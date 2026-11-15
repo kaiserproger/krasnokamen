@@ -193,7 +193,13 @@ fn reused_compressor_keeps_independent_vanilla_slot_bytes() {
 fn lz4_block_payload(method: u8, block: &[u8], decompressed_len: usize, checksum: u32) -> Vec<u8> {
     let mut payload = Vec::new();
     payload.extend_from_slice(LZ4_BLOCK_MAGIC);
-    payload.push(method);
+    let level = decompressed_len
+        .max(1)
+        .next_power_of_two()
+        .ilog2()
+        .saturating_sub(10);
+    assert!(level <= 15);
+    payload.push(method | level as u8);
     payload.extend_from_slice(&(block.len() as u32).to_le_bytes());
     payload.extend_from_slice(&(decompressed_len as u32).to_le_bytes());
     payload.extend_from_slice(&checksum.to_le_bytes());
@@ -211,7 +217,7 @@ fn raw_lz4_block_payload(raw: &[u8]) -> Vec<u8> {
         LZ4_BLOCK_METHOD_RAW,
         raw,
         raw.len(),
-        xxhash32(raw, LZ4_CHECKSUM_SEED),
+        xxhash32(raw, LZ4_CHECKSUM_SEED) & 0x0FFF_FFFF,
     )
 }
 
@@ -221,7 +227,7 @@ fn compressed_lz4_block_payload(raw: &[u8]) -> Vec<u8> {
         LZ4_BLOCK_METHOD_COMPRESSED,
         &compressed,
         raw.len(),
-        xxhash32(raw, LZ4_CHECKSUM_SEED),
+        xxhash32(raw, LZ4_CHECKSUM_SEED) & 0x0FFF_FFFF,
     )
 }
 
@@ -446,6 +452,124 @@ fn reads_synthetic_gzip_uncompressed_and_lz4_regions() {
         let chunk = read_chunk(region.path(), 0, 0).unwrap().unwrap();
         assert_eq!(chunk.timestamp, 1_700_000_000);
         assert_eq!(chunk.uncompressed_nbt, raw);
+    }
+}
+
+#[test]
+fn lz4_masked_checksum_reads_and_rejects_corruption() {
+    let raw = b"checksum-protected LZ4 payload";
+    assert_ne!(xxhash32(raw, LZ4_CHECKSUM_SEED) & 0xF000_0000, 0);
+    for payload in [
+        raw_lz4_block_payload(raw),
+        compressed_lz4_block_payload(raw),
+    ] {
+        let region = synthetic_region(CompressionType::Lz4 as u8, &payload);
+        assert_eq!(read_region(region.path()).unwrap()[0].uncompressed_nbt, raw);
+        assert_eq!(decompress_lz4_exact(&payload, raw.len()).unwrap(), raw);
+
+        // Neither corruption inside the 28-bit checksum nor a nonzero high
+        // nibble is valid: only the calculated hash, not the wire value, is masked.
+        for (byte, bit) in [(17, 0x01), (20, 0x80)] {
+            let mut corrupt = payload.clone();
+            corrupt[byte] ^= bit;
+            let region = synthetic_region(CompressionType::Lz4 as u8, &corrupt);
+            assert!(
+                read_region(region.path())
+                    .unwrap_err()
+                    .to_string()
+                    .contains("checksum mismatch")
+            );
+            assert!(
+                decompress_lz4_exact(&corrupt, raw.len())
+                    .unwrap_err()
+                    .to_string()
+                    .contains("checksum mismatch")
+            );
+        }
+    }
+}
+
+#[test]
+fn lz4_masked_checksum_preserved_writer_output() {
+    let raw = b"checksum-protected LZ4 payload";
+    let checksum = xxhash32(raw, LZ4_CHECKSUM_SEED) & 0x0FFF_FFFF;
+    for payload in [
+        raw_lz4_block_payload(raw),
+        compressed_lz4_block_payload(raw),
+    ] {
+        let record = RegionChunkOutput::Preserved(RawChunkRecord {
+            local_x: 0,
+            local_z: 0,
+            timestamp: 1_700_000_000,
+            compression: CompressionType::Lz4 as u8,
+            compressed: payload.clone(),
+            validated_decoded_len: None,
+            validated_content_stamp: None,
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("preserved.mca");
+        write_region_create_new_mixed(&path, &[record]).unwrap();
+        let (compression, written) = first_populated_chunk(&path).unwrap();
+        assert_eq!(compression, CompressionType::Lz4 as u8);
+        assert_eq!(written, payload);
+        assert_eq!(
+            u32::from_le_bytes(written[17..21].try_into().unwrap()),
+            checksum
+        );
+        assert_eq!(read_region(&path).unwrap()[0].uncompressed_nbt, raw);
+    }
+}
+
+#[test]
+fn lz4_token_size_bound_applies_to_readers_and_preserved_writer() {
+    for level in [0, 1, 6] {
+        let max_len = 1_usize << (10 + level);
+        for len in [max_len, max_len + 1] {
+            let raw = vec![0xA5; len];
+            for mut payload in [
+                raw_lz4_block_payload(&raw),
+                compressed_lz4_block_payload(&raw),
+            ] {
+                payload[8] = (payload[8] & 0xF0) | level;
+                let region = synthetic_region(CompressionType::Lz4 as u8, &payload);
+                let record = RegionChunkOutput::Preserved(RawChunkRecord {
+                    local_x: 0,
+                    local_z: 0,
+                    timestamp: 1_700_000_000,
+                    compression: CompressionType::Lz4 as u8,
+                    compressed: payload.clone(),
+                    validated_decoded_len: None,
+                    validated_content_stamp: None,
+                });
+                let directory = tempfile::tempdir().unwrap();
+                let path = directory.path().join("preserved.mca");
+                let raw_read = read_region_raw(region.path());
+                let decoded = decompress_lz4_exact(&payload, raw.len());
+                let write = write_region_create_new_mixed(&path, &[record]);
+                assert_eq!(
+                    [raw_read.is_ok(), decoded.is_ok(), write.is_ok()],
+                    [len == max_len; 3],
+                    "token {:#04x}, length {len}: raw reader / decoder / writer",
+                    payload[8]
+                );
+                if len == max_len {
+                    assert_eq!(decoded.unwrap(), raw);
+                    assert_eq!(read_region(&path).unwrap()[0].uncompressed_nbt, raw);
+                } else {
+                    for error in [
+                        raw_read.unwrap_err().to_string(),
+                        decoded.unwrap_err().to_string(),
+                        write.unwrap_err().to_string(),
+                    ] {
+                        assert!(
+                            error.contains("LZ4 block exceeds token size limit"),
+                            "{error}"
+                        );
+                    }
+                    assert!(!path.exists(), "invalid block must not be published");
+                }
+            }
+        }
     }
 }
 

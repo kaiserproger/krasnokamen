@@ -93,7 +93,7 @@ fn read_only_database(
         .open_read_only(path)
         .map_err(|error| match error {
             redb::DatabaseError::RepairAborted => NativeError::Source(
-                "world was not shut down cleanly; start and stop the server once to repair it, then export"
+                "world was not shut down cleanly; start and stop the server once to repair it, then retry"
                     .into(),
             ),
             error => NativeError::Database(error.into()),

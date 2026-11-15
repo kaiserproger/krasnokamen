@@ -6083,3 +6083,32 @@ regression = [
 fix_commit = "f645ca39a"
 repro_check = "Lifted the dropped fixture to y161.4 with fixed block lighting. The x320-450/y260-400 search excludes HUD/chat; only pixels enclosed by the clock's gold rim contribute to the day/night blue-face proportion. HUD-only changes and a static clock fail. Stored original ctx-day/ctx-night frames from 20261115T000416-native-dynamic-context-fzv1vs1e are rejected by DroppedClockTests.test_stored_original_frames_reject_hud_contamination using KRASNOKAMEN_CLOCK_TEST_FRAMES (green-final-units.log; no skip). Only the original HUD/dark-angle oracle restored: receipts/HarnessFix2/red-clock-only.log fails because the HUD-only counterexample is accepted. Restore: receipts/HarnessFix2/green-final-units.log. Main still needs a graphical run of the lifted fixture; this unit evidence does not accept MODEL-DYNAMIC-CONTEXT."
 failing_first = "not recorded"
+
+[[bug]]
+id = "LZ4-CHECKSUM-MASK"
+title = "Anvil reader rejects clean vanilla LZ4 worlds by comparing an unmasked XXHash32"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3Ignored: cleanly stopped vanilla 26.1.2 LZ4 world rejected with expected 0x0d189c4b versus calculated 0xdd189c4b; lz4-java 1.10.1 StreamingXXHash32.asChecksum masks to 28 bits"
+repro = "cargo"
+regression = [
+  "cargo:mc-world:anvil::region::tests::lz4_masked_checksum_reads_and_rejects_corruption",
+  "cargo:mc-world:anvil::region::tests::lz4_masked_checksum_preserved_writer_output",
+]
+fix_commit = "58bc11afa"
+repro_check = "Ignored mc-world tests reads_real_vanilla_lz4_region and lz4_block_api_matches_real_vanilla_lz4_payload require the local .analysis/test-world-lz4 fixture. Both pass after the fix: receipts/ServerSmallFix/green-vanilla-lz4-harness/result.json. The two registered regressions fail against the original verifier with expected 0x019b3c63 versus 0x219b3c63: receipts/ServerSmallFix/negative-lz4-harness/test.log. Raw and compressed synthetic blocks verify low-bit and high-nibble corruption refusal. Fresh export is zlib; preserved LZ4 writer output retains the masked checksum verbatim."
+failing_first = "reported"
+
+[[bug]]
+id = "LZ4-TOKEN-SIZE-LIMIT"
+title = "Anvil preserving writer accepts LZ4 blocks larger than their token permits"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage3 ServerSmallFix independent review: a checksum-valid raw LZ4 block with token 0x10 and length 1025 is accepted although vanilla lz4-java 1.10.1 refuses originalLen above 1 << (10 + token low nibble)"
+repro = "cargo"
+regression = ["cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies_to_readers_and_preserved_writer"]
+fix_commit = "24a0eefd4"
+repro_check = "receipts/ServerSmallFix/negative-token-bound-harness/test.log records all three paths (raw reader, exact decoder, preserving writer) accepting the invalid 1025-byte block before the size guard. token-green-anvil-harness/result.json passes 397 Anvil tests; token-green-vanilla-lz4-harness/result.json passes both ignored vanilla fixture tests. Regression covers raw/compressed blocks at and one byte above the token limit for levels 0, 1 and 6, with no destination published on rejection. token-bound-javap.log records the local vanilla bytecode oracle."
+failing_first = "reported"
