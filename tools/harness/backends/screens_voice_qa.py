@@ -788,16 +788,27 @@ def voice_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dict[
 
         # HC-1: reconnect to a server without voice; nothing from the old one survives.
         quiet_address, _ = run.server("no-voice-server", "\n[voice]\nenabled = false\n", [native_name])
-        native.call("minecraft_disconnect")
-        native.call("minecraft_connect", {"server_addr": quiet_address})
-        wait_play(native)
-        register(native)
-        native.call("minecraft_wait_ticks", {"ticks": 100})
-        after = native.observe()
-        leg["native_on_non_voice_server"] = {"voice": after["voice"], "voice_hud": voice_hud(after),
-                                             "screenshot": native_shot(native, "native-non-voice-server")}
-        verdicts["native_voice_resets_on_non_voice_server"] = (
-            after["voice"] == {"registered": False, "server_enabled": False, "listening": False}
+        verdicts["native_voice_resets_on_non_voice_server"] = voice_reconnect(native, quiet_address, leg)
+
+
+def voice_reconnect(native: ProbeSteps, quiet_address: str, leg: dict[str, Any]) -> bool:
+    native.call("minecraft_disconnect")
+    disconnected = native.observe(outside_play=True)
+    leg["native_after_disconnect"] = {"voice": disconnected["voice"], "voice_hud": voice_hud(disconnected)}
+    native.call("minecraft_connect", {"server_addr": quiet_address})
+    wait_play(native)
+    register(native)
+    native.call("minecraft_wait_ticks", {"ticks": 100})
+    after = native.observe()
+    leg["native_on_non_voice_server"] = {"voice": after["voice"], "voice_hud": voice_hud(after),
+                                         "screenshot": native_shot(native, "native-non-voice-server")}
+    # Registration advertises this client's capability anew on every Play connection,
+    # even when the next server has no voice support. Prove the old state cleared first.
+    return (disconnected.get("in_play") is False
+            and disconnected["voice"] == {"registered": False, "server_enabled": False, "listening": False}
+            and not voice_hud(disconnected)
+            and after["voice"]["server_enabled"] is False
+            and after["voice"]["listening"] is False
             and not voice_hud(after))
 
 

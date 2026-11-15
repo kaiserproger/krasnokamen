@@ -132,6 +132,10 @@ be provisioned at the harness's pinned artifact path (or `KRASNOKAMEN_SVC_JAR`);
 the publisher size and both hashes are checked before staging it.
 The voice fixture explicitly binds SVC's group action to `G` in each client's
 `options.txt`; the pinned mod leaves that action unbound by default.
+The native reconnect check records cleared voice registration, server support,
+listening and microphone HUD immediately after disconnect. On the next non-voice
+server it requires support/listening/HUD to remain off; a fresh client capability
+advertisement (`registered=true`) in Play is not stale server voice state.
 
 Java launches keep private game homes but reuse `GRADLE_USER_HOME`, defaulting
 to the existing sibling `loader-gradle-home` on the owner host. The 180-second

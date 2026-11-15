@@ -109,6 +109,30 @@ class ScreensVoiceHelperTests(unittest.TestCase):
             self.assertIn("key_key.voice_chat_group:key.keyboard.g",
                           files.get("options.txt", "").splitlines())
 
+    def test_voice_reset_allows_fresh_capability_registration_only_after_reconnect(self):
+        cleared = {"registered": False, "server_enabled": False, "listening": False}
+        advertised = {**cleared, "registered": True}
+        cases = [
+            (cleared, advertised, [], [], True),
+            (advertised, advertised, [], [], False),
+            (cleared, {**advertised, "server_enabled": True}, [], [], False),
+            (cleared, {**advertised, "listening": True}, [], [], False),
+            (cleared, advertised, [{"id": "hud/voice_mic"}], [], False),
+            (cleared, advertised, [], [{"id": "hud/voice_mic"}], False),
+        ]
+        for before, after, before_hud, after_hud, expected in cases:
+            with self.subTest(before=before, after=after, expected=expected), \
+                 mock.patch.object(qa, "wait_play"), mock.patch.object(qa, "register"), \
+                 mock.patch.object(qa, "native_shot", return_value="quiet.png"):
+                native = mock.Mock()
+                native.observe.side_effect = lambda **kwargs: (
+                    {"voice": before, "ui_nodes": before_hud, "in_play": False}
+                    if kwargs.get("outside_play") else
+                    {"voice": after, "ui_nodes": after_hud, "in_play": True})
+                evidence = {}
+                self.assertEqual(qa.voice_reconnect(native, "quiet:25565", evidence), expected)
+                self.assertEqual(evidence["native_on_non_voice_server"]["voice"], after)
+
 
 if __name__ == "__main__":
     unittest.main()
