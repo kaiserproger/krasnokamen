@@ -251,7 +251,7 @@ nested=0
 if [ "$exclusive" = 1 ]; then
   # One window at a time; while it holds this lock new commands wait at start.
   exec 3>"$dir/exclusive.lock"
-  flock 3
+  flock 3 9>&-
   # Lock order: a scene slot (scene-slot.sh) is taken before this lock, never inside the
   # window. Gates hold scene slots while they wait for this lock (shared), so a window
   # command waiting for a slot deadlocked the whole fleet for ~50 min (2026-11-14).
@@ -270,11 +270,13 @@ else
   # starts meanwhile always sees this command and waits for it. A command nested in a
   # running scope (a ledger promote's builds and gates) does not wait: the window
   # already waits for its ancestor, so waiting here deadlocked both (2026-11-12).
+  # The flock child never gets the build token (fd 9): when this runner was killed
+  # while waiting, an orphaned `flock -s 3` kept token 1 for 36 min (2026-11-15).
   exec 3>"$dir/exclusive.lock"
-  [ "$nested" = 1 ] || flock -s 3
+  [ "$nested" = 1 ] || flock -s 3 9>&-
   if [ "$perf" = 1 ]; then
     exec 6>"$dir/perf"
-    flock 6
+    flock 6 9>&-
   fi
 fi
 # Disk floor (owner, 2026-11-13: 250 GiB): below KRASNOKAMEN_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
