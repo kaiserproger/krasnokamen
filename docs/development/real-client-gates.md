@@ -117,8 +117,12 @@ local vanilla client jar for the development agent build. Plain vanilla
 `vanilla_command` separately accepts exact 26.1.2, 26.2 and 26.3 metadata.
 Explicit selectors never switch the caller's task/composition: use the matching
 Loader profile/platform. Combining them with the legacy no-Loader agent task or
-a different Loader platform fails before spawning Gradle. Prepared Fabric
-JavaExec launches use the same exact endpoint properties.
+a different Loader platform fails before spawning Gradle. Java matrix groups use
+the same ordinary runtime launch as other Java gates, always after their private
+Xvfb starts; there is no separate Fabric preparation process or manifest contract.
+The old manifest only avoided one Gradle process per client; it supplied no
+additional client capability. Its exporter existed on Loader's unmerged
+`bots-runjava` branch (`2bc292e`), not on the main line used by the harness.
 
 `screens-voice-qa --client native --windowed --parts 2` selects endpoints per
 leg: screens uses 26.3/Fabric; voice derives its version from the checked SVC
@@ -449,8 +453,10 @@ render-frame gait inputs; the entity identity must persist. Position is not
 wrapped: renderers can apply a factor before calculating phase.
 `tools/harness/gait_phase_scene.json` fixes the scene and slows both clients'
 server clock to 2 TPS so extraction can be sampled without widening the phase
-tolerance. For the Java lane copy the fixture and set `java_plain` and
-`java_hide_chat` to `true`; the latter hides chat in the captured image.
+tolerance. Zombie and spider use separate approach lanes, with the camera moved
+to the spider's lane so the zombie death animation cannot obscure its capture.
+For the Java lane copy the fixture and set `java_plain` and `java_hide_chat` to
+`true`; the latter hides chat in the captured image.
 
 `goat_side_horn` checks a previously named screenshot from the fixed goat side
 pose against the measured Java horn edge; its four-row bracket shifts down one

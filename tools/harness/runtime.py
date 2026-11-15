@@ -903,7 +903,6 @@ def start_client(
     username: str,
     display: str,
     platform: str | None = None,
-    launch_manifest: Path | None = None,
     client_profile: str | None = None,
     window_size: tuple[int, int] | None = None,
     sound_sink: str | None = None,
@@ -1006,12 +1005,11 @@ def start_client(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("wb")
     try:
-        if launch_manifest is not None or client_profile == "vanilla":
-            from .java_launcher import prepared_fabric_command, vanilla_command
+        if client_profile == "vanilla":
+            from .java_launcher import vanilla_command
 
-            command = (prepared_fabric_command(launch_manifest, game_dir, username)
-                       if launch_manifest is not None else vanilla_command(
-                           game_dir=game_dir, username=username, agent_jar=_agent_jar_path()))
+            command = vanilla_command(
+                game_dir=game_dir, username=username, agent_jar=_agent_jar_path())
             if window_size is not None:
                 if min(window_size) < 1:
                     raise ValueError("client window dimensions must be positive")

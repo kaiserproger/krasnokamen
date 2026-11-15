@@ -5968,8 +5968,7 @@ repro = "source"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_exact_selectors_reach_spawned_gradle_command",
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_legacy_selectors_refuse_composition_change_before_spawn",
-  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_prepared_launch_passes_exact_version_to_gradle",
-  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_selectors_never_switch_a_resolved_task",
+  "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_selectors_never_switch_a_resolved_task",
 ]
 fix_commit = "f645ca39a"
 repro_check = """e774598aacd137c2749e6993019a45f221af0499 wired the exact selector helper and its spawned-command test. git log -m -p -S'modded_gradle_arguments(task)' identifies merge 6b76082affa21d5796072958883102565e00d60e (2026-11-14T14:14:57Z), relative to parent b363ba41d, removing that call; the merged test file also lost its endpoint regression. The prepared-Fabric path independently used a bare task. Restored both paths, with explicit refusal rather than silently changing the legacy no-Loader composition. Mocked launch tests isolate sibling discovery from main_checkout's Git subprocess in linked worktrees.
@@ -6200,8 +6199,46 @@ source = "ScreensVoiceStart real gates 20261115T011032 and 20261115T011838 lose 
 repro = "source"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
-  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
+  "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
 ]
 repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
 fix_commit = "patch:ae29d7a30d5dcdf843a6b14b99a606cffddf9ead95ec269ed4730d16205eceed"
 failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST"
+title = "Java matrix preparation launches Fabric instead of exporting a command and times out"
+area = "harness"
+severity = "major"
+status = "open"
+source = "HarnessGraphical Java matrix capability group times out in prepare_fabric_launch before private Xvfb starts; current Loader has no launch-manifest exporter"
+repro = "source"
+regression = ["python:tools.harness.test_java_clients:JavaClientsTests.test_matrix_fabric_group_uses_only_private_runtime_launches"]
+fix_commit = "b6f1ac655"
+failing_first = "reported"
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log reverses only fix-only.patch while retaining tests, and fails on the unexpected Gradle prelaunch. green-restored.log passes both fixes; green-isolation-merge.log passes ordinary runtime/cache wiring. Original matrix command on 3c2279125 reaches 26.1.2 Fabric (0.155.2 API), capability passed=true and simultaneous_in_play=1 on private display :150; real-java/20261115T013000-java-matrix-fd94b0mk/capability-fabric_krasnokamen_loader/result.json. Full invocation later fails separately on the armadillo cell's unloaded block; not a full matrix pass. Loader exporter existed at 2bc292e64d9083537e3f97bca6c635c0b9ba5590 only on unmerged bots-runjava. Ordinary runtime preserves endpoint build/project-cache and audio isolation. See report.md."
+
+[[bug]]
+id = "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED"
+title = "Gait capture shows a dying zombie over the spider"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HarnessGraphical gait scene: zombie and spider approach the same camera on the same lane, and the zombie death animation occludes the spider"
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view"]
+fix_commit = "b6f1ac655"
+failing_first = "reported"
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log fails the original fixture's camera-frustum assertion with tests retained. green-restored.log passes. Three native windowed gait runs pass on 3c2279125: real-gait/20261115T012844-scene-shot-j9w3a8qy, 20261115T013328-scene-shot-mgy_ub0y, 20261115T013411-scene-shot-4da3qs2q. All three accepted spider frames and the first zombie frame were visually reviewed: subject unobstructed, no overlapping zombie. Spider capture uses 2, 2 and 3 uniquely named attempts respectively. Server c7786910eaa6 and client 12e076e9c761 pins; report.md retains commands and review."
+
+[[bug]]
+id = "HARNESS-JAVA-MATRIX-FIXTURE-CHUNK-NOT-LOADED"
+title = "Java matrix armadillo cell fails waiting for its remote fixture block after successful launch"
+area = "harness"
+severity = "major"
+status = "open"
+source = "PreparedLaunchFix original java-matrix command: Fabric capability reaches Play, but selected mobs.armadillo reconnect_mid_action cell fails minecraft_wait_for_loaded_block at -16,199,-16"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Two observed failures with server c7786910eaa6 and 26.1.2 Fabric Loader 7343bd38: receipts/PreparedLaunchFix/real-java/20261115T012435-java-matrix-50t25et0/pw-2314a2e847b93d120a99/result.json and real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99/result.json. Both capability groups pass; the cell records no domain checks and fails with client chunk did not load at -16, 199, -16. Root cause not investigated in the isolated-launch assignment; no product armadillo failure inferred."

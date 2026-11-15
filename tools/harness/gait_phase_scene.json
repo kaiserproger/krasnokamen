@@ -94,7 +94,16 @@
       "cmd": "kill @e[type=minecraft:zombie,distance=..20]"
     },
     {
-      "cmd": "summon minecraft:spider 1000.5 160 1008.5 {PersistenceRequired:1b}"
+      "tp": [
+        1010.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "cmd": "summon minecraft:spider 1010.5 160 1008.5 {PersistenceRequired:1b}"
     },
     {
       "walk_capture": {
