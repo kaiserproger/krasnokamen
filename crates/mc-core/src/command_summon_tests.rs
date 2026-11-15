@@ -674,7 +674,64 @@ fn custom_name_visible_is_authoritative_and_can_clear() {
 }
 unsupported_tag!(silent_is_explicitly_unsupported, "Silent", "1b");
 unsupported_tag!(glowing_is_explicitly_unsupported, "Glowing", "1b");
-unsupported_tag!(tags_are_explicitly_unsupported, "Tags", "['probe']");
+#[test]
+fn summon_tags_match_selectors_and_survive_checkpoint() {
+    for (kind, nbt) in [
+        ("cow", "{Tags:['x','second']}"),
+        ("armor_stand", "{Tags:['x','second']}"),
+        (
+            "item",
+            "{Tags:['x','second'],Item:{id:'minecraft:stone'},PickupDelay:32767}",
+        ),
+        ("experience_orb", "{Tags:['x','second'],Value:1}"),
+    ] {
+        let (mut state, id) = summon(kind, nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        let retained = state.entities.row(slot).opaque_entity_fields.clone();
+        assert!(!retained.is_empty(), "{kind}: no retained tags");
+        let actor = state.connections.entity_of(ConnectionId(1)).unwrap();
+        let context = crate::command_context::Context::source(&state, ConnectionId(1), actor, 2);
+        let before = state.day_time;
+        crate::command_context::run(
+            &mut state,
+            "execute if entity @e[tag=x,tag=second,tag=!absent] run time add 7",
+            context,
+            &mut ChangeSet::default(),
+        );
+        assert_eq!(state.day_time, before + 7, "{kind}: selector missed tags");
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let native = chunks
+            .values()
+            .flat_map(|chunk| &chunk.entities)
+            .find(|entity| entity.wire_id == id.0)
+            .unwrap();
+        let restored = EntityStateImage::from_record(&state.registry, native).unwrap();
+        assert_eq!(
+            restored.opaque_entity_fields, retained,
+            "{kind}: checkpoint lost tags"
+        );
+    }
+}
+
+#[test]
+fn summon_tags_reject_invalid_types_before_spawn() {
+    for value in ["'x'", "1", "[1,2]"] {
+        let state = rejected_tag_fixture();
+        let nbt = crate::command_snbt::parse(&format!("{{Tags:{value}}}")).unwrap();
+        let error = prepare(
+            &state,
+            state.registry.cow_type_id,
+            "minecraft:cow",
+            [0.; 3],
+            &nbt,
+        )
+        .err()
+        .expect("invalid Tags must be refused");
+        assert!(error.message().contains("Tags"), "{}", error.message());
+        assert!(error.message().contains("string"), "{}", error.message());
+        rejected_tag_reaches_sender("cow", "Tags", value);
+    }
+}
 unsupported_tag!(left_handed_is_explicitly_unsupported, "LeftHanded", "1b");
 unsupported_tag!(unknown_tag_names_reach_chat, "UnsupportedExample", "1b");
 

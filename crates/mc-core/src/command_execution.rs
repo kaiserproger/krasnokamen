@@ -1061,6 +1061,13 @@ pub(crate) fn execute(
                         return Failed;
                     }
                 };
+                let tags = match crate::command_summon::retained_tags(nbt) {
+                    Ok(tags) => tags,
+                    Err(failure) => {
+                        error(state, connection, failure.message());
+                        return Failed;
+                    }
+                };
                 let id = crate::experience_orbs::spawn(
                     state,
                     type_id,
@@ -1069,6 +1076,10 @@ pub(crate) fn execute(
                     motion,
                     0.0,
                 );
+                if let Some(tags) = tags {
+                    let slot = state.entities.slot_of(id).expect("new orb summon");
+                    state.entities.row_mut(slot).opaque_entity_fields = tags;
+                }
                 changes.entities_spawned.push(id);
                 success_feedback(
                     state,
