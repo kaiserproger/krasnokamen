@@ -54,6 +54,9 @@ struct Cli {
     /// Player name to send in LoginStart.
     #[arg(long, default_value = "probe")]
     name: String,
+    /// Exact endpoint for the chunk-batch wire scenario (775, 776, 777).
+    #[arg(long, default_value_t = PROTOCOL_VERSION)]
+    protocol: i32,
     /// Maximum seconds to wait for each command-fenced Play capture.
     #[arg(long, default_value_t = 5)]
     play_seconds: u64,
@@ -312,6 +315,7 @@ struct Probe {
     stream: TcpStream,
     rbuf: BytesMut,
     compression: Compression,
+    play: bool,
 }
 
 impl Probe {
@@ -320,6 +324,7 @@ impl Probe {
             stream,
             rbuf: BytesMut::with_capacity(8192),
             compression: Compression::Disabled,
+            play: false,
         }
     }
 
@@ -347,6 +352,25 @@ impl Probe {
     async fn read_frame(&mut self) -> Result<mc_protocol::RawFrame> {
         loop {
             if let Some(frame) = try_decode_frame(&mut self.rbuf, self.compression)? {
+                if self.play
+                    && frame.id == mc_protocol::packets::play::ClientboundChunkBatchFinished::ID
+                {
+                    let mut body = frame.body.as_ref();
+                    mc_protocol::packets::play::ClientboundChunkBatchFinished::decode(&mut body)?;
+                    anyhow::ensure!(body.is_empty(), "trailing chunk batch finished data");
+                    let mut body = BytesMut::new();
+                    mc_protocol::packets::play::ServerboundChunkBatchReceived {
+                        desired_chunks_per_tick: 64.0,
+                    }
+                    .encode(&mut body)?;
+                    self.stream
+                        .write_all(&encode_frame(
+                            mc_protocol::packets::play::ServerboundChunkBatchReceived::ID,
+                            &body,
+                            self.compression,
+                        )?)
+                        .await?;
+                }
                 return Ok(frame);
             }
             let n = self.stream.read_buf(&mut self.rbuf).await?;
@@ -354,6 +378,109 @@ impl Probe {
                 anyhow::bail!("peer closed");
             }
         }
+    }
+
+    async fn capture_chunk_batches(
+        &mut self,
+        protocol: i32,
+        acknowledge: bool,
+        capture: &mut CaptureWriter,
+    ) -> Result<()> {
+        use mc_protocol::packets::play::{
+            ClientboundChunkBatchFinished, ClientboundChunkBatchStart,
+            ServerboundChunkBatchReceived,
+        };
+        let offset = i32::from(protocol == 777);
+        let mut in_batch = false;
+        let mut count = 0;
+        let mut batches = 0;
+        let mut keepalives = 0;
+        while !acknowledge || batches < 3 {
+            let frame = tokio::time::timeout(Duration::from_secs(60), self.read_frame())
+                .await
+                .context("waiting for chunk batch evidence")??;
+            capture.line(format!(
+                "[PLAY] id=0x{:02X} body_len={} body={}",
+                frame.id,
+                frame.body.len(),
+                hexdump_short(&frame.body, 16)
+            ))?;
+            if frame.id == ClientboundChunkBatchStart::ID {
+                anyhow::ensure!(!in_batch && frame.body.is_empty(), "invalid batch start");
+                in_batch = true;
+                count = 0;
+            } else if frame.id == 0x2d + offset {
+                anyhow::ensure!(in_batch, "chunk outside batch");
+                count += 1;
+            } else if frame.id == ClientboundChunkBatchFinished::ID {
+                let mut body = frame.body.as_ref();
+                let finished = ClientboundChunkBatchFinished::decode(&mut body)?;
+                anyhow::ensure!(
+                    in_batch && body.is_empty() && finished.batch_size == count,
+                    "batch count mismatch"
+                );
+                if acknowledge {
+                    self.write_packet_logged(
+                        &ServerboundChunkBatchReceived {
+                            desired_chunks_per_tick: 64.0,
+                        },
+                        "PLAY",
+                        "ChunkBatchReceived",
+                        capture,
+                    )
+                    .await?;
+                }
+                batches += 1;
+                in_batch = false;
+                capture.line(format!(
+                    "batch={batches} chunks={count} acked={acknowledge}"
+                ))?;
+            } else if frame.id == 0x2c + offset {
+                self.stream
+                    .write_all(&encode_frame(
+                        ServerboundKeepAlive::ID,
+                        &frame.body,
+                        self.compression,
+                    )?)
+                    .await?;
+                keepalives += 1;
+                if !acknowledge && keepalives == 2 {
+                    anyhow::ensure!(
+                        batches == 1 && !in_batch,
+                        "never-ACK connection exceeded initial one-batch limit"
+                    );
+                    capture.line("no_ack_measurement: batches=1 keepalives=2")?;
+                    return Ok(());
+                }
+            } else if frame.id == 0x48 + offset {
+                use mc_protocol::codec::WriteMc;
+                let mut body = frame.body.as_ref();
+                let mut accepted = Vec::new();
+                accepted.write_varint(body.read_varint()?);
+                if protocol == 777 {
+                    for _ in 0..3 {
+                        WriteMc::write_f64(&mut accepted, ReadMc::read_f64(&mut body)?);
+                    }
+                    for _ in 0..3 {
+                        ReadMc::read_f64(&mut body)?;
+                    }
+                    WriteMc::write_f32(&mut accepted, ReadMc::read_f32(&mut body)?);
+                    WriteMc::write_f32(&mut accepted, ReadMc::read_f32(&mut body)?);
+                }
+                self.stream
+                    .write_all(&encode_frame(
+                        ConfirmTeleportation::ID,
+                        &accepted,
+                        self.compression,
+                    )?)
+                    .await?;
+                self.write_packet_logged(&ServerboundPlayerLoaded, "PLAY", "PlayerLoaded", capture)
+                    .await?;
+            } else if frame.id == 0x20 {
+                anyhow::bail!("server disconnected during batch capture: {:?}", frame.body);
+            }
+        }
+        Ok(())
     }
 
     async fn dump_until_command_response(
@@ -1355,6 +1482,15 @@ async fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
         .init();
     let cli = Cli::parse();
+    anyhow::ensure!(
+        [775, 776, 777].contains(&cli.protocol),
+        "unsupported probe protocol"
+    );
+    anyhow::ensure!(
+        cli.protocol == PROTOCOL_VERSION
+            || matches!(cli.scenario.as_str(), "chunk-batch" | "chunk-batch-no-ack"),
+        "noncanonical probe requires a chunk-batch scenario"
+    );
     let mut capture = CaptureWriter::new(cli.out.clone())?;
     let captured_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1365,7 +1501,7 @@ async fn main() -> Result<()> {
     capture.line(format!("server_kind={}", cli.server_kind))?;
     capture.line(format!("addr={}", cli.addr))?;
     capture.line(format!("player={}", cli.name))?;
-    capture.line(format!("protocol_version={PROTOCOL_VERSION}"))?;
+    capture.line(format!("protocol_version={}", cli.protocol))?;
     capture.line(format!("play_seconds={}", cli.play_seconds))?;
     capture.line(format!("captured_at_unix_ms={captured_at}"))?;
     capture.line(
@@ -1388,7 +1524,7 @@ async fn main() -> Result<()> {
     probe
         .write_packet_logged(
             &Handshake {
-                protocol_version: PROTOCOL_VERSION,
+                protocol_version: cli.protocol,
                 server_address: "127.0.0.1".into(),
                 server_port: port,
                 next_state: NextState::Login,
@@ -1444,27 +1580,38 @@ async fn main() -> Result<()> {
             continue;
         }
 
-        // LoginSuccess detection: try to decode and if it has the right
-        // shape, ack.
         if frame.id == LoginSuccess::ID {
-            let mut body = frame.body.clone();
-            if let Ok(success) = LoginSuccess::decode(&mut body) {
-                capture.line(format!(
-                    "    ↳ LoginSuccess: name={} uuid={} properties={}",
-                    success.name,
-                    success.uuid,
-                    success.properties.len()
-                ))?;
-                probe
-                    .write_packet_logged(
-                        &LoginAcknowledged,
-                        "LOGIN",
-                        "LoginAcknowledged",
-                        &mut capture,
-                    )
-                    .await?;
-                break;
+            let mut body = frame.body.as_ref();
+            let uuid = body.read_uuid()?;
+            let name = body.read_string(16)?;
+            let properties = body.read_varint()?;
+            anyhow::ensure!(
+                (0..=16).contains(&properties),
+                "invalid login property count"
+            );
+            for _ in 0..properties {
+                body.read_string(32767)?;
+                body.read_string(32767)?;
+                if body.read_bool()? {
+                    body.read_string(32767)?;
+                }
             }
+            if cli.protocol >= 776 {
+                body.read_uuid()?;
+            }
+            anyhow::ensure!(body.is_empty(), "trailing endpoint login success data");
+            capture.line(format!(
+                "    ↳ LoginSuccess: name={name} uuid={uuid} properties={properties}"
+            ))?;
+            probe
+                .write_packet_logged(
+                    &LoginAcknowledged,
+                    "LOGIN",
+                    "LoginAcknowledged",
+                    &mut capture,
+                )
+                .await?;
+            break;
         }
 
         // Disconnect/anything-unexpected: dump and bail.
@@ -1527,11 +1674,14 @@ async fn main() -> Result<()> {
             continue;
         }
 
-        // FinishConfiguration is empty body. The first empty-body
-        // frame we see after KnownPacks is almost certainly it.
-        if frame.body.is_empty() && sent_known_packs_response {
+        // All three measured endpoints register FinishConfiguration at 0x03.
+        if frame.id == mc_protocol::packets::configuration::FinishConfiguration::ID {
+            anyhow::ensure!(
+                frame.body.is_empty() && sent_known_packs_response,
+                "invalid configuration finish"
+            );
             capture.line(format!(
-                "    ↳ assumed FinishConfiguration (id 0x{:02X}); sending Ack",
+                "    ↳ FinishConfiguration (id 0x{:02X}); sending Ack",
                 frame.id
             ))?;
             probe
@@ -1543,9 +1693,16 @@ async fn main() -> Result<()> {
                 )
                 .await?;
             got_finish = true;
+            probe.play = true;
         }
     }
 
+    if matches!(cli.scenario.as_str(), "chunk-batch" | "chunk-batch-no-ack") {
+        probe.play = false; // These scenarios log their ACKs explicitly.
+        return probe
+            .capture_chunk_batches(cli.protocol, cli.scenario == "chunk-batch", &mut capture)
+            .await;
+    }
     capture.line("")?;
     capture.line(format!(
         "=== PLAY STATE (reading for {}s) ===",

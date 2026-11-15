@@ -50,9 +50,10 @@ javap -classpath /path/to/client.jar -p net.minecraft.network.protocol.game.Clie
 ## Capture the wire
 
 `wire-probe` connects in offline mode, walks Handshake, Login, Configuration and
-Play, and records clientbound frames. Point it at a local server of the matching
-canonical protocol; it uses `mc_protocol::PROTOCOL_VERSION`, not an arbitrary
-version selector. Start the intended server separately, then for example:
+Play, and records clientbound frames. Ordinary scenarios use the canonical
+`mc_protocol::PROTOCOL_VERSION`; `--scenario chunk-batch --protocol 775|776|777`
+also supports exact endpoint batch captures, completing after three validated
+batches and ACKs. Start the intended server separately, then for example:
 
 ```sh
 mkdir -p .analysis/protocol
@@ -111,6 +112,30 @@ Use the shared-machine runner described in [heavy commands](heavy-commands-and-m
 and the [real-client gates](real-client-gates.md) for changed client-visible
 behavior. Passing codec tests or a wire capture alone does not prove rendering,
 gameplay, or real-client compatibility.
+
+## Chunk batches and client-paced quota
+
+Every nonempty publication's full chunk packets use `chunk_batch_start` (empty,
+0x0c), then the chunks, then `chunk_batch_finished` (VarInt count, 0x0b).
+The layouts and IDs are identical in 775/776/777 and traverse the normal adjacent
+translation chain. Local metadata commands and wire receipts belong in
+`receipts/ChunkBatchFix/` outside Git.
+
+Connection-local edge state follows the measured 26.3 `PlayerChunkSender`:
+initial rate 9, initial outstanding-batch limit 1; any ACK raises the limit to 10.
+ACK rates clamp to [0.01, 64], with NaN selecting 0.01. While below the limit,
+each publication adds the rate to quota, capped at max(1, rate); whole chunks
+spend quota only after queue admission. An ACK leaving no outstanding batches
+resets quota to 1. The existing 16/publication cap and world slot/byte credit
+remain upper bounds. Batch framing reserves two additional slots; queue admission
+is atomic and dimension fences discard whole groups, returning their ACK debt.
+Unloads, light-only updates and other packets do not spend chunk quota.
+
+Protocol drivers must ACK completed batches. The shared raw test client does so
+once at network receipt, at 8 chunks/tick; callers must not ACK it a second time.
+The native sibling ACKs at 4 chunks/tick, so its join terrain now follows that
+rate instead of the former 16/publication maximum; vanilla/Loader clients adapt
+their desired rate themselves.
 
 ## Timed battle swings (26.3)
 

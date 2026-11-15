@@ -473,6 +473,9 @@ pub(super) async fn publish_and_route(
         let registry = server.connections.inner.lock();
         for (id, viewer) in viewers.iter_mut() {
             viewer.view_distance = registry.view_distances.get(id).copied();
+            if let Some(handles) = connections.get(id) {
+                viewer.chunk_batches = Arc::clone(&handles.chunk_batches);
+            }
             (viewer.world_credit, viewer.world_bytes) =
                 connections.get(id).map_or((0, 0), |handles| {
                     (handles.world_tx.capacity(), handles.world_tx.free_bytes())
@@ -521,7 +524,18 @@ pub(super) async fn publish_and_route(
             .fetch_add(1, Ordering::Relaxed);
         viewers.remove(&victim);
     }
-    for packet in packets {
+    let mut packets = packets.into_iter();
+    while let Some(packet) = packets.next() {
+        // Consume the complete group even if the connection has just closed.
+        let batch = match packet.priority {
+            crate::fanout::Priority::ChunkBatch(chunks) => {
+                let mut frames = Vec::with_capacity(chunks + 2);
+                frames.push(packet.data.clone());
+                frames.extend(packets.by_ref().take(chunks + 1).map(|packet| packet.data));
+                Some((chunks, frames))
+            }
+            _ => None,
+        };
         let Some(handles) = connections.get(&packet.connection) else {
             continue;
         };
@@ -539,6 +553,17 @@ pub(super) async fn publish_and_route(
                         .reliable_drops
                         .fetch_add(1, Ordering::Relaxed);
                     viewers.remove(&packet.connection);
+                }
+            }
+            crate::fanout::Priority::ChunkBatch(_) => {
+                let (chunks, frames) = batch.expect("batch priority collected its frames");
+                if handles
+                    .world_tx
+                    .try_send_chunk_batch(&frames, chunks, &handles.chunk_batches)
+                    .is_err()
+                    && let Some(viewer) = viewers.get_mut(&packet.connection)
+                {
+                    viewer.world_frame_unsent();
                 }
             }
             crate::fanout::Priority::BestEffort => {

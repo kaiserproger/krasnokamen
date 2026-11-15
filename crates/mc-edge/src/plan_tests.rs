@@ -699,7 +699,11 @@ fn chunk_at(x: i32, z: i32) -> (ChunkPos, Arc<mc_world::chunk::Chunk>) {
 }
 
 fn viewer_at(conn: u64, pos: [f64; 3]) -> ViewerState {
-    ViewerState::new(ConnectionId(conn), EntityId(conn as i32), pos)
+    let viewer = ViewerState::new(ConnectionId(conn), EntityId(conn as i32), pos);
+    // Pure planner fixtures model an already-ACKing fast client. Fresh-session
+    // pacing and actual queue admission have dedicated chunk_batch tests.
+    viewer.chunk_batches.lock().acknowledge(64.0);
+    viewer
 }
 
 fn entity(id: i32, pos: [f64; 3]) -> EntityView {
@@ -1045,7 +1049,7 @@ fn village_motion_frames_reach_tracked_viewer_while_streaming_chunks() {
         assert!(
             packets
                 .iter()
-                .filter(|packet| packet.priority == crate::fanout::Priority::BestEffort)
+                .filter(|packet| packet.priority != crate::fanout::Priority::Reliable)
                 .count()
                 <= viewer.world_credit
         );

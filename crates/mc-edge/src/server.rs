@@ -668,6 +668,22 @@ impl EdgeServer {
                 ServerboundCustomPayload,
             },
         };
+        if packet_id == mc_protocol::packets::play::ServerboundChunkBatchReceived::ID {
+            let mut input = body;
+            let request =
+                mc_protocol::packets::play::ServerboundChunkBatchReceived::decode(&mut input)?;
+            anyhow::ensure!(
+                input.is_empty(),
+                "trailing chunk batch acknowledgement data"
+            );
+            if let Some(handles) = self.connections.get(id) {
+                handles
+                    .chunk_batches
+                    .lock()
+                    .acknowledge(request.desired_chunks_per_tick);
+            }
+            return Ok(true);
+        }
         if packet_id == ServerboundCustomPayload::ID {
             let mut input = body;
             let channel_length = usize::try_from(input.read_varint()?)

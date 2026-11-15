@@ -107,8 +107,8 @@ fn shelf_output(base: &Chunk, tick: u64, revision: u64, items: usize) -> TickOut
 
 /// What a vanilla client holds of the shelf: block-entity updates apply only
 /// to a held chunk, and a chunk replaces the block entities it carries.
-#[derive(Default)]
 struct ClientShelf {
+    chunk_batches: Arc<parking_lot::Mutex<crate::plan::chunk_batch::ChunkBatchState>>,
     chunk_held: bool,
     chunks_received: usize,
     items: Option<usize>,
@@ -118,7 +118,22 @@ struct ClientShelf {
 }
 
 impl ClientShelf {
+    fn new(wire: &Wire) -> Self {
+        Self {
+            chunk_batches: Arc::clone(&wire.connections[&wire.id].chunk_batches),
+            chunk_held: false,
+            chunks_received: 0,
+            items: None,
+            updates_dropped: 0,
+            arrivals: Vec::new(),
+        }
+    }
     fn receive(&mut self, id: i32, body: &[u8]) {
+        if id == ClientboundChunkBatchFinished::ID {
+            ClientboundChunkBatchFinished::decode(&mut &body[..]).unwrap();
+            self.chunk_batches.lock().acknowledge(8.0);
+            return;
+        }
         if id == LevelChunkWithLight::ID {
             let chunk = LevelChunkWithLight::decode(&mut &body[..]).unwrap();
             self.chunk_held = true;
@@ -336,7 +351,7 @@ async fn shelf_update_cannot_be_lost_to_a_chunk_still_queued_for_the_client() {
     ));
     let mut client_connection = crate::connection::Connection::new(client_socket);
     client_connection.set_compression(mc_protocol::frame::Compression::Threshold(256));
-    let mut client = ClientShelf::default();
+    let mut client = ClientShelf::new(&wire);
     for _ in 0..queued {
         let frame = tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -363,7 +378,7 @@ async fn shelf_update_after_the_chunk_was_taken_by_the_writer_needs_no_resend() 
     let mut wire = Wire::new();
     wire.publish_shelf(1, 0).await;
     // The writer has taken every queued frame: reliable first, then world.
-    let mut client = ClientShelf::default();
+    let mut client = ClientShelf::new(&wire);
     while let Ok(frame) = wire.reliable_rx.try_recv() {
         client.receive_framed(&frame);
     }
@@ -393,7 +408,7 @@ async fn shelf_update_after_the_chunk_was_taken_by_the_writer_needs_no_resend() 
 #[tokio::test]
 async fn shelf_update_waits_for_block_credit_and_uses_the_newest_snapshot() {
     let mut wire = Wire::new();
-    let mut client = ClientShelf::default();
+    let mut client = ClientShelf::new(&wire);
     wire.publish_shelf(1, 0).await;
     while let Ok(frame) = wire.reliable_rx.try_recv() {
         client.receive_framed(&frame);
@@ -479,7 +494,7 @@ async fn shelf_update_waits_for_block_credit_and_uses_the_newest_snapshot() {
 #[tokio::test]
 async fn shelf_update_does_not_starve_during_continuous_single_credit_events() {
     let mut wire = Wire::new();
-    let mut client = ClientShelf::default();
+    let mut client = ClientShelf::new(&wire);
     wire.publish_shelf(1, 0).await;
     while let Ok(frame) = wire.reliable_rx.try_recv() {
         client.receive_framed(&frame);
@@ -529,7 +544,7 @@ async fn shelf_update_does_not_starve_during_continuous_single_credit_events() {
 #[tokio::test]
 async fn shelf_update_pending_during_skip_is_covered_by_latest_chunk_repair() {
     let mut wire = Wire::new();
-    let mut client = ClientShelf::default();
+    let mut client = ClientShelf::new(&wire);
     wire.publish_shelf(1, 0).await;
     while let Ok(frame) = wire.reliable_rx.try_recv() {
         client.receive_framed(&frame);
@@ -618,7 +633,7 @@ async fn full_world_queue_does_not_disconnect_or_starve_shelf_updates() {
         &wire.server
     ));
     wire.publish_shelf(3, 2).await;
-    let mut client = ClientShelf::default();
+    let mut client = ClientShelf::new(&wire);
     while let Ok(frame) = wire.reliable_rx.try_recv() {
         client.receive_framed(&frame);
     }

@@ -44,6 +44,7 @@ pub struct Client {
     rbuf: BytesMut,
     pending: VecDeque<RawFrame>,
     compression: Compression,
+    play: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -119,6 +120,7 @@ impl Client {
             rbuf: BytesMut::with_capacity(8192),
             pending: VecDeque::new(),
             compression: Compression::Disabled,
+            play: false,
         })
     }
 
@@ -156,6 +158,17 @@ impl Client {
     async fn read_network_frame(&mut self) -> Result<RawFrame> {
         loop {
             if let Some(frame) = try_decode_frame(&mut self.rbuf, self.compression)? {
+                if self.play
+                    && frame.id == mc_protocol::packets::play::ClientboundChunkBatchFinished::ID
+                {
+                    let mut body = frame.body.as_ref();
+                    mc_protocol::packets::play::ClientboundChunkBatchFinished::decode(&mut body)?;
+                    anyhow::ensure!(body.is_empty(), "trailing chunk batch finished data");
+                    self.write_packet(&mc_protocol::packets::play::ServerboundChunkBatchReceived {
+                        desired_chunks_per_tick: 8.0,
+                    })
+                    .await?;
+                }
                 return Ok(frame);
             }
             let n = self.stream.read_buf(&mut self.rbuf).await?;
@@ -320,6 +333,7 @@ impl Client {
             }
             if frame.id == FinishConfiguration::ID {
                 self.write_packet(&AcknowledgeFinishConfiguration).await?;
+                self.play = true;
                 return Ok(());
             }
             bail!(
@@ -448,3 +462,7 @@ mod tests {
         assert!(err.to_string().contains("skipped 1 frames"));
     }
 }
+
+#[cfg(test)]
+#[path = "wire_client_chunk_batch_tests.rs"]
+mod chunk_batch_tests;

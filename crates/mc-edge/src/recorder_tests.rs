@@ -120,7 +120,7 @@ fn marker_reserves_its_world_slot() {
         assert!(
             packets
                 .iter()
-                .filter(|packet| packet.priority == Priority::BestEffort)
+                .filter(|packet| packet.priority != Priority::Reliable)
                 .count()
                 <= credit
         );

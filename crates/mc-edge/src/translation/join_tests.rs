@@ -55,6 +55,7 @@ struct Client {
     buf: BytesMut,
     compression: Compression,
     profile: Arc<Profile>,
+    batch_chunks: Option<i32>,
 }
 
 impl Client {
@@ -112,6 +113,7 @@ impl Client {
             buf: BytesMut::new(),
             compression: Compression::Disabled,
             profile,
+            batch_chunks: None,
         };
         let mut hello = Vec::new();
         hello.write_varint(client.profile.version.protocol);
@@ -226,6 +228,7 @@ impl Client {
             buf: BytesMut::new(),
             compression: Compression::Disabled,
             profile,
+            batch_chunks: None,
         };
         let mut handshake = Vec::new();
         handshake.write_varint(client.profile.version.protocol);
@@ -252,6 +255,15 @@ impl Client {
     async fn play_until<T>(&mut self, mut stop: impl FnMut(&Self, &RawFrame) -> Option<T>) -> T {
         loop {
             let frame = self.recv().await;
+            if frame.id == self.id("play", true, "minecraft:chunk_batch_start") {
+                assert!(frame.body.is_empty() && self.batch_chunks.is_none());
+                self.batch_chunks = Some(0);
+            } else if frame.id == self.id("play", true, "minecraft:level_chunk_with_light") {
+                *self
+                    .batch_chunks
+                    .as_mut()
+                    .expect("chunk must be inside a batch") += 1;
+            }
             if frame.id == self.id("play", true, "minecraft:update_advancements") {
                 if self.profile.version.protocol < 777 {
                     validate_legacy_advancement_icons(&self.profile.tables, &frame.body);
@@ -284,6 +296,10 @@ impl Client {
                 )
                 .await;
             } else if frame.id == self.id("play", true, "minecraft:chunk_batch_finished") {
+                let mut body = frame.body.as_ref();
+                let count = body.read_varint().unwrap();
+                assert_eq!(self.batch_chunks.take(), Some(count));
+                assert!(count > 0 && count <= 16 && body.is_empty());
                 let mut rate = Vec::new();
                 rate.write_f32(25.0);
                 self.send(

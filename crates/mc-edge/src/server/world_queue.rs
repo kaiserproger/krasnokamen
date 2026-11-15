@@ -34,6 +34,10 @@ const _: () = assert!(RECORDER_WORLD_QUEUE_FRAMES >= 2 * 2 * 20_000_usize.div_ce
 struct WorldFrame {
     bytes: bytes::Bytes,
     generation: u64,
+    // A batch is one indivisible writer item, but consumes all wire frame
+    // slots. These unused permits stay charged until the item is taken.
+    reservations: Vec<mpsc::OwnedPermit<WorldFrame>>,
+    chunk_batch: Option<Arc<parking_lot::Mutex<crate::plan::chunk_batch::ChunkBatchState>>>,
 }
 
 /// Producer half; clones share the byte count.
@@ -100,6 +104,8 @@ impl WorldSender {
             .try_send(WorldFrame {
                 bytes: frame,
                 generation: self.generation.load(Ordering::Acquire),
+                reservations: Vec::new(),
+                chunk_batch: None,
             })
             .map_err(|error| {
                 self.queued.fetch_sub(len, Ordering::AcqRel);
@@ -108,6 +114,36 @@ impl WorldSender {
                     TrySendError::Closed(frame) => TrySendError::Closed(frame.bytes),
                 }
             })
+    }
+
+    /// Reserve every batch frame or queue nothing. A single writer item keeps
+    /// framing intact across reliable dimension resets and competing LOD sends.
+    pub(crate) fn try_send_chunk_batch(
+        &self,
+        frames: &[bytes::Bytes],
+        chunks: usize,
+        state: &Arc<parking_lot::Mutex<crate::plan::chunk_batch::ChunkBatchState>>,
+    ) -> Result<(), ()> {
+        let mut reservations = Vec::with_capacity(frames.len());
+        for _ in frames {
+            reservations.push(self.frames.clone().try_reserve_owned().map_err(|_| ())?);
+        }
+        let sender = reservations.pop().ok_or(())?;
+        let len = frames.iter().map(bytes::Bytes::len).sum();
+        let mut bytes = bytes::BytesMut::with_capacity(len);
+        for frame in frames {
+            bytes.extend_from_slice(frame);
+        }
+        let mut batch = state.lock();
+        self.queued.fetch_add(len, Ordering::AcqRel);
+        batch.sent(chunks);
+        sender.send(WorldFrame {
+            bytes: bytes.freeze(),
+            generation: self.generation.load(Ordering::Acquire),
+            reservations,
+            chunk_batch: Some(Arc::clone(state)),
+        });
+        Ok(())
     }
 
     /// Fence queued world frames before enqueueing a reliable dimension reset.
@@ -166,9 +202,10 @@ impl WorldReceiver {
         }
     }
 
+    /// Wire frame slots queued or reserved, including grouped batch frames.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.frames.len()
+        self.frames.max_capacity() - self.frames.capacity()
     }
 
     #[must_use]
@@ -178,7 +215,16 @@ impl WorldReceiver {
 
     fn taken(&self, frame: WorldFrame) -> Option<bytes::Bytes> {
         self.queued.fetch_sub(frame.bytes.len(), Ordering::AcqRel);
-        (frame.generation == self.generation.load(Ordering::Acquire)).then_some(frame.bytes)
+        // Releasing the reservations here matches an ordinary frame's slot.
+        drop(frame.reservations);
+        if frame.generation == self.generation.load(Ordering::Acquire) {
+            Some(frame.bytes)
+        } else {
+            if let Some(state) = frame.chunk_batch {
+                state.lock().discarded();
+            }
+            None
+        }
     }
 }
 

@@ -30,6 +30,7 @@ pub use player_changes::plan_player_changes;
 pub(crate) use player_changes::plan_routed_player_changes;
 
 mod camera;
+pub(crate) mod chunk_batch;
 mod chunk_delta;
 mod entity_candidates;
 mod entity_interest;
@@ -463,6 +464,7 @@ pub struct ViewerState {
     pub dimension: mc_core::dimensions::Dimension,
     /// Negotiated connection radius; None uses the caller's server limit.
     pub(crate) view_distance: Option<i32>,
+    pub(crate) chunk_batches: Arc<parking_lot::Mutex<chunk_batch::ChunkBatchState>>,
     /// Registry indices resolved by the edge from its exact vanilla data.
     pub dimension_type_ids: [i32; 3],
     pub advancements: Arc<crate::advancements::AdvancementPackets>,
@@ -559,6 +561,7 @@ impl ViewerState {
             position,
             dimension: mc_core::dimensions::Dimension::Overworld,
             view_distance: None,
+            chunk_batches: Arc::default(),
             dimension_type_ids: [0; 3],
             advancements: Arc::default(),
             recipe_catalog: None,
@@ -1369,7 +1372,16 @@ fn plan_viewer_inner(
 
     // Admit unseen chunks first, then repair held chunks. Both share the same
     // bounded send budget; a deferred repair remains owed across publishes.
-    let mut chunks_left = CHUNKS_PER_TICK;
+    let mut chunks_left = viewer.chunk_batches.lock().allowance();
+    // Two framing slots travel atomically with the chunks. Reserve them
+    // before admission; unused reservations are returned below.
+    let batch_credit = credit;
+    if credit.frames >= 3 && credit.bytes > 0 {
+        credit.frames -= 2;
+    } else {
+        chunks_left = 0;
+    }
+    let batch_start = out.len();
     for repairs in [false, true] {
         if !admit {
             break;
@@ -1388,11 +1400,12 @@ fn plan_viewer_inner(
                 admission_debt = true;
                 break;
             }
-            chunks_left -= 1;
+            // Missing resident chunks do not spend client quota.
             chunk_stat!(stats.probes += 1);
             let Some(resident) = find_chunk(&snapshot.chunks, pos) else {
                 continue;
             };
+            chunks_left -= 1;
             let data = chunk_cache
                 .get(
                     snapshot.dimension,
@@ -1410,12 +1423,21 @@ fn plan_viewer_inner(
                 chunk_dimension: snapshot.dimension,
             });
             credit.charge(&out[out.len() - 1..]);
+            if out.len() == batch_start + 1 {
+                // Threshold-256 framing: empty start = 3 bytes, one-byte count
+                // finish = 4. Charge with the first chunk so any remaining
+                // byte credit still admits one complete (possibly large) group.
+                credit.bytes = credit.bytes.saturating_sub(7);
+            }
             viewer.loaded_chunks.insert(pos, resident.revision);
             viewer.chunk_repairs.remove(&pos);
             viewer
                 .light_baseline
                 .record(pos, &resident.chunk, resident.revision);
         }
+    }
+    if out.len() == batch_start {
+        credit = batch_credit;
     }
     if let Some(delta) = delta {
         let quiet = !unload_debt

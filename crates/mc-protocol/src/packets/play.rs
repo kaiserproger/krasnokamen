@@ -102,9 +102,10 @@ pub use chat_commands::{
     ServerboundEditBook, ServerboundPlayerLoaded, ServerboundSignUpdate,
 };
 pub use chunks::{
-    BlockChangedAck, BlockEntityInfo, BlockUpdate, ChunkHeightmap, ForgetLevelChunk,
-    LevelChunkWithLight, LevelEvent, LightData, LightUpdate, SectionBlockChange,
-    SectionBlocksUpdate, SetCenterChunk, SetChunkCacheRadius, pack_chunk_pos,
+    BlockChangedAck, BlockEntityInfo, BlockUpdate, ChunkHeightmap, ClientboundChunkBatchFinished,
+    ClientboundChunkBatchStart, ForgetLevelChunk, LevelChunkWithLight, LevelEvent, LightData,
+    LightUpdate, SectionBlockChange, SectionBlocksUpdate, SetCenterChunk, SetChunkCacheRadius,
+    pack_chunk_pos,
 };
 pub use entity::{
     AddEntity, BlockStateId, ClientboundSetEntityData, ClientboundSetPassengers,
