@@ -85,6 +85,10 @@ def _client_command(profile, scenario):
         argv.extend(['--client', 'native', '--windowed'])
     else:
         argv.extend(['--client', 'java'])
+    if profile == 'scene-shot' and scenario == 'java-gait-sidecar':
+        argv.append('--windowed')
+    if profile == 'java-battle-functional':
+        argv.extend(['--platform', 'neoforge', '--timeout-seconds', '1800'])
     return argv
 
 # Only profiles explicitly supported by the CLI's windowed native client path.

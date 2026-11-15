@@ -31,6 +31,25 @@ water medium after terrain arrives. Teardown releases the held stream even
 when an assertion fails. Pins, tree identity and control/restore receipts are
 still required for ledger promotion.
 
+## Registered gait and late battle capture regressions
+
+`native-gait-spider` and `java-gait-sidecar` run the canonical
+`gait_phase_scene.json`, using respectively `--client native --windowed` and
+`--client java --windowed`. Java uses the plain 26.3 endpoint. Both require
+same-frame zombie/spider walk phases; the native gate additionally rejects
+death-tinted zombie pixels in the spider's fixed camera ROI while requiring
+visible spider-body pixels. This is a fixture-specific obstruction check.
+
+`java-battle-end-camera` runs `java-battle-functional --client java --platform
+neoforge` with seed 46 and a 150-second take. Set `KRASNOKAMEN_SERVER_BINARY`
+to the candidate's non-incremental release pin, `KRASNOKAMEN_CLIENT_BINARY`
+to the pinned recorder, and `KRASNOKAMEN_BATTLE_RECORDER_DATA`,
+`KRASNOKAMEN_BATTLE_WORLD`, `KRASNOKAMEN_BATTLE_PACK_ROOT` and
+`KRASNOKAMEN_BATTLE_HIT_COUNTER` to the existing battle inputs. Loader's
+`--late-capture` waits for `completion.ready`, captures the real camera while
+the server remains live, then releases `completion.done`. A regular battle
+pass without this assertion is not proof of the late-capture regression.
+
 ## Prerequisites
 
 Everything below is reproducible from public sources, except where a line says

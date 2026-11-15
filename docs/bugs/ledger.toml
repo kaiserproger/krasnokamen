@@ -6014,7 +6014,7 @@ severity = "major"
 status = "open"
 source = "Stage3 S3Issue1 F2: scene_shot.check_player_head uses x880-1080 rather than the head at x590-690"
 repro = "client"
-regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels"]
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels", "harness:scene-shot:native-player-head"]
 fix_commit = "f645ca39a"
 repro_check = "Fixture camera/geometry frames the placed head in x580-700/y520-655. Stored original frame measurement at channel delta >25: old ROI 0, corrected ROI 10750 changed pixels (receipts/HarnessFix2/stored-head-roi.json). Only ROI reverted: receipts/HarnessFix2/red-head-roi.log fails placed_head_renders. Restore: receipts/HarnessFix2/green-final-units.log. Followup real-client placed-head evidence: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 authored hat pixels; 20261115T010623-native-player-head-vwnycn1k hat-only control has zero. Full head acceptance additionally requires the worn attachment fix and tightened worn assertion."
 failing_first = "not recorded"
@@ -6102,6 +6102,7 @@ repro = "client"
 regression = [
   "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock",
   "python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud",
+  "harness:scene-shot:native-dynamic-context",
 ]
 fix_commit = "f645ca39a"
 repro_check = "The dropped fixture is y161.4 with fixed block lighting. Followup fad1cef1e measures blue occupancy in an 8x8 grid inside the gold rim, not total blue area (opposite phases can have equal areas), and excludes HUD/chat. Only the original HUD/dark-angle oracle restored: receipts/HarnessFix2/red-clock-only.log accepts the HUD-only counterexample. Followup unit suite: receipts/HarnessFix2/green-followup-scene-units.log, 72 tests pass. Real-client native-dynamic-context passes 3/3: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. Dropped and held day/night frames of the first run were reviewed; no item-frame coverage or general MODEL-DYNAMIC-CONTEXT promotion is claimed."
@@ -6262,6 +6263,7 @@ regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink",
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_without_private_graph_is_refused_before_spawn",
   "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph",
+  "harness:screens-voice-qa:fabric_loader_plays_screen_audio",
 ]
 repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode."
 failing_first = "reported"
@@ -6278,6 +6280,7 @@ repro = "source"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
   "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
+  "harness:screens-voice-qa:svc_proximity_fabric_to_fabric",
 ]
 repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
 fix_commit = "patch:94ce251608e4cb8d332ed8543764c21edc0614d9106b7574db7ff2d6e2cefab2"
@@ -6306,7 +6309,7 @@ severity = "minor"
 status = "open"
 source = "HarnessGraphical gait scene: zombie and spider approach the same camera on the same lane, and the zombie death animation occludes the spider"
 repro = "client"
-regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view"]
+regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view", "harness:scene-shot:native-gait-spider"]
 fix_commit = "b6f1ac655"
 failing_first = "reported"
 repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log fails the original fixture's camera-frustum assertion with tests retained. green-restored.log passes. Three native windowed gait runs pass on 3c2279125: real-gait/20261115T012844-scene-shot-j9w3a8qy, 20261115T013328-scene-shot-mgy_ub0y, 20261115T013411-scene-shot-4da3qs2q. All three accepted spider frames and the first zombie frame were visually reviewed: subject unobstructed, no overlapping zombie. Spider capture uses 2, 2 and 3 uniquely named attempts respectively. Server c7786910eaa6 and client 12e076e9c761 pins; report.md retains commands and review."
@@ -6357,6 +6360,7 @@ regression = [
   "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_holds_shutdown_until_scenario_releases",
   "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed",
   "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes",
+  "harness:java-battle-functional:java-battle-end-camera",
 ]
 fix_commit = "patch:d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e"
 failing_first = "reported"
@@ -6394,7 +6398,7 @@ severity = "blocker"
 status = "open"
 source = "Stage3 S3Loader on loader dfad752: critical mixin injection failure, wt/S3LoaderCore/.analysis/validation/20261114T232908-loader-fabric-screen-admission-j0xk_52i/client.log:207"
 repro = "client"
-regression = []
+regression = ["harness:loader-live:loader-fabric-screen-admission"]
 failing_first = "reported"
 repro_check = "Fixed in Loader commits 635e415 (ZombieShieldPoseMixin now injects at extractRenderState(Zombie, ZombieRenderState, float) RETURN and sets the arm BLOCK pose; WindowMixin.onFocus reads isFocused()) and 4e214443 (generic MixinTargetTest over every configured mixin selector against the 26.1.2, 26.2 and 26.3 client jars); no ledger fix_commit kind for the Loader repository. Loader Java tests (no ledger ref kind): receipts/LoaderMixinFix/generic-26.1.2-final.xml, generic-26.2-final.xml, generic-26.3-final.xml green; old zombie selector restored fails naming ZombieShieldPoseMixin/getArmPose (receipts/LoaderMixinFix/generic-negative-committed.xml). Real clients: Fabric screen admission enters Play (receipts/LoaderMixinFix/20261114T234416-loader-fabric-screen-admission-uvnk421h), NeoForge settlements smoke enters Play (20261114T234858-loader-v2-settlements-smoke-m8581t1b); S3Loader confirmed the blocking husk shield pose visually on loader 635e415 (receipts/Stage3/S3Loader/REPORT.md). Not promoted."
 
@@ -6718,7 +6722,7 @@ severity = "major"
 status = "open"
 source = "Stage3 HeadBreaker Java 26.3 gait scene against server 8b6fc28e58bb: 109/110 spider sidecars empty with the spider visible (wt/HeadBreaker/.analysis/validation/20261115T031712-scene-shot-19zmhrum, spider-phase-walk.json), retry 98/99 zombie sidecars empty (20261115T031837-scene-shot-fx6igd36, zombie-phase-walk.json)"
 repro = "client"
-regression = []
+regression = ["harness:scene-shot:java-gait-sidecar"]
 failing_first = "reported"
 repro_check = "Proven cause (LoaderGaitFix): the IO completion callback sampled frame 547 for screenshot 541, so render/extract state was not tied to the captured frame. Loader fix 30a39f838 (loader main) captures gait inputs with their rendered frame (VanillaFrameTransformer). Red: fix-only reversal makes VanillaFrameCaptureTest fail and the real Java 26.3 gait scene produce 192/192 empty sidecars (receipts/LoaderGaitFix/red-fix-only-real/20261115T033610-scene-shot-7mruhd0f, harness e5512b2a5). Green: 3/3 real runs pass with 0 empty sidecars (receipts/LoaderGaitFix/green-frozen-real/20261115T033835-scene-shot-sms00brg, 20261115T034012-scene-shot-vyyyv3hh, 20261115T034125-scene-shot-ke3ccriy), accepted frames visually reviewed. Promotion still needs a registered real-client harness ref and candidate receipt."
 
