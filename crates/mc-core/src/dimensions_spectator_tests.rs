@@ -162,3 +162,26 @@ fn spectator_explicit_same_world_teleport_releases_only_after_valid_destination(
         world.entities.pos(world.entities.slot_of(bob).unwrap())
     );
 }
+
+#[test]
+fn spectator_tracking_roster_is_current_and_shared_in_every_dimension_snapshot() {
+    let (mut state, alice, _) = worlds();
+    for mode in ["spectator", "survival"] {
+        let (output, _) = command(&mut state, 1, &format!("gamemode {mode}"));
+        let roster = &state.dimension_globals.roster;
+        assert!(Arc::ptr_eq(&output.snapshot.player_roster, roster));
+        assert_eq!(
+            output
+                .snapshot
+                .player_roster
+                .iter()
+                .find(|player| player.entity == alice)
+                .unwrap()
+                .game_mode,
+            if mode == "spectator" { 3 } else { 0 }
+        );
+        for child in output.snapshot.dimensions.values() {
+            assert!(Arc::ptr_eq(&child.snapshot.player_roster, roster));
+        }
+    }
+}

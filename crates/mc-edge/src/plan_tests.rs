@@ -17,6 +17,9 @@ mod chunk_delta_tests;
 #[path = "plan/camera_tests.rs"]
 mod camera_tests;
 
+#[path = "plan/player_visibility_tests.rs"]
+mod player_visibility_tests;
+
 #[path = "plan/section_blocks_tests.rs"]
 mod section_blocks_tests;
 

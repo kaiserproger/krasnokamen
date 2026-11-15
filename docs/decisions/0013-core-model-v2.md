@@ -71,6 +71,12 @@ release, rather than retaining a dimension-local entity reference. Explicit
 player teleport also releases the player's camera; refused teleports do not.
 The effects appearance owner projects spectator invisibility and suppresses
 effect particles without deleting the player's potion state.
+The snapshot shares the existing global roster allocation for current player
+modes. Entity interest uses that roster and camera ownership for vanilla player
+tracking eligibility, not a second mode store: ordinary viewers never receive
+spectator bodies; spectator viewers receive only self-camera player bodies.
+Retained interest revisits player rows when either immutable input changes,
+including already paired and previously hidden players, without scanning mobs.
 
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first rider with a live body controls motion; absent recovery claims are skipped.

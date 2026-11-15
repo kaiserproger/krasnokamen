@@ -691,6 +691,9 @@ pub struct WorldSnapshot {
     pub player_factions: Arc<Vec<(String, u16)>>,
     /// Transient camera bindings, reconciled by edge only after target tracking.
     pub cameras: Arc<rustc_hash::FxHashMap<EntityId, EntityId>>,
+    /// The shared authoritative online roster, including current player modes.
+    /// Reuses the global roster allocation; entity tracking stays dimension-local.
+    pub player_roster: Arc<[crate::dimensions::RosterPlayer]>,
     /// Names of the scoreboard's `/team` teams, ascending; the same `Arc`
     /// while they are unchanged. The edge never projects a faction team over
     /// one of these names.

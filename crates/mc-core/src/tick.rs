@@ -1996,6 +1996,7 @@ fn run_dimension_tick_inner<'a>(
         settlement_labels: crate::settlements::presentation::snapshot(state),
         player_factions: crate::battle::live_players::player_factions(state),
         cameras: Arc::clone(&state.cameras),
+        player_roster: Arc::clone(&state.dimension_globals.roster),
         team_names: crate::scoreboard::snapshot_team_names(state),
     });
     let output = TickOutput {

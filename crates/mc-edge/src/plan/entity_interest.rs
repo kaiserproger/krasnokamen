@@ -7,6 +7,9 @@ type Order = (i32, i32, i32);
 #[derive(Debug, Default)]
 pub(super) struct EntityInterest {
     previous: Option<mc_core::boundary::EntityViews>,
+    /// Prior immutable inputs to player eligibility, not a second mode authority.
+    roster: Option<Arc<[mc_core::dimensions::RosterPlayer]>>,
+    cameras: Option<Arc<rustc_hash::FxHashMap<EntityId, EntityId>>>,
     position: Option<([u64; 2], i32)>,
     held: HashSet<(i32, i32)>,
     /// Distinct tracking ranges of the tracked kinds (a handful): a linear probe replaces the hash of
@@ -53,6 +56,14 @@ impl EntityInterest {
         let same = revision == Some(snapshot.entities.revision());
         let contiguous =
             same || revision.is_some_and(|revision| index.entity_base == Some(revision));
+        let roster_changed = self
+            .roster
+            .as_ref()
+            .is_none_or(|old| !Arc::ptr_eq(old, &snapshot.player_roster));
+        let cameras_changed = self
+            .cameras
+            .as_ref()
+            .is_none_or(|old| !Arc::ptr_eq(old, &snapshot.cameras));
         let held_same = self.held.len() == viewer.loaded_chunks.len()
             && self
                 .held
@@ -112,6 +123,24 @@ impl EntityInterest {
                 self.seeded = true;
             }
             scratch.visible.clear();
+            if roster_changed || cameras_changed {
+                // Modes and camera ownership can change without an entity-row
+                // revision. Revisit players only, including hidden/unpaired rows.
+                for player in snapshot.player_roster.iter() {
+                    self.changed(snapshot, viewer, distance, player.entity);
+                }
+                if roster_changed && let Some(old) = self.roster.as_ref().map(Arc::clone) {
+                    for player in old.iter() {
+                        if !snapshot
+                            .player_roster
+                            .iter()
+                            .any(|now| now.entity == player.entity)
+                        {
+                            self.changed(snapshot, viewer, distance, player.entity);
+                        }
+                    }
+                }
+            }
             if !same {
                 index.entity_changes_for(&viewer.loaded_chunks, |delta| {
                     self.delta(snapshot, viewer, distance, delta);
@@ -197,6 +226,12 @@ impl EntityInterest {
         scratch.removed.sort_unstable();
         self.position = Some(position);
         self.previous = Some(snapshot.entities.clone());
+        if roster_changed {
+            self.roster = Some(Arc::clone(&snapshot.player_roster));
+        }
+        if cameras_changed {
+            self.cameras = Some(Arc::clone(&snapshot.cameras));
+        }
     }
 
     fn delta(
@@ -293,7 +328,8 @@ impl EntityInterest {
                 .entities
                 .in_chunk(mc_core::boundary::ChunkPos { x, z })
             {
-                if entity_trackable(entity, viewer, distance)
+                if (entity_trackable(entity, viewer, distance)
+                    && broadcast_to(snapshot, entity, viewer.entity_id))
                     != self.visible.contains_key(&entity.id)
                 {
                     scratch.visible.push(entity.id);
@@ -322,6 +358,7 @@ impl EntityInterest {
                 && (chunk.1 - center.1).abs() <= distance.max(0)
                 && (id == viewer.entity_id || viewer.loaded_chunks.contains_key(&chunk))
                 && entity_trackable(entity, viewer, distance)
+                && broadcast_to(snapshot, entity, viewer.entity_id)
         });
         if let Some(entity) = entity {
             self.visible.insert(id, order(entity));
@@ -437,6 +474,34 @@ impl EntityInterest {
         } else {
             self.scheduled.remove(&entity.id);
         }
+    }
+}
+
+/// Vanilla ServerPlayer.broadcastToPlayer: bound subjects are absent even for
+/// spectator recipients; ordinary recipients never track spectator subjects.
+/// Self metadata and non-player tracking retain their existing contracts.
+pub(super) fn broadcast_to(
+    snapshot: &WorldSnapshot,
+    entity: &EntityView,
+    recipient: EntityId,
+) -> bool {
+    if entity.id == recipient || entity.type_id != player_entity_type_id() {
+        return true;
+    }
+    let spectator_viewer = snapshot
+        .player_roster
+        .iter()
+        .any(|player| player.entity == recipient && player.game_mode == 3);
+    if spectator_viewer {
+        snapshot
+            .cameras
+            .get(&entity.id)
+            .is_none_or(|target| *target == entity.id)
+    } else {
+        !snapshot
+            .player_roster
+            .iter()
+            .any(|player| player.entity == entity.id && player.game_mode == 3)
     }
 }
 

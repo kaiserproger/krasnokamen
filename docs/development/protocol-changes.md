@@ -116,6 +116,19 @@ invisibility. Command receipts are outside Git in
 The native effects projection preserves potion state when entering/leaving
 spectator mode. A roster mode update alone does not replace shared flags.
 
+Player tracking also applies `ServerPlayer.broadcastToPlayer`, independently
+of invisibility: a spectator recipient sees only subjects whose camera is self;
+an ordinary recipient never tracks a spectator subject. Local 26.3 bytecode
+shows `ChunkMap$TrackedEntity.updatePlayer` combines this predicate with range
+and tracked-chunk eligibility, and removes an existing pairing when it becomes
+false. Player/Avatar/LivingEntity do not override the base Entity predicate
+(true). Thus both free and bound spectators are absent for ordinary recipients;
+bound spectators are absent for spectator recipients too.
+The edge consumes the existing authoritative roster and camera snapshot,
+revisits player eligibility on either input's change, and retains ordered
+removal/re-pair debt. No name/side filter or observer picking workaround applies.
+Receipts: `receipts/HzBattlePrep/vanilla-26.3-{ServerPlayer,TrackedEntity,Entity}.txt`.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs
