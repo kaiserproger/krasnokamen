@@ -56,10 +56,10 @@ override the general queue and fleet defaults below.
    a ledger promotion batch of five or more rows; a change to persistence,
    protocol, custody or the battle core before Main commits it (and the design
    of a client threading or entity-tick change before implementation and its code
-   before merging), reviewed by the `architect-fable` agent (owner, 2026-11-14);
-   two release reviewers before a tag. Docs-only and test-only slices get no
-   reviewer. The owner contract authorizes these reviewers; fixing their
-   findings needs no second review.
+   before merging), under the [portable critical-review policy](docs/development/review-committee-and-breaker.md#independent-reviewer)
+   (permanent owner decision, 2026-11-15); two release reviewers before a tag.
+   Docs-only and test-only slices get no reviewer. The owner contract authorizes
+   these reviewers; fixing their findings needs no second review.
 6. An autonomous `/goal` covers the approved objective, not a slice; a context
    handoff neither pauses nor completes it. For this announcement the owner
    explicitly authorized the finite acceptance and stop condition linked above.

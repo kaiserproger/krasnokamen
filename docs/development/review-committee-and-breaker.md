@@ -6,9 +6,9 @@ protocol or custody changes before commit, two reviewers before a tag; no
 reviewer for docs-only or test-only slices; no reviewer carousel) and the
 [break-it QA protocol](../QA_AGENT_PROTOCOL.md) is
 the breaker's contract. This page records the roles' prompts and practice.
-Models are the owner's choice and are not named here; agent definitions live in
-the agent runtime's user agent directory as Markdown files with frontmatter
-(`name`, `description`, model, thinking level, `tools`, optional `spawns`).
+Models follow the owner's policy below; agent definitions live in the runtime's
+user agent directory as Markdown files with frontmatter (`name`, `description`,
+model, thinking level, `tools`, optional `spawns`).
 
 ## Advisor (watchdog)
 
@@ -77,11 +77,20 @@ both YAML results under `.analysis/releases/<tag>/`.
 
 ## Independent reviewer
 
-One read-only reviewer at each review point in AGENTS.md "Working rules" (a
-ledger promotion batch of five or more rows; a persistence, protocol or custody
-change before Main commits it); docs-only and test-only slices get none. It
-neither edits nor delegates, and fixing its findings does not trigger another
-reviewer. The negative-code checks it must include are in
+One read-only reviewer at each review point in AGENTS.md "Working rules",
+including critical persistence, protocol, custody and battle-core changes before
+Main commits them; docs-only and test-only slices get none. It neither edits nor
+delegates, and fixing its findings does not trigger another reviewer.
+
+Permanent owner policy, 2026-11-15: **Fable (`architect-fable`) is preferred; when
+unavailable, an independent Astra/Sol reviewer is allowed.** This replaces the
+single-model prerequisite, not independent review. Record actual agent/model,
+independence, exact base/candidate/diff and critical source coverage. Reuse an old
+or partial review only for the hunks it actually covers, never as approval of a
+new combined candidate. Review points/counts, correctness, negative controls,
+original-consumer/client evidence, breaker and two release reviews are unchanged.
+
+The negative-code checks it must include are in
 [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Negative-code gate". Apply
 [Main's integration checklist](agent-fleet.md#mains-integration-checklist)
 to the review scope; the rubric below specialises it for independent review:
