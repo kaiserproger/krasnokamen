@@ -895,7 +895,8 @@ impl EdgeServer {
             return Ok(true);
         }
         if root == "whitelist" {
-            self.whitelist_command(id, &words.collect::<Vec<_>>())?;
+            self.whitelist_command(id, &words.collect::<Vec<_>>())
+                .await?;
             return Ok(true);
         }
         if root == "banlist" {
@@ -969,6 +970,74 @@ impl EdgeServer {
         let live = self.admin.find(target);
         if matches!(root, "op" | "deop" | "pardon" | "pardon-ip") && !reason.is_empty() {
             self.feedback(id, "Incorrect argument for command")?;
+            return Ok(true);
+        }
+        if matches!(root, "op" | "deop") {
+            let Some(profiles) = self.profile_targets(id, target).await? else {
+                return Ok(true);
+            };
+            let _guard = self.operator_updates.lock().await;
+            let updates: Vec<_> = profiles
+                .into_iter()
+                .map(|(uuid, name)| {
+                    let sessions = self.admin.sessions_for_uuid(uuid);
+                    (uuid, name, sessions)
+                })
+                .collect();
+            let slots = updates
+                .iter()
+                .map(|(_, _, sessions)| 1 + sessions.len())
+                .sum();
+            let mut permits = self
+                .hub
+                .reserve_inputs(slots)
+                .await
+                .map_err(|_| anyhow::anyhow!("authoritative operator update queue stopped"))?;
+            // Authorize the complete selected batch after both awaited steps.
+            // Deopping the source within this batch must not truncate its targets.
+            if id != mc_core::command_console::CONNECTION
+                && (self.hub.session_locked(id)
+                    || !crate::command_tree::permitted(
+                        command,
+                        self.admin.session_level(id),
+                        self.hub.plugin_commands(),
+                    ))
+            {
+                self.feedback(id, "Unknown or incomplete command")?;
+                return Ok(true);
+            }
+            for (uuid, name, sessions) in updates {
+                if let Err(error) = self.admin.set_op(uuid, &name, root == "op") {
+                    self.feedback(id, &format!("Command failed: {error}"))?;
+                    return Ok(true);
+                }
+                permits.next().expect("reserved operator snapshot").send(
+                    PlayerInput::SpawnProtectionOperators {
+                        operators: self.admin.operator_ids(),
+                    },
+                );
+                let level = self.admin.level(uuid);
+                for &other in &sessions {
+                    permits.next().expect("reserved permission update").send(
+                        PlayerInput::PermissionLevel {
+                            connection: other,
+                            level,
+                        },
+                    );
+                }
+                for other in sessions {
+                    let level = if self.hub.session_locked(other) {
+                        0
+                    } else {
+                        level
+                    };
+                    self.send(
+                        other,
+                        &crate::command_tree::tree(level, self.hub.plugin_commands()),
+                    )?;
+                }
+            }
+            self.success_feedback(id, &format!("Command {root} completed for {target}"))?;
             return Ok(true);
         }
         let source = self
@@ -1169,59 +1238,6 @@ impl EdgeServer {
                 return Ok(true);
             };
             match root {
-                "op" | "deop" => {
-                    let _guard = self.operator_updates.lock().await;
-                    let sessions = self.admin.sessions_for_uuid(uuid);
-                    let mut permits =
-                        self.hub
-                            .reserve_inputs(1 + sessions.len())
-                            .await
-                            .map_err(|_| {
-                                anyhow::anyhow!("authoritative operator update queue stopped")
-                            })?;
-                    if id != mc_core::command_console::CONNECTION
-                        && (self.hub.session_locked(id)
-                            || !crate::command_tree::permitted(
-                                command,
-                                self.admin.session_level(id),
-                                self.hub.plugin_commands(),
-                            ))
-                    {
-                        self.feedback(id, "Unknown or incomplete command")?;
-                        return Ok(true);
-                    }
-                    let result = self.admin.set_op(uuid, &name, root == "op");
-                    if result.is_ok() {
-                        permits.next().expect("reserved operator snapshot").send(
-                            PlayerInput::SpawnProtectionOperators {
-                                operators: self.admin.operator_ids(),
-                            },
-                        );
-                    }
-                    if result.is_ok() {
-                        let level = self.admin.level(uuid);
-                        for &other in &sessions {
-                            permits.next().expect("reserved permission update").send(
-                                PlayerInput::PermissionLevel {
-                                    connection: other,
-                                    level,
-                                },
-                            );
-                        }
-                        for other in sessions {
-                            let level = if self.hub.session_locked(other) {
-                                0
-                            } else {
-                                level
-                            };
-                            self.send(
-                                other,
-                                &crate::command_tree::tree(level, self.hub.plugin_commands()),
-                            )?;
-                        }
-                    }
-                    result
-                }
                 "mute" | "unmute" => {
                     let result = self.admin.mute_player(
                         uuid,
@@ -1279,11 +1295,60 @@ impl EdgeServer {
         Ok(true)
     }
 
+    /// Vanilla GameProfileArgument: selectors resolve on the native tick owner,
+    /// while names may also refer to cached/not-yet-joined offline profiles.
+    async fn profile_targets(
+        &self,
+        id: ConnectionId,
+        target: &str,
+    ) -> anyhow::Result<Option<Vec<(uuid::Uuid, String)>>> {
+        if target.starts_with('@') {
+            let selected = match self
+                .hub
+                .resolve_moderation_selector(id, target.to_owned())
+                .await
+            {
+                Ok(selected) => selected,
+                Err(error) => {
+                    self.feedback(id, &error)?;
+                    return Ok(None);
+                }
+            };
+            let profiles: Vec<_> = selected
+                .into_iter()
+                .filter_map(|(connection, uuid, name)| {
+                    (self.admin.uuid_of(connection) == Some(uuid)).then_some((uuid, name))
+                })
+                .collect();
+            if profiles.is_empty() {
+                self.feedback(id, "No player was found")?;
+                return Ok(None);
+            }
+            return Ok(Some(profiles));
+        }
+        let profile = self
+            .admin
+            .find(target)
+            .map(|(_, uuid, name, _)| (uuid, name))
+            .or_else(|| self.admin.profile(target))
+            .or_else(|| {
+                (!self.cfg.auth.online_mode)
+                    .then(|| (crate::crypto::offline_uuid(target), target.to_owned()))
+            });
+        match profile {
+            Some(profile) => Ok(Some(vec![profile])),
+            None => {
+                self.feedback(id, "That player does not exist")?;
+                Ok(None)
+            }
+        }
+    }
+
     /// Vanilla `/whitelist on|off|add|remove|list|reload`.
     ///
     /// The list file stays a plain `whitelist.json` array; the enforcement
     /// toggle persists in `whitelist.enabled` beside it.
-    fn whitelist_command(&self, id: ConnectionId, words: &[&str]) -> anyhow::Result<()> {
+    async fn whitelist_command(&self, id: ConnectionId, words: &[&str]) -> anyhow::Result<()> {
         let (sub, rest): (Option<&str>, &[&str]) = match words.split_first() {
             Some((sub, rest)) => (Some(*sub), rest),
             None => (None, &[]),
@@ -1316,31 +1381,51 @@ impl EdgeServer {
                 self.admin.reload_whitelist()?;
                 self.success_feedback(id, "Reloaded the whitelist")
             }
-            (Some("add"), [target]) => {
-                let profile = self
-                    .admin
-                    .find(target)
-                    .map(|(_, uuid, name, _)| (uuid, name))
-                    .or_else(|| self.admin.profile(target))
-                    .or_else(|| {
-                        (!self.cfg.auth.online_mode)
-                            .then(|| (crate::crypto::offline_uuid(target), (*target).to_owned()))
-                    });
-                let Some((uuid, name)) = profile else {
-                    return self.feedback(id, "No player was found");
+            (Some(sub @ ("add" | "remove")), [target]) => {
+                let Some(profiles) = self.profile_targets(id, target).await? else {
+                    return Ok(());
                 };
-                if self.admin.whitelist_add(uuid, &name)? {
-                    self.success_feedback(id, &format!("Added {name} to the whitelist"))
-                } else {
-                    self.feedback(id, "That player is already whitelisted")
+                let _guard = self.operator_updates.lock().await;
+                if id != mc_core::command_console::CONNECTION
+                    && (self.hub.session_locked(id)
+                        || !crate::command_tree::permitted(
+                            "whitelist",
+                            self.admin.session_level(id),
+                            self.hub.plugin_commands(),
+                        ))
+                {
+                    return self.feedback(id, "Unknown or incomplete command");
                 }
-            }
-            (Some("remove"), [target]) => {
-                if self.admin.whitelist_remove(target)? {
-                    self.success_feedback(id, &format!("Removed {target} from the whitelist"))
-                } else {
-                    self.feedback(id, "Nothing changed. The player is not whitelisted")
+                let mut changed = false;
+                for (uuid, name) in profiles {
+                    let updated = if sub == "add" {
+                        self.admin.whitelist_add(uuid, &name)?
+                    } else {
+                        self.admin.whitelist_remove(uuid)?
+                    };
+                    if updated {
+                        changed = true;
+                        self.success_feedback(
+                            id,
+                            &if sub == "add" {
+                                format!("Added {name} to the whitelist")
+                            } else {
+                                format!("Removed {name} from the whitelist")
+                            },
+                        )?;
+                    }
                 }
+                if !changed {
+                    self.feedback(
+                        id,
+                        if sub == "add" {
+                            "That player is already whitelisted"
+                        } else {
+                            "Nothing changed. The player is not whitelisted"
+                        },
+                    )?;
+                }
+                Ok(())
             }
             _ => self.feedback(id, "Incorrect argument for command"),
         }

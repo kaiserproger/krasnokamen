@@ -1084,3 +1084,155 @@ mod lost_entity_frames_tests;
 
 #[path = "explosion_queue_tests.rs"]
 mod explosion_queue_tests;
+
+#[tokio::test]
+async fn profile_selectors_op_deop_and_whitelist_use_native_players() {
+    use mc_core::boundary::PlayerInput;
+    let (server, _dir) = fixture_in_temp_dir();
+    let (operator, mut rx) = register(&server, "Operator", true);
+    let (alice, _alice_rx) = register(&server, "Alice", false);
+    let (bob, _bob_rx) = register(&server, "Bob", false);
+    let mut ticks = server.hub.subscribe();
+    for (connection, name, permission_level) in [
+        (operator, "Operator", 4),
+        (alice, "Alice", 0),
+        (bob, "Bob", 0),
+    ] {
+        assert!(server.hub.submit(PlayerInput::Join {
+            connection,
+            uuid: crate::crypto::offline_uuid(name),
+            name: name.into(),
+            permission_level,
+        }));
+    }
+    for _ in 0..3 {
+        ticks.recv().await.unwrap();
+    }
+    assert!(
+        server
+            .handle_admin_command(operator, "deop @s")
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        server.admin.level(crate::crypto::offline_uuid("Operator")),
+        0
+    );
+    assert_eq!(
+        crate::admin::Admin::open(_dir.path())
+            .unwrap()
+            .level(crate::crypto::offline_uuid("Operator")),
+        0
+    );
+    let console = mc_core::command_console::CONNECTION;
+    assert!(server.handle_admin_command(console, "op @a").await.unwrap());
+    for name in ["Operator", "Alice", "Bob"] {
+        assert_eq!(server.admin.level(crate::crypto::offline_uuid(name)), 4);
+    }
+    // The source may itself be among multiple targets; one batch authorization
+    // must cover all of them, regardless of native entity iteration order.
+    assert!(
+        server
+            .handle_admin_command(operator, "deop @a")
+            .await
+            .unwrap()
+    );
+    for name in ["Operator", "Alice", "Bob"] {
+        assert_eq!(server.admin.level(crate::crypto::offline_uuid(name)), 0);
+    }
+    assert_eq!(server.admin.level(crate::crypto::offline_uuid("@a")), 0);
+    assert!(
+        server
+            .handle_admin_command(console, "whitelist add @a")
+            .await
+            .unwrap()
+    );
+    assert_eq!(server.admin.whitelist_names().len(), 3);
+    assert!(
+        server
+            .handle_admin_command(console, "whitelist remove @a")
+            .await
+            .unwrap()
+    );
+    assert!(server.admin.whitelist_names().is_empty());
+    assert!(
+        crate::admin::Admin::open(_dir.path())
+            .unwrap()
+            .whitelist_names()
+            .is_empty()
+    );
+    server
+        .admin
+        .whitelist_add(crate::crypto::offline_uuid("Alice"), "FormerAlice")
+        .unwrap();
+    assert!(
+        server
+            .handle_admin_command(console, "whitelist remove @a[name=Alice]")
+            .await
+            .unwrap()
+    );
+    assert!(
+        server.admin.whitelist_names().is_empty(),
+        "a renamed selected UUID must still be removed"
+    );
+    // Literal offline names retain their existing admission path.
+    assert!(
+        server
+            .handle_admin_command(console, "whitelist add Absent")
+            .await
+            .unwrap()
+    );
+    assert_eq!(server.admin.whitelist_names(), ["Absent"]);
+    assert!(
+        server
+            .handle_admin_command(console, "whitelist remove Absent")
+            .await
+            .unwrap()
+    );
+    assert!(server.admin.whitelist_names().is_empty());
+    while rx.try_recv().is_ok() {}
+    server.hub.shutdown();
+}
+
+#[tokio::test]
+async fn profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles() {
+    use mc_core::boundary::PlayerInput;
+    let (server, _dir) = fixture_in_temp_dir();
+    let (operator, mut rx) = register(&server, "Operator", true);
+    let mut ticks = server.hub.subscribe();
+    assert!(server.hub.submit(PlayerInput::Join {
+        connection: operator,
+        uuid: crate::crypto::offline_uuid("Operator"),
+        name: "Operator".into(),
+        permission_level: 4,
+    }));
+    for _ in 0..3 {
+        ticks.recv().await.unwrap();
+    }
+    for command in [
+        "op @a[name=Missing]",
+        "deop @a[name=Missing]",
+        "whitelist add @a[name=Missing]",
+        "whitelist remove @a[name=Missing]",
+    ] {
+        assert!(
+            server
+                .handle_admin_command(operator, command)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            feedback_text(&receive(&mut rx).await),
+            "No player was found"
+        );
+        assert!(rx.try_recv().is_err());
+    }
+    assert!(server.admin.whitelist_names().is_empty());
+    assert_eq!(
+        server
+            .admin
+            .level(crate::crypto::offline_uuid("@a[name=Missing]")),
+        0
+    );
+    server.hub.shutdown();
+}

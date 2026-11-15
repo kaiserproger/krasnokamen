@@ -38,6 +38,12 @@ corruption during recovery, rather than selecting one list and losing another.
 Vanilla 26.3 bounds the authored list to 1024 **before** set insertion, so 1025
 identical strings are still refused; the count message says “at most 1024 tags”.
 
+`/op`, `/deop` and `/whitelist add|remove` resolve player selectors through the
+native tick owner, as vanilla's `GameProfileArgument` does. Empty selectors
+answer “No player was found”, never create literal `@...` profiles, and whitelist
+removal uses UUID identity even if a stored name has changed. Operator batches
+reauthorize after awaited selection/admission, before any permission mutation.
+
 Entity `CustomName` uses 26.x literal strings: `CustomName:"NamedCow"` and
 `CustomName:{text:"NamedCow"}` match `@e[name=NamedCow]`; JSON-looking strings
 remain literal, including their quote characters. Styled compound names are

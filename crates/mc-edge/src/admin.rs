@@ -349,17 +349,14 @@ impl Admin {
         Ok(true)
     }
 
-    /// Remove every listing whose name matches; false when nothing matched.
-    pub(crate) fn whitelist_remove(&self, name: &str) -> anyhow::Result<bool> {
+    /// Remove one profile identity regardless of its recorded name.
+    pub(crate) fn whitelist_remove(&self, uuid: Uuid) -> anyhow::Result<bool> {
         let _mutation = self.mutations.lock();
         let mut whitelist = self.lists.lock().whitelist.clone();
-        if !whitelist
-            .iter()
-            .any(|entry| entry.name.eq_ignore_ascii_case(name))
-        {
+        if !whitelist.iter().any(|entry| entry.uuid == uuid) {
             return Ok(false);
         }
-        whitelist.retain(|entry| !entry.name.eq_ignore_ascii_case(name));
+        whitelist.retain(|entry| entry.uuid != uuid);
         persist(&self.dir.join("whitelist.json"), &whitelist)?;
         self.lists.lock().whitelist = whitelist;
         Ok(true)
@@ -797,14 +794,15 @@ mod whitelist_tests {
     }
 
     #[test]
-    fn reload_reads_hand_edited_vanilla_list_and_remove_matches_name_case() {
+    fn reload_reads_hand_edited_vanilla_list_and_remove_uses_profile_identity() {
         let (admin, dir) = fixture();
         let uuid = Uuid::new_v4();
         admin.whitelist_add(uuid, "Listed").unwrap();
+        let edited = Uuid::new_v4();
         std::fs::write(
             dir.path().join("whitelist.json"),
             serde_json::to_vec(&vec![serde_json::json!({
-                "uuid": Uuid::new_v4(),
+                "uuid": edited,
                 "name": "Edited"
             })])
             .unwrap(),
@@ -812,10 +810,24 @@ mod whitelist_tests {
         .unwrap();
         assert_eq!(admin.reload_whitelist().unwrap(), 1);
         assert_eq!(admin.whitelist_names(), vec!["Edited".to_owned()]);
-        assert!(admin.whitelist_remove("eDiTeD").unwrap());
-        assert!(!admin.whitelist_remove("Edited").unwrap());
+        assert!(!admin.whitelist_remove(uuid).unwrap());
+        assert!(admin.whitelist_remove(edited).unwrap());
+        assert!(!admin.whitelist_remove(edited).unwrap());
         assert!(admin.whitelist_names().is_empty());
         std::fs::remove_dir_all(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn whitelist_removal_does_not_remove_another_uuid_with_the_same_name() {
+        let (admin, _dir) = fixture();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        admin.whitelist_add(a, "SameName").unwrap();
+        admin.whitelist_add(b, "SameName").unwrap();
+        assert!(admin.whitelist_remove(a).unwrap());
+        assert_eq!(admin.whitelist_names(), ["SameName"]);
+        assert!(admin.whitelist_remove(b).unwrap());
+        assert!(admin.whitelist_names().is_empty());
     }
 
     #[test]
