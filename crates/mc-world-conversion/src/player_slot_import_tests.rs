@@ -353,3 +353,153 @@ fn missing_item_id_with_payload_refuses_import_before_load_save() {
 fn wrong_type_item_id_with_payload_refuses_import_before_load_save() {
     malformed_item_id_refuses_import(Some(Tag::Int(7)));
 }
+
+fn duplicate_custody_refuses_import(location: &str) {
+    refused(
+        |player| {
+            let Tag::Compound(fields) = player else {
+                unreachable!()
+            };
+            fields.retain(|(name, _)| name != location);
+            let empty_item = Tag::Compound(vec![]);
+            let malformed_item = Tag::Compound(vec![
+                ("count".into(), Tag::Int(7)),
+                (
+                    "components".into(),
+                    Tag::Compound(vec![(
+                        "plugin:payload".into(),
+                        Tag::String("must not disappear".into()),
+                    )]),
+                ),
+            ]);
+            let (first, second) = if location == "krasnokamen:Carried" {
+                (empty_item, malformed_item)
+            } else {
+                (list(vec![empty_item; 4]), list(vec![malformed_item]))
+            };
+            fields.push((location.into(), first));
+            fields.push((location.into(), second));
+        },
+        &format!("{location}: duplicate owned custody field"),
+    );
+}
+
+#[test]
+fn duplicate_carried_refuses_import_before_first_match() {
+    duplicate_custody_refuses_import("krasnokamen:Carried");
+}
+
+#[test]
+fn duplicate_crafting_grid_refuses_import_before_first_match() {
+    duplicate_custody_refuses_import("krasnokamen:CraftingGrid");
+}
+
+#[test]
+fn duplicate_embedded_player_custody_refuses_import_before_publication() {
+    for key in ["krasnokamen:Carried", "krasnokamen:CraftingGrid"] {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("anvil");
+        let native = temp.path().join("native");
+        let config = crate::test_support::config(native.clone(), 42);
+        crate::roundtrip_tests::modern_fixture(&source, &config);
+        let mut player = crate::read_nbt(&source.join(PLAYER_PATH)).unwrap();
+        let Tag::Compound(fields) = &mut player else {
+            unreachable!()
+        };
+        fields.push(("UUID".into(), Tag::IntArray(vec![0, 0, 0, 3])));
+        let empty = Tag::Compound(vec![]);
+        let malformed = Tag::Compound(vec![
+            ("count".into(), Tag::Int(7)),
+            ("payload".into(), Tag::String("retained".into())),
+        ]);
+        let values = if key == "krasnokamen:Carried" {
+            [empty, malformed]
+        } else {
+            [empty, malformed].map(|item| list(vec![item]))
+        };
+        fields.extend(values.into_iter().map(|value| (key.into(), value)));
+        let mut level = crate::read_nbt(&source.join("level.dat")).unwrap();
+        let Tag::Compound(root) = &mut level else {
+            unreachable!()
+        };
+        let (_, Tag::Compound(data)) = root.iter_mut().find(|(key, _)| key == "Data").unwrap()
+        else {
+            unreachable!()
+        };
+        data.push(("Player".into(), player));
+        crate::roundtrip_tests::save(&source, "level.dat", &level);
+        let before = hashes(&source).unwrap();
+        let error = import_anvil(&config, &source, &native, &temp.path().join("import.json"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("level.dat#Data.Player"), "{error}");
+        assert!(
+            error.contains(&format!("{key}: duplicate owned custody field")),
+            "{error}"
+        );
+        assert!(!native.exists());
+        assert_eq!(hashes(&source).unwrap(), before);
+    }
+}
+
+#[test]
+fn duplicate_wal_player_custody_refuses_offline_export_without_publication() {
+    for key in ["krasnokamen:Carried", "krasnokamen:CraftingGrid"] {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("anvil");
+        let native = temp.path().join("native");
+        let output = temp.path().join("export");
+        let config = crate::test_support::config(native.clone(), 42);
+        crate::roundtrip_tests::modern_fixture(&source, &config);
+        import_anvil(&config, &source, &native, &temp.path().join("import.json")).unwrap();
+        let empty = Tag::Compound(vec![]);
+        let malformed = Tag::Compound(vec![
+            ("count".into(), Tag::Int(7)),
+            ("payload".into(), Tag::String("retained".into())),
+        ]);
+        let values = if key == "krasnokamen:Carried" {
+            [empty, malformed]
+        } else {
+            [empty, malformed].map(|item| list(vec![item]))
+        };
+        let mut opaque = Vec::new();
+        mc_nbt::write_named(
+            &mut opaque,
+            "",
+            &Tag::Compound(
+                values
+                    .into_iter()
+                    .map(|value| (key.into(), value))
+                    .collect(),
+            ),
+        )
+        .unwrap();
+        let entry: mc_core::journal::JournalEntry = serde_json::from_value(serde_json::json!({
+            "Player": {
+                "uuid": PLAYER, "opaque_player_fields": opaque,
+                "pos": [0.0,80.0,0.0], "yaw":0.0, "pitch":0.0, "health":20.0,
+                "food":20, "saturation":5.0, "exhaustion":0.0, "air":300,
+                "experience_level":0, "experience_progress":0.0, "experience_total":0,
+                "game_mode":0, "selected":0,
+                "inventory": vec![mc_data::ItemStack::EMPTY;41],
+                "carried": mc_data::ItemStack::EMPTY, "grid": [],
+                "enchantment_offer_seed":0, "tick":80
+            }
+        }))
+        .unwrap();
+        let mut writer = mc_core::journal::JournalWriter::open(&native, 79).unwrap();
+        writer.append(80, 80, &[entry]).unwrap();
+        writer.flush().unwrap();
+        drop(writer);
+        let before = hashes(&native).unwrap();
+        let error = export_anvil(&config, &native, &output, &temp.path().join("export.json"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(key) && error.contains("duplicate owned custody field"),
+            "{error}"
+        );
+        assert!(!output.exists());
+        assert_eq!(hashes(&native).unwrap(), before);
+    }
+}

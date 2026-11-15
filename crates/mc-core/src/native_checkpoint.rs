@@ -821,6 +821,17 @@ pub fn recover_with_reader(
                 for (lo, hi, entries) in &routed {
                     for entry in entries {
                         if let crate::journal::JournalEntry::Player {
+                            uuid,
+                            opaque_player_fields,
+                            ..
+                        } = entry
+                        {
+                            crate::journal::validate_player_opaque_custody(opaque_player_fields)
+                                .map_err(|error| CoreError::Storage(format!(
+                                    "native WAL recovery batch {lo}..{hi}: player {uuid}: {error}"
+                                )))?;
+                        }
+                        if let crate::journal::JournalEntry::Player {
                             uuid, inventory, ..
                         } = entry
                             && inventory.len() != crate::inventory::PLAYER_SLOTS

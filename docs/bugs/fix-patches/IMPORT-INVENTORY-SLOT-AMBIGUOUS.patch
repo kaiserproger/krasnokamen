@@ -44,10 +44,75 @@ index f29898fdc..373b61502 100644
      Ok(slots)
  }
 diff --git a/crates/mc-core/src/journal/player_nbt.rs b/crates/mc-core/src/journal/player_nbt.rs
-index d58d20f9e..89916bd21 100644
+index d58d20f9e..f1955446e 100644
 --- a/crates/mc-core/src/journal/player_nbt.rs
 +++ b/crates/mc-core/src/journal/player_nbt.rs
-@@ -323,9 +323,9 @@ pub fn player_from_tag(
+@@ -44,6 +44,7 @@ pub(super) fn player_image_to_tag(
+         };
+         fields
+     };
++    validate_owned_custody_fields(&opaque_fields)?;
+     // Exclude every owned key, even when its fresh optional value is absent.
+     opaque_fields.retain(|(key, _)| !player_owned_field(key));
+     let mut inventory = Vec::new();
+@@ -303,6 +304,48 @@ pub(super) fn krasnokamen_custody_fields(
+     Ok(out)
+ }
+ 
++fn validate_owned_custody_fields(entries: &[(String, mc_nbt::Tag)]) -> Result<(), CoreError> {
++    let failure = |key: &str| {
++        CoreError::Storage(format!(
++            "player record: {key}: duplicate owned custody field"
++        ))
++    };
++    for (index, (key, value)) in entries.iter().enumerate() {
++        if (player_owned_field(key) || key == "recipeBook")
++            && entries[..index].iter().any(|(previous, _)| previous == key)
++        {
++            return Err(failure(key));
++        }
++        if key == "recipeBook"
++            && let mc_nbt::Tag::Compound(book) = value
++            && book.iter().filter(|(name, _)| name == "recipes").count() > 1
++        {
++            return Err(failure("recipeBook.recipes"));
++        }
++    }
++    Ok(())
++}
++
++pub(crate) fn validate_player_opaque_custody(bytes: &[u8]) -> Result<(), CoreError> {
++    if bytes.is_empty() {
++        return Ok(());
++    }
++    let mut input = bytes;
++    let (_, tag) = mc_nbt::read_named(&mut input)
++        .map_err(|error| CoreError::Storage(format!("player opaque fields: {error}")))?;
++    if !input.is_empty() {
++        return Err(CoreError::Storage(
++            "player opaque fields: trailing NBT".into(),
++        ));
++    }
++    let mc_nbt::Tag::Compound(entries) = tag else {
++        return Err(CoreError::Storage(
++            "player opaque fields: expected compound".into(),
++        ));
++    };
++    validate_owned_custody_fields(&entries)
++}
++
+ /// Decode a player image without touching filesystem state.
+ pub fn player_from_tag(
+     root: &mc_nbt::Tag,
+@@ -314,6 +357,7 @@ pub fn player_from_tag(
+     let mc_nbt::Tag::Compound(entries) = root else {
+         return Err(failure("NBT", "root is not a compound".into()));
+     };
++    validate_owned_custody_fields(entries)?;
+     let player = player_from_fields(items, VanillaPlayer::default(), entries)
+         .map_err(|err| failure("player fields", err.to_string()))?;
+     let mut inventory = vec![mc_data::ItemStack::EMPTY; 41];
+@@ -323,9 +367,9 @@ pub fn player_from_tag(
          }
      }
      for (name, stack) in player.equipment {
@@ -60,7 +125,7 @@ index d58d20f9e..89916bd21 100644
      }
      let find = |name: &str| {
          entries
-@@ -378,9 +378,11 @@ pub fn player_from_tag(
+@@ -378,9 +422,11 @@ pub fn player_from_tag(
          Some(_) => return Err(failure("unlocked recipes", "expected string list".into())),
      });
      let carried = match find("krasnokamen:Carried") {
@@ -75,7 +140,7 @@ index d58d20f9e..89916bd21 100644
          Some(_) => {
              return Err(failure(
                  "krasnokamen:Carried slot 0",
-@@ -399,12 +401,14 @@ pub fn player_from_tag(
+@@ -399,12 +445,14 @@ pub fn player_from_tag(
                          "expected item compound".into(),
                      ));
                  };
@@ -97,7 +162,7 @@ index d58d20f9e..89916bd21 100644
              }
              grid
 diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
-index e9862c473..55399f075 100644
+index e9862c473..129964730 100644
 --- a/crates/mc-core/src/native_checkpoint.rs
 +++ b/crates/mc-core/src/native_checkpoint.rs
 @@ -697,7 +697,13 @@ pub fn recover_with_reader(
@@ -115,10 +180,21 @@ index e9862c473..55399f075 100644
          players.insert(uuid::Uuid::from_bytes(player.uuid).to_string(), decoded);
      }
      for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
-@@ -814,6 +820,17 @@ pub fn recover_with_reader(
+@@ -814,6 +820,28 @@ pub fn recover_with_reader(
                  }
                  for (lo, hi, entries) in &routed {
                      for entry in entries {
++                        if let crate::journal::JournalEntry::Player {
++                            uuid,
++                            opaque_player_fields,
++                            ..
++                        } = entry
++                        {
++                            crate::journal::validate_player_opaque_custody(opaque_player_fields)
++                                .map_err(|error| CoreError::Storage(format!(
++                                    "native WAL recovery batch {lo}..{hi}: player {uuid}: {error}"
++                                )))?;
++                        }
 +                        if let crate::journal::JournalEntry::Player {
 +                            uuid, inventory, ..
 +                        } = entry

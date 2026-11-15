@@ -42,7 +42,7 @@ fn player_entry(uuid: uuid::Uuid, player: &ReplayPlayer, tick: u64) -> JournalEn
     }
 }
 
-fn wal_inventory_recovery(size: usize) {
+fn wal_inventory_recovery(size: usize, duplicate: Option<&str>) {
     let directory = tempfile::tempdir().unwrap();
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let registry = crate::registry::CoreRegistry::load(None).unwrap();
@@ -60,6 +60,31 @@ fn wal_inventory_recovery(size: usize) {
     let mut bad = player.clone();
     bad.inventory
         .resize(size, mc_data::ItemStack::new(stone, 11));
+    if let Some(key) = duplicate {
+        let empty = Tag::Compound(vec![]);
+        let malformed = malformed_item(None);
+        let values = if key == "krasnokamen:Carried" {
+            [empty, malformed]
+        } else {
+            [empty, malformed].map(|item| {
+                Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: vec![item],
+                })
+            })
+        };
+        mc_nbt::write_named(
+            &mut bad.opaque_player_fields,
+            "",
+            &Tag::Compound(
+                values
+                    .into_iter()
+                    .map(|value| (key.into(), value))
+                    .collect(),
+            ),
+        )
+        .unwrap();
+    }
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     writer
         .append(2, 2, &[player_entry(owner, &player, 2)])
@@ -82,7 +107,26 @@ fn wal_inventory_recovery(size: usize) {
         })
         .collect();
     let recovered = recover_offline(&config);
-    if size == crate::inventory::PLAYER_SLOTS {
+    if let Some(key) = duplicate {
+        let error = match recovered {
+            Ok(_) => panic!("duplicate WAL custody {key} published recovered state"),
+            Err(error) => error.to_string(),
+        };
+        for detail in [
+            bad_owner.to_string(),
+            key.into(),
+            "duplicate owned custody field".into(),
+        ] {
+            assert!(error.contains(&detail), "{error}");
+        }
+        let save_error = crate::journal::player_to_tag(&bad, &registry.items)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            save_error.contains("duplicate owned custody field"),
+            "{save_error}"
+        );
+    } else if size == crate::inventory::PLAYER_SLOTS {
         let recovered = recovered.unwrap();
         let players = &recovered.dimensions[&Dimension::Overworld].players;
         assert_eq!(players[&owner.to_string()].inventory[0].count, 7);
@@ -107,6 +151,16 @@ fn wal_inventory_recovery(size: usize) {
         db_before,
         "recovery rewrote checkpoint custody"
     );
+    // A writable redb open updates its allocation/header bookkeeping even on
+    // refusal; prove read-only byte identity first, then live logical custody.
+    if let Some(key) = duplicate {
+        let live_error = match crate::core::recover_dimension_state(&config, Dimension::Overworld) {
+            Ok(_) => panic!("duplicate WAL custody {key} reached live dimension state"),
+            Err(error) => error.to_string(),
+        };
+        assert!(live_error.contains(key), "{live_error}");
+        assert_eq!(read_manifest(&config).unwrap().tick, 1);
+    }
     for (path, bytes) in batches {
         assert_eq!(
             std::fs::read(path).unwrap(),
@@ -126,17 +180,27 @@ fn wal_inventory_recovery(size: usize) {
 
 #[test]
 fn short_wal_inventory_refuses_recovery_without_partial_load() {
-    wal_inventory_recovery(40);
+    wal_inventory_recovery(40, None);
 }
 
 #[test]
 fn long_wal_inventory_refuses_recovery_without_partial_load() {
-    wal_inventory_recovery(42);
+    wal_inventory_recovery(42, None);
 }
 
 #[test]
 fn ordinary_wal_inventory_recovers_all_players_without_rewriting_checkpoint() {
-    wal_inventory_recovery(41);
+    wal_inventory_recovery(41, None);
+}
+
+#[test]
+fn duplicate_carried_in_wal_opaque_refuses_recovery() {
+    wal_inventory_recovery(41, Some("krasnokamen:Carried"));
+}
+
+#[test]
+fn duplicate_crafting_grid_in_wal_opaque_refuses_recovery() {
+    wal_inventory_recovery(41, Some("krasnokamen:CraftingGrid"));
 }
 
 fn malformed_item(id: Option<Tag>) -> Tag {
@@ -156,13 +220,16 @@ fn malformed_item(id: Option<Tag>) -> Tag {
     Tag::Compound(fields)
 }
 
-fn malformed_checkpoint_item(id: Option<Tag>) {
+fn malformed_checkpoint_item(id: Option<Tag>, duplicate: Option<&str>) {
     for location in [
         "Inventory",
         "equipment",
         "krasnokamen:Carried",
         "krasnokamen:CraftingGrid",
     ] {
+        if duplicate.is_some_and(|key| key != location) {
+            continue;
+        }
         let directory = tempfile::tempdir().unwrap();
         let config = CoreConfig::new(directory.path().to_path_buf(), 42);
         let registry = crate::registry::CoreRegistry::load(None).unwrap();
@@ -204,6 +271,17 @@ fn malformed_checkpoint_item(id: Option<Tag>) {
             }),
         };
         fields.retain(|(name, _)| name != location);
+        if duplicate.is_some() {
+            let empty = if location == "krasnokamen:Carried" {
+                Tag::Compound(vec![])
+            } else {
+                Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: vec![Tag::Compound(vec![]); 4],
+                })
+            };
+            fields.push((location.into(), empty));
+        }
         fields.push((location.into(), value));
         let mut manifest: CheckpointManifest =
             serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
@@ -218,6 +296,32 @@ fn malformed_checkpoint_item(id: Option<Tag>) {
             "checkpoint".into(),
             record(tick, serde_json::to_vec(&manifest).unwrap()),
         );
+        if duplicate.is_some() {
+            let error = crate::journal::player_from_tag(&tag, &registry.items)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("duplicate owned custody field"), "{error}");
+            let error = store
+                .commit_checkpoint(
+                    NativeCheckpoint {
+                        tick,
+                        previous_tick: image.tick,
+                        chunks: &[],
+                        entities: &[],
+                        players: &[mc_world::native::NativePlayerSnapshot {
+                            uuid: *bad_owner.as_bytes(),
+                            record: tag_record(tick, &tag).unwrap(),
+                        }],
+                        globals: &image.globals,
+                    },
+                    &registry.blocks,
+                    &registry.items,
+                )
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("NBT/duplicate_field"), "{error}");
+            continue;
+        }
         let players = [mc_world::native::NativePlayerSnapshot {
             uuid: *bad_owner.as_bytes(),
             record: tag_record(tick, &tag).unwrap(),
@@ -246,7 +350,11 @@ fn malformed_checkpoint_item(id: Option<Tag>) {
         for detail in [
             bad_owner.to_string(),
             location.into(),
-            "missing or non-string id".into(),
+            if duplicate.is_some() {
+                "duplicate owned custody field".into()
+            } else {
+                "missing or non-string id".into()
+            },
         ] {
             assert!(error.contains(&detail), "{error}");
         }
@@ -267,12 +375,59 @@ fn malformed_checkpoint_item(id: Option<Tag>) {
 
 #[test]
 fn missing_item_id_with_payload_refuses_checkpoint_recovery() {
-    malformed_checkpoint_item(None);
+    malformed_checkpoint_item(None, None);
 }
 
 #[test]
 fn wrong_type_item_id_with_payload_refuses_checkpoint_recovery() {
-    malformed_checkpoint_item(Some(Tag::Int(7)));
+    malformed_checkpoint_item(Some(Tag::Int(7)), None);
+}
+
+#[test]
+fn duplicate_carried_refuses_checkpoint_recovery_before_first_match() {
+    malformed_checkpoint_item(None, Some("krasnokamen:Carried"));
+}
+
+#[test]
+fn duplicate_crafting_grid_refuses_checkpoint_recovery_before_first_match() {
+    malformed_checkpoint_item(None, Some("krasnokamen:CraftingGrid"));
+}
+
+#[test]
+fn duplicate_recipe_book_custody_refuses_even_with_native_recipe_authority() {
+    let items = mc_data::items::krasnokamen_required_items();
+    let tag = Tag::Compound(vec![
+        (
+            "KrasnokamenUnlockedRecipes".into(),
+            Tag::List(mc_nbt::ListTag {
+                element_type: mc_nbt::tag_type::STRING,
+                elements: vec![],
+            }),
+        ),
+        (
+            "recipeBook".into(),
+            Tag::Compound(vec![
+                (
+                    "recipes".into(),
+                    Tag::List(mc_nbt::ListTag {
+                        element_type: mc_nbt::tag_type::STRING,
+                        elements: vec![],
+                    }),
+                ),
+                (
+                    "recipes".into(),
+                    Tag::String("unread second custody".into()),
+                ),
+            ]),
+        ),
+    ]);
+    let error = crate::journal::player_from_tag(&tag, &items)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("recipeBook.recipes: duplicate owned custody field"),
+        "{error}"
+    );
 }
 
 #[test]

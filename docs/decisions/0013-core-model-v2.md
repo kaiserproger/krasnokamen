@@ -206,6 +206,14 @@ for every saved entry, including slot 0; the 26.2/26.3 codec's optional read
 default does not omit the field on write. Recovery coverage is
 `mc-core::native_checkpoint::tests::player_custody`.
 
+Repeated projected player custody names refuse before first-match decoding or
+removal from the opaque image. The shared check also runs on WAL player opaque
+bytes before replay and before player serialization; otherwise a WAL post-image
+could bypass the native NBT codec's existing duplicate-name refusal and lose a
+second cursor/crafting-grid payload on export or checkpoint. Native checkpoint
+encoding and raw checkpoint recovery retain their existing recursive NBT
+duplicate-name guard; no repair or weakened native admission is introduced.
+
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened
 path or duplicated Windows handle). Positioned reads have independent cursors;
