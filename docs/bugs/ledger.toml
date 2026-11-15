@@ -5923,3 +5923,36 @@ regression = ["cargo:mc-core:portals::tests::donkey_portal_transfer_keeps_chest_
 fix_commit = "f8cdf9468"
 repro_check = "dimensions_travel.rs::move_between ejected riders through mounts::death, which also detaches the chest and commits the chest and cargo as drops in the source world. The fix splits a seating-only mounts::eject for dimension transfer; real death still ejects and drops cargo. The regression requires exactly one destination donkey, all 15 cargo slots unchanged, no item entities in any dimension and no deferred life drops. Red at base with the test and without the fix: receipts/M3FixState/r2/red.log. Introducing commit not traced."
 failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-REGRESSIONS-CLIENT-REBUILDS"
+title = "Client regression gates ignore release pins and rebuild the server"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 QA: regressions._release_server ran cargo build --release despite the owner pin-release rule"
+repro = "source"
+regression = [
+  "python:tools.harness.test_regressions:ReleasePinTests.test_pin_is_accepted_for_its_registered_tree_without_building",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_explicit_pin_is_accepted_for_its_registered_tree",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_pin_of_another_tree_is_refused",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_missing_pin_is_refused_and_names_exact_pin_release_command",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_explicit_unregistered_pin_is_refused_without_building",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_negative_control_accepts_only_its_own_registered_pin",
+]
+fix_commit = "a39164dc9"
+repro_check = "HarnessPins/negative-pin.log: all eight pin tests fail with only the base _release_server restored, at the forbidden release-build invocation. HarnessPins/refusal.log and its result.json: real regressions-client invocation refuses the absent pin before executing any command."
+failing_first = "not recorded"
+
+[[bug]]
+id = "HARNESS-LOADER-STARTUP-180S"
+title = "Loader live gate times out during a cold NeoForge artifact compilation"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 QA: cold NeoForge createMinecraftArtifacts compiles about 7300 sources before MCP can start, exceeding the shared 180-second readiness limit"
+repro = "source"
+regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance"]
+fix_commit = "a39164dc9"
+repro_check = "HarnessPins/negative-loader.log: retaining the API but restoring only the old fixed readiness wait fails at 180.0 != 1800.0. No real graphical cold-build pass is claimed."
+failing_first = "not recorded"
