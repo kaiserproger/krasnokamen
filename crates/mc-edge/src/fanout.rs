@@ -217,6 +217,35 @@ pub fn publish_with_registries<'a>(
             viewer.chunk_unsent(pos);
         }
     }
+    // Cache misses had no encoded bytes during planning. Apply the actual
+    // sizes now, admitting one oversize world frame (or chunk plus markers)
+    // for progress, but no later world dependency after the first deferral.
+    for ((connection, packets), viewer) in planned.iter_mut().zip(viewers.iter_mut()) {
+        debug_assert_eq!(*connection, viewer.connection);
+        let mut bytes = viewer.world_bytes;
+        let mut first_chunk = true;
+        let mut deferred = false;
+        packets.retain(|packet| {
+            if packet.reliable {
+                return true;
+            }
+            if bytes == 0 {
+                deferred = true;
+                return false;
+            }
+            let framing = if packet.chunk.is_some() && first_chunk {
+                first_chunk = false;
+                7
+            } else {
+                0
+            };
+            bytes = bytes.saturating_sub(packet.data.len() + framing);
+            true
+        });
+        if deferred {
+            viewer.world_frame_unsent();
+        }
+    }
     if let (Some(start), Some(index_start), Some(plan_start), Some(fill_start), Some(fill_time)) =
         (probe, index_start, plan_start, fill_start, fill_time)
     {

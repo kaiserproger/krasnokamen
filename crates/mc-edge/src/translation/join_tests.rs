@@ -56,6 +56,7 @@ struct Client {
     compression: Compression,
     profile: Arc<Profile>,
     batch_chunks: Option<i32>,
+    completed_batches: usize,
 }
 
 impl Client {
@@ -114,6 +115,7 @@ impl Client {
             compression: Compression::Disabled,
             profile,
             batch_chunks: None,
+            completed_batches: 0,
         };
         let mut hello = Vec::new();
         hello.write_varint(client.profile.version.protocol);
@@ -229,6 +231,7 @@ impl Client {
             compression: Compression::Disabled,
             profile,
             batch_chunks: None,
+            completed_batches: 0,
         };
         let mut handshake = Vec::new();
         handshake.write_varint(client.profile.version.protocol);
@@ -307,6 +310,7 @@ impl Client {
                     &rate,
                 )
                 .await;
+                self.completed_batches += 1;
             } else if frame.id == self.id("play", true, "minecraft:keep_alive") {
                 self.send(self.id("play", false, "minecraft:keep_alive"), &frame.body)
                     .await;
@@ -596,6 +600,15 @@ async fn join_version(protocol: i32) {
             .await;
         assert_eq!(updated, granite, "block update carries the polyfill");
         interactions::run(&mut first, &hub, pos).await;
+        if first.completed_batches < 2 {
+            first
+                .play_until(|client, _| (client.completed_batches >= 2).then_some(()))
+                .await;
+        }
+        assert!(
+            first.completed_batches >= 2,
+            "first connection ACKed and resumed"
+        );
         drop(first);
 
         let mut second = Client::join(address, "Chain2", Arc::clone(&profile), false).await;
@@ -610,6 +623,12 @@ async fn join_version(protocol: i32) {
             seen, granite,
             "the chunk carries the polyfill, not the 26.3 id"
         );
+        if second.completed_batches < 2 {
+            second
+                .play_until(|client, _| (client.completed_batches >= 2).then_some(()))
+                .await;
+        }
+        assert!(second.completed_batches >= 2, "reconnect ACKed and resumed");
     })
     .await
     .expect("legacy join and chunk within the deadline");

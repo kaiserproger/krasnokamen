@@ -1018,7 +1018,15 @@ pub(super) async fn play_writer(
                 continue;
             }
         }
-        while batch.len() < WRITE_BATCH_BYTES {
+        loop {
+            // A batch already taken from the world queue precedes every
+            // later reliable reset, even when it exceeds the write target.
+            while let Some(bytes) = world_rx.next_in_batch() {
+                batch.extend_from_slice(&bytes);
+            }
+            if batch.len() >= WRITE_BATCH_BYTES {
+                break;
+            }
             if let Ok(bytes) = reliable_rx.try_recv() {
                 batch.extend_from_slice(&bytes);
                 reliable = true;

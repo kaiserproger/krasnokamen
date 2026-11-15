@@ -141,7 +141,7 @@ The layouts and IDs are identical in 775/776/777 and traverse the normal adjacen
 translation chain. Local metadata commands and wire receipts belong in
 `receipts/ChunkBatchFix/` outside Git.
 
-Connection-local edge state follows the measured 26.3 `PlayerChunkSender`:
+Connection-local edge state follows the inspected 26.3 `PlayerChunkSender`:
 initial rate 9, initial outstanding-batch limit 1; any ACK raises the limit to 10.
 ACK rates clamp to [0.01, 64], with NaN selecting 0.01. While below the limit,
 each publication adds the rate to quota, capped at max(1, rate); whole chunks
@@ -149,6 +149,17 @@ spend quota only after queue admission. An ACK leaving no outstanding batches
 resets quota to 1. The existing 16/publication cap and world slot/byte credit
 remain upper bounds. Batch framing reserves two additional slots; queue admission
 is atomic and dimension fences discard whole groups, returning their ACK debt.
+Admission rechecks current quota and the outstanding limit under the same lock
+as the debit: an intervening ACK cannot admit a stale larger plan. Filled chunk
+sizes are checked again after cache misses, permitting one oversize chunk for
+progress. Groups retain existing reference-counted buffers; the writer drains
+the entire taken group before selecting a later reliable reset.
+
+Like vanilla, an unsolicited ACK updates the rate, sets the limit to 10 and
+resets zero-debt quota to 1. ACKs have no wire ID: duplicates while debt remains
+are indistinguishable from legitimate oldest ACKs. Internal FIFO tickets only
+identify still-unacknowledged, never-written groups for a dimension-fence refund;
+already ACKed work is never refunded twice.
 Unloads, light-only updates and other packets do not spend chunk quota.
 
 Protocol drivers must ACK completed batches. The shared raw test client does so

@@ -55,7 +55,7 @@ fn chunk_batch_fractional_quota_accumulates_without_idle_burst_or_limit_credit()
         state.allowance();
     }
     assert_eq!(state.quota, 1.0);
-    state.unacknowledged = state.limit;
+    state.unacknowledged.resize(state.limit, (u64::MAX, 0));
     let quota = state.quota;
     for _ in 0..100 {
         assert_eq!(state.allowance(), 0);
@@ -69,7 +69,22 @@ fn chunk_batch_duplicate_ack_never_underflows_and_resets_quota() {
     for _ in 0..20 {
         state.acknowledge(0.01);
     }
-    assert_eq!(state.unacknowledged, 0);
+    assert!(state.unacknowledged.is_empty());
     assert_eq!(state.quota, 1.0);
     assert_eq!(state.limit, 10);
+}
+
+#[test]
+fn chunk_batch_unsolicited_ack_matches_vanilla_zero_debt_semantics() {
+    let mut state = ChunkBatchState::default();
+    state.acknowledge(0.01);
+    assert_eq!(state.limit, 10);
+    assert_eq!(state.quota, 1.0);
+    assert!(state.unacknowledged.is_empty());
+    assert_eq!(state.allowance(), 1);
+    let batch = state.sent(1);
+    state.acknowledge(4.0);
+    assert_eq!(state.quota, 1.0);
+    state.discarded(batch);
+    assert_eq!(state.quota, 1.0, "acknowledged work is not refunded");
 }
