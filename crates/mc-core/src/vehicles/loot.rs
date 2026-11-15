@@ -29,15 +29,18 @@ pub(super) fn materialize(state: &mut TickState, slot: EntitySlot) {
         .as_ref()
         .unwrap();
     let Some(id) = &v.loot_table else { return };
-    let table = state
-        .registry
-        .chest_loot
-        .get(id)
-        .expect("validated saved vehicle loot table");
     let mut rng = ChestRng::new(v.loot_seed as u64);
-    let stacks = table
-        .roll(&mut rng, &state.registry.items, 0.0)
-        .expect("validated canonical vehicle loot items");
+    let stacks = match state.registry.chest_loot.get(id) {
+        Some(table) => table
+            .roll(&mut rng, &state.registry.items, 0.0)
+            .expect("validated canonical vehicle loot items"),
+        None => {
+            // ContainerEntity consumes the reference even when the reloadable
+            // registry returns LootTable.EMPTY after a pack was removed.
+            tracing::warn!(table = %id, "Missing container loot table; resolving as empty");
+            Vec::new()
+        }
+    };
     let v = state
         .entities
         .row_mut(slot)

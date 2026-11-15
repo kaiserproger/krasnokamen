@@ -10,6 +10,8 @@ use std::sync::Arc;
 mod boat_floating;
 #[path = "vehicles_collision_tests.rs"]
 mod vehicles_collision;
+#[path = "vehicles_loot_reload_tests.rs"]
+mod vehicles_loot_reload;
 
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {

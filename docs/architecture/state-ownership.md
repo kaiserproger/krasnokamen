@@ -26,10 +26,13 @@ shared startup tables. The worker layers namespaced chest/generic tables,
 recompiles references after filters/overrides and refuses unsupported functions,
 conditions or missing references before publication. Both legacy
 `functions`/`function` and carried `modifier`/`type` are accepted, never both
-spellings at once. Unknown saved container tables refuse opening with a warning
-and preserve the table and seed for a corrected pack; they never become empty
-inventories. First-open rolling still uses the existing native block-entity/WAL
-owner. This does not claim whole-mod or modpack compatibility.
+spellings at once. A saved table missing at materialization (for example after
+pack removal) follows vanilla's `LootTable.EMPTY` lookup: block containers and
+vehicles warn once with the table ID, consume the reference and generate no
+items. Vehicle open, hopper transfer and death share that rule; destruction is
+not refused. Seed metadata is omitted with the consumed reference. First-open
+rolling still uses the existing native block-entity/WAL owner. This does not
+claim whole-mod or modpack compatibility.
 
 ## Tick and wire clocks
 

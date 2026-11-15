@@ -96,7 +96,7 @@ fn open(state: &mut TickState) -> bool {
 }
 
 #[test]
-fn atm_container_pack_barrel_rolls_once_and_unknown_table_warns_without_consuming() {
+fn atm_container_pack_barrel_rolls_once() {
     let directory = tempfile::tempdir().unwrap();
     pack(directory.path(), "a", "crystal", LOOT);
     let packs = PackSet::load(directory.path(), Selection::default()).unwrap();
@@ -126,17 +126,66 @@ fn atm_container_pack_barrel_rolls_once_and_unknown_table_warns_without_consumin
         Some(&Tag::String("minecraft:barrel".into()))
     );
     assert!(mc_data::item_nbt::field(&fields, "LootTable").is_none());
+}
 
-    let mut missing = barrel(base, "demo:absent");
-    assert!(open(&mut missing));
-    assert!(missing.block_entities.is_empty());
-    assert!(missing.opaque_changes.is_empty());
-    let chest = &missing.world.chunk(ChunkPos { x: 0, z: 0 }).unwrap().chests
-        [&BlockPos { x: 4, y: 201, z: 4 }];
-    assert_eq!(chest.loot_table.as_ref().unwrap().as_str(), "demo:absent");
-    assert_eq!(chest.loot_seed, 17);
-    assert!(missing.outbox[&ConnectionId(1)].iter().any(|change| matches!(change,
-        PlayerChange::Chat { message } if message.contains("demo:absent") && message.contains("retained"))));
+#[test]
+fn atm_container_removed_pack_barrel_consumes_empty_table_once() {
+    let directory = tempfile::tempdir().unwrap();
+    pack(directory.path(), "a", "crystal", LOOT);
+    let base = CoreRegistry::load(None).unwrap();
+    let mut registry = base.prepare_content();
+    PackSet::load(directory.path(), Selection::default())
+        .unwrap()
+        .install_content(&mut registry)
+        .unwrap();
+    let mut state = barrel(registry, "demo:crystal");
+    // The unopened generated barrel exists before its pack is disabled.
+    let packs = PackSet::load(
+        directory.path(),
+        Selection {
+            enabled: vec!["vanilla".into()],
+            disabled: vec!["file/a".into()],
+        },
+    )
+    .unwrap();
+    let mut registry = base.prepare_content();
+    packs.install_content(&mut registry).unwrap();
+    assert!(
+        registry
+            .chest_loot
+            .get(&Identifier::parse("demo:crystal").unwrap())
+            .is_none()
+    );
+    state.registry = Arc::new(registry);
+    assert!(!open(&mut state));
+    assert!(
+        state.block_entities[&(4, 201, 4)]
+            .slots
+            .iter()
+            .all(|stack| stack.is_empty())
+    );
+    assert_eq!(state.opaque_changes.len(), 1);
+    let bytes = state.opaque_changes[0].1.as_ref().unwrap();
+    let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
+        panic!("barrel compound")
+    };
+    assert!(mc_data::item_nbt::field(&fields, "LootTable").is_none());
+    assert!(mc_data::item_nbt::field(&fields, "LootTableSeed").is_none());
+    // Re-enabling the pack cannot reroll an already consumed empty table.
+    let mut registry = base.prepare_content();
+    PackSet::load(directory.path(), Selection::default())
+        .unwrap()
+        .install_content(&mut registry)
+        .unwrap();
+    state.registry = Arc::new(registry);
+    assert!(!open(&mut state));
+    assert!(
+        state.block_entities[&(4, 201, 4)]
+            .slots
+            .iter()
+            .all(|stack| stack.is_empty())
+    );
+    assert_eq!(state.opaque_changes.len(), 1);
 }
 
 #[test]
