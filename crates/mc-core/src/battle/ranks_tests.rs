@@ -275,8 +275,9 @@ fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
     let mut melee_kills = 0;
     let mut wounds = 0;
     // 9edae78e7 intentionally lengthened contact by reducing press lethality.
-    // The old 2200-tick cutoff could stop before pursuit; sample the actual
-    // phase and actual melee kills, retaining both original heap limits.
+    // The old 2200-tick cutoff could stop before pursuit. Preserve its >300
+    // casualty floor and both heap limits, but allow the deliberately longer
+    // battle to reach that exposure and at least 200 actual pursuit ticks.
     for t in 1..=6000 {
         crate::tick::run_tick(&mut state, &[]);
         let battle = &state.hostile.battle;
@@ -294,7 +295,7 @@ fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
             foot = foot.max(100.0 * c.heaped_foot as f64 / c.foot.max(1) as f64);
             horse = horse.max(100.0 * c.heaped_horse as f64 / c.horse.max(1) as f64);
         }
-        if t >= 2200 && pursuit_ticks >= 200 {
+        if t >= 2200 && pursuit_ticks >= 200 && dead(&state) > 300 {
             break;
         }
     }
@@ -309,5 +310,5 @@ fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
         melee_kills > 0,
         "contact must still kill, melee_kills={melee_kills}"
     );
-    assert!(dead(&state) > 0, "contact must still kill");
+    assert!(dead(&state) > 300, "contact must still kill");
 }
