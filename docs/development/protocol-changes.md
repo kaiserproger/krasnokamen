@@ -129,6 +129,32 @@ revisits player eligibility on either input's change, and retains ordered
 removal/re-pair debt. No name/side filter or observer picking workaround applies.
 Receipts: `receipts/HzBattlePrep/vanilla-26.3-{ServerPlayer,TrackedEntity,Entity}.txt`.
 
+## Relative entity movement
+
+The common 775–777 `VecDeltaCodec` rounds each endpoint to the nearest
+1/4096 block (half ties toward positive infinity), then subtracts the two
+integers. It does **not** floor or round the raw displacement. The edge retains
+the last sent authoritative endpoint for movement thresholds and quantizes
+only when encoding a relative move. Rotation-only packets leave that position
+baseline unchanged; position-only packets leave rotation unchanged. Differences
+outside signed-short range use the existing absolute position sync.
+
+Local `javap -p -c` of `VecDeltaCodec`, `ServerEntity` and
+`ClientPacketListener` in the official 26.1.2, 26.2 and 26.3 client jars
+establishes the rounding, endpoint subtraction and baseline contract. The
+consumer preserves a zero-delta axis, otherwise adds the short to its rounded
+base and decodes at 1/4096; absolute sync replaces the base. Command lines,
+jar hashes and output are retained outside Git at
+`wt/EntityMoveDelta/.analysis/codex-logs/entity-move-delta/vanilla-<release>.txt`
+under the work root.
+
+The focused `plan::plan_tests::shared_moves_tests::relative_movement_*` tests
+decode production shared movement frames and apply this consumer contract.
+They cover closed trajectories, signed half-step boundaries, near-world-border
+coordinates, unsent components, threshold accumulation and absolute sync.
+These tests do not establish a graphical/native-client outcome or explain the
+Spain villagers' low received positions; that causal claim remains unproved.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs

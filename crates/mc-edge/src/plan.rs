@@ -314,8 +314,8 @@ pub struct PlannedPacket {
     pub chunk_dimension: mc_core::dimensions::Dimension,
 }
 
-/// Last sent `(position, yaw, pitch, head_yaw)` of an entity: the client's
-/// state relative moves are encoded against.
+/// Last sent authoritative `(position, yaw, pitch, head_yaw)` of an entity.
+/// Relative positions subtract quantized endpoints; thresholds use raw ones.
 type MoveBaseline = ([f64; 3], f32, f32, f32);
 
 /// One publish's world-queue room ([`crate::server::WorldSender`]): free
@@ -2107,7 +2107,15 @@ fn entity_movement(
     if !moved && !rotated {
         return None;
     }
-    let rel = (delta_to_short(dx), delta_to_short(dy), delta_to_short(dz));
+    let rel = if moved {
+        (
+            relative_move_delta(entity.position[0], last_pos[0]),
+            relative_move_delta(entity.position[1], last_pos[1]),
+            relative_move_delta(entity.position[2], last_pos[2]),
+        )
+    } else {
+        (Some(0), Some(0), Some(0))
+    };
     let fits = rel.0.is_some() && rel.1.is_some() && rel.2.is_some();
     let packet = match (moved, rotated, fits) {
         (true, false, true) => MovePacket::Pos(MoveEntityPos {
@@ -2144,9 +2152,9 @@ fn entity_movement(
             on_ground: entity.on_ground,
         }),
     };
-    // The baseline is exactly what the packet tells the client: a
-    // position-only move keeps the old rotation and vice versa; an absolute
-    // sync carries both.
+    // Keep the last sent authoritative endpoint: relative moves subtract its
+    // quantized value, not the raw displacement. Position-only moves preserve
+    // rotation and rotation-only moves preserve position; sync carries both.
     let synced = moved && !fits;
     let position = if moved { entity.position } else { last_pos };
     let (yaw, pitch) = if rotated || synced {
@@ -2843,10 +2851,18 @@ fn pack_degrees(degrees: f32) -> u8 {
     floor_f32_i32(degrees * 256.0 / 360.0) as u8
 }
 
-/// `Mth.floor(delta * 4096)` clamped to `i16`, or `None` when the delta
-/// exceeds relative-move range (caller falls back to absolute sync).
-fn delta_to_short(delta: f64) -> Option<i16> {
-    i16::try_from(floor_i32(delta * 4096.0)).ok()
+/// Vanilla VecDeltaCodec (775–777): subtract endpoints rounded to 1/4096
+/// blocks, with ties toward positive infinity. Retain the raw baseline for
+/// movement thresholds; an out-of-range difference needs absolute sync.
+fn relative_move_delta(position: f64, baseline: f64) -> Option<i16> {
+    let quantize = |coordinate: f64| {
+        let scaled = coordinate * 4096.0;
+        let lower = scaled.floor();
+        // Adding 0.5 before flooring would round the float immediately below
+        // a positive half-step up as well. Compare the fraction instead.
+        lower as i64 + i64::from(scaled - lower >= 0.5)
+    };
+    i16::try_from(quantize(position).checked_sub(quantize(baseline))?).ok()
 }
 
 /// Frame `body` once (threshold-256 compression) and push it; nothing is
