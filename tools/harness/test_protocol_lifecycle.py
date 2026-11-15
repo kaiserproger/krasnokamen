@@ -302,7 +302,7 @@ class LifecycleGuardTests(unittest.TestCase):
             server = _harness(tmp)
             server.run_dir.mkdir(parents=True)
             server.world_dir.mkdir()
-            server.log_path.write_text("")
+            server.log_path.write_text("checkpoint committed \x1b[3mtick\x1b[0m\x1b[2m=\x1b[0m1598\n")
             server._argv = ["krasnokamen"]
             server._process = SimpleNamespace(
                 pid=11, poll=lambda: None, kill=lambda: None, wait=lambda timeout: -9,
@@ -312,6 +312,7 @@ class LifecycleGuardTests(unittest.TestCase):
                     mock.patch.object(lifecycle.runtime, "wait_port"):
                 receipt = server.kill9_restart(mutation_tick_bounds=(1599, 1642))
             self.assertEqual(receipt["mutation_tick_bounds"], [1599, 1642])
+            self.assertEqual(receipt["published_prefix_before_kill"], 1598)
             self.assertEqual(json.loads(
                 (Path(receipt["crash_snapshot_dir"]) / "proof.json").read_text(),
             )["mutation_tick_bounds"], [1599, 1642])

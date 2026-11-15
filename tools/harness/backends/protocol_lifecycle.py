@@ -510,8 +510,10 @@ seed = {self.seed}
         published_tick = max(
             (int(path.stem.split("-")[-1]) for path in
              (self.world_dir / "journal").glob("batch-*-*.bin")), default=0)
-        checkpoints = re.findall(r"checkpoint committed tick=(\d+)",
-                                 self.log_path.read_text(errors="replace"))
+        checkpoint_log = re.sub(
+            r"\x1b\[[0-9;]*m", "", self.log_path.read_text(errors="replace"),
+        )
+        checkpoints = re.findall(r"checkpoint committed tick=(\d+)", checkpoint_log)
         published_tick = max([published_tick, *map(int, checkpoints)])
         self._close_handles()
         snapshot = self.run_dir / "crashes" / uuid.uuid4().hex
