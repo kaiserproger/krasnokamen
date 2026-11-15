@@ -9,8 +9,9 @@ records how fleets were run on the owner's machine and what went wrong.
 
 - **Keep the fleet small.** On 2026-10-24 about 26 parallel agents burned 30%
   of the owner's weekly usage on two accounts in one hour, and the owner
-  collapsed the fleet. Limits since 2026-11-07: at most 10 live agents and 3
-  concurrent builders (enforced since 2026-11-11 by the runner's
+  collapsed the fleet. Limits since 2026-11-14 (owner): at most 15 actively
+  working agents plus up to 2 reviewers (agents waiting for builds or tests do
+  not count) and 3 concurrent builders (enforced since 2026-11-11 by the runner's
   [build tokens](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28));
   no child agent for a part under 30 minutes; reserve the
   review and breaker budget before spawning builders. One agent session per

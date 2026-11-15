@@ -207,7 +207,9 @@ python3 -m tools.harness list
   wall-clock sleeps in production, tests, harnesses or tools: wait for the exact
   message, packet, notification or process/world/simulation state (push, not pull).
 - Main has the owner's standing authorization to spawn subagents within the
-  fleet limits: at most 10 live agents and 3 concurrent builders, no child agent
+  fleet limits: at most 15 actively working agents plus up to 2 reviewers
+  (agents waiting for builds or tests do not count; owner, 2026-11-14) and 3
+  concurrent builders, no child agent
   for a part under 30 minutes. Workers spawn only when their brief allows it.
   Larger fleets need explicit owner permission. Give disjoint responsibilities
   and write sets, pass a bounded task, base commit, paths and evidence contract

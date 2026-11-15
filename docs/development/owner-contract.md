@@ -63,8 +63,9 @@ Owner decisions on the agent-work retrospective (2026-11-07, chosen from
 `receipts/AgentRetro/` proposals; AGENTS.md restates them):
 
 - Main has standing authorization to spawn subagents within the fleet limits
-  (at most 10 live agents, 3 concurrent builders); this replaces the
-  `quaka-whaka-zaka-du` phrase.
+  (at most 15 actively working agents plus up to 2 reviewers, agents waiting
+  for builds or tests not counted, since 2026-11-14; 3 concurrent builders);
+  this replaces the `quaka-whaka-zaka-du` phrase.
 - Only Main runs the hourly owner-issue check; workers do not.
 - Failing-first is recorded, not a gate. A fix's regression test must go red
   when the fix hunks are reverted, and a bug row becomes `fixed` only through
