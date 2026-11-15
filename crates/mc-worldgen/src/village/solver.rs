@@ -49,11 +49,12 @@ use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 
 use mc_data::Identifier;
-use mc_data::village_data::{ProcessorRef, Projection, StructureSpec};
+use mc_data::village_data::{HeightmapType, ProcessorRef, Projection, StructureSpec};
 use mc_world::BlockPos;
 
 use super::beard::BeardContribution;
 use super::closure::{ClosureElement, ClosurePool, ClosureStructure, VillageClosure};
+use super::height_query::HeightQuery;
 use super::placement::{
     RandomSpreadPlacement, set_large_feature_seed, set_large_feature_with_salt, start_origin,
 };
@@ -290,7 +291,7 @@ struct BiomeGate<'a> {
 /// generates, or `None` when the chunk is not a candidate or no entry of the
 /// set passes its biome gate.
 ///
-/// `free_height(x, z)` is the `WORLD_SURFACE_WG` first-free-height query,
+/// `free_height` supplies plan-free heightmaps and optional liquid facts;
 /// `biome_at(x, y, z)` is the terrain's plan-free noise biome at the stub's
 /// block coordinates (the caller converts all three axes to quart coordinates),
 /// and `biome_matches(tag, biome)` is membership in the structure's biome tag.
@@ -301,9 +302,15 @@ pub fn assemble_village(
     chunk_z: i32,
     biome_at: impl Fn(i32, i32, i32) -> Identifier,
     biome_matches: impl Fn(&Identifier, &Identifier) -> bool,
-    free_height: impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
 ) -> Option<VillageAssembly> {
-    if !closure.placement.is_placement_chunk(seed, chunk_x, chunk_z) {
+    if !closure.placement.is_placement_chunk(seed, chunk_x, chunk_z)
+        || !super::placement::meets_minimum_origin_distance(
+            chunk_x,
+            chunk_z,
+            closure.min_distance_from_world_origin,
+        )
+    {
         return None;
     }
     // The selection random: a fresh legacy source, seeded the way
@@ -337,7 +344,7 @@ pub fn assemble_village(
             chunk_x,
             chunk_z,
             &gate,
-            &free_height,
+            free_height,
         ) {
             return Some(assembly);
         }
@@ -359,6 +366,21 @@ pub fn assemble_village(
 /// costs a start piece instead of five grown villages. The per-column plan
 /// lookup makes that the difference between usable and pathological chunk
 /// generation.
+fn projected_height(
+    query: &dyn HeightQuery,
+    heightmap: HeightmapType,
+    x: i32,
+    z: i32,
+) -> Option<i32> {
+    match heightmap {
+        HeightmapType::OceanFloor | HeightmapType::OceanFloorWg => query.ocean_floor(x, z),
+        HeightmapType::WorldSurface
+        | HeightmapType::WorldSurfaceWg
+        | HeightmapType::MotionBlocking
+        | HeightmapType::MotionBlockingNoLeaves => Some(query.world_surface(x, z)),
+    }
+}
+
 fn assemble_structure(
     closure: &VillageClosure,
     structure: &ClosureStructure,
@@ -366,8 +388,24 @@ fn assemble_structure(
     chunk_x: i32,
     chunk_z: i32,
     gate: &BiomeGate<'_>,
-    free_height: &impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
 ) -> Option<VillageAssembly> {
+    if let Some(checks) = structure.spec.moog_start_checks {
+        let heightmap = structure
+            .spec
+            .project_start_to_heightmap
+            .unwrap_or(HeightmapType::WorldSurfaceWg);
+        if !super::moog_start_checks::passes(
+            chunk_x,
+            chunk_z,
+            checks.cannot_spawn_in_liquid,
+            checks.terrain_check,
+            &|x, z| projected_height(free_height, heightmap, x, z),
+            &|x, z| free_height.top_is_liquid(x, z),
+        ) {
+            return None;
+        }
+    }
     let aliases = sample_aliases(
         &structure.spec.pool_aliases,
         &mut LegacyRandom::new(set_large_feature_seed(seed, chunk_x, chunk_z)),
@@ -405,7 +443,7 @@ fn plan_start(
     seed: i64,
     chunk_x: i32,
     chunk_z: i32,
-    free_height: &impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
     aliases: &BTreeMap<Identifier, Identifier>,
 ) -> Option<(VillageAssembly, LegacyRandom)> {
     let spec = &structure.spec;
@@ -437,10 +475,10 @@ fn plan_start(
     // `StructurePoolElement.getGroundLevelDelta` is 1 for every element kind the
     // village closure reaches.
     let ground_level_delta = 1;
-    let bottom_y = if spec.project_start_to_heightmap.is_some() {
+    let bottom_y = if let Some(heightmap) = spec.project_start_to_heightmap {
         let center_x = (center_max.x + center_min.x) / 2;
         let center_z = (center_max.z + center_min.z) / 2;
-        origin.y + free_height(center_x, center_z)
+        origin.y + projected_height(free_height, heightmap, center_x, center_z)?
     } else {
         anchored.y
     };
@@ -510,7 +548,7 @@ fn grow_start(
     structure: &ClosureStructure,
     assembly: &mut VillageAssembly,
     random: &mut LegacyRandom,
-    free_height: &impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
     aliases: &BTreeMap<Identifier, Identifier>,
 ) {
     let spec = &structure.spec;
@@ -627,7 +665,7 @@ struct Placer<'a> {
     spec: &'a StructureSpec,
     aliases: &'a BTreeMap<Identifier, Identifier>,
     random: &'a mut LegacyRandom,
-    free_height: &'a dyn Fn(i32, i32) -> i32,
+    free_height: &'a dyn HeightQuery,
     pieces: &'a mut Vec<PlacedPiece>,
     junctions: &'a mut Vec<Junction>,
     beard_pieces: &'a mut Vec<BeardContribution>,
@@ -744,7 +782,7 @@ impl Placer<'_> {
                         } else {
                             if source_jigsaw_base_height == i32::MIN {
                                 source_jigsaw_base_height =
-                                    (self.free_height)(source_jigsaw_pos.x, source_jigsaw_pos.z);
+                                    self.free_height.world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
                             }
                             source_jigsaw_base_height - target_jigsaw.pos.y
                         };
@@ -804,7 +842,7 @@ impl Placer<'_> {
                         } else {
                             if source_jigsaw_base_height == i32::MIN {
                                 source_jigsaw_base_height =
-                                    (self.free_height)(source_jigsaw_pos.x, source_jigsaw_pos.z);
+                                    self.free_height.world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
                             }
                             source_jigsaw_base_height + delta_y / 2
                         };

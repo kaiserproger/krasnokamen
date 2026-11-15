@@ -61,6 +61,22 @@ impl RandomSpreadPlacement {
     }
 }
 
+/// Moog's minimum distance is measured in blocks from the candidate chunk's
+/// corner to the world origin, inclusive at the boundary.
+pub(super) fn meets_minimum_origin_distance(
+    chunk_x: i32,
+    chunk_z: i32,
+    minimum: Option<i32>,
+) -> bool {
+    let Some(minimum) = minimum else {
+        return true;
+    };
+    let x = i128::from(chunk_x) * 16;
+    let z = i128::from(chunk_z) * 16;
+    let minimum = i128::from(minimum);
+    x * x + z * z >= minimum * minimum
+}
+
 /// `WorldgenRandom.setLargeFeatureWithSalt`:
 /// `result = x * 341873128712 + z * 132897987541 + seed + blend`, then re-seed.
 #[must_use]
@@ -106,6 +122,16 @@ pub fn start_origin(chunk_x: i32, chunk_z: i32, start_height: i32, free_height: 
 #[cfg(test)]
 mod tests {
     use super::RandomSpreadPlacement;
+
+    #[test]
+    fn moog_origin_distance_uses_chunk_corners_and_inclusive_boundary() {
+        use super::meets_minimum_origin_distance;
+        assert!(meets_minimum_origin_distance(0, 0, None));
+        assert!(!meets_minimum_origin_distance(3, 3, Some(80)));
+        assert!(meets_minimum_origin_distance(3, 4, Some(80)));
+        assert!(meets_minimum_origin_distance(-3, -4, Some(80)));
+        assert!(meets_minimum_origin_distance(i32::MAX, i32::MIN, Some(i32::MAX)));
+    }
 
     #[test]
     fn village_candidates_match_local_26_1_2_java_oracle() {

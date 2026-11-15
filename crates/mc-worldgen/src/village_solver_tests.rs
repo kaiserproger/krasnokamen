@@ -194,6 +194,7 @@ fn feature_jigsaws_are_the_synthetic_bottom_connector() {
     let closure = crate::village::closure::VillageClosure {
         dimension_bounds: (-64, 320),
         structure_set: identifier("minecraft:villages"),
+        min_distance_from_world_origin: None,
         placement: crate::village::placement::RandomSpreadPlacement {
             spacing: 34,
             separation: 8,
@@ -267,7 +268,7 @@ fn desert_village_assembles_deterministically() {
                 chunk_z,
                 biome_at,
                 biome_matches,
-                surface,
+                &surface,
             ) {
                 found = Some((chunk_x, chunk_z, assembly));
                 break 'search;
@@ -284,7 +285,7 @@ fn desert_village_assembles_deterministically() {
             chunk_z,
             biome_at,
             biome_matches,
-            surface,
+            &surface,
         )
     };
 
@@ -375,7 +376,7 @@ fn selection_retries_until_an_entry_passes_its_biome_gate() {
         0,
         biome_at,
         biome_matches,
-        surface,
+        &surface,
     )
     .expect("the eligible entry is reached by re-drawing");
     assert_eq!(assembly.structure, identifier("minecraft:village_taiga"));
@@ -404,7 +405,7 @@ fn non_placement_chunks_produce_no_village() {
             0,
             |_, _, _| identifier("minecraft:plains"),
             |_, _| true,
-            |_, _| 64,
+            &|_, _| 64,
         )
         .is_none()
     );
@@ -473,6 +474,7 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
         pool_aliases: Vec::new(),
         id: structure_id.clone(),
         structure_type: identifier("minecraft:jigsaw"),
+        moog_start_checks: None,
         biomes: BiomeSet::Biomes(vec![identifier("minecraft:plains")]),
         spawn_overrides: Vec::new(),
         step: StructureStep::SurfaceStructures,
@@ -493,6 +495,7 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
     let closure = VillageClosure {
         dimension_bounds: (-64, 320),
         structure_set: identifier("test:villages"),
+        min_distance_from_world_origin: None,
         // Every chunk is a placement chunk, so the test does not search.
         placement: crate::village::placement::RandomSpreadPlacement {
             spacing: 1,
@@ -539,9 +542,50 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
             identifier("minecraft:plains")
         },
         |_tag, _biome| true,
-        |_x, _z| surface,
+        &|_x, _z| surface,
     )
     .expect("the synthetic structure starts");
+    let mut distant = closure.clone();
+    distant.min_distance_from_world_origin = Some(10_000);
+    assert!(
+        assemble_village(
+            &distant,
+            4242,
+            chunk_x,
+            chunk_z,
+            |_x, _y, _z| identifier("minecraft:plains"),
+            |_tag, _biome| true,
+            &|_x, _z| surface,
+        )
+        .is_none(),
+        "the Moog minimum origin distance rejects this otherwise valid start"
+    );
+    // The same fixture proves custom checks run on the assembly path, not just
+    // in the standalone predicate. Missing liquid facts must fail closed.
+    let mut moog = closure.clone();
+    moog.structures[0].spec.moog_start_checks = Some(mc_data::village_data::MoogStartChecks {
+        cannot_spawn_in_liquid: true,
+        terrain_check: Some((1, 3)),
+    });
+    struct MoogColumns { liquid: bool, rough: bool }
+    impl crate::village::height_query::HeightQuery for MoogColumns {
+        fn world_surface(&self, x: i32, z: i32) -> i32 {
+            if self.rough && (x, z) == (215, -105) { 68 } else { 64 }
+        }
+        fn top_is_liquid(&self, _x: i32, _z: i32) -> Option<bool> {
+            Some(self.liquid)
+        }
+    }
+    let moog_start = |columns: &dyn crate::village::height_query::HeightQuery| {
+        assemble_village(
+            &moog, 4242, chunk_x, chunk_z,
+            |_x, _y, _z| identifier("minecraft:plains"), |_tag, _biome| true, columns,
+        )
+    };
+    assert!(moog_start(&MoogColumns { liquid: false, rough: false }).is_some());
+    assert!(moog_start(&MoogColumns { liquid: true, rough: false }).is_none());
+    assert!(moog_start(&MoogColumns { liquid: false, rough: true }).is_none());
+    assert!(moog_start(&|_, _| 64).is_none());
     assert_eq!(assembly.structure, structure_id);
     assert_eq!(
         assembly.pieces.len(),

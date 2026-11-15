@@ -7,6 +7,57 @@ fn identifier(value: &str) -> Identifier {
     Identifier::parse(value.to_owned()).unwrap()
 }
 
+#[test]
+fn moog_versioned_pool_element_resolves_selected_template() {
+    let value = serde_json::json!({
+        "element_type": "moogs_structures:versioned_single_pool_element",
+        "location": "mvs:fallback",
+        "locations": {
+            "1.21-1.21.4": "mvs:old",
+            "1.21.5-26.3": "mvs:1_21_0/crystal/base"
+        },
+        "processors": "minecraft:empty",
+        "projection": "rigid"
+    });
+    let PoolElementSpec::Single(single) =
+        parse_pool_element(&identifier("mvs:crystal/temp"), &value).unwrap()
+    else {
+        panic!("expected a selected single template");
+    };
+    assert_eq!(single.location, identifier("mvs:1_21_0/crystal/base"));
+}
+
+#[test]
+fn moog_overworld_structure_parses_crystal_rules_and_refuses_unknown_layout() {
+    let mut value = serde_json::json!({
+        "type": "moogs_structures:moogs_structures_generic_jigsaw_structure",
+        "start_pool": "mvs:crystal/temp",
+        "size": 2,
+        "project_start_to_heightmap": "WORLD_SURFACE_WG",
+        "cannot_spawn_in_liquid": true,
+        "terrain_height_radius_check": 2,
+        "allowed_terrain_height_range": 3,
+        "biomes": "#c:is_overworld",
+        "step": "surface_structures",
+        "terrain_adaptation": "beard_thin",
+        "start_height": { "absolute": 0 },
+        "spawn_overrides": {}
+    });
+    let id = identifier("mvs:crystal");
+    let spec = parse_structure(&id, &value).expect("crystal's Moog codec");
+    assert_eq!(
+        spec.moog_start_checks,
+        Some(MoogStartChecks {
+            cannot_spawn_in_liquid: true,
+            terrain_check: Some((2, 3)),
+        })
+    );
+    assert_eq!(spec.max_distance_from_center, MaxDistance { horizontal: 80, vertical: 80 });
+    assert!(!spec.use_expansion_hack);
+    value["burying_type"] = serde_json::json!("AVERAGE_LAND");
+    assert!(parse_structure(&id, &value).is_err());
+}
+
 fn loader(root: &Path) -> VillageDataLoader {
     VillageDataLoader::new(root.join("data/minecraft/worldgen"))
 }
@@ -133,6 +184,7 @@ fn structure_set_round_trips() {
                     other_set: identifier("minecraft:monuments"),
                     chunk_count: 4,
                 }),
+                min_distance_from_world_origin: None,
             }),
             structures: vec![
                 StructureSetEntry {
@@ -146,6 +198,32 @@ fn structure_set_round_trips() {
             ],
         }
     );
+}
+
+#[test]
+fn moog_advanced_spread_scales_grid_and_keeps_origin_distance() {
+    let owner = identifier("example:crystal");
+    let value = serde_json::json!({
+        "type": "moogs_structures:advanced_random_spread",
+        "spacing": 112,
+        "separation": 62,
+        "salt": 469982354,
+        "min_distance_from_world_origin": 800
+    });
+    let PlacementSpec::RandomSpread(placement) = parse_placement(&owner, &value).unwrap();
+    assert_eq!((placement.spacing, placement.separation), (185, 102));
+    assert_eq!(placement.min_distance_from_world_origin, Some(800));
+    let mut unsupported = value.clone();
+    unsupported["super_exclusion_zone"] = serde_json::json!({"chunk_count": 3});
+    assert!(matches!(
+        parse_placement(&owner, &unsupported),
+        Err(VillageDataError::UnsupportedField { field: "super_exclusion_zone", .. })
+    ));
+    unsupported["type"] = serde_json::json!("example:random_spread");
+    assert!(matches!(
+        parse_placement(&owner, &unsupported),
+        Err(VillageDataError::UnsupportedType { .. })
+    ));
 }
 
 /// Placement fields vanilla defaults stay defaulted, and fields vanilla
@@ -238,6 +316,7 @@ fn structure_round_trips() {
             pool_aliases: Vec::new(),
             id: identifier("minecraft:village_plains"),
             structure_type: identifier("minecraft:jigsaw"),
+            moog_start_checks: None,
             biomes: BiomeSet::Biomes(vec![
                 identifier("minecraft:plains"),
                 identifier("minecraft:meadow"),
@@ -286,6 +365,7 @@ fn structure_optional_fields_default() {
             pool_aliases: Vec::new(),
             id: identifier("minecraft:village_plains"),
             structure_type: identifier("minecraft:jigsaw"),
+            moog_start_checks: None,
             biomes: BiomeSet::Tag(identifier("minecraft:has_structure/village_plains")),
             spawn_overrides: Vec::new(),
             step: StructureStep::SurfaceStructures,
@@ -899,20 +979,95 @@ fn missing_required_fields_fail_closed() {
     }
 }
 
-/// A structure outside the vanilla namespace never resolves: the cache
-/// only holds `data/minecraft`.
+/// Identical paths in different namespaces resolve to their own resources.
 #[test]
-fn non_vanilla_namespace_fails_closed() {
+fn structure_set_resolves_its_namespace() {
     let dir = fixture();
-    let error = loader(dir.path())
-        .load_structure_set(&identifier("krasnokamen:villages"))
-        .expect_err("a non-vanilla structure set fails closed");
-    assert!(
-        error
-            .to_string()
-            .contains("non-minecraft structure set krasnokamen:villages"),
-        "{error}"
+    write(
+        dir.path(),
+        "data/krasnokamen/worldgen/structure_set/villages.json",
+        r#"{
+            "placement": { "type": "minecraft:random_spread", "spacing": 40, "separation": 8, "salt": 1 },
+            "structures": [{ "structure": "krasnokamen:house", "weight": 1 }]
+        }"#,
     );
+    let loaded = loader(dir.path())
+        .load_structure_set(&identifier("krasnokamen:villages"))
+        .unwrap();
+    assert_eq!(loaded.structures[0].structure, identifier("krasnokamen:house"));
+    let error = loader(dir.path())
+        .load_structure_set(&identifier("other:villages"))
+        .expect_err("another namespace must not resolve the vanilla entry");
+    assert!(error.to_string().contains("other:villages"), "{error}");
+}
+
+#[test]
+fn structure_step_includes_namespaces_in_vanilla_order() {
+    let dir = fixture();
+    write(
+        dir.path(),
+        "data/example/worldgen/structure/village_plains.json",
+        r#"{"step":"surface_structures"}"#,
+    );
+    let ids = loader(dir.path())
+        .structures_in_step(StructureStep::SurfaceStructures)
+        .unwrap();
+    assert_eq!(
+        ids,
+        vec![identifier("example:village_plains"), identifier("minecraft:village_plains")]
+    );
+}
+
+#[test]
+fn structure_sets_include_all_namespaces_in_registry_order() {
+    let dir = fixture();
+    write(
+        dir.path(),
+        "data/example/worldgen/structure_set/villages.json",
+        "{}",
+    );
+    assert_eq!(
+        loader(dir.path()).structure_sets().unwrap(),
+        vec![identifier("example:villages"), identifier("minecraft:villages")]
+    );
+}
+
+#[test]
+fn structure_pool_and_processors_resolve_their_own_namespace() {
+    let dir = fixture();
+    for relative in [
+        "structure/village_plains.json",
+        "template_pool/village/plains/town_centers.json",
+        "processor_list/zombie_plains.json",
+    ] {
+        let source = dir.path().join("data/minecraft/worldgen").join(relative);
+        let contents = std::fs::read_to_string(source).unwrap();
+        write(
+            dir.path(),
+            &format!("data/example/worldgen/{relative}"),
+            &contents,
+        );
+    }
+    let loader = loader(dir.path());
+    assert!(loader.load_structure(&identifier("example:village_plains")).is_ok());
+    assert!(
+        loader.load_template_pool(&identifier("example:village/plains/town_centers")).is_ok()
+    );
+    assert!(loader.load_processor_list(&identifier("example:zombie_plains")).is_ok());
+}
+
+#[test]
+fn structure_loader_rejects_an_unregistered_jigsaw_namespace() {
+    let dir = fixture();
+    let path = dir.path().join("data/minecraft/worldgen/structure/village_plains.json");
+    let contents = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("minecraft:jigsaw", "example:jigsaw");
+    std::fs::write(path, contents).unwrap();
+    let error = loader(dir.path())
+        .load_structure(&identifier("minecraft:village_plains"))
+        .expect_err("a foreign jigsaw type is not the vanilla codec");
+    assert!(matches!(error, VillageDataError::UnsupportedType { .. }));
 }
 
 /// A missing entry names the id, the entry that referenced it and the path

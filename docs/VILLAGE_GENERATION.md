@@ -17,6 +17,13 @@ village capability; do not infer it from the old profile or warning names.
 
 ## Modern jigsaw structures
 
+The jigsaw registry and template readers resolve resource identifiers within
+their own `data/<namespace>/worldgen` and `data/<namespace>/structure`
+directories. Structure-set discovery and structure-step ordering include the
+namespaces present in the supplied resource root. This library capability alone
+does not enable datapack worldgen in the running server; see the current
+[datapack limits](OPERATING.md#datapacks-and-command-blocks).
+
 Missing template resources follow vanilla's `StructureTemplateManager.getOrCreate`:
 the closure caches a zero-sized empty template and logs its identifier once during
 loading. This is required by the shipped ancient-city `walls/no_corners` pool,

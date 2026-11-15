@@ -93,6 +93,7 @@ pub mod trial_loot;
 pub mod trial_nbt;
 pub mod vanilla_feature_closure;
 pub mod village_data;
+mod versioned_structure_pool;
 pub mod villager_trades_26_1_2;
 pub mod worldgen_features;
 pub mod worldgen_inventory;
