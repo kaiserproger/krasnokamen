@@ -6294,3 +6294,20 @@ repro = "source"
 regression = []
 failing_first = "reported"
 repro_check = "Two observed failures with server c7786910eaa6 and 26.1.2 Fabric Loader 7343bd38: receipts/PreparedLaunchFix/real-java/20261115T012435-java-matrix-50t25et0/pw-2314a2e847b93d120a99/result.json and real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99/result.json. Both capability groups pass; the cell records no domain checks and fails with client chunk did not load at -16, 199, -16. Root cause not investigated in the isolated-launch assignment; no product armadillo failure inferred."
+
+[[bug]]
+id = "WORN-PLAYER-HEAD-ON-BACK"
+title = "A worn player head renders on the avatar's back instead of its head"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 head scene: 20261115T010550-native-player-head-iplrnv4q head-worn.png versus head-none.png; skull at x600-680/y420-506, actual head y306-375 (P2)"
+repro = "client"
+regression = [
+  "client:krasnokamen-client:entities::animation_tests::worn_skull_and_custom_head_follow_the_head_bone_not_the_hand_pose",
+  "client:krasnokamen-client:entities::crowd::tests::worn_skull_composites_match_cpu_and_do_not_alias_ordinary_head_items",
+  "harness:scene-shot:native-player-head",
+]
+fix_commit = "client:2cf3cfd0307556d0ec413f292a19df2d7cf7ee11"
+repro_check = "CustomHeadLayer now resolves the canonical SkullBlock family/profile independently of inventory-graph normalization, then attaches its raw geometry to the head bone at 1.1875 scale in CPU and crowd paths. Only old attachment restored: receipts/HarnessFix2/client-head/red-worn-head-old-attachment.log is red. Only inventory-graph bypass disabled with the real resolver test retained: red-worn-head-inventory-graph.log is red at head-local centroid (0.59375,0.296875,0.59375), not (0,-0.296875,0). Restore: green-real-resolver-animation.log (54 pass), green-real-resolver-crowd.log (10 pass, one unrelated timing benchmark ignored), green-real-resolver-item-models.log (16 pass, one unrelated runtime-resource test ignored). On clean harness 5447c5d0d and server 8b6fc28e58bb, windowed candidate 2cf3cfd0 passes native-player-head 3/3: .analysis/validation/20261115T014909-native-player-head-hhn8klcw, 20261115T014959-native-player-head-v5tt385e, 20261115T015030-native-player-head-70lg1lsk. Control 0a0ed7e4 restores all four production files to 98e4b5bb with tests retained; 20261115T015102-native-player-head-7yjylsdr fails worn_head_renders with zero head-region hat pixels while placed hat remains 9822. Every candidate/control head-worn.png and head-block.png was visually reviewed: candidate skull covers the head, control skull remains on the back. Rejected intermediate 9f641fdf is not acceptance evidence. Full receipts and commands: receipts/HarnessFix2/result.json. No promotion performed."
+failing_first = "reported"
