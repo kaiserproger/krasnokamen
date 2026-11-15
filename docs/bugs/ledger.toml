@@ -6961,7 +6961,7 @@ repro_check = "receipts/ScreensVoiceStart/runs/20261115T032837-screens-voice-qa-
 
 [[bug]]
 id = "PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION"
-title = "After 256 distinct malformed player-head profiles, valid profile heads render as default Steve until restart"
+title = "After 261 distinct malformed player-head profiles, a valid profile head renders as default Steve"
 area = "client"
 severity = "major"
 status = "open"
