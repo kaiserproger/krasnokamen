@@ -3181,13 +3181,12 @@ title = "Java matrix cumulative chat is unavailable because bounded newest-first
 area = "harness"
 repro = "cargo"
 severity = "minor"
-status = "fixed"
+status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
 regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
 repro_check = "Cumulative-chat scope only: retained refs reject GUI history and missing/lost/out-of-order packet receipts. Prediction tokens, exact ACK sequence, transformer client acceptance and pure-target-mod lanes are tracked separately in TEST-JAVA-PREDICTION-ACK-LANES. Historical red receipts/XHarnessJava/NC-R2-reverse-e99902e71.log."
 fix_commit = "patch:27496b8944131e3b86385de3ab13027df0766e6bcda7b71adafdf5205728a047"
 failing_first = "reported"
-promotion = "docs/bugs/promotions/TEST-JAVA-CAPABILITIES.json"
 
 [[bug]]
 id = "TEST-JAVA-PREDICTION-ACK-LANES"
@@ -4357,13 +4356,12 @@ title = "Differential seed 19 completes the Solaris crafting action but times ou
 area = "harness"
 repro = "source"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
 regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions"]
 repro_check = "Forward-ported original random.py, quirk_parity/player.py and BOTH wire.py behavioral hunks; kept click_body keyword API. The packet-driven seed19 fixture asserts that input without cursor correction cannot satisfy the craft fence. Control/restore: receipts/HarnessFix4/SCENARIO-VANILLA-CRAFT-ACK.red.log and .green.log; original-hunk dispositions in promotions/SCENARIO-VANILLA-CRAFT-ACK.hunks.md. Historical claims that wire hunks had no HEAD equivalent are superseded."
 failing_first = "reported"
 fix_commit = "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52"
-promotion = "docs/bugs/promotions/SCENARIO-VANILLA-CRAFT-ACK.json"
 
 [[bug]]
 id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
@@ -6243,7 +6241,7 @@ id = "HARNESS-VOICE-PIN-ENDPOINT"
 title = "Voice gate launches the Loader default instead of the Minecraft version covered by its SVC pin"
 area = "harness"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader defaults to 26.3. Owner case is PrismLauncher 26.1.2; screens remains on 26.3. The independent fix patch restores the unscoped run loop; java_endpoint stays available for retained API tests but is unused by the reversed live path."
 repro = "source"
 regression = [
@@ -6253,7 +6251,6 @@ regression = [
 repro_check = "ScreensVoiceStart/endpoint-red.log fails with the old unscoped launcher; endpoint-green.log passes pinned screen/voice selection and conflicting-selector rejection."
 failing_first = "reported"
 fix_commit = "patch:c22e452d0ae4fa2c378a304e109d085df5845da59b9f738e36d62f2b1d4a67b5"
-promotion = "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json"
 
 [[bug]]
 id = "HARNESS-AUDIBLE-SINK-IGNORED"
