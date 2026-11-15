@@ -88,6 +88,109 @@ class RandomMatrixTests(unittest.TestCase):
             else: a.close()
             b.close()
 
+    def test_vanilla_craft_cursor_correction_uses_transmitted_prediction(self):
+        import socket
+        import threading
+        from . import wire
+        from .protocol_matrix_client import ProtocolMatrixClient
+
+        local, remote = socket.socketpair()
+        stopped = threading.Event()
+        errors = []
+        clicks = []
+        observer = None
+        worker = None
+
+        def serve():
+            try:
+                for expected_slot in (36, 1, 0):
+                    packet, body = wire.read_compressed_frame(remote)
+                    while packet == 0x0D:
+                        packet, body = wire.read_compressed_frame(remote)
+                    self.assertEqual(packet, 0x12)
+                    window, offset = wire.read_varint_bytes(body)
+                    _, offset = wire.read_varint_bytes(body, offset)
+                    slot, button = struct.unpack_from(">hb", body, offset)
+                    mode, offset = wire.read_varint_bytes(body, offset + 3)
+                    changed, offset = wire.read_varint_bytes(body, offset)
+                    self.assertEqual((window, slot, changed), (0, expected_slot, 0))
+                    prediction = body[offset:]
+                    clicks.append((slot, button, mode, prediction.hex()))
+                    if slot == 36:
+                        wire.send_compressed_frame(remote, 0x14, bytes.fromhex("0002002400"))
+                        actual_cursor = bytes.fromhex("01a3010000")
+                    elif slot == 1:
+                        self.assertEqual((button, mode), (1, 0))
+                        wire.send_compressed_frame(remote, 0x14, bytes.fromhex("00040000043f0000"))
+                        wire.send_compressed_frame(remote, 0x14, bytes.fromhex("0005000101a3010000"))
+                        actual_cursor = b"\x00"
+                    else:
+                        self.assertEqual(mode, 1)
+                        wire.send_compressed_frame(remote, 0x14, bytes.fromhex("0006000000"))
+                        actual_cursor = b"\x00"
+                    # Vanilla sends a correction only when the transmitted
+                    # prediction differs. No observer/wait hook injects it.
+                    if prediction != actual_cursor:
+                        wire.send_compressed_frame(remote, 0x60, actual_cursor)
+            except Exception as error:
+                if not stopped.is_set():
+                    errors.append(error)
+
+        try:
+            with patch.object(wire, "join_offline_socket", return_value=(local, {})):
+                observer = wire.PlayObserver(("unused", 0), "Probe", account_uuid=None, timeout=1)
+            client = object.__new__(ProtocolMatrixClient)
+            client.observer = observer
+            client.items = {163: "minecraft:oak_log", 63: "minecraft:oak_planks"}
+            client.teleport_to = lambda *args: None
+            client.open_inventory = lambda: None
+            client.wait_until = lambda predicate, **kwargs: observer.wait(
+                lambda _: predicate(), description=kwargs["description"], timeout=1)
+            slots = [b"\x00"] * 46
+            slots[36] = bytes.fromhex("01a3010000")
+            wire.send_compressed_frame(remote, 0x12, bytes([0, 1, 46]) + b"".join(slots) + b"\x00")
+            observer.wait(lambda p: 0 in p.menus, description="initial player menu")
+            worker = threading.Thread(target=serve, daemon=True)
+            worker.start()
+
+            def craft(matrix):
+                _action(matrix, {"actor": 0, "verb": "craft", "count": 2, "target": 0})
+                matrix.state["final"] = client.snapshot()
+                return [{"passed": True}]
+
+            with tempfile.TemporaryDirectory() as directory:
+                fixture = Path(directory)
+                jar = fixture / "server.jar"
+                jar.write_bytes(b"socket fixture")
+                dimension = fixture / "data/minecraft/dimension_type/overworld.json"
+                dimension.parent.mkdir(parents=True)
+                dimension.write_text('{"min_y": -64}')
+                ctx = SimpleNamespace(artifact_dir=fixture, client_evidence={}, logs=[])
+                with patch.object(player, "VanillaMatrixServer") as server, \
+                     patch.object(player, "ProtocolMatrixClient", return_value=client), \
+                     patch.object(player, "run_subject", side_effect=craft), \
+                     patch("tools.harness.matrix_domains.random._supply"), \
+                     patch("tools.harness.matrix_domains.random._close"):
+                    server.return_value.log_path = fixture / "server.log"
+                    try:
+                        final = player.run_player_script(ctx, player_scenario(19, 1, 2), jar, fixture)
+                    except TimeoutError as error:
+                        self.fail(f"vanilla craft retained its old cursor without a wire correction: {error}")
+                self.assertIsNone(final["cursor"])
+                self.assertEqual(final["menu"]["state_id"], 6)
+            self.assertEqual([click[0] for click in clicks], [36, 1, 0])
+            self.assertFalse(errors, errors)
+        finally:
+            stopped.set()
+            if observer is not None:
+                observer.close()
+            else:
+                local.close()
+            remote.close()
+            if worker is not None:
+                worker.join(timeout=2)
+                self.assertFalse(worker.is_alive(), "wire fixture thread did not stop")
+
     def test_differential_rejects_planted_inventory_divergence(self):
         state = {'inventories': [{}], 'container': {}, 'blocks': {}}
         self.assertTrue(player.compare_player_states(state, state)['passed'])

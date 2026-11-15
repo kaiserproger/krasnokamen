@@ -612,6 +612,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="received game age stays constant across held frames and teleport",
         limits="one native client; does not cover restart",
     ),
+    "java-matrix-system-chat": _entry(
+        id="java-matrix-system-chat",
+        summary="Real loader system-chat receipts reach the Java matrix adapter",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="java-matrix-system-chat", requires=("xvfb",),
+        sources=("tools/harness/backends/java_system_chat.py",),
+        fixture="one Java join and one unique server system-chat message",
+        proves="the loader's received packet journal reaches matrix snapshot events",
+        limits="one message; does not prove journal capacity or multi-message ordering",
+    ),
     "native-unloaded-eye": _entry(
         id="native-unloaded-eye",
         summary="A far teleport with not-yet-loaded eye terrain keeps the native session alive",
