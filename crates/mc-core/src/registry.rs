@@ -81,6 +81,8 @@ pub struct CoreRegistry {
     pub(crate) construction_crafting: Arc<crate::settlements::construction_crafting::Index>,
     /// Reloadable datapack selector predicates.
     pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Selected, startup-validated datapack structure IDs; no tick filesystem scan.
+    pub(crate) datapack_structures: Arc<[Identifier]>,
     /// Block loot tables used by native block breaks.
     pub loot: mc_data::loot::LootTables,
 }
@@ -214,6 +216,7 @@ impl Clone for CoreRegistry {
             loot: self.loot.clone(),
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
+            datapack_structures: Arc::clone(&self.datapack_structures),
         }
     }
 }
@@ -227,6 +230,11 @@ impl std::fmt::Debug for CoreRegistry {
 }
 
 impl CoreRegistry {
+    /// Enabled datapack structures, including those with no resident starts yet.
+    pub fn datapack_structures(&self) -> &[Identifier] {
+        &self.datapack_structures
+    }
+
     /// Copy only reloadable catalogs; immutable startup tables stay shared.
     pub(crate) fn prepare_content(&self) -> Self {
         Self {
@@ -235,6 +243,7 @@ impl CoreRegistry {
             iron_smelting: self.iron_smelting,
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
+            datapack_structures: Arc::clone(&self.datapack_structures),
             loot: self.loot.clone(),
         }
     }
@@ -597,6 +606,7 @@ impl CoreRegistry {
             iron_smelting,
             loot,
             predicates: std::collections::BTreeMap::new(),
+            datapack_structures: Arc::from([]),
             stable: Arc::new(RegistryTables {
                 blocks,
                 shears_item,
