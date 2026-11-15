@@ -1,11 +1,12 @@
 #!/bin/sh
-# Run one graphical scene-shot/gate command in one of six shared host slots,
+# Run one graphical scene-shot/gate command in one of four shared host slots,
 # through slot-lock.py (the same mechanism as mem-run.sh's build tokens): a waiter
-# blocks on all six slots at once and takes whichever frees first, so a long run in
+# blocks on all four slots at once and takes whichever frees first, so a long run in
 # one slot never starves the queue. No polling; the lock is held until the command
 # exits (an inherited fd >= 10, which mem-run.sh's own fds 3-9 never touch).
-# Six fits the 16-thread owner host: one scene (release server + native client
-# + Xvfb, or a Java oracle) measured about 1.5 cores and 3.5 GB (2026-11-11).
+# Four on the 16-thread owner host (owner, 2026-11-15): six slots plus builds reached
+# load 134 (CPU PSI 75%); each CPU-rendered native client under Xvfb took 140-170% CPU
+# and Java/multi-client scenes several cores, so starved gates timed out falsely.
 # The command sees KRASNOKAMEN_SCENE_SLOT=<slot>; mem-run.sh then gives its scope a
 # higher CPU weight than tests and builds, so the gate keeps its tick rate.
 # Holders and waiters: tools/dev/fleet-status.
@@ -32,7 +33,7 @@ if [ -n "${KRASNOKAMEN_EXCLUSIVE_WINDOW:-}" ]; then
   echo "scene-slot: refused inside mem-run -x window $KRASNOKAMEN_EXCLUSIVE_WINDOW (lock order: take the slot first, scene-slot.sh mem-run.sh -x <command>)" >&2
   exit 75
 fi
-exec python3 "$here/slot-lock.py" --dir "$dir" --name 'solaris-scene-slot-%s.lock' --slots a,b,c,d,e,f \
+exec python3 "$here/slot-lock.py" --dir "$dir" --name 'solaris-scene-slot-%s.lock' --slots a,b,c,d \
   --env KRASNOKAMEN_SCENE_SLOT --wait-dir "$dir/solaris-scene-slot-wait" \
-  --wait-message "scene-slot: all six scene slots are in use; waiting for one (holders: $here/fleet-status)" \
+  --wait-message "scene-slot: all four scene slots are in use; waiting for one (holders: $here/fleet-status)" \
   -- "$@"
