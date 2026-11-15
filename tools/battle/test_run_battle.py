@@ -571,7 +571,7 @@ class BattleRunnerTests(unittest.TestCase):
                '2026-11-11T11:02:08Z  INFO mc_core::core::journal: checkpoint committed tick=1574 total_ms=1332\n')
         self.assertEqual(runner.server_checkpoint_ticks(log), [849, 1574])
 
-    def run_fake_battle(self, root, *extra, expect_success=True, **fake_environment):
+    def run_fake_battle(self, root, *extra, expect_success=True, during_run=None, **fake_environment):
         server = root / 'server'
         server.write_text(FAKE_SERVER)
         server.chmod(0o755)
@@ -585,16 +585,65 @@ class BattleRunnerTests(unittest.TestCase):
             (root / name).mkdir()
         dashboard = free_port()
         environment = dict(os.environ, FAKE_DASHBOARD_PORT=str(dashboard), FAKE_WINDOW_TICKS='300', MC_CORE_PHASE_LOG='1', **fake_environment)
-        result = subprocess.run([str(Path(__file__).with_name('run-battle.sh')), '--pin', str(root / 'pin'), '--client', str(recorder),
-                                 '--client-data', str(root / 'client-data'), '--cache', str(root / 'cache'), '--run-dir', str(root / 'run'),
-                                 '--scenario', 'field-100', '--count', '10', '--seed', '9', '--port', str(free_port()),
-                                 '--dashboard-port', str(dashboard), '--duration', '1', *extra],
-                                text=True, capture_output=True, timeout=120, env=environment)
+        command = [str(Path(__file__).with_name('run-battle.sh')), '--pin', str(root / 'pin'), '--client', str(recorder),
+                   '--client-data', str(root / 'client-data'), '--cache', str(root / 'cache'), '--run-dir', str(root / 'run'),
+                   '--scenario', 'field-100', '--count', '10', '--seed', '9', '--port', str(free_port()),
+                   '--dashboard-port', str(dashboard), '--duration', '1', *extra]
+        with subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment) as process:
+            try:
+                if during_run is not None:
+                    during_run(process, root / 'run')
+                stdout, stderr = process.communicate(timeout=120)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.communicate(timeout=40)
+            result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if not expect_success:
             return result, root / 'run'
         self.assertEqual(result.returncode, 0, result.stderr)
         commands = (root / 'run' / 'commands.txt').read_text().splitlines()
         return commands, root / 'run'
+
+    def test_completion_barrier_holds_shutdown_until_scenario_releases(self):
+        runner = load_runner()
+        def capture(process, run):
+            runner.watch_ready(run, process, 30)
+            runner.watch_ready(run / 'completion.ready', process, 30)
+            commands = (run / 'commands.txt').read_text().splitlines()
+            self.assertIn('battle start', commands)
+            self.assertNotIn('battle pause', commands)
+            self.assertNotIn('stop', commands)
+            self.assertTrue((run / 'take.solrec.result.json').is_file())
+            (run / 'captures.complete').touch()
+            (run / 'completion.done').touch()
+        with tempfile.TemporaryDirectory() as directory:
+            commands, run = self.run_fake_battle(Path(directory), '--completion-timeout', '30', during_run=capture)
+            self.assertTrue((run / 'captures.complete').exists())
+            self.assertLess(commands.index('battle pause'), commands.index('stop'))
+            self.assertEqual(json.loads((run / 'result.json').read_text())['status'], 'complete')
+
+    def test_completion_barrier_deadline_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, run = self.run_fake_battle(Path(directory), '--completion-timeout', '1', expect_success=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue((run / 'completion.ready').is_file())
+            error = json.loads((run / 'result.json').read_text())['error']
+            self.assertIn('live scenario completion barrier did not create', error)
+            self.assertIn('completion.done within 1 s', error)
+            commands = (run / 'commands.txt').read_text().splitlines()
+            self.assertNotIn('battle pause', commands)
+            self.assertNotIn('stop', commands)
+
+    def test_completion_barrier_accepts_capture_before_recorder_finishes(self):
+        runner = load_runner()
+        def capture(process, run):
+            runner.watch_ready(run, process, 30)
+            (run / 'completion.done').touch()
+        with tempfile.TemporaryDirectory() as directory:
+            commands, run = self.run_fake_battle(Path(directory), '--completion-timeout', '1', during_run=capture)
+            self.assertTrue((run / 'completion.ready').is_file())
+            self.assertIn('stop', commands)
 
     def test_take_refuses_a_server_pin_that_ignores_the_cadence_key(self):
         with tempfile.TemporaryDirectory() as directory:
