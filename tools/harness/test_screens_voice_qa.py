@@ -70,7 +70,7 @@ class ScreensVoiceHelperTests(unittest.TestCase):
                         self.fail("conflicting selector reached the voice leg")
                 self.assertEqual(os.environ[key], value)
 
-    def test_run_scopes_pinned_endpoints_to_each_leg(self):
+    def run_leg_commands(self, selected_leg=None):
         with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ):
             root = Path(directory)
             binary = root / "server"
@@ -78,6 +78,8 @@ class ScreensVoiceHelperTests(unittest.TestCase):
             os.environ.update(KRASNOKAMEN_SERVER_BINARY=str(binary), KRASNOKAMEN_PW_ROOT="private")
             for key in ("KRASNOKAMEN_JAVA_VERSION", "KRASNOKAMEN_JAVA_PLATFORM", qa.LEG_ENV):
                 os.environ.pop(key, None)
+            if selected_leg is not None:
+                os.environ[qa.LEG_ENV] = selected_leg
             commands = []
             def leg(*args):
                 commands.append(java_launcher.modded_gradle_arguments(":loader-fabric:runClientMcp"))
@@ -87,9 +89,19 @@ class ScreensVoiceHelperTests(unittest.TestCase):
                  mock.patch.object(qa, "screens_leg", side_effect=leg), \
                  mock.patch.object(qa, "voice_leg", side_effect=leg):
                 qa.run(ctx)
-            self.assertIn("-PminecraftVersion=26.3", commands[0])
-            self.assertIn("-PminecraftVersion=26.1.2", commands[1])
             self.assertNotIn("KRASNOKAMEN_JAVA_VERSION", os.environ)
+            return commands
+
+    def test_run_scopes_pinned_endpoints_to_each_leg(self):
+        commands = self.run_leg_commands()
+        self.assertIn("-PminecraftVersion=26.3", commands[0])
+        self.assertIn("-PminecraftVersion=26.1.2", commands[1])
+
+    def test_voice_leg_launches_with_svc_pinned_version(self):
+        commands = self.run_leg_commands("voice")
+        self.assertEqual(len(commands), 1)
+        self.assertIn("-PminecraftVersion=26.1.2", commands[0],
+                      "voice was launched without its SVC-pinned Minecraft endpoint")
 
     def test_voice_fixture_binds_the_group_key_it_presses(self):
         with tempfile.TemporaryDirectory() as directory, \

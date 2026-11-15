@@ -1528,7 +1528,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
         "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
-    if ctx.scenario_id in named_fixtures:
+    if ctx.scenario_id == "java-matrix-system-chat":
+        if ctx.client != "java" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError("java-matrix-system-chat requires its registered Java fixture without overrides")
+        scenario = {"steps": [], "operator": True, "server_view_distance": 2, "java_plain": True}
+    elif ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
             raise ValueError(f"{ctx.scenario_id} requires its registered native fixture without overrides")
         scenario = json.loads((runtime.REPO_ROOT / "tools/harness" / named_fixtures[ctx.scenario_id]).read_text())
@@ -1750,7 +1754,10 @@ def run(
                 "observed_version": before["state_version"], "timeout_seconds": probe.remaining(),
             })
             shots = script(probe, artifact, scenario["steps"], ctx.client)
-            if ctx.scenario_id == "native-263-entity-rigs":
+            if ctx.scenario_id == "java-matrix-system-chat":
+                from .java_system_chat import check
+                check(probe, artifact)
+            elif ctx.scenario_id == "native-263-entity-rigs":
                 check_263_entity_rigs(probe, artifact)
             elif ctx.scenario_id == "native-shelf-clock":
                 check_shelf_clock(probe, artifact)

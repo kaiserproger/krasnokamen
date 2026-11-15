@@ -1,7 +1,7 @@
 diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene_shot.py
 --- a/tools/harness/backends/scene_shot.py
 +++ b/tools/harness/backends/scene_shot.py
-@@ -1243,13 +1243,16 @@
+@@ -1249,13 +1249,16 @@
      from PIL import Image, ImageDraw
  
      pack = artifact / "head-skin-pack"
@@ -21,7 +21,7 @@ diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene
      (pack / "pack.mcmeta").write_text(json.dumps({
          "pack": {"description": "Authored player-head hat regression skin", "pack_format": 84},
      }) + "\n")
-@@ -1295,7 +1298,8 @@
+@@ -1301,7 +1304,8 @@
      probe.report["bare_head_back_hat_pixels"] = bare_back_hat
      probe.report["worn_head_added_back_hat_pixels"] = added_back_hat
      probe.check("placed_head_renders", placed > 100)
@@ -30,8 +30,8 @@ diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene
 +    probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
      probe.check("worn_head_back_unchanged", added_back_hat <= 100)
  
- def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
-@@ -1643,9 +1647,15 @@
+ def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list, int, int]:
+@@ -1702,9 +1706,15 @@
          ctx.logs.append(str(artifact / "xvfb.log"))
          old_xdg = os.environ.get("XDG_DATA_HOME")
          old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
@@ -47,7 +47,7 @@ diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene
              if ctx.client == "java":
                  client, client_log, mcp = start_java(
                      ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
-@@ -1656,7 +1666,8 @@
+@@ -1715,7 +1725,8 @@
              else:
                  client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
          finally:

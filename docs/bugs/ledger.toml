@@ -3183,8 +3183,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
-regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
-repro_check = "Cumulative-chat scope only: retained refs reject GUI history and missing/lost/out-of-order packet receipts. Prediction tokens, exact ACK sequence, transformer client acceptance and pure-target-mod lanes are tracked separately in TEST-JAVA-PREDICTION-ACK-LANES. Historical red receipts/XHarnessJava/NC-R2-reverse-e99902e71.log."
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts", "harness:scene-shot:java-matrix-system-chat"]
+proving_assertions = { "harness:scene-shot:java-matrix-system-chat" = "system_chat_producer_reaches_matrix_events" }
+repro_check = "Cumulative-chat scope only. Real Java joins once, receives one unique system chat, and exposes it through the actual loader producer and JavaMatrixClient.snapshot. receipts/HarnessFix4Proof/java-producer.red.log removes only MinecraftClientObservation received_system_chat emission and fails system_chat_producer_reaches_matrix_events, not startup or timeout; producer and adapter restore receipts are in REPORT.md. Unit refs retain duplicate/order projection and missing/lost receipt rejection; the one-message live gate does not prove multi-message ordering. Prediction/ACK/target-mod lanes remain in TEST-JAVA-PREDICTION-ACK-LANES. Main must rerun promotion on its merged-tree pin."
 fix_commit = "patch:27496b8944131e3b86385de3ab13027df0766e6bcda7b71adafdf5205728a047"
 failing_first = "reported"
 
@@ -4358,8 +4359,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
-regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions"]
-repro_check = "Forward-ported original random.py, quirk_parity/player.py and BOTH wire.py behavioral hunks; kept click_body keyword API. The packet-driven seed19 fixture asserts that input without cursor correction cannot satisfy the craft fence. Control/restore: receipts/HarnessFix4/SCENARIO-VANILLA-CRAFT-ACK.red.log and .green.log; original-hunk dispositions in promotions/SCENARIO-VANILLA-CRAFT-ACK.hunks.md. Historical claims that wire hunks had no HEAD equivalent are superseded."
+regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_vanilla_craft_cursor_correction_uses_transmitted_prediction"]
+repro_check = "The new socket peer decodes actual ProtocolMatrixClient -> PlayObserver -> click_body output and sends cursor corrections only for mismatching transmitted predictions. Real run_player_script enables sync. Keeping click_slot/send/encoder intact, independently reversing the player flag or wire behavior reproduces the stale craft cursor; craft-player-flag.red.log and craft-wire.red.log under receipts/HarnessFix4Proof. Corresponding green logs pass after restoration. The retained earlier test separately proves the early-result/input/cursor fence. Full patch craft.red.log/green.log covers both. This is protocol-fixture evidence, not another live vanilla differential run."
 failing_first = "reported"
 fix_commit = "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52"
 
@@ -6031,8 +6032,8 @@ regression = [
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels",
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window",
 ]
-fix_commit = "patch:80b3c75a8020fa0a46664baf28cf5fc3513ae3d49e9d319f863657053b02902b"
-repro_check = "The scene installs an authored offline default-skin pack (cyan base, magenta opaque hat, transparent face window) and unresolved HarnessHat, not an online skin. Only hat assertion removed: receipts/HarnessFix2/red-head-hat-assertion.log wrongly accepts the no-hat frame. Restore: receipts/HarnessFix2/green-final-units.log. Followup fad1cef1e authors both wide and slim Steve fallback paths; the real UUID selects slim Steve. Real-client placed hat: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 magenta pixels, hat-only control 20261115T010623-native-player-head-vwnycn1k has zero and fails placed_head_hat_layer_pixels. These frames exposed a separate worn-head-on-back product failure; full gate acceptance is not inferred from the placed head."
+fix_commit = "patch:d5503b10c277e6e23027843c089e4a10175f74dcc9b60e5ecf83d4bdb7bb1ed7"
+repro_check = "Forward-ported both original commits onto ff72f53bd/current scene runtime. receipts/HarnessFix4Proof/hat.red.log and hat.green.log prove the combined patch; hat-f645 and hat-fad1 red/green logs prove each original commit independently. The authored wide/slim offline skin and placed-hat assertion are covered; original hunk dispositions remain in promotions/HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE.hunks.md. Historical actual placed-head evidence: 20261115T010513-native-player-head-93kmva1a has 9822 magenta pixels; 20261115T010623-native-player-head-vwnycn1k has zero and fails placed_head_hat_layer_pixels. That does not establish acceptance of the separate worn-head-on-back product failure."
 failing_first = "not recorded"
 
 [[bug]]
@@ -6244,9 +6245,10 @@ source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader de
 repro = "source"
 regression = [
   "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg",
+  "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_leg_launches_with_svc_pinned_version",
   "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors",
 ]
-repro_check = "ScreensVoiceStart/endpoint-red.log fails with the old unscoped launcher; endpoint-green.log passes pinned screen/voice selection and conflicting-selector rejection."
+repro_check = "Voice-only proving ref executes the actual run leg scope and captures launcher argv, independently of screens assertions. receipts/HarnessFix4Proof/voice.red.log fails at test_screens_voice_qa.py:103 because the voice child lacks -PminecraftVersion=26.1.2; voice.green.log passes after restoring the retained patch. Existing combined-leg and conflicting-selector refs remain registered."
 failing_first = "reported"
 fix_commit = "patch:c22e452d0ae4fa2c378a304e109d085df5845da59b9f738e36d62f2b1d4a67b5"
 
