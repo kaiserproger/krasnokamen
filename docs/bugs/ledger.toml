@@ -6315,8 +6315,8 @@ repro = "client"
 regression = [
   "cargo:mc-edge:server::admin_tests::profile_selectors_op_deop_and_whitelist_use_native_players",
   "cargo:mc-edge:server::admin_tests::profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles",
-  "cargo:mc-edge:admin::tests::whitelist_removal_does_not_remove_another_uuid_with_the_same_name",
+  "cargo:mc-edge:admin::whitelist_tests::whitelist_removal_does_not_remove_another_uuid_with_the_same_name",
 ]
-fix_commit = "d0ae64284"
+fix_commit = "patch:b69e31e85a2d333c95235b2cef5bedc8a6489fb6fee306cea9f0632eddea0c0e"
 failing_first = "reported"
-repro_check = "FixBatchB/amendments/F5-red.log fails with only selector expansion removed: /deop @s leaves level 4 and an empty selector reports false success. F5-green.log and deop-restored.log pass native-player targeting, persisted self-deop, multi-target authorization, whitelist selectors and renamed-profile UUID removal. Local 26.3 javap confirms GameProfileArgument for OpCommand, DeOpCommands and both WhitelistCommand target branches; SelectorResult uses EntityArgument.NO_PLAYERS_FOUND (No player was found). Original graphical spawn-protection replay and promotion remain Main-owned."
+repro_check = "FixBatchB/amendments/F5-red.log fails with selector expansion removed: /deop @s leaves level 4 and an empty selector reports false success. F5-profile-restored.log passes persisted self-deop, multi-target authorization, whitelist selectors, renamed UUIDs and literal persisted whitelist identities. Local 26.3 javap confirms GameProfileArgument for OpCommand, DeOpCommands and both WhitelistCommand branches; SelectorResult uses EntityArgument.NO_PLAYERS_FOUND (No player was found). The symptom patch OP-DEOP-SELECTOR-LITERAL.patch reverses the op/deop target cutover while retaining the shared profile API and the separate owner-requested whitelist behavior, avoiding an API-breaking control. Original graphical spawn-protection replay and promotion remain Main-owned."
