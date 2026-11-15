@@ -112,8 +112,8 @@ def run(
 
     game_dir = artifact_dir / "game"
     game_dir.mkdir(parents=True, exist_ok=True)
-    if platform == "forge":
-        # Avoid FML's failing early-window GL-context handoff on this Xvfb host.
+    if platform in ("forge", "neoforge"):
+        # FML's early GL window can fail under Xvfb before Minecraft creates its own.
         config_dir = game_dir / "config"
         config_dir.mkdir(exist_ok=True)
         (config_dir / "fml.toml").write_text("earlyWindowControl = false\n")
@@ -177,7 +177,7 @@ def run(
         "server_address": server_address(server_port),
         "server_port": server_port,
         "mcp_port": mcp_port,
-        "forge_early_window_control": False if platform == "forge" else None,
+        "fml_early_window_control": False if platform in ("forge", "neoforge") else None,
         "server_binary": str(server_bin),
         "server_binary_sha256": hashlib.sha256(server_bin.read_bytes()).hexdigest(),
         "plugins_directory": str(fixture_root),
