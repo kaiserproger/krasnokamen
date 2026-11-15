@@ -541,3 +541,172 @@ fn set_damage_changes_durability_but_leaves_nondurable_trial_loot_intact() {
         assert_eq!(items.name_of(drops[0].item_id), Some(&id(item)));
     }
 }
+
+#[test]
+fn atm_container_modifier_order_conditions_and_fail_closed() {
+    let raw = r#"{"modifier":[{"type":"minecraft:set_count","count":2,"add":true}],
+      "pools":[{"rolls":1,"modifier":[{"type":"minecraft:limit_count","limit":4}],
+      "conditions":[{"type":"minecraft:all_of","terms":[{"type":"minecraft:random_chance","chance":1},
+        {"type":"minecraft:any_of","terms":[{"type":"minecraft:inverted","term":{"type":"minecraft:random_chance","chance":0}}]}]}],
+      "entries":[{"type":"minecraft:item","name":"minecraft:bread","modifier":[
+        {"type":"minecraft:set_count","count":{"type":"minecraft:uniform","min":8,"max":8}},
+        {"type":"minecraft:set_count","count":60,"conditions":[{"type":"minecraft:random_chance","chance":0}]}]}]}]}"#;
+    let items = crate::items::krasnokamen_required_items();
+    let table = ChestLootTable::compile(id("other:generic"), raw).unwrap();
+    assert_eq!(
+        table.roll(&mut ChestRng::new(4), &items, 0.0).unwrap()[0].count,
+        6
+    );
+    for (bad, expected) in [
+        (
+            raw.replace("minecraft:set_count", "other:unsupported"),
+            "unsupported function other:unsupported",
+        ),
+        (
+            raw.replace("minecraft:random_chance", "minecraft:killed_by_player"),
+            "unsupported condition minecraft:killed_by_player",
+        ),
+        (
+            raw.replace(
+                "\"modifier\":[{\"type\":\"minecraft:set_count\",\"count\":2",
+                "\"functions\":[],\"modifier\":[{\"type\":\"minecraft:set_count\",\"count\":2",
+            ),
+            "both functions and modifier",
+        ),
+    ] {
+        let error = ChestLootTable::compile(id("other:generic"), &bad)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
+fn atm_container_modifiers_enchantments_and_instrument_preserve_effects() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    for path in [
+        "minecraft/enchantment",
+        "minecraft/loot_table/chests",
+        "minecraft/tags/instrument",
+        "minecraft/tags/enchantment",
+    ] {
+        std::fs::create_dir_all(root.join(path)).unwrap();
+    }
+    // Authored minimal vanilla-resource context, not copied game data.
+    std::fs::write(root.join("minecraft/enchantment/unbreaking.json"), r#"{
+        "supported_items":["minecraft:iron_pickaxe"],"max_level":3,"weight":5,
+        "min_cost":{"base":1,"per_level_above_first":1},"max_cost":{"base":200,"per_level_above_first":1}}"#).unwrap();
+    std::fs::write(
+        root.join("minecraft/tags/enchantment/on_random_loot.json"),
+        r#"{"values":["minecraft:unbreaking"]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("minecraft/tags/instrument/regular_goat_horns.json"),
+        r#"{"values":["minecraft:ponder_goat_horn"]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("minecraft/loot_table/chests/base.json"),
+        r#"{"type":"minecraft:chest","pools":[]}"#,
+    )
+    .unwrap();
+    let base = ChestLootCatalog::load_vanilla_tables(root, &[id("minecraft:chests/base")]).unwrap();
+    let items = crate::items::krasnokamen_required_items();
+    for (name, item, modifier) in [
+        (
+            "random",
+            "minecraft:book",
+            serde_json::json!({"type":"minecraft:enchant_randomly"}),
+        ),
+        (
+            "levels",
+            "minecraft:iron_pickaxe",
+            serde_json::json!({"type":"minecraft:enchant_with_levels","levels":30,"options":"#minecraft:on_random_loot"}),
+        ),
+        (
+            "instrument",
+            "minecraft:goat_horn",
+            serde_json::json!({"type":"minecraft:set_instrument","options":"#minecraft:regular_goat_horns"}),
+        ),
+    ] {
+        let table_id = id(&format!("other:{name}"));
+        let raw = serde_json::json!({"type":"minecraft:chest","pools":[{"rolls":1,"entries":[
+            {"type":"minecraft:item","name":item,"modifier":[modifier]}]}]})
+        .to_string();
+        let catalog = base
+            .with_datapacks(BTreeMap::from([(table_id.clone(), raw)]), |_| false, &items)
+            .unwrap();
+        let drops = catalog
+            .get(&table_id)
+            .unwrap()
+            .roll(&mut ChestRng::new(7), &items, 0.0)
+            .unwrap();
+        match name {
+            "random" => assert_eq!(
+                drops[0].extended().stored_enchantments[0].id,
+                id("minecraft:unbreaking")
+            ),
+            "levels" => assert_eq!(drops[0].enchantments[0].id, id("minecraft:unbreaking")),
+            _ => {
+                let fields = crate::item_nbt::stack_to_fields(&items, &drops[0]).unwrap();
+                let Some(mc_nbt::Tag::Compound(components)) =
+                    crate::item_nbt::field(&fields, "components")
+                else {
+                    panic!("components")
+                };
+                assert_eq!(
+                    crate::item_nbt::field(components, "minecraft:instrument"),
+                    Some(&mc_nbt::Tag::String("minecraft:ponder_goat_horn".into()))
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn atm_container_references_recompile_and_filters_do_not_fall_back() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    std::fs::create_dir_all(root.join("minecraft/loot_table/chests")).unwrap();
+    std::fs::write(root.join("minecraft/loot_table/chests/parent.json"), r#"{"type":"minecraft:chest","pools":[{"rolls":1,"entries":[{"type":"minecraft:loot_table","value":"minecraft:chests/child"}]}]}"#).unwrap();
+    std::fs::write(root.join("minecraft/loot_table/chests/child.json"), r#"{"type":"minecraft:chest","pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:bread"}]}]}"#).unwrap();
+    let parent = id("minecraft:chests/parent");
+    let child = id("minecraft:chests/child");
+    let base = ChestLootCatalog::load_vanilla_tables(root, std::slice::from_ref(&parent)).unwrap();
+    let items = crate::items::krasnokamen_required_items();
+    let raw = r#"{"type":"minecraft:chest","pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond","modifier":[{"type":"minecraft:set_count","count":9}]}]}]}"#;
+    let changed = base
+        .with_datapacks(
+            BTreeMap::from([(child.clone(), raw.into())]),
+            |_| false,
+            &items,
+        )
+        .unwrap();
+    let drops = changed
+        .get(&parent)
+        .unwrap()
+        .roll(&mut ChestRng::new(1), &items, 0.0)
+        .unwrap();
+    assert_eq!(drops[0].count, 9);
+    assert_eq!(
+        items.name_of(drops[0].item_id),
+        Some(&id("minecraft:diamond"))
+    );
+    let error = base
+        .with_datapacks(BTreeMap::new(), |id| *id == child, &items)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("unresolved reference minecraft:chests/child"),
+        "{error}"
+    );
+    let unknown = raw.replace("minecraft:diamond", "other:missing");
+    assert!(
+        base.with_datapacks(BTreeMap::from([(child, unknown)]), |_| false, &items)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown item other:missing")
+    );
+}

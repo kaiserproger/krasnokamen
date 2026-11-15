@@ -37,9 +37,7 @@ fn condition(value: &Value, depth: usize) -> Result<Condition, String> {
     if depth > 16 {
         return Err("condition nesting exceeds 16".into());
     }
-    let name = value["condition"]
-        .as_str()
-        .ok_or("condition missing identifier")?;
+    let name = discriminator(value, "condition")?;
     let result = match name {
         "minecraft:random_chance" => {
             Number::compile(&value["chance"], 0.0, 1.0).map(Condition::Chance)
@@ -127,6 +125,34 @@ enum Action {
     },
 }
 
+/// 26.3 carried data calls the list `modifier` and its discriminator `type`.
+/// Never prefer one spelling silently when both are supplied.
+pub(super) fn from_owner(
+    owner: &Value,
+    item: Option<&Identifier>,
+    resources: &Resources,
+) -> Result<Vec<ChestFunction>, String> {
+    if owner.get("functions").is_some() && owner.get("modifier").is_some() {
+        return Err("both functions and modifier supplied".into());
+    }
+    compile(
+        owner.get("modifier").or_else(|| owner.get("functions")),
+        item,
+        resources,
+    )
+}
+
+fn discriminator<'a>(value: &'a Value, legacy: &str) -> Result<&'a str, String> {
+    if value.get(legacy).is_some() && value.get("type").is_some() {
+        return Err(format!("both {legacy} and type supplied"));
+    }
+    value
+        .get("type")
+        .or_else(|| value.get(legacy))
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{legacy}/type missing identifier"))
+}
+
 pub(super) fn compile(
     value: Option<&Value>,
     item: Option<&Identifier>,
@@ -142,9 +168,7 @@ pub(super) fn compile(
     values
         .iter()
         .map(|value| {
-            let name = value["function"]
-                .as_str()
-                .ok_or("function missing identifier")?;
+            let name = discriminator(value, "function")?;
             let conditions =
                 conditions(value.get("conditions")).map_err(|e| format!("{name}: {e}"))?;
             let action =

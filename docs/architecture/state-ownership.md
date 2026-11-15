@@ -18,7 +18,18 @@ and [mutations.md](mutations.md) for routes.
 | Other plugin product policy | deployed component in its own repository | UI and guest callbacks | persisted only through admitted native plugin storage operations |
 | Connection/session and Loader negotiation | `mc-edge` | routing, auth state, held wire baselines and queue credit | connection-scoped, not gameplay persistence |
 | Immutable content tables and definitions | validated startup data / native registry | gameplay, worldgen, wire encoders, component declarations | external licensed content cache; world identity rejects unsupported state |
+| Selected datapack container loot | datapack worker compiles; native tick installs a registry snapshot | first-open container owner, loot commands, chunk readers | selected pack files plus native unresolved table/seed or rolled inventory; never roll-time JSON/filesystem access |
 | Validation run and owned processes | canonical `tools/harness` | agents/CI inspect receipts | one `.analysis/validation/<stamp>-<profile>-<id>/result.json` plus command logs |
+
+Container loot is reloadable `CoreRegistry` content, not a mutable member of its
+shared startup tables. The worker layers namespaced chest/generic tables,
+recompiles references after filters/overrides and refuses unsupported functions,
+conditions or missing references before publication. Both legacy
+`functions`/`function` and carried `modifier`/`type` are accepted, never both
+spellings at once. Unknown saved container tables refuse opening with a warning
+and preserve the table and seed for a corrected pack; they never become empty
+inventories. First-open rolling still uses the existing native block-entity/WAL
+owner. This does not claim whole-mod or modpack compatibility.
 
 ## Tick and wire clocks
 

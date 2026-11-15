@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(super) struct Resources {
     root: Option<PathBuf>,
     definitions: BTreeMap<Identifier, Value>,

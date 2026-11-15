@@ -85,6 +85,8 @@ pub struct CoreRegistry {
     pub(crate) datapack_structures: Arc<[Identifier]>,
     /// Block loot tables used by native block breaks.
     pub loot: mc_data::loot::LootTables,
+    /// Reloadable container loot, including selected datapack namespaces.
+    pub chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
 }
 
 /// Startup-only tables shared by successive native content snapshots.
@@ -142,7 +144,6 @@ pub struct RegistryTables {
     /// Immutable catalogs loaded from the same selected vanilla directory.
     pub entity_loot: Arc<mc_data::loot::entity_26_1_2::EntityLootCatalog>,
     pub entity_loot_lookups: Arc<mc_data::loot::entity_26_1_2::VanillaEntityLootLookups>,
-    pub chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
     pub fishing_loot: Arc<mc_data::loot::fishing_26_1_2::FishingLootTables>,
     pub trial_loot: Arc<mc_data::trial_loot::TrialLootTables>,
     /// Vanilla block-mining table (correct-tool-for-drops gate).
@@ -214,6 +215,7 @@ impl Clone for CoreRegistry {
             recipes: self.recipes.clone(),
             iron_smelting: self.iron_smelting,
             loot: self.loot.clone(),
+            chest_loot: Arc::clone(&self.chest_loot),
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
             datapack_structures: Arc::clone(&self.datapack_structures),
@@ -245,6 +247,7 @@ impl CoreRegistry {
             predicates: self.predicates.clone(),
             datapack_structures: Arc::clone(&self.datapack_structures),
             loot: self.loot.clone(),
+            chest_loot: Arc::clone(&self.chest_loot),
         }
     }
 
@@ -605,6 +608,7 @@ impl CoreRegistry {
             construction_crafting,
             iron_smelting,
             loot,
+            chest_loot,
             predicates: std::collections::BTreeMap::new(),
             datapack_structures: Arc::from([]),
             stable: Arc::new(RegistryTables {
@@ -614,7 +618,6 @@ impl CoreRegistry {
                 items: Arc::new(items),
                 entity_loot,
                 entity_loot_lookups,
-                chest_loot,
                 fishing_loot,
                 trial_loot,
                 mining,

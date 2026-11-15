@@ -75,6 +75,11 @@ pub(crate) fn before_open(
             continue;
         };
         let Some(compiled) = state.registry.chest_loot.get(&table) else {
+            let message = format!(
+                "Unknown container loot table {table} at {x} {y} {z}; opening refused, table and seed retained"
+            );
+            tracing::warn!("{message}");
+            state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
             waiting = true;
             continue;
         };
@@ -107,7 +112,8 @@ pub(crate) fn before_open(
         };
         if pending.specs.is_empty() {
             pending.openers.clear();
-            if resolve(state, key, pending).is_err() {
+            if let Err(error) = resolve(state, key, pending) {
+                tracing::warn!(%error, x, y, z, "Container loot roll refused; unresolved table retained");
                 waiting = true;
             }
         } else {

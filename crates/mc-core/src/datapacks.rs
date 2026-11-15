@@ -1002,12 +1002,65 @@ impl PackSet {
                     .any(|f| f.hides(block.namespace(), &format!("loot_table/blocks/{path}.json")))
             });
         }
+        let mut containers = BTreeMap::new();
         for (path, text) in &self.resources {
             let named = |error: String| match self.origins.get(path) {
                 Some(pack) => format!("{pack}: {path}: {error}"),
                 None => format!("{path}: {error}"),
             };
+            // Container tables may have any namespace/path, not only chests/*.
+            let (namespace, tail) = path
+                .split_once('/')
+                .ok_or_else(|| named("Missing namespace".into()))?;
+            if let Some(resource) = tail.strip_prefix("loot_table/") {
+                let value: serde_json::Value =
+                    serde_json::from_str(text).map_err(|error| named(error.to_string()))?;
+                if matches!(
+                    value.get("type").and_then(serde_json::Value::as_str),
+                    None | Some("minecraft:chest" | "minecraft:empty")
+                ) {
+                    let id = mc_data::Identifier::parse(format!(
+                        "{namespace}:{}",
+                        resource
+                            .strip_suffix(".json")
+                            .ok_or_else(|| named("Resource must be JSON".into()))?
+                    ))
+                    .map_err(|error| named(error.to_string()))?;
+                    containers.insert(id, text.clone());
+                    continue;
+                }
+            }
             self.install_resource(registry, path, text).map_err(named)?;
+        }
+        if !containers.is_empty() || !self.filters.is_empty() {
+            registry.chest_loot = Arc::new(
+                registry
+                    .chest_loot
+                    .with_datapacks(
+                        containers,
+                        |id| {
+                            self.filters.iter().any(|filter| {
+                                filter.hides(
+                                    id.namespace(),
+                                    &format!("loot_table/{}.json", id.path()),
+                                )
+                            })
+                        },
+                        &registry.items,
+                    )
+                    .map_err(|error| {
+                        let mc_data::loot::chest_26_1_2::ChestLootError::Unsupported { id, .. } =
+                            &error
+                        else {
+                            return error.to_string();
+                        };
+                        let path = format!("{}/loot_table/{}.json", id.namespace(), id.path());
+                        match self.origins.get(&path) {
+                            Some(pack) => format!("{pack}: {path}: {error}"),
+                            None => error.to_string(),
+                        }
+                    })?,
+            );
         }
         registry.predicates = self.predicates.clone();
         registry.refresh_recipe_indexes();
@@ -1045,7 +1098,7 @@ impl PackSet {
             registry.loot.override_datapack_block(block, text)?;
         } else {
             return Err(format!(
-                "Unsupported datapack loot domain: {id}; currently block loot tables only"
+                "Unsupported datapack loot domain: {id}; supported: block and container tables"
             ));
         }
         Ok(())
@@ -1956,3 +2009,7 @@ mod iron_smelting_tests {
         assert_eq!(registry.iron_smelting.unwrap().cook_ticks, 53);
     }
 }
+
+#[cfg(test)]
+#[path = "datapacks_container_tests.rs"]
+mod container_tests;
