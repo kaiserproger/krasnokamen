@@ -1069,7 +1069,7 @@ def start_client(
                 text = log_path.read_text(errors="replace")
                 return "Setting user:" in text, text
             wait_for_path_condition(log_path, _CLIENT_READY_TIMEOUT_SECONDS, initialized)
-    except Exception:
+    except BaseException:
         stop_process(process)
         log_handle.close()
         raise

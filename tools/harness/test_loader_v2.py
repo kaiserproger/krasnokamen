@@ -226,6 +226,24 @@ class LoaderV2Tests(unittest.TestCase):
                 runtime.wait_port(12345, None, process, log_path=log)
         selector.select.assert_not_called()
 
+    def test_cancelling_cold_start_stops_unreturned_client_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(runtime, "sibling_root", return_value=root), \
+                 mock.patch.object(runtime, "ensure_loader_gradle_home", return_value=root), \
+                 mock.patch.object(Path, "is_file", return_value=True), \
+                 mock.patch.object(runtime.os, "access", return_value=True), \
+                 mock.patch.object(runtime, "port_open", return_value=False), \
+                 mock.patch.object(runtime.subprocess, "Popen") as launch, \
+                 mock.patch.object(runtime, "wait_port", side_effect=KeyboardInterrupt("SIGTERM")), \
+                 mock.patch.object(runtime, "stop_process") as stop:
+                with self.assertRaises(KeyboardInterrupt):
+                    runtime.start_client(game_dir=root / "game", log_path=root / "client.log",
+                                         token="unit", mcp_port=12345, username="Test",
+                                         display=":99", platform="neoforge", ready_timeout_seconds=None)
+                stop.assert_called_once_with(launch.return_value)
+                self.assertTrue(launch.call_args.kwargs["stdout"].closed)
+
     def test_loader_gradle_home_defaults_to_the_shared_work_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary)
