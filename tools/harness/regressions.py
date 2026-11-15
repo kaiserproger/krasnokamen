@@ -8,10 +8,12 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import sys
 import tomllib
 
 from .ledger_base_fixed import BASE_FIXED
+from tools.dev.wtlib import PINS
 from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
@@ -291,68 +293,46 @@ def tree_build_command(tree, argv):
     return [str(MEM_RUN), '-m', '12G', *argv], env
 
 
-def _built_executable(log):
-    """The krasnokamen executable path named by cargo's JSON messages in a build log."""
-    found = None
-    for line in log.splitlines():
-        if line.startswith('{'):
-            try:
-                message = json.loads(line)
-            except ValueError:
-                continue
-            if message.get('reason') == 'compiler-artifact' and message.get('executable') and Path(message['executable']).name == 'krasnokamen':
-                found = Path(message['executable'])
-    if found is None:
-        raise RuntimeError('cargo reported no krasnokamen executable')
-    return found
-
-
 def _release_server(ctx, profiles, tree=None):
-    other = is_other_tree(tree)
-    built = Path(tree).resolve() if other else REPO_ROOT.resolve()
-    argv = ['cargo', 'build', '--release', '--locked', '-p', 'mc-edge', '--bin', 'krasnokamen']
-    if other:
-        argv, env = tree_build_command(tree, argv + ['--message-format', 'json-render-diagnostics'])
-        profiles._run_command(argv, ctx, 'regressions-client-server-build.log', cwd=tree, env=env)
-        # The slot is whichever mem-run picked for this tree: read it from cargo's own report.
-        binary = _built_executable((ctx.artifact_dir / 'regressions-client-server-build.log').read_text())
-        target = binary.parent.parent.resolve()
-    else:
-        profiles._run_command(argv, ctx, 'regressions-client-server-build.log', cwd=tree)
-        target = Path(os.environ.get('CARGO_TARGET_DIR', str(REPO_ROOT / 'target')))
-        if not target.is_absolute():
-            target = REPO_ROOT / target
-        target = target.resolve()
-        binary = target / 'release' / 'krasnokamen'
-    marker = target / '.krasnokamen-tree'
-    pooled = target.parent.name == 'targets' and target.name.startswith('slot-')
-    def check_tree():
-        if pooled or marker.exists():
-            if marker.read_text().strip() != str(built):
-                raise RuntimeError(f'target slot {target} does not belong to {built}')
-    check_tree()
-    with binary.open('rb') as file:
-        digest = hashlib.file_digest(file, 'sha256').hexdigest()
-    pin_dir = Path(os.environ.get('KRASNOKAMEN_REGRESSIONS_BIN_DIR', str(ctx.artifact_dir / 'bin'))).resolve()
-    if pin_dir.is_relative_to(target) or any(
-        parent.name.startswith('slot-') and parent.parent.name == 'targets'
-        for parent in (pin_dir, *pin_dir.parents)
-    ):
-        raise RuntimeError(f'pin directory {pin_dir} is inside a pooled target')
-    pin_dir.mkdir(parents=True, exist_ok=True)
-    pinned = pin_dir / f'krasnokamen-{digest}'
-    if not pinned.exists():
-        # Cargo replaces outputs with new files, so a hard link pins this build at no disk cost.
+    """Select a registered pin of the exact tree; never build or relabel a server."""
+    from . import ledger
+
+    built = Path(tree or REPO_ROOT).resolve()
+    fingerprint = ledger.tree_fingerprint(built)
+    registry = Path(os.environ.get('KRASNOKAMEN_LEDGER_ROOT') or built) / '.analysis/ledger-builds'
+    command = shlex.join([str(MEM_RUN.with_name('pin-release')), str(built)])
+    explicit = os.environ.get('KRASNOKAMEN_SERVER_BINARY')
+    manifests = ([Path(explicit).expanduser().resolve().parent / 'manifest.json'] if explicit
+                 else sorted(PINS.glob('*/manifest.json')))
+    reason = 'no registered pin-release server for this tree'
+    for manifest in manifests:
         try:
-            os.link(binary, pinned)
-        except OSError:
-            shutil.copy2(binary, pinned)
-    check_tree()
-    with pinned.open('rb') as file:
-        if hashlib.file_digest(file, 'sha256').hexdigest() != digest:
-            raise RuntimeError('release server changed while pinning')
-    ctx.client_evidence['regressions_server'] = {'path': str(pinned), 'sha256': digest}
-    return pinned
+            info = json.loads(manifest.read_text())
+            binary = Path(info['binary']).resolve()
+            digest = info['binary_sha256']
+            if (info.get('repo') != 'core' or info.get('kind') != 'server'
+                    or binary.parent != manifest.parent.resolve()
+                    or (explicit and binary != Path(explicit).expanduser().resolve())):
+                raise ValueError(f'{manifest} does not pin the requested server')
+            registration = json.loads((registry / f'{digest}.json').read_text())
+            if (info.get('head') != fingerprint['head'] or registration.get('sha256') != digest
+                    or registration.get('tree') != {key: fingerprint[key] for key in ('head', 'sha256')}):
+                raise ValueError(f'{manifest} pins a different tree (not {fingerprint["head"][:12]}/{fingerprint["sha256"][:12]})')
+            if not os.access(binary, os.X_OK):
+                raise ValueError(f'pin is not executable: {binary}')
+            with binary.open('rb') as file:
+                if hashlib.file_digest(file, 'sha256').hexdigest() != digest:
+                    raise ValueError(f'pin checksum mismatch: {binary}')
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            if explicit:
+                reason = f'cannot use KRASNOKAMEN_SERVER_BINARY={explicit}: {error}'
+            continue
+        ctx.client_evidence['regressions_server'] = {
+            'path': str(binary), 'sha256': digest, 'manifest': str(manifest), 'tree': fingerprint,
+        }
+        return binary
+    raise RuntimeError(f'{reason}. Run `{command}` for the tree under test; '
+                       'a negative control needs its own reverted-tree pin. No build fallback.')
 
 
 def _client_env(binary):
@@ -577,6 +557,8 @@ def run(ctx):
     print(f'[regressions] open={len(bugs)-fixed} fixed={fixed}', flush=True)
     if errors:
         raise ValueError('; '.join(errors))
+    # Refuse before any unit/Cargo gates: a missing pin cannot be repaired by this run.
+    binary = _release_server(ctx, profiles) if ctx.include_regression_client and clients else None
     failures = []
     from . import ledger as ledger_tool
     for refs, execute in ((python_refs, ledger_tool._run_python),
@@ -608,31 +590,26 @@ def run(ctx):
             failed = _failed_ids(log.read_text(), cargo) if log.exists() else set()
             failures.append(f"{', '.join(sorted(failed or all_ids))}: {error}")
     if ctx.include_regression_client and clients:
-        try:
-            binary = _release_server(ctx, profiles)
-        except Exception as error:
-            failures.append(f"{', '.join(sorted(set().union(*clients.values())))}: release server: {error}")
-        else:
-            env = _client_env(binary)
-            grouped = defaultdict(list)
-            for ref, bug_ids in sorted(clients.items()):
-                _, profile, check = ref.split(':', 2)
-                command, is_profile = _check_command(profile, check)
-                grouped[tuple(command)].append((profile, check, bug_ids, is_profile))
-            for command, checks in grouped.items():
-                try:
-                    profile, check, _, is_profile = checks[0]
-                    receipt, _ = _client_receipt(ctx, profiles, command, env, profile, check, is_profile)
-                except Exception as error:
-                    bug_ids = set().union(*(ids for _, _, ids, _ in checks))
-                    failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
-                    continue
-                for profile, check, bug_ids, is_profile in checks:
-                    if is_profile:
-                        try:
-                            _profile_verdict(receipt, profile, check)
-                        except Exception as error:
-                            failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
+        env = _client_env(binary)
+        grouped = defaultdict(list)
+        for ref, bug_ids in sorted(clients.items()):
+            _, profile, check = ref.split(':', 2)
+            command, is_profile = _check_command(profile, check)
+            grouped[tuple(command)].append((profile, check, bug_ids, is_profile))
+        for command, checks in grouped.items():
+            try:
+                profile, check, _, is_profile = checks[0]
+                receipt, _ = _client_receipt(ctx, profiles, command, env, profile, check, is_profile)
+            except Exception as error:
+                bug_ids = set().union(*(ids for _, _, ids, _ in checks))
+                failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
+                continue
+            for profile, check, bug_ids, is_profile in checks:
+                if is_profile:
+                    try:
+                        _profile_verdict(receipt, profile, check)
+                    except Exception as error:
+                        failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
     if failures:
         raise RuntimeError('; '.join(failures))
     return {'open': len(bugs)-fixed, 'fixed': fixed, 'cargo_checks': sum(map(len, cargo.values())), 'client_checks': len(clients), 'client_executed': ctx.include_regression_client}

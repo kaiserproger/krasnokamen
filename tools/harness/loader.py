@@ -90,6 +90,7 @@ def run(
     *,
     server_bin: Path,
     plugins_dir: Path,
+    client_ready_timeout_seconds: float,
 ) -> dict[str, Any]:
     """Run a named scenario against an immutable server and plugin deployment.
 
@@ -181,6 +182,7 @@ def run(
         "server_binary_sha256": hashlib.sha256(server_bin.read_bytes()).hexdigest(),
         "plugins_directory": str(fixture_root),
         "expected_bundle_cache_files": expected_bundle_cache_files,
+        "client_ready_timeout_seconds": client_ready_timeout_seconds,
     }
     try:
         xvfb, display, xvfb_log = runtime.start_xvfb(artifact_dir)
@@ -206,6 +208,7 @@ def run(
             username=username,
             display=display,
             platform=platform,
+            ready_timeout_seconds=client_ready_timeout_seconds,
         )
         result["mcp_ready"] = True
 

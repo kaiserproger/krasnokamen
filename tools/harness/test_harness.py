@@ -296,6 +296,21 @@ class ReceiptContractTests(unittest.TestCase):
                     self.assertEqual(cli.cmd_run(["test", "--timeout-seconds", "7"]), 0)
             self.assertEqual(contexts, [None, 7.0])
 
+    def test_screens_voice_native_cli_reaches_its_backend(self) -> None:
+        from . import preflight
+
+        # Dispatch only: no graphical/audio behavior is claimed by this unit test.
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), \
+                mock.patch.object(preflight, "check", return_value=()), \
+                mock.patch("tools.harness.backends.screens_voice_qa.run", return_value={}) as run:
+            code = cli.cmd_run(["screens-voice-qa", "--client", "native", "--windowed"])
+            payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
+        self.assertEqual(code, 0, payload["error"])
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0].client, "native")
+        self.assertTrue(run.call_args.args[0].windowed)
+
     def test_unknown_profile_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):

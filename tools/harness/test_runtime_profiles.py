@@ -155,13 +155,14 @@ class ProfileTaskTests(unittest.TestCase):
             with _gradlew_present(), \
                     mock.patch.object(runtime.os, "access", return_value=True), \
                     mock.patch.object(runtime, "port_open", return_value=False), \
-                    mock.patch.object(runtime, "wait_port"), \
+                    mock.patch.object(runtime, "wait_port") as ready, \
                     mock.patch.object(runtime.subprocess, "Popen") as launch:
                 launch.return_value = mock.Mock()
                 process, handle = runtime.start_client(
                     **_valid_kwargs(root / "game", root / "client.log"))
                 try:
                     self.assertIs(process, launch.return_value)
+                    self.assertEqual(ready.call_args.args[1], 180.0)
                     argv = launch.call_args.args[0]
                     self.assertEqual(argv[-1], ":fabric-agent:runClientMcp")
                     self.assertIn("--no-daemon", argv)

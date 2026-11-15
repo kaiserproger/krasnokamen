@@ -748,6 +748,7 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
         platform, timeout, ctx.artifact_dir, scenario,
         server_bin=ctx.server_bin,
         plugins_dir=ctx.plugins_dir,
+        client_ready_timeout_seconds=PROFILES["loader-live"]["client_ready_timeout_seconds"],
     )
     details["scenario"] = result
     if result.get("passed") is not True:
@@ -1290,6 +1291,9 @@ PROFILES: dict[str, dict[str, Any]] = {
         "scope": "real-client",
         "description": "Loader gate via loader.run; requires --platform fabric|neoforge|forge",
         "run": run_loader_live,
+        # Gradle runClient stays alive with the game; MCP readiness, not its exit, is completion.
+        # A cold NeoForge createMinecraftArtifacts compiles ~7300 sources before MCP can start.
+        "client_ready_timeout_seconds": 1800.0,
     },
     "dh-gate": {
         "scope": "real-client",
@@ -1377,7 +1381,7 @@ _SHARED = (("server_binary",), ("client_binary", "client_data"),
            ("loader", "xvfb"), ("windowed_assets", "xvfb"))
 PROFILE_PREREQUISITES = {
     "regressions": _NONE,
-    # The regression runner builds and pins its own server before sub-runs.
+    # The regression runner requires a registered pin-release server for its exact tree.
     "regressions-client": _NONE,
     "harness-check": _NONE,
     "correctness": _NONE,

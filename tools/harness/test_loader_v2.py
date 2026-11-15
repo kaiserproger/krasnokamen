@@ -54,7 +54,8 @@ class LoaderV2Tests(unittest.TestCase):
                 profiles.run_loader_live(ctx)
             build.assert_not_called()
             self.assertEqual(run.call_args.kwargs, {
-                "server_bin": ctx.server_bin, "plugins_dir": ctx.plugins_dir})
+                "server_bin": ctx.server_bin, "plugins_dir": ctx.plugins_dir,
+                "client_ready_timeout_seconds": profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]})
             self.assertEqual(json.loads((root / "ops.json").read_text())[0]["name"], "GateFabric")
 
     def test_missing_v2_inputs_fail_before_build(self) -> None:
@@ -99,7 +100,7 @@ class LoaderV2Tests(unittest.TestCase):
                  mock.patch.object(runtime, "start_xvfb", side_effect=RuntimeError("config fence")):
                 with self.assertRaisesRegex(RuntimeError, "config fence"):
                     loader.run("fabric", 10, artifact, {"run": mock.Mock(), "deploy": deploy},
-                        server_bin=binary, plugins_dir=plugins)
+                        server_bin=binary, plugins_dir=plugins, client_ready_timeout_seconds=1800)
             config = tomllib.loads((artifact / "playable.toml").read_text())
             self.assertEqual(config["plugins"]["directory"], str(plugins))
             result = json.loads((artifact / "scenario.json").read_text())
@@ -120,7 +121,7 @@ class LoaderV2Tests(unittest.TestCase):
         with mock.patch.object(runtime, "start_xvfb", side_effect=RuntimeError("config fence")):
             with self.assertRaisesRegex(RuntimeError, "config fence"):
                 loader.run("fabric", 10, artifact, {"run": mock.Mock()},
-                           server_bin=binary, plugins_dir=plugins)
+                           server_bin=binary, plugins_dir=plugins, client_ready_timeout_seconds=1800)
         config = tomllib.loads((artifact / "playable.toml").read_text())
         record = json.loads((artifact / "scenario.json").read_text())
         return {"config_port": config["network"]["port"], "record": record}
@@ -160,6 +161,38 @@ class LoaderV2Tests(unittest.TestCase):
         self.assertEqual(loader.confirm_loader_permission(client, 5.0, 31234),
                          "Allow Krasnokamen content from localhost:31234?")
         self.assertEqual(titles, list(loader.confirmation_titles(31234)))
+
+    def test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance(self) -> None:
+        with tempfile.TemporaryDirectory(dir=runtime.REPO_ROOT / ".analysis") as temporary:
+            root = Path(temporary)
+            binary = root / "frozen"
+            binary.write_text("#!/bin/false\n")
+            binary.chmod(0o700)
+            plugins = root / "plugins"
+            plugins.mkdir()
+            artifact = root / "artifact"
+            artifact.mkdir()
+            allowance = profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]
+            self.assertGreaterEqual(allowance, 1800)
+            with mock.patch.object(runtime, "start_xvfb", return_value=(mock.Mock(), ":99", None)), \
+                 mock.patch.object(runtime, "sibling_root", return_value=root / "loader"), \
+                 mock.patch.object(runtime, "ensure_loader_gradle_home"), \
+                 mock.patch.object(runtime.subprocess, "Popen"), \
+                 mock.patch.object(runtime, "wait_port") as ready, \
+                 mock.patch.object(runtime, "port_open", return_value=False), \
+                 mock.patch.object(runtime, "stop_process"), \
+                 mock.patch.object(runtime.os, "access", return_value=True), \
+                 mock.patch.object(Path, "is_file", return_value=True), \
+                 mock.patch.object(loader, "McpClient", side_effect=RuntimeError("MCP fence")):
+                with self.assertRaisesRegex(RuntimeError, "MCP fence"):
+                    loader.run("neoforge", 10, artifact, {"run": mock.Mock()},
+                               server_bin=binary, plugins_dir=plugins,
+                               client_ready_timeout_seconds=allowance)
+            client_wait = ready.call_args
+            self.assertEqual(client_wait.args[1], allowance)
+            self.assertEqual(client_wait.kwargs["phase_name"], "client_start")
+            record = json.loads((artifact / "scenario.json").read_text())
+            self.assertEqual(record["client_ready_timeout_seconds"], allowance)
 
     def test_loader_gradle_home_defaults_to_the_shared_work_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

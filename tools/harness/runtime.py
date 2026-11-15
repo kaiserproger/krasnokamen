@@ -909,6 +909,7 @@ def start_client(
     client_profile: str | None = None,
     window_size: tuple[int, int] | None = None,
     sound_sink: str | None = None,
+    ready_timeout_seconds: float = _CLIENT_READY_TIMEOUT_SECONDS,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
@@ -934,6 +935,8 @@ def start_client(
     (``soundDevice``; OpenAL Soft ignores ``PULSE_SINK`` for its default)
     and game sound is at full volume. Without it the client plays muted
     into ``agents-null``.
+    ``ready_timeout_seconds`` bounds the event-driven MCP readiness wait,
+    including any Gradle build before launch; Loader profiles supply a cold-build allowance.
     """
     if not token:
         raise ValueError("token must not be empty")
@@ -1044,7 +1047,7 @@ def start_client(
         log_handle.close()
         raise
     try:
-        wait_port(mcp_port, _CLIENT_READY_TIMEOUT_SECONDS, process, log_path=log_path,
+        wait_port(mcp_port, ready_timeout_seconds, process, log_path=log_path,
                   phase_name="client_start")
         if client_profile == "vanilla":
             # premain exposes MCP before Minecraft.getInstance() is assigned.

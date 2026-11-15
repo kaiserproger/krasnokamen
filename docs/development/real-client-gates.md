@@ -124,9 +124,11 @@ tree (HEAD plus the hash of uncommitted changes), copies the binary to
 `<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
 `KRASNOKAMEN_SERVER_BINARY=` (or `KRASNOKAMEN_CLIENT_BINARY=`) line and reuses an
 existing pin without building. Pins are immutable; the build is incremental by
-default, `--no-incremental` makes the full build performance windows require. A harness profile that
-builds the release server itself (`regressions-client`) hard-links its build
-into the run's artifact dir.
+default, `--no-incremental` makes the full build performance windows require.
+`regressions-client` also consumes these pins: its manifest, checksum and ledger
+registration must match the tested tree. It never builds a release server and
+refuses missing/mismatched pins with the exact `pin-release <tree>` command.
+The negative-control tree needs its own pin.
 
 - A headless native run (`--client native`) needs `KRASNOKAMEN_CLIENT_DATA_DIR`
   with its block and registry reports. `--windowed` additionally needs

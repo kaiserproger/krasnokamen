@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import re
 import shutil
@@ -538,42 +539,6 @@ regression = ["cargo:mc-core:module::other"]
                     regressions.run(profiles.ProfileContext(root))
             self.assertIn('BROKEN', str(error.exception))
             self.assertNotIn('OTHER', str(error.exception))
-
-    def test_release_server_is_pinned_outside_the_target(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            built = root / 'target/release/krasnokamen'
-            built.parent.mkdir(parents=True)
-            built.write_bytes(b'candidate')
-            ctx = profiles.ProfileContext(root)
-            with patch.dict('os.environ', {'CARGO_TARGET_DIR': str(root / 'target')}), patch.object(profiles, '_run_command') as command:
-                pinned = regressions._release_server(ctx, profiles)
-            self.assertNotEqual(pinned, built)
-            self.assertIn('--release', command.call_args.args[0])
-            self.assertNotIn(root / 'target', pinned.parents)
-            # Cargo replaces its output with a new file; the pinned build must survive.
-            built.unlink()
-            built.write_bytes(b'other tree')
-            self.assertEqual(pinned.read_bytes(), b'candidate')
-            self.assertEqual(ctx.client_evidence['regressions_server']['sha256'], __import__('hashlib').sha256(b'candidate').hexdigest())
-
-    def test_release_server_rejects_slot_tree_change_during_copy(self):
-        import os
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            target = root / 'target'
-            binary = target / 'release/krasnokamen'
-            binary.parent.mkdir(parents=True)
-            binary.write_bytes(b'candidate')
-            marker = target / '.krasnokamen-tree'
-            marker.write_text(str(root))
-            original_link = os.link
-            def switch_tree(src, dst):
-                original_link(src, dst)
-                marker.write_text('/different/tree')
-            with patch.dict('os.environ', {'CARGO_TARGET_DIR': str(target)}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command'), patch.object(regressions.os, 'link', switch_tree):
-                with self.assertRaisesRegex(RuntimeError, 'does not belong'):
-                    regressions._release_server(profiles.ProfileContext(root), profiles)
 
     def test_red_repro_is_not_run_as_a_gate(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1535,35 +1500,111 @@ class LedgerToolTests(unittest.TestCase):
             argv, env = regressions.tree_build_command(tree_a, ['cargo', 'build'])
             self.assertEqual((argv, env['CARGO_TARGET_DIR']), (['cargo', 'build'], str(base / 'targets/slot-a')))
 
-    def test_release_server_of_another_tree_checks_the_slot_marker_against_that_tree(self):
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        base = Path(directory.name)
-        mem_run = base / 'mem-run.sh'
-        mem_run.write_text('#!/bin/sh\n')
-        tree_a, tree_b = base / 'wt/A', base / 'wt/B'
-        tree_a.mkdir(parents=True)
-        tree_b.mkdir(parents=True)
-        slot = base / 'targets/slot-x'
-        binary = slot / 'release/krasnokamen'
-        binary.parent.mkdir(parents=True)
+class ReleasePinTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name) / 'tree'
+        self.root.mkdir()
+        for argv in (['init', '-q'], ['add', '.'], ['commit', '-qm', 'base']):
+            if argv[0] == 'add':
+                (self.root / 'source').write_text('candidate\n')
+            subprocess.run(['git', '-C', str(self.root), *argv], check=True,
+                           capture_output=True, env={**os.environ, **GIT_ENV})
+        self.fingerprint = ledger.tree_fingerprint(self.root)
+        self.pins = self.root.parent / 'pins'
+        self.pins.mkdir()
+        self.ctx = profiles.ProfileContext(self.root.parent / 'artifacts')
+        self.addCleanup(patch.stopall)
+        patch.object(regressions, 'REPO_ROOT', self.root).start()
+        patch.object(regressions, 'PINS', self.pins).start()
+        patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': '', 'KRASNOKAMEN_LEDGER_ROOT': ''}).start()
+        self.build = patch.object(profiles, '_run_command',
+                                  side_effect=AssertionError('must never build a release server')).start()
+
+    def pin(self, *, register=True):
+        directory = self.pins / 'candidate-server'
+        directory.mkdir()
+        binary = directory / 'krasnokamen'
         binary.write_bytes(b'candidate')
-        calls = []
-        def run_command(argv, ctx, name, cwd=None, env=None):
-            calls.append((argv, cwd, env))
-            (ctx.artifact_dir / name).write_text('{"reason":"compiler-artifact","executable":%s}\n' % json.dumps(str(binary)))
-        ctx = profiles.ProfileContext(base / 'artifacts')
-        (base / 'artifacts').mkdir()
-        with patch.object(regressions, 'MEM_RUN', mem_run), patch.object(regressions, 'REPO_ROOT', tree_a), \
-                patch.object(profiles, '_run_command', run_command), \
-                patch.dict('os.environ', {'CARGO_TARGET_DIR': str(base / 'targets/slot-a')}):
-            # A slot marked for tree A must not be accepted for a build of tree B.
-            (slot / '.krasnokamen-tree').write_text(str(tree_a))
-            with self.assertRaisesRegex(RuntimeError, 'does not belong'):
-                regressions._release_server(ctx, profiles, tree_b)
-            (slot / '.krasnokamen-tree').write_text(str(tree_b.resolve()))
-            pinned = regressions._release_server(ctx, profiles, tree_b)
-        self.assertEqual(pinned.read_bytes(), b'candidate')
-        argv, cwd, env = calls[-1]
-        self.assertEqual((argv[0], cwd), (str(mem_run), tree_b))
-        self.assertNotIn('CARGO_TARGET_DIR', env)
+        binary.chmod(0o555)
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        (directory / 'manifest.json').write_text(json.dumps({
+            'repo': 'core', 'kind': 'server', 'head': self.fingerprint['head'],
+            'binary': str(binary), 'binary_sha256': digest,
+        }))
+        if register:
+            registry = self.root / '.analysis/ledger-builds'
+            registry.mkdir(parents=True)
+            (registry / f'{digest}.json').write_text(json.dumps({
+                'sha256': digest,
+                'tree': {key: self.fingerprint[key] for key in ('head', 'sha256')},
+            }))
+        return binary
+
+    def test_pin_is_accepted_for_its_registered_tree_without_building(self):
+        binary = self.pin()
+        self.assertEqual(regressions._release_server(self.ctx, profiles), binary)
+        self.build.assert_not_called()
+        evidence = self.ctx.client_evidence['regressions_server']
+        self.assertEqual(evidence['sha256'], hashlib.sha256(b'candidate').hexdigest())
+        self.assertEqual(evidence['tree'], self.fingerprint)
+
+    def test_explicit_pin_is_accepted_for_its_registered_tree(self):
+        binary = self.pin()
+        with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
+            self.assertEqual(regressions._release_server(self.ctx, profiles), binary)
+        self.build.assert_not_called()
+
+    def test_pin_of_another_tree_is_refused(self):
+        binary = self.pin()
+        (self.root / 'source').write_text('reverted control\n')
+        with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
+            with self.assertRaisesRegex(RuntimeError, 'different tree.*pin-release'):
+                regressions._release_server(self.ctx, profiles)
+        self.build.assert_not_called()
+
+    def test_missing_pin_is_refused_and_names_exact_pin_release_command(self):
+        with self.assertRaisesRegex(RuntimeError, 'no registered pin-release server') as failure:
+            regressions._release_server(self.ctx, profiles)
+        self.assertIn(f'`{regressions.MEM_RUN.with_name("pin-release")} {self.root}`', str(failure.exception))
+        self.assertIn('negative control needs its own reverted-tree pin', str(failure.exception))
+        self.build.assert_not_called()
+
+    def test_explicit_unregistered_pin_is_refused_without_building(self):
+        binary = self.pin(register=False)
+        with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
+            with self.assertRaisesRegex(RuntimeError, 'cannot use KRASNOKAMEN_SERVER_BINARY.*pin-release'):
+                regressions._release_server(self.ctx, profiles)
+        self.build.assert_not_called()
+
+    def test_another_tree_cannot_use_the_callers_pin(self):
+        binary = self.pin()
+        other = self.root.parent / 'control'
+        subprocess.run(['git', 'clone', '-q', str(self.root), str(other)], check=True, capture_output=True)
+        (other / 'source').write_text('control\n')
+        with patch.dict(os.environ, {
+                'KRASNOKAMEN_SERVER_BINARY': str(binary), 'KRASNOKAMEN_LEDGER_ROOT': str(self.root)}):
+            with self.assertRaisesRegex(RuntimeError, 'different tree.*pin-release') as failure:
+                regressions._release_server(self.ctx, profiles, other)
+        self.assertIn(str(other), str(failure.exception))
+        self.build.assert_not_called()
+
+    def test_negative_control_accepts_only_its_own_registered_pin(self):
+        other = self.root.parent / 'control'
+        subprocess.run(['git', 'clone', '-q', str(self.root), str(other)], check=True, capture_output=True)
+        (other / 'source').write_text('reverted control\n')
+        self.root = other
+        self.fingerprint = ledger.tree_fingerprint(other)
+        binary = self.pin()
+        self.assertEqual(regressions._release_server(self.ctx, profiles, other), binary)
+        self.build.assert_not_called()
+
+    def test_changed_pin_bytes_are_refused(self):
+        binary = self.pin()
+        binary.chmod(0o755)
+        binary.write_bytes(b'not the pinned server')
+        with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
+            with self.assertRaisesRegex(RuntimeError, 'checksum mismatch.*pin-release'):
+                regressions._release_server(self.ctx, profiles)
+        self.build.assert_not_called()

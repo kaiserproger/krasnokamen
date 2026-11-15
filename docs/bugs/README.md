@@ -74,18 +74,23 @@ the child receipt must pass and the named behaviour must be true in its
 boolean verdict map, or `PASS` in its legacy behaviour map. Unknown profiles
 and verdicts fail validation. `harness:loader-live:<scenario>` is valid for
 graphical `loader-live` scenarios: the runner executes them exactly as the
-loader-live gate does (Fabric platform, the tree's own built release server
+loader-live gate does (Fabric platform, the tree's own `pin-release` server
 via `--server-bin`, an empty `--plugins-dir`, the private audio wrapper, and
 the Loader checkout/Gradle home/client jar from `KRASNOKAMEN_LOADER_ROOT`,
 `GRADLE_USER_HOME` and `KRASNOKAMEN_CLIENT_JAR`), records the harness Xvfb
 display in the receipt, and fails closed (unrunnable, never green) when any
 of those are missing or the scenario is not a registered loader-live entry.
-`regressions-client` builds its own release server (a known exception to the
-`pin-release` rule, listed in [open transitions](../STATUS.md#open-transitions))
-in the enclosing runner's pooled target, then hard-links it (copies if it
-cannot) outside the pooled target before executing clients.
-`KRASNOKAMEN_REGRESSIONS_BIN_DIR` selects that directory; the receipt records the
-pinned path and SHA-256. Pin any supplied client binary separately.
+`regressions-client` never builds a release server. Run
+`<work>/solaris/tools/dev/pin-release <tree>` first: the gate discovers a
+server manifest in `<work>/pins/`, or uses `KRASNOKAMEN_SERVER_BINARY` when
+explicitly supplied. It checks the manifest, executable SHA-256 and that pin's
+`.analysis/ledger-builds/<sha256>.json` registration against the tested tree's
+`tree_fingerprint`. `KRASNOKAMEN_LEDGER_ROOT` selects the registry root when a
+control pin was registered there. A missing, unregistered or mismatched pin
+fails closed and names the exact `pin-release` command. A negative control
+needs its own reverted-tree pin, never the candidate's. The receipt retains
+the manifest path, binary path, SHA-256 and tested tree. Pin any supplied client
+binary separately.
 Every green Cargo check in `regression`, even for an open row, runs on every
 integration; client checks run in the client tier. Keep a known-red reproducer
 in `repro_check` instead; it is not a gate. Never weaken or delete checks to
@@ -227,10 +232,9 @@ worker, runs the negative control.
    receipt without that field, from another revision or with other
    uncommitted changes is refused: rerun the gate on the candidate, and after
    any later edit. The receipt must also name a release server binary that
-   the tooling built from exactly that candidate (`ledger probe --client` and
-   `promote` register every server they build in
-   `.analysis/ledger-builds/<sha256>.json`): a pinned or foreign
-   `KRASNOKAMEN_SERVER_BINARY`, or a binary built from an older source, proves
+   `pin-release` registered for exactly that candidate in
+   `.analysis/ledger-builds/<sha256>.json`. An unregistered or foreign
+   `KRASNOKAMEN_SERVER_BINARY`, or a binary pinned from an older source, proves
    nothing about this source and is refused. A unit test cannot close a client
    failure.
 4. Automatic negative control: the fix commit's non-test hunks (test files,
@@ -317,7 +321,7 @@ distinct ref, and prints one line per row:
 - `green`: every ref passed;
 - `red [ref: status]`: a ref failed; the row is still broken here;
 - `needs-real-client [cargo ref green, ...]`: a harness ref was not run (pass
-  `--client` to run it; it builds a release server and drives the real client);
+  `--client` to run it with its tree's existing release pin and drive the real client);
 - `unrunnable(reason)`: no registered check, unknown or ignored test, build error,
   or a ref that cannot run.
 
@@ -335,9 +339,9 @@ changes the ledger; it is not promotion.
 a pinned client/server pair of the same protocol, the data, resource and asset
 roots, and a fresh `XDG_DATA_HOME` whose `krasnokamen-client/` symlinks `facts
 assets data resources mojang`; run it through `scene-slot.sh` and `mem-run.sh`.
-The tool builds the release server itself and ignores `KRASNOKAMEN_SERVER_BINARY`;
-that is a second pinning mechanism next to `tools/dev/pin-release`, kept until
-its [open transition](../STATUS.md#open-transitions) closes. Do not extend it.
+The tool consumes the tree's registered `pin-release` server, including an
+explicit `KRASNOKAMEN_SERVER_BINARY` only when it matches that registration.
+Control and restore trees each need their own pin; missing pins fail closed.
 A stale `target/debug` client fails with `target protocol mismatch`, a missing
 XDG with `missing content file`: both are reported `unrunnable`, never red.
 
