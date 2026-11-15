@@ -6466,3 +6466,18 @@ regression = [
 fix_commit = "fc6b53988"
 failing_first = "reported"
 repro_check = "Java server commands now take the runner as an argv prefix. No revert-red receipt recorded at fix time; promotion runs its own control. Not promoted."
+
+[[bug]]
+id = "NATIVE-UNLOADED-EYE-SESSION-END"
+title = "A far server teleport ends the native client session when the eye's terrain has not arrived yet"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 ScreensVoiceStart: teleport to 1000.5/176/1000.5 → `session failed: unloaded_eye_environment` (client 12e076e9 player.rs:644 eye_medium Err on an unloaded block ended the session)"
+repro = "client"
+regression = [
+  "client:krasnokamen-client:session::observation::destruction_tests::unloaded_eye_keeps_play_frames_and_waits_for_terrain",
+]
+fix_commit = "client:ace7a8049bc10c22f5d2db639f40663712dee4b4"
+failing_first = "reported"
+repro_check = "Eye medium is an explicit Unloaded/Air/Fluid state: the renderer omits the fluid overlay on Unloaded, observation keeps eye_medium null, prediction waits at missing feet/underfoot blocks, no invented flow. Unit red with only the Err return restored: receipts/EyeUnloaded/unit-red.log; green unit-green.log. Real client (causal fixture client tools/unloaded_eye_repro.py + tools/unloaded_eye_scene.json, server 8b6fc28e58bb, unmodified packets paused after the far teleport until the unloaded frame is captured): candidate pin ace7a8049bc1 passes 3/3 (receipts/EyeUnloaded/positive/20261115T020423-scene-shot-wxi03l1d, 20261115T020706-scene-shot-7pmjgp91, 20261115T020743-scene-shot-dd24uz5s), old pin 12e076e9 fails in_play with unloaded_eye_environment (negative/20261115T020020-scene-shot-okor0oz3; not a timeout). Promotion needs that scene registered as a harness ref. Full receipts: receipts/EyeUnloaded/result.yaml. Not promoted."
