@@ -1578,6 +1578,14 @@ fn validate_lz4_method(
     compressed_len: usize,
     decompressed_len: usize,
 ) -> Result<(), std::io::Error> {
+    // lz4-java encodes compressionLevel = 10 + the token's low nibble.
+    let max_block_len = 1_usize << (10 + (token & 0x0F));
+    if decompressed_len > max_block_len {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("LZ4 block exceeds token size limit: {decompressed_len} > {max_block_len}"),
+        ));
+    }
     match token & 0xF0 {
         LZ4_BLOCK_METHOD_RAW if compressed_len == decompressed_len => Ok(()),
         LZ4_BLOCK_METHOD_RAW => Err(std::io::Error::new(
@@ -1593,7 +1601,8 @@ fn validate_lz4_method(
 }
 
 fn verify_lz4_checksum(bytes: &[u8], expected: u32) -> Result<(), std::io::Error> {
-    let actual = xxhash32(bytes, LZ4_CHECKSUM_SEED);
+    // lz4-java's StreamingXXHash32.asChecksum() exposes only the low 28 bits.
+    let actual = xxhash32(bytes, LZ4_CHECKSUM_SEED) & 0x0FFF_FFFF;
     if actual != expected {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,

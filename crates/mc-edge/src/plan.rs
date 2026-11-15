@@ -351,10 +351,10 @@ impl WorldCredit {
     }
 }
 
-/// Keep the best-effort frames `push` adds only if they fit `credit`, so a
-/// planned world packet is never dropped and the viewer cache is exactly
-/// what the client receives. A group that does not fit is removed and
-/// planned again from a newer snapshot.
+/// Keep the best-effort frames `push` adds only if they fit the sampled credit.
+/// A group that does not fit is removed and planned again from a newer snapshot.
+/// A later queue race can still refuse a planned frame; the pump then repairs
+/// retained geometry/entity state, while one-shot visuals may be lost.
 pub(super) fn try_push(
     out: &mut Vec<PlannedPacket>,
     credit: &mut WorldCredit,

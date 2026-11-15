@@ -1,8 +1,7 @@
-"""Prepared real Java client commands over Mojang's locally cached metadata.
+"""Real Java client commands over Mojang's locally cached metadata.
 
-This is a command-building primitive called by runtime.start_client, not another
-launcher process/lifecycle. It never invokes Gradle per player. Vanilla uses the
-unmodified Mojang main class with the existing java-agent instrumentation only.
+Vanilla uses the unmodified Mojang main class with java-agent instrumentation.
+Modded endpoints use their ordinary Gradle runtime launch through start_client.
 All published client/library/index sizes and SHA-1s are checked before execution.
 Missing artifacts report their exact URL; no neighboring version is substituted.
 """
@@ -134,57 +133,35 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
             "--accessToken", "0", "--versionType", "release"]
 
 
-def prepared_fabric_command(manifest_path: Path, game_dir: Path, username: str) -> list[str]:
-    """Reuse the canonical Loom JavaExec command prepared once per group."""
-    if not manifest_path.is_file():
-        raise MissingCapability(f"fabric_launch_manifest:{manifest_path}")
-    manifest = json.loads(manifest_path.read_text())
-    original_game = manifest["game_dir"]
-    original_name = manifest["username"]
-    for path in manifest["classpath"]:
-        if not Path(path).exists():
-            raise MissingCapability(f"fabric_classpath:{path}")
-    def rewrite(value: str) -> str:
-        return value.replace(original_game, str(game_dir))
-    jvm = [rewrite(value) for value in manifest["jvm_args"]
-           if not value.startswith(("-Xmx", "-Xms"))]
-    arguments = []
-    for value in manifest["args"]:
-        arguments.append(username if value == original_name else rewrite(value))
-    return [manifest["java"], "-Xms128M", "-Xmx512M", *jvm, "-cp",
-            os.pathsep.join(manifest["classpath"]), manifest["main_class"], *arguments]
+def gradle_project_cache(loader_root: Path, task: str) -> Path:
+    """Keep task history and Loom launch metadata private to an endpoint."""
+    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+    root = (work / "targets/loader-builds" if (work / "targets").is_dir()
+            else loader_root / ".analysis/harness-builds")
+    tree = hashlib.sha256(str(loader_root.resolve()).encode()).hexdigest()
+    # Default properties can change independently of an explicitly pinned endpoint.
+    version = os.environ.get("KRASNOKAMEN_JAVA_VERSION", "default")
+    return (root / tree / version / task.split(":")[1] / "project-cache").resolve()
 
+def write_gradle_init(game_dir: Path, task: str, *, cap_heap: bool = True) -> Path:
+    """Separate live endpoint classes; never rewrite another version's build output."""
+    game_dir.mkdir(parents=True, exist_ok=True)
+    init = game_dir / "client-init.gradle"
+    init.write_text(
+        "gradle.beforeProject { project ->\n"
+        "  def version = project.providers.gradleProperty('minecraftVersion').get()\n"
+        "  def endpoint = new File(gradle.startParameter.projectCacheDir.parentFile, 'build/' + version)\n"
+        "  project.layout.buildDirectory.set(new File(endpoint, project.name))\n"
+        "}\n" +
+        ("gradle.projectsEvaluated {\n"
+         "  gradle.rootProject.allprojects { project ->\n"
+         "    project.tasks.withType(JavaExec).configureEach {\n"
+         f"      if (path == {json.dumps(task)}) {{ maxHeapSize = '512m' }}\n"
+         "    }\n"
+         "  }\n"
+         "}\n" if cap_heap else ""))
+    return init
 
-def prepare_fabric_launch(artifact_dir: Path, agent_root: Path, timeout_seconds: float) -> Path:
-    """Prepare canonical dependencies and export one exact JavaExec command."""
-    import subprocess
-    from . import runtime
-    manifest = artifact_dir / "fabric-java-launch.json"
-    game = artifact_dir / "prepared-game"
-    env = os.environ.copy()
-    env.update(KRASNOKAMEN_CLIENT_LAUNCH_MANIFEST=str(manifest),
-               KRASNOKAMEN_CLIENT_MCP_TOKEN="prepared-command-not-a-listening-token",
-               KRASNOKAMEN_CLIENT_MCP_PORT="26299")
-    command = [str(agent_root / "gradlew"), "--no-daemon", "--no-configuration-cache",
-               "--max-workers=2", "-p", str(agent_root),
-               f"-Pkrasnokamen.clientMcp.gameDir={game}",
-               "-Pkrasnokamen.clientMcp.username=PreparedJava",
-               *modded_gradle_arguments(":loader-fabric:runClientMcp")]
-    log_path = artifact_dir / "fabric-prepare.log"
-    with log_path.open("wb") as log:
-        process = subprocess.Popen(command, env=env, stdout=log,
-                                   stderr=subprocess.STDOUT, start_new_session=True)
-        try:
-            returncode = process.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired as error:
-            runtime.stop_process(process)
-            raise MissingCapability(f"fabric_prepare_timeout:{log_path}") from error
-        except BaseException:
-            runtime.stop_process(process)
-            raise
-    if returncode != 0 or not manifest.is_file():
-        raise MissingCapability(f"fabric_prepare_failed:exit {returncode}; {log_path}")
-    return manifest
 
 
 def modded_gradle_arguments(task: str) -> list[str]:

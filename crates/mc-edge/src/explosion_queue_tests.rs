@@ -40,13 +40,9 @@ async fn explosions_deliver_or_explicitly_close_under_queue_pressure() {
             };
             server
                 .connections
-                .register(
-                    id,
-                    ConnectionHandles {
-                        reliable_tx,
-                        world_tx,
-                    },
-                )
+                .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+                    server.hub.published_knockback_count(id)
+                })
                 .unwrap();
             let (close, mut closed) = tokio::sync::oneshot::channel();
             server.connections.inner.lock().closers.insert(id, close);
@@ -150,13 +146,9 @@ async fn six_hundred_explosions_coalesce_knockback_without_disconnect() {
         let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(
-                id,
-                ConnectionHandles {
-                    reliable_tx,
-                    world_tx,
-                },
-            )
+            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+                server.hub.published_knockback_count(id)
+            })
             .unwrap();
         let (close, mut closed) = tokio::sync::oneshot::channel();
         server.connections.inner.lock().closers.insert(id, close);
@@ -423,38 +415,12 @@ async fn publication_command(core: &Core, text: String) {
 }
 
 #[tokio::test]
-async fn published_knockback_epochs_count_ticks_not_explosions_and_survive_quiet_ticks() {
-    use mc_core::boundary::PlayerInput;
+async fn published_knockback_epochs_count_ticks_and_fence_delayed_queue_registration() {
     let (server, dir) = fixture();
+    let server = Arc::new(server);
     let mut outputs = server.hub.subscribe();
-    let connection = ConnectionId(80);
-    let uuid = uuid::Uuid::from_u128(80);
-    assert!(server.hub.submit(PlayerInput::SetViewDistance {
-        connection,
-        view_distance: 0,
-    }));
-    assert!(server.hub.submit(PlayerInput::Join {
-        connection,
-        uuid,
-        name: "Observer".into(),
-        permission_level: 4,
-    }));
-    let (entity, position) = tokio::time::timeout(std::time::Duration::from_secs(60), async {
-        loop {
-            let out = outputs.recv().await.unwrap();
-            server.hub.try_drain_outbox_through(out.tick);
-            if let Some(player) = out.snapshot.entities.iter().find(|e| e.uuid == uuid)
-                && out.snapshot.chunks.iter().any(|chunk| {
-                    chunk.pos.x == (player.position[0].floor() as i32).div_euclid(16)
-                        && chunk.pos.z == (player.position[2].floor() as i32).div_euclid(16)
-                })
-            {
-                break (player.id, player.position);
-            }
-        }
-    })
-    .await
-    .unwrap();
+    let connection = server.connections.joining_id();
+    let (entity, position) = join_impulse_observer(&server, &mut outputs, connection).await;
     publication_command(&server.hub, "tick freeze".into()).await;
     for _ in 0..2 {
         publication_command(
@@ -469,7 +435,7 @@ async fn published_knockback_epochs_count_ticks_not_explosions_and_survive_quiet
         .await;
     }
     publication_command(&server.hub, "tick step 1".into()).await;
-    let impulse_tick = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+    let first_impulse = tokio::time::timeout(std::time::Duration::from_secs(60), async {
         loop {
             let out = outputs.recv().await.unwrap();
             server.hub.try_drain_outbox_through(out.tick);
@@ -490,7 +456,7 @@ async fn published_knockback_epochs_count_ticks_not_explosions_and_survive_quiet
                     out.snapshot.player_knockback_ticks[&connection],
                     (1, out.tick)
                 );
-                break out.tick;
+                break out;
             }
         }
     })
@@ -500,8 +466,458 @@ async fn published_knockback_epochs_count_ticks_not_explosions_and_survive_quiet
     assert!(quiet.changes.explosions.is_empty());
     assert_eq!(
         quiet.snapshot.player_knockback_ticks[&connection],
-        (1, impulse_tick)
+        (1, first_impulse.tick)
     );
+    let mut delayed = vec![first_impulse];
+    let mut position = quiet
+        .snapshot
+        .entities
+        .iter()
+        .find(|e| e.id == entity)
+        .unwrap()
+        .position;
+    for count in 2..=3 {
+        publication_command(
+            &server.hub,
+            format!(
+                "summon minecraft:tnt {} {} {} {{fuse:1s,explosion_power:1f}}",
+                position[0] + 1.0,
+                position[1] + 1.0,
+                position[2]
+            ),
+        )
+        .await;
+        publication_command(&server.hub, "tick step 1".into()).await;
+        let out = next_impulse(&server.hub, &mut outputs, connection, count).await;
+        position = out
+            .snapshot
+            .entities
+            .iter()
+            .find(|e| e.id == entity)
+            .unwrap()
+            .position;
+        delayed.push(out);
+    }
+    let quiet = outputs.recv().await.unwrap();
+    assert_eq!(server.hub.published_knockback_count(connection), 3);
+    assert!(quiet.changes.explosions.is_empty());
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(64);
+    let (world_tx, _world_rx) = world_queue(8, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            connection,
+            ConnectionHandles::new(reliable_tx, world_tx),
+            || server.hub.published_knockback_count(connection),
+        )
+        .unwrap();
+    let (close, mut closed) = tokio::sync::oneshot::channel();
+    server
+        .connections
+        .inner
+        .lock()
+        .closers
+        .insert(connection, close);
+    let (mut connections, _) = server.connections.routing_snapshot();
+    let mut viewers = HashMap::from([(
+        connection,
+        crate::plan::ViewerState::new(connection, entity, position),
+    )]);
+    let mut seen = std::collections::BTreeMap::new();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let mut cache = crate::plan::ChunkPacketCache::new();
+    // The Core is already at count 3 when queues register, but the pump's
+    // first processed outputs still contain counts 1 and 3.
+    for out in [&delayed[0], &delayed[2]] {
+        close_skipped_knockback(&server, out, &mut seen, &mut viewers, &mut connections);
+        assert!(server.connections.get(connection).is_some());
+        assert_eq!(seen[&connection], 3, "old outputs must not lower the fence");
+        publish_and_route(
+            &server,
+            &pool,
+            &mut viewers,
+            out,
+            &mut cache,
+            &mut connections,
+        )
+        .await;
+        while !reliable_rx.is_empty() {
+            let frame = receive(&mut reliable_rx).await;
+            assert_ne!(
+                frame.id,
+                ClientboundExplode::ID,
+                "pre-registration impulses must not be delivered to the new client"
+            );
+        }
+    }
+    close_skipped_knockback(&server, &quiet, &mut seen, &mut viewers, &mut connections);
+    assert!(
+        server.connections.get(connection).is_some(),
+        "no post-registration impulse was lost"
+    );
+    assert!(matches!(
+        closed.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+
+    publication_command(
+        &server.hub,
+        format!(
+            "summon minecraft:tnt {} {} {} {{fuse:1s,explosion_power:1f}}",
+            position[0] + 1.0,
+            position[1] + 1.0,
+            position[2]
+        ),
+    )
+    .await;
+    publication_command(&server.hub, "tick step 1".into()).await;
+    let _skipped = next_impulse(&server.hub, &mut outputs, connection, 4).await;
+    let retained = outputs.recv().await.unwrap();
+    assert!(retained.changes.explosions.is_empty());
+    close_skipped_knockback(
+        &server,
+        &retained,
+        &mut seen,
+        &mut viewers,
+        &mut connections,
+    );
+    assert_eq!(closed.try_recv().unwrap(), "skipped-explosion-knockback");
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+async fn next_impulse(
+    core: &Core,
+    outputs: &mut broadcast::Receiver<TickOutput>,
+    connection: ConnectionId,
+    count: u64,
+) -> TickOutput {
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let out = outputs.recv().await.unwrap();
+            core.try_drain_outbox_through(out.tick);
+            if !out.changes.explosions.is_empty() {
+                assert_eq!(
+                    out.snapshot.player_knockback_ticks[&connection],
+                    (count, out.tick)
+                );
+                return out;
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn first_processed_output_after_registration_still_closes_a_skipped_impulse() {
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
+    let (id, _rx) = register(&server, "FirstLagged", false);
+    let (close, mut closed) = tokio::sync::oneshot::channel();
+    server.connections.inner.lock().closers.insert(id, close);
+    let (mut connections, _) = server.connections.routing_snapshot();
+    let mut viewers = HashMap::from([(
+        id,
+        crate::plan::ViewerState::new(id, EntityId(id.0 as i32), [8.0, 64.0, 8.0]),
+    )]);
+    let (tx, mut rx) = broadcast::channel(1);
+    for tick in 1..=2 {
+        tx.send(TickOutput {
+            tick,
+            snapshot: Arc::new(WorldSnapshot {
+                tick,
+                player_knockback_ticks: Arc::new([(id, (tick, tick))].into()),
+                ..Default::default()
+            }),
+            changes: Arc::new(ChangeSet {
+                explosions: vec![ExplosionEvent {
+                    center: [8.0, 64.0, 8.0],
+                    radius: 4.0,
+                    blocks: 0,
+                    knockback: vec![(EntityId(id.0 as i32), [0.1, 0.2, 0.3])],
+                }],
+                ..Default::default()
+            }),
+            times: Default::default(),
+        })
+        .unwrap();
+    }
+    assert!(matches!(
+        rx.recv().await,
+        Err(broadcast::error::RecvError::Lagged(1))
+    ));
+    close_skipped_knockback(
+        &server,
+        &rx.recv().await.unwrap(),
+        &mut Default::default(),
+        &mut viewers,
+        &mut connections,
+    );
+    assert_eq!(closed.try_recv().unwrap(), "skipped-explosion-knockback");
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+async fn join_impulse_observer(
+    server: &Arc<EdgeServer>,
+    outputs: &mut broadcast::Receiver<TickOutput>,
+    connection: ConnectionId,
+) -> (EntityId, [f64; 3]) {
+    use mc_core::boundary::PlayerInput;
+    let uuid = uuid::Uuid::from_u128(80);
+    assert!(server.hub.submit(PlayerInput::SetViewDistance {
+        connection,
+        view_distance: 0,
+    }));
+    assert!(server.hub.submit(PlayerInput::Join {
+        connection,
+        uuid,
+        name: "Observer".into(),
+        permission_level: 4,
+    }));
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let out = outputs.recv().await.unwrap();
+            server.hub.try_drain_outbox_through(out.tick);
+            if let Some(player) = out.snapshot.entities.iter().find(|e| e.uuid == uuid)
+                && out.snapshot.chunks.iter().any(|chunk| {
+                    chunk.pos.x == (player.position[0].floor() as i32).div_euclid(16)
+                        && chunk.pos.z == (player.position[2].floor() as i32).div_euclid(16)
+                })
+            {
+                break (player.id, player.position);
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
+async fn stepped_impulse(
+    server: &Arc<EdgeServer>,
+    outputs: &mut broadcast::Receiver<TickOutput>,
+    connection: ConnectionId,
+    position: [f64; 3],
+    count: u64,
+) -> TickOutput {
+    publication_command(
+        &server.hub,
+        format!(
+            "summon minecraft:tnt {} {} {} {{fuse:1s,explosion_power:1f}}",
+            position[0] + 1.0,
+            position[1] + 1.0,
+            position[2]
+        ),
+    )
+    .await;
+    publication_command(&server.hub, "tick step 1".into()).await;
+    next_impulse(&server.hub, outputs, connection, count).await
+}
+
+async fn received_impulses(
+    reliable_rx: &mut mpsc::Receiver<bytes::Bytes>,
+) -> Vec<Option<[f64; 3]>> {
+    let mut impulses = Vec::new();
+    while !reliable_rx.is_empty() {
+        let frame = receive(reliable_rx).await;
+        if frame.id == ClientboundExplode::ID {
+            let blast = ClientboundExplode::decode(&mut &frame.body[..]).unwrap();
+            impulses.push(blast.knockback.map(|push| [push.x, push.y, push.z]));
+        }
+    }
+    impulses
+}
+
+#[tokio::test]
+async fn publication_before_registration_atomically_fences_the_impulse() {
+    synchronized_registration_publication(true).await;
+}
+
+#[tokio::test]
+async fn registration_before_publication_delivers_the_impulse_exactly_once() {
+    synchronized_registration_publication(false).await;
+}
+
+async fn synchronized_registration_publication(publication_first: bool) {
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
+    let mut outputs = server.hub.subscribe();
+    let connection = server.connections.joining_id();
+    let (entity, position) = join_impulse_observer(&server, &mut outputs, connection).await;
+    publication_command(&server.hub, "tick freeze".into()).await;
+    // Both orders start with one historical impulse. A first-output/zero
+    // baseline must not mistake this history for a post-registration loss.
+    let historical = stepped_impulse(&server, &mut outputs, connection, position, 1).await;
+    let position = historical
+        .snapshot
+        .entities
+        .iter()
+        .find(|e| e.id == entity)
+        .unwrap()
+        .position;
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(64);
+    let (world_tx, _world_rx) = world_queue(8, WORLD_QUEUE_BYTES);
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(0);
+    let registering = Arc::clone(&server);
+    let registration = tokio::task::spawn_blocking(move || {
+        registering.connections.register(
+            connection,
+            ConnectionHandles::new(reliable_tx, world_tx),
+            || {
+                // Pause inside the real registry critical section, on either
+                // side of its canonical-count read (the admission boundary).
+                let count = if publication_first {
+                    None
+                } else {
+                    Some(registering.hub.published_knockback_count(connection))
+                };
+                entered_tx.send(count).unwrap();
+                release_rx.recv().unwrap();
+                count.unwrap_or_else(|| registering.hub.published_knockback_count(connection))
+            },
+        )
+    });
+    let captured = tokio::time::timeout(std::time::Duration::from_secs(60), entered_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(captured, (!publication_first).then_some(1));
+    assert!(
+        server.connections.inner.try_lock().is_none(),
+        "the registration must remain inside its critical section"
+    );
+    // This actual native publication completes while registration is paused:
+    // the publisher must not enter the edge registry or invert the lock order.
+    let boundary = stepped_impulse(&server, &mut outputs, connection, position, 2).await;
+    release_tx.send(()).unwrap();
+    registration.await.unwrap().unwrap();
+    let baseline = if publication_first { 2 } else { 1 };
+    assert_eq!(
+        server
+            .connections
+            .get(connection)
+            .unwrap()
+            .knockback_baseline,
+        baseline
+    );
+    let (close, mut closed) = tokio::sync::oneshot::channel();
+    server
+        .connections
+        .inner
+        .lock()
+        .closers
+        .insert(connection, close);
+    let (mut connections, _) = server.connections.routing_snapshot();
+    let position = boundary
+        .snapshot
+        .entities
+        .iter()
+        .find(|e| e.id == entity)
+        .unwrap()
+        .position;
+    let mut viewers = HashMap::from([(
+        connection,
+        crate::plan::ViewerState::new(connection, entity, position),
+    )]);
+    let mut seen = std::collections::BTreeMap::new();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let mut cache = crate::plan::ChunkPacketCache::new();
+    close_skipped_knockback(
+        &server,
+        &boundary,
+        &mut seen,
+        &mut viewers,
+        &mut connections,
+    );
+    assert!(
+        server.connections.get(connection).is_some(),
+        "no impulse was skipped after admission"
+    );
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &boundary,
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    let received = received_impulses(&mut reliable_rx).await;
+    let expected: Vec<_> = if publication_first {
+        Vec::new()
+    } else {
+        vec![Some(
+            boundary
+                .changes
+                .explosions
+                .iter()
+                .flat_map(|blast| &blast.knockback)
+                .find(|&&(id, _)| id == entity)
+                .unwrap()
+                .1,
+        )]
+    };
+    assert_eq!(
+        received, expected,
+        "the boundary impulse must be fenced or delivered once, never replayed or lost"
+    );
+    let quiet = outputs.recv().await.unwrap();
+    assert!(quiet.changes.explosions.is_empty());
+    close_skipped_knockback(&server, &quiet, &mut seen, &mut viewers, &mut connections);
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &quiet,
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    assert!(
+        received_impulses(&mut reliable_rx).await.is_empty(),
+        "the next quiet publication must not duplicate the impulse"
+    );
+    assert!(matches!(
+        closed.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    // A fresh post-registration impulse must still be delivered in both
+    // orders; registration is not a blanket suppression of later impulses.
+    let next = stepped_impulse(&server, &mut outputs, connection, position, 3).await;
+    close_skipped_knockback(&server, &next, &mut seen, &mut viewers, &mut connections);
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &next,
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    let expected = next
+        .changes
+        .explosions
+        .iter()
+        .flat_map(|blast| &blast.knockback)
+        .find(|&&(id, _)| id == entity)
+        .unwrap()
+        .1;
+    assert_eq!(
+        received_impulses(&mut reliable_rx).await,
+        vec![Some(expected)]
+    );
+    assert!(matches!(
+        closed.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
     server.hub.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
 }

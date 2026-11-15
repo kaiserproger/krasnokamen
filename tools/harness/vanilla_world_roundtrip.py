@@ -2,7 +2,7 @@
 """Real Java -> offline import -> native v2 -> offline export -> Java -> native gate.
 
 Requires an existing accepted eula.txt; this driver does not accept legal terms.
-Run: python3 tools/harness/vanilla_world_roundtrip.py --eula-file PATH
+Run: python3 -m tools.harness.vanilla_world_roundtrip --eula-file PATH
 Receipts and complete process logs are retained under --output.
 All runtime worlds are native-only; Java uses separate offline Anvil exports.
 The original 18 checks remain, including Java mutations and fresh native import.
@@ -21,6 +21,8 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+
+from tools.harness.regressions import MEM_RUN
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST = "roundtrip_tests::vanilla_headless_world_roundtrip"
@@ -124,10 +126,12 @@ def main():
         home.mkdir()
         shutil.copyfile(args.eula_file, home / "eula.txt")
         world = home / "world"
-        runner = ROOT / "tools/dev/mem-run.sh"
+        # The owner host's canonical runner; elsewhere commands run directly.
+        def limited(memory):
+            return [str(MEM_RUN), "-m", memory] if MEM_RUN.exists() else []
 
         def v2(phase, native, anvil):
-            command = [str(runner), "-m", "8G", "env", "CARGO_BUILD_JOBS=6",
+            command = [*limited("8G"), "env", "CARGO_BUILD_JOBS=6",
                        "CARGO_PROFILE_DEV_DEBUG=0", "CARGO_PROFILE_TEST_DEBUG=0",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD={native}", f"KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE={phase}",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL={anvil}",
@@ -157,7 +161,7 @@ def main():
             "generate-structures=false\nspawn-protection=0\nenable-rcon=false\nenable-query=false\n")
         bootstrap_log = output / "java-bootstrap.log"
         receipt["logs"]["java_bootstrap"] = str(bootstrap_log)
-        server = subprocess.Popen([str(runner), "-m", "4G", args.java, "-Xms512M", "-Xmx2G", "-jar",
+        server = subprocess.Popen([*limited("4G"), args.java, "-Xms512M", "-Xmx2G", "-jar",
                                    str(args.jar.resolve()), "nogui"], cwd=bootstrap, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         bootstrap_lines = queue.Queue()
@@ -202,7 +206,7 @@ def main():
         vanilla_log = output / "vanilla.log"
         receipt["logs"]["vanilla"] = str(vanilla_log)
         lines = queue.Queue()
-        server = subprocess.Popen([str(runner), "-m", "4G", args.java, "-Xms512M", "-Xmx2G", "-jar",
+        server = subprocess.Popen([*limited("4G"), args.java, "-Xms512M", "-Xmx2G", "-jar",
                                    str(args.jar.resolve()), "nogui"], cwd=home, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 

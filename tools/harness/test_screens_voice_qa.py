@@ -1,7 +1,11 @@
 import math
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from tools.harness import java_launcher
 
 from tools.harness.backends import screens_voice_qa as qa
 
@@ -36,6 +40,56 @@ class ScreensVoiceHelperTests(unittest.TestCase):
         amplitude = qa.tone_amplitudes(mono, rate, (440, 660))
         self.assertTrue(qa.heard({"amplitude": amplitude}, 440), amplitude)
         self.assertTrue(qa.silent({"amplitude": amplitude}, 660), amplitude)
+
+    def test_voice_endpoint_comes_from_svc_pin_and_does_not_leak_to_screens(self):
+        with mock.patch.dict(os.environ):
+            for key in ("KRASNOKAMEN_JAVA_VERSION", "KRASNOKAMEN_JAVA_PLATFORM"):
+                os.environ.pop(key, None)
+            for version in ("26.1.2", "26.3"):
+                with mock.patch.object(qa.runtime, "_mod_artifact_path") as path, \
+                     mock.patch.object(qa.runtime, "_select_mod_entry",
+                                       return_value={"game_versions": [version]}):
+                    path.return_value.read_text.return_value = (
+                        '{"baseline":{"minecraft":"' + version + '"}}')
+                    with qa.java_endpoint("voice"):
+                        argv = java_launcher.modded_gradle_arguments(":loader-fabric:runClientMcp")
+                        self.assertIn(f"-PminecraftVersion={version}", argv)
+                        with self.assertRaisesRegex(Exception, "conflicts with task"):
+                            java_launcher.modded_gradle_arguments(":loader-neoforge:runClientMcp")
+                self.assertNotIn("KRASNOKAMEN_JAVA_VERSION", os.environ)
+            with qa.java_endpoint("screens"):
+                self.assertEqual(os.environ["KRASNOKAMEN_JAVA_VERSION"], "26.3")
+            self.assertNotIn("KRASNOKAMEN_JAVA_PLATFORM", os.environ)
+
+    def test_voice_endpoint_refuses_conflicting_selectors(self):
+        for key, value in (("KRASNOKAMEN_JAVA_VERSION", "26.3"),
+                           ("KRASNOKAMEN_JAVA_PLATFORM", "neoforge")):
+            with mock.patch.dict(os.environ, {key: value}):
+                with self.assertRaisesRegex(ValueError, f"voice requires {key}="):
+                    with qa.java_endpoint("voice"):
+                        self.fail("conflicting selector reached the voice leg")
+                self.assertEqual(os.environ[key], value)
+
+    def test_run_scopes_pinned_endpoints_to_each_leg(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ):
+            root = Path(directory)
+            binary = root / "server"
+            binary.write_bytes(b"unit fixture")
+            os.environ.update(KRASNOKAMEN_SERVER_BINARY=str(binary), KRASNOKAMEN_PW_ROOT="private")
+            for key in ("KRASNOKAMEN_JAVA_VERSION", "KRASNOKAMEN_JAVA_PLATFORM", qa.LEG_ENV):
+                os.environ.pop(key, None)
+            commands = []
+            def leg(*args):
+                commands.append(java_launcher.modded_gradle_arguments(":loader-fabric:runClientMcp"))
+            ctx = qa.ProfileContext(artifact_dir=root, client="native", windowed=True)
+            with mock.patch.object(qa, "validate_args", return_value=60), \
+                 mock.patch.object(qa.native_client, "resolve_binary"), \
+                 mock.patch.object(qa, "screens_leg", side_effect=leg), \
+                 mock.patch.object(qa, "voice_leg", side_effect=leg):
+                qa.run(ctx)
+            self.assertIn("-PminecraftVersion=26.3", commands[0])
+            self.assertIn("-PminecraftVersion=26.1.2", commands[1])
+            self.assertNotIn("KRASNOKAMEN_JAVA_VERSION", os.environ)
 
 
 if __name__ == "__main__":

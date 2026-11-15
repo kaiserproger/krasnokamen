@@ -4,10 +4,10 @@
 //! Before each publish the pump reads both as the viewer's world credit.
 //! Frame slots are a hard limit. Queued bytes are a soft one: any remaining
 //! byte credit admits one more packet group, so a frame larger than the
-//! bound still goes out once the queue drains, and nothing planned is ever
-//! dropped. Bytes, not frames, are what a slow socket backs up on: the byte
-//! bound caps how stale a slow client's world view can get, while the frame
-//! bound caps per-frame queue memory.
+//! bound still goes out once the queue drains. A competing producer may still
+//! consume the last frame slot after planning, so a planned send can fail.
+//! Bytes, not frames, are what a slow socket backs up on: the byte bound caps
+//! world-view backlog, while the frame bound caps per-frame queue memory.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

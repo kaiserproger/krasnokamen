@@ -76,6 +76,7 @@ pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandE
                 }
             }
             ("Motion", _) => return Err(error("Invalid Motion: expected three numbers")),
+            ("Tags", _) => validate_tags(tag)?,
             (
                 "Pos" | "id" | "UUID" | "CustomName" | "CustomNameVisible" | "Invulnerable"
                 | "NoGravity" | "Rotation" | "OnGround" | "Fire" | "FallDistance",
@@ -92,6 +93,39 @@ pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandE
         return Err(error("Invalid orb Count: expected a positive integer"));
     }
     Ok((value, count, motion))
+}
+
+fn validate_tags(value: &Tag) -> Result<(), CommandError> {
+    let Tag::List(list) = value else {
+        return Err(error("Invalid Tags: expected a list of strings"));
+    };
+    if list.elements.len() > 1024
+        || list
+            .elements
+            .iter()
+            .any(|tag| !matches!(tag, Tag::String(_)))
+    {
+        return Err(error("Invalid Tags: expected at most 1024 strings"));
+    }
+    Ok(())
+}
+
+pub(crate) fn retained_tags(nbt: &Tag) -> Result<Option<Vec<u8>>, CommandError> {
+    let Tag::Compound(fields) = nbt else {
+        return Err(error("Summon NBT must be a compound"));
+    };
+    let Some((_, tags)) = fields.iter().find(|(key, _)| key == "Tags") else {
+        return Ok(None);
+    };
+    validate_tags(tags)?;
+    let mut bytes = Vec::new();
+    mc_nbt::write_named(
+        &mut bytes,
+        "",
+        &Tag::Compound(vec![("Tags".into(), tags.clone())]),
+    )
+    .map_err(|failure| error(format!("Invalid Tags: {failure}")))?;
+    Ok(Some(bytes))
 }
 fn number(tag: &Tag, key: &str) -> Result<f64, CommandError> {
     let value = match tag {
@@ -181,6 +215,7 @@ pub(crate) struct ItemSummon {
     pub(crate) motion: Option<[f64; 3]>,
     pub(crate) no_gravity: bool,
     pub(crate) invulnerable: bool,
+    tags: Option<Vec<u8>>,
 }
 /// Validate item stack and supported item-entity summon fields before any spawn.
 pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, CommandError> {
@@ -196,6 +231,7 @@ pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, C
         }
         match key.as_str() {
             "id" | "Pos" => {}
+            "Tags" => validate_tags(value)?,
             "NoGravity" => no_gravity = number(value, key)? != 0.0,
             "Invulnerable" => invulnerable = number(value, key)? != 0.0,
             "Item" => {
@@ -248,6 +284,7 @@ pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, C
         motion,
         no_gravity,
         invulnerable,
+        tags: retained_tags(nbt)?,
     })
 }
 /// Whether the summon NBT field `key` applies to the entity `name`; `None`
@@ -306,7 +343,9 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         }),
         "krasnokamen:Faction" => true,
         "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
-        | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
+        | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" | "Tags" => {
+            true
+        }
         "fuse" | "explosion_power" | "block_state" => name == "minecraft:tnt",
         "BlockState" | "Time" => name == "minecraft:falling_block",
         _ => return None,
@@ -341,6 +380,10 @@ fn authored_fields(
         }
         let value = match key.as_str() {
             "id" | "Pos" => continue,
+            "Tags" => {
+                validate_tags(value)?;
+                value.clone()
+            }
             "NoAI"
             | "PersistenceRequired"
             | "CanPickUpLoot"
@@ -897,9 +940,7 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     row.breed_cooldown = image.state.breed_cooldown;
     row.loot = image.state.loot;
     row.persistent = image.state.persistent;
-    if native.id == "minecraft:armor_stand" {
-        row.opaque_entity_fields = image.state.opaque_entity_fields;
-    }
+    row.opaque_entity_fields = image.state.opaque_entity_fields;
     // A size changes only when the baby state does: an already small hitbox is
     // not halved again, and growing up restores the full one.
     if baby != was_baby {
@@ -990,6 +1031,9 @@ pub(crate) fn apply_item(state: &mut TickState, id: EntityId, item: ItemSummon) 
     crate::entity_controls::set_no_gravity(state, slot, item.no_gravity);
     let row = state.entities.row_mut(slot);
     row.controls.invulnerable = item.invulnerable;
+    if let Some(tags) = item.tags {
+        row.opaque_entity_fields = tags;
+    }
     row.item = Some(Box::new(crate::entities::StackRow {
         item_id: item.stack.item_id,
         count: item.stack.count,

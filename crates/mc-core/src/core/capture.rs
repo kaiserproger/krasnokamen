@@ -1,5 +1,4 @@
 //! Checkpoint/journal capture of entities and players.
-//! Moved verbatim from `core.rs`.
 
 use super::*;
 
@@ -426,7 +425,7 @@ pub(crate) fn entity_data_record(
 /// One non-player entity's vanilla checkpoint record and its chunk, or `None`
 /// for players, corpses (a row on the dying clock is a durable removal, see
 /// `EntityStore::begin_dying`) and entity types without a vanilla contract.
-/// Other dead rows keep their record.
+/// Other dead non-player rows must be removed before checkpoint capture.
 pub(super) fn entity_capture_record(
     view: &EntityCaptureView<'_>,
     slot: crate::entities::EntitySlot,
@@ -444,6 +443,7 @@ pub(super) fn entity_capture_record(
     if view.entities.is_dying(body.id) {
         return None;
     }
+    debug_assert!(body.alive, "dead non-corpse row reached checkpoint capture");
     let name = view.registry.entity_type_name(type_id)?.to_owned();
     let tick = view.tick;
     let rot = view.entities.rot(slot);
@@ -719,3 +719,7 @@ pub(super) fn player_record(
         tick,
     })
 }
+
+#[cfg(test)]
+#[path = "capture_tests.rs"]
+mod tests;

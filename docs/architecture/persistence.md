@@ -115,8 +115,9 @@ An item entity with `Age: -32768` (vanilla `INFINITE_LIFETIME`) never ages or
 despawns, and one with `PickupDelay: 32767` never becomes pickable or mergeable.
 The native lifetime clock is unsigned, so it holds the never value as `u32::MAX`:
 checkpoint and Anvil records carry the vanilla short -32768 (an import of a vanilla
-world maps it back), the WAL carries `u32::MAX` in the entity image age and
-`krasnokamen:LifetimeAge`, and replay never advances it.
+world maps it back). Native checkpoint NBT also carries
+`krasnokamen:LifetimeAge=4294967295`; WAL entity images and `ItemMotion` records
+carry `u32::MAX` in their typed age field. Replay never advances that age.
 
 Cow, pig, chicken and zombie-nautilus variants (from `/summon ... {variant:...}`)
 are persisted. The checkpoint stores the vanilla string `variant` field of the

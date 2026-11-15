@@ -3688,10 +3688,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
-regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata", "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers"]
-proving_assertions = { "harness:scene-shot:native-263-entity-rigs" = "rendered_minecraft:cushion" }
-repro_check = "Round 5 client:35df28a0 real revert reds boat-layer and pufferfish refs (receipts/XHarnessGates/client-r5-revert-red.log); the scene checks all four received rigs and their visibility."
-fix_commit = "client:35df28a0"
+regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_cushion_activates_colored_rig_above_ground", "client:krasnokamen-client:entities::resources::tests::entity_render_263_sulfur_cube_activates_both_layers_and_sizes", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata", "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers"]
+proving_assertions = { "harness:scene-shot:native-263-entity-rigs" = "rendered_minecraft:sulfur_cube" }
+repro_check = "Stage3 S3Scenes reproduced invisible sulfur cube and cushion twice at client:12e076e9; client:35df28a0 corrected boat geometry but did not activate these families. FixBatchA/rigs-control-red.log: both received-render tests fail no activated rig family with only the production fix restored to base; 25 resource tests pass on e593fa04. Windowed native-263-entity-rigs on c7786910eaa6: rigs-client-green/result.json passes all four rendered/resolved/visible-pixel assertions on e593fa045cf8; rigs-client-red/result.json fails rendered_minecraft:sulfur_cube on faithful ac1c4a6b1994, whose frame reports both missing families. Candidate/control screenshots reviewed: pale sulfur cube and white cushion are visible only on candidate."
+fix_commit = "client:e593fa04"
 [[bug]]
 id = "MODEL-ITEM-BARS"
 title = "No item bar (durability or bundle fullness) anywhere in the GUI"
@@ -5968,8 +5968,7 @@ repro = "source"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_exact_selectors_reach_spawned_gradle_command",
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_legacy_selectors_refuse_composition_change_before_spawn",
-  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_prepared_launch_passes_exact_version_to_gradle",
-  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_selectors_never_switch_a_resolved_task",
+  "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_selectors_never_switch_a_resolved_task",
 ]
 fix_commit = "f645ca39a"
 repro_check = """e774598aacd137c2749e6993019a45f221af0499 wired the exact selector helper and its spawned-command test. git log -m -p -S'modded_gradle_arguments(task)' identifies merge 6b76082affa21d5796072958883102565e00d60e (2026-11-14T14:14:57Z), relative to parent b363ba41d, removing that call; the merged test file also lost its endpoint regression. The prepared-Fabric path independently used a bare task. Restored both paths, with explicit refusal rather than silently changing the legacy no-Loader composition. Mocked launch tests isolate sibling discovery from main_checkout's Git subprocess in linked worktrees.
@@ -6133,5 +6132,165 @@ source = "Visual review of rejected client 9f641fdf: 20261115T013251-native-play
 repro = "client"
 regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi"]
 fix_commit = "98900fb5c"
-repro_check = "The old x580-700/y280-400 box clipped 743 magenta pixels from the adjacent skull; actual head remained bare at x606-673/y305-375. The stricter x600-680/y280-375 box rejects it. Only ROI reverted: receipts/HarnessFix2/red-adjacent-head-roi.log fails the counterexample. Restore: green-adjacent-scene-units.log (73 pass). Re-evaluating the retained real candidate with the strict checker fails worn_head_renders: red-rejected-9f-realframe.log. The rejected graphical run's original passed status is invalid evidence, not candidate acceptance."
+repro_check = "The old x580-700/y280-400 box clipped 743 magenta pixels from the adjacent skull; actual head remained bare at x606-673/y305-375. The stricter x600-680/y280-375 box rejects it. Only ROI reverted: receipts/HarnessFix2/red-adjacent-head-roi.log fails the counterexample. Restore: green-adjacent-scene-units.log (72 pass, one optional stored-clock-frame test skipped). Re-evaluating the retained real candidate with the strict checker fails worn_head_renders: red-rejected-9f-realframe.log. The rejected graphical run's original passed status is invalid evidence, not candidate acceptance."
 failing_first = "reported"
+
+[[bug]]
+id = "LZ4-CHECKSUM-MASK"
+title = "Anvil reader rejects clean vanilla LZ4 worlds by comparing an unmasked XXHash32"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3Ignored: cleanly stopped vanilla 26.1.2 LZ4 world rejected with expected 0x0d189c4b versus calculated 0xdd189c4b; lz4-java 1.10.1 StreamingXXHash32.asChecksum masks to 28 bits"
+repro = "cargo"
+regression = [
+  "cargo:mc-world:anvil::region::tests::lz4_masked_checksum_reads_and_rejects_corruption",
+  "cargo:mc-world:anvil::region::tests::lz4_masked_checksum_preserved_writer_output",
+]
+fix_commit = "58bc11afa"
+repro_check = "Ignored mc-world tests reads_real_vanilla_lz4_region and lz4_block_api_matches_real_vanilla_lz4_payload require the local .analysis/test-world-lz4 fixture. Both pass after the fix: receipts/ServerSmallFix/green-vanilla-lz4-harness/result.json. The two registered regressions fail against the original verifier with expected 0x019b3c63 versus 0x219b3c63: receipts/ServerSmallFix/negative-lz4-harness/test.log. Raw and compressed synthetic blocks verify low-bit and high-nibble corruption refusal. Fresh export is zlib; preserved LZ4 writer output retains the masked checksum verbatim."
+failing_first = "reported"
+
+[[bug]]
+id = "LZ4-TOKEN-SIZE-LIMIT"
+title = "Anvil preserving writer accepts LZ4 blocks larger than their token permits"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage3 ServerSmallFix independent review: a checksum-valid raw LZ4 block with token 0x10 and length 1025 is accepted although vanilla lz4-java 1.10.1 refuses originalLen above 1 << (10 + token low nibble)"
+repro = "cargo"
+regression = ["cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies_to_readers_and_preserved_writer"]
+fix_commit = "24a0eefd4"
+repro_check = "receipts/ServerSmallFix/negative-token-bound-harness/test.log records all three paths (raw reader, exact decoder, preserving writer) accepting the invalid 1025-byte block before the size guard. token-green-anvil-harness/result.json passes 397 Anvil tests; token-green-vanilla-lz4-harness/result.json passes both ignored vanilla fixture tests. Regression covers raw/compressed blocks at and one byte above the token limit for levels 0, 1 and 6, with no destination published on rejection. token-bound-javap.log records the local vanilla bytecode oracle."
+failing_first = "reported"
+
+[[bug]]
+id = "SUMMON-TAGS-REFUSED"
+title = "Summon rejects vanilla scoreboard Tags and spawns no entity"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3Issue1 REPORT.md F1: summon with Tags failed with Unknown or unsupported summon NBT field Tags"
+repro = "client"
+regression = ["cargo:mc-core:command_summon::tests::summon_tags_match_selectors_and_survive_checkpoint", "cargo:mc-core:command_summon::tests::summon_tags_reject_invalid_types_before_spawn", "harness:scene-shot:native-command-feedback"]
+proving_assertions = { "harness:scene-shot:native-command-feedback" = "summon-tags_contains_0" }
+fix_commit = "3a79a7535"
+failing_first = "reported"
+repro_check = "FixBatchA/summon-control-red.log: completed tests fail before entity allocation with only the production fix reverted. summon-suite-green.log: 70 passed. Windowed native-command-feedback: summon-client-red/result.json fails summon-tags_contains_0 using control server d0f4170ac7df; summon-client-green/result.json passes the same assertion on server 868f716e2dc0 with client 12e076e9c761. Screenshot reviewed."
+
+[[bug]]
+id = "HARNESS-PRIVATE-AUDIO-STARTUP"
+title = "Private audio preflight accepts a WirePlumber graph that failed to connect"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart: screens-voice-qa voice leg recorded zero samples after WirePlumber started before PipeWire; the inner shell ignored the failed sm-settings wait."
+repro = "source"
+regression = [
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_wireplumber_starts_only_after_pipewire_registry",
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_missing_wireplumber_settings_fails_before_child",
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_failed_registry_wait_fails_before_child",
+]
+repro_check = "ScreensVoiceStart/audio-red.log: original wrapper fails all three retained assertions; audio-endpoint-green.log passes after socket/registry ordering and fail-closed waits."
+failing_first = "reported"
+fix_commit = "patch:5d744b47d4ed61e6b67f2f5692b2c5980017551b9c6cbcee180fc56d1c5981f5"
+
+[[bug]]
+id = "HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE"
+title = "Java client starts rebuild Minecraft in every private home instead of reusing the warmed Gradle cache"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart: screens-voice-qa FabricViewer exceeded runtime.py's 180-second MCP readiness deadline while mavenizer prepared 26.3 under game/.home/.gradle."
+repro = "source"
+regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_client_launch_reuses_gradle_cache_despite_private_home"]
+repro_check = "ScreensVoiceStart/cache-red.log: original runtime has no GRADLE_USER_HOME in the child; unit-green.log passes after resolving the shared cache before launch, without changing the deadline or private HOME."
+failing_first = "reported"
+fix_commit = "patch:4f7f11a4626e69443db89cb3f05e9c09af82a2d1eacd397b2cda4742dc496445"
+
+[[bug]]
+id = "HARNESS-VOICE-PIN-ENDPOINT"
+title = "Voice gate launches the Loader default instead of the Minecraft version covered by its SVC pin"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader defaults to 26.3. Owner case is PrismLauncher 26.1.2; screens remains on 26.3. The independent fix patch restores the unscoped run loop; java_endpoint stays available for retained API tests but is unused by the reversed live path."
+repro = "source"
+regression = [
+  "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg",
+  "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors",
+]
+repro_check = "ScreensVoiceStart/endpoint-red.log fails with the old unscoped launcher; endpoint-green.log passes pinned screen/voice selection and conflicting-selector rejection."
+failing_first = "reported"
+fix_commit = "patch:c22e452d0ae4fa2c378a304e109d085df5845da59b9f738e36d62f2b1d4a67b5"
+
+[[bug]]
+id = "HARNESS-AUDIBLE-SINK-IGNORED"
+title = "Java launch ignores its explicit private sound sink and forces No Output"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart real gate 20261115T011032: FabricViewer reaches Play but OpenAL reports No Output rather than fabric_viewer_out because runtime.start_client ignores sound_sink. The independent fix patch restores null audio and muted options; the private-audio helper remains for retained API tests but is unused by the reversed live path."
+repro = "source"
+regression = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink",
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_without_private_graph_is_refused_before_spawn",
+  "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph",
+]
+repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode."
+failing_first = "reported"
+fix_commit = "patch:7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b"
+
+[[bug]]
+id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
+title = "Concurrent Java endpoints share mutable Loader classes and can lose live class files"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart real gates 20261115T011032 and 20261115T011838 lose live Loader classes while another endpoint builds. Independent fix patch covers the runtime and prepared launch wiring from 3aca2c4ec and 495367bce, restoring the old heap-only script and shared project cache; new helpers remain only for retained API tests. endpoint-startup/result.json proves both real endpoints remain live after the second build with private project caches."
+repro = "source"
+regression = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
+  "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
+]
+repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
+fix_commit = "patch:94ce251608e4cb8d332ed8543764c21edc0614d9106b7574db7ff2d6e2cefab2"
+failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST"
+title = "Java matrix preparation launches Fabric instead of exporting a command and times out"
+area = "harness"
+severity = "major"
+status = "open"
+source = "HarnessGraphical Java matrix capability group times out in prepare_fabric_launch before private Xvfb starts; current Loader has no launch-manifest exporter"
+repro = "source"
+regression = ["python:tools.harness.test_java_clients:JavaClientsTests.test_matrix_fabric_group_uses_only_private_runtime_launches"]
+fix_commit = "b6f1ac655"
+failing_first = "reported"
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log reverses only fix-only.patch while retaining tests, and fails on the unexpected Gradle prelaunch. green-restored.log passes both fixes; green-isolation-merge.log passes ordinary runtime/cache wiring. Original matrix command on 3c2279125 reaches 26.1.2 Fabric (0.155.2 API), capability passed=true and simultaneous_in_play=1 on private display :150; real-java/20261115T013000-java-matrix-fd94b0mk/capability-fabric_krasnokamen_loader/result.json. Full invocation later fails separately on the armadillo cell's unloaded block; not a full matrix pass. Loader exporter existed at 2bc292e64d9083537e3f97bca6c635c0b9ba5590 only on unmerged bots-runjava. Ordinary runtime preserves endpoint build/project-cache and audio isolation. See report.md."
+
+[[bug]]
+id = "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED"
+title = "Gait capture shows a dying zombie over the spider"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HarnessGraphical gait scene: zombie and spider approach the same camera on the same lane, and the zombie death animation occludes the spider"
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view"]
+fix_commit = "b6f1ac655"
+failing_first = "reported"
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log fails the original fixture's camera-frustum assertion with tests retained. green-restored.log passes. Three native windowed gait runs pass on 3c2279125: real-gait/20261115T012844-scene-shot-j9w3a8qy, 20261115T013328-scene-shot-mgy_ub0y, 20261115T013411-scene-shot-4da3qs2q. All three accepted spider frames and the first zombie frame were visually reviewed: subject unobstructed, no overlapping zombie. Spider capture uses 2, 2 and 3 uniquely named attempts respectively. Server c7786910eaa6 and client 12e076e9c761 pins; report.md retains commands and review."
+
+[[bug]]
+id = "HARNESS-JAVA-MATRIX-FIXTURE-CHUNK-NOT-LOADED"
+title = "Java matrix armadillo cell fails waiting for its remote fixture block after successful launch"
+area = "harness"
+severity = "major"
+status = "open"
+source = "PreparedLaunchFix original java-matrix command: Fabric capability reaches Play, but selected mobs.armadillo reconnect_mid_action cell fails minecraft_wait_for_loaded_block at -16,199,-16"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Two observed failures with server c7786910eaa6 and 26.1.2 Fabric Loader 7343bd38: receipts/PreparedLaunchFix/real-java/20261115T012435-java-matrix-50t25et0/pw-2314a2e847b93d120a99/result.json and real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99/result.json. Both capability groups pass; the cell records no domain checks and fails with client chunk did not load at -16, 199, -16. Root cause not investigated in the isolated-launch assignment; no product armadillo failure inferred."

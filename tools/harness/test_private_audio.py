@@ -90,6 +90,23 @@ class PrivateAudioTest(unittest.TestCase):
                 with self.assertRaisesRegex(MissingCapability,"virtual_null_output"):
                     audio.private_audio_preflight(root)
 
+    def test_audible_java_refuses_a_sink_outside_verified_graph(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory)
+            with patch.object(audio, "private_audio_preflight", return_value={"graph": []}):
+                with self.assertRaisesRegex(MissingCapability, "private_named_sink_missing"):
+                    audio.require_java_private_audio(dict(os.environ), game, "host-speakers")
+                self.assertFalse((game / audio.JAVA_AUDIO_RECEIPT).exists())
+
+    def test_audible_java_refuses_child_server_different_from_observed_graph(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, PULSE_SERVER="unix:/host/pulse/native")
+            with patch.dict(os.environ, {"PULSE_SERVER": "unix:/private/pulse/native"}), \
+                 patch.object(audio, "private_audio_preflight") as preflight:
+                with self.assertRaisesRegex(MissingCapability, "child_environment_mismatch"):
+                    audio.require_java_private_audio(env, Path(directory), "viewer")
+                preflight.assert_not_called()
+
 
 class SoundCaptureApiTest(unittest.TestCase):
     def test_backend_named_sinks_have_distinct_monitors_and_artifacts(self):

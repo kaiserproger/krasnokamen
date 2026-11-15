@@ -423,11 +423,15 @@ pub(super) fn close_skipped_knockback(
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
 ) {
     seen.retain(|id, _| connections.contains_key(id));
+    for (&id, handles) in connections.iter() {
+        seen.entry(id).or_insert(handles.knockback_baseline);
+    }
     for (&id, &(count, last_tick)) in out.snapshot.player_knockback_ticks.iter() {
         if !connections.contains_key(&id) {
             continue;
         }
-        let previous = seen.insert(id, count).unwrap_or(0);
+        let previous = seen[&id];
+        seen.insert(id, previous.max(count));
         let current = u64::from(last_tick == out.tick);
         let reason = if count.saturating_sub(previous) > current {
             Some("skipped-explosion-knockback")
@@ -494,7 +498,19 @@ pub(super) async fn publish_and_route(
     let packets = pool.install(|| {
         crate::fanout::publish_with_registries(
             out,
-            viewers.values_mut(),
+            viewers.values_mut().filter(|viewer| {
+                // A delayed pump may still be draining publications from
+                // before queue registration. Do not replay those impulses
+                // into the new client; its next eligible snapshot reconciles
+                // the world view without advancing it through this old tick.
+                !out.snapshot
+                    .player_knockback_ticks
+                    .get(&viewer.connection)
+                    .is_some_and(|&(count, last_tick)| {
+                        last_tick == out.tick
+                            && count <= connections[&viewer.connection].knockback_baseline
+                    })
+            }),
             view_distance,
             &registries,
             chunk_cache,
@@ -803,13 +819,9 @@ mod roster_seed_tests {
         let (world_tx, _world_rx) = world_queue(bound, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(
-                id,
-                ConnectionHandles {
-                    reliable_tx,
-                    world_tx,
-                },
-            )
+            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+                server.hub.published_knockback_count(id)
+            })
             .unwrap();
         reliable_rx
     }

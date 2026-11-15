@@ -21,12 +21,13 @@
 //! - **world** ([`world_queue()`], bounded in frames and bytes):
 //!   chunk/entity/block packets. Before each publish the pump reads the
 //!   queue's free slots and bytes as the viewer's credit; the plan emits at
-//!   most that many frames and stops once the bytes run out, so nothing
-//!   planned is dropped, and what did not fit stays unsent in the viewer
-//!   cache for a newer snapshot to carry.
+//!   most that many frames and stops once the bytes run out. Updates that do
+//!   not fit wait for a newer snapshot. A competing producer can still fill
+//!   the queue after planning: a refused frame triggers geometry/entity repair,
+//!   while one-shot visuals may be lost.
 //!
-//! Reliable-overflow disconnect is the only drop. The writer task drains
-//! reliable first, then world.
+//! Reliable overflow disconnects instead of dropping results. The writer task
+//! drains reliable first, then world.
 //!
 //! # Lagged pump (world-skip signal, not data loss)
 //!

@@ -71,6 +71,29 @@
     },
     {
       "shot": "feedback-enabled"
+    },
+    {
+      "cmd": "summon minecraft:cow ~2 ~ ~2 {NoAI:1b,Tags:[\"summon-tags-probe\"]}"
+    },
+    {
+      "cmd": "execute if entity @e[type=minecraft:cow,tag=summon-tags-probe] run say SummonTagsMatched"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "assert_chat": {
+        "name": "summon-tags",
+        "contains": [
+          "SummonTagsMatched"
+        ],
+        "excludes": [
+          "Unknown or unsupported summon NBT field Tags"
+        ]
+      }
+    },
+    {
+      "shot": "summon-tags"
     }
   ]
 }

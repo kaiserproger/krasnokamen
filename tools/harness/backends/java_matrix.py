@@ -119,7 +119,7 @@ def group(args: argparse.Namespace, directory: Path, count: int, server: Protoco
     return client_group(directory / "clients", count, f"127.0.0.1:{server.port}",
                         platform=platform, client_profile=profile,
                         timeout_seconds=args.timeout_seconds,
-                        authenticate="krasnokamen-auth" in server.enabled_plugins, prepare_launch=True)
+                        authenticate="krasnokamen-auth" in server.enabled_plugins)
 
 
 def run_capabilities(args: argparse.Namespace, root: Path) -> dict[str, Any]:

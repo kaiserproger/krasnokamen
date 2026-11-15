@@ -18,7 +18,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from types import SimpleNamespace
+
 from . import java_clients
+
+from .backends import java_matrix
 
 
 class FakeLogHandle:
@@ -163,6 +167,26 @@ class JavaClientsTests(unittest.TestCase):
 
     def _group_text(self) -> str:
         return (self.artifact / "group.json").read_text()
+
+    def test_matrix_fabric_group_uses_only_private_runtime_launches(self) -> None:
+        self._start_patches()
+        args = SimpleNamespace(timeout_seconds=20)
+        server = SimpleNamespace(port=25567, enabled_plugins=[])
+        with mock.patch("subprocess.Popen", side_effect=AssertionError("unexpected prelaunch process")), \
+                mock.patch.object(java_clients.runtime, "sibling_root", return_value=Path("/loader")), \
+                mock.patch.object(java_clients, "_confirm_exact_permission", return_value="Allowed"):
+            with java_matrix.group(args, self.artifact, 2, server, "fabric_krasnokamen_loader") as clients:
+                self.assertEqual(len(clients), 2)
+                self.assertTrue(all(not client.closed for client in clients))
+        self.assertEqual(len(self.start_kwargs), 2)
+        java_clients.runtime.start_xvfb.assert_called_once()
+        for kwargs in self.start_kwargs:
+            self.assertEqual(kwargs["display"], ":99")
+            self.assertEqual(kwargs["platform"], "fabric")
+            self.assertEqual(kwargs["client_profile"], "loader")
+            self.assertNotIn("launch_manifest", kwargs)
+        self.assertTrue(self.xvfb_log.closed)
+        self.assertIn(self.xvfb_proc, self.stopped)
 
     def test_rejects_bad_count_before_any_lifecycle(self) -> None:
         self._start_patches()
