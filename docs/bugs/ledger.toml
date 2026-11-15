@@ -6311,3 +6311,44 @@ regression = [
 fix_commit = "client:2cf3cfd0307556d0ec413f292a19df2d7cf7ee11"
 repro_check = "CustomHeadLayer now resolves the canonical SkullBlock family/profile independently of inventory-graph normalization, then attaches its raw geometry to the head bone at 1.1875 scale in CPU and crowd paths. Only old attachment restored: receipts/HarnessFix2/client-head/red-worn-head-old-attachment.log is red. Only inventory-graph bypass disabled with the real resolver test retained: red-worn-head-inventory-graph.log is red at head-local centroid (0.59375,0.296875,0.59375), not (0,-0.296875,0). Restore: green-real-resolver-animation.log (54 pass), green-real-resolver-crowd.log (10 pass, one unrelated timing benchmark ignored), green-real-resolver-item-models.log (16 pass, one unrelated runtime-resource test ignored). On clean harness 5447c5d0d and server 8b6fc28e58bb, windowed candidate 2cf3cfd0 passes native-player-head 3/3: .analysis/validation/20261115T014909-native-player-head-hhn8klcw, 20261115T014959-native-player-head-v5tt385e, 20261115T015030-native-player-head-70lg1lsk. Control 0a0ed7e4 restores all four production files to 98e4b5bb with tests retained; 20261115T015102-native-player-head-7yjylsdr fails worn_head_renders with zero head-region hat pixels while placed hat remains 9822. Every candidate/control head-worn.png and head-block.png was visually reviewed: candidate skull covers the head, control skull remains on the back. Rejected intermediate 9f641fdf is not acceptance evidence. Full receipts and commands: receipts/HarnessFix2/result.json. No promotion performed."
 failing_first = "reported"
+
+[[bug]]
+id = "JAVA-BATTLE-TAKE-END-CAMERA"
+title = "The battle runner shuts the server down while the Loader scenario is still capturing its end camera"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 LoaderObs seed-46 Java battle: tools/battle/run-battle.py stopped the server right after the finite recorder wait while the CamSpec shield capture was still running (receipts/LoaderObs)"
+repro = "source"
+regression = [
+  "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_holds_shutdown_until_scenario_releases",
+  "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed",
+  "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes",
+]
+fix_commit = "5fd8de1de5d6577a91988b73ff0a70dc3c3b82ef"
+failing_first = "reported"
+repro_check = "Runner now waits for an explicit, bounded inotify/pidfd completion barrier released by the Loader scenario (loader d6a94c22 battle_scenario.py CaptureLifecycleTest). Red: receipts/LoaderObs/completion-barrier-red.log, capture-lifecycle-red.log; green: completion-barrier-green.log, capture-lifecycle-green.log (39 core tests). Real client: receipts/LoaderObs/late-capture-neoforge-46/java-battle.json waited for completion.ready, took the screenshot, then completion.done, then runner shutdown. Deadline fails closed. Not promoted."
+
+[[bug]]
+id = "JAVA-BATTLE-SPEAR-PLAIN-ATTACK"
+title = "The Java agent's attack tool sends a plain entity attack while holding a spear, which vanilla servers reject"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 LoaderObs seed-46 Java battle: 8 NeoForge attacks unconfirmed and the Fabric player died after unconfirmed spear attacks; kits carry iron_spear (piercing_weapon)"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Fixed in Loader commit d6a94c225bc42d0a4d4b772fc7f1fc7344fdc31e (merged into local loader main a559802; no ledger fix_commit kind for the Loader repository). Vanilla 26.1.2 ServerGamePacketListenerImpl.handleAttack returns when the main hand has PIERCING_WEAPON (receipts/LoaderObs/vanilla-26.1.2-interact-bytecode.txt:5390-5494, offsets 106-117; bytecode inspection, not a live vanilla run). minecraft_attack_entity_once now refreshes the vanilla raycast and calls startAttack, keeping the piercing path and cooldown gates; no server combat change. Loader Java tests (no ledger ref kind): MinecraftAttackInputTest 4 tests on 26.1.2 and 26.3. Red: receipts/LoaderObs/native-attack-red-26.1.2.log, native-attack-facade-red.log; green: native-attack-green-26.1.2.log, native-attack-green-26.3.log. Real clients: native-input-fabric-46/java-battle.json and native-input-neoforge-46/java-battle.json functional pass with confirmed damage. Not promoted."
+
+[[bug]]
+id = "JAVA-BATTLE-SEED46-APPROACH"
+title = "Seed-46 Java battle: the Fabric player respawned at file18 stops facing dirt and never reaches the blue targets"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 LoaderObs: receipts/LoaderObs/fabric-46-cached/java-battle.json, six blue targets in_reach=false then 90 s combat deadline; PovRed-failure.png faces dirt at arm length after descending four blocks"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Not reproduced: the original run respawned at file18 (-178.70,94,121.70) and ended at (-183.70,90,136.50) facing minecraft:dirt at (-185,91,136); later instrumented runs respawned at file35 and reached the targets, so their pass does not close the file18 path. Per-approach diagnostics now retained (loader d6a94c22 MinecraftClientFacadeTest.approachRetainsCombatDiagnosticsForBothArrivalAndRefusal). No movement, deadline, teleport, kit or damage change."
