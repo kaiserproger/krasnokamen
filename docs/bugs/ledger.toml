@@ -6126,3 +6126,29 @@ proving_assertions = { "harness:scene-shot:native-command-feedback" = "summon-ta
 fix_commit = "3a79a7535"
 failing_first = "reported"
 repro_check = "FixBatchA/summon-control-red.log: completed tests fail before entity allocation with only the production fix reverted. summon-suite-green.log: 70 passed. Windowed native-command-feedback: summon-client-red/result.json fails summon-tags_contains_0 using control server d0f4170ac7df; summon-client-green/result.json passes the same assertion on server 868f716e2dc0 with client 12e076e9c761. Screenshot reviewed."
+
+[[bug]]
+id = "DFU-PLAYER-SELECTED-ITEM-REMAINDER"
+title = "Player NBT upgrade rewrites opaque SelectedItem unlike official Java DFU"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage3 S3Ignored versionless-player differential: official Java 26.1.2 keeps SelectedItem.Count while native upgrade changes it to count; player-visible impact not established"
+repro = "cargo"
+regression = ["cargo:mc-world:anvil::upgrade::old_player_map::tests::player_selected_item_is_opaque_while_inventory_is_upgraded"]
+fix_commit = "14f6f10a0"
+failing_first = "reported"
+repro_check = "IgnoredRepair/dfu-selected-item-negative.log: retained regression fails from -1 with only the walk.rs fix reverted (Count Byte(1) becomes count Int(1)). dfu-selected-item-green.log passes the focused module and the original real versionless player/map official-Java oracle, two cases with zero residues; SelectedItem remains opaque while typed Inventory still upgrades."
+
+[[bug]]
+id = "BATTLE-OBLIQUE-GAP-REOPEN"
+title = "Oblique crowd steering reopens an earlier neighbour gap and heaps foot soldiers"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "IgnoredRepair native flat 1000-a-side pursuit gate: 4.51% foot heaps exceeds the existing 3% contract; steering projects away from a later neighbour back into an earlier one"
+repro = "cargo"
+regression = ["cargo:mc-core:battle::steering::tests::oblique_neighbour_cannot_reopen_an_already_closed_gap"]
+fix_commit = "4a2c83e44"
+failing_first = "reported"
+repro_check = "IgnoredRepair/battle-fix-reverted-unit.log and battle-fix-reverted-native.log revert only 4a2c83e44's steering fix, retaining all tests: closed gap drive [0.128, 0.096] and 4.51% foot heap are red. battle-gap-green-suite.log passes 180 ordinary battle tests. Restored battle-fix-restored-native.log runs the same 1000-a-side fixture through 200 pursuit ticks: foot heap 4.51% -> 1.12%, horse 6.01% -> 6.04%, deaths 266 -> 288, melee kills 167 -> 179, wounds 48 -> 42, native wounded survivors 12 -> 9. Heap limits stay 3% foot/15% horse; no graphical-client acceptance claimed."
