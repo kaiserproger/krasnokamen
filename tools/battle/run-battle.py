@@ -83,6 +83,7 @@ def arguments():
     p.add_argument('--resource-pack-url', default='', help='vanilla server-pushed resource pack URL (empty disables the offer)')
     p.add_argument('--resource-pack-sha1', default='', help='SHA-1 of the server-pushed pack')
     p.add_argument('--console-fifo', action='store_true', help='create RUN_DIR/console.fifo: each line written to it is sent to the server console (recorded in commands.txt), e.g. `echo "kill PovRed" > RUN_DIR/console.fifo`')
+    p.add_argument('--completion-timeout', type=int, metavar='SECONDS', help='after recording, publish RUN_DIR/completion.ready and wait at most SECONDS for RUN_DIR/completion.done before pausing or stopping; the live scenario creates completion.done only after its captures')
     p.add_argument('--trace', type=trace_point, metavar='X,Z,R', help='from the end of the population barrier until the recorder stops, send `battle trace X Z R` about every --trace-every recorded ticks and write the replies to trace.jsonl; needs a server pin with the command (b31c2540 or later); default off')
     p.add_argument('--trace-every', type=int, metavar='TICKS', help=f'trace cadence in recorded ticks, with --trace (default {DEFAULT_TRACE_EVERY_TICKS})')
     p.add_argument('--dry-run', action='store_true')
@@ -129,6 +130,8 @@ def arguments():
         p.error('pre-stage ticks must not be negative')
     if a.live_timeout < 1:
         p.error('live timeout must be at least one second')
+    if a.completion_timeout is not None and a.completion_timeout < 1:
+        p.error('completion timeout must be at least one second')
     try:
         a.live_players, a.live_spectators = live_roles(a.live_player, a.live_spectator)
     except ValueError as error:
@@ -519,7 +522,7 @@ def read_pin(pin):
     return binary, manifest
 
 
-def watch_ready(path, process, timeout=180):
+def watch_ready(path, process, timeout=180, *, label='recorder', ready_marker=None):
     """Wait on a directory event or child exit, not a timer polling loop."""
     libc = ctypes.CDLL(None, use_errno=True)
     fd = libc.inotify_init1(os.O_CLOEXEC)
@@ -530,6 +533,8 @@ def watch_ready(path, process, timeout=180):
             raise OSError(ctypes.get_errno(), 'inotify_add_watch')
         pidfd = os.pidfd_open(process.pid)
         try:
+            if ready_marker is not None:
+                ready_marker.touch(exist_ok=False)
             if path.exists():
                 return
             import time
@@ -537,14 +542,14 @@ def watch_ready(path, process, timeout=180):
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise TimeoutError(f'recorder did not create {path}')
+                    raise TimeoutError(f'{label} did not create {path} within {timeout} s')
                 ready, _, _ = select.select([fd, pidfd], [], [], remaining)
                 if fd in ready:
                     os.read(fd, 65536)
                     if path.exists():
                         return
                 if pidfd in ready:
-                    raise RuntimeError(f'recorder exited before readiness: {process.wait()}')
+                    raise RuntimeError(f'{label}: process exited before {path.name}: {process.wait()}')
         finally:
             os.close(pidfd)
     finally:
@@ -734,6 +739,7 @@ def run(a):
                          commands[1],
                          f'require at least {a.minimum_battle_ticks} continuously recorded battle ticks',
                          *(['write take.json: window MSPT/TPS/memory, checkpoint spikes in the shot window, clean verdict'] if a.take else []),
+                         *([f'completion barrier: publish completion.ready, wait up to {a.completion_timeout} s for completion.done'] if a.completion_timeout is not None else []),
                          *commands[2:]]))
         return
     binary, manifest = read_pin(a.pin.resolve())
@@ -894,6 +900,9 @@ def run(a):
                 or type(last_tick) is not int or type(gaps) is not int or (gaps != 0 and not a.allow_marker_gaps)
                 or first_tick > battle_start or last_tick <= battle_start):
             raise RuntimeError('recorder receipt lacks a continuous battle marker range')
+        if a.completion_timeout is not None:
+            watch_ready(root / 'completion.done', server, a.completion_timeout,
+                        label='live scenario completion barrier', ready_marker=root / 'completion.ready')
         send(commands[2])
         pause_line = expect(messages, 'Battle paused tick=')
         battle_end = int(pause_line.split('Battle paused tick=', 1)[1].strip().split()[0])

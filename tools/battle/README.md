@@ -89,7 +89,14 @@ requests the console-only `battle roster` of soldier and horse UUIDs, publishes
 the roster atomically, and waits until every UUID is observed before combat.
 The recorder gets a 900-second post-join roster deadline for large setups;
 its requested recording duration starts only after that roster is observed.
-It streams dashboard telemetry and stops the server after the recorder exits.
+It streams dashboard telemetry and normally stops the server after the recorder
+exits. With `--completion-timeout SECONDS`, it first publishes
+`RUN_DIR/completion.ready` and waits on a filesystem event for
+`RUN_DIR/completion.done`. The live scenario creates that file only after all
+combat and shield captures succeed (it may complete before the recorder).
+Until then neither `battle pause` nor `stop` is sent. A deadline or server exit
+fails closed with a completion-barrier error; owned processes are cleaned up.
+This extends only the live capture lifecycle, not the recorded take window.
 This does not establish real-time performance or all-dirty residency.
 
 ## Take mode (the recorded shot)
