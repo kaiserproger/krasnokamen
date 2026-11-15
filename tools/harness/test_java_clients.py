@@ -520,7 +520,7 @@ class JavaClientsTests(unittest.TestCase):
         else:
             self.fail("expected RuntimeError")
 
-    def test_heap_cap_applies_during_launch_and_restores(self) -> None:
+    def test_group_does_not_cap_gradle_and_compiler_jvms(self) -> None:
         self._start_patches()
         saved = dict(os.environ)
         os.environ.pop("JDK_JAVA_OPTIONS", None)
@@ -536,7 +536,7 @@ class JavaClientsTests(unittest.TestCase):
             with java_clients.client_group(self.artifact, 1, "127.0.0.1:25567"):
                 pass
         self.assertEqual(len(snapshots), 1)
-        self.assertEqual(snapshots[0]["JDK_JAVA_OPTIONS"], "-Xmx512M")
+        self.assertNotIn("JDK_JAVA_OPTIONS", snapshots[0])
         self.assertNotIn("JDK_JAVA_OPTIONS", os.environ)
 
     def test_heap_cap_respects_operator_preset(self) -> None:

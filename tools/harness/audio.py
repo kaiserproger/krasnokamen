@@ -42,12 +42,13 @@ class SoundCapture:
     RATE = 48000
     BYTES_PER_FRAME = 8
 
-    def __init__(self, artifact_dir: Path):
-        self.path = artifact_dir / "audio.f32le"
-        self.sink = f"krasnokamen_loader_gate_{os.getpid()}"
+    def __init__(self, artifact_dir: Path, sink: str | None = None,
+                 description: str = "KrasnokamenLoaderGate"):
+        self.sink = sink or f"krasnokamen_loader_gate_{os.getpid()}"
+        self.path = artifact_dir / ("audio.f32le" if sink is None else f"{sink}.f32le")
         self.module = subprocess.check_output([
             "pactl", "load-module", "module-null-sink", f"sink_name={self.sink}",
-            "rate=48000", "channels=2", "sink_properties=device.description=KrasnokamenLoaderGate",
+            "rate=48000", "channels=2", f"sink_properties=device.description={description}",
         ], text=True).strip()
         self.condition = threading.Condition()
         self.written = 0

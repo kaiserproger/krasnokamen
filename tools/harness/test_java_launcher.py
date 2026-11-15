@@ -111,6 +111,32 @@ class VanillaLauncherTest(unittest.TestCase):
         self.assertIn(str(self.game), command)
         self.assertIn("-Dkrasnokamen.loader.cacheDir=" + str(self.game / "cache"), command)
 
+class PreparedFabricLauncherTest(unittest.TestCase):
+    def test_prepared_launch_passes_exact_version_to_gradle(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.1.2",
+                                              "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}), \
+                mock.patch("subprocess.Popen") as launch:
+            root = Path(directory)
+            manifest = root / "fabric-java-launch.json"
+            manifest.write_text("{}")
+            launch.return_value.wait.return_value = 0
+            self.assertEqual(launcher.prepare_fabric_launch(root, root / "loader", 20), manifest)
+            argv = launch.call_args.args[0]
+            self.assertIn("-PminecraftVersion=26.1.2", argv)
+            self.assertIn("-PfabricLoaderVersion=0.19.3", argv)
+            self.assertIn("-PfabricApiVersion=0.155.2+26.1.2", argv)
+            self.assertEqual(argv[-1], ":loader-fabric:runClientMcp")
+
+    def test_selectors_never_switch_a_resolved_task(self):
+        for task in (":fabric-agent:runClientMcp", ":loader-neoforge:runClientMcp"):
+            with self.subTest(task=task), mock.patch.dict(
+                    "os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.1.2",
+                                   "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}):
+                with self.assertRaisesRegex(MissingCapability, "conflicts with task"):
+                    launcher.modded_gradle_arguments(task)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -169,7 +169,7 @@ def prepare_fabric_launch(artifact_dir: Path, agent_root: Path, timeout_seconds:
                "--max-workers=2", "-p", str(agent_root),
                f"-Pkrasnokamen.clientMcp.gameDir={game}",
                "-Pkrasnokamen.clientMcp.username=PreparedJava",
-               ":loader-fabric:runClientMcp"]
+               *modded_gradle_arguments(":loader-fabric:runClientMcp")]
     log_path = artifact_dir / "fabric-prepare.log"
     with log_path.open("wb") as log:
         process = subprocess.Popen(command, env=env, stdout=log,
@@ -203,7 +203,7 @@ def modded_gradle_arguments(task: str) -> list[str]:
     endpoint = endpoints.get((version, platform))
     if endpoint is None:
         raise MissingCapability(f"unsupported modded Java endpoint: {version}/{platform}")
-    expected_tasks = {":fabric-agent:runClientMcp", f":loader-{platform}:runClientMcp"}
+    expected_tasks = {f":loader-{platform}:runClientMcp"}
     if task not in expected_tasks:
         raise MissingCapability(f"Java endpoint {version}/{platform} conflicts with task {task}")
     fabric_loader, fabric_api, neo = endpoint
@@ -214,5 +214,5 @@ def modded_gradle_arguments(task: str) -> list[str]:
     client_jar = os.environ.get("KRASNOKAMEN_CLIENT_JAR")
     if client_jar:
         arguments.append(f"-Pkrasnokamen.clientJar={client_jar}")
-    arguments.append(f":loader-{platform}:runClientMcp")
+    arguments.append(task)
     return arguments

@@ -125,6 +125,14 @@ Gradle's separately configured cache is not isolated by this setting.
 Before connecting, the launcher retries an explicit render-thread observation
 timeout only within the bootstrap deadline; it still requires the actual title
 screen and propagates other MCP errors.
+The default 512 MiB game heap is applied to the selected Gradle `runClientMcp`
+JavaExec task only (or directly to a prepared/plain Java command), never through
+an injected `JDK_JAVA_OPTIONS` inherited by Gradle/NeoForm compiler JVMs.
+An operator-supplied `JDK_JAVA_OPTIONS` remains unchanged.
+The vanilla-world roundtrip is a correctness driver and uses the normal memory
+runner lane; only measurement profiles may request `-x`.
+The screen/voice capture API accepts a named private sink and its description;
+each named capture records its own `<sink>.f32le` and monitors only that sink.
 
 ## Matrix runner status
 

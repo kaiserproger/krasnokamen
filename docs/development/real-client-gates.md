@@ -115,6 +115,10 @@ missing, conflicting or unsupported selectors fail before launch, with no
 neighbor-version fallback. `KRASNOKAMEN_CLIENT_JAR` must identify the matching
 local vanilla client jar for the development agent build. Plain vanilla
 `vanilla_command` separately accepts exact 26.1.2, 26.2 and 26.3 metadata.
+Explicit selectors never switch the caller's task/composition: use the matching
+Loader profile/platform. Combining them with the legacy no-Loader agent task or
+a different Loader platform fails before spawning Gradle. Prepared Fabric
+JavaExec launches use the same exact endpoint properties.
 
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
 other trees reuse, so the harness refuses `KRASNOKAMEN_SERVER_BINARY` or
@@ -319,6 +323,27 @@ obsidian from far and close positions, including held attack frames.
 `tool_wall_visible` checks the received target, selected tool and eye distance,
 then requires turquoise tool pixels over a dark wall in the fixed close-view
 frame. Inspect the attack frames separately; the pixel check covers rest only.
+
+`native-player-head` installs an authored offline skin pack in its private run:
+cyan base head, magenta opaque hat and a transparent face window. The fixed
+camera frames the placed head at x580–700/y520–655; `placed_head_hat_layer_pixels`
+requires magenta there separately from the placed/worn changed-pixel checks.
+The unresolved `HarnessHat` profile deliberately uses that default skin, not an
+online Mojang lookup. This proves hat geometry on a contrasting texture, not
+online profile resolution. Retain and inspect both candidate and hat-only-control
+frames before promoting the model row.
+
+`walk_capture` retains a distinct `-attempt-N` image and frame sidecar per
+resample. Its walk evidence lists all attempts; a phase miss still fails within
+`max_ticks`, without widening the phase bracket.
+
+The dropped clock in `native-dynamic-context` is raised to eye level and lit by a
+sea lantern. Its search region x320–450/y260–400 excludes the HUD and chat.
+`dropped_clock_face_*` requires a gold-rim-enclosed face in both frames and a
+changed blue-face proportion, not a dark-pixel angle in the hotbar. A static
+clock or changing HUD without that face fails. Retained old day/night frames can
+exercise the rejection test with `KRASNOKAMEN_CLOCK_TEST_FRAMES` naming their
+screenshot directory; they do not prove the moved fixture's graphical pass.
 
 
 `require_entities` takes `name`, `args` for `minecraft_list_entities`, and a nonempty

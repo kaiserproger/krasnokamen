@@ -20,9 +20,8 @@ Contract the matrix runner relies on:
   Fabric Loader, SVC, or DH launcher. An explicit Loader platform is passed
   through; its permission screen is confirmed only for the exact connected
   server address. No fallback titles or standing grants.
-* Client JVMs default to ``JDK_JAVA_OPTIONS=-Xmx512M`` during group startup.
-  Explicit runtime JVM flags take precedence; no host-sized default heap is
-  allowed for an eight-client group.
+* Client heap bounds belong to runtime's game-only launch, never to the
+  environment inherited by Gradle and its prerequisite compiler JVMs.
 * Startup is bounded-parallel (``ThreadPoolExecutor`` with ``count``
   workers) and every wait is event-driven via ``runtime`` helpers
   (port/state inotify+pidfd, MCP push waits); nothing sleeps.
@@ -65,7 +64,6 @@ from . import runtime
 from .mcp import McpClient
 
 MAX_CLIENTS = 8
-_CLIENT_MAX_HEAP = "-Xmx512M"
 _AUTH_WAIT_CAP_SECONDS = 90.0
 
 
@@ -381,14 +379,9 @@ def client_group(
 
     _sentinel = object()
     saved_env: dict[str, Any] = {
-        name: os.environ.get(name, _sentinel) for name in ("WAYLAND_DISPLAY", "JDK_JAVA_OPTIONS")
+        name: os.environ.get(name, _sentinel) for name in ("WAYLAND_DISPLAY",)
     }
     os.environ.pop("WAYLAND_DISPLAY", None)
-    # N8 heap safety: cap each vanilla/Loader client JVM; an explicit
-    # operator value is respected instead.
-    heap_overrode = "JDK_JAVA_OPTIONS" not in os.environ
-    if heap_overrode:
-        os.environ["JDK_JAVA_OPTIONS"] = _CLIENT_MAX_HEAP
     wrote_receipt = False
     try:
         try:

@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import socket
 import tempfile
 import threading
@@ -1085,6 +1086,171 @@ class SceneShotTests(unittest.TestCase):
             options.write_text("fov:0.0\n")
             with self.assertRaisesRegex(RuntimeError, "renderDistance"):
                 scene_shot.check_java_render_distance(options, 32)
+
+
+class PlayerHeadTests(unittest.TestCase):
+    class Probe:
+        def __init__(self):
+            self.report = {}
+        def check(self, name, value):
+            if not value:
+                raise AssertionError(name)
+
+    def store_frames(self, root, *, hat=True, placed=True):
+        from PIL import Image, ImageDraw
+
+        shots = root / "screenshots"
+        shots.mkdir(exist_ok=True)
+        frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1001.5],
+                 "yaw": 0, "pitch": 0}
+        for name in ("head-empty", "head-block", "head-worn", "head-none"):
+            image = Image.new("RGB", scene_shot.WINDOW, (70, 70, 70))
+            draw = ImageDraw.Draw(image)
+            if name == "head-block" and placed:
+                draw.rectangle((594, 537, 686, 640), fill=(0, 200, 200))
+                if hat:
+                    draw.rectangle((594, 537, 686, 560), fill=(200, 0, 200))
+            if name == "head-worn":
+                draw.rectangle((610, 306, 674, 370), fill=(200, 0, 200))
+            image.save(shots / f"{name}.png")
+            (shots / f"{name}.json").write_text(json.dumps(frame))
+
+    def test_placed_head_roi_covers_fixture_and_requires_hat_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            probe = self.Probe()
+            scene_shot.check_player_head(probe, root)
+            self.assertGreater(probe.report["placed_head_changed_pixels"], 9000)
+            self.assertEqual(probe.report["placed_head_hat_layer_pixels"], 93 * 24)
+            self.store_frames(root, hat=False)
+            with self.assertRaisesRegex(AssertionError, "placed_head_hat_layer_pixels"):
+                scene_shot.check_player_head(self.Probe(), root)
+            self.store_frames(root, placed=False)
+            with self.assertRaisesRegex(AssertionError, "placed_head_renders"):
+                scene_shot.check_player_head(self.Probe(), root)
+
+    def test_authored_skin_has_opaque_contrasting_hat_and_base_window(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as directory:
+            pack = scene_shot.player_head_skin_pack(Path(directory))
+            self.assertEqual(json.loads((pack / "pack.mcmeta").read_text())["pack"]["pack_format"], 84)
+            with Image.open(pack / "assets/minecraft/textures/entity/player/wide/steve.png") as skin:
+                self.assertEqual(skin.size, (64, 64))
+                self.assertEqual(skin.getpixel((8, 8)), (0, 220, 220, 255))
+                self.assertEqual(skin.getpixel((40, 8)), (240, 0, 240, 255))
+                self.assertEqual(skin.getpixel((43, 11))[3], 0)
+            scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/player_head_scene.json").read_text())
+            heads = [step["cmd"] for step in scene["steps"] if "profile" in step.get("cmd", "")]
+            self.assertEqual(len(heads), 4)
+            self.assertTrue(all("HarnessHat" in command for command in heads))
+
+
+class WalkCaptureArtifactsTests(unittest.TestCase):
+    def test_each_retry_owns_an_artifact_and_misses_are_bounded(self):
+        spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 1.5,
+                "tolerance": 0.25, "min_speed": 0.1, "max_ticks": 3}
+        entity = {"entity_type": "minecraft:zombie", "entity_uuid": "mob",
+                  "walk_position": 1.4, "walk_speed": 0.2}
+
+        class Probe:
+            def call(self, name, args):
+                return {"entities": [entity]}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+
+        for client in ("native", "java"):
+            for positions, succeeds in (((1.0, 1.1, 1.5), True), ((1.0, 1.1, 1.2), False)):
+                with self.subTest(client=client, succeeds=succeeds), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    samples = iter(positions)
+                    names = []
+                    def capture(probe, artifact, name):
+                        names.append(name)
+                        image = artifact / f"{name}.png"
+                        # The real MCP artifact store uses exclusive creation.
+                        with image.open("xb") as file:
+                            file.write(b"image")
+                        frame = [{**entity, "walk_position": next(samples)}]
+                        sidecar = Path(str(image) + ".gait.json") if client == "java" else image.with_suffix(".json")
+                        sidecar.write_text(json.dumps(frame if client == "java" else {"gait_frame": frame}))
+                        return str(image)
+                    with patch.object(scene_shot, f"capture_{client}", side_effect=capture):
+                        if succeeds:
+                            result = scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)
+                            self.assertEqual(result, [str(root / f"{names[-1]}.png")])
+                        else:
+                            with self.assertRaisesRegex(RuntimeError, "walk phase not reached"):
+                                scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)
+                    self.assertEqual(len(names), spec["max_ticks"])
+                    self.assertEqual(len(set(names)), len(names))
+                    evidence = json.loads((root / "walk-walk.json").read_text())
+                    self.assertEqual(len(evidence["attempts"]), 3)
+                    self.assertEqual([Path(a["image"]).stem for a in evidence["attempts"]], names)
+
+
+class DroppedClockTests(unittest.TestCase):
+    class Probe:
+        def __init__(self):
+            self.report = {}
+        def check(self, name, value):
+            if not value:
+                raise AssertionError(name)
+
+    def frames(self, clock):
+        from PIL import Image, ImageDraw
+
+        images = {phase: Image.new("RGB", scene_shot.WINDOW, (130, 130, 130))
+                  for phase in ("ctx-day", "ctx-night", "compass-day")}
+        for phase, image in images.items():
+            draw = ImageDraw.Draw(image)
+            if phase == "ctx-day":
+                for box in ((385, 480, 410, 505), (975, 470, 1005, 500), (660, 390, 705, 435)):
+                    draw.rectangle(box, fill=(10, 10, 200))
+                draw.rectangle((338, 645, 390, 650), fill="black")
+            elif phase == "ctx-night":
+                draw.rectangle((355, 642, 360, 695), fill="black")
+            else:
+                draw.rectangle((430, 490, 445, 493), fill=(200, 10, 10))
+                draw.rectangle((1007, 482, 1010, 499), fill=(200, 10, 10))
+            if clock and phase != "compass-day":
+                draw.ellipse((355, 300, 415, 355), fill=(180, 150, 20))
+                draw.ellipse((360, 305, 410, 350), fill=(
+                    (10, 10, 200) if phase == "ctx-day" or clock == "static" else (45, 45, 45)))
+        return {phase: ({"camera_position": [1000.5, 161.62, 1001.5], "yaw": 0, "pitch": 0,
+                         "environment": {"time_of_day": "13000" if phase == "ctx-night" else "1000"}}, image)
+                for phase, image in images.items()}
+
+    def test_only_clock_face_change_passes_not_hud_or_static_clock(self):
+        with patch.object(scene_shot, "_load_shots", return_value=self.frames(None)):
+            with self.assertRaisesRegex(AssertionError, "dropped_clock_face_day"):
+                scene_shot.check_dynamic_context(self.Probe(), Path("/unused"))
+        with patch.object(scene_shot, "_load_shots", return_value=self.frames("static")):
+            with self.assertRaisesRegex(AssertionError, "dropped_clock_face_changed"):
+                scene_shot.check_dynamic_context(self.Probe(), Path("/unused"))
+        with patch.object(scene_shot, "_load_shots", return_value=self.frames("changed")):
+            probe = self.Probe()
+            scene_shot.check_dynamic_context(probe, Path("/unused"))
+            self.assertGreater(abs(probe.report["dropped_clock_face_blue_fraction"][0]
+                                   - probe.report["dropped_clock_face_blue_fraction"][1]), 0.15)
+
+    @unittest.skipUnless(os.environ.get("KRASNOKAMEN_CLOCK_TEST_FRAMES"), "requires retained original scene frames")
+    def test_stored_original_frames_reject_hud_contamination(self):
+        from PIL import Image
+
+        root = Path(os.environ["KRASNOKAMEN_CLOCK_TEST_FRAMES"])
+        with Image.open(root / "ctx-day.png") as day, Image.open(root / "ctx-night.png") as night:
+            with self.assertRaisesRegex(AssertionError, "dropped_clock_face_day"):
+                scene_shot.check_dropped_clock(self.Probe(), day.convert("RGB"), night.convert("RGB"))
+
+    def test_fixture_lifts_and_lights_dropped_clock_away_from_hud(self):
+        scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/dynamic_context_scene.json").read_text())
+        commands = [step["cmd"] for step in scene["steps"] if "cmd" in step]
+        self.assertTrue(any(command.startswith("summon minecraft:item 1001.5 161.4 1003.5 ")
+                            and "minecraft:clock" in command for command in commands))
+        self.assertIn("setblock 1001 162 1003 minecraft:sea_lantern", commands)
 
 
 class AssertEntitiesTests(unittest.TestCase):

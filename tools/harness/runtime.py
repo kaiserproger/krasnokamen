@@ -68,8 +68,6 @@ USERNAME_RE = re.compile(r"[A-Za-z0-9_]{1,16}\Z")
 CLIENT_PROFILES = ("vanilla", "loader", "svc", "dh")
 PLATFORMS = ("fabric", "neoforge", "forge")
 
-_CLIENT_MAX_HEAP = "-Xmx512M"
-
 _PROFILE_MOD_ARTIFACTS = {"svc": "svc-artifacts.json", "dh": "dh-artifacts.json"}
 
 
@@ -999,7 +997,6 @@ def start_client(
     from .audio import force_java_audio_isolation, require_java_audio_isolation
     force_java_audio_isolation(env, game_dir)
     require_java_audio_isolation(env, game_dir)
-    env.setdefault("JDK_JAVA_OPTIONS", _CLIENT_MAX_HEAP)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("wb")
     try:
@@ -1022,20 +1019,34 @@ def start_client(
                 start_new_session=True,
             )
         else:
+            from .java_launcher import modded_gradle_arguments
+
             loader_root = sibling_root("loader")
             gradlew = loader_root / "gradlew"
             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
+            # A global JDK_JAVA_OPTIONS heap cap also limits NeoForm's cold
+            # recompile JVM. Configure only the resolved game JavaExec task.
+            init = game_dir / "client-heap.gradle"
+            init.write_text(
+                "gradle.projectsEvaluated {\n"
+                "  gradle.rootProject.allprojects { project ->\n"
+                "    project.tasks.withType(JavaExec).configureEach {\n"
+                f"      if (path == {json.dumps(task)}) {{ maxHeapSize = '512m' }}\n"
+                "    }\n"
+                "  }\n"
+                "}\n")
             process = subprocess.Popen(
                 [
                     str(gradlew),
                     "--no-daemon",
                     "--no-configuration-cache",
+                    *([] if "JDK_JAVA_OPTIONS" in env else ["--init-script", str(init)]),
                     "-p",
                     str(loader_root),
                     f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
                     f"-Pkrasnokamen.clientMcp.username={username}",
-                    task,
+                    *modded_gradle_arguments(task),
                 ],
                 cwd=REPO_ROOT,
                 env=env,

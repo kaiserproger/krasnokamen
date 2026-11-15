@@ -91,6 +91,32 @@ class PrivateAudioTest(unittest.TestCase):
                     audio.private_audio_preflight(root)
 
 
+class SoundCaptureApiTest(unittest.TestCase):
+    def test_backend_named_sinks_have_distinct_monitors_and_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(audio.subprocess, "check_output", return_value="42\n") as load, \
+                patch.object(audio.subprocess, "Popen") as record, \
+                patch.object(audio.subprocess, "run") as unload, \
+                patch.object(audio.threading, "Thread"), \
+                patch.object(audio.SoundCapture, "sample") as ready:
+            root = Path(directory)
+            paths = []
+            # Exactly the constructor calls used by the screen and voice legs.
+            for sink in ("fabric_viewer_out", "svcspeakera_out", "svcspeakerb_out"):
+                capture = audio.SoundCapture(root, sink=sink, description=sink)
+                self.addCleanup(record.call_args.kwargs["stderr"].close)
+                self.assertEqual(capture.sink, sink)
+                self.assertEqual(capture.path, root / f"{sink}.f32le")
+                self.assertIn(f"sink_name={sink}", load.call_args.args[0])
+                self.assertIn(f"sink_properties=device.description={sink}", load.call_args.args[0])
+                self.assertIn(f"--device={sink}.monitor", record.call_args.args[0])
+                ready.assert_called_with(0.1)
+                paths.append(capture.path)
+                capture.close()
+                unload.assert_called_with(["pactl", "unload-module", "42"], check=True)
+            self.assertEqual(len(set(paths)), 3)
+
+
 class JavaAudioIsolationTest(unittest.TestCase):
     """Owner rule: an agent Java client never reaches the owner's speakers or microphone."""
 

@@ -14,9 +14,8 @@ on:
   the run's isolated ``game_dir/mods`` — fail-closed before Gradle starts on
   missing jars or hash/size mismatch;
 - mod presence is never treated as working voice/DH support;
-- child env always drops ``WAYLAND_DISPLAY`` and pins null audio, defaults
-  the N8-safe ``JDK_JAVA_OPTIONS=-Xmx512M`` heap without overriding an
-  explicit operator value;
+- child env always drops ``WAYLAND_DISPLAY`` and pins null audio; the
+  default client heap cap applies only to the game task, not Gradle's JVMs;
 - missing published artifacts for the MC/platform cell block with the exact
   prerequisite instead of launching.
 
@@ -26,6 +25,7 @@ Durable usage lives in ``docs/AGENT_TOOLING.md`` ("Java client profiles").
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import itertools
 import json
 import os
@@ -50,8 +50,9 @@ def _valid_kwargs(game_dir: Path, log_path: Path, **overrides):
     kwargs.update(overrides)
     return kwargs
 
-def _gradlew_present() -> mock._patch:
-    """Fake only the Gradle wrapper check; real game-dir/mod files stay real."""
+@contextmanager
+def _gradlew_present():
+    """Fake Gradle/sibling discovery only; real game-dir/mod files stay real."""
     real_is_file = Path.is_file
 
     def fake_is_file(self: Path) -> bool:
@@ -59,11 +60,85 @@ def _gradlew_present() -> mock._patch:
             return True
         return real_is_file(self)
 
-    return mock.patch.object(Path, "is_file", fake_is_file)
+    with mock.patch.object(Path, "is_file", fake_is_file), \
+            mock.patch.object(runtime, "sibling_root", return_value=Path("/test/loader")):
+        yield
 
 
 
 class ProfileTaskTests(unittest.TestCase):
+    def setUp(self):
+        selectors = mock.patch.dict(os.environ)
+        selectors.start()
+        self.addCleanup(selectors.stop)
+        os.environ.pop("KRASNOKAMEN_JAVA_VERSION", None)
+        os.environ.pop("KRASNOKAMEN_JAVA_PLATFORM", None)
+        os.environ.pop("JDK_JAVA_OPTIONS", None)
+
+    def test_exact_selectors_reach_spawned_gradle_command(self):
+        endpoints = (("26.1.2", "fabric"), ("26.1.2", "neoforge"), ("26.2", "neoforge"),
+                     ("26.3", "fabric"), ("26.3", "neoforge"))
+        for version, platform in endpoints:
+            with self.subTest(version=version, platform=platform), \
+                    tempfile.TemporaryDirectory() as directory, _gradlew_present(), \
+                    mock.patch.dict(os.environ, {"KRASNOKAMEN_JAVA_VERSION": version,
+                                                 "KRASNOKAMEN_JAVA_PLATFORM": platform,
+                                                 "KRASNOKAMEN_CLIENT_JAR": "/test/client.jar"}), \
+                    mock.patch.object(runtime.os, "access", return_value=True), \
+                    mock.patch.object(runtime, "port_open", return_value=False), \
+                    mock.patch.object(runtime, "wait_port"), \
+                    mock.patch.object(runtime.subprocess, "Popen") as launch:
+                root = Path(directory)
+                _, handle = runtime.start_client(**_valid_kwargs(
+                    root / "game", root / "client.log", client_profile="loader", platform=platform))
+                handle.close()
+                argv = launch.call_args.args[0]
+                self.assertIn(f"-PminecraftVersion={version}", argv)
+                self.assertIn("-Pkrasnokamen.clientJar=/test/client.jar", argv)
+                self.assertEqual(argv[-1], runtime._resolve_profile_task("loader", platform)["task"])
+                self.assertEqual(runtime.profile_prerequisites("loader", platform)["composition"],
+                                 [f"krasnokamen-loader-{platform}"])
+                if version == "26.1.2":
+                    self.assertIn("-PneoVersion=26.1.2.76", argv)
+                    self.assertIn("-PfabricApiVersion=0.155.2+26.1.2", argv)
+                elif version == "26.2":
+                    self.assertIn("-PneoVersion=26.2.0.93", argv)
+                else:
+                    self.assertIn("-PneoVersion=26.3.0.83", argv)
+                    self.assertIn("-PfabricApiVersion=0.163.0+26.3", argv)
+
+    def test_neoforge_client_heap_does_not_limit_gradle(self):
+        with tempfile.TemporaryDirectory() as directory, _gradlew_present(), \
+                mock.patch.object(runtime.os, "access", return_value=True), \
+                mock.patch.object(runtime, "port_open", return_value=False), \
+                mock.patch.object(runtime, "wait_port"), \
+                mock.patch.object(runtime.subprocess, "Popen") as launch:
+            root = Path(directory)
+            _, handle = runtime.start_client(**_valid_kwargs(
+                root / "game", root / "client.log", client_profile="loader", platform="neoforge"))
+            handle.close()
+            self.assertNotIn("JDK_JAVA_OPTIONS", launch.call_args.kwargs["env"])
+            argv = launch.call_args.args[0]
+            script = Path(argv[argv.index("--init-script") + 1]).read_text()
+            self.assertIn('path == ":loader-neoforge:runClientMcp"', script)
+            self.assertIn("maxHeapSize = '512m'", script)
+            self.assertEqual(argv[-1], ":loader-neoforge:runClientMcp")
+
+    def test_legacy_selectors_refuse_composition_change_before_spawn(self):
+        with tempfile.TemporaryDirectory() as directory, _gradlew_present(), \
+                mock.patch.dict(os.environ, {"KRASNOKAMEN_JAVA_VERSION": "26.1.2",
+                                             "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}), \
+                mock.patch.object(runtime.os, "access", return_value=True), \
+                mock.patch.object(runtime, "port_open", return_value=False), \
+                mock.patch.object(runtime, "wait_port"), \
+                mock.patch.object(runtime.subprocess, "Popen") as launch:
+            root = Path(directory)
+            with self.assertRaisesRegex(MissingCapability, "conflicts with task :fabric-agent"):
+                runtime.start_client(**_valid_kwargs(root / "game", root / "client.log"))
+            launch.assert_not_called()
+            self.assertEqual(runtime._resolve_profile_task(None, None)["composition"],
+                             ["krasnokamen-agent-neoforge-mod"])
+
     def _force_driver(self, driver: str):
         """Run the real forcing, then leave ``driver`` in the env (a broken forcing)."""
         real = audio.force_java_audio_isolation
@@ -172,7 +247,11 @@ class ProfileTaskTests(unittest.TestCase):
                     self.assertNotIn("WAYLAND_DISPLAY", env)
                     self.assertEqual(env["ALSOFT_DRIVERS"], "null")
                     self.assertNotIn("PULSE_SINK", env)
-                    self.assertEqual(env["JDK_JAVA_OPTIONS"], "-Xmx512M")
+                    self.assertNotIn("JDK_JAVA_OPTIONS", env)
+                    self.assertIn("--init-script", argv)
+                    script = Path(argv[argv.index("--init-script") + 1]).read_text()
+                    self.assertIn('path == ":fabric-agent:runClientMcp"', script)
+                    self.assertIn("maxHeapSize = '512m'", script)
                     seen["env"] = env
                 finally:
                     handle.close()
@@ -273,6 +352,7 @@ class ProfileTaskTests(unittest.TestCase):
                     **_valid_kwargs(root / "game", root / "client.log"))
                 try:
                     self.assertEqual(launch.call_args.kwargs["env"]["JDK_JAVA_OPTIONS"], "-Xmx1G")
+                    self.assertNotIn("--init-script", launch.call_args.args[0])
                 finally:
                     handle.close()
 

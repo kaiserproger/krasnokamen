@@ -127,7 +127,7 @@ def main():
         runner = ROOT / "tools/dev/mem-run.sh"
 
         def v2(phase, native, anvil):
-            command = [str(runner), "-x", "-m", "8G", "env", "CARGO_BUILD_JOBS=6",
+            command = [str(runner), "-m", "8G", "env", "CARGO_BUILD_JOBS=6",
                        "CARGO_PROFILE_DEV_DEBUG=0", "CARGO_PROFILE_TEST_DEBUG=0",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD={native}", f"KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE={phase}",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL={anvil}",

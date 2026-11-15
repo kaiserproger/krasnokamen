@@ -720,7 +720,7 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 # The image is the last presented render, interpolated from the
                 # previous tick: resample it instead of waiting a whole tick,
                 # which under load can skip the requested phase entirely.
-                image = capture(probe, artifact, value["name"])
+                image = capture(probe, artifact, f"{value['name']}-attempt-{len(attempts) + 1}")
                 after = probe.call("minecraft_list_entities", args)
                 frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
                 frame_data = json.loads(frame_path.read_text())
@@ -729,7 +729,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 same_entity = [entity for entity in after.get("entities", [])
                                if first.get("entity_uuid")
                                and entity.get("entity_uuid") == first["entity_uuid"]]
-                attempts.append({"before": before, "after": after, "frame": frame})
+                attempts.append({"before": before, "after": after, "frame": frame,
+                                 "image": image, "frame_path": str(frame_path)})
                 if matching_walk(frame, value) is not None and len(same_entity) == 1:
                     break
                 rendered = [entity for entity in frame_entities
@@ -1211,8 +1212,26 @@ def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("poppy_no_directional_shading", abs(lums[0] - lums[1]) < 8.0)
 
 
+def player_head_skin_pack(artifact: Path) -> Path:
+    """An authored offline Steve skin: cyan base, opaque magenta hat with a face window."""
+    from PIL import Image, ImageDraw
+
+    pack = artifact / "head-skin-pack"
+    texture = pack / "assets/minecraft/textures/entity/player/wide/steve.png"
+    texture.parent.mkdir(parents=True)
+    skin = Image.new("RGBA", (64, 64), (0, 220, 220, 255))
+    draw = ImageDraw.Draw(skin)
+    draw.rectangle((32, 0, 63, 15), fill=(240, 0, 240, 255))
+    draw.rectangle((42, 10, 45, 13), fill=(0, 0, 0, 0))
+    skin.save(texture)
+    (pack / "pack.mcmeta").write_text(json.dumps({
+        "pack": {"description": "Authored player-head hat regression skin", "pack_format": 84},
+    }) + "\n")
+    return pack
+
+
 def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
-    """MODEL-OPUS-N3: placed and worn player heads render (hat layer needs an online skin)."""
+    """Placed/worn offline heads and the contrasting authored hat layer."""
     shots = _load_shots(probe, artifact, ("head-empty", "head-block", "head-worn", "head-none"))
     empty_f, block_f = shots["head-empty"][0], shots["head-block"][0]
     probe.check("head_front_camera_unchanged", all(
@@ -1222,12 +1241,46 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("head_back_camera_unchanged", all(
         abs(a - b) < 0.01 for a, b in zip(worn_f["camera_position"], none_f["camera_position"])
     ) and abs(worn_f["yaw"] - none_f["yaw"]) < 0.01 and abs(worn_f["pitch"] - none_f["pitch"]) < 0.01)
-    placed = _changed(shots["head-block"][1], shots["head-empty"][1], (880, 520, 1080, 680))
+    # player_head_scene: head at (1000.5,160.25,1004.5), camera
+    # (1000.5,161.62,1001.5), yaw/pitch 0, vertical FOV 70, 1280x720.
+    # The projected half-block head is x593..687/y534..641 (hat expands it).
+    head_box = (580, 520, 700, 655)
+    placed = _changed(shots["head-block"][1], shots["head-empty"][1], head_box)
     worn = _changed(shots["head-worn"][1], shots["head-none"][1], (560, 280, 760, 420))
     probe.report["placed_head_changed_pixels"] = placed
     probe.report["worn_head_changed_pixels"] = worn
+    magenta = lambda r, g, b: r > 60 and b > 60 and r > g * 2 and b > g * 2
+    hat = _count(shots["head-block"][1], head_box, magenta)
+    probe.report["placed_head_hat_layer_pixels"] = hat
+    probe.report["placed_head_roi"] = list(head_box)
     probe.check("placed_head_renders", placed > 100)
+    probe.check("placed_head_hat_layer_pixels", hat > 100)
     probe.check("worn_head_renders", worn > 500)
+
+def check_dropped_clock(probe: ProbeSteps, day: Any, night: Any) -> None:
+    """Compare only the gold-enclosed face, not HUD, sky or a rotating silhouette."""
+    # dynamic_context_scene lifts the clock to eye height, lights it equally in
+    # both phases, and keeps this search box above chat/hotbar and left of the mob.
+    box = (320, 260, 450, 400)
+    fractions = []
+    for phase, image in (("day", day), ("night", night)):
+        crop = image.crop(box)
+        gold = lambda r, g, b: r > b * 1.25 and g > b * 1.15 and g > 20 and r > g * 0.9
+        face = []
+        for y in range(crop.height):
+            ring = [x for x in range(crop.width) if gold(*crop.getpixel((x, y)))]
+            if len(ring) >= 2 and ring[-1] - ring[0] >= 12:
+                # Exclude the rim itself, including its shaded/antialiased edge.
+                face.extend(crop.getpixel((x, y)) for x in range(ring[0] + 3, ring[-1] - 2))
+        probe.report[f"dropped_clock_face_pixels_{phase}"] = len(face)
+        probe.check(f"dropped_clock_face_{phase}", len(face) >= 100)
+        blue = sum(b > r * 1.35 and b > g * 1.15 and b > 15 for r, g, b in face)
+        fractions.append(blue / len(face))
+    probe.report["dropped_clock_face_blue_fraction"] = fractions
+    # A proportion is invariant to the dropped sprite's rotation/size: a moving
+    # rim or background cannot masquerade as a changed clock texture.
+    probe.check("dropped_clock_face_changed", abs(fractions[0] - fractions[1]) > 0.15)
+
 
 def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-DYNAMIC-CONTEXT: shelf, dropped and held clocks plus two shelf
@@ -1269,19 +1322,7 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
         probe.report[f"{name}_blue_pixels"] = [sum(m1), sum(m2)]
         probe.report[f"{name}_changed"] = changed
         probe.check(f"{name}_face_changed", changed >= threshold)
-    # Dropped clock: the dark needle angle must change between received day and night.
-    dark = lambda r, g, b: max(r, g, b) < 95 and max(r, g, b) - min(r, g, b) < 25
-    drop_box = (335, 640, 395, 700)
-    drop_angles = []
-    for name, image in (("day", day), ("night", night)):
-        crop = image.crop(drop_box)
-        w, h = crop.size
-        px = [(x, y) for y in range(h) for x in range(w) if dark(*crop.getpixel((x, y)))]
-        probe.report[f"dropped_clock_dark_pixels_{name}"] = len(px)
-        probe.check(f"dropped_clock_face_{name}", len(px) >= 100)
-        drop_angles.append(axis_angle(px))
-    probe.report["dropped_clock_axis_angles"] = [round(a, 1) for a in drop_angles]
-    probe.check("dropped_clock_face_changed", axis_diff(drop_angles[0], drop_angles[1]) > 30.0)
+    check_dropped_clock(probe, day, night)
     red = lambda r, g, b: r > g * 1.25 and r > b * 1.25 and r > 50
     comp = shots["compass-day"][1]
     angles = []
@@ -1537,9 +1578,15 @@ def run(
         ctx.logs.append(str(artifact / "xvfb.log"))
         old_xdg = os.environ.get("XDG_DATA_HOME")
         old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
+        old_packs = os.environ.get("KRASNOKAMEN_CLIENT_RESOURCE_PACKS")
         try:
             os.environ["XDG_DATA_HOME"] = str(xdg)
             os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
+            if ctx.scenario_id == "native-player-head":
+                pack = player_head_skin_pack(artifact)
+                os.environ["KRASNOKAMEN_CLIENT_RESOURCE_PACKS"] = os.pathsep.join(
+                    [old_packs, str(pack)] if old_packs else [str(pack)])
+                ctx.client_evidence["head_skin_pack"] = str(pack)
             if ctx.client == "java":
                 client, client_log, mcp = start_java(
                     ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
@@ -1550,7 +1597,8 @@ def run(
             else:
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:
-            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings)):
+            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings),
+                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs)):
                 if old is None:
                     os.environ.pop(key, None)
                 else:
