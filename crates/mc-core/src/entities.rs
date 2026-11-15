@@ -1277,7 +1277,7 @@ impl EntityStore {
     }
 
     /// Whether `id` is a corpse: a row on the dying clock (see
-    /// [`Self::begin_dying`]). Other dead rows keep their checkpoint custody.
+    /// [`Self::begin_dying`]). Other dead non-player rows must be removed before capture.
     pub(crate) fn is_dying(&self, id: EntityId) -> bool {
         self.dying.contains_key(&id)
     }
