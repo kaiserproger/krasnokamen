@@ -28,8 +28,8 @@ fn moog_versioned_pool_element_resolves_selected_template() {
 }
 
 #[test]
-fn moog_overworld_structure_parses_crystal_rules_and_refuses_unknown_layout() {
-    let mut value = serde_json::json!({
+fn moog_start_rules_parse_but_layout_is_refused() {
+    let value = serde_json::json!({
         "type": "moogs_structures:moogs_structures_generic_jigsaw_structure",
         "start_pool": "mvs:crystal/temp",
         "size": 2,
@@ -44,18 +44,15 @@ fn moog_overworld_structure_parses_crystal_rules_and_refuses_unknown_layout() {
         "spawn_overrides": {}
     });
     let id = identifier("mvs:crystal");
-    let spec = parse_structure(&id, &value).expect("crystal's Moog codec");
+    let spec = parse_moog_start_checks(&id, &value).expect("crystal's Moog start checks");
     assert_eq!(
-        spec.moog_start_checks,
+        Some(spec),
         Some(MoogStartChecks {
             cannot_spawn_in_liquid: true,
             terrain_check: Some((2, 3)),
         })
     );
-    assert_eq!(spec.max_distance_from_center, MaxDistance { horizontal: 80, vertical: 80 });
-    assert!(!spec.use_expansion_hack);
-    value["burying_type"] = serde_json::json!("AVERAGE_LAND");
-    assert!(parse_structure(&id, &value).is_err());
+    assert!(parse_structure(&id, &value).is_err(), "piece-limited layout is not yet implemented");
 }
 
 #[test]
