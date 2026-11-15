@@ -48,7 +48,7 @@ pub(crate) fn prepare_tags(
     };
     fields.retain(|(key, _)| key != "Tags");
     if let Some(tags) = tags {
-        fields.push(("Tags".into(), tags.clone()));
+        fields.push(("Tags".into(), crate::command_tag::normalized(tags)?));
     }
     let mut bytes = Vec::new();
     mc_nbt::write_named(&mut bytes, "", &mc_nbt::Tag::Compound(fields))

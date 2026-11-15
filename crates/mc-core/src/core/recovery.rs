@@ -236,7 +236,11 @@ pub(super) fn load_dimension_state(
                 dimension.name()
             ))
         })?;
-        tick_state.offline_players.insert(uuid, player.clone());
+        let mut player = player.clone();
+        player.opaque_player_fields =
+            crate::command_tag::normalize_opaque(player.opaque_player_fields)
+                .map_err(CoreError::Storage)?;
+        tick_state.offline_players.insert(uuid, player);
     }
     let mut max_wire_id: i32 = 0;
     // One growth for the known population: doubling the cold columns while the
@@ -590,7 +594,9 @@ pub(crate) fn restore_entity(
         row.special_mob = record.state.special_mob.clone();
         row.bee = record.state.bee.clone();
         row.allay = record.state.allay.clone();
-        row.opaque_entity_fields = record.state.opaque_entity_fields.clone();
+        row.opaque_entity_fields =
+            crate::command_tag::normalize_opaque(record.state.opaque_entity_fields.clone())
+                .map_err(CoreError::Storage)?;
         crate::entity_life::restore_appearance(body, row);
         crate::entity_controls::sync_no_gravity(
             Arc::make_mut(&mut row.appearance),

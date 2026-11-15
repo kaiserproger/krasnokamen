@@ -99,13 +99,34 @@ fn validate_tags(value: &Tag) -> Result<(), CommandError> {
     let Tag::List(list) = value else {
         return Err(error("Invalid Tags: expected a list of strings"));
     };
-    if list.elements.len() > 1024
-        || list
-            .elements
-            .iter()
-            .any(|tag| !matches!(tag, Tag::String(_)))
+    if list
+        .elements
+        .iter()
+        .any(|tag| !matches!(tag, Tag::String(_)))
     {
+        return Err(error("Invalid Tags: every list element must be a string"));
+    }
+    if list.elements.len() > 1024 {
         return Err(error("Invalid Tags: expected at most 1024 strings"));
+    }
+    for (index, tag) in list.elements.iter().enumerate() {
+        let Tag::String(value) = tag else {
+            unreachable!()
+        };
+        // NBT uses Java Modified UTF-8 (UTF-16 code units, not UTF-8 bytes).
+        let bytes: usize = value
+            .encode_utf16()
+            .map(|unit| match unit {
+                1..=0x7f => 1,
+                0..=0x7ff => 2,
+                _ => 3,
+            })
+            .sum();
+        if bytes > u16::MAX as usize {
+            return Err(error(format!(
+                "Invalid Tags: tag at index {index} is {bytes} Modified UTF-8 bytes; maximum is 65535"
+            )));
+        }
     }
     Ok(())
 }
@@ -122,7 +143,10 @@ pub(crate) fn retained_tags(nbt: &Tag) -> Result<Option<Vec<u8>>, CommandError> 
     mc_nbt::write_named(
         &mut bytes,
         "",
-        &Tag::Compound(vec![("Tags".into(), tags.clone())]),
+        &Tag::Compound(vec![(
+            "Tags".into(),
+            crate::command_tag::normalized(tags).map_err(error)?,
+        )]),
     )
     .map_err(|failure| error(format!("Invalid Tags: {failure}")))?;
     Ok(Some(bytes))

@@ -486,7 +486,7 @@ impl EntityStateImage {
             record.id.as_str(),
             "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
         );
-        let retained: Vec<_> = record
+        let mut retained: Vec<_> = record
             .extra_fields
             .iter()
             .filter(|(key, _)| {
@@ -515,6 +515,7 @@ impl EntityStateImage {
             })
             .cloned()
             .collect();
+        crate::command_tag::normalize_fields(&mut retained).map_err(CoreError::Storage)?;
         if !retained.is_empty() {
             mc_nbt::write_named(
                 &mut image.opaque_entity_fields,
