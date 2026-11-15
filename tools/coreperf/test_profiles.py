@@ -202,7 +202,11 @@ class ProfilesTests(unittest.TestCase):
             receipt = pin / "manifest.json"
             receipt.write_text(json.dumps(manifest))
             with patch.object(profiles, "PIN_ROOT", store):
-                self.assertEqual(profiles.pinned_binary(binary, "server"), manifest)
+                try:
+                    accepted = profiles.pinned_binary(binary, "server")
+                except ValueError as error:
+                    self.fail(f"valid relocated release pin was rejected: {error}")
+                self.assertEqual(accepted, manifest)
                 with self.assertRaises(ValueError):
                     profiles.pinned_binary(binary, "bots")
                 for path in (str(store / "original-pin" / "other-binary"), None):

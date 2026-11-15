@@ -1,0 +1,29 @@
+diff --git a/tools/harness/backends/native_matrix.py b/tools/harness/backends/native_matrix.py
+--- a/tools/harness/backends/native_matrix.py
++++ b/tools/harness/backends/native_matrix.py
+@@ -805,6 +805,7 @@
+         if blocker:
+             row['note']=blocker
+         else:
++            oracle_started=False
+             try:
+                 with Lane(ctx,scenario,directory,binary,native,26301+(index%90),timeout,tuple(sorted(exclusions))) as lane:
+                     from ..matrix_api import MissingCapability
+@@ -816,6 +817,7 @@
+                     row['excluded_plugins']=list(sorted(exclusions))
+                     with ProbeSteps(lane.clients[0],directory/'probe',timeout,scenario['id']) as steps:
+                         lane.steps=steps
++                        oracle_started=True
+                         lane.health = HealthInterval(lane.host)
+                         row['always_oracle'] = {'segments': lane.health.segments,
+                                                 'restart_boundaries': lane.health.restart_boundaries,
+@@ -849,7 +851,8 @@
+             except (NotImplementedError, MissingCapability) as error:
+                 row['note']=str(error)
+             except Exception as error:
+-                row['status']='fail';row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
++                row['status']=failure_status(oracle_started)
++                row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
+         record_outcome(details, row, declared)
+         (directory/'outcome.json').write_text(json.dumps(row,indent=2))
+         print('[native-matrix]',row['status'],scenario['id'],row['note'][:180],flush=True)

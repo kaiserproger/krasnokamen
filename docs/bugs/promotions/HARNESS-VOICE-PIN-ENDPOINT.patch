@@ -1,0 +1,13 @@
+diff --git a/tools/harness/backends/screens_voice_qa.py b/tools/harness/backends/screens_voice_qa.py
+--- a/tools/harness/backends/screens_voice_qa.py
++++ b/tools/harness/backends/screens_voice_qa.py
+@@ -176,7 +176,8 @@
+     ctx.client_evidence["screens_voice"] = evidence
+     try:
+         for leg in legs:
+-            {"screens": screens_leg, "voice": voice_leg}[leg](ctx, binary, timeout, verdicts, evidence)
++            with java_endpoint(leg):
++                {"screens": screens_leg, "voice": voice_leg}[leg](ctx, binary, timeout, verdicts, evidence)
+     finally:
+         (ctx.artifact_dir / "verdicts.json").write_text(json.dumps(verdicts, indent=2) + "\n")
+     failed = [name for name, value in verdicts.items() if value is not True]

@@ -1,0 +1,30 @@
+diff --git a/tools/harness/java_matrix_client.py b/tools/harness/java_matrix_client.py
+--- a/tools/harness/java_matrix_client.py
++++ b/tools/harness/java_matrix_client.py
+@@ -81,6 +81,17 @@
+                     "slot_count": container.get("slot_count"),
+                     "state_id": container.get("container_state_id")}
+             cursor = container.get("carried")
++        events = None
++        if "received_system_chat" in observed:
++            messages = observed["received_system_chat"]
++            dropped = observed.get("dropped_system_chat")
++            if not isinstance(messages, list) or not all(isinstance(message, str) for message in messages):
++                raise MissingCapability("snapshot:system_chat:invalid_receipts")
++            if type(dropped) is not int or dropped < 0:
++                raise MissingCapability("snapshot:system_chat:missing_loss_counter")
++            if dropped:
++                raise MissingCapability(f"snapshot:system_chat:lost_receipts:{dropped}")
++            events = messages
+         xp = {key: player[native] for key, native in (
+             ("total", "total_experience"), ("level", "experience_level"),
+             ("progress", "experience_progress"),
+@@ -88,7 +99,7 @@
+         return {"position": position, "inventory": JavaMatrixClient.inventory_slots(observed.get("inventory")),
+                 "cursor": cursor, "menu": menu, "health": player.get("health"),
+                 # The applied-packet journal, not bounded GUI history, fences inputs.
+-                "food": player.get("food"), "xp": xp, "events": None,
++                "food": player.get("food"), "xp": xp, "events": events,
+                 "in_play": observed.get("in_play"), "raw": observed,
+                 "connected": observed.get("connected"),
+                 "uuid": player.get("entity_uuid"), "dimension": observed.get("dimension"),

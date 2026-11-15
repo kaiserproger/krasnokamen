@@ -609,7 +609,15 @@ class BattleRunnerTests(unittest.TestCase):
         runner = load_runner()
         def capture(process, run):
             runner.watch_ready(run, process, 30)
-            runner.watch_ready(run / 'completion.ready', process, 30)
+            try:
+                runner.watch_ready(run / 'completion.ready', process, 30)
+            except RuntimeError:
+                # An exited runner is not itself a regression assertion. Only
+                # its observed shutdown before capture release proves this row;
+                # startup/argument failures remain unrunnable errors.
+                commands = (run / 'commands.txt').read_text().splitlines()
+                self.assertNotIn('stop', commands, 'server stopped before the scenario captured its end camera')
+                raise
             commands = (run / 'commands.txt').read_text().splitlines()
             self.assertIn('battle start', commands)
             self.assertNotIn('battle pause', commands)

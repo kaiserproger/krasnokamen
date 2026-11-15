@@ -1,0 +1,65 @@
+diff --git a/tools/harness/matrix_domains/random.py b/tools/harness/matrix_domains/random.py
+index 7c797266f..afba09ec6 100644
+--- a/tools/harness/matrix_domains/random.py
++++ b/tools/harness/matrix_domains/random.py
+@@ -407,12 +407,18 @@ def _action(ctx, step):
+         _supply(ctx, actor, 'minecraft:oak_log', 1)
+         actor.open_inventory()
+         _click(actor, _slot(actor, 'minecraft:oak_log'))
++        actor.wait_until(lambda: (actor.snapshot().get('cursor') or {}).get('item_id') == 'minecraft:oak_log',
++                         description='received crafting cursor')
++        carried_before = actor.snapshot().get('cursor')
++        if not carried_before or carried_before['item_id'] != 'minecraft:oak_log':
++            raise AssertionError('craft input was not received on cursor')
+         _click(actor, 1, button=1)
+         # Vanilla can send the craft-result update before the input-slot
+         # update. A changed state ID alone may still expose the old cursor.
+         actor.wait_until(lambda: any(s['slot'] == 1 and s['item_id'] == 'minecraft:oak_log'
+-                                     for s in actor.snapshot()['menu']['slots']),
+-                         description='received crafting input')
++                                     for s in actor.snapshot()['menu']['slots'])
++                         and (actor.snapshot().get('cursor') or {}).get('count', 0) == carried_before['count'] - 1,
++                         description='received crafting input and cursor')
+         if actor.snapshot().get('cursor'):
+             _click(actor, 23)
+         actor.wait_until(lambda: any(s['slot'] == 0 for s in actor.snapshot()['menu']['slots']),
+diff --git a/tools/harness/quirk_parity/player.py b/tools/harness/quirk_parity/player.py
+index 77808fb35..08fd68c54 100644
+--- a/tools/harness/quirk_parity/player.py
++++ b/tools/harness/quirk_parity/player.py
+@@ -55,6 +55,9 @@ def run_player_script(ctx, row, jar, vanilla_data):
+             name = f'Proto{index}'
+             client = ProtocolMatrixClient(name, ('127.0.0.1', server.port), directory,
+                                           vanilla_data, server.command, account_uuid=offline_uuid(name))
++            # Vanilla omits cursor packets when the client's prediction matches;
++            # force a correction so the observer never relies on predicted state.
++            client.observer.force_cursor_sync = True
+             client.chunk_min_y = minimum
+             client.observer.chunk_min_y = minimum
+             clients.append(client)
+diff --git a/tools/harness/wire.py b/tools/harness/wire.py
+--- a/tools/harness/wire.py
++++ b/tools/harness/wire.py
+@@ -267,8 +267,11 @@
+     """ContainerClick with an optional deliberately wrong cursor prediction."""
+     if mode not in range(7):
+         raise ValueError(f"unknown click mode {mode}")
++    # A count above the fixture's max stack forces vanilla to send its actual
++    # carried stack, including an explicit empty cursor after placement.
++    carried = b"\x01\x01\x7f\x00\x00" if force_cursor_sync else b"\x00"
+     return (write_varint(window) + write_varint(state_id) + struct.pack(">hb", slot, button)
+-            + write_varint(mode) + b"\x00\x00")
++            + write_varint(mode) + b"\x00" + carried)
+ 
+ 
+ def decode_section_blocks(body: bytes) -> dict[tuple[int, int, int], int]:
+@@ -568,7 +571,8 @@
+               state_id: int | None = None) -> None:
+         with self.condition:
+             state = self.menus[window]["state_id"] if state_id is None else state_id
+-        self.send(0x12, click_body(window, state, slot, button, mode))
++        self.send(0x12, click_body(window, state, slot, button, mode,
++                                   force_cursor_sync=getattr(self, 'force_cursor_sync', False)))
+         self.send(0x0D)
+ 
+     def _forget_menu(self, window: int) -> None:

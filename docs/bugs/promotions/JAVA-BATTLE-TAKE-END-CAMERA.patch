@@ -1,0 +1,48 @@
+diff --git a/tools/battle/run-battle.py b/tools/battle/run-battle.py
+--- a/tools/battle/run-battle.py
++++ b/tools/battle/run-battle.py
+@@ -522,7 +522,7 @@
+     return binary, manifest
+ 
+ 
+-def watch_ready(path, process, timeout=180):
++def watch_ready(path, process, timeout=180, *, label='recorder', ready_marker=None):
+     """Wait on a directory event or child exit, not a timer polling loop."""
+     libc = ctypes.CDLL(None, use_errno=True)
+     fd = libc.inotify_init1(os.O_CLOEXEC)
+@@ -533,6 +533,8 @@
+             raise OSError(ctypes.get_errno(), 'inotify_add_watch')
+         pidfd = os.pidfd_open(process.pid)
+         try:
++            if ready_marker is not None:
++                ready_marker.touch(exist_ok=False)
+             if path.exists():
+                 return
+             import time
+@@ -540,14 +542,14 @@
+             while True:
+                 remaining = deadline - time.monotonic()
+                 if remaining <= 0:
+-                    raise TimeoutError(f'recorder did not create {path}')
++                    raise TimeoutError(f'{label} did not create {path} within {timeout} s')
+                 ready, _, _ = select.select([fd, pidfd], [], [], remaining)
+                 if fd in ready:
+                     os.read(fd, 65536)
+                     if path.exists():
+                         return
+                 if pidfd in ready:
+-                    raise RuntimeError(f'recorder exited before readiness: {process.wait()}')
++                    raise RuntimeError(f'{label}: process exited before {path.name}: {process.wait()}')
+         finally:
+             os.close(pidfd)
+     finally:
+@@ -898,6 +900,9 @@
+                 or type(last_tick) is not int or type(gaps) is not int or (gaps != 0 and not a.allow_marker_gaps)
+                 or first_tick > battle_start or last_tick <= battle_start):
+             raise RuntimeError('recorder receipt lacks a continuous battle marker range')
++        if a.completion_timeout is not None:
++            watch_ready(root / 'completion.done', server, a.completion_timeout,
++                        label='live scenario completion barrier', ready_marker=root / 'completion.ready')
+         send(commands[2])
+         pause_line = expect(messages, 'Battle paused tick=')
+         battle_end = int(pause_line.split('Battle paused tick=', 1)[1].strip().split()[0])

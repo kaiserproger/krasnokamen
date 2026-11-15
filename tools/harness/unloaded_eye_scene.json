@@ -1,0 +1,106 @@
+{
+  "seed": 100,
+  "operator": true,
+  "username": "EyeTeleport",
+  "server_view_distance": 4,
+  "client_latency_ms": 1,
+  "client_settings": {
+    "graphics_preset": "low",
+    "render_distance": 4,
+    "fov": 70
+  },
+  "steps": [
+    {
+      "cmd": "gamemode creative @s"
+    },
+    {
+      "wait_chat": "Creative Mode"
+    },
+    {
+      "observe": "before-teleport"
+    },
+    {
+      "shot": "before-teleport"
+    },
+    {
+      "tp": [
+        1000.5,
+        176,
+        1000.5,
+        0,
+        20
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "observe": "after-teleport"
+    },
+    {
+      "cmd": "fill 996 174 996 1004 174 1004 minecraft:stone"
+    },
+    {
+      "cmd": "fill 996 175 996 1004 179 1004 minecraft:water"
+    },
+    {
+      "wait_chat": "Changed 405 block(s)"
+    },
+    {
+      "tp": [
+        1000.5,
+        176,
+        1000.5,
+        0,
+        20
+      ]
+    },
+    {
+      "wait_terrain": {
+        "name": "destination-terrain",
+        "args": {
+          "sections": [
+            [
+              62,
+              10,
+              62
+            ],
+            [
+              62,
+              11,
+              62
+            ]
+          ],
+          "timeout_seconds": 120
+        }
+      }
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "observe": "water-arrived"
+    },
+    {
+      "shot": "water-arrived"
+    },
+    {
+      "look": {
+        "yaw_deg": 90,
+        "pitch_deg": 20
+      }
+    },
+    {
+      "wait_ticks": 2
+    },
+    {
+      "observe": "still-playing"
+    },
+    {
+      "shot": "still-playing"
+    }
+  ]
+}

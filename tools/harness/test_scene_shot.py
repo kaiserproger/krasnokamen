@@ -1247,7 +1247,9 @@ class PlayerHeadTests(unittest.TestCase):
             pack = scene_shot.player_head_skin_pack(Path(directory))
             self.assertEqual(json.loads((pack / "pack.mcmeta").read_text())["pack"]["pack_format"], 84)
             for model in ("slim", "wide"):
-                with Image.open(pack / f"assets/minecraft/textures/entity/player/{model}/steve.png") as skin:
+                texture = pack / f"assets/minecraft/textures/entity/player/{model}/steve.png"
+                self.assertTrue(texture.is_file(), f"{model} default skin has no authored hat fixture")
+                with Image.open(texture) as skin:
                     self.assertEqual(skin.size, (64, 64))
                     self.assertEqual(skin.getpixel((8, 8)), (0, 220, 220, 255))
                     self.assertEqual(skin.getpixel((40, 8)), (240, 0, 240, 255))

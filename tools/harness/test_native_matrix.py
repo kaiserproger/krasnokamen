@@ -12,6 +12,71 @@ from tools.harness.backends import native_matrix
 
 
 class NativeMatrixTests(unittest.TestCase):
+    def test_wave_never_credits_missing_slow_or_restart_gap_health(self):
+        from unittest.mock import MagicMock
+
+        baseline = {'latest_tick': 10, 'source_skipped_ticks_total': 0,
+                    'instance_started_unix_ns': 42}
+        good = dict(baseline, latest_tick=11, after_tick=10, overrun=False,
+                    samples=[{'tick': 11, 'wall_us': 1000}])
+        for fault, expected in (('none', 'pass'), ('slow', 'fail'),
+                                ('missing', 'blocked'), ('log', 'fail'), ('restart_gap', 'blocked')):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                binary = root / 'server'
+                binary.write_bytes(b'server')
+                log = root / 'server.log'
+                log.write_text('INFO ready\n')
+                row = {'id': 'case', 'subject': 'containers.chest', 'origin': 'full', 'context': {
+                    'client_kind': 'native_linux', 'network_condition': 'normal',
+                    'server_lifecycle': 'steady', 'player_count': '1',
+                    'game_mode': 'survival', 'dimension': 'overworld'}}
+                matrix = root / 'matrix.json'
+                matrix.write_text(json.dumps({'scenarios': [row]}))
+                ctx = SimpleNamespace(extra_args=['--matrix', str(matrix), '--ledger', str(root/'ledger'),
+                    '--run-root', str(root/'runs')], client='native', windowed=True, server_bin=binary,
+                    plugins_dir=root, timeout_seconds=5, artifact_dir=root/'artifact',
+                    client_evidence={}, commands=[], cwds=[], exits=[], logs=[])
+                ticks = iter((1, 2))
+                host = SimpleNamespace(enabled_plugins=[], running=True, _process=object(), log_path=log,
+                    dashboard_full_stats=lambda: {'simulation_tick': next(ticks),
+                        'tick': {'source_tick': 2, 'samples': 1, 'p50_us': 1000}})
+                client = SimpleNamespace(call_tool=lambda name, *args:
+                    {'status': 'ok'} if name == 'minecraft_wait_ticks' else {'in_play': True})
+                lane = SimpleNamespace(host=host, clients=[client])
+                manager = MagicMock()
+                manager.__enter__.return_value = lane
+                manager.__exit__.return_value = False
+                final = dict(good)
+                if fault == 'slow':
+                    final['samples'] = [{'tick': 11, 'wall_us': 50000}]
+                elif fault == 'missing':
+                    final['samples'] = []
+
+                def action(lane, scenario):
+                    if fault == 'restart_gap':
+                        lane.health.restart_boundaries.append({'kind': 'clean'})
+
+                def capture(*args):
+                    if fault == 'log':
+                        log.write_text('ERROR during final capture\n')
+
+                with patch.object(native_matrix.native_client, 'resolve_binary', return_value=binary), \
+                     patch.object(native_matrix.native_client, 'capture', side_effect=capture), \
+                     patch.object(native_matrix, 'Lane', return_value=manager), \
+                     patch.object(native_matrix, 'storage', side_effect=action), \
+                     patch.object(native_matrix.HealthInterval, '_snapshot', side_effect=[baseline, final]), \
+                     patch('tools.harness.matrix_execution.select_plugin_profile', return_value=([], None)), \
+                     patch('tools.harness.matrix_execution.copy_plugins', return_value=[]), \
+                     patch('tools.harness.matrix_execution.plugin_set_fingerprint', return_value='sha'):
+                    if expected == 'pass':
+                        native_matrix.run(ctx)
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, 'native matrix incomplete'):
+                            native_matrix.run(ctx)
+                self.assertEqual(ctx.client_evidence['matrix']['rows'][0]['status'], expected,
+                                 f'wave credited incomplete or unhealthy action interval: {fault}')
+
     def test_run_classifies_startup_and_oracle_exceptions(self):
         import yaml
         from types import SimpleNamespace
@@ -30,7 +95,7 @@ class NativeMatrixTests(unittest.TestCase):
                     '--run-root',str(run_root)],client='native',windowed=True,server_bin=binary,
                     plugins_dir=root,timeout_seconds=5,artifact_dir=root/'artifact',
                     client_evidence={},commands=[],cwds=[],exits=[],logs=[])
-                host=SimpleNamespace(enabled_plugins=[])
+                host=SimpleNamespace(enabled_plugins=[], log_path=root/'server.log')
                 lane=SimpleNamespace(host=host,clients=[object()])
                 manager=MagicMock()
                 manager.__enter__.side_effect=RuntimeError('missing block_collision_shapes') if startup else None
@@ -38,12 +103,17 @@ class NativeMatrixTests(unittest.TestCase):
                 manager.__exit__.return_value=False
                 with patch.object(native_matrix.native_client,'resolve_binary',return_value=binary), \
                      patch.object(native_matrix,'Lane',return_value=manager), \
-                     patch.object(native_matrix,'storage',side_effect=AssertionError('oracle failed')), \
+                     patch.object(native_matrix,'HealthInterval',return_value=SimpleNamespace(segments=[],restart_boundaries=[])), \
+                     patch.object(native_matrix,'storage',side_effect=AssertionError('oracle failed')) as oracle, \
                      patch('tools.harness.matrix_execution.select_plugin_profile',return_value=([],None)), \
                      patch('tools.harness.matrix_execution.copy_plugins',return_value=[]), \
                      patch('tools.harness.matrix_execution.plugin_set_fingerprint',return_value='sha'):
                     with self.assertRaisesRegex(RuntimeError,'native matrix incomplete'):
                         native_matrix.run(ctx)
+                if startup:
+                    oracle.assert_not_called()
+                else:
+                    oracle.assert_called_once()
                 self.assertEqual(ctx.client_evidence['matrix']['rows'][0]['status'],expected)
                 receipt={'details':{'matrix':ctx.client_evidence['matrix']}}
                 native_matrix.record_receipt(receipt,run_root/'result.json')

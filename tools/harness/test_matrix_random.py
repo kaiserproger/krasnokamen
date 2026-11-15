@@ -36,11 +36,13 @@ class RandomMatrixTests(unittest.TestCase):
             slots=[b'\x00']*46; slots[36]=bytes.fromhex('01a3010000')
             wire.send_compressed_frame(b,0x12,bytes([0,1,46])+b''.join(slots)+b'\x00')
             observer.wait(lambda p:0 in p.menus,description='initial player menu')
+            input_pending = [0]
             def click(slot,**kwargs):
                 if slot==36:
                     send(0x14,'0002002400'); send(0x60,'01a3010000')
                 elif slot==1:
                     send(0x14,'00040000043f0000')
+                    input_pending[0] = 2
                 elif slot==0:
                     send(0x14,'0006000000')
                 else:
@@ -48,16 +50,30 @@ class RandomMatrixTests(unittest.TestCase):
             client.click_slot=click
             deliver=[True]
             def wait(predicate,*,description,timeout_seconds=30):
-                if description=='received crafting input and cursor':
+                if input_pending[0] == 2:
+                    # The click acknowledgement is only the early result-slot
+                    # packet. A second wait must fence input AND cursor receipt.
+                    input_pending[0] = 1
+                    observer.wait(lambda p: p.menus[0]['state_id'] == 4,
+                                  description='early craft result received')
+                elif input_pending[0] == 1:
+                    input_pending[0] = 0
                     self.assertFalse(predicate())
+                    send(0x14,'0005000101a3010000')
+                    observer.wait(lambda p: p.menus[0]['state_id'] == 5,
+                                  description='craft input received without cursor correction')
+                    self.assertFalse(predicate(), 'craft accepted input while the received cursor still holds the log')
                     if deliver[0]:
-                        send(0x14,'0005000101a3010000'); send(0x60,'00')
+                        send(0x60,'00')
                 return observer.wait(lambda _:predicate(),description=description,timeout=0.1)
             client.wait_until=wait
             ctx=SimpleNamespace(clients=[client])
             with patch('tools.harness.matrix_domains.random._supply'), \
                  patch('tools.harness.matrix_domains.random._close'):
-                _action(ctx,{'actor':0,'verb':'craft','count':2,'target':0})
+                try:
+                    _action(ctx,{'actor':0,'verb':'craft','count':2,'target':0})
+                except TimeoutError as error:
+                    self.fail(f"seed 19 crafting failed to consume delivered transitions: {error}")
             self.assertEqual(observer.menus[0]['state_id'],6)
             self.assertIsNone(observer.menus[0]['slots'][0])
             deliver[0]=False

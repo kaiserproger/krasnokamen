@@ -1,0 +1,71 @@
+diff --git a/tools/harness/screen_audio_graph.sh b/tools/harness/screen_audio_graph.sh
+--- a/tools/harness/screen_audio_graph.sh
++++ b/tools/harness/screen_audio_graph.sh
+@@ -31,31 +31,54 @@
+ # Do not exec: replacing this shell drops the EXIT trap above and leaks the
+ # private graph directory (a run left thousands of /tmp/solaris-pw.* behind).
+ status=0
+-dbus-run-session -- sh -c '
+-  export XDG_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" PIPEWIRE_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" \
++dbus-run-session -- sh -eu -c '
++  export PIPEWIRE_REMOTE=pipewire-0 XDG_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" PIPEWIRE_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" \
+     XDG_CONFIG_HOME="$KRASNOKAMEN_PW_ROOT/config" XDG_STATE_HOME="$KRASNOKAMEN_PW_ROOT/state" \
+     XDG_DATA_HOME="$KRASNOKAMEN_PW_ROOT/data" HOME="$KRASNOKAMEN_PW_ROOT/home"
+   unset DISPLAY WAYLAND_DISPLAY PIPEWIRE_NODE PULSE_SINK PULSE_SERVER PULSE_SOURCE DBUS_SYSTEM_BUS_ADDRESS
++  pw= wp= pulse=
++  stop() {
++    status=$?
++    trap - EXIT
++    kill $pulse $wp $pw 2>/dev/null || :
++    wait $pulse $wp $pw 2>/dev/null || :
++    if [ -n "${KRASNOKAMEN_AUDIO_RECEIPT_DIR:-}" ]; then
++      for log in pipewire wireplumber pulse; do
++        if [ -f "$KRASNOKAMEN_PW_ROOT/$log.log" ]; then
++          cp "$KRASNOKAMEN_PW_ROOT/$log.log" "$KRASNOKAMEN_AUDIO_RECEIPT_DIR/"
++        fi
++      done
++    fi
++    exit "$status"
++  }
++  trap stop EXIT
+   pipewire >"$KRASNOKAMEN_PW_ROOT/pipewire.log" 2>&1 &
+   pw=$!
++  # Subscribe before checking the socket, so creation cannot race the wait.
++  if ! python3 -c "import os; from pathlib import Path; from tools.harness.runtime import wait_for_path_condition; p = Path(os.environ[\"PIPEWIRE_RUNTIME_DIR\"]) / \"pipewire-0\"; wait_for_path_condition(p, 30, lambda: (p.is_socket(), None))"; then
++    echo "ABORT: private PipeWire socket did not become ready; see pipewire.log" >&2
++    exit 3
++  fi
++  if ! timeout 30 pw-dump >/dev/null; then
++    echo "ABORT: private PipeWire registry is unavailable; see pipewire.log" >&2
++    exit 3
++  fi
+   wireplumber >"$KRASNOKAMEN_PW_ROOT/wireplumber.log" 2>&1 &
+   wp=$!
+-  stop() { kill $wp $pw 2>/dev/null; wait $wp $pw 2>/dev/null; }
++  # WirePlumber publishes settings only after connecting and managing the graph.
++  if ! timeout 30 pw-mon 2>/dev/null | grep -m1 "sm-settings" >/dev/null; then
++    echo "ABORT: private WirePlumber did not publish sm-settings; see wireplumber.log" >&2
++    exit 3
++  fi
+   if [ -n "${KRASNOKAMEN_AUDIO_RECEIPT_DIR:-}" ]; then
+     pipewire-pulse >"$KRASNOKAMEN_PW_ROOT/pulse.log" 2>&1 &
+     pulse=$!
+-    # The graph dir is deleted on exit; the receipt keeps the daemon logs.
+-    stop() {
+-      kill $pulse $wp $pw 2>/dev/null; wait $pulse $wp $pw 2>/dev/null
+-      cp "$KRASNOKAMEN_PW_ROOT/pipewire.log" "$KRASNOKAMEN_PW_ROOT/wireplumber.log" "$KRASNOKAMEN_PW_ROOT/pulse.log" \
+-        "$KRASNOKAMEN_AUDIO_RECEIPT_DIR/"
+-    }
+   fi
+-  trap stop EXIT
+-  # WirePlumber publishes its settings metadata once it manages the graph: wait for that event.
+-  timeout 30 pw-mon 2>/dev/null | grep -m1 "sm-settings" >/dev/null
+   # Pre-flight: a hardware-free graph. Abort if any ALSA or BlueZ object is visible.
+-  dump=$(pw-dump)
++  if ! dump=$(timeout 30 pw-dump); then
++    echo "ABORT: private PipeWire hardware preflight could not read registry" >&2
++    exit 3
++  fi
+   if printf "%s" "$dump" | grep -Eq "alsa_|bluez_|api\.alsa|api\.bluez"; then
+     echo "ABORT: private graph can see hardware audio nodes" >&2
+     printf "%s" "$dump" | grep -E "alsa_|bluez_|api\.alsa|api\.bluez" | head -5 >&2
