@@ -331,6 +331,13 @@ def _release_server(ctx, profiles, tree=None):
             missing = [key for key in ('head', 'diff_sha256', 'inputs_sha256', 'env_deps') if info.get(key) is None]
             if missing:
                 raise ValueError(f'{manifest} records no build provenance ({", ".join(missing)})')
+            # A pin copied from another pin directory is used only if that source was built from
+            # the same working state (pin-release's relabelled-pin fence).
+            source = info.get('reused_from')
+            if source:
+                origin = json.loads((manifest.parent.parent / str(source) / 'manifest.json').read_text())
+                if (origin.get('head'), origin.get('diff_sha256')) != (info['head'], info['diff_sha256']):
+                    raise ValueError(f'{manifest} is a relabelled pin of {source}')
             registration = json.loads((registry / f'{digest}.json').read_text())
             if (info.get('head') != fingerprint['head'] or registration.get('sha256') != digest
                     or registration.get('tree') != {key: fingerprint[key] for key in ('head', 'sha256')}):

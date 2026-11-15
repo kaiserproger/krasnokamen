@@ -1584,6 +1584,29 @@ class ReleasePinTests(unittest.TestCase):
                         regressions._release_server(self.ctx, profiles)
         self.build.assert_not_called()
 
+    def test_relabelled_pin_is_refused(self):
+        for name, origin in (('missing-source', None), ('other-tree-source', {'head': 'f' * 40, 'diff_sha256': 'e' * 64})):
+            with self.subTest(source=name):
+                if origin is not None:
+                    (self.pins / name).mkdir()
+                    (self.pins / name / 'manifest.json').write_text(json.dumps(origin))
+                binary = self.pin(name=f'relabelled-from-{name}')
+                manifest = binary.parent / 'manifest.json'
+                manifest.write_text(json.dumps({**json.loads(manifest.read_text()), 'reused_from': name}))
+                with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
+                    with self.assertRaisesRegex(RuntimeError, f'relabelled pin of {name}|{name}/manifest.json'):
+                        regressions._release_server(self.ctx, profiles)
+        self.build.assert_not_called()
+
+    def test_pin_reused_from_the_same_working_state_is_accepted(self):
+        (self.pins / 'source-pin').mkdir()
+        (self.pins / 'source-pin' / 'manifest.json').write_text(json.dumps(
+            {'head': self.fingerprint['head'], 'diff_sha256': 'e' * 64}))
+        binary = self.pin()
+        manifest = binary.parent / 'manifest.json'
+        manifest.write_text(json.dumps({**json.loads(manifest.read_text()), 'reused_from': 'source-pin'}))
+        self.assertEqual(regressions._release_server(self.ctx, profiles), binary)
+
     def test_pin_of_another_tree_is_refused(self):
         binary = self.pin()
         (self.root / 'source').write_text('reverted control\n')
