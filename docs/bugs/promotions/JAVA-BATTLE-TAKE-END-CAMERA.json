@@ -1,0 +1,46 @@
+{
+  "id": "JAVA-BATTLE-TAKE-END-CAMERA",
+  "verdict": "promoted",
+  "fix_commit": "patch:d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e",
+  "fix_commit_full": "patch:d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e",
+  "promoted_at": "2026-11-15T03:25:20+00:00",
+  "tree_head": "af2bad271a522d8a876b21a664f4fcb4562e14c2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e",
+  "reversed_files": [
+    "tools/battle/run-battle.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_holds_shutdown_until_scenario_releases": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_holds_shutdown_until_scenario_releases": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness2/.analysis/validation/20261115T032503-ledger-promote-tzhdcjts"
+}

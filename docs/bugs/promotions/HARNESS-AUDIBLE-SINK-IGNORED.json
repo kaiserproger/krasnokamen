@@ -1,0 +1,46 @@
+{
+  "id": "HARNESS-AUDIBLE-SINK-IGNORED",
+  "verdict": "promoted",
+  "fix_commit": "patch:7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b",
+  "fix_commit_full": "patch:7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b",
+  "promoted_at": "2026-11-15T03:24:52+00:00",
+  "tree_head": "af2bad271a522d8a876b21a664f4fcb4562e14c2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b",
+  "reversed_files": [
+    "tools/harness/runtime.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_without_private_graph_is_refused_before_spawn": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_without_private_graph_is_refused_before_spawn": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness2/.analysis/validation/20261115T032447-ledger-promote-wa18w031"
+}

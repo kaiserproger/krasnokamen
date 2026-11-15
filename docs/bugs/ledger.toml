@@ -3100,12 +3100,13 @@ title = "All 113 stale `scenarios/runs/RunNative/bugs.md` sections belong to `20
 area = "harness"
 repro = "cargo"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-FACTS"
 regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_run_classifies_startup_and_oracle_exceptions", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_native_missing_content_is_blocked_not_product_failure", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_receipt_records_exact_status_without_promoting_blocked"]
 repro_check = "Forward-ported original run classification hunks; no synthetic failure_status replacement. Retained fixture reaches the planted post-start oracle assertion. Control fails the startup blocked-versus-fail assertion; restored three refs pass. receipts/HarnessFix4/TEST-NATIVE-FACTS.red.log and .green.log; original-hunk dispositions in promotions/TEST-NATIVE-FACTS.hunks.md."
 failing_first = "reported"
 fix_commit = "patch:bd081f998d0dcd9b0605f4df8612a777ea086ec148b27b67c0cbce7a34435e0e"
+promotion = "docs/bugs/promotions/TEST-NATIVE-FACTS.json"
 
 [[bug]]
 id = "TEST-NATIVE-IMPORT"
@@ -3251,13 +3252,14 @@ title = "First B02 causal replay remains failed: `scenarios/runs/Fixer-B02/20261
 area = "harness"
 repro = "cargo"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-END-RESTART-OBSERVER"
 regression = ["python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_moves_observers_beside_the_dragon_and_never_the_dragon", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_dragon_beyond_tracking_range_after_restart_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_different_dragon_identity_after_recovery_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_capability_requires_eight_real_joined_clients", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_new_error_record_fails_the_capability", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_missing_info_level_writer_shutdown_receipt_fails_the_capability"]
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/scene-slot.sh /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/end-plugins --timeout-seconds 240 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --capability peaceful_end_restart --port 26741 --dashboard-port 26742. Passed live with eight protocol clients (receipt wt/LedgerMatrixB15/.analysis/validation/20261111T123432-protocol-matrix-ty2uwwtr/result.json) on plugin set 060d (current krasnokamen-essentials+krasnokamen-permissions), not the original b52 packages: the preserved b52 packages (scenarios/live-plugins.stale-20261024) no longer instantiate on any retained server pin ('failed to convert function to given type', receipt .analysis/validation/20261111T132836-protocol-matrix-0x8arzc7), and the original server binary 7e7ba958 is not retained.; candidate: receipts/XHarnessJava/NC-R8-reverse-ef67d139e.log reverses the protocol_end_restart.py hunk and the module disappears (a proxy, not the symptom); a symptom-level control would be synthetic and is not counted; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 # The final clause above is historical: XHarnessJava is merged, and all six refs pass on M3 (receipts/M3Ledger/python-refs.log).
 fix_commit = "patch:ac4faef658a70344363ba23de98f708505b6e7cb40839b98502cdc76e81ccdd9"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/TEST-END-RESTART-OBSERVER.json"
 
 [[bug]]
 id = "MODEL-OPUS-1"
@@ -4623,11 +4625,12 @@ title = "Coreperf profiles reject valid release pins on other Linux hosts"
 area = "harness"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
 regression = ["python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash", "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass", "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung"]
 failing_first = "reported"
 fix_commit = "patch:0857f91e78dc482212e855cdc26161ea8f81371f64d15c863f84e891311d41c2"
+promotion = "docs/bugs/promotions/COREPERF-PINS-OWNER-HOST-ONLY.json"
 
 [[bug]]
 id = "NATIVE-NAV-WAYPOINT-CORNER-DEADZONE"
@@ -6206,7 +6209,7 @@ id = "HARNESS-PRIVATE-AUDIO-STARTUP"
 title = "Private audio preflight accepts a WirePlumber graph that failed to connect"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ScreensVoiceStart: screens-voice-qa voice leg recorded zero samples after WirePlumber started before PipeWire; the inner shell ignored the failed sm-settings wait."
 repro = "source"
 regression = [
@@ -6217,19 +6220,21 @@ regression = [
 repro_check = "ScreensVoiceStart/audio-red.log: original wrapper fails all three retained assertions; audio-endpoint-green.log passes after socket/registry ordering and fail-closed waits."
 failing_first = "reported"
 fix_commit = "patch:5d744b47d4ed61e6b67f2f5692b2c5980017551b9c6cbcee180fc56d1c5981f5"
+promotion = "docs/bugs/promotions/HARNESS-PRIVATE-AUDIO-STARTUP.json"
 
 [[bug]]
 id = "HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE"
 title = "Java client starts rebuild Minecraft in every private home instead of reusing the warmed Gradle cache"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ScreensVoiceStart: screens-voice-qa FabricViewer exceeded runtime.py's 180-second MCP readiness deadline while mavenizer prepared 26.3 under game/.home/.gradle."
 repro = "source"
 regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_client_launch_reuses_gradle_cache_despite_private_home"]
 repro_check = "ScreensVoiceStart/cache-red.log: original runtime has no GRADLE_USER_HOME in the child; unit-green.log passes after resolving the shared cache before launch, without changing the deadline or private HOME."
 failing_first = "reported"
 fix_commit = "patch:4f7f11a4626e69443db89cb3f05e9c09af82a2d1eacd397b2cda4742dc496445"
+promotion = "docs/bugs/promotions/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.json"
 
 [[bug]]
 id = "HARNESS-VOICE-PIN-ENDPOINT"
@@ -6252,7 +6257,7 @@ id = "HARNESS-AUDIBLE-SINK-IGNORED"
 title = "Java launch ignores its explicit private sound sink and forces No Output"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ScreensVoiceStart real gate 20261115T011032: FabricViewer reaches Play but OpenAL reports No Output rather than fabric_viewer_out because runtime.start_client ignores sound_sink. The independent fix patch restores null audio and muted options; the private-audio helper remains for retained API tests but is unused by the reversed live path."
 repro = "source"
 regression = [
@@ -6263,13 +6268,14 @@ regression = [
 repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode."
 failing_first = "reported"
 fix_commit = "patch:7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b"
+promotion = "docs/bugs/promotions/HARNESS-AUDIBLE-SINK-IGNORED.json"
 
 [[bug]]
 id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
 title = "Concurrent Java endpoints share mutable Loader classes and can lose live class files"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ScreensVoiceStart real gates 20261115T011032 and 20261115T011838 lose live Loader classes while another endpoint builds. Independent fix patch covers the runtime and prepared launch wiring from 3aca2c4ec and 495367bce, restoring the old heap-only script and shared project cache; new helpers remain only for retained API tests. endpoint-startup/result.json proves both real endpoints remain live after the second build with private project caches."
 repro = "source"
 regression = [
@@ -6279,6 +6285,7 @@ regression = [
 repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
 fix_commit = "patch:94ce251608e4cb8d332ed8543764c21edc0614d9106b7574db7ff2d6e2cefab2"
 failing_first = "reported"
+promotion = "docs/bugs/promotions/HARNESS-LOADER-SHARED-BUILD-DIR-RACE.json"
 
 [[bug]]
 id = "HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST"
@@ -6347,7 +6354,7 @@ id = "JAVA-BATTLE-TAKE-END-CAMERA"
 title = "The battle runner shuts the server down while the Loader scenario is still capturing its end camera"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 LoaderObs seed-46 Java battle: tools/battle/run-battle.py stopped the server right after the finite recorder wait while the CamSpec shield capture was still running (receipts/LoaderObs)"
 repro = "source"
 regression = [
@@ -6358,6 +6365,7 @@ regression = [
 fix_commit = "patch:d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e"
 failing_first = "reported"
 repro_check = "Runner now waits for an explicit, bounded inotify/pidfd completion barrier released by the Loader scenario (loader d6a94c22 battle_scenario.py CaptureLifecycleTest). Red: receipts/LoaderObs/completion-barrier-red.log, capture-lifecycle-red.log; green: completion-barrier-green.log, capture-lifecycle-green.log (39 core tests). Real client: receipts/LoaderObs/late-capture-neoforge-46/java-battle.json waited for completion.ready, took the screenshot, then completion.done, then runner shutdown. Deadline fails closed. Not promoted."
+promotion = "docs/bugs/promotions/JAVA-BATTLE-TAKE-END-CAMERA.json"
 
 [[bug]]
 id = "JAVA-BATTLE-SPEAR-PLAIN-ATTACK"

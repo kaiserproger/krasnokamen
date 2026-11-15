@@ -1,0 +1,70 @@
+{
+  "id": "TEST-END-RESTART-OBSERVER",
+  "verdict": "promoted",
+  "fix_commit": "patch:ac4faef658a70344363ba23de98f708505b6e7cb40839b98502cdc76e81ccdd9",
+  "fix_commit_full": "patch:ac4faef658a70344363ba23de98f708505b6e7cb40839b98502cdc76e81ccdd9",
+  "promoted_at": "2026-11-15T03:25:41+00:00",
+  "tree_head": "af2bad271a522d8a876b21a664f4fcb4562e14c2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "ac4faef658a70344363ba23de98f708505b6e7cb40839b98502cdc76e81ccdd9",
+  "reversed_files": [
+    "tools/harness/backends/protocol_end_restart.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_different_dragon_identity_after_recovery_is_a_failure": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_dragon_beyond_tracking_range_after_restart_is_a_failure": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_new_error_record_fails_the_capability": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_missing_info_level_writer_shutdown_receipt_fails_the_capability": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_capability_requires_eight_real_joined_clients": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_moves_observers_beside_the_dragon_and_never_the_dragon": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_different_dragon_identity_after_recovery_is_a_failure": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_dragon_beyond_tracking_range_after_restart_is_a_failure": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_new_error_record_fails_the_capability": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_missing_info_level_writer_shutdown_receipt_fails_the_capability": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_capability_requires_eight_real_joined_clients": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_moves_observers_beside_the_dragon_and_never_the_dragon": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness2/.analysis/validation/20261115T032535-ledger-promote-vynurjwz"
+}

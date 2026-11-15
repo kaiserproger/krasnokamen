@@ -1,0 +1,46 @@
+{
+  "id": "COREPERF-PINS-OWNER-HOST-ONLY",
+  "verdict": "promoted",
+  "fix_commit": "patch:0857f91e78dc482212e855cdc26161ea8f81371f64d15c863f84e891311d41c2",
+  "fix_commit_full": "patch:0857f91e78dc482212e855cdc26161ea8f81371f64d15c863f84e891311d41c2",
+  "promoted_at": "2026-11-15T03:25:03+00:00",
+  "tree_head": "af2bad271a522d8a876b21a664f4fcb4562e14c2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0857f91e78dc482212e855cdc26161ea8f81371f64d15c863f84e891311d41c2",
+  "reversed_files": [
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness2/.analysis/validation/20261115T032457-ledger-promote-d0x_kn3e"
+}
