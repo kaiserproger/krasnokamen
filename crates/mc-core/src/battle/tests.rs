@@ -1349,7 +1349,14 @@ fn battle20k_reaches_melee_attrition_and_a_timed_first_break() {
         "melee removals={}",
         melee_kills + wounds
     );
-    assert!(native_wounds >= 100, "native_wounds={native_wounds}");
+    // 28de515e1 deliberately finishes wounded men; 9edae78e7 reduces press
+    // removals fivefold. Count wounds inflicted, not survivors still wounded
+    // at the end of the shot (the old 754accb61 film used a 60% wounded share).
+    assert!(wounds >= 100, "wounds={wounds}");
+    assert!(
+        native_wounds > 0 && native_wounds as u64 <= wounds,
+        "native_wounds={native_wounds}"
+    );
     assert!(dead.into_iter().all(|count| count >= 50), "{dead:?}");
     assert!(removed.into_iter().all(|count| count >= 200), "{removed:?}");
 }

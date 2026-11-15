@@ -383,7 +383,14 @@ fn every_vanilla_chest_compiles_rolls_and_is_seed_deterministic() {
     )
     .unwrap();
     assert_eq!(ids.len(), 56, "26.1.2 chest table inventory changed");
-    assert_eq!(catalog.len(), 77, "56 chests, 6 archaeology, 15 hero gifts");
+    assert_eq!(
+        catalog.len(),
+        79,
+        "56 chests, 6 archaeology, 15 hero gifts, cat gift and sniffer digging"
+    );
+    for name in ["gameplay/cat_morning_gift", "gameplay/sniffer_digging"] {
+        assert!(catalog.get(&id(&format!("minecraft:{name}"))).is_some());
+    }
     let items = crate::items::krasnokamen_required_items();
     for (id, table) in &catalog.tables {
         for seed in 0..16 {

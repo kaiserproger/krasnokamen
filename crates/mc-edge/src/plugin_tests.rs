@@ -45,6 +45,16 @@ impl Drop for RunningCore {
     }
 }
 
+async fn open_core(world: &Path, deployment: &Path) -> RunningCore {
+    let config = configuration(world, deployment);
+    RunningCore(
+        tokio::task::spawn_blocking(move || Core::open(config))
+            .await
+            .expect("join blocking core startup")
+            .expect("open genuine plugin world"),
+    )
+}
+
 struct CrashWriter(Child);
 
 impl Drop for CrashWriter {
@@ -459,10 +469,10 @@ async fn real_sibling_economy_command_wal_and_checkpoint_are_exactly_once() {
         "missing prerequisite: deployed component is empty"
     );
     std::fs::write(&wasm, &bytes[..7]).unwrap();
-    expect_plugin_startup_failure(configuration(
-        &directory.0.join("invalid-world"),
-        &deployment,
-    ));
+    let invalid_config = configuration(&directory.0.join("invalid-world"), &deployment);
+    tokio::task::spawn_blocking(move || expect_plugin_startup_failure(invalid_config))
+        .await
+        .expect("join invalid-package startup");
     std::fs::write(&wasm, &bytes).unwrap();
 
     let world = directory.0.join("world");
@@ -516,9 +526,7 @@ async fn real_sibling_economy_command_wal_and_checkpoint_are_exactly_once() {
     // First open replays WAL. A second open after a checkpoint must retain the
     // exact revision and physical inventory, with no repeated debit or grant.
     for _ in 0..2 {
-        let core = RunningCore(
-            Core::open(configuration(&world, &deployment)).expect("recover real plugin world"),
-        );
+        let core = open_core(&world, &deployment).await;
         assert!(
             core.0
                 .plugin_commands()
@@ -540,7 +548,7 @@ async fn real_sibling_economy_command_wal_and_checkpoint_are_exactly_once() {
         );
     }
 
-    let core = RunningCore(Core::open(configuration(&world, &deployment)).unwrap());
+    let core = open_core(&world, &deployment).await;
     let mut changes = PushedChanges::new(&core.0);
     changes.joined(&core.0).await;
     changes.inventory(&core.0, 6, 2).await;
@@ -556,7 +564,7 @@ async fn real_sibling_economy_command_wal_and_checkpoint_are_exactly_once() {
         Some(("v2|".into(), revision + 1))
     );
 
-    let core = RunningCore(Core::open(configuration(&world, &deployment)).unwrap());
+    let core = open_core(&world, &deployment).await;
     let mut changes = PushedChanges::new(&core.0);
     changes.joined(&core.0).await;
     changes.inventory(&core.0, 9, 0).await;
@@ -571,7 +579,7 @@ async fn real_sibling_economy_command_wal_and_checkpoint_are_exactly_once() {
         Some(("v2|".into(), revision + 1)),
         "a repeated refund cannot create currency or advance the KV revision"
     );
-    let core = RunningCore(Core::open(configuration(&world, &deployment)).unwrap());
+    let core = open_core(&world, &deployment).await;
     let mut changes = PushedChanges::new(&core.0);
     changes.joined(&core.0).await;
     changes.inventory(&core.0, 9, 0).await;
@@ -589,9 +597,7 @@ async fn plugin_v2_crash_writer_child() {
     let deployment =
         PathBuf::from(std::env::var_os(CHILD_DEPLOY).expect("parent supplies genuine deployment"));
     eprintln!("plugin-v2 acceptance: loading the genuine guest and native world");
-    let core = RunningCore(
-        Core::open(configuration(&world, &deployment)).expect("load genuine first-party package"),
-    );
+    let core = open_core(&world, &deployment).await;
     assert!(
         core.0
             .plugin_commands()
