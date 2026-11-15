@@ -1285,3 +1285,52 @@ fn team_join_refuses_a_holder_and_a_faction_entity() {
     team(&mut state, ids[0], &["join", "allies", "Other"]).unwrap();
     assert!(state.scoreboard.teams["allies"].members.contains("Other"));
 }
+
+#[test]
+fn spectator_pending_named_intent_retries_dead_target_and_same_id_viewer_respawn() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    let [target, viewer] = [ids[0], ids[1]];
+    let input = |connection, text: &str| PlayerInput::Command {
+        connection: ConnectionId(connection),
+        command: text.into(),
+        permission_level: 2,
+    };
+    run_tick(
+        &mut state,
+        &[input(2, "gamemode spectator"), input(1, "kill")],
+    );
+    // Restored named intent has not successfully bound in this process.
+    state
+        .hostile
+        .battle
+        .live
+        .spectators
+        .push(("CamSpec".into(), "PovRed".into()));
+    run_tick(&mut state, &[]);
+    assert!(state.cameras.is_empty());
+    assert_eq!(state.hostile.battle.live.spectators.len(), 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    state.world.ensure_blocking(&state.desired_chunks());
+    run_tick(&mut state, &[]);
+    assert!(!is_dead(&state, target));
+    assert_eq!(state.cameras.get(&viewer), Some(&target));
+    run_tick(&mut state, &[input(2, "kill")]);
+    assert!(state.cameras.is_empty());
+    assert_eq!(state.hostile.battle.live.spectators.len(), 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(2),
+        }],
+    );
+    state.world.ensure_blocking(&state.desired_chunks());
+    run_tick(&mut state, &[]);
+    assert!(!is_dead(&state, viewer));
+    assert_eq!(state.connections.entity_of(ConnectionId(2)), Some(viewer));
+    assert_eq!(state.cameras.get(&viewer), Some(&target));
+}

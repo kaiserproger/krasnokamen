@@ -942,16 +942,19 @@ pub(crate) fn stop_camera(state: &mut TickState, viewer: EntityId) {
     }
 }
 
-/// Resolve names only while a battle binding exists. Offline/dead targets keep
-/// intent, never a stale camera id; an offline or non-spectator viewer ends it.
+/// Resolve names only while a battle binding exists. Dead viewers/targets and
+/// offline targets keep intent, never a stale camera id; viewer leave/mode exit ends it.
 pub(crate) fn follow_cameras(state: &mut TickState) {
     let mut bindings = std::mem::take(&mut state.hostile.battle.live.spectators);
     bindings.retain(|(name, target)| {
         let Some(viewer) = player_named(state, name) else {
             return false;
         };
-        if !state.players[&viewer].spectator() || is_dead(state, viewer) {
+        if !state.players[&viewer].spectator() {
             return false;
+        }
+        if is_dead(state, viewer) {
+            return true;
         }
         if let Some(subject) = player_named(state, target)
             && !is_dead(state, subject)

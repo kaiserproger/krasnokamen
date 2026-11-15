@@ -39,17 +39,7 @@ fn single(target: &Target) -> bool {
     }
 }
 
-fn resolve_one(
-    state: &TickState,
-    executor: EntityId,
-    target: &Target,
-    player: bool,
-) -> Result<EntityId, &'static str> {
-    let missing = if player {
-        "argument.entity.notfound.player"
-    } else {
-        "argument.entity.notfound.entity"
-    };
+fn validate_selector(target: &Target, player: bool) -> Result<(), &'static str> {
     if !single(target) {
         return Err(if player {
             "argument.player.toomany"
@@ -69,6 +59,21 @@ fn resolve_one(
     {
         return Err("argument.player.entities");
     }
+    Ok(())
+}
+
+fn resolve_one(
+    state: &TickState,
+    executor: EntityId,
+    target: &Target,
+    player: bool,
+) -> Result<EntityId, &'static str> {
+    validate_selector(target, player)?;
+    let missing = if player {
+        "argument.entity.notfound.player"
+    } else {
+        "argument.entity.notfound.entity"
+    };
     let ids = command_execution::resolve_target(state, executor, target).map_err(|_| missing)?;
     match ids.as_slice() {
         [id] if !player || state.players.contains_key(id) => Ok(*id),
@@ -137,8 +142,9 @@ pub(crate) fn alive(state: &TickState, id: EntityId) -> bool {
             .is_none_or(|player| !player.vitals.is_dead())
 }
 
-pub(crate) fn bind(
-    state: &mut TickState,
+fn validate_binding(
+    state: &TickState,
+    target_world: &TickState,
     viewer: EntityId,
     target: Option<EntityId>,
 ) -> Result<(), &'static str> {
@@ -153,14 +159,14 @@ pub(crate) fn bind(
         return Err("commands.spectate.not_spectator");
     }
     if let Some(target) = target {
-        let slot = state
+        let slot = target_world
             .entities
             .slot_of(target)
             .ok_or("argument.entity.notfound.entity")?;
-        if !alive(state, target) {
+        if !alive(target_world, target) {
             return Err("argument.entity.notfound.entity");
         }
-        let type_id = match state.entities.body(slot).kind {
+        let type_id = match target_world.entities.body(slot).kind {
             crate::entities::EntityKind::Player { .. } => crate::entities::player_type_id(),
             crate::entities::EntityKind::Mob { type_id } => crate::blueprint::wire_type_id(type_id),
             crate::entities::EntityKind::Item { type_id }
@@ -171,6 +177,30 @@ pub(crate) fn bind(
         {
             return Err("commands.spectate.cannot_spectate");
         }
+    }
+    Ok(())
+}
+
+pub(crate) fn bind(
+    state: &mut TickState,
+    viewer: EntityId,
+    target: Option<EntityId>,
+) -> Result<(), &'static str> {
+    validate_binding(state, state, viewer, target)?;
+    apply_binding(state, viewer, target, true)
+}
+
+fn apply_binding(
+    state: &mut TickState,
+    viewer: EntityId,
+    target: Option<EntityId>,
+    correct_position: bool,
+) -> Result<(), &'static str> {
+    if let Some(target) = target {
+        let slot = state
+            .entities
+            .slot_of(target)
+            .ok_or("argument.entity.notfound.entity")?;
         let viewer_slot = state
             .entities
             .slot_of(viewer)
@@ -181,7 +211,9 @@ pub(crate) fn bind(
         if state.cameras.get(&viewer) != Some(&target) {
             crate::mounts::dismount(state, viewer);
             Arc::make_mut(&mut state.cameras).insert(viewer, target);
-            sync_position(state, viewer);
+            if correct_position {
+                sync_position(state, viewer);
+            }
             tracing::info!(
                 viewer = viewer.0,
                 target = target.0,
@@ -264,6 +296,9 @@ fn invalid(state: &TickState, viewer: EntityId, target: EntityId) -> bool {
             .is_some_and(|player| player.spectator())
         || state.connections.entity_connection(viewer).is_none()
 }
+
+#[path = "spectator_transfer.rs"]
+pub(crate) mod transfer;
 
 #[cfg(test)]
 #[path = "spectator_tests.rs"]

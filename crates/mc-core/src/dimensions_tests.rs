@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "dimensions_spectator_tests.rs"]
+mod spectator;
+
 #[test]
 fn explosion_epoch_survives_same_tick_dimension_transfer() {
     let (mut state, alice, _) = worlds();

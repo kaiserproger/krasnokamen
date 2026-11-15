@@ -104,6 +104,18 @@ chunk groups are consumed whole without charging ACK debt. This preserves
 spawn-before-camera and release-before-removal dependencies under queue races,
 not just during planning.
 
+Local 26.3 `javap` inspection also establishes gameplay-side projection:
+`ServerPlayer.setCamera` changes worlds before binding; target dimension travel
+moves attached viewers then releases their cameras; explicit player teleport
+clears the camera. `ServerPlayer.updateInvisibilityStatus` sets spectator
+invisibility and removes effect particles; `Entity.setInvisible` uses shared
+flag bit 5 (`0x20`). This is not a workaround for client picking: vanilla
+`Player.isPickable` separately rejects spectator players, regardless of
+invisibility. Command receipts are outside Git in
+`receipts/SpectateFix/{camera-transfer,entity-transfer,spectator-visibility}-26.3.txt`.
+The native effects projection preserves potion state when entering/leaving
+spectator mode. A roster mode update alone does not replace shared flags.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs

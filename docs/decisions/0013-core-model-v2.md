@@ -53,10 +53,18 @@ world snapshot. `/spectate` and battle named-follow use that same authority;
 the native tick follows the target position for residency and ignores viewer
 movement while bound. Binding changes synchronize the viewer once, not on every
 follow tick. Death/disconnect releases the current camera; only battle's named
-intent retries a returning target. Explicit stop, sneak, viewer disconnect or
-leaving spectator mode clears that intent. Neither camera map is persisted.
+intent retries a returning target or a respawned viewer on the same connection.
+Explicit stop, sneak, viewer disconnect or leaving spectator mode clears that
+intent. Neither camera map is persisted.
 The edge binds only a paired target, with camera release, removal, pairing and
 rebind ordered on the entity world FIFO; credit loss retains delivery debt.
+Shared command resolution finds named/UUID targets across worlds and transfers
+the viewer through existing dimension custody before publishing a binding.
+When a bound target changes dimensions, its viewers move with it and then
+release, rather than retaining a dimension-local entity reference. Explicit
+player teleport also releases the player's camera; refused teleports do not.
+The effects appearance owner projects spectator invisibility and suppresses
+effect particles without deleting the player's potion state.
 
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first rider with a live body controls motion; absent recovery claims are skipped.

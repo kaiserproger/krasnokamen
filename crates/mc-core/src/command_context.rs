@@ -838,7 +838,7 @@ pub(crate) fn native(
         return Err("Command does not support execute store".into());
     }
     if state.command_context.shared
-        && (matches!(command, Command::Teleport { .. })
+        && (matches!(command, Command::Teleport { .. } | Command::Spectate { .. })
             || crate::dimensions::commands::target(&command).is_some())
     {
         let mut aggregate = std::mem::take(&mut state.command_context.changes);

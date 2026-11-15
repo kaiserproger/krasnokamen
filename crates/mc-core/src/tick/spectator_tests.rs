@@ -237,3 +237,77 @@ fn spectator_mode_exit_cancels_named_intent_even_if_restored_in_same_tick() {
     run_tick(&mut state, &[]);
     assert!(!state.cameras.contains_key(&viewer));
 }
+
+#[test]
+fn spectator_mode_projects_invisibility_without_destroying_potion_state() {
+    let (mut state, viewer, _) = fixture();
+    let flags = |state: &TickState| {
+        state
+            .entities
+            .row(state.entities.slot_of(viewer).unwrap())
+            .appearance
+            .shared_flags
+    };
+    assert_ne!(
+        flags(&state) & 0x20,
+        0,
+        "mode entry publishes spectator invisibility"
+    );
+    command(&mut state, 2, "effect give @s minecraft:invisibility 30");
+    let slot = state.entities.slot_of(viewer).unwrap();
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .effect_particles
+            .is_empty()
+    );
+    assert!(!state.players[&viewer].active_effects.entries.is_empty());
+    command(&mut state, 2, "gamemode survival");
+    assert_ne!(
+        flags(&state) & 0x20,
+        0,
+        "leaving spectator preserves potion invisibility"
+    );
+    let slot = state.entities.slot_of(viewer).unwrap();
+    assert!(
+        !state
+            .entities
+            .row(slot)
+            .appearance
+            .effect_particles
+            .is_empty()
+    );
+    command(&mut state, 2, "effect clear @s");
+    assert_eq!(flags(&state) & 0x20, 0);
+    command(&mut state, 2, "gamemode spectator");
+    command(&mut state, 2, "effect clear @s");
+    assert_ne!(
+        flags(&state) & 0x20,
+        0,
+        "effect clearing cannot make a spectator visible"
+    );
+    // Session restoration supplies the mode before the first appearance pass.
+    let slot = state.entities.slot_of(viewer).unwrap();
+    Arc::make_mut(&mut state.entities.row_mut(slot).appearance).shared_flags &= !0x20;
+    state.world.ensure_blocking(&state.desired_chunks());
+    let (output, _, _) = run_tick(&mut state, &[]);
+    assert_ne!(
+        output
+            .snapshot
+            .entities
+            .get(viewer)
+            .unwrap()
+            .appearance
+            .shared_flags
+            & 0x20,
+        0
+    );
+    command(&mut state, 2, "gamemode survival");
+    assert_eq!(
+        flags(&state) & 0x20,
+        0,
+        "no potion means mode exit clears invisibility"
+    );
+}

@@ -812,6 +812,7 @@ pub(crate) fn execute(
                         ]
                     })
                     .unwrap_or([current_rotation[0], current_rotation[1]]);
+                crate::tick::spectator::stop(state, target);
                 let wrap = |angle: f32| (angle + 180.0).rem_euclid(360.0) - 180.0;
                 state
                     .entities
