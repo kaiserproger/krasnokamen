@@ -1148,6 +1148,24 @@ class PlayerHeadTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "worn_head_renders"):
                 scene_shot.check_player_head(self.Probe(), root)
 
+    def test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi(self):
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            path = root / "screenshots/head-worn.png"
+            with Image.open(path) as frame:
+                image = frame.convert("RGB")
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((600, 300, 680, 380), fill=(110, 100, 90))
+            # Real rejected candidate: skull left of the bare head. Its edge
+            # supplied 743 magenta pixels to the old x580-700/y280-400 box.
+            draw.rectangle((486, 369, 597, 484), fill=(200, 0, 200))
+            image.save(path)
+            with self.assertRaisesRegex(AssertionError, "worn_head_renders"):
+                scene_shot.check_player_head(self.Probe(), root)
+
     def test_authored_skin_has_opaque_contrasting_hat_and_base_window(self):
         from PIL import Image
 

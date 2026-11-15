@@ -333,8 +333,8 @@ index 6, used by unresolved placed heads) and `wide/steve` (special items).
 The unresolved `HarnessHat` profile deliberately uses those offline resources;
 it is not a listed player and does not fetch unsigned/online profile textures.
 This proves hat geometry, not profile resolution. `worn_head_renders` also
-requires magenta at the actual avatar head, x580–700/y280–400: torso/back
-attachments or unrelated avatar/sky changes cannot satisfy it. Retain and
+requires magenta at the actual avatar head, x600–680/y280–375: adjacent,
+torso/back attachments or unrelated avatar/sky changes cannot satisfy it. Retain and
 inspect candidate and hat-only-control frames before promoting the model row.
 
 `walk_capture` retains a distinct `-attempt-N` image and frame sidecar per
