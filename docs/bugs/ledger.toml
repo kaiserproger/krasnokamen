@@ -6150,8 +6150,9 @@ status = "open"
 source = "HarnessGraphical Java matrix capability group times out in prepare_fabric_launch before private Xvfb starts; current Loader has no launch-manifest exporter"
 repro = "source"
 regression = ["python:tools.harness.test_java_clients:JavaClientsTests.test_matrix_fabric_group_uses_only_private_runtime_launches"]
+fix_commit = "b6f1ac655"
 failing_first = "reported"
-repro_check = "PreparedLaunchFix receipts: red-before-fix.log reproduces the unexpected prelaunch process. Cut over matrix groups to ordinary runtime.start_client after private Xvfb, retaining exact endpoint properties, audio isolation and per-endpoint build directories. No separate manifest contract remains. Loader exporter existed at 2bc292e64d9083537e3f97bca6c635c0b9ba5590 on bots-runjava, but is not in Loader main history. See receipts/PreparedLaunchFix/report.md for negative-control and real-client receipts."
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log reverses only fix-only.patch while retaining tests, and fails on the unexpected Gradle prelaunch. green-restored.log passes both fixes; green-isolation-merge.log passes ordinary runtime/cache wiring. Original matrix command on 3c2279125 reaches 26.1.2 Fabric (0.155.2 API), capability passed=true and simultaneous_in_play=1 on private display :150; real-java/20261115T013000-java-matrix-fd94b0mk/capability-fabric_krasnokamen_loader/result.json. Full invocation later fails separately on the armadillo cell's unloaded block; not a full matrix pass. Loader exporter existed at 2bc292e64d9083537e3f97bca6c635c0b9ba5590 only on unmerged bots-runjava. Ordinary runtime preserves endpoint build/project-cache and audio isolation. See report.md."
 
 [[bug]]
 id = "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED"
@@ -6162,5 +6163,18 @@ status = "open"
 source = "HarnessGraphical gait scene: zombie and spider approach the same camera on the same lane, and the zombie death animation occludes the spider"
 repro = "source"
 regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view"]
+fix_commit = "b6f1ac655"
 failing_first = "reported"
-repro_check = "PreparedLaunchFix/red-before-fix.log fails the camera-frustum assertion on the original fixture. Spider and camera now move ten blocks sideways before capture, outside the dying zombie's lane. See receipts/PreparedLaunchFix/report.md for negative-control and reviewed real frames."
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log fails the original fixture's camera-frustum assertion with tests retained. green-restored.log passes. Three native windowed gait runs pass on 3c2279125: real-gait/20261115T012844-scene-shot-j9w3a8qy, 20261115T013328-scene-shot-mgy_ub0y, 20261115T013411-scene-shot-4da3qs2q. All three accepted spider frames and the first zombie frame were visually reviewed: subject unobstructed, no overlapping zombie. Spider capture uses 2, 2 and 3 uniquely named attempts respectively. Server c7786910eaa6 and client 12e076e9c761 pins; report.md retains commands and review."
+
+[[bug]]
+id = "HARNESS-JAVA-MATRIX-FIXTURE-CHUNK-NOT-LOADED"
+title = "Java matrix armadillo cell fails waiting for its remote fixture block after successful launch"
+area = "harness"
+severity = "major"
+status = "open"
+source = "PreparedLaunchFix original java-matrix command: Fabric capability reaches Play, but selected mobs.armadillo reconnect_mid_action cell fails minecraft_wait_for_loaded_block at -16,199,-16"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Two observed failures with server c7786910eaa6 and 26.1.2 Fabric Loader 7343bd38: receipts/PreparedLaunchFix/real-java/20261115T012435-java-matrix-50t25et0/pw-2314a2e847b93d120a99/result.json and real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99/result.json. Both capability groups pass; the cell records no domain checks and fails with client chunk did not load at -16, 199, -16. Root cause not investigated in the isolated-launch assignment; no product armadillo failure inferred."
