@@ -7,12 +7,47 @@ records how fleets were run on the owner's machine and what went wrong.
 
 ## Size and roles
 
+### Announcement stabilization mode
+
+Owner-directed cutover, 2026-11-15, for the finite 21 November announcement:
+**Main plus at most two actively executing child tasks total**, including
+fixers, QA and reviewers. There is no additional reviewer pool. This mode
+overrides the general fleet defaults/history below, until the
+[finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
+is reached or the owner changes it.
+
+Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`:
+finish/integrate/accept a returned vertical slice or its named dependency
+before opening another front. Findings enter this announcement's blocking
+queue only through the DoD admission rule; other findings remain visible
+backlog. Do not start a helper, committee or broad QA campaign for backlog.
+
+Checkpoint and park excess owners at safe immutable commit/patch boundaries;
+preserve ownership and partial/negative proof, and never kill an in-flight
+proof merely to reduce the counter. Waiting background commands consume no
+LLM turns, but cannot hide concurrently writing owners. Already allocated
+laptop W2 is a separate measurement job, not another host implementation
+slot. Existing build, memory and measurement safeguards remain.
+
+Workers return bounded immutable changes with affected L0/L1; Main batches
+integration and owns final integrated L2. Reuse the same clean pin for the
+same tree/inputs; do not repeat unchanged greens or sibling full suites.
+Checkpoints and completions are event-driven, without polling, empty wait
+loops, acknowledgement chains or repeated large transcript reads. Report
+newly integrated/accepted outcomes, remaining blocking rows and impediments,
+not agent count as progress.
+
+No new paid top-ups, saved resets, accounts or provider/credential changes
+without explicit owner authorization. Main's process/session/model stay
+as-is: this spending brake is not a restart or a claimed dollar-budget cap.
+
 - **Keep the fleet small.** On 2026-10-24 about 26 parallel agents burned 30%
   of the owner's weekly usage on two accounts in one hour, and the owner
-  collapsed the fleet. Limits since 2026-11-14 (owner): at most 15 actively
-  working agents plus up to 2 reviewers (agents waiting for builds or tests do
-  not count) and 3 concurrent builders (enforced since 2026-11-11 by the runner's
-  [build tokens](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28));
+  collapsed the fleet. General limits since 2026-11-14 (owner), **outside the
+  current announcement mode**, are at most 15 active agents plus 2 reviewers
+  (agents only waiting for builds/tests do not count), and 3 concurrent
+  builders enforced by the runner's
+  [build tokens](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28);
   no child agent for a part under 30 minutes; reserve the
   review and breaker budget before spawning builders. One agent session per
   bounded task (a batch of related rows): the agent returns when the task is
@@ -151,20 +186,16 @@ and an overrun is visible without reading transcripts (owner, 2026-11-11).
   and running runner commands. Main and the owner read it instead of
   reconstructing state from transcripts. Tests:
   `python3 tools/dev/test_task_claim.py`.
-- **Slices close in hours; nothing claimed waits a day** (owner, 2026-11-12).
-  The owner runs the full allowed fleet (10 agents, 3 build tokens) and must
-  not wait days for one task. Main cuts every task into slices that finish
-  within hours and claims each with its timebox. The brief states the
-  timebox; when it runs out the agent returns its final YAML itself (`done`,
-  or `partial` with the remaining work). Main handles an overrun from that
-  result or from the task's completion or failure event (split, reassign, or
-  report the exact blocker); it reads `fleet-status` only in response to such
-  an event, never on a schedule (no polling of agent status or lists). A task
-  is reassigned only after the previous agent returned or was stopped
-  (`task-release` or kill), so two agents never do the same work. No claimed
-  task goes more than 24 hours without a result the owner can look at (a
-  receipt, frames, a commit or a written blocker). The battle video stays
-  first.
+- **Slices close in hours; nothing claimed waits a day.** Main selects owners
+  from the current ranked critical path under the operating mode above, not
+  a historical “fill ten agents / battle first” schedule. A brief names its
+  bounded result and timebox; at expiry the owner returns immutable work and
+  evidence, or `partial` with the exact outside prerequisite. Main handles
+  that completion/overrun event by integrating, parking or reassigning; it
+  never polls fleet status on a schedule. Reassignment follows the previous
+  owner's checkpoint/release, so two owners never write the same task.
+  Release the claim when the result arrives. Deferred work stays visible in
+  the single queue, not automatically active for this announcement.
 
 ## Messaging
 
@@ -220,14 +251,15 @@ Before accepting a returned slice (procedure:
 
 Run it after any change to AGENTS.md, the Constitution, AGENT_TOOLING,
 DEFINITION_OF_DONE, the QA protocol, the bug ledger README, the owner
-contract, this page or the heavy-commands page. Main runs it, or hands it to a
-read-only agent that edits nothing. A fresh agent with no memory reads only
-AGENTS.md and the pages it links, as a newly started worker would, and lists
-every contradiction or stale statement with both `file:line` citations. Main
-fixes each one in the page that owns the topic (the one "Which rule wins" or
-"Where to look" names), never by restating the rule elsewhere, then runs
-`python3 tools/doclinks.py`. The result lists each finding with its
-before and after lines. First run: 2026-11-07.
+contract, this page or the heavy-commands page. During the owner-directed
+announcement cutover, Main performs this check **inline**, without a new
+docs reviewer/helper: read AGENTS and the touched owning pages as a new
+worker would; record concrete conflicting statements and their disposition.
+Outside this mode, a fresh read-only agent may perform that check.
+Fix contradictions in their owning page, not by copying policy elsewhere,
+then run `python3 tools/doclinks.py`. Code/persistence/release independence
+requirements remain unchanged and their reviewers use the same two slots.
+Record each concrete finding and its before/after disposition in the result.
 
 ## Liveness and recovery
 

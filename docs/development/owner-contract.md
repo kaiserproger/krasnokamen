@@ -85,6 +85,25 @@ Owner decisions on the agent-work retrospective (2026-11-07, chosen from
 
 > все явные пробелы ЧИНИТЬ (owner, 2026-11-07)
 
-Every gap an agent or Main reports is a work item to fix, not an accepted
-ending. Only what needs something outside the agents' reach (owner action,
-hardware, credentials) stays open, with the exact blocker named.
+Every gap remains a visible work item, not an implicit acceptance. The later
+owner decision below overrides automatic admission to this announcement's
+blocking queue; it does not hide findings or declare unfinished work fixed.
+
+## Later finite-announcement decision — 2026-11-15
+
+For the 21 November announcement the owner explicitly authorized finite
+closure and a spending brake, while preserving the approved differentiators
+and A1–A12/A2b/A2c thresholds. The historical quotes above remain historical
+authority for other goals; this later goal-specific decision takes precedence:
+only reproducible safety failures, broken ordinary advertised paths and
+concrete frozen-acceptance dependencies automatically block this announcement.
+Other findings remain tracked backlog, not automatic new work or release
+requirements. The owner may explicitly add scope.
+
+The owning [DoD table, admission and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
+and [two-child operating mode](agent-fleet.md#announcement-stabilization-mode)
+are authoritative. General 15-plus-2 fleet defaults do not override this
+mode; no extra reviewer pool. Once its gates pass, park automated development
+and send the owner one tag/announcement decision packet, without new audits.
+Publication authorization and strict safety, parity and real-client evidence
+requirements are unchanged. Main stays as-is; no restart/model/provider reset.

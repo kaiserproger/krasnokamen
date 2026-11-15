@@ -35,6 +35,12 @@ Code, tests, config and runtime evidence beat every document: fix the document.
 
 ## Working rules
 
+**Current mode (owner, 2026-11-15):** the 21 November announcement is a finite
+stabilization, not an expanding `/goal`. Its
+[acceptance and stop condition](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance)
+and [two-child operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode)
+override the general queue and fleet defaults below.
+
 1. Deliver what was asked, end to end for the real case, as simply as possible:
    the 20% that gives 80%. No speculative abstractions, flags, hardening, rare
    edges or unrelated churn; a rare blocker gets a clear error, not a subsystem.
@@ -54,18 +60,23 @@ Code, tests, config and runtime evidence beat every document: fix the document.
    two release reviewers before a tag. Docs-only and test-only slices get no
    reviewer. The owner contract authorizes these reviewers; fixing their
    findings needs no second review.
-6. An autonomous `/goal` is the whole objective and queue: continue until it is
-   verified or blocked with nothing actionable. A context handoff neither pauses
-   nor completes it. Slices need disjoint interfaces, not separate full gates,
-   snapshots, reviews, sessions or commits. Finite mode needs explicit permission.
+6. An autonomous `/goal` covers the approved objective, not a slice; a context
+   handoff neither pauses nor completes it. For this announcement the owner
+   explicitly authorized the finite acceptance and stop condition linked above.
+   Other goals continue until verified or externally blocked with nothing
+   actionable. Slices need disjoint interfaces, not duplicated full gates.
 7. Priorities: ordinary vanilla-client gameplay and multiplayer; the production
    plugin API and adapters; measured optimization, ECS, ownership and
    autoscaling; rare edges. A lower item moves up only when it blocks play,
    saves or plugins.
 8. Main checks the owner's open issues hourly and before a commit (workers do
    not): `gh issue list -R kaiserproger/krasnokamen --author kaiserproger --state open`.
-   Outside a `/goal` they are the work queue; inside one, add new issues to the
-   goal's queue.
+   During announcement stabilization, classify new findings under the
+   [finite queue admission rule](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance):
+   only its safety, ordinary advertised-path or frozen-criterion dependencies
+   enter the blocking queue; record everything else as visible backlog.
+   Outside that mode, issues are the queue outside a `/goal` and join its queue
+   inside one.
 
 ## Where to look
 
@@ -206,11 +217,12 @@ python3 -m tools.harness list
   whole context (23% of fleet tokens on 2026-11-12). Never add
   wall-clock sleeps in production, tests, harnesses or tools: wait for the exact
   message, packet, notification or process/world/simulation state (push, not pull).
-- Main has the owner's standing authorization to spawn subagents within the
-  fleet limits: at most 15 actively working agents plus up to 2 reviewers
-  (agents waiting for builds or tests do not count; owner, 2026-11-14) and 3
-  concurrent builders, no child agent
-  for a part under 30 minutes. Workers spawn only when their brief allows it.
+- Main has standing authorization to spawn within the
+  [current operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode).
+  Outside announcement stabilization, the general limit is 15 active agents
+  plus 2 reviewers (owner, 2026-11-14), with 3 concurrent builders.
+  No child agent for a part under 30 minutes. Workers spawn only when their
+  brief allows it.
   Larger fleets need explicit owner permission. Give disjoint responsibilities
   and write sets, pass a bounded task, base commit, paths and evidence contract
   (no conversation forks), never delegate the immediate blocker and then idle,
@@ -223,10 +235,11 @@ python3 -m tools.harness list
   implementers `status: done|partial|blocked`, reviewers and breakers
   `verdict: pass|changes|blocked`, plus `changed_files`, `validation` and
   optional `report_path`. A gap is work, not an ending (owner, 2026-11-07):
-  close every gap within reach before returning; `partial` or `gaps` list only
+  close every admitted gap within the bounded slice's reach; `partial` or `gaps` list only
   what needs something outside the agent's reach (owner action, hardware,
-  credentials), each with its exact blocker, and Main queues every reported gap
-  for a fix. Ask nothing the brief answers. Acks to peers go through
+  credentials), each with its exact blocker. Main records every reported gap;
+  the current mode's queue-admission rule decides blocker versus backlog.
+  Ask nothing the brief answers. Acks to peers go through
   messages, never the final text. Long detail goes in a file; deduplicate
   notifications by agent id and revision. Brief and result templates:
   [running agents](docs/development/agent-fleet.md#briefs).
@@ -304,7 +317,7 @@ python3 -m tools.harness list
 - *Owner host:* worktrees are created with `tools/dev/wt-new` under `<work>/wt/`
   and ended with `tools/dev/wt-done`; gate binaries come from
   `tools/dev/pin-release`. Heavy outputs go under
-  `<work>/targets/`, nothing new on the root disk. Keep at least 250 GB free on
+  `<work>/targets/`, nothing new on the root disk. Keep at least 250 GiB free on
   the games disk (below it `slot-gc` evicts idle slots in LRU order): a finished
   run keeps only its reports, logs and `result.json`
   ([disk rules](docs/development/heavy-commands-and-memory.md#disk)). Use

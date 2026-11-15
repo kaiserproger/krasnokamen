@@ -4,6 +4,67 @@ This document is the hard process contract for Krasnokamen agents. It does
 not slow down draft implementation; it prevents draft work from being
 reported as release quality.
 
+## Finite announcement acceptance
+
+Owner authorization, 2026-11-15: stabilize the already approved **21 November
+2026** announcement, preserving A1–A12, A2b/A2c and the **2:45 teaser**. This
+does not authorize a vanilla-only replacement or removal of differentiators.
+The scoped **80% vanilla parity** rule below remains required.
+
+The existing operational plan is `<work>/receipts/Stage3/ANNOUNCE-PLAN.md`;
+current ownership, ranked dependencies and evidence are in
+`<work>/receipts/Stage3/PLAN.md`. Receipt paths in this table are relative to
+`<work>/receipts/`. A named owner may be parked: ownership is not permission to
+execute outside the [current two-child mode](development/agent-fleet.md#announcement-stabilization-mode).
+Missing, old-candidate, incomplete or merely prepared evidence stays **blocked**.
+The freeze remains 19 November evening; 20 November is final QA/review; the
+target date does not turn a failed criterion into a pass.
+
+| Row | Concrete end-to-end criterion | Existing gate / required repeats | Current owner / receipts |
+|---|---|---|---|
+| A1 | Live Horizon battle: `battle.fighting` peak and plateau, **20 TPS**, **≥30 FPS in both windows**, **≥10 server-confirmed PovRed hits per battle minute**, normal damage and following CamSpec; montage from that accepted freeze-pin take. | Existing live-take acceptance, server scan, `povred_hits.py`, per-10-second client stats and owner cut approval. Preserve exact read-only-extension disclosure and committed diff/SHA; no rendering/network/input modification. | HzBattlePrep + laptop; server dependencies Main / SpectateFix / EntityMoveDelta. `HzBattlePrep/`, `SpectateFix/`, `EntityMoveDelta/`. |
+| A2 | Horizon's bots on ours, vanilla and Horizon in both parallel-tick modes: **1/10/25/50/100 bots × mixed/explore/fight**, identical recorded configuration, commands and raw results. No superiority claim for a lost comparison. | Existing Horizon-method matrix; variance; independent repeat of **2 cells**; freeze-pin rerun of required headline cells. | HzServerBots; `HzServerBots/`. |
+| A2b | Same `mixed ×100` and `horizon-100-roam` at **1/2/4/6 physical server cores**, whole SMT pairs, bots on fixed separate cores; ours, vanilla, Horizon `parallel_tick=false/true`; TPS and MSPT p50/p95. | Existing scaling windows: **every point repeated**, second agent reruns **2 points**. An advantage enters S4 only if measured. No new Paper/Pumpkin/FerrumC campaign. | HzServerBots + PerfRoam; `HzServerBots/`, `PerfRoam/`. |
+| A2c | Separately labelled internet/remote-bot scenario: laptop bots, **8 physical server cores / 16 logical CPUs**, `mixed ×100`; all bots log in, walk/explore bots move; the normal **20% idle** cohort need not move. | Existing W2/W9 owner and order: ours, vanilla, Horizon false/true, **r1 and r2**; raw route/RTT/configuration evidence. Never merge this point into the local-bot curve. | Laptop HzRemoteBots; `HzRemoteBots/`, `HzServerBots/SERVERS.md`. |
+| A3 | **100+ joined players and 100k+ freely roaming mobs at 20 TPS**, Horizon's scenario, not pens or spawned-but-inactive counts. | Existing `horizon-100-roam`, quiet freeze-pin measurement and **second run**; load-correctness breaker checks no lost mobs/items. Preserve the scheduled comparison/scaling points. | PerfRoam; `PerfRoam/`. |
+| A4 | Unmodified Horizon client joins and completes its existing server-capable survival/UI/event/pick/use-screen/consume/suggestions paths without disconnect or broken ordinary interaction; FPS comparison uses actual drawn frames. | Existing Horizon e2e scenarios **×3**, explore **25 bots ×3**, original failed suggestions/copper/fill cases on corrected pin; laptop 1:1 FPS comparison. Headless functional evidence is not graphical/FPS acceptance. | HzClientQA, queued HzCompatA4 fixes + laptop; `HzClientQA/`, `HzCompatA4/`. |
+| A5 | Battle with `/give` and kits in flight survives SIGKILL/restart with the required entity/item/inventory census and legitimate lifecycle removals accounted for. | Existing crash campaign: **≥5 valid cuts at each of its four moments (20 total)**, including before/after checkpoint, during append and after publication; ordinary pruning, retained original WAL/crash copies. Incomplete cuts are not passes. | CrashGive; `CrashGive/`. |
+| A6 | Measured public-docs-only zero-to-running-server-with-plugins path for ours and Horizon: steps, wall time, downloads and failures; merge concrete small fixes it discovers. | Existing fresh-user replay; **second independent replay of our path** from docs alone. Report losses honestly. | ConvenienceSdk; `ConvenienceSdk/`. |
+| A7 | Measured zero-to-first-working-plugin path for ours and `cargo-horizon-mod`: steps, lines and time; the existing proposed concrete simplification is resolved by the owner and merged if selected. | Existing fresh-checkout plugin replay, not a generated scaffold or mocked command response. No speculative SDK redesign. | ConvenienceSdk + owner API-cut decision; `ConvenienceSdk/`. |
+| A8 | Real **26.1.2 and 26.3 clients simultaneously** in one freeze-pin world: chat, see each other, transfer an item. Retain support for the full 775–777 window. | Existing mixed-version real-client gate and freeze-pin recheck; protocol bots alone do not accept the visible interaction. | Main; `Stage3/` mixed-version gate receipts. |
+| A9 | Genuine paid Spanish construction, parent growth and daughter founding inheriting the committed style; same owner UUID is the approved teaser faction. Real timelapse, day/population/buildings/TPS overlay and chronicle from that run, not a single-town substitute. | Existing S1 trial in fresh recorded-seed worlds **≥2 runs**, freeze-pin footage; all **5 approved founding amendments**, old rows read `None`, no old-binary downgrade after new-field writes, independent persistence review, required negative/crash controls. | SpainCulture, queued; `SpainCulture/`. |
+| A10 | Full already-selected adapted ATM data/worldgen target (**127 MVS Overworld + 3 Nether definitions**), genuinely generated and shown by a real client in a fresh world, surviving the required restart. Preserve structure sets/pools/jigsaw/processors/placement/Moog support and block/item requirements, not fixture-only admission. | Existing unchanged selected-pack count/restart case (seed **20261115**, origin chunk **(-16,-16)**, same seven-file crystal fixture), plus full selected-pack and actual-template/Nether checks; the partial fixture is not the full acceptance target. Keep all original repeats/controls. Caption **“adapted data from N ATM10 mods, EXPERIMENTAL”**; N stays **0** until actual proof; record licences, no jars/data redistribution or whole-modpack compatibility claim. | AtmNether integration; queued AtmCarry counted proof. `AtmNether/`, `AtmOverlay/`, `AtmCarry/`, `AtmPilot/`. |
+| A11 | Persisted native battle regiments/formations/orders/targets/holds/phase/live-player roles recover and battle continues automatically after SIGKILL, with no reset/setup command. | Existing native/WAL regression with **fix-reverted negative control**, independent persistence review, actual Horizon-client SIGKILL continuation **≥3 repeats** on the corrected candidate; ADR and operating guide updated. | BattleResume; `BattleResume/`, `SpectateFix/`. |
+| A12 | CONTRIBUTING and outside-AI guidance work without owner-host internals: build, L0/L1/L2, PR, licence/Mojang-byte rules. **24 existing first-entry issues** (within approved 20–30), labelled and containing context/files/acceptance/verification. | Fresh clean clone/user follows docs to **green L1 + sample draft PR**; breaker reads **all 24 drafts**, references refreshed to freeze pin. Main publication authorized **20 November only after those checks**, not now. | ContribReady + Main; `ContribReady/`, `ContribReady/issues/`, `Stage3/`. |
+
+**Queue admission.** Report and file every noticed defect. Only a reproducible
+safety failure (crash, data loss, duplication or access bypass), a broken
+ordinary advertised path, or a concrete dependency of a frozen row
+automatically blocks this announcement. Name the row and causal dependency.
+Everything else stays visible backlog, not an automatic implementation slice,
+QA campaign, audit or new release requirement. The owner may explicitly add
+scope. Preserve negative evidence and deferred debt; never erase a failure by
+renaming it or narrowing its assertion.
+
+**Closure and stop.** All frozen rows need their required same-candidate
+evidence; the blocking set must be empty, including no known release-blocking
+crash/data loss/dupe/access bypass or broken ordinary advertised path. Require
+final integrated `correctness`, scoped real-client proof, independent
+[breaker acceptance](QA_AGENT_PROTOCOL.md), **two release reviewers**, and
+honest documented limits under the existing
+[release procedure](development/release-and-tags.md). These reviews count
+inside the two-child limit, not an extra pool. Reuse clean pins only for the
+same tree and inputs; rerun only evidence invalidated by a relevant change.
+
+Then set `release-ready`, stop/park automated development and send **one owner
+decision packet** for tag/announcement. Do not reopen broad audits, refactors,
+optional mechanics, benchmarks or the historical ledger automatically.
+Publication still requires owner authorization. If a criterion cannot be met,
+report its exact missing proof/blocker and the owner decision required; do not
+silently cut scope, reset the date or retry indefinitely. Apply the
+Constitution's same-premise check before a third fix after two failed fixes.
+
+
 ## Quality Labels
 
 Every plan, closeout, and final response must use one of these labels:
