@@ -122,9 +122,9 @@ alongside the world and telemetry; the chronicle does not invent lost history.
 
 ### Native daughter founding
 
-The provisional founding schema is recorded separately in
-[owner decisions](../settlements/OWNER_DECISIONS.md#provisional-daughter-founding--2026-11-15);
-Main authorized implementation and review, not an owner-approved schema release.
+The owner-approved founding schema and its five committee amendments are
+recorded in [owner decisions](../settlements/OWNER_DECISIONS.md#daughter-founding--owner-approved-2026-11-15).
+Main requires independent persistence review before integration.
 A styled owned town with at least 24 residents considers one complete, fed
 household at a time. The initial outpost has three house beds, so admission
 requires two or three members, including at least two adults, with no military,
@@ -152,3 +152,10 @@ handover must recover either the entire old image or the entire new image.
 Old checkpoint and WAL rows decode missing `founding` as `None`. Once a world
 contains this new field, downgrade to a binary whose row schema denies it is
 unsupported; restore the matching pre-upgrade world backup instead.
+
+Short land strolls reject steps whose actual standing feet are in water
+(`LandRandomPos`'s dry-land policy); the general work/POI router retains its
+wading and floating permission. A dry stroll must not send a resident down
+into a roofed village well merely because the water bed is standable.
+This is entry prevention, not a teleport or a claim that a trapped resident
+can jump through the well's low roof.

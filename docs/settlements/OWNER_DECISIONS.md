@@ -48,15 +48,15 @@ The supply recipes from the same decision (saddle, hay block) are implemented; s
 - Water, lava, steep terrain and other existing terrain refusals remain refusals.
 - An identical player replacement at a former natural coordinate after history expiry may be felled with its drops conserved; see [the construction policy](construction.md#planning-and-streets).
 
-## Provisional daughter founding — 2026-11-15
+## Daughter founding — owner approved 2026-11-15
 
-Status: Main authorized a separate implementation commit and independent review
-of the committee's minimal schema; final owner schema approval remains required.
+Status: the owner approved `SettlementRecord.founding` with all five committee
+amendments. Main requires an independent persistence review before integration.
 This is not an approved war/faction model and must not be described as one.
 
 - The existing owner UUID groups teaser settlements. Only completed native
   Spanish blueprint provenance establishes that owner's style.
-- The proposed durable addition is a serde-defaulted optional `founding` on a
+- The durable addition is a serde-defaulted optional `founding` on a
   settlement, containing only `destination: [i32; 3]` and an existing `household`
   key. Stage, payment, materials, construction and culture are derived from
   existing native state; there is no persisted lineage or culture flag.

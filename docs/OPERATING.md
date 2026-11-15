@@ -840,6 +840,17 @@ startup. Death-grave custody can be verified offline with
 
 ## World operations and backup
 
+### Settlement schema upgrades
+
+Before upgrading to the owner-approved daughter-founding schema, retain a
+complete pre-upgrade world backup. Old checkpoint and WAL settlement rows
+without `founding` decode as `None`; the new binary writes the new field.
+After those writes, do not open that world with an older binary whose strict
+settlement schema rejects the field. Roll back the binary **and its matching
+pre-upgrade world backup**, not just the executable. The founding schema and
+atomic handover contract are in
+[settlement architecture](architecture/settlements.md#native-daughter-founding).
+
 ### Native worlds and Anvil interchange
 
 Serving persists a native database (`native/state.redb`) and the tick WAL, not
