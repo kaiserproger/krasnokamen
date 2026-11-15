@@ -83,14 +83,15 @@ class BuildTokenTests(unittest.TestCase):
                         KRASNOKAMEN_WINDOW_OVERRIDE='1', KRASNOKAMEN_RELEASE_BUILD_ALLOW='1')
         self.count = 0
 
-    def start(self, *command: str) -> Command:
+    def start(self, *command: str, pass_fds: tuple[int, ...] = ()) -> Command:
         """Start `mem-run.sh -m 1G <command>`; slot-lock.py writes b'w' to its ready pipe once queued."""
         self.count += 1
         ready_r, ready_w = os.pipe()
         log = self.root / f'runner-{self.count}.log'
         with open(log, 'w') as stderr:
             proc = subprocess.Popen([str(self.runner), '-m', '1G', *command], cwd=self.tree,
-                                    env=self.env | {'KRASNOKAMEN_BUILD_TOKEN_READY_FD': str(ready_w)}, pass_fds=(ready_w,),
+                                    env=self.env | {'KRASNOKAMEN_BUILD_TOKEN_READY_FD': str(ready_w)},
+                                    pass_fds=(ready_w, *pass_fds),
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr, text=True)
         os.close(ready_w)
         cmd = Command(proc, ready_r, log)
@@ -212,6 +213,36 @@ class BuildTokenTests(unittest.TestCase):
         for cmd in running + [fifth]:
             self.finish(cmd)
         self.wait_tokens_free()
+
+    def test_killing_a_runner_parked_behind_a_window_frees_its_token(self):
+        # 2026-11-15: a compile killed while it waited for a -x window left its `flock -s 3`
+        # child orphaned with a copy of the token fd, so the token stayed held until the window ended.
+        self.state_dir.mkdir()
+        window = os.open(self.state_dir / 'exclusive.lock', os.O_WRONLY | os.O_CREAT, 0o644)
+        self.addCleanup(os.close, window)  # releasing it lets the parked flock finish and exit
+        fcntl.flock(window, fcntl.LOCK_EX)
+        # A `flock` stub on PATH reports the shared wait on a pipe, then becomes the real flock.
+        parked_r, parked_w = os.pipe()
+        self.addCleanup(os.close, parked_r)
+        (self.root / 'bin' / 'flock').write_text(
+            f'#!{sys.executable}\nimport os, sys\n'
+            'if sys.argv[1:] == ["-s", "3"]:\n'
+            '    os.write(int(os.environ["TEST_FLOCK_PARKED_FD"]), b"p")\n'
+            f'os.execv({shutil.which("flock")!r}, ["flock", *sys.argv[1:]])\n')
+        (self.root / 'bin' / 'flock').chmod(0o755)
+        saved, self.env = self.env, self.env | {'TEST_FLOCK_PARKED_FD': str(parked_w)}
+        try:
+            parked = self.start('cargo', 'build', pass_fds=(parked_w,))
+        finally:
+            self.env = saved
+            os.close(parked_w)
+        readable, _, _ = select.select([parked_r], [], [], BOUND)
+        self.assertTrue(readable, f'the runner did not park behind the window within {BOUND} s')
+        self.assertEqual(os.read(parked_r, 1), b'p')
+        self.assertEqual(len(self.held_tokens()), 1)
+        parked.proc.send_signal(signal.SIGKILL)
+        parked.proc.wait(timeout=BOUND)
+        self.wait_tokens_free()  # while the window still holds exclusive.lock
 
     def test_nested_compile_and_gate_run_while_all_tokens_are_held(self):
         running, _ = self.hold_three()
