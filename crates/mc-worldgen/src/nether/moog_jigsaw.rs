@@ -36,6 +36,10 @@ impl HeightQuery for NetherMoogQuery<'_> {
     fn sea_level(&self) -> Option<i32> {
         Some(NETHER_LAVA_LEVEL)
     }
+
+    fn highest_land(&self, x: i32, z: i32, min_y: i32, max_y: i32) -> Option<i32> {
+        highest_land(self.generator, x, z, min_y, max_y)
+    }
 }
 
 impl NetherMoogQuery<'_> {
@@ -74,3 +78,7 @@ pub(super) fn highest_land(
 #[cfg(test)]
 #[path = "moog_jigsaw_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "moog_jigsaw_placement_tests.rs"]
+mod placement_tests;
