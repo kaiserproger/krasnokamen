@@ -243,6 +243,24 @@ and ticket removal. See the [battle contract](../architecture/persistence.md#bat
 Native death tombstones take authority immediately: the short-lived presentation
 corpse never contributes compact persisted poses after its live body is gone.
 
+The owner-approved native founding expedition is an optional, default-absent
+`SettlementRecord.founding` field containing only its destination and household
+identity. Paid construction stages remain derived from the canonical structure
+ledger. The reservation is admitted by the settlement registry and fences both
+construction rectangles and the civil radius that either daughter can publish.
+Generic building certification remains strictly inside the current civil radius;
+an expedition cannot lend its reservation to parent certificates. Handover consumes
+the reservation and publishes the new daughter, its certificates, the same living
+household and inventories, and committed ledger ownership in one native tick/WAL
+boundary. Canceled payment/construction history is retained, not transferred as
+live provenance. There is no second persistence owner, spawned replacement family,
+or visual-only daughter.
+
+Older native checkpoints and WAL rows without `founding` open with no expedition.
+Once this field has been written, binaries predating it are **not downgrade-safe**:
+restore a pre-upgrade native checkpoint and its matching WAL with the old binary,
+or continue with the compatible binary. Do not strip the field or rewrite the
+save to make an older reader accept it.
 
 Retained player and entity NBT is validated and tag-set-normalized at the shared
 recovery boundary before dimension copies, live hydration or offline

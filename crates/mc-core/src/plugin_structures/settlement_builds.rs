@@ -1294,6 +1294,7 @@ pub(crate) fn prepare_founding_transfer(
     let matches = |record: &Structure| {
         record.settlement == Some(source)
             && record.owner == source_owner
+            && record.snapshot.state == ScriptStructureState::Committed
             && sites.iter().any(|(name, origin)| {
                 record
                     .snapshot
@@ -1318,8 +1319,7 @@ pub(crate) fn prepare_founding_transfer(
         }
     }
     for record in ledger.structures.values().filter(|record| matches(record)) {
-        if record.snapshot.state != ScriptStructureState::Committed
-            || record.snapshot.dimension != state.dimension.name()
+        if record.snapshot.dimension != state.dimension.name()
             || record.cells.iter().flatten().any(|cell| {
                 cell.state != state.registry.states.air
                     && state

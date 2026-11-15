@@ -451,6 +451,25 @@ impl Registry {
             .ok_or("settlement identity exhausted")
     }
 
+    fn claim_available(&self, id: SettlementId, anchor: [i32; 3], radius: u32) -> bool {
+        self.records.values().all(|other| {
+            other.id == id || other.founding.as_ref().is_none_or(|site| {
+                !super::construction::founding::sphere_overlaps(anchor, radius, site.bounds())
+            })
+        })
+    }
+
+    pub(super) fn grow_radius(&mut self, id: SettlementId, radius: u32) {
+        let Some(record) = self.records.get(&id) else { return };
+        if record.radius >= radius || !self.claim_available(id, record.anchor, radius) {
+            return;
+        }
+        let record = self.records.get_mut(&id).unwrap();
+        record.radius = radius;
+        record.revision = record.revision.saturating_add(1);
+        self.touched.insert(id);
+    }
+
     pub fn create(
         &mut self,
         sequence: &mut u64,
@@ -487,6 +506,9 @@ impl Registry {
             founding: None,
         };
         validate_record(&record)?;
+        if !self.claim_available(id, anchor, radius) {
+            return Err("settlement overlaps a founding expedition claim");
+        }
         self.records.insert(id, record);
         self.touched.insert(id);
         self.high_water = id.0;
@@ -534,6 +556,9 @@ impl Registry {
             founding: None,
         };
         validate_record(&record)?;
+        if !self.claim_available(id, anchor, record.radius) {
+            return Err("settlement overlaps a founding expedition claim");
+        }
         self.records.insert(id, record);
         self.touched.insert(id);
         self.high_water = id.0;
@@ -683,13 +708,7 @@ impl Registry {
             let wanted = GROWTH_PER_RESIDENT
                 .saturating_mul(residents)
                 .min(MAX_RADIUS);
-            if let Some(record) = self.records.get_mut(&id)
-                && record.radius < wanted
-            {
-                record.radius = wanted;
-                record.revision = record.revision.saturating_add(1);
-                self.touched.insert(id);
-            }
+            self.grow_radius(id, wanted);
         }
     }
 

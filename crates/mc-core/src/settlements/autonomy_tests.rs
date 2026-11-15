@@ -1720,3 +1720,39 @@ fn busy_gatherer_can_prove_the_other_natural_source() {
         "already staffing the grove must not make the only adult disappear from natural mine admission"
     );
 }
+
+#[test]
+fn review_generated_village_adoption_respects_an_active_expedition_claim() {
+    let (mut state, chunks) = fixture(
+        vec![BELL],
+        vec![(
+            generated_claim("minecraft:village/plains/houses/plains_house_1", [0, 201, 0]),
+            [6.5, 202.0, 6.5],
+            "none".into(),
+        )],
+        vec![],
+    );
+    let parent = state.settlements.create(
+        &mut state.settlement_sequence, "parent".into(), "owner".into(), [-96, 201, 8], 16,
+    ).unwrap();
+    let mut family = Vec::new();
+    for _ in 0..2 {
+        let slot = crate::settlements::allocator::tests::villager(&mut state, [-96.5, 201.0, 8.5]);
+        let entity = state.entities.body(slot).id;
+        crate::settlements::bind(&mut state, parent, entity).unwrap();
+        family.push(entity);
+    }
+    let household = crate::settlements::households::form(
+        &mut state, parent, &family, crate::settlements::households::HouseholdOrigin::Migration,
+    ).unwrap();
+    state.settlements.get_mut(parent).unwrap().founding =
+        Some(crate::settlements::construction::FoundingExpedition {
+            destination: [0, 200, 0],
+            household,
+        });
+    let sequence = state.settlement_sequence;
+    adopt(&mut state, &chunks);
+    assert_eq!(state.settlements.records().count(), 1, "generated bell cannot steal an expedition claim");
+    assert_eq!(state.settlement_sequence, sequence);
+    crate::settlements::persistence::finish_recovery(&mut state).unwrap();
+}

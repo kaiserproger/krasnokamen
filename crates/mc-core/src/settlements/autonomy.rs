@@ -395,15 +395,7 @@ fn grow_radius(
     let radius = (distance.sqrt().ceil() as u32)
         .saturating_add(4)
         .min(super::registry::MAX_RADIUS);
-    if state
-        .settlements
-        .get(id)
-        .is_some_and(|record| record.radius < radius)
-    {
-        let record = state.settlements.get_mut(id).expect("adopted village");
-        record.radius = radius;
-        record.revision = record.revision.saturating_add(1);
-    }
+    state.settlements.grow_radius(id, radius);
 }
 
 fn ensure_storage_chest(

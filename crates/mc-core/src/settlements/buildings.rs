@@ -235,7 +235,7 @@ fn overlaps(a: ScriptWorldBounds, b: ScriptWorldBounds) -> bool {
     (0..3).all(|i| a.min[i] <= b.max[i] && b.min[i] <= a.max[i])
 }
 fn within(record: &SettlementRecord, bounds: ScriptWorldBounds) -> bool {
-    let in_town = [bounds.min[0], bounds.max[0]].into_iter().all(|x| {
+    [bounds.min[0], bounds.max[0]].into_iter().all(|x| {
         [bounds.min[1], bounds.max[1]].into_iter().all(|y| {
             [bounds.min[2], bounds.max[2]].into_iter().all(|z| {
                 [x, y, z]
@@ -246,12 +246,7 @@ fn within(record: &SettlementRecord, bounds: ScriptWorldBounds) -> bool {
                     <= i128::from(record.radius).pow(2)
             })
         })
-    });
-    in_town
-        || record
-            .founding
-            .as_ref()
-            .is_some_and(|site| site.contains(bounds.min) && site.contains(bounds.max))
+    })
 }
 /// Krasnokamen job stations: builder huts, mines and lumber camps are staffed at crafting
 /// tables or barrels. Resolved by building kind, so vanilla fishermen keep their barrels.

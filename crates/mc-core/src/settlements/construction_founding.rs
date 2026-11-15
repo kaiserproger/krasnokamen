@@ -71,14 +71,26 @@ fn overlaps(a: ScriptWorldBounds, b: ScriptWorldBounds) -> bool {
     (0..3).all(|axis| a.min[axis] <= b.max[axis] && b.min[axis] <= a.max[axis])
 }
 
-fn town_overlaps(town: &SettlementRecord, bounds: ScriptWorldBounds) -> bool {
+pub(in crate::settlements) fn sphere_overlaps(
+    anchor: [i32; 3],
+    radius: u32,
+    bounds: ScriptWorldBounds,
+) -> bool {
     (0..3)
         .map(|axis| {
-            let nearest = town.anchor[axis].clamp(bounds.min[axis], bounds.max[axis]);
-            (i128::from(nearest) - i128::from(town.anchor[axis])).pow(2)
+            let nearest = anchor[axis].clamp(bounds.min[axis], bounds.max[axis]);
+            (i128::from(nearest) - i128::from(anchor[axis])).pow(2)
         })
         .sum::<i128>()
-        <= i128::from(town.radius).pow(2)
+        <= i128::from(radius).pow(2)
+}
+
+fn expedition_overlaps(a: &FoundingExpedition, b: &FoundingExpedition) -> bool {
+    // Reserve against the civil radius that handover will publish, not just
+    // today's disjoint construction rectangles. Both directions must survive
+    // either expedition completing first.
+    sphere_overlaps(a.anchor(), CHILD_RADIUS, b.bounds())
+        || sphere_overlaps(b.anchor(), CHILD_RADIUS, a.bounds())
 }
 
 /// Recovery uses exactly the same full site claims as admission. No chunk load.
@@ -93,7 +105,7 @@ pub(in crate::settlements) fn validate_claims(state: &TickState) -> Result<(), &
         let bounds = expedition.bounds();
         if state.settlements.records().any(|other| {
             other.id != parent.id
-                && (town_overlaps(other, bounds)
+                && (sphere_overlaps(other.anchor, other.radius, bounds)
                     || other
                         .buildings
                         .values()
@@ -101,7 +113,7 @@ pub(in crate::settlements) fn validate_claims(state: &TickState) -> Result<(), &
                     || other
                         .founding
                         .as_ref()
-                        .is_some_and(|other| overlaps(other.bounds(), bounds)))
+                        .is_some_and(|other| expedition_overlaps(other, expedition)))
         }) || !executor::founding_claim_clear(state, parent.id, bounds, &expedition.sites())
         {
             return Err("founding site overlaps a settlement, expedition or structure claim");
@@ -254,11 +266,11 @@ fn admit(state: &mut TickState, parent: SettlementId) {
     }
     let bounds = expedition.bounds();
     if state.settlements.records().any(|town| {
-        town_overlaps(town, bounds)
+        sphere_overlaps(town.anchor, town.radius, bounds)
             || town
                 .founding
                 .as_ref()
-                .is_some_and(|other| overlaps(other.bounds(), bounds))
+                .is_some_and(|other| expedition_overlaps(other, &expedition))
     }) || !executor::founding_claim_clear(state, parent, bounds, &expedition.sites())
     {
         return;
@@ -383,9 +395,7 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
     }
     let source = state.settlements.get(parent).unwrap();
     if source.project.is_some()
-        || source.buildings.len() > 1020
-        || source.building_sequence > u64::from(u32::MAX) - 4
-        || source.revision > u64::MAX - 8
+        || source.revision > u64::MAX - 2
         || source.households[&expedition.household].revision == u64::MAX
     {
         return false;
@@ -430,15 +440,10 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
     };
     let owner = source.owner.clone().expect("validated founding owner");
     let owner_name = source.owner_name.clone();
-    // Native certification rechecks physical geometry. All identities and
-    // capacities above are fenced on this one synchronous tick owner.
-    let ids: Vec<_> = certificates
-        .iter()
-        .map(|(kind, bounds, _)| {
-            buildings::certify(state, parent, *kind, *bounds)
-                .expect("prevalidated outpost certificate")
-        })
-        .collect();
+    // The source reservation is consumed by this same synchronous tick. Every
+    // fallible check above has completed; creation now admits against all
+    // remaining claims, and certificates belong directly to the daughter.
+    state.settlements.get_mut(parent).unwrap().founding = None;
     let created = state
         .settlements
         .create(
@@ -450,20 +455,9 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
         )
         .expect("prevalidated daughter identity");
     assert_eq!(created, child);
-    for (index, old) in ids.into_iter().enumerate() {
-        let mut building = state
-            .settlements
-            .get_mut(parent)
-            .unwrap()
-            .buildings
-            .remove(&old)
-            .expect("new outpost certificate");
-        building.id = BuildingId((child.0 << 32) | (index as u64 + 1));
-        building.settlement = child;
-        building.revision = 1;
-        let destination = state.settlements.get_mut(child).unwrap();
-        destination.building_sequence = index as u64 + 1;
-        destination.buildings.insert(building.id, building);
+    for (kind, bounds, _) in certificates {
+        buildings::certify(state, child, kind, bounds)
+            .expect("prevalidated daughter certificate");
     }
     state.settlements.get_mut(child).unwrap().owner_name = owner_name;
     executor::commit_founding_transfer(state, transfer);
