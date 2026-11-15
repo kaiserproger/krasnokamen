@@ -234,6 +234,11 @@ compression, palette and compound order, omitted defaults and `LastUpdate` are
 normalized, not byte-identical. The receipt's file inventory uses CRC32, not a
 cryptographic signature.
 
+Anvil reads support gzip, zlib, uncompressed and vanilla LZ4Block streams.
+LZ4 checksums use lz4-java's low 28 bits of XXHash32 (seed `0x9747b28c`);
+checksum mismatches still refuse import. Fresh export chunks use zlib, not LZ4.
+The region-preserving writer copies validated LZ4 slots byte-for-byte.
+
 ### A world from Solaris 1.0.0-rc.5 or older
 
 This build refuses to open a world written before the Krasnokamen rename and

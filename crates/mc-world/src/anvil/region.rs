@@ -1593,7 +1593,8 @@ fn validate_lz4_method(
 }
 
 fn verify_lz4_checksum(bytes: &[u8], expected: u32) -> Result<(), std::io::Error> {
-    let actual = xxhash32(bytes, LZ4_CHECKSUM_SEED);
+    // lz4-java's StreamingXXHash32.asChecksum() exposes only the low 28 bits.
+    let actual = xxhash32(bytes, LZ4_CHECKSUM_SEED) & 0x0FFF_FFFF;
     if actual != expected {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,

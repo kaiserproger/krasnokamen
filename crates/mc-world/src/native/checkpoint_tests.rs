@@ -1446,7 +1446,7 @@ fn native_checkpoint_readonly_crash_refuses_export_without_repairing_source() {
     );
     let before = std::fs::read(&path).unwrap();
     let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
-    let expected = "native source: world was not shut down cleanly; start and stop the server once to repair it, then export";
+    let expected = "native source: world was not shut down cleanly; start and stop the server once to repair it, then retry";
     let error = NativeReadOnlyStore::open_with_cache(&path, [1; 32], 1024 * 1024)
         .err()
         .expect("read-only open must not repair a crashed writer");
