@@ -577,10 +577,12 @@ def screens_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dic
         # Manifest gate: the native client admits the computer bundle (loaders lists "native").
         for probe in (owner, viewer):
             state = probe.wait(lambda s: (s.get("loader") or {}).get("acknowledged") is True
-                               and "computer:monitor" in (s.get("loader") or {}).get("registered_blocks", []),
-                               "native_loader_registered_computer_monitor")
+                               and (s.get("loader") or {}).get("transfer_pending") is False,
+                               "native_loader_acknowledged")
             leg.setdefault("loader", {})[probe.report["id"]] = state.get("loader")
-        verdicts["native_loads_computer_monitor"] = True
+            admitted = "computer:monitor" in state["loader"].get("registered_blocks", [])
+            verdicts["native_loads_computer_monitor"] = admitted
+            probe.check("native_loader_registered_computer_monitor", admitted)
         arena(owner, owner_name, (1000, 1000))
         owner.fixture("setblock {} {} {} minecraft:gray_glazed_terracotta[facing=north]".format(*MONITOR))
         owner.fixture("setworldspawn 1001 160 1001")
@@ -707,7 +709,9 @@ def voice_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dict[
                 SoundCapture(run.root, sink=f"{name.lower()}_out", description=f"{name.lower()}_out")))
         clients = {}
         for name in (a_name, b_name):
-            files = {"config/voicechat/voicechat-client.properties": svc_config(outs[name].sink, mics[name].source)}
+            # The pinned SVC version leaves its group key unbound by default.
+            files = {"config/voicechat/voicechat-client.properties": svc_config(outs[name].sink, mics[name].source),
+                     "options.txt": java_options(8, 70) + "\nkey_key.voice_chat_group:key.keyboard.g\n"}
             clients[name] = run.java(name, address, "svc", outs[name].sink, files)
             register(clients[name])
         a, b = clients[a_name], clients[b_name]
@@ -786,16 +790,27 @@ def voice_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dict[
 
         # HC-1: reconnect to a server without voice; nothing from the old one survives.
         quiet_address, _ = run.server("no-voice-server", "\n[voice]\nenabled = false\n", [native_name])
-        native.call("minecraft_disconnect")
-        native.call("minecraft_connect", {"server_addr": quiet_address})
-        wait_play(native)
-        register(native)
-        native.call("minecraft_wait_ticks", {"ticks": 100})
-        after = native.observe()
-        leg["native_on_non_voice_server"] = {"voice": after["voice"], "voice_hud": voice_hud(after),
-                                             "screenshot": native_shot(native, "native-non-voice-server")}
-        verdicts["native_voice_resets_on_non_voice_server"] = (
-            after["voice"] == {"registered": False, "server_enabled": False, "listening": False}
+        verdicts["native_voice_resets_on_non_voice_server"] = voice_reconnect(native, quiet_address, leg)
+
+
+def voice_reconnect(native: ProbeSteps, quiet_address: str, leg: dict[str, Any]) -> bool:
+    native.call("minecraft_disconnect")
+    disconnected = native.observe(outside_play=True)
+    leg["native_after_disconnect"] = {"voice": disconnected["voice"], "voice_hud": voice_hud(disconnected)}
+    native.call("minecraft_connect", {"server_addr": quiet_address})
+    wait_play(native)
+    register(native)
+    native.call("minecraft_wait_ticks", {"ticks": 100})
+    after = native.observe()
+    leg["native_on_non_voice_server"] = {"voice": after["voice"], "voice_hud": voice_hud(after),
+                                         "screenshot": native_shot(native, "native-non-voice-server")}
+    # Registration advertises this client's capability anew on every Play connection,
+    # even when the next server has no voice support. Prove the old state cleared first.
+    return (disconnected.get("in_play") is False
+            and disconnected["voice"] == {"registered": False, "server_enabled": False, "listening": False}
+            and not voice_hud(disconnected)
+            and after["voice"]["server_enabled"] is False
+            and after["voice"]["listening"] is False
             and not voice_hud(after))
 
 

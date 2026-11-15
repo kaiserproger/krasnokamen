@@ -91,6 +91,79 @@ class ScreensVoiceHelperTests(unittest.TestCase):
             self.assertIn("-PminecraftVersion=26.1.2", commands[1])
             self.assertNotIn("KRASNOKAMEN_JAVA_VERSION", os.environ)
 
+    def test_voice_fixture_binds_the_group_key_it_presses(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(qa, "Run") as run_type, \
+             mock.patch.object(qa, "Microphone"), \
+             mock.patch.object(qa, "SoundCapture"), \
+             mock.patch.object(qa, "write_tone"), \
+             mock.patch.object(qa.runtime, "reserve_port", return_value=24454):
+            run = run_type.return_value
+            run.__enter__.return_value = run
+            run.root = Path(directory)
+            run.server.return_value = ("127.0.0.1:25565", run.root / "server.log")
+            run.java.side_effect = RuntimeError("captured-client-config")
+            with self.assertRaisesRegex(RuntimeError, "captured-client-config"):
+                qa.voice_leg(mock.Mock(), Path("/unused/server"), 60, {}, {})
+            files = run.java.call_args.args[4]
+            self.assertIn("key_key.voice_chat_group:key.keyboard.g",
+                          files.get("options.txt", "").splitlines())
+
+    def test_voice_reset_allows_fresh_capability_registration_only_after_reconnect(self):
+        cleared = {"registered": False, "server_enabled": False, "listening": False}
+        advertised = {**cleared, "registered": True}
+        cases = [
+            (cleared, advertised, [], [], True),
+            (advertised, advertised, [], [], False),
+            (cleared, {**advertised, "server_enabled": True}, [], [], False),
+            (cleared, {**advertised, "listening": True}, [], [], False),
+            (cleared, advertised, [{"id": "hud/voice_mic"}], [], False),
+            (cleared, advertised, [], [{"id": "hud/voice_mic"}], False),
+        ]
+        for before, after, before_hud, after_hud, expected in cases:
+            with self.subTest(before=before, after=after, expected=expected), \
+                 mock.patch.object(qa, "wait_play"), mock.patch.object(qa, "register"), \
+                 mock.patch.object(qa, "native_shot", return_value="quiet.png"):
+                native = mock.Mock()
+                native.observe.side_effect = lambda **kwargs: (
+                    {"voice": before, "ui_nodes": before_hud, "in_play": False}
+                    if kwargs.get("outside_play") else
+                    {"voice": after, "ui_nodes": after_hud, "in_play": True})
+                evidence = {}
+                self.assertEqual(qa.voice_reconnect(native, "quiet:25565", evidence), expected)
+                self.assertEqual(evidence["native_on_non_voice_server"]["voice"], after)
+
+    def test_screen_manifest_records_missing_monitor_after_loader_acknowledgement(self):
+        for blocks in ([], ["computer:monitor"]):
+            with self.subTest(blocks=blocks), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(qa, "Run") as run_type, \
+                 mock.patch.object(qa, "write_tone"), mock.patch.object(qa, "SoundCapture"), \
+                 mock.patch.object(qa, "register"), \
+                 mock.patch.object(qa, "arena", side_effect=RuntimeError("past manifest")):
+                state = {"loader": {"acknowledged": True, "transfer_pending": False,
+                                    "registered_blocks": blocks}}
+                def ready(predicate, label):
+                    if not predicate(state):
+                        raise RuntimeError("awaiting impossible post-ack content")
+                    return state
+                def check(label, condition):
+                    if not condition:
+                        raise RuntimeError(label)
+                run = run_type.return_value
+                run.__enter__.return_value = run
+                run.__exit__.return_value = False
+                run.root = Path(directory)
+                run.evidence = {}
+                run.server.return_value = ("fixture:25565", None)
+                probe = run.native.return_value
+                probe.wait.side_effect = ready
+                probe.check.side_effect = check
+                probe.report = {"id": "native"}
+                verdicts = {}
+                with self.assertRaises(RuntimeError):
+                    qa.screens_leg(mock.Mock(), Path("/unused"), 60, verdicts, {})
+                self.assertIs(verdicts.get("native_loads_computer_monitor"), bool(blocks))
+
 
 if __name__ == "__main__":
     unittest.main()
