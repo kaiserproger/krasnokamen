@@ -352,9 +352,32 @@ class ProfileTaskTests(unittest.TestCase):
                     **_valid_kwargs(root / "game", root / "client.log"))
                 try:
                     self.assertEqual(launch.call_args.kwargs["env"]["JDK_JAVA_OPTIONS"], "-Xmx1G")
-                    self.assertNotIn("--init-script", launch.call_args.args[0])
+                    argv = launch.call_args.args[0]
+                    script = Path(argv[argv.index("--init-script") + 1]).read_text()
+                    self.assertNotIn("maxHeapSize", script)
+                    self.assertIn("project.layout.buildDirectory.set", script)
                 finally:
                     handle.close()
+
+    def test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap(self):
+        for platform in ("fabric", "neoforge"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
+                    _gradlew_present(), mock.patch.dict(os.environ, {"JDK_JAVA_OPTIONS": "-Xmx1G"}), \
+                    mock.patch.object(runtime.os, "access", return_value=True), \
+                    mock.patch.object(runtime, "port_open", return_value=False), \
+                    mock.patch.object(runtime, "wait_port"), \
+                    mock.patch.object(runtime.subprocess, "Popen") as launch:
+                root = Path(directory)
+                _, handle = runtime.start_client(**_valid_kwargs(
+                    root / "game", root / "client.log", client_profile="loader", platform=platform))
+                handle.close()
+                argv = launch.call_args.args[0]
+                self.assertIn("--init-script", argv)
+                script = Path(argv[argv.index("--init-script") + 1]).read_text()
+                self.assertIn("gradleProperty('minecraftVersion').get()", script)
+                self.assertIn(f"version + '/loader-{platform}'", script)
+                self.assertIn("project.layout.buildDirectory.set(new File(endpoint, project.name))", script)
+                self.assertNotIn("maxHeapSize", script)
 
 
 def _mod_entry(profile: str, platform: str) -> dict:

@@ -155,6 +155,32 @@ def prepared_fabric_command(manifest_path: Path, game_dir: Path, username: str) 
             os.pathsep.join(manifest["classpath"]), manifest["main_class"], *arguments]
 
 
+def write_gradle_init(game_dir: Path, task: str, *, cap_heap: bool = True) -> Path:
+    """Separate live endpoint classes; never rewrite another version's build output."""
+    game_dir.mkdir(parents=True, exist_ok=True)
+    init = game_dir / "client-init.gradle"
+    platform = task.split(":")[1]
+    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+    build_root = (json.dumps(str(work / "targets" / "loader-builds"))
+                  if (work / "targets").is_dir()
+                  else "new File(project.rootDir, '.analysis/harness-builds')")
+    init.write_text(
+        "gradle.beforeProject { project ->\n"
+        "  def version = project.providers.gradleProperty('minecraftVersion').get()\n"
+        "  def tree = java.security.MessageDigest.getInstance('SHA-256').digest(project.rootDir.canonicalPath.getBytes('UTF-8')).encodeHex().toString()\n"
+        f"  def endpoint = new File({build_root}, tree + '/' + version + '/{platform}')\n"
+        "  project.layout.buildDirectory.set(new File(endpoint, project.name))\n"
+        "}\n" +
+        ("gradle.projectsEvaluated {\n"
+         "  gradle.rootProject.allprojects { project ->\n"
+         "    project.tasks.withType(JavaExec).configureEach {\n"
+         f"      if (path == {json.dumps(task)}) {{ maxHeapSize = '512m' }}\n"
+         "    }\n"
+         "  }\n"
+         "}\n" if cap_heap else ""))
+    return init
+
+
 def prepare_fabric_launch(artifact_dir: Path, agent_root: Path, timeout_seconds: float) -> Path:
     """Prepare canonical dependencies and export one exact JavaExec command."""
     import subprocess
@@ -162,11 +188,13 @@ def prepare_fabric_launch(artifact_dir: Path, agent_root: Path, timeout_seconds:
     manifest = artifact_dir / "fabric-java-launch.json"
     game = artifact_dir / "prepared-game"
     env = os.environ.copy()
+    env["GRADLE_USER_HOME"] = str(runtime.ensure_loader_gradle_home(agent_root).resolve())
+    init = write_gradle_init(game, ":loader-fabric:runClientMcp", cap_heap=False)
     env.update(KRASNOKAMEN_CLIENT_LAUNCH_MANIFEST=str(manifest),
                KRASNOKAMEN_CLIENT_MCP_TOKEN="prepared-command-not-a-listening-token",
                KRASNOKAMEN_CLIENT_MCP_PORT="26299")
     command = [str(agent_root / "gradlew"), "--no-daemon", "--no-configuration-cache",
-               "--max-workers=2", "-p", str(agent_root),
+               "--max-workers=2", "--init-script", str(init), "-p", str(agent_root),
                f"-Pkrasnokamen.clientMcp.gameDir={game}",
                "-Pkrasnokamen.clientMcp.username=PreparedJava",
                *modded_gradle_arguments(":loader-fabric:runClientMcp")]

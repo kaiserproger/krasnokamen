@@ -6126,3 +6126,18 @@ proving_assertions = { "harness:scene-shot:native-command-feedback" = "summon-ta
 fix_commit = "3a79a7535"
 failing_first = "reported"
 repro_check = "FixBatchA/summon-control-red.log: completed tests fail before entity allocation with only the production fix reverted. summon-suite-green.log: 70 passed. Windowed native-command-feedback: summon-client-red/result.json fails summon-tags_contains_0 using control server d0f4170ac7df; summon-client-green/result.json passes the same assertion on server 868f716e2dc0 with client 12e076e9c761. Screenshot reviewed."
+
+[[bug]]
+id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
+title = "Concurrent Java endpoints share mutable Loader classes and can lose live class files"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart real gate 20261115T011032: 26.1.2 SVC crashes with NoClassDefFoundError LoaderMinecraftInput while 26.3 builds against the same Loader checkout/build directories; the source and compiled class are present after the run."
+repro = "source"
+regression = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
+  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
+]
+repro_check = "ScreensVoiceStart/build-red.log restores only the old init-script behavior and fails both Fabric and NeoForge wiring assertions; audible-build-final-green.log passes. Builds are keyed by canonical checkout hash/version/platform under owner-host targets, with an ignored local fallback; no existing outputs are removed."
+failing_first = "reported"

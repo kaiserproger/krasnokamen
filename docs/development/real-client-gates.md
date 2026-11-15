@@ -120,6 +120,12 @@ Loader profile/platform. Combining them with the legacy no-Loader agent task or
 a different Loader platform fails before spawning Gradle. Prepared Fabric
 JavaExec launches use the same exact endpoint properties.
 
+Gradle init scripts separate build outputs by checkout path, Minecraft version
+and launch platform so one live client cannot lose its classes to another
+endpoint's compilation. On the owner host they live under `<work>/targets/loader-builds`;
+elsewhere they use the checkout's ignored `.analysis/harness-builds`. Existing
+build outputs are neither deleted nor moved.
+
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
 other trees reuse, so the harness refuses `KRASNOKAMEN_SERVER_BINARY` or
 `KRASNOKAMEN_CLIENT_BINARY` inside a slot. Pin instead:
