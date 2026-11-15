@@ -5956,3 +5956,17 @@ regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_sta
 fix_commit = "a39164dc9"
 repro_check = "HarnessPins/negative-loader.log: retaining the API but restoring only the old fixed readiness wait fails at 180.0 != 1800.0. No real graphical cold-build pass is claimed."
 failing_first = "not recorded"
+
+[[bug]]
+id = "SUMMON-TAGS-REFUSED"
+title = "Summon rejects vanilla scoreboard Tags and spawns no entity"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3Issue1 REPORT.md F1: summon with Tags failed with Unknown or unsupported summon NBT field Tags"
+repro = "client"
+regression = ["cargo:mc-core:command_summon::tests::summon_tags_match_selectors_and_survive_checkpoint", "cargo:mc-core:command_summon::tests::summon_tags_reject_invalid_types_before_spawn", "harness:scene-shot:native-command-feedback"]
+proving_assertions = { "harness:scene-shot:native-command-feedback" = "summon-tags_contains_0" }
+fix_commit = "3a79a7535"
+failing_first = "reported"
+repro_check = "FixBatchA/summon-red.log: Tags summon creates zero entities; selector and checkpoint tests pass after retaining Tags through the existing opaque entity NBT owner."

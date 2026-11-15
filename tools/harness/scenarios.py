@@ -623,12 +623,12 @@ SCENARIOS: dict[str, Scenario] = {
         limits="certification only; villager sleep and breeding are not checked",
     ),
     "native-263-entity-rigs": _entry(
-        id="native-263-entity-rigs", summary="26.3 entity rigs (armour stand poses, item frames, banners) render as upstream 26.3 draws them",
+        id="native-263-entity-rigs", summary="26.3 sulfur cube, cushion, poplar boat and poplar chest boat render in the native client",
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="native-263-entity-rigs", requires=("xvfb",),
         sources=("tools/harness/entity_263_rigs_scene.json",),
         fixture="private native client on the scene's own fixture world, windowed capture",
-        proves="checks the received entity poses and the framed shots against the 26.3 model layout",
+        proves="checks all four received entity types are submitted for rendering and visibly change their framed shot regions",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
     "native-shelf-clock": _entry(
