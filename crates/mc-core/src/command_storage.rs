@@ -135,7 +135,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<(i32,
         return Ok((result, message));
     }
     let previous = root.clone();
-    let count = mutate(state, context, action, &mut root, &mut input)?;
+    let count = mutate(state, context, action, &mut root, &mut input, |_| Ok(()))?;
     if count == 0 || root == previous {
         return Err("Data did not change".into());
     }
@@ -153,12 +153,14 @@ pub(crate) fn mutate(
     action: &str,
     root: &mut Tag,
     input: &mut &str,
+    validate_source: impl Fn(&Tag) -> Result<(), String>,
 ) -> Result<i32, String> {
     let word = crate::command_nbt_path::argument;
     Ok(match action {
         "merge" => {
             let previous = root.clone();
             let patch = crate::command_snbt::parse(input.trim()).map_err(str::to_owned)?;
+            validate_source(&patch)?;
             let (Tag::Compound(fields), Tag::Compound(patch)) = (&mut *root, patch) else {
                 return Err("Expected compound".into());
             };
@@ -206,6 +208,7 @@ pub(crate) fn mutate(
                 "from" => source(state, context, input)?,
                 _ => return Err("Expected value or from".into()),
             };
+            validate_source(&value)?;
             if !input.trim().is_empty() {
                 return Err("Trailing arguments".into());
             }

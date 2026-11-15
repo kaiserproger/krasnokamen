@@ -321,7 +321,12 @@ async fn broadcast_lag_closes_only_recipients_of_skipped_knockback() {
 }
 
 #[tokio::test]
-async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
+async fn same_tick_dimension_switch_discards_only_old_world_knockback() {
+    dimension_switch_knockback(false).await;
+    dimension_switch_knockback(true).await;
+}
+
+async fn dimension_switch_knockback(destination_impulse: bool) {
     use mc_core::boundary::PlayerChange;
     use mc_core::dimensions::Dimension;
     let (server, dir) = fixture();
@@ -329,16 +334,21 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
     let (id, mut reliable_rx) = register(&server, "Traveler", false);
     let (close, mut closed) = tokio::sync::oneshot::channel();
     server.connections.inner.lock().closers.insert(id, close);
+    let (other, mut other_rx) = register(&server, "Witness", false);
     let (mut connections, _) = server.connections.routing_snapshot();
     let mut viewers = HashMap::from([(
         id,
         crate::plan::ViewerState::new(id, EntityId(81), [8.0, 64.0, 8.0]),
     )]);
+    viewers.insert(
+        other,
+        crate::plan::ViewerState::new(other, EntityId(82), [8.0, 64.0, 8.0]),
+    );
     let output = TickOutput {
         tick: 2,
         snapshot: Arc::new(WorldSnapshot {
             tick: 2,
-            player_knockback_ticks: Arc::new([(id, (1, 2))].into()),
+            player_knockback_ticks: Arc::new([(id, (1, 2)), (other, (1, 2))].into()),
             dimensions: [(
                 Dimension::Nether,
                 TickOutput {
@@ -348,7 +358,19 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
                         dimension: Dimension::Nether,
                         ..Default::default()
                     }),
-                    changes: Arc::new(ChangeSet::default()),
+                    changes: Arc::new(ChangeSet {
+                        explosions: if destination_impulse {
+                            vec![ExplosionEvent {
+                                center: [8.0, 64.0, 8.0],
+                                radius: 4.0,
+                                blocks: 1,
+                                knockback: vec![(EntityId(81), [0.7, 0.8, 0.9])],
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                        ..Default::default()
+                    }),
                     times: Default::default(),
                 },
             )]
@@ -360,7 +382,10 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
                 center: [8.0, 64.0, 8.0],
                 radius: 4.0,
                 blocks: 1,
-                knockback: vec![(EntityId(81), [0.1, 0.2, 0.3])],
+                knockback: vec![
+                    (EntityId(81), [0.1, 0.2, 0.3]),
+                    (EntityId(82), [0.3, 0.2, 0.1]),
+                ],
             }],
             ..Default::default()
         }),
@@ -393,13 +418,71 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
         &mut viewers,
         &mut connections,
     );
+    assert!(matches!(
+        closed.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    assert!(viewers.contains_key(&id));
+    assert!(connections.contains_key(&id));
+    assert!(server.connections.get(id).is_some());
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &output,
+        &mut crate::plan::ChunkPacketCache::new(),
+        &mut connections,
+    )
+    .await;
     assert_eq!(
-        closed.try_recv().unwrap(),
-        "dimension-switch-explosion-knockback"
+        received_impulses(&mut reliable_rx).await,
+        if destination_impulse {
+            vec![Some([0.7, 0.8, 0.9])]
+        } else {
+            Vec::new()
+        },
+        "only destination-world knockback may cross the dimension reset"
     );
-    assert!(!viewers.contains_key(&id));
-    assert!(!connections.contains_key(&id));
-    assert!(server.connections.get(id).is_none());
+    assert_eq!(
+        received_impulses(&mut other_rx).await,
+        vec![Some([0.3, 0.2, 0.1])]
+    );
+    // A later impulse in the new world still reaches the traveler.
+    let next = TickOutput {
+        tick: 3,
+        snapshot: Arc::new(WorldSnapshot {
+            tick: 3,
+            dimension: Dimension::Nether,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet {
+            explosions: vec![ExplosionEvent {
+                center: [8.0, 64.0, 8.0],
+                radius: 4.0,
+                blocks: 1,
+                knockback: vec![(EntityId(81), [0.4, 0.5, 0.6])],
+            }],
+            ..Default::default()
+        }),
+        times: Default::default(),
+    };
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &next,
+        &mut crate::plan::ChunkPacketCache::new(),
+        &mut connections,
+    )
+    .await;
+    assert_eq!(
+        received_impulses(&mut reliable_rx).await,
+        vec![Some([0.4, 0.5, 0.6])]
+    );
     reliable_rx.close();
     server.hub.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
@@ -918,6 +1001,203 @@ async fn synchronized_registration_publication(publication_first: bool) {
         closed.try_recv(),
         Err(tokio::sync::oneshot::error::TryRecvError::Empty)
     ));
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn dimension_reset_fences_queued_old_world_explosions_at_real_writer() {
+    use mc_core::boundary::PlayerChange;
+    use mc_core::dimensions::Dimension;
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
+    let id = server.connections.joining_id();
+    let (reliable_tx, mut reliable_rx) = mpsc::channel(64);
+    let (world_tx, mut world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx.clone()),
+            || 0,
+        )
+        .unwrap();
+    let (mut connections, _) = server.connections.routing_snapshot();
+    let mut viewers = HashMap::from([(
+        id,
+        crate::plan::ViewerState::new(id, EntityId(81), [8.0, 64.0, 8.0]),
+    )]);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let mut cache = crate::plan::ChunkPacketCache::new();
+    let old = TickOutput {
+        tick: 1,
+        snapshot: Arc::new(WorldSnapshot {
+            tick: 1,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet {
+            explosions: vec![ExplosionEvent {
+                center: [8.0, 64.0, 8.0],
+                radius: 4.0,
+                blocks: 1,
+                knockback: Vec::new(),
+            }],
+            ..Default::default()
+        }),
+        times: Default::default(),
+    };
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &old,
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    while reliable_rx.try_recv().is_ok() {}
+    let mut old_frame = None;
+    while let Ok(frame) = world_rx.try_recv() {
+        let (tx, mut rx) = mpsc::channel(1);
+        tx.try_send(frame.clone()).unwrap();
+        if receive(&mut rx).await.id == ClientboundExplode::ID {
+            old_frame = Some(frame);
+        }
+    }
+    let old_frame = old_frame.expect("queued visual explosion");
+    for _ in 0..4 {
+        world_tx.try_send(old_frame.clone()).unwrap();
+    }
+    assert_eq!(world_tx.capacity(), 0, "old world queue must be full");
+    route_outbox_batches(
+        &server,
+        &mut viewers,
+        &mut connections,
+        vec![(
+            id,
+            vec![PlayerChange::DimensionChanged {
+                teleport_id: 2,
+                dimension: Dimension::Nether,
+                position: [8.0, 64.0, 8.0],
+                yaw: 0.0,
+                pitch: 0.0,
+                game_mode: 0,
+                portal_cooldown: 10,
+            }],
+        )],
+        &mut Arc::from([]),
+    );
+    let destination = TickOutput {
+        tick: 2,
+        snapshot: Arc::new(WorldSnapshot {
+            tick: 2,
+            dimension: Dimension::Nether,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet {
+            explosions: vec![ExplosionEvent {
+                center: [18.0, 64.0, 8.0],
+                radius: 4.0,
+                blocks: 1,
+                knockback: vec![(EntityId(81), [0.7, 0.8, 0.9])],
+            }],
+            ..Default::default()
+        }),
+        times: Default::default(),
+    };
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &destination,
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    let reliable_count = reliable_rx.len();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let client_socket = TcpStream::connect(listener.local_addr().unwrap())
+        .await
+        .unwrap();
+    let (server_socket, _) = listener.accept().await.unwrap();
+    let mut connection = crate::connection::Connection::new(server_socket);
+    connection.set_compression(mc_protocol::frame::Compression::Threshold(256));
+    let (_, writer) = connection.into_play_halves();
+    let task = tokio::spawn(play_writer(
+        writer,
+        Arc::clone(&server.net_counters),
+        Arc::clone(&server.connections),
+        id,
+        uuid::Uuid::nil(),
+        PlayReceivers {
+            reliable: reliable_rx,
+            world: world_rx,
+            dh: mpsc::channel(1).1,
+            keepalive: mpsc::channel(1).1,
+        },
+    ));
+    let mut client = crate::connection::Connection::new(client_socket);
+    client.set_compression(mc_protocol::frame::Compression::Threshold(256));
+    let mut respawned = false;
+    let mut impulses = 0;
+    for _ in 0..reliable_count {
+        let frame =
+            tokio::time::timeout(std::time::Duration::from_secs(5), client.read_frame_play())
+                .await
+                .unwrap()
+                .unwrap();
+        if frame.id == ClientboundRespawn::ID {
+            respawned = true;
+        }
+        if frame.id == ClientboundExplode::ID {
+            assert!(respawned);
+            let blast = ClientboundExplode::decode(&mut &frame.body[..]).unwrap();
+            assert_eq!(blast.center.x, 18.0, "old world explosion followed respawn");
+            assert_eq!(
+                blast.knockback.map(|v| [v.x, v.y, v.z]),
+                Some([0.7, 0.8, 0.9])
+            );
+            impulses += 1;
+        }
+    }
+    assert!(respawned);
+    assert_eq!(
+        impulses, 1,
+        "same-tick destination impulse must be delivered"
+    );
+    // Receiving the reliable burst proves the writer has drained the full old
+    // queue into either its byte stream (broken) or the discard fence (fixed).
+    let mut body = Vec::new();
+    ForgetLevelChunk {
+        chunk_x: 77,
+        chunk_z: 88,
+    }
+    .encode(&mut body)
+    .unwrap();
+    let mut frame = bytes::BytesMut::new();
+    mc_protocol::frame::append_frame(
+        &mut frame,
+        ForgetLevelChunk::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .unwrap();
+    world_tx.try_send(frame.freeze()).unwrap();
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(5), client.read_frame_play())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        frame.id,
+        ForgetLevelChunk::ID,
+        "queued old world frame leaked after respawn"
+    );
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    server.connections.remove(id);
     server.hub.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
 }

@@ -16,8 +16,14 @@ fn prepare(
     mut arguments: &str,
 ) -> Result<(i32, Tag), String> {
     let mut candidate = original.clone();
-    let count =
-        crate::command_storage::mutate(state, context, action, &mut candidate, &mut arguments)?;
+    let count = crate::command_storage::mutate(
+        state,
+        context,
+        action,
+        &mut candidate,
+        &mut arguments,
+        |_| Ok(()),
+    )?;
     Ok((count, candidate))
 }
 

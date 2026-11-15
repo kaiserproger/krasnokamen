@@ -1,6 +1,10 @@
 use super::*;
 use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
 
+#[path = "command_summon_scoreboard_tags_disk_tests.rs"]
+mod scoreboard_tags_disk_tests;
+#[path = "command_summon_scoreboard_tags_tests.rs"]
+mod scoreboard_tags_tests;
 #[path = "command_summon_variant_disk_tests.rs"]
 mod variant_disk_tests;
 #[path = "command_summon_variant_refusal_tests.rs"]

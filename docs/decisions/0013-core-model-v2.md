@@ -119,9 +119,19 @@ affected connections close (`skipped-explosion-knockback`); this observation
 does not alter gameplay authority or persistence.
 Entity ids remain stable through dimension travel: the observer resolves the
 recipient across current worlds after travel commits. If the ordered dimension
-reset moves a viewer away from that tick's explosion projection, the edge closes
-only that recipient (`dimension-switch-explosion-knockback`) instead of silently
-losing the impulse. It does not send an old-world explosion into the new world.
+reset moves a viewer away from that tick's explosion projection, only that
+recipient's stale old-world impulse is discarded. The connection stays open;
+other recipients and new-world impulses are unchanged.
+Before queuing the reliable reset, the pump advances that recipient's world-FIFO
+generation. The writer discards queued older-generation frames, including
+best-effort explosion visuals from an earlier tick; destination frames retain
+the new generation. Already-taken bytes precede the reset in the single writer's
+stream. This fence does not clear another recipient's queue.
+An old-world explosion must never be projected into the new world. This is accepted delivery policy,
+not a claim that vanilla resets motion: 26.3 `ServerPlayer.teleport` sends
+respawn keep-data flags 3, and `ClientPacketListener.handleRespawn` copies old
+delta movement when bit 2 is set. Skipped publications still close only their
+affected recipients as above.
 World snapshot deltas may reconcile to a newer snapshot; fanout plans within
 each world queue's free frame slots and bytes, so a slow viewer's backlog is
 bounded in bytes and its nearest, longest-waiting entity updates go first. See
@@ -182,6 +192,11 @@ those edits could duplicate custody. Each checkpoint logs the quarantined chunks
 complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
+
+Retained player and entity NBT is validated and tag-set-normalized at the shared
+recovery boundary before dimension copies, live hydration or offline
+export. A valid root followed by trailing bytes and repeated `Tags` keys refuse
+the entire image; rewriting a valid prefix is not corruption recovery.
 
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened

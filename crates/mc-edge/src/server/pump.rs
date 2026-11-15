@@ -398,6 +398,14 @@ pub(super) fn route_changes(
     handles: &ConnectionHandles,
     server: &Arc<EdgeServer>,
 ) -> bool {
+    if changes.iter().any(|change| {
+        matches!(
+            change,
+            mc_core::boundary::PlayerChange::DimensionChanged { .. }
+        )
+    }) {
+        handles.world_tx.reset();
+    }
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
         if handles.reliable_tx.try_send(planned.data).is_err() {
             server
@@ -435,20 +443,6 @@ pub(super) fn close_skipped_knockback(
         let current = u64::from(last_tick == out.tick);
         let reason = if count.saturating_sub(previous) > current {
             Some("skipped-explosion-knockback")
-        } else if current != 0
-            && count > previous
-            && !viewers.get(&id).is_some_and(|viewer| {
-                out.in_dimension(viewer.dimension).is_some_and(|world| {
-                    world.changes.explosions.iter().any(|blast| {
-                        blast
-                            .knockback
-                            .iter()
-                            .any(|&(entity, push)| entity == viewer.entity_id && push != [0.0; 3])
-                    })
-                })
-            })
-        {
-            Some("dimension-switch-explosion-knockback")
         } else {
             None
         };

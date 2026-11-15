@@ -65,6 +65,18 @@ Those connections close with `skipped-explosion-knockback`; unaffected viewers
 reconcile snapshots. These counters are transient edge observations, not
 gameplay authority or persisted state. Socket completion and client rendering
 are separate from native commit.
+An ordered dimension reset discards only the traveler's stale old-world
+explosion impulse, without disconnecting or projecting it into the destination.
+The reset first fences that recipient's queued best-effort world frames with a
+new FIFO generation. The real writer discards stale generations before delivery;
+already-taken bytes remain before the reset, and subsequent destination frames
+remain eligible, including a destination impulse in the same tick.
+Other viewers and destination-world impulses are unaffected. Delivering the old
+impulse before reset would require splitting world fanout around the independently
+drained reliable outbox; the existing pump routes that outbox first. Dropping it
+is deliberate delivery policy, not vanilla motion-reset parity (26.3 retains
+motion with respawn keep-data bit 2); skipped-publication detection remains
+fail-closed.
 
 ### Tick cost accounting
 

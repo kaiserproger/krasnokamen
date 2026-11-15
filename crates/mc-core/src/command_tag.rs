@@ -4,6 +4,71 @@ use crate::command_execution::CommandResult;
 use crate::tick::TickState;
 use mc_nbt::{ListTag, Tag, tag_type};
 
+/// Vanilla entity tags are a set; retain first-occurrence order in the NBT list.
+pub(crate) fn normalized(value: &Tag) -> Result<Tag, String> {
+    let Tag::List(list) = value else {
+        return Err("Invalid entity tags: expected a list of strings".into());
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let mut elements = Vec::with_capacity(list.elements.len());
+    for value in &list.elements {
+        let Tag::String(name) = value else {
+            return Err("Invalid entity tags: expected string elements".into());
+        };
+        if seen.insert(name.as_str()) {
+            elements.push(value.clone());
+        }
+    }
+    Ok(Tag::List(ListTag {
+        element_type: tag_type::STRING,
+        elements,
+    }))
+}
+
+pub(crate) fn validate_fields(fields: &[(String, Tag)]) -> Result<(), String> {
+    if fields
+        .iter()
+        .filter(|(key, _)| key == "Tags")
+        .take(2)
+        .count()
+        > 1
+    {
+        return Err("Invalid Tags: duplicate Tags field".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn normalize_fields(fields: &mut [(String, Tag)]) -> Result<(), String> {
+    validate_fields(fields)?;
+    for (key, value) in fields {
+        if key == "Tags" {
+            *value = normalized(value)?;
+        }
+    }
+    Ok(())
+}
+
+/// Also canonicalize existing native/WAL records, without changing the format.
+pub(crate) fn normalize_opaque(mut bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    if bytes.is_empty() {
+        return Ok(bytes);
+    }
+    let mut remaining = bytes.as_slice();
+    let (_, Tag::Compound(mut fields)) =
+        mc_nbt::read_named(&mut remaining).map_err(|error| error.to_string())?
+    else {
+        return Err("Invalid retained entity data".into());
+    };
+    if !remaining.is_empty() {
+        return Err("Invalid retained entity data: trailing NBT bytes".into());
+    }
+    normalize_fields(&mut fields)?;
+    bytes.clear();
+    mc_nbt::write_named(&mut bytes, "", &Tag::Compound(fields))
+        .map_err(|error| error.to_string())?;
+    Ok(bytes)
+}
+
 pub(crate) fn execute(state: &mut TickState, context: Context, input: &str) -> CommandResult {
     let result = run(state, context, input);
     match result {
@@ -81,7 +146,10 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<(i32, Str
             Some(Tag::List(list))
                 if list.element_type == tag_type::STRING || list.elements.is_empty() =>
             {
-                list.elements.clone()
+                let Tag::List(tags) = normalized(&fields[index.unwrap()].1)? else {
+                    unreachable!("normalized tags are a list");
+                };
+                tags.elements
             }
             _ => return Err("Invalid entity tags".into()),
         };

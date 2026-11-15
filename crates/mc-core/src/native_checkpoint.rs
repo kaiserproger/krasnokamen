@@ -853,6 +853,9 @@ pub fn recover_with_reader(
     let root = &dimensions[&Dimension::Overworld];
     let mut players = root.players.clone();
     for player in players.values_mut() {
+        player.opaque_player_fields =
+            crate::command_tag::normalize_opaque(std::mem::take(&mut player.opaque_player_fields))
+                .map_err(CoreError::Storage)?;
         player.statistics.freeze_at_tick(recovered_tick);
         player.warden_warning.freeze_at_tick(recovered_tick);
     }
@@ -872,7 +875,13 @@ pub fn recover_with_reader(
         replay.difficulty = difficulty;
         replay.default_game_mode = default_game_mode;
         replay.gamerules = gamerules.clone();
-        for (&id, entity) in &replay.entities {
+        for (&id, entity) in &mut replay.entities {
+            // Canonicalize native/WAL tag lists before offline conversion or
+            // live hydration can rewrite an ambiguous retained image.
+            entity.state.opaque_entity_fields = crate::command_tag::normalize_opaque(
+                std::mem::take(&mut entity.state.opaque_entity_fields),
+            )
+            .map_err(CoreError::Storage)?;
             if !ids.insert(id) || !uuids.insert(entity.uuid.clone()) {
                 return Err(CoreError::Storage(format!(
                     "native recovery: duplicate entity identity WireId {id} UUID {}",

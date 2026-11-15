@@ -1616,3 +1616,32 @@ fn fall_distance_growth_is_silent_but_the_landing_reset_is_journaled() {
         "landing resets a journaled non-zero distance"
     );
 }
+
+#[test]
+fn duplicate_tags_in_legacy_wal_normalize_on_entity_restore() {
+    let mut state = fixture();
+    let native = mc_data::entity_nbt::VanillaEntity {
+        id: "minecraft:cow".into(),
+        uuid: uuid::Uuid::new_v4(),
+        pos: [8.0, 65.0, 8.0],
+        ..Default::default()
+    };
+    let mut record = replay_record(&state, &native);
+    let tags = crate::command_snbt::parse("{Tags:['d1','d1'],Other:'kept'}").unwrap();
+    mc_nbt::write_named(&mut record.state.opaque_entity_fields, "", &tags).unwrap();
+    restore_entity(&mut state, 200, &record).unwrap();
+    let row = state
+        .entities
+        .row(state.entities.slot_of(EntityId(200)).unwrap());
+    let (_, mc_nbt::Tag::Compound(fields)) =
+        mc_nbt::read_named(&mut row.opaque_entity_fields.as_slice()).unwrap()
+    else {
+        panic!("retained compound")
+    };
+    let mc_nbt::Tag::Compound(expected) =
+        crate::command_snbt::parse("{Tags:['d1'],Other:'kept'}").unwrap()
+    else {
+        unreachable!()
+    };
+    assert_eq!(fields, expected);
+}
