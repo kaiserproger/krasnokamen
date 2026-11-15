@@ -853,6 +853,9 @@ pub fn recover_with_reader(
     let root = &dimensions[&Dimension::Overworld];
     let mut players = root.players.clone();
     for player in players.values_mut() {
+        player.opaque_player_fields =
+            crate::command_tag::normalize_opaque(std::mem::take(&mut player.opaque_player_fields))
+                .map_err(CoreError::Storage)?;
         player.statistics.freeze_at_tick(recovered_tick);
         player.warden_warning.freeze_at_tick(recovered_tick);
     }

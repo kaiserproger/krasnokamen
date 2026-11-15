@@ -71,6 +71,10 @@ fn tail(config: &crate::CoreConfig, state: &TickState, id: EntityId, tags: &Tag)
     let mut image = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
     image.opaque_entity_fields.clear();
     mc_nbt::write_named(&mut image.opaque_entity_fields, "", tags).unwrap();
+    tail_image(config, id, image);
+}
+
+fn tail_image(config: &crate::CoreConfig, id: EntityId, image: EntityStateImage) {
     let mut writer = crate::journal::JournalWriter::open(&config.world_dir, 1).unwrap();
     writer
         .append(
@@ -191,6 +195,111 @@ fn duplicate_tags_keys_in_wal_refuse_recovery() {
     tail(&config, &state, id, &repeated_keys());
     for _ in 0..2 {
         let error = recovered_fields(&config, id).unwrap_err().to_string();
+        assert!(error.contains("duplicate Tags field"), "{error}");
+    }
+}
+
+#[test]
+fn opaque_wal_trailing_bytes_refuse_offline_and_live_recovery() {
+    let (_dir, config, state, id) =
+        checkpoint(crate::command_snbt::parse("{Tags:['checkpoint']}").unwrap());
+    let slot = state.entities.slot_of(id).unwrap();
+    let mut image = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
+    image.opaque_entity_fields.clear();
+    mc_nbt::write_named(
+        &mut image.opaque_entity_fields,
+        "",
+        &crate::command_snbt::parse("{Tags:['tail']}").unwrap(),
+    )
+    .unwrap();
+    image.opaque_entity_fields.extend_from_slice(&[0, 42]);
+    tail_image(&config, id, image);
+    for _ in 0..2 {
+        let error = recovered_fields(&config, id).unwrap_err().to_string();
+        assert!(error.contains("trailing NBT bytes"), "{error}");
+        let error =
+            crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+                .err()
+                .expect("live recovery must refuse trailing opaque bytes")
+                .to_string();
+        assert!(error.contains("trailing NBT bytes"), "{error}");
+    }
+}
+
+fn player_tail(tags: &Tag) -> (tempfile::TempDir, crate::CoreConfig, uuid::Uuid) {
+    let (dir, config, mut state, _) = checkpoint(Tag::Compound(Vec::new()));
+    let player = state.players.values_mut().next().unwrap();
+    player.opaque_player_fields.clear();
+    mc_nbt::write_named(&mut player.opaque_player_fields, "", tags).unwrap();
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    let entry = crate::core::journal_entries_for_tick(&mut state, &output)
+        .into_iter()
+        .find(|entry| matches!(entry, crate::journal::JournalEntry::Player { .. }))
+        .expect("fixture player must have a WAL post-image");
+    let crate::journal::JournalEntry::Player { uuid, .. } = &entry else {
+        unreachable!()
+    };
+    let uuid = uuid.parse().unwrap();
+    let mut writer = crate::journal::JournalWriter::open(&config.world_dir, 1).unwrap();
+    writer.append(2, 2, &[entry]).unwrap();
+    writer.flush().unwrap();
+    (dir, config, uuid)
+}
+
+#[test]
+fn duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery() {
+    let (_dir, config, uuid) =
+        player_tail(&crate::command_snbt::parse("{Tags:['tail','tail'],Other:'player'}").unwrap());
+    let expected = crate::command_snbt::parse("{Tags:['tail'],Other:'player'}").unwrap();
+    for _ in 0..2 {
+        let world = crate::native_checkpoint::recover_offline(&config).unwrap();
+        for replay in world.dimensions.values() {
+            let player = &replay.players[&uuid.to_string()];
+            let (_, fields) =
+                mc_nbt::read_named(&mut player.opaque_player_fields.as_slice()).unwrap();
+            assert_eq!(fields, expected);
+        }
+        let checkpoint = crate::native_checkpoint::encode_checkpoint(&world).unwrap();
+        let player = checkpoint
+            .players
+            .iter()
+            .find(|player| player.uuid == *uuid.as_bytes())
+            .unwrap();
+        let Tag::Compound(fields) =
+            crate::native_checkpoint::decode_tag(&player.record, "player").unwrap()
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            mc_data::item_nbt::field(&fields, "Tags"),
+            Some(&crate::command_snbt::parse("['tail']").unwrap()),
+        );
+        drop(world);
+        let live =
+            crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+                .unwrap();
+        let (_, fields) =
+            mc_nbt::read_named(&mut live.offline_players[&uuid].opaque_player_fields.as_slice())
+                .unwrap();
+        assert_eq!(fields, expected);
+    }
+}
+
+#[test]
+fn duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery() {
+    let (_dir, config, _) = player_tail(&repeated_keys());
+    for _ in 0..2 {
+        let error = crate::native_checkpoint::recover_offline(&config)
+            .and_then(|world| crate::native_checkpoint::encode_checkpoint(&world))
+            .err()
+            .expect("offline export must refuse repeated player Tags keys")
+            .to_string();
+        assert!(error.contains("duplicate Tags field"), "{error}");
+        let error =
+            crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+                .err()
+                .expect("live recovery must refuse repeated player Tags keys")
+                .to_string();
         assert!(error.contains("duplicate Tags field"), "{error}");
     }
 }

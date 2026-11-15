@@ -236,11 +236,7 @@ pub(super) fn load_dimension_state(
                 dimension.name()
             ))
         })?;
-        let mut player = player.clone();
-        player.opaque_player_fields =
-            crate::command_tag::normalize_opaque(player.opaque_player_fields)
-                .map_err(CoreError::Storage)?;
-        tick_state.offline_players.insert(uuid, player);
+        tick_state.offline_players.insert(uuid, player.clone());
     }
     let mut max_wire_id: i32 = 0;
     // One growth for the known population: doubling the cold columns while the

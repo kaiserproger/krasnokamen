@@ -193,6 +193,11 @@ complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
+Retained player and entity NBT is validated and tag-set-normalized at the shared
+recovery boundary before dimension copies, live hydration or offline
+export. A valid root followed by trailing bytes and repeated `Tags` keys refuse
+the entire image; rewriting a valid prefix is not corruption recovery.
+
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened
 path or duplicated Windows handle). Positioned reads have independent cursors;

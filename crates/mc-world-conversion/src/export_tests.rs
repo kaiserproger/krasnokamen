@@ -568,3 +568,93 @@ fn export_hopper_deadlines_become_bounded_portable_remaining_cooldowns() {
         }
     }
 }
+
+#[test]
+fn export_refuses_ambiguous_player_tags_from_real_wal_without_publication() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("native-world");
+    let destination = temporary.path().join("anvil-world");
+    let receipt_path = temporary.path().join("export.json");
+    let config = crate::test_support::config(source.clone(), 42);
+    let registry = crate::test_support::registry().unwrap();
+    drop(fixture_store(&config).unwrap());
+    let player =
+        mc_core::journal::player_from_tag(&Tag::Compound(Vec::new()), &registry.items).unwrap();
+    let tags = Tag::List(mc_nbt::ListTag {
+        element_type: mc_nbt::tag_type::STRING,
+        elements: vec![Tag::String("a".into())],
+    });
+    let mut opaque_player_fields = Vec::new();
+    mc_nbt::write_named(
+        &mut opaque_player_fields,
+        "",
+        &Tag::Compound(vec![
+            ("Tags".into(), tags),
+            (
+                "Tags".into(),
+                Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::STRING,
+                    elements: vec![Tag::String("b".into())],
+                }),
+            ),
+        ]),
+    )
+    .unwrap();
+    let entry = JournalEntry::Player {
+        uuid: uuid::Uuid::from_u128(42).to_string(),
+        opaque_player_fields,
+        statistics: Box::new(player.statistics),
+        advancement_progress: Some(player.advancement_progress),
+        unlocked_recipes: Some(player.unlocked_recipes),
+        dimension: player.dimension,
+        pos: player.pos,
+        yaw: player.yaw,
+        pitch: player.pitch,
+        health: player.health,
+        food: player.food,
+        saturation: player.saturation,
+        exhaustion: player.exhaustion,
+        air: player.air,
+        experience_level: player.experience_level,
+        experience_progress: player.experience_progress,
+        experience_total: player.experience_total,
+        game_mode: player.game_mode,
+        selected: player.selected,
+        inventory: player.inventory,
+        carried: player.carried,
+        grid: player.grid,
+        respawn: player.respawn,
+        respawn_dimension: player.respawn_dimension,
+        respawn_forced: player.respawn_forced,
+        respawn_yaw: player.respawn_yaw,
+        respawn_pitch: player.respawn_pitch,
+        active_effects: player.active_effects,
+        enchantment_seed: player.enchantment_seed,
+        enchantment_offer_seed: player.enchantment_offer_seed,
+        warden_warning: player.warden_warning,
+        current_impulse_impact_pos: player.current_impulse_impact_pos,
+        fall_flying: player.fall_flying,
+        burn_ticks: player.burn_ticks,
+        portal: player.portal,
+        tick: 1,
+    };
+    let mut writer = JournalWriter::open(&source, 1).unwrap();
+    writer.append(1, 1, &[entry]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let before = hashes(&source).unwrap();
+    let error = export_anvil(&config, &source, &destination, &receipt_path).unwrap_err();
+    assert!(
+        error.to_string().contains("duplicate Tags field"),
+        "{error}"
+    );
+    assert!(
+        !destination.exists(),
+        "corrupt player image must not be published"
+    );
+    assert_eq!(hashes(&source).unwrap(), before);
+    let receipt: ConversionReceipt =
+        serde_json::from_slice(&std::fs::read(receipt_path).unwrap()).unwrap();
+    assert_eq!(receipt.status, "FAIL");
+    assert!(receipt.error.unwrap().contains("duplicate Tags field"));
+}

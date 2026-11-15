@@ -894,9 +894,22 @@ impl EdgeServer {
             self.feedback(id, "Unknown or incomplete command")?;
             return Ok(true);
         }
-        if root == "whitelist" {
-            self.whitelist_command(id, &words.collect::<Vec<_>>())
-                .await?;
+        let parsed = if matches!(
+            root,
+            "kick" | "ban" | "pardon" | "op" | "deop" | "whitelist"
+        ) {
+            match Core::moderation_command_words(command) {
+                Ok(parsed) => Some(parsed),
+                Err(error) => {
+                    self.feedback(id, &format!("Command failed: {error}"))?;
+                    return Ok(true);
+                }
+            }
+        } else {
+            None
+        };
+        if let ("whitelist", Some(parsed)) = (root, &parsed) {
+            self.whitelist_command(id, &parsed[1..]).await?;
             return Ok(true);
         }
         if root == "banlist" {
@@ -907,14 +920,7 @@ impl EdgeServer {
             self.transfer_command(id, &words.collect::<Vec<_>>())?;
             return Ok(true);
         }
-        let (target, arguments) = if matches!(root, "kick" | "ban" | "pardon") {
-            let parsed = match Core::moderation_command_words(command) {
-                Ok(parsed) => parsed,
-                Err(error) => {
-                    self.feedback(id, &format!("Command failed: {error}"))?;
-                    return Ok(true);
-                }
-            };
+        let (target, arguments) = if let Some(parsed) = parsed {
             (
                 parsed.get(1).copied(),
                 parsed

@@ -1248,3 +1248,58 @@ async fn profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles
     );
     server.hub.shutdown();
 }
+
+#[tokio::test]
+async fn profile_selectors_keep_quoted_spaces_for_op_deop_and_whitelist() {
+    use mc_core::boundary::PlayerInput;
+    let (server, _dir) = fixture_in_temp_dir();
+    let (alice, _alice_rx) = register(&server, "Alice", false);
+    let (bob, _bob_rx) = register(&server, "Bob", false);
+    let mut ticks = server.hub.subscribe();
+    for (connection, name) in [(alice, "Alice"), (bob, "Bob")] {
+        assert!(server.hub.submit(PlayerInput::Join {
+            connection,
+            uuid: crate::crypto::offline_uuid(name),
+            name: name.into(),
+            permission_level: 0,
+        }));
+    }
+    for _ in 0..3 {
+        ticks.recv().await.unwrap();
+    }
+    let console = mc_core::command_console::CONNECTION;
+    let selector = r#"@a[name=!"Nobody Here"]"#;
+    assert!(
+        server
+            .handle_admin_command(console, &format!("op {selector}"))
+            .await
+            .unwrap()
+    );
+    for name in ["Alice", "Bob"] {
+        assert_eq!(server.admin.level(crate::crypto::offline_uuid(name)), 4);
+    }
+    assert!(
+        server
+            .handle_admin_command(console, &format!("deop {selector}"))
+            .await
+            .unwrap()
+    );
+    for name in ["Alice", "Bob"] {
+        assert_eq!(server.admin.level(crate::crypto::offline_uuid(name)), 0);
+    }
+    assert!(
+        server
+            .handle_admin_command(console, &format!("whitelist add {selector}"))
+            .await
+            .unwrap()
+    );
+    assert_eq!(server.admin.whitelist_names(), ["Alice", "Bob"]);
+    assert!(
+        server
+            .handle_admin_command(console, &format!("whitelist remove {selector}"))
+            .await
+            .unwrap()
+    );
+    assert!(server.admin.whitelist_names().is_empty());
+    server.hub.shutdown();
+}

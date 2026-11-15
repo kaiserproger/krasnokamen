@@ -53,11 +53,15 @@ pub(crate) fn normalize_opaque(mut bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     if bytes.is_empty() {
         return Ok(bytes);
     }
+    let mut remaining = bytes.as_slice();
     let (_, Tag::Compound(mut fields)) =
-        mc_nbt::read_named(&mut bytes.as_slice()).map_err(|error| error.to_string())?
+        mc_nbt::read_named(&mut remaining).map_err(|error| error.to_string())?
     else {
         return Err("Invalid retained entity data".into());
     };
+    if !remaining.is_empty() {
+        return Err("Invalid retained entity data: trailing NBT bytes".into());
+    }
     normalize_fields(&mut fields)?;
     bytes.clear();
     mc_nbt::write_named(&mut bytes, "", &Tag::Compound(fields))

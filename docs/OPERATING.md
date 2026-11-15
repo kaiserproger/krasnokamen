@@ -506,6 +506,9 @@ files can be dropped in unchanged.
   the whitelist as in vanilla, and the player cap only with `bypassesPlayerLimit`
   in `ops.json`. `reload` re-reads a hand-edited list; `add` resolves a live or
   already-known player, or an offline-mode name.
+- `/op`, `/deop`, `/whitelist add` and `/whitelist remove` also resolve online
+  player selectors. Balanced selector arguments preserve quoted spaces, for
+  example `@a[name=!"Nobody Here"]`; they are not split at the inner space.
 - `/kick`, `/ban` and `/pardon` accept selectors such as `@a`, which resolve only
   online players; literal profile names can also target known offline players
   (or offline-mode names). `/ban-ip` takes an IPv4 address or an online player

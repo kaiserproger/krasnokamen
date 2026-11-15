@@ -6274,10 +6274,14 @@ regression = [
   "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_checkpoint_refuse_recovery",
   "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_wal_refuse_recovery",
   "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_checkpoint_and_wal_recovery_is_idempotent",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery",
+  "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication",
 ]
-fix_commit = "patch:5cf559afda0f39316103fd5442ac83c4e17429b31e89eace386f9ee58bb1a25f"
+fix_commit = "patch:a8332407519ccdc26e29f3bebd4d45f46cfd4d4f3b6b19f1f1305028c7549210"
 failing_first = "reported"
-repro_check = "FixBatchB/F3-red.log proves duplicate member loss; amendments/F3-duplicates-red.log proves repeated Tags keys in binary WAL and imported storage source can bypass preflight without the guard. amendments/core-green.log passes all six tag tests, including actual checkpoint and WAL recovery twice each. SNBT and the native checkpoint codec already reject duplicate names; the raw-corrupted checkpoint test confirms fail-closed recovery. 26.3 Entity.javap:12057-12060 applies STRING.sizeLimitedListOf(1024) before insertion into the Set, so 1025 identical entries must remain refused. Cumulative patch docs/bugs/fix-patches/TAGS-DUPLICATES.patch combines c224df8de and 0c51b3a44, excluding F4 validation behavior; its control retains the new mutate validator parameter solely for API compatibility with retained tests, with base callers/behavior."
+repro_check = "FixBatchB/F3-red.log proves duplicate-member loss; amendments/F3-duplicates-red.log proves repeated-key preflight bypass. Round3 F3-trailing-red.log fails when only full-input consumption is reverted. F3-player-red.log and F3-export-red.log fail when only shared player normalization is removed: duplicate elements survive offline recovery and export publishes a corrupt image. Adjacent .control.diff and .control.json identify exact reverted hunks; historical controls are explicitly reconstructed from recorded edits. Shared recovery validates player and entity compounds before rewriting and export. Entity.javap:12057-12060 applies STRING.sizeLimitedListOf(1024) before insertion into the Set. Cumulative TAGS-DUPLICATES.patch retains the mutate validator API for tests but reverts its behavior, excludes F4 validation, and includes the shared recovery fixes. Live player hydration no longer redundantly normalizes the shared result."
 
 [[bug]]
 id = "TAGS-REFUSAL-MESSAGES"
@@ -6316,7 +6320,8 @@ regression = [
   "cargo:mc-edge:server::admin_tests::profile_selectors_op_deop_and_whitelist_use_native_players",
   "cargo:mc-edge:server::admin_tests::profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles",
   "cargo:mc-edge:admin::whitelist_tests::whitelist_removal_does_not_remove_another_uuid_with_the_same_name",
+  "cargo:mc-edge:server::admin_tests::profile_selectors_keep_quoted_spaces_for_op_deop_and_whitelist",
 ]
 fix_commit = "patch:b69e31e85a2d333c95235b2cef5bedc8a6489fb6fee306cea9f0632eddea0c0e"
 failing_first = "reported"
-repro_check = "FixBatchB/amendments/F5-red.log fails with selector expansion removed: /deop @s leaves level 4 and an empty selector reports false success. F5-profile-restored.log passes persisted self-deop, multi-target authorization, whitelist selectors, renamed UUIDs and literal persisted whitelist identities. Local 26.3 javap confirms GameProfileArgument for OpCommand, DeOpCommands and both WhitelistCommand branches; SelectorResult uses EntityArgument.NO_PLAYERS_FOUND (No player was found). The symptom patch OP-DEOP-SELECTOR-LITERAL.patch reverses the op/deop target cutover while retaining the shared profile API and the separate owner-requested whitelist behavior, avoiding an API-breaking control. Original graphical spawn-protection replay and promotion remain Main-owned."
+repro_check = "FixBatchB/amendments/F5-red.log fails with selector expansion removed: self-deop retains level 4 and an empty selector reports false success. F5-profile-restored.log covers persisted self-deop, multi-target authorization, whitelist selectors and UUID identity. Round3 F5-lexer-red.log removes only balanced argument parsing and fails quoted-space selection; edge-green.log covers all four profile commands with a space inside a quoted selector value. Adjacent .control.diff files identify the exact reverted hunks. Local 26.3 javap confirms GameProfileArgument for OpCommand, DeOpCommands and WhitelistCommand; empty selection reports No player was found. The symptom patch reverses the op/deop target cutover while retaining shared profile and whitelist behavior. Original graphical spawn-protection replay and promotion remain Main-owned."

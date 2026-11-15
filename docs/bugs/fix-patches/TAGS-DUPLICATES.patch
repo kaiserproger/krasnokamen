@@ -1,11 +1,145 @@
+diff --git a/crates/mc-core/src/command_data/entity.rs b/crates/mc-core/src/command_data/entity.rs
+index ac01b183f..9032c3eaf 100644
+--- a/crates/mc-core/src/command_data/entity.rs
++++ b/crates/mc-core/src/command_data/entity.rs
+@@ -68,13 +68,19 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag,
+     let mut image = crate::command_data::entity_image(world, id)?;
+     let previous = crate::command_data::entity(world, id)?;
+     let mut edited = previous.clone();
+-    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |_| Ok(()))?;
++    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |source| {
++        if let Tag::Compound(fields) = source {
++            crate::command_tag::validate_fields(fields)?;
++        }
++        Ok(())
++    })?;
+     if edited == previous {
+         return Err("Nothing changed. The specified properties already have these values".into());
+     }
+     let (Tag::Compound(old), Tag::Compound(new)) = (&previous, edited) else {
+         return Err("Entity data must be a compound".into());
+     };
++    crate::command_tag::validate_fields(&new)?;
+     // What the edit changed or removed. The entity keeps its identity and place:
+     // those are not data to load back.
+     let mut changed = Vec::new();
+@@ -87,17 +93,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag,
+             return Err(format!("Editing {key} is not supported; use /tp"));
+         }
+         if key == "Tags" {
+-            let Tag::List(list) = value else {
+-                return Err("Tags must be a string list".into());
+-            };
+-            if list.elements.len() > 1024
+-                || list
+-                    .elements
+-                    .iter()
+-                    .any(|tag| !matches!(tag, Tag::String(_)))
+-            {
+-                return Err("Tags must contain at most 1024 strings".into());
+-            }
++            crate::command_summon::validate_tags(value).map_err(|error| error.message())?;
+             image.retain(|(existing, _)| existing != key);
+             image.push((key.clone(), value.clone()));
+             touched.push(key.clone());
+diff --git a/crates/mc-core/src/command_storage.rs b/crates/mc-core/src/command_storage.rs
+index add325cc9..f711444d5 100644
+--- a/crates/mc-core/src/command_storage.rs
++++ b/crates/mc-core/src/command_storage.rs
+@@ -153,13 +153,14 @@ pub(crate) fn mutate(
+     action: &str,
+     root: &mut Tag,
+     input: &mut &str,
+-    _validate_source: impl Fn(&Tag) -> Result<(), String>,
++    validate_source: impl Fn(&Tag) -> Result<(), String>,
+ ) -> Result<i32, String> {
+     let word = crate::command_nbt_path::argument;
+     Ok(match action {
+         "merge" => {
+             let previous = root.clone();
+             let patch = crate::command_snbt::parse(input.trim()).map_err(str::to_owned)?;
++            validate_source(&patch)?;
+             let (Tag::Compound(fields), Tag::Compound(patch)) = (&mut *root, patch) else {
+                 return Err("Expected compound".into());
+             };
+@@ -207,6 +208,7 @@ pub(crate) fn mutate(
+                 "from" => source(state, context, input)?,
+                 _ => return Err("Expected value or from".into()),
+             };
++            validate_source(&value)?;
+             if !input.trim().is_empty() {
+                 return Err("Trailing arguments".into());
+             }
+diff --git a/crates/mc-core/src/command_summon.rs b/crates/mc-core/src/command_summon.rs
+index 7c8c85861..557b3a22a 100644
+--- a/crates/mc-core/src/command_summon.rs
++++ b/crates/mc-core/src/command_summon.rs
+@@ -51,6 +51,7 @@ pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandE
+     let Tag::Compound(fields) = nbt else {
+         return Err(error("Summon NBT must be a compound"));
+     };
++    crate::command_tag::validate_fields(fields).map_err(error)?;
+     let (mut value, mut count, mut motion) = (0i16, 1i32, [0.0f64; 3]);
+     let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+     for (key, tag) in fields {
+@@ -95,7 +96,7 @@ pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandE
+     Ok((value, count, motion))
+ }
+ 
+-fn validate_tags(value: &Tag) -> Result<(), CommandError> {
++pub(crate) fn validate_tags(value: &Tag) -> Result<(), CommandError> {
+     let Tag::List(list) = value else {
+         return Err(error("Invalid Tags: expected a list of strings"));
+     };
+@@ -135,6 +136,7 @@ pub(crate) fn retained_tags(nbt: &Tag) -> Result<Option<Vec<u8>>, CommandError>
+     let Tag::Compound(fields) = nbt else {
+         return Err(error("Summon NBT must be a compound"));
+     };
++    crate::command_tag::validate_fields(fields).map_err(error)?;
+     let Some((_, tags)) = fields.iter().find(|(key, _)| key == "Tags") else {
+         return Ok(None);
+     };
+@@ -143,7 +145,10 @@ pub(crate) fn retained_tags(nbt: &Tag) -> Result<Option<Vec<u8>>, CommandError>
+     mc_nbt::write_named(
+         &mut bytes,
+         "",
+-        &Tag::Compound(vec![("Tags".into(), tags.clone())]),
++        &Tag::Compound(vec![(
++            "Tags".into(),
++            crate::command_tag::normalized(tags).map_err(error)?,
++        )]),
+     )
+     .map_err(|failure| error(format!("Invalid Tags: {failure}")))?;
+     Ok(Some(bytes))
+@@ -381,6 +386,7 @@ fn authored_fields(
+     name: &str,
+     authored: &[(String, Tag)],
+ ) -> Result<Authored, CommandError> {
++    crate::command_tag::validate_fields(authored).map_err(error)?;
+     let horse = crate::taming::horse(name);
+     let is_painting = name == crate::painting::PAINTING_ID;
+     let mut fields = Vec::with_capacity(authored.len());
+diff --git a/crates/mc-core/src/command_summon_data.rs b/crates/mc-core/src/command_summon_data.rs
+index 59dba8e5d..a9d21697c 100644
+--- a/crates/mc-core/src/command_summon_data.rs
++++ b/crates/mc-core/src/command_summon_data.rs
+@@ -48,7 +48,7 @@ pub(crate) fn prepare_tags(
+     };
+     fields.retain(|(key, _)| key != "Tags");
+     if let Some(tags) = tags {
+-        fields.push(("Tags".into(), tags.clone()));
++        fields.push(("Tags".into(), crate::command_tag::normalized(tags)?));
+     }
+     let mut bytes = Vec::new();
+     mc_nbt::write_named(&mut bytes, "", &mc_nbt::Tag::Compound(fields))
 diff --git a/crates/mc-core/src/command_tag.rs b/crates/mc-core/src/command_tag.rs
+index ed6eaa04a..5bbe387b1 100644
 --- a/crates/mc-core/src/command_tag.rs
 +++ b/crates/mc-core/src/command_tag.rs
-@@ -3,6 +3,67 @@
- use crate::command_execution::CommandResult;
+@@ -4,6 +4,71 @@ use crate::command_execution::CommandResult;
  use crate::tick::TickState;
  use mc_nbt::{ListTag, Tag, tag_type};
-+
+ 
 +/// Vanilla entity tags are a set; retain first-occurrence order in the NBT list.
 +pub(crate) fn normalized(value: &Tag) -> Result<Tag, String> {
 +    let Tag::List(list) = value else {
@@ -55,21 +189,26 @@ diff --git a/crates/mc-core/src/command_tag.rs b/crates/mc-core/src/command_tag.
 +    if bytes.is_empty() {
 +        return Ok(bytes);
 +    }
++    let mut remaining = bytes.as_slice();
 +    let (_, Tag::Compound(mut fields)) =
-+        mc_nbt::read_named(&mut bytes.as_slice()).map_err(|error| error.to_string())?
++        mc_nbt::read_named(&mut remaining).map_err(|error| error.to_string())?
 +    else {
 +        return Err("Invalid retained entity data".into());
 +    };
++    if !remaining.is_empty() {
++        return Err("Invalid retained entity data: trailing NBT bytes".into());
++    }
 +    normalize_fields(&mut fields)?;
 +    bytes.clear();
 +    mc_nbt::write_named(&mut bytes, "", &Tag::Compound(fields))
 +        .map_err(|error| error.to_string())?;
 +    Ok(bytes)
 +}
- 
++
  pub(crate) fn execute(state: &mut TickState, context: Context, input: &str) -> CommandResult {
      let result = run(state, context, input);
-@@ -81,7 +142,10 @@
+     match result {
+@@ -81,7 +146,10 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<(i32, Str
              Some(Tag::List(list))
                  if list.element_type == tag_type::STRING || list.elements.is_empty() =>
              {
@@ -81,103 +220,11 @@ diff --git a/crates/mc-core/src/command_tag.rs b/crates/mc-core/src/command_tag.
              }
              _ => return Err("Invalid entity tags".into()),
          };
-diff --git a/crates/mc-core/src/command_summon.rs b/crates/mc-core/src/command_summon.rs
---- a/crates/mc-core/src/command_summon.rs
-+++ b/crates/mc-core/src/command_summon.rs
-@@ -51,6 +51,7 @@
-     let Tag::Compound(fields) = nbt else {
-         return Err(error("Summon NBT must be a compound"));
-     };
-+    crate::command_tag::validate_fields(fields).map_err(error)?;
-     let (mut value, mut count, mut motion) = (0i16, 1i32, [0.0f64; 3]);
-     let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
-     for (key, tag) in fields {
-@@ -95,7 +96,7 @@
-     Ok((value, count, motion))
- }
- 
--fn validate_tags(value: &Tag) -> Result<(), CommandError> {
-+pub(crate) fn validate_tags(value: &Tag) -> Result<(), CommandError> {
-     let Tag::List(list) = value else {
-         return Err(error("Invalid Tags: expected a list of strings"));
-     };
-@@ -114,6 +115,7 @@
-     let Tag::Compound(fields) = nbt else {
-         return Err(error("Summon NBT must be a compound"));
-     };
-+    crate::command_tag::validate_fields(fields).map_err(error)?;
-     let Some((_, tags)) = fields.iter().find(|(key, _)| key == "Tags") else {
-         return Ok(None);
-     };
-@@ -122,7 +124,10 @@
-     mc_nbt::write_named(
-         &mut bytes,
-         "",
--        &Tag::Compound(vec![("Tags".into(), tags.clone())]),
-+        &Tag::Compound(vec![(
-+            "Tags".into(),
-+            crate::command_tag::normalized(tags).map_err(error)?,
-+        )]),
-     )
-     .map_err(|failure| error(format!("Invalid Tags: {failure}")))?;
-     Ok(Some(bytes))
-@@ -360,6 +365,7 @@
-     name: &str,
-     authored: &[(String, Tag)],
- ) -> Result<Authored, CommandError> {
-+    crate::command_tag::validate_fields(authored).map_err(error)?;
-     let horse = crate::taming::horse(name);
-     let is_painting = name == crate::painting::PAINTING_ID;
-     let mut fields = Vec::with_capacity(authored.len());
-diff --git a/crates/mc-core/src/command_summon_data.rs b/crates/mc-core/src/command_summon_data.rs
---- a/crates/mc-core/src/command_summon_data.rs
-+++ b/crates/mc-core/src/command_summon_data.rs
-@@ -48,7 +48,7 @@
-     };
-     fields.retain(|(key, _)| key != "Tags");
-     if let Some(tags) = tags {
--        fields.push(("Tags".into(), tags.clone()));
-+        fields.push(("Tags".into(), crate::command_tag::normalized(tags)?));
-     }
-     let mut bytes = Vec::new();
-     mc_nbt::write_named(&mut bytes, "", &mc_nbt::Tag::Compound(fields))
-diff --git a/crates/mc-core/src/journal/replay.rs b/crates/mc-core/src/journal/replay.rs
---- a/crates/mc-core/src/journal/replay.rs
-+++ b/crates/mc-core/src/journal/replay.rs
-@@ -486,7 +486,7 @@
-             record.id.as_str(),
-             "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
-         );
--        let retained: Vec<_> = record
-+        let mut retained: Vec<_> = record
-             .extra_fields
-             .iter()
-             .filter(|(key, _)| {
-@@ -515,6 +515,7 @@
-             })
-             .cloned()
-             .collect();
-+        crate::command_tag::normalize_fields(&mut retained).map_err(CoreError::Storage)?;
-         if !retained.is_empty() {
-             mc_nbt::write_named(
-                 &mut image.opaque_entity_fields,
 diff --git a/crates/mc-core/src/core/recovery.rs b/crates/mc-core/src/core/recovery.rs
+index 51cad75f4..6823e2726 100644
 --- a/crates/mc-core/src/core/recovery.rs
 +++ b/crates/mc-core/src/core/recovery.rs
-@@ -236,7 +236,11 @@
-                 dimension.name()
-             ))
-         })?;
--        tick_state.offline_players.insert(uuid, player.clone());
-+        let mut player = player.clone();
-+        player.opaque_player_fields =
-+            crate::command_tag::normalize_opaque(player.opaque_player_fields)
-+                .map_err(CoreError::Storage)?;
-+        tick_state.offline_players.insert(uuid, player);
-     }
-     let mut max_wire_id: i32 = 0;
-     // One growth for the known population: doubling the cold columns while the
-@@ -590,7 +594,9 @@
+@@ -590,7 +590,9 @@ pub(crate) fn restore_entity(
          row.special_mob = record.state.special_mob.clone();
          row.bee = record.state.bee.clone();
          row.allay = record.state.allay.clone();
@@ -188,10 +235,42 @@ diff --git a/crates/mc-core/src/core/recovery.rs b/crates/mc-core/src/core/recov
          crate::entity_life::restore_appearance(body, row);
          crate::entity_controls::sync_no_gravity(
              Arc::make_mut(&mut row.appearance),
+diff --git a/crates/mc-core/src/journal/replay.rs b/crates/mc-core/src/journal/replay.rs
+index d32bee5f2..3df112730 100644
+--- a/crates/mc-core/src/journal/replay.rs
++++ b/crates/mc-core/src/journal/replay.rs
+@@ -486,7 +486,7 @@ impl EntityStateImage {
+             record.id.as_str(),
+             "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
+         );
+-        let retained: Vec<_> = record
++        let mut retained: Vec<_> = record
+             .extra_fields
+             .iter()
+             .filter(|(key, _)| {
+@@ -515,6 +515,7 @@ impl EntityStateImage {
+             })
+             .cloned()
+             .collect();
++        crate::command_tag::normalize_fields(&mut retained).map_err(CoreError::Storage)?;
+         if !retained.is_empty() {
+             mc_nbt::write_named(
+                 &mut image.opaque_entity_fields,
 diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
+index e9862c473..9c0bf9f9e 100644
 --- a/crates/mc-core/src/native_checkpoint.rs
 +++ b/crates/mc-core/src/native_checkpoint.rs
-@@ -872,7 +872,13 @@
+@@ -853,6 +853,9 @@ pub fn recover_with_reader(
+     let root = &dimensions[&Dimension::Overworld];
+     let mut players = root.players.clone();
+     for player in players.values_mut() {
++        player.opaque_player_fields =
++            crate::command_tag::normalize_opaque(std::mem::take(&mut player.opaque_player_fields))
++                .map_err(CoreError::Storage)?;
+         player.statistics.freeze_at_tick(recovered_tick);
+         player.warden_warning.freeze_at_tick(recovered_tick);
+     }
+@@ -872,7 +875,13 @@ pub fn recover_with_reader(
          replay.difficulty = difficulty;
          replay.default_game_mode = default_game_mode;
          replay.gamerules = gamerules.clone();
@@ -206,73 +285,3 @@ diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native
              if !ids.insert(id) || !uuids.insert(entity.uuid.clone()) {
                  return Err(CoreError::Storage(format!(
                      "native recovery: duplicate entity identity WireId {id} UUID {}",
-diff --git a/crates/mc-core/src/command_storage.rs b/crates/mc-core/src/command_storage.rs
---- a/crates/mc-core/src/command_storage.rs
-+++ b/crates/mc-core/src/command_storage.rs
-@@ -153,13 +153,14 @@
-     action: &str,
-     root: &mut Tag,
-     input: &mut &str,
--    _validate_source: impl Fn(&Tag) -> Result<(), String>,
-+    validate_source: impl Fn(&Tag) -> Result<(), String>,
- ) -> Result<i32, String> {
-     let word = crate::command_nbt_path::argument;
-     Ok(match action {
-         "merge" => {
-             let previous = root.clone();
-             let patch = crate::command_snbt::parse(input.trim()).map_err(str::to_owned)?;
-+            validate_source(&patch)?;
-             let (Tag::Compound(fields), Tag::Compound(patch)) = (&mut *root, patch) else {
-                 return Err("Expected compound".into());
-             };
-@@ -207,6 +208,7 @@
-                 "from" => source(state, context, input)?,
-                 _ => return Err("Expected value or from".into()),
-             };
-+            validate_source(&value)?;
-             if !input.trim().is_empty() {
-                 return Err("Trailing arguments".into());
-             }
-diff --git a/crates/mc-core/src/command_data/entity.rs b/crates/mc-core/src/command_data/entity.rs
---- a/crates/mc-core/src/command_data/entity.rs
-+++ b/crates/mc-core/src/command_data/entity.rs
-@@ -68,13 +68,19 @@
-     let mut image = crate::command_data::entity_image(world, id)?;
-     let previous = crate::command_data::entity(world, id)?;
-     let mut edited = previous.clone();
--    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |_| Ok(()))?;
-+    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |source| {
-+        if let Tag::Compound(fields) = source {
-+            crate::command_tag::validate_fields(fields)?;
-+        }
-+        Ok(())
-+    })?;
-     if edited == previous {
-         return Err("Nothing changed. The specified properties already have these values".into());
-     }
-     let (Tag::Compound(old), Tag::Compound(new)) = (&previous, edited) else {
-         return Err("Entity data must be a compound".into());
-     };
-+    crate::command_tag::validate_fields(&new)?;
-     // What the edit changed or removed. The entity keeps its identity and place:
-     // those are not data to load back.
-     let mut changed = Vec::new();
-@@ -87,17 +93,7 @@
-             return Err(format!("Editing {key} is not supported; use /tp"));
-         }
-         if key == "Tags" {
--            let Tag::List(list) = value else {
--                return Err("Tags must be a string list".into());
--            };
--            if list.elements.len() > 1024
--                || list
--                    .elements
--                    .iter()
--                    .any(|tag| !matches!(tag, Tag::String(_)))
--            {
--                return Err("Tags must contain at most 1024 strings".into());
--            }
-+            crate::command_summon::validate_tags(value).map_err(|error| error.message())?;
-             image.retain(|(existing, _)| existing != key);
-             image.push((key.clone(), value.clone()));
-             touched.push(key.clone());
