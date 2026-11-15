@@ -134,6 +134,10 @@ signal or raise `MissingCapability("server:chunk_loaded_signal")`. A
 `forceload add` feedback line alone is not this fence. Current protocol
 `snapshot.loaded_chunks` and `wait_for_chunk(position)` expose only actual
 current-dimension received chunks; unload/respawn invalidates them.
+Java visits each requested chunk as a spectator before its loaded-block observation,
+then restores the actor's position, rotation and game mode, including on a failed
+chunk observation. This is fixture preparation, before the domain action or reconnect;
+server forceload alone cannot publish a distant fixture to a client still at spawn.
 
 `ctx.state` and every `Check.detail` must be JSON values (dict/list/string/
 number/bool/null); no `Check` objects, callbacks, Paths, bytes, clients or sets.

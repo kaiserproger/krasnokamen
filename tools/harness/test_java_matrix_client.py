@@ -208,15 +208,55 @@ class JavaMatrixClientTest(unittest.TestCase):
         self.client(mcp).wait_ticks(600)
         self.assertEqual([call.args[1]["ticks"] for call in mcp.call_tool.call_args_list], [255, 255, 90])
 
+    def fixture_client(self, *, fail_chunk=False):
+        home = dict(x=192.5, y=77.0, z=-447.5, yaw=15.0, pitch=20.0, game_mode="creative")
+        player = home.copy()
+        requests = []
+        commands = []
+        def command(text):
+            commands.append(text)
+            parts = text.split()
+            if parts[0] == "gamemode":
+                player["game_mode"] = parts[1]
+            elif parts[0] == "teleport":
+                player.update(zip(("x", "y", "z", "yaw", "pitch"), map(float, parts[2:])))
+        def call(tool, args):
+            if tool == "minecraft_observe":
+                return {"player": player.copy(), "state_version": len(commands)}
+            if tool == "minecraft_wait_for_loaded_block":
+                # Forceload cannot make a chunk outside the view visible. Model a
+                # one-chunk view, stricter than the original spawn's render distance.
+                self.assertEqual((int(player["x"] // 16), int(player["z"] // 16)),
+                                 (args["x"] // 16, args["z"] // 16))
+                self.assertEqual(player["game_mode"], "spectator")
+                requests.append((args["x"], args["z"]))
+                if fail_chunk:
+                    raise RuntimeError("chunk publication failed")
+                return {"loaded": True}
+            raise AssertionError(tool)
+        client = self.client(Mock(call_tool=Mock(side_effect=call)))
+        client.fixture_command = command
+        return client, home, player, requests, commands
+
     def test_loaded_area_waits_for_each_actual_client_chunk(self):
-        mcp = Mock()
-        mcp.call_tool.return_value = {"loaded": True}
-        self.client(mcp).ensure_loaded(((-1, 64, 15), (16, 70, 16)))
-        requests = [call.args[1] for call in mcp.call_tool.call_args_list]
-        self.assertEqual([(r["x"], r["z"]) for r in requests],
-                         [(-16, 0), (-16, 16), (0, 0), (0, 16), (16, 0), (16, 16)])
-        self.assertTrue(all(call.args[0] == "minecraft_wait_for_loaded_block"
-                            for call in mcp.call_tool.call_args_list))
+        client, home, player, requests, commands = self.fixture_client()
+        client.ensure_loaded(((-1, 64, 15), (16, 70, 16)))
+        self.assertEqual(requests, [(-16, 0), (-16, 16), (0, 0), (0, 16), (16, 0), (16, 16)])
+        self.assertEqual(player, home)
+        self.assertEqual(commands[0], "gamemode spectator JMatrix00")
+        self.assertEqual(commands[-1], "gamemode creative JMatrix00")
+
+    def test_remote_armadillo_fixture_loads_before_arena_teleport(self):
+        client, home, player, requests, _ = self.fixture_client()
+        client.ensure_loaded(((-16, 199, -16), (16, 215, 16)))
+        self.assertEqual(requests, [(x, z) for x in (-16, 0, 16) for z in (-16, 0, 16)])
+        self.assertEqual(player, home)
+
+    def test_fixture_observer_restores_actor_when_chunk_publication_fails(self):
+        client, home, player, _, _ = self.fixture_client(fail_chunk=True)
+        with self.assertRaisesRegex(RuntimeError, "chunk publication failed"):
+            client.ensure_loaded(((-16, 199, -16), (16, 215, 16)))
+        self.assertEqual(player, home)
 
     def test_reconnect_can_leave_auth_gate_for_auth_scenario(self):
         mcp = Mock()
