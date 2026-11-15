@@ -1308,8 +1308,8 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
     probe.check("worn_head_back_unchanged", added_back_hat <= 100)
 
-def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list]:
-    """Sample only the blue pattern enclosed by the gold rim, excluding the HUD."""
+def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list, int, int]:
+    """Sample the gold-enclosed face, including its pose-independent sky colours."""
     crop = image.crop(box)
     gold = lambda r, g, b: r > b * 1.25 and g > b * 1.15 and g > 20 and r > g * 0.9
     rows = []
@@ -1319,6 +1319,7 @@ def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list]:
             rows.append((y, ring[0] + 3, ring[-1] - 2))
     pixels = sum(x1 - x0 for _, x0, x1 in rows)
     cells = [[] for _ in range(64)]
+    blue_pixels = dark_pixels = 0
     if rows:
         top, bottom = rows[0][0], rows[-1][0] + 1
         # Normalize between rim edges so yaw/bob cannot move the background
@@ -1327,8 +1328,12 @@ def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list]:
             for x in range(x0, x1):
                 r, g, b = crop.getpixel((x, y))
                 index = min(7, (y - top) * 8 // (bottom - top)) * 8 + min(7, (x - x0) * 8 // (x1 - x0))
-                cells[index].append(b > r * 1.35 and b > g * 1.15 and b > 15)
-    return pixels, [sum(cell) / len(cell) if cell else None for cell in cells]
+                blue = b > r * 1.35 and b > g * 1.15 and b > 15
+                dark = max(r, g, b) < 85 and max(r, g, b) - min(r, g, b) <= max(r, g, b) * 0.25
+                cells[index].append(blue)
+                blue_pixels += blue
+                dark_pixels += dark
+    return pixels, [sum(cell) / len(cell) if cell else None for cell in cells], blue_pixels, dark_pixels
 
 
 def _capture_dropped_clock(probe: ProbeSteps, artifact: Path, name: str) -> str:
@@ -1342,7 +1347,7 @@ def _capture_dropped_clock(probe: ProbeSteps, artifact: Path, name: str) -> str:
         sample = f"{name}-attempt-{index + 1}"
         image = capture_native(probe, artifact, sample)
         _, frame = _load_shots(probe, artifact, (sample,))[sample]
-        pixels, grid = _clock_face_samples(frame, (300, 260, 460, 420))
+        pixels, grid, _, _ = _clock_face_samples(frame, (300, 260, 460, 420))
         occupied = sum(cell is not None for cell in grid)
         attempts.append({"image": image, "face_pixels": pixels, "sampled_cells": occupied})
         if pixels >= 100 and occupied == 64:
@@ -1360,18 +1365,28 @@ def _capture_dropped_clock(probe: ProbeSteps, artifact: Path, name: str) -> str:
 
 
 def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
-    """Align the gold-enclosed face; compare its blue pattern, never HUD or rim motion."""
+    """Require both changed face cells and a changed blue/dark sky proportion."""
     grids = []
+    blue_fractions = []
     for phase, image in (("day", day), ("night", night)):
-        pixels, grid = _clock_face_samples(image, box)
+        pixels, grid, blue, dark = _clock_face_samples(image, box)
         probe.report[f"{name}_face_pixels_{phase}"] = pixels
         probe.check(f"{name}_face_{phase}", pixels >= 100)
         grids.append(grid)
+        probe.report[f"{name}_face_blue_dark_pixels_{phase}"] = [blue, dark]
+        probe.check(f"{name}_face_colours_{phase}", blue + dark >= 20)
+        blue_fractions.append(blue / (blue + dark))
     changes = [abs(a - b) for a, b in zip(*grids) if a is not None and b is not None]
     probe.report[f"{name}_face_blue_grid"] = grids
     probe.report[f"{name}_face_changed_cells"] = sum(delta > 0.35 for delta in changes)
     probe.check(f"{name}_face_sampled", len(changes) >= 48)
-    probe.check(f"{name}_face_changed", sum(delta > 0.35 for delta in changes) >= 4)
+    # Bob/clipping/yaw can move unchanged blue pixels between normalized cells.
+    # Blue versus neutral-dark sky is a material proportion within the same
+    # face: projection scales both, while noon/midnight swap those sky colours.
+    # Excluding the gold rim/sun also avoids counting a clipped lower bezel.
+    probe.report[f"{name}_face_blue_fractions"] = blue_fractions
+    probe.check(f"{name}_face_changed", sum(delta > 0.35 for delta in changes) >= 4
+                and abs(blue_fractions[0] - blue_fractions[1]) >= 0.35)
 
 
 def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:

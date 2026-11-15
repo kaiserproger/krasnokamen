@@ -6628,3 +6628,16 @@ regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_clock
 fix_commit = "635d650e1"
 failing_first = "reported"
 repro_check = "HarnessFix3/clock-edge-green.json: offline retained-frame streams skip the two reported day poses (0 and 35 cells), select the earlier 020137 visible day frame (64 cells), then pass the unchanged face oracle with 12 and 14 changed cells against the corresponding real night frames; earlier full pair has 15. This is not a live rerun. clock-edge-control.log reverses only the scene capture steps to single shots, and both retained edge-on streams fail at the original face assertions. clock-edge-unit-control.log makes the registered unit fail at dropped_clock_face_day with the same fixture-only reversal. HUD-only capture exhausts its bounded samples; a static real face has zero changed cells and stays red. One graphical confirmation remains pending Main's GO."
+
+[[bug]]
+id = "HARNESS-CLOCK-POSE-FALSE-ANIMATION"
+title = "Clock face oracle can mistake different item poses for time animation"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Advisor/Main: HarnessFix2 ctx-day frames 20261115T010330-native-dynamic-context-toy5c9tm and 20261115T011022-native-dynamic-context-vew1_lrt have identical time 6000 and camera but produce 17 changed face-grid cells. Pose alone could hide a frozen clock texture after a server time change."
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation", "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock"]
+fix_commit = "d3bc1c33a"
+failing_first = "reported"
+repro_check = "HarnessFix3/clock-pose-green.json: same-time/different-pose real day and night pairs fail dropped_clock_face_changed; noon blue/(blue+neutral-dark) proportions are 0.8414 and 0.8370 despite 17 shifted cells. Three real day/night full-context pairs still pass, including held clocks; dropped fraction changes are 0.65..0.70. Selection remains rim-coverage-only. clock-pose-control.log restores only the prior comparator and its sampling helper from 29800a709, retaining tests: the reported same-time day pair falsely passes again. clock-pose-unit-control.log produces the same false-green failure in the registered regression. Edge-on sampling replays and HUD-only/static controls remain green/red respectively; frame-level proof only, no graphical run or promotion."
