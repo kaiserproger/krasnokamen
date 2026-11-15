@@ -1017,7 +1017,7 @@ def start_client(
                 start_new_session=True,
             )
         else:
-            from .java_launcher import modded_gradle_arguments, write_gradle_init
+            from .java_launcher import gradle_project_cache, modded_gradle_arguments, write_gradle_init
 
             loader_root = sibling_root("loader")
             gradlew = loader_root / "gradlew"
@@ -1030,6 +1030,7 @@ def start_client(
                     "--no-daemon",
                     "--no-configuration-cache",
                     "--init-script", str(init),
+                    "--project-cache-dir", str(gradle_project_cache(loader_root, task)),
                     "-p",
                     str(loader_root),
                     f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",

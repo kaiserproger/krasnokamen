@@ -125,10 +125,12 @@ additional client capability. Its exporter existed on Loader's unmerged
 `bots-runjava` branch (`2bc292e`), not on the main line used by the harness.
 
 Gradle init scripts separate build outputs by checkout path, Minecraft version
-and launch platform so one live client cannot lose its classes to another
-endpoint's compilation. On the owner host they live under `<work>/targets/loader-builds`;
-elsewhere they use the checkout's ignored `.analysis/harness-builds`. Existing
-build outputs are neither deleted nor moved.
+and launch platform. The matching `--project-cache-dir` also isolates task
+history and Loom launch metadata: separate output paths alone do not prevent
+Gradle from deleting the previous endpoint's live classes as stale outputs.
+On the owner host both live under `<work>/targets/loader-builds`; elsewhere they
+use the checkout's ignored `.analysis/harness-builds`. Existing outputs are
+neither deleted nor moved.
 
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
 other trees reuse, so the harness refuses `KRASNOKAMEN_SERVER_BINARY` or

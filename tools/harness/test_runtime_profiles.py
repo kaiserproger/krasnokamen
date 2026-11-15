@@ -373,9 +373,14 @@ class ProfileTaskTests(unittest.TestCase):
                 handle.close()
                 argv = launch.call_args.args[0]
                 self.assertIn("--init-script", argv)
+                self.assertIn("--project-cache-dir", argv)
+                cache = Path(argv[argv.index("--project-cache-dir") + 1])
+                self.assertTrue(cache.is_absolute())
+                self.assertEqual(cache.parent.name, f"loader-{platform}")
+                self.assertEqual(cache.name, "project-cache")
                 script = Path(argv[argv.index("--init-script") + 1]).read_text()
                 self.assertIn("gradleProperty('minecraftVersion').get()", script)
-                self.assertIn(f"version + '/loader-{platform}'", script)
+                self.assertIn("gradle.startParameter.projectCacheDir.parentFile", script)
                 self.assertIn("project.layout.buildDirectory.set(new File(endpoint, project.name))", script)
                 self.assertNotIn("maxHeapSize", script)
 

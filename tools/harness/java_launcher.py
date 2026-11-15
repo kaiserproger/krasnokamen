@@ -133,20 +133,24 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
             "--accessToken", "0", "--versionType", "release"]
 
 
+def gradle_project_cache(loader_root: Path, task: str) -> Path:
+    """Keep task history and Loom launch metadata private to an endpoint."""
+    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+    root = (work / "targets/loader-builds" if (work / "targets").is_dir()
+            else loader_root / ".analysis/harness-builds")
+    tree = hashlib.sha256(str(loader_root.resolve()).encode()).hexdigest()
+    # Default properties can change independently of an explicitly pinned endpoint.
+    version = os.environ.get("KRASNOKAMEN_JAVA_VERSION", "default")
+    return (root / tree / version / task.split(":")[1] / "project-cache").resolve()
+
 def write_gradle_init(game_dir: Path, task: str, *, cap_heap: bool = True) -> Path:
     """Separate live endpoint classes; never rewrite another version's build output."""
     game_dir.mkdir(parents=True, exist_ok=True)
     init = game_dir / "client-init.gradle"
-    platform = task.split(":")[1]
-    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
-    build_root = (json.dumps(str(work / "targets" / "loader-builds"))
-                  if (work / "targets").is_dir()
-                  else "new File(project.rootDir, '.analysis/harness-builds')")
     init.write_text(
         "gradle.beforeProject { project ->\n"
         "  def version = project.providers.gradleProperty('minecraftVersion').get()\n"
-        "  def tree = java.security.MessageDigest.getInstance('SHA-256').digest(project.rootDir.canonicalPath.getBytes('UTF-8')).encodeHex().toString()\n"
-        f"  def endpoint = new File({build_root}, tree + '/' + version + '/{platform}')\n"
+        "  def endpoint = new File(gradle.startParameter.projectCacheDir.parentFile, 'build/' + version)\n"
         "  project.layout.buildDirectory.set(new File(endpoint, project.name))\n"
         "}\n" +
         ("gradle.projectsEvaluated {\n"
@@ -157,6 +161,7 @@ def write_gradle_init(game_dir: Path, task: str, *, cap_heap: bool = True) -> Pa
          "  }\n"
          "}\n" if cap_heap else ""))
     return init
+
 
 
 def modded_gradle_arguments(task: str) -> list[str]:

@@ -110,15 +110,19 @@ class ModdedLauncherTest(unittest.TestCase):
     def test_build_root_uses_owner_targets_or_portable_local_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
-            with mock.patch.dict("os.environ", {"KRASNOKAMEN_WORK_ROOT": str(work)}):
-                local = launcher.write_gradle_init(work / "game", ":loader-fabric:runClientMcp").read_text()
-                self.assertIn("new File(project.rootDir, '.analysis/harness-builds')", local)
+            loader = work / "loader"
+            with mock.patch.dict("os.environ", {"KRASNOKAMEN_WORK_ROOT": str(work),
+                                               "KRASNOKAMEN_JAVA_VERSION": "26.1.2"}):
+                local = launcher.gradle_project_cache(loader, ":loader-fabric:runClientMcp")
+                self.assertTrue(local.is_relative_to(loader / ".analysis/harness-builds"))
                 (work / "targets").mkdir()
-                owner = launcher.write_gradle_init(work / "game", ":loader-fabric:runClientMcp").read_text()
-                self.assertIn(json.dumps(str(work / "targets/loader-builds")), owner)
-                self.assertNotIn(".analysis/harness-builds", owner)
-                self.assertIn("project.rootDir.canonicalPath", owner)
-                self.assertIn("tree + '/' + version + '/loader-fabric'", owner)
+                owner = launcher.gradle_project_cache(loader, ":loader-fabric:runClientMcp")
+                self.assertTrue(owner.is_relative_to(work / "targets/loader-builds"))
+                self.assertEqual(owner.parts[-3:], ("26.1.2", "loader-fabric", "project-cache"))
+                self.assertNotEqual(owner, launcher.gradle_project_cache(work / "other", ":loader-fabric:runClientMcp"))
+                self.assertNotEqual(owner, launcher.gradle_project_cache(loader, ":loader-neoforge:runClientMcp"))
+                with mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.3"}):
+                    self.assertNotEqual(owner, launcher.gradle_project_cache(loader, ":loader-fabric:runClientMcp"))
 
 
 

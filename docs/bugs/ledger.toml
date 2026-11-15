@@ -6138,7 +6138,7 @@ regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
   "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
 ]
-repro_check = "ScreensVoiceStart/build-red.log restores only the old init-script behavior and fails both Fabric and NeoForge wiring assertions; audible-build-final-green.log passes. Builds are keyed by canonical checkout hash/version/platform under owner-host targets, with an ignored local fallback; no existing outputs are removed."
+repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
 failing_first = "reported"
 
 [[bug]]
