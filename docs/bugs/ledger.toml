@@ -5952,9 +5952,13 @@ severity = "major"
 status = "open"
 source = "Stage3 QA: cold NeoForge createMinecraftArtifacts compiles about 7300 sources before MCP can start, exceeding the shared 180-second readiness limit"
 repro = "source"
-regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance"]
-fix_commit = "a39164dc9"
-repro_check = "HarnessPins/negative-loader.log: retaining the API but restoring only the old fixed readiness wait fails at 180.0 != 1800.0. No real graphical cold-build pass is claimed."
+regression = [
+  "python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance",
+  "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_has_no_clock_deadline_and_requires_owned_listener",
+  "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_fails_on_process_exit",
+]
+fix_commit = "1081c210e"
+repro_check = "HarnessFix3/negative-controls.log: restoring only the finite profile allowance makes the retained event-only readiness assertion fail (1800.0 is not None). a39164dc9 removed 180s but still imposed 1800s; the current fix waits on MCP listener ownership or process exit. No cold NeoForge graphical pass is claimed."
 failing_first = "not recorded"
 
 [[bug]]
@@ -6291,9 +6295,14 @@ severity = "major"
 status = "open"
 source = "PreparedLaunchFix original java-matrix command: Fabric capability reaches Play, but selected mobs.armadillo reconnect_mid_action cell fails minecraft_wait_for_loaded_block at -16,199,-16"
 repro = "source"
-regression = []
+regression = [
+  "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_remote_armadillo_fixture_loads_before_arena_teleport",
+  "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_loaded_area_waits_for_each_actual_client_chunk",
+  "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_fixture_observer_restores_actor_when_chunk_publication_fails",
+]
+fix_commit = "e02693db1"
 failing_first = "reported"
-repro_check = "Two observed failures with server c7786910eaa6 and 26.1.2 Fabric Loader 7343bd38: receipts/PreparedLaunchFix/real-java/20261115T012435-java-matrix-50t25et0/pw-2314a2e847b93d120a99/result.json and real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99/result.json. Both capability groups pass; the cell records no domain checks and fails with client chunk did not load at -16, 199, -16. Root cause not investigated in the isolated-launch assignment; no product armadillo failure inferred."
+repro_check = "PreparedLaunchFix real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99: JMatrix00-verbs.jsonl shows the actor at 192.5,77,-447.5 (chunk 12,-28), then a loaded-block wait for chunk -1,-1; server/runproto.toml view_distance=2. ensure_loaded ran before the arena teleport, so forceload could not publish the remote chunk to that client. HarnessFix3/negative-controls.log retains the new regression and reverses only ensure_loaded: expected loaded-chunk assertion fails (12,-28 != -1,-1). No reconnect action had run at the original failure."
 
 [[bug]]
 id = "WORN-PLAYER-HEAD-ON-BACK"
