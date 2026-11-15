@@ -419,7 +419,8 @@ pub(super) fn keep_gap(
     mut drive: [f64; 2],
 ) -> [f64; 2] {
     let m = &members[index];
-    for &(distance, other) in near {
+    let mut limits = [([0.0; 2], 0.0); NEIGHBOURS];
+    for (limit, &(distance, other)) in limits.iter_mut().zip(near) {
         if other == usize::MAX || distance < 1e-8 {
             continue;
         }
@@ -431,12 +432,23 @@ pub(super) fn keep_gap(
         ];
         let closing = drive[0] * towards[0] + drive[1] * towards[1];
         let allowed = ((dist - spacing) * 0.5).max(0.0);
+        *limit = (towards, allowed);
         if closing > allowed {
             drive[0] -= towards[0] * (closing - allowed);
             drive[1] -= towards[1] * (closing - allowed);
         }
     }
-    drive
+    // Projecting off an oblique neighbour can point back into an earlier one.
+    // All limits include zero drive, so a final common scale satisfies every
+    // half-gap without reopening another, allocating or iterating to convergence.
+    let mut scale: f64 = 1.0;
+    for (towards, allowed) in limits {
+        let closing = drive[0] * towards[0] + drive[1] * towards[1];
+        if closing > allowed {
+            scale = scale.min(allowed / closing);
+        }
+    }
+    drive.map(|component| component * scale)
 }
 
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {

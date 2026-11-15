@@ -75,6 +75,28 @@ fn frozen_simultaneous_rows_cannot_close_below_minimum_spacing() {
 }
 
 #[test]
+fn oblique_neighbour_cannot_reopen_an_already_closed_gap() {
+    let mut runtime = FormationRuntime::default();
+    for id in [10, 20, 30] {
+        single(&mut runtime, id, 1, 0.0, Order::Hold);
+    }
+    runtime.members[1].pos = [0.0, 64.0, 1.0];
+    runtime.members[2].pos = [0.6, 64.0, -0.8];
+    let mut near = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
+    near[0] = (1.0, 1);
+    near[1] = (1.0, 2);
+    let drive = keep_gap(&runtime.members, 0, &near, 1.0, [0.2, 0.2]);
+    for member in &runtime.members[1..] {
+        let closing = drive[0] * member.pos[0] + drive[1] * member.pos[2];
+        assert!(
+            closing <= 1e-12,
+            "closed gap at {:?}: drive={drive:?}",
+            member.pos
+        );
+    }
+}
+
+#[test]
 fn exact_overlap_has_deterministic_opposite_separation_not_a_permanent_stack() {
     let mut runtime = FormationRuntime::default();
     single(&mut runtime, 10, 1, 0.0, Order::Hold);
