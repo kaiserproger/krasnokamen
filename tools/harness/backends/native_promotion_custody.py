@@ -69,9 +69,11 @@ class PackWireReceipt:
             action = reader.varint()
             if reader.offset != len(payload):
                 raise ValueError("trailing bytes in resource-pack status")
-            # Declined is ordinal 1 in the verified ResourcePackAction codec.
-            self.observed.update(decline_id=identity, action="declined" if action == 1 else str(action),
-                                 decline_sequence=self.sequence)
+            # ResourcePackAction ordinals: Accepted=3, FailedDownload=2.
+            # Preserve every response: the final status alone cannot prove an
+            # accepted download attempt on the deliberately unavailable URL.
+            self.observed.setdefault("statuses", []).append(
+                {"id": identity, "action": action, "sequence": self.sequence})
             self._save()
 
     def _save(self) -> None:
@@ -245,19 +247,22 @@ def _pack(steps: ProbeSteps) -> None:
     if not isinstance(receipt, dict):
         raise RuntimeError("optional pack wire receipt must be a mapping")
     steps.report["optional_pack_wire"] = receipt
-    steps.check("optional_pack_offer_and_matching_decline_before_play",
+    statuses = receipt.get("statuses", [])
+    steps.check("optional_pack_accepted_then_failed_download_before_play",
                 receipt.get("offer_required") is False
                 and bool(receipt.get("offer_id"))
-                and receipt.get("decline_id") == receipt.get("offer_id")
-                and receipt.get("action") == "declined"
-                and type(receipt.get("offer_sequence")) is int
-                and type(receipt.get("decline_sequence")) is int
-                and type(receipt.get("play_sequence")) is int
-                and 0 < receipt["offer_sequence"] < receipt["decline_sequence"] < receipt["play_sequence"])
+                and len(statuses) == 2
+                and [status.get("action") for status in statuses] == [3, 2]
+                and all(status.get("id") == receipt["offer_id"] for status in statuses)
+                and all(type(sequence) is int for sequence in (
+                    receipt.get("offer_sequence"), receipt.get("play_sequence"),
+                    *(status.get("sequence") for status in statuses)))
+                and 0 < receipt["offer_sequence"] < statuses[0]["sequence"]
+                < statuses[1]["sequence"] < receipt["play_sequence"])
     state = steps.observe()
     steps.check("optional_pack_client_in_play", state["in_play"] is True)
     _echo(steps, "optional_pack_ordered_play_chat")
-    _capture(steps, "optional-pack-declined-play")
+    _capture(steps, "optional-pack-failed-download-play")
 
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int], kind: str) -> None:

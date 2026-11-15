@@ -29,9 +29,13 @@ class Server:
         self.dimension = 'overworld'
         self.log_path = log_path
         self.lifecycle: list[str] = []
+        self.clients = []
 
     def command(self, text):
         self.commands.append(text)
+        if text.startswith(OBSERVER_MOVE):
+            name = text.removeprefix(OBSERVER_MOVE).removesuffix(' ~ ~ ~')
+            next(client for client in self.clients if client.name == name).beside_dragon = True
         return ''
 
     query = command
@@ -51,12 +55,13 @@ class Client:
         self.after_uuid = after_uuid
         self.dragon_after = dragon_after
         self.restarted = False
+        self.beside_dragon = False
         self.lifecycle: list[str] = []
         self.waits: list[str] = []
 
     def _visible(self):
         if self.restarted:
-            return self.dragon_after
+            return self.dragon_after and self.beside_dragon
         return True
 
     def snapshot(self):
@@ -90,6 +95,7 @@ class EndRestartObserverTests(unittest.TestCase):
         server = Server(log_path)
         if clients is None:
             clients = [Client(f'Proto{index}') for index in range(8)]
+        server.clients = clients
         report: dict = {}
         end_restart.run(server, clients, report)
         return server, clients, report

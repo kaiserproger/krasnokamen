@@ -9,6 +9,28 @@ commands, receipts, Java/Loader client variables). This page is the working
 recipe and the traps for graphical and native-client gates. Profile and scenario
 lists come from `python3 -m tools.harness list` and `explain`, not from here.
 
+## Optional packs and unloaded-eye regression scenes
+
+`native-v2-p2-optional-pack` follows the native client's documented automatic
+HTTP(S) pack policy, not its former unconditional decline. The fixture offers
+an unavailable loopback URL: the wire observer must see the same UUID in
+`Accepted` (3), then `FailedDownload` (2), both before Play. Ordered chat and
+an actual-window capture prove that an optional download failure did not end
+the join. It does not prove successful pack installation or required-pack policy;
+`CLIENT-SERVER-RESOURCE-PACK-PUSH-DECLINED` remains a separate product row.
+
+`native-unloaded-eye` is registered as `harness:scene-shot:native-unloaded-eye`.
+Run it with `--client native --windowed`. Its canonical scene and loopback proxy
+port the client repository's unloaded-eye reproducer: unchanged server packets
+are forwarded in order, then held immediately after the far teleport while the
+client observes and captures missing destination terrain. The proving assertion
+is `unloaded_eye_session_survives`, after the already-established Play session
+receives the teleport, not the initial join check. It also requires null eye
+medium while unloaded, advancing GPU-completed actual-window frames, and the
+water medium after terrain arrives. Teardown releases the held stream even
+when an assertion fails. Pins, tree identity and control/restore receipts are
+still required for ledger promotion.
+
 ## Prerequisites
 
 Everything below is reproducible from public sources, except where a line says

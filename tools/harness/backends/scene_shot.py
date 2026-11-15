@@ -1510,6 +1510,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-low-roof-house": "low_roof_house_scene.json",
         "native-falling-block-prediction": "falling_block_scene.json",
         "native-frozen-game-age": "frozen_game_age_scene.json",
+        "native-unloaded-eye": "unloaded_eye_scene.json",
         "native-village-idle-stroll": "village_idle_stroll_scene.json",
         "native-village-night-door": "village_night_door_scene.json",
         "native-village-late-job": "village_late_job_scene.json",
@@ -1688,7 +1689,13 @@ def run(
         runtime.wait_port(port, timeout, server, log_path=artifact / "server.log")
         client_port = port
         (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "proxy_start", "timeout_seconds": 8, "started_unix": time.time()}) + "\n")
-        if client_latency_ms or any(step.get("server_eof") is True for step in scenario["steps"]):
+        if ctx.scenario_id == "native-unloaded-eye":
+            from .unloaded_eye import UnloadedEyeProxy, execute as unloaded_eye_script
+
+            proxy = UnloadedEyeProxy(port, artifact)
+            client_port = proxy.start()
+            script = unloaded_eye_script
+        elif client_latency_ms or any(step.get("server_eof") is True for step in scenario["steps"]):
             proxy = LatencyProxy(port, client_latency_ms)
             client_port = proxy.start()
         xvfb, display, _ = runtime.start_xvfb(artifact, tuple(settings.get("screen_size", WINDOW)))
@@ -1725,7 +1732,8 @@ def run(
         mcp.scene_window_size = tuple(settings.get("screen_size", WINDOW))
         mcp.scene_proxy = proxy
         (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "scenario", "timeout_seconds": timeout, "started_unix": time.time()}) + "\n")
-        with ProbeSteps(mcp, artifact / "scene-shot", timeout, "scene-shot") as probe:
+        probe_id = "native-unloaded-eye" if ctx.scenario_id == "native-unloaded-eye" else "scene-shot"
+        with ProbeSteps(mcp, artifact / "scene-shot", timeout, probe_id) as probe:
             wait_play(probe)
             if ctx.client == "java":
                 window_id = find_java_window(display)

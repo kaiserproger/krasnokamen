@@ -10,7 +10,7 @@ from tools.harness.backends import native_promotion_custody as custody
 
 
 class PromotionCustodyTests(unittest.TestCase):
-    def test_pack_wire_records_actual_offer_decline_and_play_order(self):
+    def test_pack_wire_records_actual_offer_status_history_and_play_order(self):
         report = {
             "configuration": {
                 "clientbound": {"minecraft:resource_pack_push": {"protocol_id": 9}},
@@ -24,15 +24,17 @@ class PromotionCustodyTests(unittest.TestCase):
             connection = object()
             wire.server_packet(connection, "configuration", 9, identity.bytes + b"\x01u\x00\x00\x00")
             self.assertEqual(wire.receipt()["offer_id"], str(identity))
-            self.assertNotIn("decline_id", wire.receipt())
-            wire.client_packet(connection, "configuration", 6, identity.bytes + b"\x01")
+            self.assertNotIn("statuses", wire.receipt())
+            wire.client_packet(connection, "configuration", 6, identity.bytes + b"\x03")
+            wire.client_packet(connection, "configuration", 6, identity.bytes + b"\x02")
             wire.server_packet(connection, "play", 50, b"")
             receipt = wire.receipt()
-            self.assertEqual(receipt["action"], "declined")
-            self.assertEqual(receipt["offer_id"], receipt["decline_id"])
+            self.assertEqual(receipt["statuses"], [
+                {"id": str(identity), "action": 3, "sequence": 2},
+                {"id": str(identity), "action": 2, "sequence": 3}])
             self.assertFalse(receipt["offer_required"])
-            self.assertLess(receipt["offer_sequence"], receipt["decline_sequence"])
-            self.assertLess(receipt["decline_sequence"], receipt["play_sequence"])
+            self.assertLess(receipt["offer_sequence"], receipt["statuses"][0]["sequence"])
+            self.assertLess(receipt["statuses"][1]["sequence"], receipt["play_sequence"])
             self.assertEqual(json.loads(wire.path.read_text()), receipt)
             with self.assertRaisesRegex(ValueError, "trailing bytes"):
                 wire.client_packet(connection, "configuration", 6, identity.bytes + b"\x01x")
@@ -67,22 +69,33 @@ class PromotionCustodyTests(unittest.TestCase):
             custody.run(steps, (0, 64, 0), custody.MOUNT_SCENARIO)
         steps.call.assert_not_called()
 
-    def test_pack_requires_wire_receipt_and_matching_ordered_decline(self):
+    def test_pack_requires_matching_accepted_failed_download_before_play(self):
         steps = self.steps(p4_window={"window_id": 1})
         with self.assertRaisesRegex(RuntimeError, "wire receipt hook"):
             custody.run(steps, (0, 64, 0), custody.PACK_SCENARIO)
-        for change in ({"offer_required": True}, {"decline_id": "other"},
-                       {"action": "failed_download"}, {"play_sequence": 2},
-                       {"decline_sequence": None}):
-            receipt = {"offer_required": False, "offer_id": "pack-id", "decline_id": "pack-id",
-                       "action": "declined", "offer_sequence": 1, "decline_sequence": 2,
-                       "play_sequence": 3}
+        accepted = {"id": "pack-id", "action": 3, "sequence": 2}
+        failed = {"id": "pack-id", "action": 2, "sequence": 3}
+        for change in ({}, {"offer_required": True},
+                       {"statuses": [accepted, dict(failed, id="other")]},
+                       {"statuses": [dict(accepted, action=1), failed]},
+                       {"statuses": [accepted]}, {"statuses": [failed, accepted]},
+                       {"statuses": [accepted, dict(failed, sequence=None)]},
+                       {"play_sequence": 2}):
+            receipt = {"offer_required": False, "offer_id": "pack-id",
+                       "statuses": [accepted, failed], "offer_sequence": 1,
+                       "play_sequence": 4}
             receipt.update(change)
             steps = self.steps(p4_window={"window_id": 1},
                                promotion_pack_receipt=lambda: receipt)
-            with self.subTest(change=change), self.assertRaisesRegex(RuntimeError, "matching_decline"):
-                custody.run(steps, (0, 64, 0), custody.PACK_SCENARIO)
-            steps.observe.assert_not_called()
+            steps.observe.return_value = {"in_play": True}
+            with self.subTest(change=change):
+                if change:
+                    with self.assertRaisesRegex(RuntimeError, "accepted_then_failed_download"):
+                        custody.run(steps, (0, 64, 0), custody.PACK_SCENARIO)
+                    steps.observe.assert_not_called()
+                else:
+                    with mock.patch.object(custody, "_echo"), mock.patch.object(custody, "_capture"):
+                        custody.run(steps, (0, 64, 0), custody.PACK_SCENARIO)
 
     def test_cargo_oracle_rejects_resurrected_or_extra_stacks(self):
         state = {"container": {"slot_count": 53, "carried": {"count": 0},

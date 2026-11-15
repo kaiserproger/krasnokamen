@@ -3103,9 +3103,9 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-FACTS"
 regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_run_classifies_startup_and_oracle_exceptions", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_native_missing_content_is_blocked_not_product_failure", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_receipt_records_exact_status_without_promoting_blocked"]
-repro_check = "negative control receipts/XHarnessGates/neg-native-facts.log (failure_status always fail -> blocked counted as executed); candidate: no exact revert (only 1 of 4 hunks applies); control is fix-lines-only (`failure_status` forced to 'fail'), receipts/XHarnessGates/neg-native-facts.log"
+repro_check = "Forward-ported original run classification hunks; no synthetic failure_status replacement. Retained fixture reaches the planted post-start oracle assertion. Control fails the startup blocked-versus-fail assertion; restored three refs pass. receipts/HarnessFix4/TEST-NATIVE-FACTS.red.log and .green.log; original-hunk dispositions in promotions/TEST-NATIVE-FACTS.hunks.md."
 failing_first = "reported"
-fix_commit = "11ed1c38a"
+fix_commit = "patch:bd081f998d0dcd9b0605f4df8612a777ea086ec148b27b67c0cbce7a34435e0e"
 
 [[bug]]
 id = "TEST-NATIVE-IMPORT"
@@ -3176,16 +3176,28 @@ regression = []
 repro_check = "candidate: the gate was re-measured green on client 9a645aa9 (workspace and the root crate explicitly, `cargo clippy --workspace --all-targets -- -D warnings` rc=0 plus `-p krasnokamen-client`, receipts/XHarnessInfra/client-clippy-9a645aa9*.log); the cited always-true assertion is gone (src/ui_hotfix_tests.rs has real assert_eq!/assert_ne! FOV assertions). No fix hunks exist to revert, and the --workspace run never printed 'Checking krasnokamen-client', which is why the root crate was checked explicitly"
 [[bug]]
 id = "TEST-JAVA-CAPABILITIES"
-title = "Exact submitted prediction tokens/ACK sequence and cumulative chat unavailable; raw GUI recent_chat is bounded/newest-first. Final transformer pickup/shield/tick/QA receipt corrections9bdf33d unbuilt/unretested; old47unit passes do not prove a client. Fabric SVC/DH profiles include SolarisLoader, not pure target-mod lanes."
+title = "Java matrix cumulative chat is unavailable because bounded newest-first GUI recent_chat is not the applied system-chat journal"
 area = "harness"
 repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
 regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
-repro_check = "python3 -m unittest tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts; gradlew :java-agent:test --tests '*VanillaEventTransformerTest' --tests '*ClientStateEventsTest' in the loader worktree. Remaining: exact prediction ACK sequence and pure-target-mod lanes are not exposed; the frozen 604b plugin set cannot run the Java lane (the Java lane postdates the 2026-10-24 freeze and the 604b packages no longer instantiate on any retained server pin), so the real Java run 20261111T122429-java-matrix-m7hk88z8 used plugin set 5efb and blocked on client:respawn.; candidate: only the cumulative-chat half (same control, receipts/XHarnessJava/NC-R2-reverse-e99902e71.log); the prediction-token/ACK sequence and the pure-target-mod SVC/DH lanes need tools/harness/java_matrix_client.py plus a transformer-enabled agent jar from solaris-loader; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
-fix_commit = "e99902e71"
+repro_check = "Cumulative-chat scope only: retained refs reject GUI history and missing/lost/out-of-order packet receipts. Prediction tokens, exact ACK sequence, transformer client acceptance and pure-target-mod lanes are tracked separately in TEST-JAVA-PREDICTION-ACK-LANES. Historical red receipts/XHarnessJava/NC-R2-reverse-e99902e71.log."
+fix_commit = "patch:27496b8944131e3b86385de3ab13027df0766e6bcda7b71adafdf5205728a047"
 failing_first = "reported"
+
+[[bug]]
+id = "TEST-JAVA-PREDICTION-ACK-LANES"
+title = "Java matrix lacks exact submitted prediction tokens/ACK sequence and pure-target-mod lanes"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Split uncovered scope from TEST-JAVA-CAPABILITIES during ReviewPromote19 repair; cumulative chat refs do not prove these capabilities."
+regression = []
+repro_check = "Exact prediction/ACK sequence and pure-target-mod lanes remain unexposed. Historical 9bdf33d pickup/shield/tick/QA transformer corrections and old 47 unit passes do not prove real-client acceptance. Frozen 604b plugin packages do not instantiate on retained pins; 20261111T122429-java-matrix-m7hk88z8 used 5efb and blocked on client:respawn."
+failing_first = "not recorded"
 
 [[bug]]
 id = "TEST-NATIVE-HEALTH"
@@ -3195,8 +3207,8 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-HEALTH"
-regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_rejects_frozen_server_despite_client_ticks"]
-repro_check = "fix is ef67d139e (HealthInterval) + fb2674fb7 (restored hunks); negative controls receipts/XHarnessGates/neg-native-health-restart.log and neg-native-health-gap.log; candidate: exact revert of fb2674fb7's native_matrix.py hunks reds the ref but with `AttributeError: no attribute HealthInterval`, not the row symptom (receipts/XHarnessGates/neg-health-restore-revert.log); restart cells stay blocked by design (final metrics read -> server stop unobservable)"
+regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_rejects_frozen_server_despite_client_ticks", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_wave_never_credits_missing_slow_or_restart_gap_health"]
+repro_check = "Not promotable for full-wave acceptance: HealthInterval and its final integration now have assertion-level control evidence (receipts/HarnessFix4/TEST-NATIVE-HEALTH.red.log and .green.log), but restart cells still deliberately block because final metrics read -> server stop is unobservable. The new wave test executes real HealthInterval validation and rejects a slow tick, missing samples, late ERROR, and restart gap; old mock-call ordering is not the proving assertion. A complete shutdown-boundary metrics receipt and a full real wave are still required; no status or promotion claim is made."
 fix_commit = "ef67d139e"
 failing_first = "reported"
 
@@ -3244,7 +3256,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-END-RESTART-OBS
 regression = ["python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_moves_observers_beside_the_dragon_and_never_the_dragon", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_dragon_beyond_tracking_range_after_restart_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_different_dragon_identity_after_recovery_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_capability_requires_eight_real_joined_clients", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_new_error_record_fails_the_capability", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_missing_info_level_writer_shutdown_receipt_fails_the_capability"]
 repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/scene-slot.sh /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/end-plugins --timeout-seconds 240 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --capability peaceful_end_restart --port 26741 --dashboard-port 26742. Passed live with eight protocol clients (receipt wt/LedgerMatrixB15/.analysis/validation/20261111T123432-protocol-matrix-ty2uwwtr/result.json) on plugin set 060d (current krasnokamen-essentials+krasnokamen-permissions), not the original b52 packages: the preserved b52 packages (scenarios/live-plugins.stale-20261024) no longer instantiate on any retained server pin ('failed to convert function to given type', receipt .analysis/validation/20261111T132836-protocol-matrix-0x8arzc7), and the original server binary 7e7ba958 is not retained.; candidate: receipts/XHarnessJava/NC-R8-reverse-ef67d139e.log reverses the protocol_end_restart.py hunk and the module disappears (a proxy, not the symptom); a symptom-level control would be synthetic and is not counted; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 # The final clause above is historical: XHarnessJava is merged, and all six refs pass on M3 (receipts/M3Ledger/python-refs.log).
-fix_commit = "ef67d139e"
+fix_commit = "patch:ac4faef658a70344363ba23de98f708505b6e7cb40839b98502cdc76e81ccdd9"
 failing_first = "reported"
 
 [[bug]]
@@ -4345,9 +4357,9 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
 regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions"]
-repro_check = "control receipts/XHarnessJava/NC-R5-reverse-09c0d0d7.log (matrix_domains/random.py + quirk_parity/player.py reversed -> TimeoutError: received crafting input, the row symptom); that commit's wire.py hunk does not reverse on HEAD (rewritten by ef67d139e); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+repro_check = "Forward-ported original random.py, quirk_parity/player.py and BOTH wire.py behavioral hunks; kept click_body keyword API. The packet-driven seed19 fixture asserts that input without cursor correction cannot satisfy the craft fence. Control/restore: receipts/HarnessFix4/SCENARIO-VANILLA-CRAFT-ACK.red.log and .green.log; original-hunk dispositions in promotions/SCENARIO-VANILLA-CRAFT-ACK.hunks.md. Historical claims that wire hunks had no HEAD equivalent are superseded."
 failing_first = "reported"
-fix_commit = "09c0d0d7d"
+fix_commit = "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52"
 
 [[bug]]
 id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
@@ -4615,7 +4627,7 @@ status = "open"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
 regression = ["python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash", "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass", "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung"]
 failing_first = "reported"
-fix_commit = "80191f115bc889838a5620b554b2a84cb7d84cb0"
+fix_commit = "patch:0857f91e78dc482212e855cdc26161ea8f81371f64d15c863f84e891311d41c2"
 
 [[bug]]
 id = "NATIVE-NAV-WAYPOINT-CORNER-DEADZONE"
@@ -6017,7 +6029,7 @@ regression = [
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels",
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window",
 ]
-fix_commit = "f645ca39a"
+fix_commit = "patch:80b3c75a8020fa0a46664baf28cf5fc3513ae3d49e9d319f863657053b02902b"
 repro_check = "The scene installs an authored offline default-skin pack (cyan base, magenta opaque hat, transparent face window) and unresolved HarnessHat, not an online skin. Only hat assertion removed: receipts/HarnessFix2/red-head-hat-assertion.log wrongly accepts the no-hat frame. Restore: receipts/HarnessFix2/green-final-units.log. Followup fad1cef1e authors both wide and slim Steve fallback paths; the real UUID selects slim Steve. Real-client placed hat: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 magenta pixels, hat-only control 20261115T010623-native-player-head-vwnycn1k has zero and fails placed_head_hat_layer_pixels. These frames exposed a separate worn-head-on-back product failure; full gate acceptance is not inferred from the placed head."
 failing_first = "not recorded"
 
@@ -6343,7 +6355,7 @@ regression = [
   "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed",
   "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes",
 ]
-fix_commit = "5fd8de1de5d6577a91988b73ff0a70dc3c3b82ef"
+fix_commit = "patch:d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e"
 failing_first = "reported"
 repro_check = "Runner now waits for an explicit, bounded inotify/pidfd completion barrier released by the Loader scenario (loader d6a94c22 battle_scenario.py CaptureLifecycleTest). Red: receipts/LoaderObs/completion-barrier-red.log, capture-lifecycle-red.log; green: completion-barrier-green.log, capture-lifecycle-green.log (39 core tests). Real client: receipts/LoaderObs/late-capture-neoforge-46/java-battle.json waited for completion.ready, took the screenshot, then completion.done, then runner shutdown. Deadline fails closed. Not promoted."
 
@@ -6496,10 +6508,12 @@ source = "Stage3 ScreensVoiceStart: teleport to 1000.5/176/1000.5 → `session f
 repro = "client"
 regression = [
   "client:krasnokamen-client:session::observation::destruction_tests::unloaded_eye_keeps_play_frames_and_waits_for_terrain",
+  "harness:scene-shot:native-unloaded-eye",
 ]
+proving_assertions = { "harness:scene-shot:native-unloaded-eye" = "unloaded_eye_session_survives" }
 fix_commit = "client:ace7a8049bc10c22f5d2db639f40663712dee4b4"
 failing_first = "reported"
-repro_check = "Eye medium is an explicit Unloaded/Air/Fluid state: the renderer omits the fluid overlay on Unloaded, observation keeps eye_medium null, prediction waits at missing feet/underfoot blocks, no invented flow. Unit red with only the Err return restored: receipts/EyeUnloaded/unit-red.log; green unit-green.log. Real client (causal fixture client tools/unloaded_eye_repro.py + tools/unloaded_eye_scene.json, server 8b6fc28e58bb, unmodified packets paused after the far teleport until the unloaded frame is captured): candidate pin ace7a8049bc1 passes 3/3 (receipts/EyeUnloaded/positive/20261115T020423-scene-shot-wxi03l1d, 20261115T020706-scene-shot-7pmjgp91, 20261115T020743-scene-shot-dd24uz5s), old pin 12e076e9 fails in_play with unloaded_eye_environment (negative/20261115T020020-scene-shot-okor0oz3; not a timeout). Promotion needs that scene registered as a harness ref. Full receipts: receipts/EyeUnloaded/result.yaml. Not promoted."
+repro_check = "Registered causal harness:scene-shot:native-unloaded-eye forwards unmodified server packets, holds the stream after the far teleport, and proves unloaded_eye_session_survives after the initial Play session. Server pin 8b6fc28e58bb: client 8a7817c8b0fb passes all 14 assertions in receipts/HarnessFix4/runs/20261115T031808-native-unloaded-eye-da3qyqcy (null unloaded eye, later water, four advancing actual-window GPU frames); client 12e076e9c761 fails exactly unloaded_eye_session_survives with initial in_play=true in runs/20261115T032109-native-unloaded-eye-d_nhc6_6 under the same receipt root. Neither is a startup error or timeout. Historical exact Err-return unit control and three ace7a8049bc1 scene passes remain in receipts/EyeUnloaded/result.yaml and unit-red.log/unit-green.log. Supplied client snapshots are not claimed to be an exact-only fix reversal. No promotion performed."
 
 [[bug]]
 id = "HARNESS-HEAD-ORACLE-NO-BACK-CHECK"

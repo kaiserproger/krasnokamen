@@ -1,0 +1,17 @@
+diff --git a/tools/harness/backends/protocol_end_restart.py b/tools/harness/backends/protocol_end_restart.py
+--- a/tools/harness/backends/protocol_end_restart.py
++++ b/tools/harness/backends/protocol_end_restart.py
+@@ -43,7 +43,13 @@
+     for client in clients:
+         client.reconnect()
+     after = []
++    # Sequential joins let the live dragon fly beyond the original observers'
++    # tracking range. Move observers, never the persisted dragon or its state.
++    report['restart_observer_fixture'] = 'teleport each observer beside the live End dragon'
+     for client in clients:
++        server.command('execute in minecraft:the_end at '
++                       '@e[type=minecraft:ender_dragon,limit=1] '
++                       f'run tp {client.name} ~ ~ ~')
+         after.append(client.wait_until(lambda client=client: _dragon(client),
+                      description=f'{client.name} receives the recovered End dragon',
+                      timeout_seconds=60))
