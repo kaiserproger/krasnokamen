@@ -1,0 +1,40 @@
+{
+  "id": "SCENARIO-VANILLA-CRAFT-ACK",
+  "verdict": "promoted",
+  "fix_commit": "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52",
+  "fix_commit_full": "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52",
+  "promoted_at": "2026-11-15T03:54:09+00:00",
+  "tree_head": "bdb7d7b7b9fe769c1b804ef7836d23dc84033c3e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52",
+  "reversed_files": [
+    "tools/harness/matrix_domains/random.py",
+    "tools/harness/quirk_parity/player.py",
+    "tools/harness/wire.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_matrix_random:RandomMatrixTests.test_vanilla_craft_cursor_correction_uses_transmitted_prediction": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_matrix_random:RandomMatrixTests.test_vanilla_craft_cursor_correction_uses_transmitted_prediction": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness3/.analysis/validation/20261115T035401-ledger-promote-fu6n3ap1"
+}
