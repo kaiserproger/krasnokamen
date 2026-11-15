@@ -5,8 +5,10 @@ The operator command is `battle setup <seed> <field-100|field-1k|field-10k>
 `battle reset`. The optional count is per side and must be 1–10,000. Presets
 are compiled in; scenario files are not read by the tick. Run setup on the
 chosen battlefield, flat or natural relief: its centre is the command origin
-(the world spawn for console). Formation runtime is in memory; after a restart
-reset the persisted battle before staging it again.
+(the world spawn for console). Battle history is saved with the native entities:
+a running battle resumes after restart at its last complete published tick,
+including formations, orders, live holds and named spectator bindings.
+`battle setup` reports that existing battle instead of resetting it.
 Every foot soldier and horse stands on the collision top of its own footprint
 as soon as its chunk is resident (before its first physics tick); a slot on a
 trunk, a wall, water, a cave opening or a sinkhole (a drop of more than two

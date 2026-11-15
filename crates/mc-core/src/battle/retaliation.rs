@@ -55,7 +55,8 @@ pub(crate) const HELPERS: usize = 2;
 /// off is handed on before the victim gets there.
 pub(crate) const STEP_IN_TICKS: u64 = 40;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Grudge {
     attacker: EntityId,
     /// Battle tick of his last blow (a helper's: of the latest hand-off).
@@ -94,7 +95,8 @@ pub(crate) struct Work {
     pub friends_examined: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Retaliation {
     /// (victim, attacker) of each blow on a battle unit the damage merge
     /// committed since the last battle tick.
@@ -102,12 +104,63 @@ pub(crate) struct Retaliation {
     /// Per soldier hurt or helping within the window.
     grudges: FxHashMap<EntityId, Grudge>,
     /// Per attacker, the helpers answering him, rebuilt by each pass.
+    #[serde(skip)]
     crews: FxHashMap<EntityId, Crew>,
     /// Members whose `close_on` the last pass set.
     closing: Vec<usize>,
     /// (victim, attacker) hand-offs of this pass.
+    #[serde(skip)]
     handoffs: Vec<(EntityId, EntityId)>,
+    #[serde(skip)]
     pub(crate) work: Work,
+}
+
+impl Retaliation {
+    pub(super) fn rebind_player(&mut self, old: EntityId, new: EntityId) {
+        for (_, attacker) in &mut self.pending {
+            if *attacker == old {
+                *attacker = new;
+            }
+        }
+        for grudge in self.grudges.values_mut() {
+            if grudge.attacker == old {
+                grudge.attacker = new;
+            }
+            if let Some((attacker, _)) = &mut grudge.other
+                && *attacker == old
+            {
+                *attacker = new;
+            }
+        }
+    }
+
+    pub(super) fn validate_history(&self, members: usize) -> Result<(), crate::CoreError> {
+        if self.closing.iter().any(|&index| index >= members) || self.grudges.len() > members {
+            return Err(super::persistence::error(
+                "invalid retaliation roster index",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_references(
+        &self,
+        known: &impl Fn(EntityId) -> bool,
+    ) -> Result<(), crate::CoreError> {
+        if self
+            .pending
+            .iter()
+            .any(|&(victim, attacker)| !known(victim) || !known(attacker))
+            || self.grudges.iter().any(|(&victim, grudge)| {
+                !known(victim)
+                    || !known(grudge.attacker)
+                    || grudge.other.is_some_and(|(id, _)| !known(id))
+            })
+        {
+            return Err(super::persistence::error("unknown retaliation identity"));
+        }
+        Ok(())
+    }
 }
 
 /// The damage merge accepted a blow of `attacker` on battle unit `victim`

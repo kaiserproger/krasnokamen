@@ -23,6 +23,7 @@ pub(super) fn load_dimension_state(
     };
     let manifest_tick = root_manifest.tick;
     crate::mounts::persistence::validate_replay(&replay)?;
+    crate::battle::persistence::validate_replay(&replay, &registry)?;
     let recovered_tick = replay.tick.max(manifest_tick);
 
     // Worldgen: load the same vanilla router/density cache used by the
@@ -133,6 +134,10 @@ pub(super) fn load_dimension_state(
     // hydrates its own rows (matched by home dimension) folded with its
     // dimension-routed WAL tail. Membership columns hydrate with entities below.
     {
+        let battle_image = replay.battle.clone();
+        if let Some(image) = battle_image {
+            tick_state.hostile.battle = crate::battle::persistence::decode(&image)?;
+        }
         let sequence = match crate::settlements::persistence::checkpoint_sequence(
             settlement_globals,
             root_manifest.tick,
@@ -307,6 +312,7 @@ pub(super) fn load_dimension_state(
             ),
         );
     }
+    crate::battle::persistence::restore(&mut tick_state)?;
     crate::end_fight::restore(&mut tick_state)?;
     crate::raids::restore(&mut tick_state)?;
     crate::end_portals::validate_gateways(&tick_state).map_err(CoreError::Storage)?;

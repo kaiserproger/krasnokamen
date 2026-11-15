@@ -193,6 +193,20 @@ complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
+Staged battles are native dimension-local gameplay owners, not disposable AI
+caches: phase and battle-local clock, regiment/member identity and rank history,
+orders/targets, morale/rout/action/weapon timers, live holds and spectator
+bindings share their entities' checkpoint transaction and tick-WAL frame.
+Changed battle-body poses are WAL-durable even within a chunk, without changing
+the existing age/chunk-clock anchor. Recovery rebuilds only derived execution
+columns and connection state. Running battles resume automatically; downtime
+does not advance combat. Removed roster/execution IDs remain historical
+tombstones, while a missing live member or an inconsistent/unsupported image
+refuses startup, including offline recovery. Tags/tickets alone never recreate
+lost formations. Reset publishes an empty owner image in the same frame as unit
+and ticket removal. See the [battle contract](../architecture/persistence.md#battle-decision-history).
+
+
 Retained player and entity NBT is validated and tag-set-normalized at the shared
 recovery boundary before dimension copies, live hydration or offline
 export. A valid root followed by trailing bytes and repeated `Tags` keys refuse

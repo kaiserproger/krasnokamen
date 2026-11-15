@@ -48,6 +48,19 @@ pub(crate) struct Columns {
 }
 
 impl Columns {
+    pub(super) fn restore(
+        &mut self,
+        rows: Vec<(EntityId, Option<EnemyTarget>, Option<super::ground::Escape>)>,
+    ) {
+        for (id, target, escape) in rows {
+            self.append();
+            let index = self.ids.len() - 1;
+            self.ids[index] = id;
+            self.targets[index] = target;
+            self.escape[index] = escape;
+        }
+    }
+
     fn append(&mut self) {
         self.ids.push(EntityId(0));
         self.slots.push(None);

@@ -17,7 +17,7 @@
 //! first; the previous inventory is discarded so the normal menu close can fold
 //! its cursor and crafting grid without overflowing onto the field. The folded
 //! contents are then replaced by exactly the kit, once, in its fixed slots.
-//! Reconnecting alone does not re-arm a holder: run console `battle live` again.
+//! Reconnecting re-arms an existing holder once; it never takes a second slot.
 //! `keep_inventory` keeps the kit from littering the field when he dies.
 //!
 //! A living holder of the other side in weapon reach is one more candidate
@@ -52,7 +52,8 @@ const PLAYER_HEIGHT: f64 = 1.8;
 /// reduced by his armour and blocked by his raised shield like any player's.
 const SOLDIER_HIT: f32 = 5.0;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Hold {
     pub name: String,
     pub side: u16,
@@ -72,19 +73,95 @@ pub(crate) struct Hold {
     pub alive_at: [f64; 3],
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct LiveState {
     watched: Vec<String>,
     /// Entity last announced online for each watched name.
+    #[serde(skip)]
     announced: Vec<Option<EntityId>>,
     pub holds: Vec<Hold>,
     /// (spectator, holder) of each `battle spectate`: the spectator goes
     /// behind the holder again on each respawn and re-arm (`follow`).
     spectators: Vec<(String, String)>,
+    #[serde(skip)]
     /// Living holders this tick (entity, side): candidates for enemy
     /// soldiers' swings (`in_reach`).
     targets: Vec<(EntityId, u16)>,
+    #[serde(skip)]
     factions: std::sync::Arc<Vec<(String, u16)>>,
+    /// Connection identities are transient; reconnect invokes the existing re-arm rule.
+    #[serde(skip)]
+    rearmed: Vec<(String, EntityId)>,
+    #[serde(skip)]
+    rebound: Vec<(String, EntityId, EntityId)>,
+    /// Last role identities let recovery validate historical target references.
+    historical: Vec<(EntityId, String)>,
+}
+
+impl LiveState {
+    pub(super) fn validate_items(
+        &self,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), crate::CoreError> {
+        for stack in self.holds.iter().flat_map(|hold| hold.kit.iter().flatten()) {
+            if registry.items.name_of(stack.item_id).is_none() || stack.count <= 0 {
+                return Err(super::persistence::error("invalid live-role kit item"));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.watched.is_empty() && self.holds.is_empty() && self.spectators.is_empty()
+    }
+
+    pub(super) fn historical_players(&self) -> impl Iterator<Item = EntityId> + '_ {
+        self.historical.iter().map(|&(id, _)| id)
+    }
+
+    pub(super) fn restore_connections(&mut self) {
+        self.announced.resize(self.watched.len(), None);
+    }
+
+    pub(super) fn validate_history(
+        &self,
+        formation: &FormationRuntime,
+    ) -> Result<(), crate::CoreError> {
+        let mut names = rustc_hash::FxHashSet::default();
+        let mut places = rustc_hash::FxHashSet::default();
+        if self.watched.len() > MAX_WATCHED
+            || self.historical.len() > self.holds.len()
+            || self.watched.iter().any(|name| !valid_name(name))
+        {
+            return Err(super::persistence::error("invalid live-role capacity/name"));
+        }
+        for hold in &self.holds {
+            if !valid_name(&hold.name)
+                || !names.insert(&hold.name)
+                || !places.insert((hold.regiment, hold.file))
+                || formation.regiments.get(hold.regiment).is_none_or(|r| {
+                    r.spec.faction != hold.side || hold.file >= usize::from(r.spec.files)
+                })
+            {
+                return Err(super::persistence::error("invalid live hold"));
+            }
+        }
+        if formation.held.len() != places.len()
+            || formation.held.iter().any(|slot| !places.contains(slot))
+            || self
+                .spectators
+                .iter()
+                .any(|(name, target)| !valid_name(name) || !valid_name(target) || name == target)
+            || self
+                .historical
+                .iter()
+                .any(|(id, name)| id.0 <= 0 || !self.holds.iter().any(|h| &h.name == name))
+        {
+            return Err(super::persistence::error("inconsistent live-role binding"));
+        }
+        Ok(())
+    }
 }
 
 /// Rebuild the published player sides only when the held slots change.
@@ -157,6 +234,78 @@ fn is_dead(state: &TickState, id: EntityId) -> bool {
 /// leave once (the runner's barrier waits on these exact lines), and put each
 /// holder who respawned back into the rank.
 pub(crate) fn update(state: &mut TickState) {
+    state.hostile.battle.live.restore_connections();
+    for index in 0..state.hostile.battle.live.holds.len() {
+        let hold = &state.hostile.battle.live.holds[index];
+        let Some(player) = player_named(state, &hold.name) else {
+            continue;
+        };
+        if is_dead(state, player)
+            || hold.dead
+            || state
+                .hostile
+                .battle
+                .live
+                .rearmed
+                .iter()
+                .any(|(name, id)| name == &hold.name && *id == player)
+        {
+            continue;
+        }
+        let name = hold.name.clone();
+        let side = hold.side;
+        state
+            .hostile
+            .battle
+            .live
+            .rearmed
+            .retain(|(n, _)| n != &name);
+        state
+            .hostile
+            .battle
+            .live
+            .rearmed
+            .push((name.clone(), player));
+        match live(state, &name, side) {
+            Ok(line) => tracing::info!("{line}"),
+            Err(error) => tracing::warn!("Battle live reconnect refused: {name}: {error}"),
+        }
+    }
+    for index in 0..state.hostile.battle.live.spectators.len() {
+        let (name, target) = &state.hostile.battle.live.spectators[index];
+        let (Some(spectator), Some(holder)) =
+            (player_named(state, name), player_named(state, target))
+        else {
+            continue;
+        };
+        if state
+            .hostile
+            .battle
+            .live
+            .rebound
+            .iter()
+            .any(|(n, s, h)| n == name && *s == spectator && *h == holder)
+        {
+            continue;
+        }
+        let (name, target) = (name.clone(), target.clone());
+        state
+            .hostile
+            .battle
+            .live
+            .rebound
+            .retain(|(n, _, _)| n != &name);
+        state
+            .hostile
+            .battle
+            .live
+            .rebound
+            .push((name.clone(), spectator, holder));
+        match place_behind(state, &name, &target) {
+            Ok(line) => tracing::info!("{line}"),
+            Err(error) => tracing::warn!("Battle spectator reconnect refused: {name}: {error}"),
+        }
+    }
     for index in 0..state.hostile.battle.live.watched.len() {
         let name = &state.hostile.battle.live.watched[index];
         let online = player_named(state, name);
@@ -203,8 +352,35 @@ pub(crate) fn update(state: &mut TickState) {
             let hold = &mut state.hostile.battle.live.holds[index];
             hold.alive_at = at;
             let side = hold.side;
+            remember_player(&mut state.hostile.battle, index, player);
             state.hostile.battle.live.targets.push((player, side));
         }
+    }
+}
+
+/// A role has one current wire identity. Reconnect transfers retained decisions
+/// to that same named holder instead of growing a session-long tombstone list.
+fn remember_player(battle: &mut BattleState, hold: usize, player: EntityId) {
+    let name = &battle.live.holds[hold].name;
+    if let Some((_, id)) = battle.live.rearmed.iter_mut().find(|(n, _)| n == name) {
+        *id = player;
+    } else {
+        battle.live.rearmed.push((name.clone(), player));
+    }
+    if let Some(index) = battle.live.historical.iter().position(|(_, n)| n == name) {
+        let old = battle.live.historical[index].0;
+        if old != player {
+            for target in battle.columns.targets.iter_mut().flatten() {
+                if target.id == old {
+                    target.id = player;
+                }
+            }
+            battle.combat.rebind_player(old, player);
+            battle.retaliation.rebind_player(old, player);
+            battle.live.historical[index].0 = player;
+        }
+    } else {
+        battle.live.historical.push((player, name.clone()));
     }
 }
 
@@ -765,6 +941,15 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
             spec.id, at[0], at[1], at[2]
         )
     };
+    state.hostile.battle.live.rearmed.retain(|(n, _)| n != name);
+    state
+        .hostile
+        .battle
+        .live
+        .rearmed
+        .push((name.to_owned(), player));
+    let index = existing.unwrap_or(state.hostile.battle.live.holds.len() - 1);
+    remember_player(&mut state.hostile.battle, index, player);
     follow(state, name);
     Ok(reply)
 }

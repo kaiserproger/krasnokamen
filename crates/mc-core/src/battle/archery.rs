@@ -33,13 +33,16 @@ pub(super) fn arrow_damage(owner: crate::boundary::EntityId, tick: u64) -> f32 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Runtime {
+    #[serde(with = "super::persistence::volley_map")]
     volleys: FxHashMap<(u16, u32), Volley>,
 }
 
-#[derive(Debug)]
-struct Volley {
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Volley {
     next: u64,
     loose: bool,
     ripple: Option<u64>,
