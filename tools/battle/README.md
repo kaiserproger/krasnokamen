@@ -103,7 +103,9 @@ For crash drills, `--crash-handoff` writes `server-pid.json` for the direct
 server process. If it is SIGKILLed, the runner stops its recorder, copies the
 entire stopped world and backups into `crash-copy/` before any restart, and
 writes `crash-handoff.json`; other failures still fail. WAL pruning remains
-normal. Restart the original world and server with
+normal; an event-driven hard-link archive captures immutable published batches
+in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
+Restart the original world and server with
 `python3 tools/battle/run-battle.py --recover-from-crash /absolute/run-dir`.
 This replaces the runner process with the server, using the original config;
 its console is on stdin. The crash copy stays untouched. This mode refuses

@@ -762,12 +762,29 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertEqual((run / 'commands.txt').read_text().splitlines(), ['battle watch PovRed'])
             self.assertFalse((run / 'recorder.log').exists())
 
+    def test_wal_archive_keeps_renamed_batch_after_normal_prune(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = runner.WalArchive(root / 'journal', root / 'archive')
+            try:
+                name = 'batch-00000000000000000001-00000000000000000001.bin'
+                temporary = root / 'journal' / (name + '.tmp')
+                temporary.write_bytes(b'frame')
+                temporary.rename(root / 'journal' / name)
+                runner.watch_ready(root / 'archive' / name, unittest.mock.Mock(pid=os.getpid()), 10)
+                (root / 'journal' / name).unlink()
+            finally:
+                archive.close()
+            self.assertEqual(archive.errors, [])
+            self.assertEqual((root / 'archive' / name).read_bytes(), b'frame')
+
     def test_crash_handoff_on_real_sigkill_keeps_world_and_reports_restart(self):
         runner = load_runner()
         def kill_server(process, run):
             runner.watch_ready(run, process, 30)
             runner.watch_ready(run / 'completion.ready', process, 30)
-            (run / 'world/journal').mkdir(parents=True)
+            (run / 'world/journal').mkdir(parents=True, exist_ok=True)
             (run / 'world/journal/evidence').write_bytes(b'wal')
             pid = json.loads((run / 'server-pid.json').read_text())['pid']
             os.kill(pid, 9)

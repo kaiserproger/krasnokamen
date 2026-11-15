@@ -13,6 +13,7 @@ import re
 import select
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import threading
@@ -722,6 +723,74 @@ def wait_telemetry_through(ticks, failures, required):
             return
 
 
+class WalArchive:
+    """Keep published immutable batches without changing the server's prune path."""
+    def __init__(self, journal, archive):
+        self.journal, self.archive = journal, archive
+        journal.mkdir(parents=True, exist_ok=True)
+        archive.mkdir()
+        libc = ctypes.CDLL(None, use_errno=True)
+        self.fd = libc.inotify_init1(os.O_CLOEXEC | os.O_NONBLOCK)
+        if self.fd < 0:
+            raise OSError(ctypes.get_errno(), 'inotify_init1')
+        if libc.inotify_add_watch(self.fd, os.fsencode(journal), 0x80 | 0x400) < 0:
+            error = ctypes.get_errno()
+            os.close(self.fd)
+            raise OSError(error, 'inotify_add_watch')
+        self.read_stop, self.write_stop = os.pipe()
+        self.errors = []
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _keep(self, name):
+        if not re.fullmatch(r'batch-\d+-\d+\.bin', name):
+            return
+        if (self.archive / name).exists():
+            return
+        try:
+            os.link(self.journal / name, self.archive / name)
+        except FileExistsError:
+            pass
+        except OSError as error:
+            self.errors.append(f'{name}: {error}')
+
+    def _scan(self):
+        for path in self.journal.iterdir():
+            self._keep(path.name)
+
+    def _run(self):
+        try:
+            self._scan()
+            while True:
+                ready, _, _ = select.select([self.fd, self.read_stop], [], [])
+                if self.fd in ready:
+                    while True:
+                        try:
+                            events = os.read(self.fd, 65536)
+                        except BlockingIOError:
+                            break
+                        offset = 0
+                        while offset < len(events):
+                            _, mask, _, length = struct.unpack_from('iIII', events, offset)
+                            name = os.fsdecode(events[offset + 16:offset + 16 + length].split(b'\0', 1)[0])
+                            offset += 16 + length
+                            if mask & (0x4000 | 0x400):
+                                self.errors.append(f'inotify lost events or journal: mask={mask:#x}')
+                            if mask & 0x80:
+                                self._keep(name)
+                if self.read_stop in ready:
+                    self._scan()
+                    return
+        except BaseException as error:
+            self.errors.append(str(error))
+
+    def close(self):
+        os.write(self.write_stop, b'x')
+        self.thread.join()
+        for fd in (self.fd, self.read_stop, self.write_stop):
+            os.close(fd)
+
+
 def run(a):
     commands = command_list(a)
     live_watch, live_placements = live_commands(a)
@@ -786,7 +855,10 @@ def run(a):
     recorder = None
     telemetry = None
     log_thread = None
+    wal_archive = None
     try:
+        if a.crash_handoff:
+            wal_archive = WalArchive(world / 'journal', root / 'wal-archive')
         environment = server_environment(a, os.environ)
         server = subprocess.Popen(launch_argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=environment, cwd=root)
         if a.crash_handoff:
@@ -968,6 +1040,9 @@ def run(a):
         stop.set()
         stop_child(recorder, 10)
         stop_child(server, 30)
+        if wal_archive is not None:
+            wal_archive.close()
+            (root / 'wal-archive-errors.json').write_text(json.dumps(wal_archive.errors, indent=2) + '\n')
         if telemetry is not None:
             telemetry.join(timeout=20)
         if log_thread is not None:
@@ -977,6 +1052,8 @@ def run(a):
             (root / 'live-players.json').write_text(json.dumps({'players': a.live_players, 'spectators': a.live_spectators, **presence.receipt()}, indent=2) + '\n')
     if crashed:
         preserve_crash(root, server)
+    if wal_archive is not None and wal_archive.errors:
+        raise RuntimeError(f'WAL archive lost evidence: {wal_archive.errors}')
 
 
 def preserve_crash(root, server):
@@ -989,6 +1066,8 @@ def preserve_crash(root, server):
     shutil.copy2(root / 'server.log', snapshot / 'server.log')
     if (root / 'backups').exists():
         shutil.copytree(root / 'backups', snapshot / 'backups')
+    if (root / 'wal-archive').exists():
+        shutil.copytree(root / 'wal-archive', snapshot / 'wal-archive')
     receipt = {'status': 'crashed', 'pid': server.pid, 'exit': server.returncode,
                'world': str(root / 'world'), 'crash_copy': str(snapshot)}
     (root / 'crash-handoff.json').write_text(json.dumps(receipt, indent=2) + '\n')
