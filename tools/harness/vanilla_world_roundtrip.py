@@ -126,10 +126,11 @@ def main():
         home.mkdir()
         shutil.copyfile(args.eula_file, home / "eula.txt")
         world = home / "world"
-        runner = MEM_RUN
+        # The owner host's canonical runner; elsewhere Cargo runs directly.
+        runner = [str(MEM_RUN), "-m", "8G"] if MEM_RUN.exists() else []
 
         def v2(phase, native, anvil):
-            command = [str(runner), "-m", "8G", "env", "CARGO_BUILD_JOBS=6",
+            command = [*runner, "env", "CARGO_BUILD_JOBS=6",
                        "CARGO_PROFILE_DEV_DEBUG=0", "CARGO_PROFILE_TEST_DEBUG=0",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD={native}", f"KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE={phase}",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL={anvil}",
