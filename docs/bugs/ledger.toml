@@ -6251,10 +6251,13 @@ severity = "major"
 status = "open"
 source = "Stage-3 S3FixBreaker finding F2: returning from the nether while TNT explodes closes the connection with dimension-switch-explosion-knockback"
 repro = "client"
-regression = ["cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback"]
-fix_commit = "5810902c7"
+regression = [
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
+]
+fix_commit = "patch:be44726c320aba551f99973c44c4061122283f3f7233bafea05f70f5d58740d3"
 failing_first = "reported"
-repro_check = "FixBatchB/F1-red.log: with only the delivery-policy fix reverted, the deterministic same-tick travel test fails its connection-open assertion. F1-green.log passes all 8 explosion_queue tests, including skipped-publication closes. Owner-accepted policy drops only the stale old-world impulse rather than splitting world fanout before the independently drained outbox; not vanilla motion-reset parity."
+repro_check = "FixBatchB/F1-red.log and amendments/F1-queue-red.log fail respectively on the connection close and the real writer leaking an old visual explosion after respawn. F1-green.log and amendments/F1-queue-green.log pass. Cumulative patch docs/bugs/fix-patches/DIMENSION-SWITCH-KNOCKBACK-DISCONNECT.patch combines 5810902c7 and 0c51b3a44; the control keeps only the reset API state/method for retained tests, with base send/receive behavior. Both same-tick destination impulse cases pass. Explicit drop policy is not vanilla motion-reset parity."
 
 [[bug]]
 id = "TAGS-DUPLICATES"
@@ -6267,10 +6270,14 @@ repro = "client"
 regression = [
   "cargo:mc-core:command_summon::tests::scoreboard_tags_tests::duplicate_tags_summon_load_add_and_remove_have_set_semantics",
   "cargo:mc-core:core::entity_state_persistence_tests::duplicate_tags_in_legacy_wal_normalize_on_entity_restore",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_tests::duplicate_tags_keys_are_refused_by_summon_and_data_before_mutation",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_checkpoint_refuse_recovery",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_wal_refuse_recovery",
+  "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_checkpoint_and_wal_recovery_is_idempotent",
 ]
-fix_commit = "c224df8de"
+fix_commit = "patch:5cf559afda0f39316103fd5442ac83c4e17429b31e89eace386f9ee58bb1a25f"
 failing_first = "reported"
-repro_check = "FixBatchB/F3-red.log: only F3 product hunks reverted, both duplicate-tag regressions fail (summon retains duplicates; legacy WAL restore retains duplicates). tags-restored-green.log and F3-wal-green.log pass after restore. Persistence format stays a string list; first-occurrence order is retained."
+repro_check = "FixBatchB/F3-red.log proves duplicate member loss; amendments/F3-duplicates-red.log proves repeated Tags keys in binary WAL and imported storage source can bypass preflight without the guard. amendments/core-green.log passes all six tag tests, including actual checkpoint and WAL recovery twice each. SNBT and the native checkpoint codec already reject duplicate names; the raw-corrupted checkpoint test confirms fail-closed recovery. 26.3 Entity.javap:12057-12060 applies STRING.sizeLimitedListOf(1024) before insertion into the Set, so 1025 identical entries must remain refused. Cumulative patch docs/bugs/fix-patches/TAGS-DUPLICATES.patch combines c224df8de and 0c51b3a44, excluding F4 validation behavior; its control retains the new mutate validator parameter solely for API compatibility with retained tests, with base callers/behavior."
 
 [[bug]]
 id = "TAGS-REFUSAL-MESSAGES"
@@ -6281,9 +6288,9 @@ status = "open"
 source = "Stage-3 S3FixBreaker finding F4: Tags:[1b] reports a count limit, and a 70000-byte tag reports an internal storage wire-length error"
 repro = "client"
 regression = ["cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn"]
-fix_commit = "c224df8de"
+fix_commit = "patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a"
 failing_first = "reported"
-repro_check = "FixBatchB/F4-red.log: only validate_tags fix reverted, the wrong-element-type message assertion fails. tags-restored-green.log passes specific element/count/Modified-UTF-8-length messages and pre-spawn refusal. Vanilla StringTag.write delegates to DataOutput.writeUTF, whose 65535-byte limit throws UTFDataFormatException; the command refuses clearly before creating an unsavable entity."
+repro_check = "FixBatchB/F4-red.log fails with only validate_tags behavior reverted; amendments/core-green.log passes element/count/Modified-UTF-8 pre-spawn checks. Count wording is at most 1024 tags, before dedupe. docs/bugs/fix-patches/TAGS-REFUSAL-MESSAGES.patch covers validation behavior from c224df8de and 0c51b3a44, leaving F3's callable API and tag normalization intact. Vanilla StringTag.write delegates to DataOutput.writeUTF, whose 65535-byte limit throws UTFDataFormatException; preflight refuses before creating an unsavable entity."
 
 [[bug]]
 id = "ENTITY-STYLED-CUSTOM-NAME-REFUSED"
@@ -6296,3 +6303,20 @@ repro = "source"
 regression = []
 failing_first = "reported"
 repro_check = "Existing command_summon::tests::unsupported_styled_custom_name_is_not_silently_flattened asserts the explicit refusal. Quoted-JSON CustomName strings are literal in vanilla 26.x, not selector defects; preserve command_execution::tests::json_shaped_summon_custom_name_stays_literal_in_vanilla_26."
+
+[[bug]]
+id = "OP-DEOP-SELECTOR-LITERAL"
+title = "/op and /deop treat a selector such as @s as a literal player name"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3ClientRegress real native run 20261115T011158-native-v2-ledger-spawn-protection-272xiuoa (wt/S3ClientRegress/.analysis/validation/): operator HarnessEntities ran `/deop @s`, stayed in ops.json and still broke stone at [194,77,-447] inside spawn protection. crates/mc-edge/src/server.rs:982 resolves selectors only for kick/ban/pardon; the else-branch at :1154-1166 looks the target up literally and in offline mode synthesises offline_uuid(\"@s\")"
+repro = "client"
+regression = [
+  "cargo:mc-edge:server::admin_tests::profile_selectors_op_deop_and_whitelist_use_native_players",
+  "cargo:mc-edge:server::admin_tests::profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles",
+  "cargo:mc-edge:admin::tests::whitelist_removal_does_not_remove_another_uuid_with_the_same_name",
+]
+fix_commit = "d0ae64284"
+failing_first = "reported"
+repro_check = "FixBatchB/amendments/F5-red.log fails with only selector expansion removed: /deop @s leaves level 4 and an empty selector reports false success. F5-green.log and deop-restored.log pass native-player targeting, persisted self-deop, multi-target authorization, whitelist selectors and renamed-profile UUID removal. Local 26.3 javap confirms GameProfileArgument for OpCommand, DeOpCommands and both WhitelistCommand target branches; SelectorResult uses EntityArgument.NO_PLAYERS_FOUND (No player was found). Original graphical spawn-protection replay and promotion remain Main-owned."
