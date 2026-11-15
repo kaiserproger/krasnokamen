@@ -276,8 +276,10 @@ fn move_between(
             .map(|player| player.close(&rules))
             .unwrap_or_default();
         crate::tick::apply_player_effects(source, connection, id, effects, changes);
-        source.open_containers.remove(&id);
         source.sign_editors.remove(&connection);
+    }
+    if source.open_containers.remove(&id).is_some() {
+        crate::copper_golem::finish_container_interaction(source, id);
     }
     source
         .entities

@@ -436,7 +436,7 @@ pub(crate) fn menu(
     };
     let pos = state
         .open_containers
-        .get(&entity)
+        .menu_at(&entity)
         .map(|&(x, y, z)| centre(BlockPos { x, y, z }))
         .or_else(|| {
             state

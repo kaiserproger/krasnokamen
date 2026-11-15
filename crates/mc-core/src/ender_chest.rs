@@ -104,7 +104,7 @@ fn is_chest(state: &TickState, position: BlockPos) -> bool {
 pub(crate) fn is_open(state: &TickState, actor: EntityId) -> bool {
     state
         .open_containers
-        .get(&actor)
+        .menu_at(&actor)
         .is_some_and(|&(x, y, z)| is_chest(state, BlockPos { x, y, z }))
 }
 pub(crate) fn select_bundle_item(

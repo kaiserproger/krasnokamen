@@ -977,7 +977,7 @@ fn block_interactions_require_reach_and_ack_refusals() {
             crate::commands::GameMode::Creative;
         let placement = matches!(&input, PlayerInput::UseItemOn { .. });
         let (output, drains, _) = run_tick(&mut state, &[input]);
-        assert!(!state.open_containers.contains_key(&entity));
+        assert!(!state.open_containers.contains(&entity));
         assert!(state.players[&entity].open.is_none());
         assert_eq!(state.world.block_at(far.x, far.y, far.z), Some(chest));
         if placement {
@@ -1007,7 +1007,7 @@ fn block_interactions_require_reach_and_ack_refusals() {
     }
     state.players.get_mut(&entity).expect("player").game_mode = crate::commands::GameMode::Survival;
     let _ = run_tick(&mut state, &[use_at(near, 4)]);
-    assert!(state.open_containers.contains_key(&entity));
+    assert!(state.open_containers.contains(&entity));
     crate::tick::mining_tests::ready_to_finish(&mut state, ConnectionId(1), near);
     let _ = run_tick(&mut state, &[dig_at(near, DigAction::Finish, 5)]);
     assert_eq!(
@@ -4722,7 +4722,7 @@ fn breaking_filled_chest_drops_contents_and_clears_storage() {
             sequence: 1,
         }],
     );
-    assert!(state.open_containers.contains_key(&entity));
+    assert!(state.open_containers.contains(&entity));
     crate::tick::mining_tests::ready_to_finish(
         &mut state,
         ConnectionId(205),
@@ -4762,7 +4762,7 @@ fn breaking_filled_chest_drops_contents_and_clears_storage() {
         "chest contents dropped"
     );
     // Viewer closed, storage removed, tombstone staged.
-    assert!(!state.open_containers.contains_key(&entity));
+    assert!(!state.open_containers.contains(&entity));
     assert!(!state.block_entities.contains_key(&(cx, cy, cz)));
     assert!(state.block_entity_removed.contains(&(cx, cy, cz)));
     let closed = drains

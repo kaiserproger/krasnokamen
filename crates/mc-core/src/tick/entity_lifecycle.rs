@@ -8,6 +8,7 @@ impl TickState {
     pub fn remove_entity(&mut self, slot: EntitySlot) {
         let body = self.entities.body(slot);
         let id = body.id;
+        self.open_containers.remove(&id);
         let kind = body.kind;
         let movement = body.movement;
         if self.entities.row(slot).projectile.is_some()

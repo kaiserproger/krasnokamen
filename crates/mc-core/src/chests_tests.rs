@@ -321,7 +321,7 @@ fn integrity_unloaded_double_chest_refuses_pickup_shift_and_drag() {
             mode,
         });
         assert!(rig.state.players[&rig.player].open.is_none());
-        assert!(!rig.state.open_containers.contains_key(&rig.player));
+        assert!(!rig.state.open_containers.contains(&rig.player));
         assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change|
             matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window)));
         assert_eq!(rig.storage(rig.left).unwrap()[0], diamond);
@@ -516,7 +516,7 @@ fn breaking_one_half_keeps_the_other_halfs_items() {
         rig.double_chest(std::slice::from_ref(&planks), std::slice::from_ref(&dirt));
         let (left, right) = (rig.left, rig.right);
         rig.open(left);
-        assert!(rig.state.open_containers.contains_key(&rig.player));
+        assert!(rig.state.open_containers.contains(&rig.player));
 
         let (broken, kept, lost, kept_items) = if break_right {
             (right, left, &dirt, &planks)

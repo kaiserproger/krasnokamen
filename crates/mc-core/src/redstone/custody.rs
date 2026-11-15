@@ -158,40 +158,152 @@ impl<'a> IntoIterator for &'a BlockEntities {
     }
 }
 
-/// Viewer transitions dirty both the previous and the new menu location.
+#[derive(Clone, Copy, Debug)]
+struct ContainerOpener {
+    cell: Cell,
+    until: Option<u64>,
+}
+
+/// Menu and native openers share counts, invalidation and animation ownership.
 #[derive(Debug, Default)]
 pub struct OpenContainers {
-    viewers: HashMap<EntityId, Cell>,
+    viewers: HashMap<EntityId, ContainerOpener>,
+    counts: HashMap<Cell, usize>,
+    native_count: usize,
     dirty: DirtyPositions,
     animation_dirty: Vec<Cell>,
 }
 
 impl OpenContainers {
     pub fn insert(&mut self, viewer: EntityId, cell: Cell) -> Option<Cell> {
-        let previous = self.viewers.insert(viewer, cell);
-        if previous != Some(cell) {
-            if let Some(previous) = previous {
-                self.dirty.mark_dirty(previous);
-                self.animation_dirty.push(previous);
+        self.set(viewer, cell, None)
+    }
+
+    pub(crate) fn insert_native(&mut self, viewer: EntityId, cell: Cell, until: u64) {
+        self.set(viewer, cell, Some(until));
+    }
+
+    fn set(&mut self, viewer: EntityId, cell: Cell, until: Option<u64>) -> Option<Cell> {
+        let previous = self.viewers.insert(viewer, ContainerOpener { cell, until });
+        if previous.is_some_and(|open| open.until.is_some()) {
+            self.native_count -= 1;
+        }
+        self.native_count += usize::from(until.is_some());
+        let previous_cell = previous.map(|open| open.cell);
+        if previous_cell != Some(cell) {
+            if let Some(previous) = previous_cell {
+                Self::release_cell(
+                    &mut self.counts,
+                    &mut self.dirty,
+                    &mut self.animation_dirty,
+                    previous,
+                );
             }
+            *self.counts.entry(cell).or_default() += 1;
             self.dirty.mark_dirty(cell);
             self.animation_dirty.push(cell);
         }
-        previous
+        previous_cell
     }
 
     pub fn remove(&mut self, viewer: &EntityId) -> Option<Cell> {
-        let cell = self.viewers.remove(viewer)?;
-        self.dirty.mark_dirty(cell);
-        self.animation_dirty.push(cell);
-        Some(cell)
+        let open = self.viewers.remove(viewer)?;
+        self.native_count -= usize::from(open.until.is_some());
+        Self::release_cell(
+            &mut self.counts,
+            &mut self.dirty,
+            &mut self.animation_dirty,
+            open.cell,
+        );
+        Some(open.cell)
+    }
+
+    fn release_cell(
+        counts: &mut HashMap<Cell, usize>,
+        dirty: &mut DirtyPositions,
+        animation_dirty: &mut Vec<Cell>,
+        cell: Cell,
+    ) {
+        let count = counts.get_mut(&cell).expect("registered container opener");
+        *count -= 1;
+        if *count == 0 {
+            counts.remove(&cell);
+        }
+        dirty.mark_dirty(cell);
+        animation_dirty.push(cell);
     }
 
     pub fn clear(&mut self) {
-        for (_, cell) in self.viewers.drain() {
+        for &cell in self.counts.keys() {
             self.dirty.mark_dirty(cell);
             self.animation_dirty.push(cell);
         }
+        self.viewers.clear();
+        self.counts.clear();
+        self.native_count = 0;
+    }
+
+    pub fn menu_at(&self, viewer: &EntityId) -> Option<&Cell> {
+        self.viewers
+            .get(viewer)
+            .filter(|open| open.until.is_none())
+            .map(|open| &open.cell)
+    }
+
+    pub fn menu_viewers(&self) -> impl Iterator<Item = (&EntityId, &Cell)> {
+        self.viewers
+            .iter()
+            .filter(|(_, open)| open.until.is_none())
+            .map(|(id, open)| (id, &open.cell))
+    }
+
+    pub(crate) fn viewers(&self) -> impl Iterator<Item = (&EntityId, &Cell)> {
+        self.viewers.iter().map(|(id, open)| (id, &open.cell))
+    }
+
+    pub fn contains(&self, viewer: &EntityId) -> bool {
+        self.viewers.contains_key(viewer)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.viewers.is_empty()
+    }
+
+    pub(crate) fn native_open(&self, viewer: EntityId) -> bool {
+        self.viewers
+            .get(&viewer)
+            .is_some_and(|open| open.until.is_some())
+    }
+
+    pub(crate) fn count_at(&self, cell: Cell, partner: Option<Cell>) -> usize {
+        self.counts.get(&cell).copied().unwrap_or(0)
+            + partner
+                .and_then(|cell| self.counts.get(&cell))
+                .copied()
+                .unwrap_or(0)
+    }
+
+    pub(crate) fn retain_native(&mut self, mut keep: impl FnMut(EntityId, Cell, u64) -> bool) {
+        if self.native_count == 0 {
+            return;
+        }
+        let Self {
+            viewers,
+            counts,
+            native_count,
+            dirty,
+            animation_dirty,
+        } = self;
+        viewers.retain(|&id, open| {
+            if let Some(until) = open.until
+                && !keep(id, open.cell, until)
+            {
+                *native_count -= 1;
+                Self::release_cell(counts, dirty, animation_dirty, open.cell);
+                return false;
+            }
+            true
+        });
     }
 
     pub(crate) fn drain_dirty_into(&mut self, cells: &mut Vec<Cell>) {
@@ -206,22 +318,5 @@ impl OpenContainers {
         cells.clear();
         debug_assert!(self.animation_dirty.is_empty());
         self.animation_dirty = cells;
-    }
-}
-
-impl Deref for OpenContainers {
-    type Target = HashMap<EntityId, Cell>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.viewers
-    }
-}
-
-impl<'a> IntoIterator for &'a OpenContainers {
-    type Item = (&'a EntityId, &'a Cell);
-    type IntoIter = std::collections::hash_map::Iter<'a, EntityId, Cell>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.viewers.iter()
     }
 }

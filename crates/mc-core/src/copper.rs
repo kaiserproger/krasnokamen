@@ -132,12 +132,11 @@ pub(crate) fn random_tick(
             state.world.block_at(p.x, p.y, p.z)
         })
         .map(|(_, p)| (p.x, p.y, p.z));
-        // Menus belong to this dimension's TickState. Query the existing
-        // custody map, including an opener on either half, without allocating.
+        // All openers belong to this dimension's native custody owner.
         if state
             .open_containers
-            .values()
-            .any(|cell| *cell == (pos.x, pos.y, pos.z) || Some(*cell) == partner)
+            .count_at((pos.x, pos.y, pos.z), partner)
+            != 0
         {
             return None;
         }

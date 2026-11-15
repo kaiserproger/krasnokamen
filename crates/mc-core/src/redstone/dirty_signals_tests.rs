@@ -154,7 +154,7 @@ fn open(state: &mut TickState, connection: ConnectionId, pos: BlockPos) {
         state.players[&player].open.is_some(),
         "container must really open"
     );
-    assert_eq!(state.open_containers.get(&player), Some(&key(pos)));
+    assert_eq!(state.open_containers.menu_at(&player), Some(&key(pos)));
 }
 
 fn click(state: &mut TickState, player: EntityId, slot: i16) {
@@ -174,7 +174,7 @@ fn close(state: &mut TickState, connection: ConnectionId) {
     let player = state.connections.entity_of(connection).unwrap();
     let window = state.players[&player].open.as_ref().unwrap().window;
     run_tick(state, &[PlayerInput::ContainerClose { connection, window }]);
-    assert!(!state.open_containers.contains_key(&player));
+    assert!(!state.open_containers.contains(&player));
 }
 
 fn command(state: &mut TickState, command: &str) {
@@ -365,7 +365,7 @@ fn trapped_chest_real_open_close_and_disconnect_track_viewer_count() {
     advance(&mut state, 3);
     assert_eq!(power(&state, wire), 1);
     run_tick(&mut state, &[PlayerInput::Leave { connection: second }]);
-    assert!(!state.open_containers.contains_key(&second_player));
+    assert!(!state.open_containers.contains(&second_player));
     advance(&mut state, 3);
     assert_eq!(power(&state, wire), 0);
     assert_eq!(comparator_output(&state, COMPARATOR), 15);

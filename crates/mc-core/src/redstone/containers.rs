@@ -646,7 +646,7 @@ fn changed(state: &mut TickState, pos: BlockPos) {
     // Synchronize every viewer, including viewers whose menu covers both halves.
     let viewers: Vec<_> = state
         .open_containers
-        .iter()
+        .menu_viewers()
         .filter_map(|(id, open)| {
             let open = position(*open);
             cells(state, open).contains(&pos).then_some((*id, open))

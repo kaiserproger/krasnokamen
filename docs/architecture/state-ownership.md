@@ -211,6 +211,22 @@ battle columns, sparse roster indexing and battle arrow lifetime use this
 marker, not an enemy predicate. Neither changes the persisted faction format.
 
 
+## Container openers
+
+Each dimension's `redstone::custody::OpenContainers` owns menu and temporary
+native openers. Its per-cell counts are derived from those records, including
+both halves of a double chest; copper weathering and trapped-chest power read
+the same counts. Menu projections enumerate only menu viewers, never native
+openers. Removing an entity or leaving a dimension removes its membership.
+
+Copper golems retain the existing native item-transfer path and dwell with the
+container open for 60 simulated ticks. Freeze holds that deadline. Expiry runs
+before random block ticks; a single commit-tail emitter publishes final ordinary,
+trapped and copper chest/shulker lid transitions after menu closures and removals.
+It reuses dirty/recipient scratch and the existing block-event encoder. Opener
+membership is transient: checkpoint/WAL item ownership remains in native container
+slots and ordinary entity equipment, not a second persisted opener registry.
+
 ## Container checkpoint capture
 
 The native checkpoint preflight materializes and hydrates container custody

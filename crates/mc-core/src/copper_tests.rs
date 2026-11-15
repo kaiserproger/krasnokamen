@@ -681,6 +681,229 @@ fn copper_build_pattern_replaces_body_with_matching_chest_exactly_once() {
 }
 
 #[test]
+fn breaking_other_chest_half_finishes_native_golem_interaction_in_commit() {
+    use crate::boundary::{DigAction, EntityDataValue, PlayerChange};
+
+    let mut state = fixture(None);
+    let player = join(&mut state);
+    install(
+        &mut state,
+        A,
+        "copper_chest",
+        "left",
+        vec![stack("iron_ingot", 16)],
+    );
+    install(&mut state, B, "copper_chest", "right", vec![]);
+    let destination = BlockPos { x: 6, ..A };
+    install(&mut state, destination, "chest", "single", vec![]);
+    let id = golem(&mut state, [1.5, 201.0, 1.5]);
+    for _ in 0..21 {
+        run_tick(&mut state, &[]);
+        if state
+            .entities
+            .row(state.entities.slot_of(id).unwrap())
+            .appearance
+            .equipment[0]
+            .is_some()
+        {
+            break;
+        }
+    }
+    assert!(state.open_containers.contains(&id));
+    let slot = state.entities.slot_of(id).unwrap();
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, value)| {
+                *index == 17 && matches!(value, EntityDataValue::CopperGolemState(1))
+            })
+    );
+    state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    let (_, drains, _) = run_tick(
+        &mut state,
+        &[PlayerInput::Dig {
+            connection: ConnectionId(1),
+            position: B,
+            action: DigAction::Start,
+            sequence: 1,
+        }],
+    );
+    assert_eq!(
+        state.world.block_at(B.x, B.y, B.z),
+        Some(state.registry.states.air)
+    );
+    assert!(!state.open_containers.contains(&id));
+    let slot = state.entities.slot_of(id).unwrap();
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, value)| {
+                *index == 17 && matches!(value, EntityDataValue::CopperGolemState(0))
+            }),
+        "committed native closure must publish the idle pose"
+    );
+    assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change| matches!(
+        change, PlayerChange::BlockEvent { position, action: 1, parameter: 0, .. } if *position == A
+    )), "the surviving half must close in the same committed output");
+}
+
+#[test]
+fn native_golem_lids_share_weathering_lifetime_and_survive_freeze() {
+    use crate::boundary::PlayerChange;
+
+    let mut state = fixture(None);
+    join(&mut state);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid: uuid::Uuid::new_v4(),
+            name: "observer".into(),
+            permission_level: 0,
+        }],
+    );
+    install(
+        &mut state,
+        A,
+        "copper_chest",
+        "single",
+        vec![stack("iron_ingot", 32)],
+    );
+    let destination = BlockPos { x: 6, ..A };
+    install(&mut state, destination, "chest", "single", vec![]);
+    let first = golem(&mut state, [1.5, 201.0, 1.5]);
+    let second = golem(&mut state, [1.5, 201.0, 1.5]);
+    let mut opened_at = None;
+    for _ in 0..21 {
+        let now = state.tick_control.game_ticks(state.tick);
+        let (_, drains, _) = run_tick(&mut state, &[]);
+        if state.block_entities[&(A.x, A.y, A.z)]
+            .slots
+            .iter()
+            .all(ItemStack::is_empty)
+        {
+            let actual = at(&state, A);
+            for connection in [ConnectionId(1), ConnectionId(2)] {
+                assert!(drains.iter().filter(|(id, _)| *id == connection)
+                    .flat_map(|(_, changes)| changes).any(|change| matches!(change,
+                        PlayerChange::BlockEvent { position, block, state: id, action: 1, parameter: 1 }
+                            if *position == A && *block == actual.block.raw_id as u32 && *id == actual.id.0
+                    )), "native opener did not animate for {connection:?}");
+            }
+            opened_at = Some(now);
+            break;
+        }
+    }
+    let until = opened_at.expect("both golems must pick up their sixteen items") + 60;
+    let second_slot = state.entities.slot_of(second).unwrap();
+    let position = state.entities.pos(second_slot);
+    for _ in 0..3 {
+        run_tick(&mut state, &[]);
+    }
+    let after = state.entities.pos(state.entities.slot_of(second).unwrap());
+    assert_eq!(
+        [after[0], after[2]],
+        [position[0], position[2]],
+        "sorting must pause while the chest is open"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(state.entities.slot_of(second).unwrap())
+            .appearance
+            .equipment[0],
+        Some(stack("iron_ingot", 16))
+    );
+    assert!(
+        state.block_entities[&(destination.x, destination.y, destination.z)]
+            .slots
+            .iter()
+            .all(ItemStack::is_empty)
+    );
+    assert!(random_tick(&state, A, at(&state, A).id.0, 0, 0).is_none());
+    let first_slot = state.entities.slot_of(first).unwrap();
+    state.remove_entity(first_slot);
+    let (_, drains, _) = run_tick(&mut state, &[]);
+    assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change| matches!(
+        change, PlayerChange::BlockEvent { position, action: 1, parameter: 0, .. } if *position == A
+    )), "one departing opener must not close another's lid");
+    assert!(random_tick(&state, A, at(&state, A).id.0, 0, 0).is_none());
+
+    let second_slot = state.entities.slot_of(second).unwrap();
+    state.entities.row_mut(second_slot).controls.no_ai = true;
+    let game_time = state.tick_control.game_ticks(state.tick);
+    state.tick_control.set_frozen(true);
+    for _ in 0..100 {
+        run_tick(&mut state, &[]);
+    }
+    assert_eq!(state.tick_control.game_ticks(state.tick), game_time);
+    assert!(random_tick(&state, A, at(&state, A).id.0, 0, 0).is_none());
+    state.tick_control.set_frozen(false);
+    while state.tick_control.game_ticks(state.tick) < until {
+        let (_, drains, _) = run_tick(&mut state, &[]);
+        assert!(!drains.iter().flat_map(|(_, changes)| changes).any(|change| matches!(
+            change, PlayerChange::BlockEvent { position, action: 1, parameter: 0, .. } if *position == A
+        )), "lid closed before the simulated interaction deadline");
+    }
+    let (_, drains, _) = run_tick(&mut state, &[]);
+    for connection in [ConnectionId(1), ConnectionId(2)] {
+        assert!(drains.iter().filter(|(id, _)| *id == connection)
+            .flat_map(|(_, changes)| changes).any(|change| matches!(
+                change, PlayerChange::BlockEvent { position, action: 1, parameter: 0, .. } if *position == A
+            )), "last opener did not close for {connection:?}");
+    }
+    assert!(random_tick(&state, A, at(&state, A).id.0, 0, 0).is_some());
+    assert_eq!(
+        state
+            .entities
+            .row(state.entities.slot_of(second).unwrap())
+            .appearance
+            .equipment[0],
+        Some(stack("iron_ingot", 16))
+    );
+    assert!(state.players.values().all(|player| player.open.is_none()));
+    let second_slot = state.entities.slot_of(second).unwrap();
+    state.entities.row_mut(second_slot).controls.no_ai = false;
+    for _ in 0..200 {
+        run_tick(&mut state, &[]);
+        if state.block_entities[&(destination.x, destination.y, destination.z)]
+            .slots
+            .iter()
+            .map(|stack| stack.count)
+            .sum::<i32>()
+            == 16
+        {
+            break;
+        }
+    }
+    assert_eq!(
+        state.block_entities[&(destination.x, destination.y, destination.z)]
+            .slots
+            .iter()
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        16,
+        "sorting must resume after the native interaction"
+    );
+    assert!(
+        state
+            .entities
+            .row(state.entities.slot_of(second).unwrap())
+            .appearance
+            .equipment[0]
+            .is_none()
+    );
+}
+
+#[test]
 fn copper_golem_walks_and_sorts_source_into_matching_or_empty_chest() {
     let mut state = fixture(None);
     let target = BlockPos { x: 6, ..A };
@@ -693,9 +916,17 @@ fn copper_golem_walks_and_sorts_source_into_matching_or_empty_chest() {
     );
     install(&mut state, target, "chest", "single", vec![]);
     let id = golem(&mut state, [2.5, 201.0, 1.5]);
-    for tick in 0..180 {
-        state.tick = tick;
-        crate::copper_golem::tick(&mut state, &mut Vec::new());
+    for _ in 0..600 {
+        run_tick(&mut state, &[]);
+        if state.block_entities[&(target.x, target.y, target.z)]
+            .slots
+            .iter()
+            .map(|stack| stack.count)
+            .sum::<i32>()
+            == 23
+        {
+            break;
+        }
     }
     assert!(
         state.block_entities[&(A.x, A.y, A.z)]

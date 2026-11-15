@@ -75,7 +75,7 @@ pub(in crate::tick) fn select_bundle_item(
                 crate::mounts::menus::select_bundle_item(state, entity, index, selected_index);
             } else if crate::vehicles::is_open(state, entity) {
                 crate::vehicles::select_bundle_item(state, entity, index, selected_index);
-            } else if let Some(open) = state.open_containers.get(&entity).copied() {
+            } else if let Some(open) = state.open_containers.menu_at(&entity).copied() {
                 let cells = container_cells(state, open);
                 let mut offset = index;
                 for cell in cells {
@@ -323,7 +323,7 @@ pub(in crate::tick) fn container_click(
     // container.
     let open_cells = state
         .open_containers
-        .get(&entity)
+        .menu_at(&entity)
         .map(|open| container_cells(state, *open))
         .unwrap_or_default();
     let registry = Arc::clone(&state.registry);
@@ -366,7 +366,7 @@ pub(in crate::tick) fn container_click(
         // One concatenated post-image covers BOTH double-chest
         // halves; testing a half against the other's old image
         // would incorrectly reject quantity-preserving reorders.
-        let below_container = state.open_containers.get(&entity).is_some_and(|pos| {
+        let below_container = state.open_containers.menu_at(&entity).is_some_and(|pos| {
             crate::plugin_inventories::below_floors(
                 state,
                 &mc_script::ScriptInventoryEndpoint::Container {
@@ -399,7 +399,7 @@ pub(in crate::tick) fn container_click(
         crate::block_log::note_container(state, entity, &open_cells, &container);
     }
     store_container_slots(state, &open_cells, &container);
-    if let Some(pos) = state.open_containers.get(&entity)
+    if let Some(pos) = state.open_containers.menu_at(&entity)
         && let Some(progress) = state
             .block_entities
             .get_mut(pos)
@@ -436,7 +436,7 @@ fn sync_container_viewers(
     if !open_cells.is_empty() && container_slots(state, open_cells) == container {
         let viewers: Vec<(EntityId, ConnectionId)> = state
             .open_containers
-            .iter()
+            .menu_viewers()
             .filter(|(viewer, viewer_pos)| {
                 **viewer != entity && container_cells(state, **viewer_pos) == open_cells
             })
@@ -613,7 +613,7 @@ pub(in crate::tick) fn place_recipe(
     let rules = registry.item_rules();
     let open_cells = state
         .open_containers
-        .get(&entity)
+        .menu_at(&entity)
         .map(|pos| container_cells(state, *pos))
         .unwrap_or_default();
     let mut container = container_slots(state, &open_cells);
@@ -645,7 +645,7 @@ pub(in crate::tick) fn place_recipe(
             return;
         };
         let plan = player.plan_inventory_transition(&container, native);
-        let below_container = state.open_containers.get(&entity).is_some_and(|pos| {
+        let below_container = state.open_containers.menu_at(&entity).is_some_and(|pos| {
             crate::plugin_inventories::below_floors(
                 state,
                 &mc_script::ScriptInventoryEndpoint::Container {
@@ -676,7 +676,7 @@ pub(in crate::tick) fn place_recipe(
     if effects.container_changed {
         crate::block_log::note_container(state, entity, &open_cells, &container);
         store_container_slots(state, &open_cells, &container);
-        if let Some(pos) = state.open_containers.get(&entity)
+        if let Some(pos) = state.open_containers.menu_at(&entity)
             && let Some(progress) = state
                 .block_entities
                 .get_mut(pos)

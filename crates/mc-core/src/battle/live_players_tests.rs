@@ -495,12 +495,12 @@ fn rearm_closes_a_full_crafting_table_without_spawning_items() {
     menu.grid[0] = stick;
     menu.carried = arrow;
     let window = menu.window;
-    assert!(state.open_containers.contains_key(&player));
+    assert!(state.open_containers.contains(&player));
     let items_before = state.entities.item_slots().count();
 
     command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(state.players[&player].open.is_none());
-    assert!(!state.open_containers.contains_key(&player));
+    assert!(!state.open_containers.contains(&player));
     assert_exactly_the_kit(&state, player);
     assert!(state.merge_life_drops.is_empty());
     assert!(changes.entities_spawned.is_empty());

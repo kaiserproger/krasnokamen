@@ -936,6 +936,7 @@ impl TickState {
             if self.open_containers.remove(&viewer).is_none() {
                 continue;
             }
+            crate::copper_golem::finish_container_interaction(self, viewer);
             let centre = [x as f64 + 0.5, y as f64 + 0.5, z as f64 + 0.5];
             let connection = self.connections.entity_connection(viewer);
             // Capture the open window id BEFORE `close()` takes the menu

@@ -2,6 +2,131 @@
 //! Moved verbatim from `tick.rs`.
 
 use super::*;
+use mc_data::block_entity_kinds::BlockEntityKind;
+
+fn animated_block(state: &TickState, pos: BlockPos) -> Option<(BlockEntityKind, u32, u32)> {
+    let id = state.world.block_at(pos.x, pos.y, pos.z)?;
+    let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
+    let kind = BlockEntityKind::for_block(block.block.id.path())?;
+    if !matches!(
+        kind,
+        BlockEntityKind::Chest | BlockEntityKind::TrappedChest | BlockEntityKind::ShulkerBox
+    ) {
+        return None;
+    }
+    Some((kind, u32::try_from(block.block.raw_id).ok()?, id))
+}
+
+pub(super) fn expire_native_openers(state: &mut TickState) {
+    let now = state.tick_control.game_ticks(state.tick);
+    let mut expired = std::mem::take(&mut state.expired_container_openers);
+    let entities = &state.entities;
+    let world = &state.world;
+    let blocks = &state.registry.blocks;
+    state
+        .open_containers
+        .retain_native(|entity, (x, y, z), until| {
+            let valid = now < until
+                && entities
+                    .slot_of(entity)
+                    .is_some_and(|slot| entities.body(slot).alive)
+                && world
+                    .block_at(x, y, z)
+                    .and_then(|id| blocks.by_id(mc_world::BlockStateId(id)))
+                    .is_some_and(|block| {
+                        matches!(
+                            BlockEntityKind::for_block(block.block.id.path()),
+                            Some(BlockEntityKind::Chest | BlockEntityKind::TrappedChest)
+                        )
+                    });
+            if !valid {
+                expired.push(entity);
+            }
+            valid
+        });
+    for entity in expired.drain(..) {
+        crate::copper_golem::finish_container_interaction(state, entity);
+    }
+    state.expired_container_openers = expired;
+}
+
+/// Seal opener transitions after destruction/menus and before outbox publication.
+pub(super) fn animate_openers(state: &mut TickState) {
+    let mut dirty = state.open_containers.take_animation_dirty();
+    if dirty.is_empty() {
+        state.open_containers.recycle_animation_dirty(dirty);
+        return;
+    }
+    let changed = dirty.len();
+    for index in 0..changed {
+        let (x, y, z) = dirty[index];
+        let pos = BlockPos { x, y, z };
+        if matches!(
+            animated_block(state, pos),
+            Some((BlockEntityKind::ShulkerBox, _, _))
+        ) {
+            continue;
+        }
+        if let Some((_, partner)) =
+            crate::chests::storage_partner(&state.registry.blocks, pos, &|p| {
+                state.world.block_at(p.x, p.y, p.z)
+            })
+        {
+            dirty.push((partner.x, partner.y, partner.z));
+        }
+        // Removal or a shape change may leave the previous half unpaired.
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (Some(x), Some(z)) = (x.checked_add(dx), z.checked_add(dz)) else {
+                continue;
+            };
+            let neighbour = BlockPos { x, y, z };
+            if matches!(
+                animated_block(state, neighbour),
+                Some((BlockEntityKind::Chest | BlockEntityKind::TrappedChest, _, _))
+            ) {
+                dirty.push((x, y, z));
+            }
+        }
+    }
+    dirty.sort_unstable();
+    dirty.dedup();
+    let mut recipients = std::mem::take(&mut state.container_animation_recipients);
+    for &(x, y, z) in &dirty {
+        let pos = BlockPos { x, y, z };
+        let Some((_, block, block_state)) = animated_block(state, pos) else {
+            continue;
+        };
+        let partner = crate::chests::storage_partner(&state.registry.blocks, pos, &|p| {
+            state.world.block_at(p.x, p.y, p.z)
+        })
+        .map(|(_, p)| (p.x, p.y, p.z));
+        let parameter = u8::from(state.open_containers.count_at((x, y, z), partner) != 0);
+        recipients.clear();
+        recipients.extend(state.players.iter().filter_map(|(entity, player)| {
+            let slot = state.entities.slot_of(*entity)?;
+            let p = state.entities.pos(slot);
+            let distance = (p[0] - f64::from(x)).powi(2)
+                + (p[1] - f64::from(y)).powi(2)
+                + (p[2] - f64::from(z)).powi(2);
+            (distance < 64.0 * 64.0).then_some(player.connection)
+        }));
+        for &connection in &recipients {
+            state.push_player(
+                connection,
+                PlayerChange::BlockEvent {
+                    position: pos,
+                    block,
+                    state: block_state,
+                    action: 1,
+                    parameter,
+                },
+            );
+        }
+    }
+    recipients.clear();
+    state.container_animation_recipients = recipients;
+    state.open_containers.recycle_animation_dirty(dirty);
+}
 
 /// Container menu for a block; both halves share one double-chest menu.
 pub(super) fn container_menu_for(
@@ -86,7 +211,7 @@ pub(crate) fn debug_menu_snapshot(
             crate::ender_chest::contents(&player.opaque_player_fields, &state.registry.items)
                 .map_err(|_| "ender chest storage is invalid")?,
         )
-    } else if let Some(position) = state.open_containers.get(&entity) {
+    } else if let Some(position) = state.open_containers.menu_at(&entity) {
         let cells = container_cells(state, *position);
         let mut slots = Vec::with_capacity(menu.kind.container_size());
         for cell in cells {
@@ -153,7 +278,7 @@ pub(crate) fn inventory_transition_refused(
     }
     let cells = state
         .open_containers
-        .get(&entity)
+        .menu_at(&entity)
         .map(|open| container_cells(state, *open))
         .unwrap_or_default();
     player.inventory_transition_refused(&container_slots(state, &cells))
@@ -165,7 +290,7 @@ pub(crate) fn refresh_container_viewers(state: &mut TickState, position: BlockPo
     let cells = container_cells(state, (position.x, position.y, position.z));
     let viewers: Vec<_> = state
         .open_containers
-        .iter()
+        .menu_viewers()
         .filter(|(_, open)| container_cells(state, **open) == cells)
         .filter_map(|(viewer, _)| {
             state
@@ -430,7 +555,7 @@ pub(crate) fn tick_furnaces(
         if !outcome.changed && before == after {
             continue;
         }
-        for (viewer, open) in &state.open_containers {
+        for (viewer, open) in state.open_containers.menu_viewers() {
             if *open != pos {
                 continue;
             }

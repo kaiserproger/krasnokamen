@@ -27,7 +27,7 @@ pub(super) fn bookshelves_for_player(state: &TickState, entity: EntityId) -> i32
     }
     state
         .open_containers
-        .get(&entity)
+        .menu_at(&entity)
         .map_or(0, |&(x, y, z)| bookshelves(state, BlockPos { x, y, z }))
 }
 fn bookshelves(state: &TickState, position: BlockPos) -> i32 {
@@ -136,7 +136,7 @@ pub(super) fn open(
 }
 
 pub(super) fn damage_anvil(state: &mut TickState, entity: EntityId, changes: &mut ChangeSet) {
-    let Some(&(x, y, z)) = state.open_containers.get(&entity) else {
+    let Some(&(x, y, z)) = state.open_containers.menu_at(&entity) else {
         return;
     };
     let Some(current) = state.world.block_at(x, y, z) else {

@@ -2360,7 +2360,7 @@ fn shared_destroy_command_settles_open_chest_before_the_next_click() {
     let click = open_diamond_chest(&mut state, 1);
     command(&mut state, 1, "setblock 10 150 8 air destroy");
     assert!(
-        !state.open_containers.contains_key(&alice),
+        !state.open_containers.contains(&alice),
         "the viewer closes with the command"
     );
     assert!(state.merge_command_broken.is_empty());

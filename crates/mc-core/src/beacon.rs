@@ -235,7 +235,7 @@ pub(crate) fn configure(
     let Some(entity) = state.connections.entity_of(connection) else {
         return;
     };
-    let Some(&(x, y, z)) = state.open_containers.get(&entity) else {
+    let Some(&(x, y, z)) = state.open_containers.menu_at(&entity) else {
         return;
     };
     let pos = BlockPos { x, y, z };
@@ -397,7 +397,7 @@ pub(crate) fn run(state: &mut TickState) {
         }
         let viewers: Vec<_> = state
             .open_containers
-            .iter()
+            .menu_viewers()
             .filter(|(_, at)| **at == (pos.x, pos.y, pos.z))
             .map(|(entity, _)| *entity)
             .collect();

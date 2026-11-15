@@ -47,7 +47,7 @@ impl Lectern {
 
 fn publish_page(state: &mut TickState, pos: BlockPos) {
     let page = state.lecterns[&key(pos)].page as i16;
-    for (viewer, cell) in &state.open_containers {
+    for (viewer, cell) in state.open_containers.menu_viewers() {
         if *cell != key(pos) {
             continue;
         }
@@ -313,7 +313,7 @@ pub(crate) fn button(
     if menu.window != window {
         return true;
     }
-    let Some(&(x, y, z)) = state.open_containers.get(&actor) else {
+    let Some(&(x, y, z)) = state.open_containers.menu_at(&actor) else {
         return true;
     };
     let pos = BlockPos { x, y, z };
@@ -372,7 +372,7 @@ pub(crate) fn button(
     persist(state, pos);
     let viewers: Vec<_> = state
         .open_containers
-        .iter()
+        .menu_viewers()
         .filter_map(|(id, cell)| (*cell == key(pos)).then_some(*id))
         .collect();
     for viewer in viewers {

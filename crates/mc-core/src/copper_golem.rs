@@ -277,6 +277,17 @@ pub(crate) fn after_blocks(state: &mut TickState, writes: &mut Vec<(BlockPos, u3
     }
 }
 
+pub(crate) fn finish_container_interaction(state: &mut TickState, entity: EntityId) {
+    if let Some(slot) = state.entities.slot_of(entity)
+        && matches!(
+            state.entities.row(slot).special_mob.as_deref(),
+            Some(Retained::Copper(_))
+        )
+    {
+        metadata(state, slot, 17, EntityDataValue::CopperGolemState(0));
+    }
+}
+
 /// Native serial owner, no AI parity promise. Transfers up to sixteen identical
 /// items from copper storage to an empty ordinary chest or one containing that
 /// item. Equipment is the custody record while travelling; both slot images
@@ -359,6 +370,13 @@ pub(crate) fn tick(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
                 removed.push(state.entities.body(slot).id);
                 continue;
             }
+        }
+        if state
+            .open_containers
+            .native_open(state.entities.body(slot).id)
+        {
+            move_to(state, slot, None);
+            continue;
         }
         if state.entities.row(slot).controls.no_ai {
             continue;
@@ -445,7 +463,14 @@ pub(crate) fn tick(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
             };
             state.world.mark_block_entity_dirty(cell);
             metadata(state, slot, 17, EntityDataValue::CopperGolemState(3));
+        } else {
+            continue;
         }
+        // 26.3 TransportItemsBetweenContainers.TARGET_INTERACTION_TIME.
+        let until = state.tick_control.game_ticks(state.tick).saturating_add(60);
+        state
+            .open_containers
+            .insert_native(state.entities.body(slot).id, key(target), until);
         state.world.mark_block_entity_dirty(target);
         state.appearance_changed.push(state.entities.body(slot).id);
     }

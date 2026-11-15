@@ -59,14 +59,15 @@ fn chest_viewers(state: &TickState, pos: BlockPos) -> u8 {
     if at(state, pos).is_none_or(|block| block.block.id.path() != "trapped_chest") {
         return 0;
     }
-    let cells = crate::chests::storage_cells(&state.registry.blocks, pos, &|cell: BlockPos| {
+    let partner = crate::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
         state.world.block_at(cell.x, cell.y, cell.z)
-    });
+    })
+    .map(|(_, cell)| (cell.x, cell.y, cell.z));
+    // 26.3 ContainerOpenersCounter includes copper golems; trapped power
+    // reads the same count as the lid, clamped to fifteen.
     state
         .open_containers
-        .values()
-        .filter(|cell| cells.iter().any(|pos| **cell == (pos.x, pos.y, pos.z)))
-        .count()
+        .count_at((pos.x, pos.y, pos.z), partner)
         .min(15) as u8
 }
 pub(super) fn prop<'a>(state: &'a BlockState, key: &str) -> Option<&'a str> {

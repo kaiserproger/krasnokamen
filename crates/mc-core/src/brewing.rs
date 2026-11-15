@@ -34,7 +34,7 @@ pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: BrewingStat
     let properties = next.properties();
     let cell = (pos.x, pos.y, pos.z);
     state.brewing.insert(cell, next);
-    for (viewer, open) in &state.open_containers {
+    for (viewer, open) in state.open_containers.menu_viewers() {
         if *open != cell {
             continue;
         }
@@ -549,7 +549,7 @@ fn run_inner(
                     .set_opaque_block_entity(pos, Some(bytes.clone()));
             }
             state.opaque_changes.push((pos, Some(bytes)));
-            for (viewer, open) in &state.open_containers {
+            for (viewer, open) in state.open_containers.menu_viewers() {
                 if open != key {
                     continue;
                 }

@@ -559,7 +559,7 @@ pub(crate) fn slot_state(
     {
         return;
     }
-    let Some(&key) = state.open_containers.get(&entity) else {
+    let Some(&key) = state.open_containers.menu_at(&entity) else {
         return;
     };
     let Ok(index) = usize::try_from(index) else {
@@ -664,7 +664,7 @@ pub(crate) fn run(state: &mut TickState) {
             persist(state, pos);
             let viewers: Vec<_> = state
                 .open_containers
-                .iter()
+                .menu_viewers()
                 .filter_map(|(id, open)| (*open == key).then_some(*id))
                 .collect();
             for id in viewers {

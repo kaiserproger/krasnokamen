@@ -536,8 +536,10 @@ pub struct TickState {
     /// as `JournalEntry::RemoveBlockEntity` and cleared at commit, so the
     /// tombstone shares the tick with the block change.
     pub block_entity_removed: Vec<(i32, i32, i32)>,
-    /// Open container position per player entity (set by UseItemOn).
+    /// Menu and timed native container openers; owns visual and redstone counts.
     pub open_containers: crate::redstone::custody::OpenContainers,
+    pub(crate) container_animation_recipients: Vec<ConnectionId>,
+    pub(crate) expired_container_openers: Vec<EntityId>,
     pub(crate) vehicle_menus: crate::vehicles::VehicleMenus,
     /// Client-predicted block uses and respawns wait for native world admission.
     pub(crate) deferred_uses: Vec<PlayerInput>,
@@ -781,6 +783,8 @@ impl TickState {
             block_entities: Default::default(),
             block_entity_removed: Vec::new(),
             open_containers: Default::default(),
+            container_animation_recipients: Vec::new(),
+            expired_container_openers: Vec::new(),
             vehicle_menus: crate::vehicles::VehicleMenus::default(),
             deferred_uses: Vec::new(),
             sign_editors: HashMap::default(),
@@ -1040,7 +1044,7 @@ impl TickState {
         self.merge_container_contents.push((cell, slots));
         let viewers: Vec<EntityId> = self
             .open_containers
-            .iter()
+            .viewers()
             .filter(|(_, open)| container_cells(self, **open).contains(&cell))
             .map(|(viewer, _)| *viewer)
             .collect();
@@ -1639,6 +1643,7 @@ fn run_dimension_tick_inner<'a>(
     let mut popped_drops = Vec::new();
     pop_unsupported(state, &mut block_writes, &mut popped_drops);
     block_laps.lap("pop_unsupported");
+    containers::expire_native_openers(state);
     if sim {
         crate::weather::settle(state, &mut block_writes);
         block_laps.lap("weather_settle");
@@ -1944,6 +1949,8 @@ fn run_dimension_tick_inner<'a>(
     }
     commit_laps.lap("plugin_player");
     spectator::tick(state);
+    containers::animate_openers(state);
+    commit_laps.lap("container_animations");
     let commit_time = commit_start.elapsed();
     // 6. Publish: chunk list + entity wire views + per-connection outbox
     // drain. Readers hold the snapshot `Arc`; unchanged chunks share theirs.
@@ -2150,7 +2157,7 @@ pub(crate) fn apply_player_effects(
     if effects.experience_orbs > 0 {
         let pos = state
             .open_containers
-            .get(&entity)
+            .menu_at(&entity)
             .map(|&(x, y, z)| [f64::from(x) + 0.5, f64::from(y) + 0.5, f64::from(z) + 0.5])
             .unwrap_or_else(|| state.world.world_spawn_position());
         crate::experience_orbs::award(
