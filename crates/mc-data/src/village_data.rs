@@ -355,6 +355,10 @@ pub struct MoogStartChecks {
     pub cannot_spawn_in_liquid: bool,
     /// Chunk radius and maximum first-free-height difference.
     pub terrain_check: Option<(i32, i32)>,
+    pub biome_radius: Option<i32>,
+    pub min_y: Option<i32>,
+    pub max_y: Option<i32>,
+    pub average_land: bool,
 }
 
 
@@ -997,9 +1001,55 @@ fn parse_moog_start_checks(
             });
         }
     };
+    let biome_radius = value.get("valid_biome_radius_check")
+        .map(|_| ranged_i32_field(value, "valid_biome_radius_check", STRUCTURE, id, 1, 100))
+        .transpose()?;
+    let (min_y, max_y) = if let Some(allowance) = value.get("y_allowance") {
+        if !allowance.is_object() {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE, entry: id.clone(), field: "y_allowance",
+                value: allowance.to_string(),
+            });
+        }
+        if allowance.as_object().is_some_and(|object| {
+            object.keys().any(|key| key != "min_y_allowed" && key != "max_y_allowed")
+        }) {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE, entry: id.clone(), field: "y_allowance",
+                value: "unsupported y_allowance field".to_owned(),
+            });
+        }
+        let min = allowance.get("min_y_allowed")
+            .map(|_| i32_field(allowance, "min_y_allowed", STRUCTURE, id)).transpose()?;
+        let max = allowance.get("max_y_allowed")
+            .map(|_| i32_field(allowance, "max_y_allowed", STRUCTURE, id)).transpose()?;
+        if matches!((min, max), (Some(min), Some(max)) if min > max) {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE, entry: id.clone(), field: "y_allowance",
+                value: "minimum exceeds maximum".to_owned(),
+            });
+        }
+        (min, max)
+    } else {
+        (None, None)
+    };
+    let average_land = match value.get("burying_type") {
+        None => false,
+        Some(Value::String(burying)) if burying == "AVERAGE_LAND" => true,
+        Some(unsupported) => {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE, entry: id.clone(), field: "burying_type",
+                value: format!("unsupported Moog burial: {unsupported}"),
+            });
+        }
+    };
     Ok(MoogStartChecks {
         cannot_spawn_in_liquid,
         terrain_check,
+        biome_radius,
+        min_y,
+        max_y,
+        average_land,
     })
 }
 
@@ -1016,10 +1066,7 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
     }
     let moog_start_checks = if is_moog {
         for field in [
-            "valid_biome_radius_check",
             "land_search_direction",
-            "y_allowance",
-            "burying_type",
             "pools_that_ignore_boundaries",
         ] {
             if let Some(unsupported) = value.get(field) {

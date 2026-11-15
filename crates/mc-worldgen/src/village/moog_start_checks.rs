@@ -8,6 +8,7 @@ pub(super) fn passes(
     chunk_z: i32,
     cannot_spawn_in_liquid: bool,
     terrain_check: Option<(i32, i32)>,
+    y_bounds: (Option<i32>, Option<i32>),
     height_at: &dyn Fn(i32, i32) -> Option<i32>,
     liquid_at: &dyn Fn(i32, i32) -> Option<bool>,
 ) -> bool {
@@ -36,6 +37,11 @@ pub(super) fn passes(
             let Some(height) = height_at(x, z) else { return false };
             lowest = lowest.min(height);
             highest = highest.max(height);
+            if y_bounds.0.is_some_and(|min| lowest < min)
+                || y_bounds.1.is_some_and(|max| lowest > max)
+            {
+                return false;
+            }
             if i64::from(highest) - i64::from(lowest) > i64::from(max_range) {
                 return false;
             }
@@ -52,20 +58,21 @@ mod tests {
     fn rejects_liquid_at_start_column_only_when_forbidden() {
         let height = |_, _| Some(65);
         let liquid = |x, z| Some((x, z) == (23, -9));
-        assert!(!passes(1, -1, true, None, &height, &liquid));
-        assert!(passes(1, -1, false, None, &height, &liquid));
-        assert!(passes(0, 0, true, None, &height, &liquid));
-        assert!(!passes(0, 0, true, None, &height, &|_, _| None));
+        assert!(!passes(1, -1, true, None, (None, None), &height, &liquid));
+        assert!(passes(1, -1, false, None, (None, None), &height, &liquid));
+        assert!(passes(0, 0, true, None, (None, None), &height, &liquid));
+        assert!(!passes(0, 0, true, None, (None, None), &height, &|_, _| None));
     }
 
     #[test]
     fn terrain_radius_samples_chunk_centres_and_allows_range_boundary() {
         let height = |x, z| Some(if (x, z) == (23, -9) { 68 } else { 65 });
         let dry = |_, _| Some(false);
-        assert!(passes(0, 0, true, Some((1, 3)), &height, &dry));
-        assert!(!passes(0, 0, true, Some((1, 2)), &height, &dry));
-        assert!(passes(0, 0, true, Some((0, 2)), &height, &dry));
-        assert!(!passes(i32::MAX, 0, true, None, &height, &dry));
-        assert!(!passes(0, 0, true, Some((1, 3)), &|_, _| None, &dry));
+        assert!(passes(0, 0, true, Some((1, 3)), (None, None), &height, &dry));
+        assert!(!passes(0, 0, true, Some((1, 2)), (None, None), &height, &dry));
+        assert!(passes(0, 0, true, Some((0, 2)), (None, None), &height, &dry));
+        assert!(!passes(i32::MAX, 0, true, None, (None, None), &height, &dry));
+        assert!(!passes(0, 0, true, Some((1, 3)), (None, None), &|_, _| None, &dry));
+        assert!(!passes(0, 0, true, Some((1, 3)), (Some(66), None), &height, &dry));
     }
 }

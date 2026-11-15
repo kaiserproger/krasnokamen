@@ -925,6 +925,10 @@ impl crate::village::height_query::HeightQuery for JigsawHeightQuery<'_> {
         let ground = self.0.base_surface_y(x, z);
         Some(self.0.world_surface_y(ground) > ground)
     }
+
+    fn sea_level(&self) -> Option<i32> {
+        Some(SEA_LEVEL)
+    }
 }
 
 impl TerrainGenerator {

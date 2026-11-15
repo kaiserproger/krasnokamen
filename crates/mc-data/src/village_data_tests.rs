@@ -50,9 +50,31 @@ fn moog_start_rules_parse_but_layout_is_refused() {
         Some(MoogStartChecks {
             cannot_spawn_in_liquid: true,
             terrain_check: Some((2, 3)),
+            biome_radius: None,
+            min_y: None,
+            max_y: None,
+            average_land: false,
         })
     );
     assert!(parse_structure(&id, &value).is_err(), "piece-limited layout is not yet implemented");
+}
+
+#[test]
+fn moog_ocean_rules_include_biome_radius_and_burial() {
+    let mut value = serde_json::json!({
+        "valid_biome_radius_check": 4,
+        "y_allowance": {"min_y_allowed": 0, "max_y_allowed": 41},
+        "burying_type": "AVERAGE_LAND",
+        "cannot_spawn_in_liquid": false,
+        "terrain_height_radius_check": 2,
+        "allowed_terrain_height_range": 5
+    });
+    let id = identifier("mvs:ocean_tower");
+    let rules = parse_moog_start_checks(&id, &value).unwrap();
+    assert_eq!((rules.biome_radius, rules.min_y, rules.max_y), (Some(4), Some(0), Some(41)));
+    assert!(rules.average_land);
+    value["y_allowance"]["min_y_allowed"] = serde_json::json!(42);
+    assert!(parse_moog_start_checks(&id, &value).is_err());
 }
 
 #[test]

@@ -12,6 +12,10 @@ pub trait HeightQuery {
     fn top_is_liquid(&self, _x: i32, _z: i32) -> Option<bool> {
         None
     }
+
+    fn sea_level(&self) -> Option<i32> {
+        None
+    }
 }
 
 impl<F: Fn(i32, i32) -> i32> HeightQuery for F {

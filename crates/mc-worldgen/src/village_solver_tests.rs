@@ -565,6 +565,10 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
     let mut moog = closure.clone();
     moog.structures[0].spec.moog_start_checks = Some(mc_data::village_data::MoogStartChecks {
         cannot_spawn_in_liquid: true,
+        biome_radius: None,
+        min_y: None,
+        max_y: None,
+        average_land: false,
         terrain_check: Some((1, 3)),
     });
     struct MoogColumns { liquid: bool, rough: bool }
@@ -582,10 +586,39 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
             |_x, _y, _z| identifier("minecraft:plains"), |_tag, _biome| true, columns,
         )
     };
-    assert!(moog_start(&MoogColumns { liquid: false, rough: false }).is_some());
+    let moog_assembly = moog_start(&MoogColumns { liquid: false, rough: false }).unwrap();
+    let first = &moog_assembly.pieces[0];
+    assert_eq!(first.bounds_min.x + (first.bounds_max.x - first.bounds_min.x + 1) / 2, chunk_x * 16);
+    assert_eq!(first.bounds_min.z + (first.bounds_max.z - first.bounds_min.z + 1) / 2, chunk_z * 16);
     assert!(moog_start(&MoogColumns { liquid: true, rough: false }).is_none());
     assert!(moog_start(&MoogColumns { liquid: false, rough: true }).is_none());
     assert!(moog_start(&|_, _| 64).is_none());
+    let mut radius = moog.clone();
+    radius.structures[0].spec.moog_start_checks.as_mut().unwrap().biome_radius = Some(1);
+    let rejected = assemble_village(
+        &radius, 4242, chunk_x, chunk_z,
+        |x, _, z| if (x, z) == (208, -112) {
+            identifier("minecraft:desert")
+        } else {
+            identifier("minecraft:plains")
+        },
+        |_tag, _biome| true,
+        &MoogColumns { liquid: false, rough: false },
+    );
+    assert!(rejected.is_none(), "every biome in the radius must match");
+
+    let mut buried = moog.clone();
+    let checks = buried.structures[0].spec.moog_start_checks.as_mut().unwrap();
+    checks.cannot_spawn_in_liquid = false;
+    checks.min_y = Some(0);
+    checks.max_y = Some(100);
+    checks.average_land = true;
+    let buried = assemble_village(
+        &buried, 4242, chunk_x, chunk_z,
+        |_x, _y, _z| identifier("minecraft:plains"), |_tag, _biome| true,
+        &MoogColumns { liquid: false, rough: false },
+    ).unwrap();
+    assert_eq!(buried.pieces[0].bounds_min.y, 70, "average occupied ground plus start offset");
     assert_eq!(assembly.structure, structure_id);
     assert_eq!(
         assembly.pieces.len(),
