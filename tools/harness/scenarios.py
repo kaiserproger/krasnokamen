@@ -1002,6 +1002,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="Loader connection, core-owned C binding opens the native settlement dialog, and native settlement create/list/info",
         limits="minimal native settlement smoke, not plugin production/war coverage; visual review required",
     ),
+    "loader-fabric-mixed-version-build": _entry(
+        id="loader-fabric-mixed-version-build",
+        summary="Keep Fabric 26.3 live while Fabric/SVC 26.1.2 builds and starts",
+        owner="core:harness", evidence="graphical", profile="loader-live",
+        scenario_id="loader-fabric-mixed-version-build",
+        requires=("sibling:solaris-loader", "client-token", "xvfb"),
+        sources=("tools/harness/loader_mixed_version.py",),
+        fixture="release server, empty plugins, Fabric 26.3 in Play before building Fabric/SVC 26.1.2",
+        proves="the first endpoint remains in Play with unchanged class bytes after the second endpoint builds and reaches its title screen",
+        limits="26.3 and 26.1.2 Fabric only; second endpoint startup, not second-client gameplay or audio",
+    ),
     "loader-fabric-screen-admission": _entry(
         id="loader-fabric-screen-admission",
         summary="Release server starts the krasnokamen:screen service for a real Fabric Loader session",

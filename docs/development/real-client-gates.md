@@ -899,6 +899,23 @@ Proves join, auth, one action and persistence; not a graphical gate.
    with `unsupported Loader channel or phase`; that is version skew, not a server
    bug.
 
+## Mixed-version Loader build overlap
+
+`loader-fabric-mixed-version-build` uses `loader-live` with Fabric 26.3
+(`KRASNOKAMEN_JAVA_VERSION=26.3`, `--platform fabric`, an exact release
+`--server-bin` and empty `--plugins-dir`). After that client enters Play,
+it builds and starts Fabric/SVC 26.1.2 while the first client remains live.
+The first client must still report Play and retain the same Loader class
+bytes; the second must reach its title screen with its classes present.
+Both windows are captured after the second build. Provision the pinned SVC
+artifact as for `screens-voice-qa`; no audio-flow claim is made here.
+
+This is the registered regression for
+`HARNESS-LOADER-SHARED-BUILD-DIR-RACE`. A same-version Fabric voice pair is
+not a substitute. The fix-only control reverses the runtime build/history
+isolation patch; the observer follows that launch's shared output rather than
+reading stale isolated files from an earlier green run.
+
 ## Manual local playable launch (owner-visible play, not a gate)
 
 An owner-visible session on a visible display, with a copied config and release

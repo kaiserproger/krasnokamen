@@ -38,3 +38,21 @@ class RealClientRefTests(unittest.TestCase):
                 (root / "java-battle.json").write_text(json.dumps({"functional_passed": True, "checks": {"late_camera_capture": True}}))
                 self.assertTrue(profiles.run_java_battle(ctx)["checks"]["late_camera_capture"])
                 self.assertEqual(ctx.client_evidence["server_binary_path"], str(binary))
+
+    def test_mixed_version_ref_and_live_output_selection(self):
+        from types import SimpleNamespace
+        from tools.harness.loader_mixed_version import class_file
+        name = "loader-fabric-mixed-version-build"
+        argv = regressions._client_command("loader-live", name)
+        self.assertIn(name, argv)
+        self.assertEqual(argv[argv.index("--platform") + 1], "fabric")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = SimpleNamespace(sibling_root=lambda _: root)
+            with patch.dict(os.environ, {"KRASNOKAMEN_JAVA_VERSION": "26.3"}):
+                shared = class_file(runtime, "26.3", root)
+                self.assertEqual(shared, root / "loader-fabric/build/classes/java/main/dev/krasnokamen/loader/fabric/mixin/PackRepositoryAccessor.class")
+                (root / "client-init.gradle").write_text("isolated launch")
+                isolated = class_file(runtime, "26.3", root)
+                self.assertNotEqual(shared, isolated)
+                self.assertIn("build/26.3/loader-fabric/classes", str(isolated))
