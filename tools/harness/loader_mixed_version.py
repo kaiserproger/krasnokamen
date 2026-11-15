@@ -26,7 +26,7 @@ def run_candidate(ctx: Any, timeout: float) -> dict[str, Any]:
     return {"scenario": result}
 
 
-def class_file(runtime: Any, version: str, game: Path) -> Path:
+def class_directory(runtime: Any, version: str, game: Path) -> Path:
     root = runtime.sibling_root("loader")
     # Resolve the output selected by this launch, including the shared output
     # used by the fix-only negative control, not an old isolated build's files.
@@ -35,19 +35,26 @@ def class_file(runtime: Any, version: str, game: Path) -> Path:
         output = cache.parent / "build" / version / "loader-fabric"
     else:
         output = root / "loader-fabric/build"
-    return output / "classes/java/main/dev/krasnokamen/loader/fabric/mixin/PackRepositoryAccessor.class"
+    return output / "classes/java/main"
+
+def class_hashes(directory: Path) -> dict[str, str]:
+    return {str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(directory.rglob("*.class"))}
+
 
 
 def run(client: Any, runtime: Any, artifact_dir: Path, server_log: Path) -> dict[str, Any]:
     report: dict[str, Any] = {"passed": False, "versions": ["26.3", "26.1.2"], "assertions": {}}
-    first_class = class_file(runtime, "26.3", artifact_dir / "game")
+    first_classes = class_directory(runtime, "26.3", artifact_dir / "game")
     report_path = artifact_dir / "mixed-version.json"
     first_before = runtime.current_client_state(client, 30)
     if not first_before.get("in_play"):
         raise AssertionError("Fabric 26.3 must be live before the second build")
-    first_bytes = first_class.read_bytes()
-    report["first_before_second_build"] = {"in_play": True, "class": str(first_class),
-                                            "sha256": hashlib.sha256(first_bytes).hexdigest()}
+    first_hashes = class_hashes(first_classes)
+    if not first_hashes:
+        raise AssertionError(f"Fabric 26.3 class tree is empty: {first_classes}")
+    report["first_before_second_build"] = {"in_play": True, "classes": str(first_classes),
+                                            "hashes": first_hashes}
     second_root = artifact_dir / "fabric-26.1.2"
     second_root.mkdir()
     previous = os.environ.get("KRASNOKAMEN_JAVA_VERSION")
@@ -69,14 +76,17 @@ def run(client: Any, runtime: Any, artifact_dir: Path, server_log: Path) -> dict
             stack.callback(second.close)
             second.initialize()
             runtime.wait_client_ready_for_connect(second, 120)
-            second_class = class_file(runtime, "26.1.2", second_root / "game")
-            report["second_after_build"] = {"class": str(second_class), "ready": True}
+            second_classes = class_directory(runtime, "26.1.2", second_root / "game")
+            report["second_after_build"] = {"classes": str(second_classes), "ready": True,
+                                             "hashes": class_hashes(second_classes)}
             if process.poll() is not None:
                 raise AssertionError("Fabric 26.1.2 exited after its build")
             after = runtime.current_client_state(client, 30)
             report["assertions"]["first_stays_in_play"] = bool(after.get("in_play"))
-            report["assertions"]["first_classes_preserved"] = first_class.is_file() and first_class.read_bytes() == first_bytes
-            report["assertions"]["second_classes_present"] = second_class.is_file()
+            after_hashes = class_hashes(first_classes)
+            report["first_after_second_build"] = {"hashes": after_hashes}
+            report["assertions"]["first_classes_preserved"] = after_hashes == first_hashes
+            report["assertions"]["second_classes_present"] = bool(report["second_after_build"]["hashes"])
             for name, endpoint in (("first-after-second-build", client), ("second-ready", second)):
                 loader.capture_ui(endpoint, artifact_dir, name)
             failed = [name for name, value in report["assertions"].items() if not value]

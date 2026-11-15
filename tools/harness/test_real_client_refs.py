@@ -41,7 +41,7 @@ class RealClientRefTests(unittest.TestCase):
 
     def test_mixed_version_ref_and_live_output_selection(self):
         from types import SimpleNamespace
-        from tools.harness.loader_mixed_version import class_file
+        from tools.harness.loader_mixed_version import class_directory, class_hashes
         name = "loader-fabric-mixed-version-build"
         argv = regressions._client_command("loader-live", name)
         self.assertIn(name, argv)
@@ -50,9 +50,19 @@ class RealClientRefTests(unittest.TestCase):
             root = Path(directory)
             runtime = SimpleNamespace(sibling_root=lambda _: root)
             with patch.dict(os.environ, {"KRASNOKAMEN_JAVA_VERSION": "26.3"}):
-                shared = class_file(runtime, "26.3", root)
-                self.assertEqual(shared, root / "loader-fabric/build/classes/java/main/dev/krasnokamen/loader/fabric/mixin/PackRepositoryAccessor.class")
+                shared = class_directory(runtime, "26.3", root)
+                self.assertEqual(shared, root / "loader-fabric/build/classes/java/main")
                 (root / "client-init.gradle").write_text("isolated launch")
-                isolated = class_file(runtime, "26.3", root)
+                isolated = class_directory(runtime, "26.3", root)
                 self.assertNotEqual(shared, isolated)
                 self.assertIn("build/26.3/loader-fabric/classes", str(isolated))
+                shared.mkdir(parents=True)
+                (shared / "Unchanged.class").write_bytes(b"same")
+                versioned = shared / "ClientVersionApi.class"
+                versioned.write_bytes(b"26.3")
+                before = class_hashes(shared)
+                self.assertEqual(before, class_hashes(shared))
+                versioned.write_bytes(b"26.1.2")
+                self.assertNotEqual(before, class_hashes(shared))
+                versioned.unlink()
+                self.assertNotEqual(before, class_hashes(shared))

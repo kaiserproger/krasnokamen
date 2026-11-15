@@ -905,8 +905,10 @@ Proves join, auth, one action and persistence; not a graphical gate.
 (`KRASNOKAMEN_JAVA_VERSION=26.3`, `--platform fabric`, an exact release
 `--server-bin` and empty `--plugins-dir`). After that client enters Play,
 it builds and starts Fabric/SVC 26.1.2 while the first client remains live.
-The first client must still report Play and retain the same Loader class
-bytes; the second must reach its title screen with its classes present.
+The first client must still report Play and retain every path and SHA-256
+in its nonempty Loader class tree; an unchanged accessor alone is insufficient
+because some classes are byte-identical across versions. The second must
+reach its title screen with its classes present.
 Both windows are captured after the second build. Provision the pinned SVC
 artifact as for `screens-voice-qa`; no audio-flow claim is made here.
 
