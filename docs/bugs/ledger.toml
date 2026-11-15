@@ -6567,3 +6567,15 @@ regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_he
 fix_commit = "f3229f1a7"
 failing_first = "reported"
 repro_check = "HarnessFix3/head-pose-green.json: five real candidate frame pairs pass including HeadBreaker 022004 and 022113, with zero added magenta hat pixels on the back; magenta counterexample and old-attachment control remain red. head-pose-control.log restores only check_player_head from 4a90fa799, retaining the real-frame unittest: exactly the 022004 pose regression fails worn_head_back_unchanged. Raw changed-pixel values remain diagnostic, not the attachment oracle."
+
+[[bug]]
+id = "OP-DEOP-SELECTOR-LITERAL"
+title = "/op and /deop treat a selector such as @s as a literal player name"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3ClientRegress real native run 20261115T011158-native-v2-ledger-spawn-protection-272xiuoa (wt/S3ClientRegress/.analysis/validation/): operator HarnessEntities ran `/deop @s`, stayed in ops.json and still broke stone at [194,77,-447] inside spawn protection. crates/mc-edge/src/server.rs:982 resolves selectors only for kick/ban/pardon; the else-branch at :1154-1166 looks the target up literally and in offline mode synthesises offline_uuid(\"@s\")"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Vanilla /op and /deop take game-profile targets that accept player selectors (https://minecraft.wiki/w/Commands/deop; argument type to be confirmed by javap in the fix). The spawn-protection scenario itself is not shown defective: its non-op setup failed. Fix assigned to FixBatchB (F5)."
