@@ -1020,7 +1020,7 @@ fn expired_hostile_and_tnt_cart_each_emit_one_tombstone() {
         .unwrap()
         .fuse = 1;
     let (output, _, _) = run_tick(&mut s, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut s, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut s, &output).unwrap();
     for id in [vex, tnt] {
         assert!(s.entities.slot_of_any(id).is_none());
         assert_eq!(
@@ -1083,7 +1083,7 @@ fn entity_region_and_wal_restart_preserve_vehicle_motion_and_custody() {
         .unwrap()
         .fuse = 70;
     let (output, _, _) = run_tick(&mut s, &[]);
-    let initial_entries = crate::core::journal_entries_for_tick(&mut s, &output);
+    let initial_entries = crate::core::journal_entries_for_tick(&mut s, &output).unwrap();
     let base = replay_batches(
         Replay::default(),
         &[(output.tick, output.tick, initial_entries)],
@@ -1122,7 +1122,7 @@ fn entity_region_and_wal_restart_preserve_vehicle_motion_and_custody() {
         .slots[26]
         .count = 4;
     let (output, _, _) = run_tick(&mut s, &[]);
-    let tail = crate::core::journal_entries_for_tick(&mut s, &output);
+    let tail = crate::core::journal_entries_for_tick(&mut s, &output).unwrap();
     {
         let mut writer = JournalWriter::open(&dir, 1).unwrap();
         writer.append(output.tick, output.tick, &tail).unwrap();

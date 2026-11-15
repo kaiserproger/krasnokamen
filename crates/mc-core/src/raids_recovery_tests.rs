@@ -21,7 +21,7 @@ fn checkpoint(root: &std::path::Path, state: &mut TickState) -> CheckpointManife
     // batch and recovery rejects it as an invalid boundary.
     state.world.refresh_active_clock(state.tick);
     let out = output(state, ChangeSet::default());
-    let entries = journal_entries_for_tick(state, &out);
+    let entries = journal_entries_for_tick(state, &out).unwrap();
     let mut writer = JournalWriter::open(root, 1).unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     for dimension in [Dimension::Nether, Dimension::End] {
@@ -166,7 +166,7 @@ fn raids_checkpoint_restart_and_wal_wave_removal_resume_without_duplicates() {
     // restored debt images at the new tick so the tail stays inside it.
     restored.world.refresh_active_clock(restored.tick);
     let out = output(&restored, changes);
-    let entries = journal_entries_for_tick(&mut restored, &out);
+    let entries = journal_entries_for_tick(&mut restored, &out).unwrap();
     let mut writer = JournalWriter::open(root.path(), 1).unwrap();
     writer
         .append(restored.tick, restored.tick, &entries)
@@ -232,7 +232,7 @@ fn raids_idle_ticks_skip_wal_and_restore_exact_elapsed_counters() {
         crate::raids::run(&mut state, &mut ChangeSet::default());
         state.tick += 1;
         let out = output(&state, ChangeSet::default());
-        let entries = journal_entries_for_tick(&mut state, &out);
+        let entries = journal_entries_for_tick(&mut state, &out).unwrap();
         assert!(
             !entries
                 .iter()
@@ -263,6 +263,7 @@ fn raids_idle_ticks_skip_wal_and_restore_exact_elapsed_counters() {
     let out = output(&restored, ChangeSet::default());
     assert!(
         journal_entries_for_tick(&mut restored, &out)
+            .unwrap()
             .iter()
             .any(|entry| matches!(entry, JournalEntry::Raids { .. })),
         "wave transition is durable"

@@ -90,7 +90,7 @@ fn checkpoint(f: &mut Fixture, config: &CoreConfig) {
 
 fn step(f: &mut Fixture, writer: &mut JournalWriter) {
     let (output, _, _) = crate::tick::run_tick(&mut f.state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut f.state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut f.state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
 }
 

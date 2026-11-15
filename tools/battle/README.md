@@ -5,8 +5,10 @@ The operator command is `battle setup <seed> <field-100|field-1k|field-10k>
 `battle reset`. The optional count is per side and must be 1–10,000. Presets
 are compiled in; scenario files are not read by the tick. Run setup on the
 chosen battlefield, flat or natural relief: its centre is the command origin
-(the world spawn for console). Formation runtime is in memory; after a restart
-reset the persisted battle before staging it again.
+(the world spawn for console). Battle history is saved with the native entities:
+a running battle resumes after restart at its last complete published tick,
+including formations, orders, live holds and named spectator bindings.
+`battle setup` reports that existing battle instead of resetting it.
 Every foot soldier and horse stands on the collision top of its own footprint
 as soon as its chunk is resident (before its first physics tick); a slot on a
 trunk, a wall, water, a cave opening or a sinkhole (a drop of more than two
@@ -98,6 +100,19 @@ Until then neither `battle pause` nor `stop` is sent. A deadline or server exit
 fails closed with a completion-barrier error; owned processes are cleaned up.
 This extends only the live capture lifecycle, not the recorded take window.
 This does not establish real-time performance or all-dirty residency.
+
+For crash drills, `--crash-handoff` writes `server-pid.json` for the direct
+server process. If it is SIGKILLed, the runner stops its recorder, copies the
+entire stopped world and backups into `crash-copy/` before any restart, and
+writes `crash-handoff.json`; other failures still fail. WAL pruning remains
+normal; an event-driven hard-link archive captures immutable published batches
+in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
+Restart the original world and server with
+`python3 tools/battle/run-battle.py --recover-from-crash /absolute/run-dir`.
+This replaces the runner process with the server, using the original config;
+its console is on stdin. The crash copy stays untouched. This mode requires a
+stopped `--world` or `--arena` fixture and refuses server wrappers and systemd
+scopes so the published PID is the server PID.
 
 ## Take mode (the recorded shot)
 

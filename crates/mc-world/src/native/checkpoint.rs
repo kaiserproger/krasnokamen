@@ -324,6 +324,21 @@ fn validate_globals(
     } else if map_rows != 0 {
         return Err(failure("map_sequence", "missing sequence row"));
     }
+    let mut battle_rows = 0;
+    for (key, record) in globals {
+        let Some(dimension) = key.strip_prefix("battle/") else {
+            continue;
+        };
+        if !matches!(dimension, "0" | "1" | "2") {
+            return Err(failure("global", "non-canonical battle row key"));
+        }
+        validate_envelope(record)?;
+        if record.captured_tick != tick {
+            return Err(failure(key, "capture tick mismatch"));
+        }
+        json(key, record)?;
+        battle_rows += 1;
+    }
     let sequence_rows = usize::from(globals.contains_key("settlement_sequence"));
     let map_sequence_rows = usize::from(globals.contains_key("map_sequence"));
     let command_storage_rows = usize::from(globals.contains_key("command_storage"));
@@ -335,6 +350,7 @@ fn validate_globals(
             + map_rows
             + map_sequence_rows
             + command_storage_rows
+            + battle_rows
     {
         return Err(NativeError::GlobalDomains);
     }

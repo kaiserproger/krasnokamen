@@ -113,7 +113,7 @@ fn pulse(state: &mut TickState) {
 }
 fn step(state: &mut TickState) -> Vec<crate::journal::JournalEntry> {
     let (output, _, _) = run_tick(state, &[]);
-    crate::core::journal_entries_for_tick(state, &output)
+    crate::core::journal_entries_for_tick(state, &output).unwrap()
 }
 
 #[test]

@@ -296,7 +296,7 @@ impl World {
                 );
             }
         }
-        let entries = journal_entries_for_tick(&mut self.state, &output);
+        let entries = journal_entries_for_tick(&mut self.state, &output).unwrap();
         self.writer
             .append(output.tick, output.tick, &entries)
             .unwrap();
@@ -1189,7 +1189,7 @@ fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
         .unwrap()
         .entities_removed
         .extend(changes.entities_removed);
-    let entries = journal_entries_for_tick(&mut world.state, &output);
+    let entries = journal_entries_for_tick(&mut world.state, &output).unwrap();
     world
         .writer
         .append(output.tick, output.tick, &entries)

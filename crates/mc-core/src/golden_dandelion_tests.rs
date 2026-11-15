@@ -139,7 +139,7 @@ fn golden_lock_native_entity_checkpoint_and_wal_image_restore_exactly() {
     let flower = stack(&state, "golden_dandelion", 1);
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = flower;
     let (output, _, _) = run_tick(&mut state, &[use_on(cow)]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let slot = state.entities.slot_of(cow).unwrap();
     let body = state.entities.body(slot);
     let row = state.entities.row(slot);

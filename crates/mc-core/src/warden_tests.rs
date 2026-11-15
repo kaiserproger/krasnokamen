@@ -116,7 +116,7 @@ fn anger_checkpoint_and_replay_restore_uuid_and_pose() {
     vibration(&mut state, pos, Some(player));
     emerging(&mut state, mob);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let slot = state.entities.slot_of(mob).unwrap();
     let row = state.entities.row(slot);
     let expected = value(&state, mob).clone();

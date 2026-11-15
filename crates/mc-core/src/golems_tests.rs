@@ -283,7 +283,7 @@ fn player_created_flag_survives_checkpoint_fields_and_journal_replay() {
 
     // WAL: the spawn tick carries the flag, and replay is idempotent.
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(0, output.tick).unwrap();

@@ -233,6 +233,7 @@ fn player_tail(tags: &Tag) -> (tempfile::TempDir, crate::CoreConfig, uuid::Uuid)
     mc_nbt::write_named(&mut player.opaque_player_fields, "", tags).unwrap();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let entry = crate::core::journal_entries_for_tick(&mut state, &output)
+        .unwrap()
         .into_iter()
         .find(|entry| matches!(entry, crate::journal::JournalEntry::Player { .. }))
         .expect("fixture player must have a WAL post-image");

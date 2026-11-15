@@ -1031,7 +1031,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     }
     state.refresh_active_chunks(state.tick);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let _ = crate::core::journal_entries_for_tick(&mut state, &output);
+    let _ = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     checkpoint_forest(&mut state, &config);
     let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
     let mut previous_tick = state.tick;
@@ -1041,7 +1041,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
         }
         guide_builder(&mut state, builder);
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         writer
             .append(previous_tick + 1, output.tick, &entries)
             .unwrap();
@@ -1070,7 +1070,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     for _ in 0..2000 {
         guide_builder(&mut state, builder);
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         if count(&state, "minecraft:birch_log") > checkpoint_stock {
             unsealed = Some((output.tick, entries));
             break;

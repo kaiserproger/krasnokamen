@@ -271,7 +271,7 @@ fn command_custody_loot_replacement_admits_whole_reserved_range_before_writing()
         &state.block_entities[&(4, 201, 4)].slots
     ));
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         format!("{entries:?}").contains("OpaqueBlockEntity"),
         "changed final inventory needs a durable postimage"

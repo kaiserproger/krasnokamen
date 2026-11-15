@@ -55,7 +55,8 @@ movement while bound. Binding changes synchronize the viewer once, not on every
 follow tick. Death/disconnect releases the current camera; only battle's named
 intent retries a returning target or a respawned viewer on the same connection.
 Explicit stop, sneak, viewer disconnect or leaving spectator mode clears that
-intent. Neither camera map is persisted.
+intent. Entity-ID camera bindings are transient; battle history persists only
+named follow intent and resolves it through this same camera authority.
 The edge binds only a paired target, with camera release, removal, pairing and
 rebind ordered on the entity world FIFO; credit loss retains delivery debt.
 Shared command resolution finds named/UUID targets across worlds and transfers
@@ -210,6 +211,20 @@ those edits could duplicate custody. Each checkpoint logs the quarantined chunks
 complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
+
+Staged battles are native dimension-local gameplay owners, not disposable AI
+caches: phase and battle-local clock, regiment/member identity and rank history,
+orders/targets, morale/rout/action/weapon timers, live holds and spectator
+bindings share their entities' checkpoint transaction and tick-WAL frame.
+Changed battle-body poses are WAL-durable even within a chunk, without changing
+the existing age/chunk-clock anchor. Recovery rebuilds only derived execution
+columns and connection state. Running battles resume automatically; downtime
+does not advance combat. Removed roster/execution IDs remain historical
+tombstones, while a missing live member or an inconsistent/unsupported image
+refuses startup, including offline recovery. Tags/tickets alone never recreate
+lost formations. Reset publishes an empty owner image in the same frame as unit
+and ticket removal. See the [battle contract](../architecture/persistence.md#battle-decision-history).
+
 
 Retained player and entity NBT is validated and tag-set-normalized at the shared
 recovery boundary before dimension copies, live hydration or offline

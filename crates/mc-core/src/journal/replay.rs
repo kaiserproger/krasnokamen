@@ -50,6 +50,8 @@ pub struct Replay {
     pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
     pub settlement_removed: BTreeSet<u64>,
     pub settlement_high_water: u64,
+    pub battle: Option<Arc<String>>,
+    pub(crate) battle_fault: Option<String>,
     /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
     /// Recovered WAL tail, which must be persisted before the WAL is pruned.
@@ -1089,6 +1091,23 @@ pub(crate) fn apply_batch_images(
                             replay.settlements.remove(&image.id.0);
                             replay.settlement_removed.insert(image.id.0);
                         }
+                    }
+                }
+                JournalEntry::Battle { value } => {
+                    replay.battle = Some(Arc::clone(value));
+                }
+                JournalEntry::EntityMotion { id, pos, vel, yaw, pitch, ground } => {
+                    if !pos.iter().chain(vel).all(|value| value.is_finite()) || !yaw.is_finite() || !pitch.is_finite() {
+                        replay.battle_fault = Some(format!("non-finite native pose for {id}"));
+                    } else if let Some(record) = replay.entities.get_mut(id) {
+                        record.pos = *pos;
+                        record.vel = *vel;
+                        record.yaw = *yaw;
+                        record.pitch = *pitch;
+                        record.ground = *ground;
+                        replay.entity_changes.insert(*id);
+                    } else {
+                        replay.battle_fault = Some(format!("pose for missing native body {id}"));
                     }
                 }
             }

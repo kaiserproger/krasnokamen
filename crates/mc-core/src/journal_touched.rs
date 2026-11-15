@@ -192,7 +192,8 @@ pub(crate) fn entity_images(
             || row.falling.is_some()
             || row.tnt.is_some()
             || row.entity_life.vehicle.is_some()
-            || crate::end_fight::is_dragon(state, slot);
+            || crate::end_fight::is_dragon(state, slot)
+            || crate::battle::battle_row(state.entities.body(slot).faction);
         if tracks_motion {
             state.journal_scan.motion.entry(*id).or_default();
         } else {
@@ -222,6 +223,17 @@ pub(crate) fn entity_images(
                 row.age,
                 state.entities.body(slot).pickup_delay,
             ));
+            *previous = Some(pose);
+        } else if crate::battle::battle_row(state.entities.body(slot).faction) && previous.is_some()
+        {
+            entries.push(JournalEntry::EntityMotion {
+                id: id.0,
+                pos: pose.position,
+                vel: pose.velocity,
+                yaw: pose.rotation[0],
+                pitch: pose.rotation[1],
+                ground: pose.ground,
+            });
             *previous = Some(pose);
         } else {
             // A new item needs its stack/identity before its compact pose.

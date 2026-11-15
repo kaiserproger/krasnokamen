@@ -273,7 +273,7 @@ fn retained_player_fire_survives_checkpoint_tail_and_rejoin() {
     .unwrap();
     assert_eq!(loaded.burn_ticks, 123);
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let replay = crate::journal::replay_batches(
         crate::journal::Replay::default(),
         &[(output.tick, output.tick, entries)],

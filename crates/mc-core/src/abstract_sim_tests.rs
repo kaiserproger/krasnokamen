@@ -199,7 +199,7 @@ fn late_insert_batch(directory: &std::path::Path) -> (TickState, Vec<JournalEntr
     state.tick = 10001;
     // Obtain a real tick output for the production WAL image owner.
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     // At tick % 3 == 0 the first two chunks precede the target.
     owe(&mut state, &chunks, 600);
     step(&mut state);
@@ -212,7 +212,7 @@ fn late_insert_batch(directory: &std::path::Path) -> (TickState, Vec<JournalEntr
     state.block_entities.get_mut(&target).unwrap().slots[0] = ItemStack::new(ore, 3);
     // No more catch-up: unload/crash may happen before the next slice. The
     // real WAL finalizer must cancel debt in the same batch as these slots.
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(
         entry,
         JournalEntry::BlockEntity {
@@ -480,7 +480,7 @@ fn item_admission_replay_hydration_keeps_preexisting_debt() {
     let id = crate::tick::spawn_item_entity(&mut source, [8.5, 100.5, 8.5], stack);
     source.hostile.spawned.push(id);
     let (output, _, _) = crate::tick::run_tick(&mut source, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut source, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut source, &output).unwrap();
     let replay = crate::journal::replay_batches(Replay::default(), &[(1, output.tick, entries)]);
     let mut record = replay.entities[&id.0].clone();
     record.age = 5800;
@@ -497,7 +497,7 @@ fn item_admission_replay_hydration_keeps_preexisting_debt() {
 fn item_admission_after_slice_cancels_debt_in_its_spawn_wal_batch() {
     let mut state = fixture(&[CHUNK]);
     let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     owe(&mut state, &[CHUNK], 6000);
     let stack = ItemStack::new(item(&state, "minecraft:stone"), 1);
     let id = crate::tick::spawn_item_entity(&mut state, [8.5, 100.5, 8.5], stack);
@@ -505,7 +505,7 @@ fn item_admission_after_slice_cancels_debt_in_its_spawn_wal_batch() {
         .expect("unpublished fixture changes")
         .entities_spawned
         .push(id);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         entries
             .iter()

@@ -184,7 +184,7 @@ Missing allegiance is zero; a wrong NBT type, out-of-range value or malformed WA
 value refuses decoding. Recovery and `/summon` use the same setter.
 The key is visible to `/data` and NBT selectors while allegiance is nonzero;
 no wire metadata or protocol change is needed. Allegiance travels with the body on transfer and
-dense compaction. Restart restores allegiance, not runtime battle targets or timers.
+dense compaction.
 The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's
 allegiance extension. Persistence changes require Main's independent review.
@@ -194,9 +194,44 @@ living-flags byte in `appearance.extra` is present in WAL entity post-images but
 not in checkpoint entity records (`core/capture.rs`
 `appearance_from_vanilla_entity` restores no living flags). Recovery keeps a WAL
 pose until the next admitted AI decision; a checkpoint-only restart starts with
-the shield lowered, like the zombie-arms pose above. Guard/swing/stagger/rout
-decisions remain runtime-only. Staging raises shields before the initial spawn,
-so starting a staged battle does not republish every shield bearer's appearance.
+the shield lowered, like the zombie-arms pose above. Persisted staged-battle
+action history rebuilds the visible guard pose on the first resumed battle tick.
+Staging raises shields before the initial spawn, so starting a staged battle
+does not republish every shield bearer's appearance.
+
+### Battle decision history
+
+Dimension-local `battle/<dimension-id>` native global rows (version 1) and
+dimension-enveloped `Battle` tick-WAL post-images own the staged/running/paused
+phase and battle-local clock, regiment specifications/leaders/orders/sections,
+stable entity-ID roster and rank/file assignments, morale/rout/charge clocks,
+retained targets and escape plans, action/ammunition/weapon-swap history,
+retaliation windows, live holds/kits and named spectator bindings.
+They share the entity capture's WAL coverage gate and atomic native transaction.
+A reset publishes an empty post-image, not an absent update.
+
+Native entity custody remains sole authority for life, pose, equipment in hand
+and mounts. Battle bodies additionally journal changed intra-chunk poses through
+`EntityMotion`, so replay cannot pair a new order/action with an older pose.
+The compact pose does not move the native age/chunk-clock anchor; the existing
+full crossing image still owns that anchor. Transient slots, position/faction
+caches, grids, projections, work counters and connection IDs rebuild.
+
+Removed roster IDs and execution-tail IDs are retained historical identities,
+not permission to spawn replacements. A missing live roster member, mismatched
+side/liveness, unknown target/action identity, invalid roster index, invalid
+motion identity, malformed payload or unsupported version refuses online and
+offline recovery. A dead roster member may lack its native body. Named live
+roles retain only their last wire ID; recovery reserves those IDs and roster/
+execution tombstones against allocator reuse, and a reconnect transfers that
+role's retained targeting references to its new wire ID.
+
+No downtime catch-up or tag-based formation reconstruction occurs. Running
+state resumes automatically; paused state remains paused. `battle setup` reports
+the existing battle. Native backups retain this authority; Anvil does not.
+Production-tick regressions:
+`battle_resume_wal_published_tick_excludes_inflight_decisions_and_motion` and
+`battle_resume_abrupt_checkpoint_commit_recovers_whole_history`.
 
 ## Quarantined chunks
 

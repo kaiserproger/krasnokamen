@@ -193,7 +193,7 @@ fn sniffer_active_dig_survives_real_wal_and_region_checkpoint() {
     }
     let output = output.expect("active dig");
     let expected = state.entities.row(sniffer_slot).entity_life.sniffer.clone();
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();

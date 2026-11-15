@@ -1334,3 +1334,105 @@ fn spectator_pending_named_intent_retries_dead_target_and_same_id_viewer_respawn
     assert_eq!(state.connections.entity_of(ConnectionId(2)), Some(viewer));
     assert_eq!(state.cameras.get(&viewer), Some(&target));
 }
+
+#[test]
+fn battle_resume_restored_roles_rearm_once_and_rebind_after_rejoin() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(
+        &mut state,
+        &mut changes,
+        BattleCommand::Spectate {
+            name: "CamSpec".into(),
+            target: "PovRed".into(),
+        },
+    )
+    .unwrap();
+    let player_uuid = state
+        .entities
+        .row(state.entities.slot_of(ids[0]).unwrap())
+        .uuid;
+    let held = state.hostile.battle.formation.held.clone();
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    let viewer = state.entities.slot_of(ids[1]).unwrap();
+    state.entities.set_pos(viewer, [0.0, 90.0, 0.0]);
+    run_tick(&mut state, &[]);
+    assert!(
+        !state.players[&ids[0]].inventory.slots[0].is_empty(),
+        "restore re-arms the existing holder"
+    );
+    assert_ne!(
+        state.entities.pos(viewer),
+        [0.0, 90.0, 0.0],
+        "restored binding moves spectator to holder camera"
+    );
+    assert_eq!(state.hostile.battle.formation.held, held);
+    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(
+        state.players[&ids[0]].inventory.slots[0].is_empty(),
+        "a continuing connection is not re-armed every tick"
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(7),
+            uuid: player_uuid,
+            name: "PovRed".into(),
+            permission_level: 0,
+        }],
+    );
+    let rejoined = player_named(&state, "PovRed").unwrap();
+    assert_ne!(rejoined, ids[0]);
+    assert!(!state.players[&rejoined].inventory.slots[0].is_empty());
+    assert_eq!(
+        state.hostile.battle.formation.held, held,
+        "reconnect never takes a second held slot"
+    );
+    assert_eq!(
+        state.hostile.battle.live.historical,
+        vec![(rejoined, "PovRed".into())],
+        "historical identities remain bounded by roles"
+    );
+    kill(&mut state, 7);
+    run_tick(&mut state, &[]);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(7),
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(8),
+            uuid: player_uuid,
+            name: "PovRed".into(),
+            permission_level: 0,
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(8),
+        }],
+    );
+    let respawned = player_named(&state, "PovRed").unwrap();
+    assert!(!state.players[&respawned].inventory.slots[0].is_empty());
+    state.players.get_mut(&respawned).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(
+        state.players[&respawned].inventory.slots[0].is_empty(),
+        "a dead holder reconnecting and respawning must not get a second re-arm"
+    );
+}

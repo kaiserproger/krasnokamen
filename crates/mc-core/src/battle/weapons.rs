@@ -5,13 +5,9 @@
 //! every rank, against horsemen too); the bow at a distance and the sword once
 //! an enemy closes.
 //!
-//! Mobs have no inventory: the weapon not in hand stays in the fighter's battle
-//! state (staging hands it over with the item components of its kit), never a
-//! persistence surface. The weapon in hand is the native main-hand equipment,
-//! so a swap is an ordinary main-hand change: native appearance custody
-//! journals it, clients get `SetEquipment`, and the row's wire change
-//! re-derives the combat classification (weapon, melee range, archer) on the
-//! next tick through `Columns::equipment_dirty`.
+//! Mobs have no inventory: the weapon not in hand stays in the fighter's durable
+//! battle state, alongside its swap clock. The weapon in hand remains native
+//! main-hand equipment; a swap journals and publishes that appearance normally.
 
 use rustc_hash::FxHashMap;
 
@@ -35,17 +31,29 @@ pub(super) const ARCHER_SWORD: f64 = super::MELEE_ENGAGEMENT_REACH;
 pub(super) const ARCHER_BOW: f64 = 10.0;
 
 /// What a kit pairs: the held weapon's class decides which of the two is in hand.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Pair {
     SpearSword,
     BowSword,
 }
 
 /// Second weapons handed over by staging, claimed once by each fighter.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Arsenal(FxHashMap<EntityId, (ItemStack, Pair)>);
 
 impl Arsenal {
+    pub(super) fn validate_items(
+        &self,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), crate::CoreError> {
+        for (stack, _) in self.0.values() {
+            if registry.items.name_of(stack.item_id).is_none() || stack.count <= 0 {
+                return Err(super::persistence::error("invalid stowed arsenal item"));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn stow(&mut self, id: EntityId, stack: ItemStack, pair: Pair) {
         self.0.insert(id, (stack, pair));
     }
@@ -57,13 +65,15 @@ impl Arsenal {
 }
 
 /// One fighter's weapon not in hand and his swap clock.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Arms {
     claimed: bool,
     /// The weapon not in hand, with the kit it forms with the held one.
     stowed: Option<Box<(ItemStack, Pair)>>,
     /// The spear's melee reach (`faction::melee_reach`) of a spear-and-sword
     /// kit: its near bound draws the sword, its reach puts the sword away.
+    #[serde(with = "super::persistence::reach")]
     spear: MeleeReach,
     /// First tick the drawn weapon may strike or loose.
     ready: u64,
@@ -81,6 +91,18 @@ impl Default for Arms {
 }
 
 impl Arms {
+    pub(super) fn validate_items(
+        &self,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), crate::CoreError> {
+        if let Some((stack, _)) = self.stowed.as_deref()
+            && (registry.items.name_of(stack.item_id).is_none() || stack.count <= 0)
+        {
+            return Err(super::persistence::error("invalid fighter second weapon"));
+        }
+        Ok(())
+    }
+
     /// The drawn weapon is still coming up: no windup, blow or draw.
     pub(super) fn swapping(&self, tick: u64) -> bool {
         tick < self.ready

@@ -314,6 +314,19 @@ pub enum JournalEntry {
     DefaultGameMode {
         value: crate::commands::GameMode,
     },
+    /// Absolute battle decision history at the same boundary as native effects.
+    Battle {
+        value: Arc<String>,
+    },
+    /// Pose of a battle body, coupled to the decision history of this tick.
+    EntityMotion {
+        id: i32,
+        pos: [f64; 3],
+        vel: [f64; 3],
+        yaw: f32,
+        pitch: f32,
+        ground: bool,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(

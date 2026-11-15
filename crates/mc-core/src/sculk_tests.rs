@@ -592,7 +592,7 @@ fn journal_writes(
             .collect(),
         ..Default::default()
     });
-    crate::core::journal_entries_for_tick(s, &output)
+    crate::core::journal_entries_for_tick(s, &output).unwrap()
 }
 
 fn disk_replay(
@@ -659,7 +659,7 @@ fn exploded_charged_catalyst_tombstones_old_native_image_before_replacement() {
         opaque(&s, CATALYST).is_none(),
         "checkpoint must not resurrect a late removed owner"
     );
-    let entries = crate::core::journal_entries_for_tick(&mut s, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut s, &output).unwrap();
     assert!(entries.iter().any(|e| matches!(e, crate::journal::JournalEntry::RemoveBlockEntity { pos, .. } if *pos == [CATALYST.x, CATALYST.y, CATALYST.z])));
     let replay = disk_replay(dir.path(), s.tick, &entries);
     assert_eq!(
