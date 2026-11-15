@@ -328,22 +328,30 @@ frame. Inspect the attack frames separately; the pixel check covers rest only.
 cyan base head, magenta opaque hat and a transparent face window. The fixed
 camera frames the placed head at x580–700/y520–655; `placed_head_hat_layer_pixels`
 requires magenta there separately from the placed/worn changed-pixel checks.
-The unresolved `HarnessHat` profile deliberately uses that default skin, not an
-online Mojang lookup. This proves hat geometry on a contrasting texture, not
-online profile resolution. Retain and inspect both candidate and hat-only-control
-frames before promoting the model row.
+The authored pack supplies both `slim/steve` (the pinned default-skin fact at
+index 6, used by unresolved placed heads) and `wide/steve` (special items).
+The unresolved `HarnessHat` profile deliberately uses those offline resources;
+it is not a listed player and does not fetch unsigned/online profile textures.
+This proves hat geometry, not profile resolution. `worn_head_renders` also
+requires magenta at the actual avatar head, x580–700/y280–400: torso/back
+attachments or unrelated avatar/sky changes cannot satisfy it. Retain and
+inspect candidate and hat-only-control frames before promoting the model row.
 
 `walk_capture` retains a distinct `-attempt-N` image and frame sidecar per
 resample. Its walk evidence lists all attempts; a phase miss still fails within
 `max_ticks`, without widening the phase bracket.
 
 The dropped clock in `native-dynamic-context` is raised to eye level and lit by a
-sea lantern. Its search region x320–450/y260–400 excludes the HUD and chat.
-`dropped_clock_face_*` requires a gold-rim-enclosed face in both frames and a
-changed blue-face proportion, not a dark-pixel angle in the hotbar. A static
-clock or changing HUD without that face fails. Retained old day/night frames can
+sea lantern. Its search region x300–460/y260–420 excludes the HUD and chat.
+`dropped_clock_face_*` normalizes rows enclosed by the gold rim into an 8×8
+blue-occupancy grid; only changed cells inside that face count, not rim motion.
+The phase pair uses noon (6000) and midnight (18000), not similar-looking
+sunrise/sunset sprites. Both shelves contain an explicit clock and compass.
+The held clock gets a separate elevated camera pair so its face is visible
+instead of edge-on; it uses the same face oracle.
+A static clock or changing HUD without that face fails. Retained old frames
 exercise the rejection test with `KRASNOKAMEN_CLOCK_TEST_FRAMES` naming their
-screenshot directory; they do not prove the moved fixture's graphical pass.
+screenshot directory; actual graphical receipts remain required.
 
 
 `require_entities` takes `name`, `args` for `minecraft_list_entities`, and a nonempty

@@ -1243,13 +1243,16 @@ def player_head_skin_pack(artifact: Path) -> Path:
     from PIL import Image, ImageDraw
 
     pack = artifact / "head-skin-pack"
-    texture = pack / "assets/minecraft/textures/entity/player/wide/steve.png"
-    texture.parent.mkdir(parents=True)
     skin = Image.new("RGBA", (64, 64), (0, 220, 220, 255))
     draw = ImageDraw.Draw(skin)
     draw.rectangle((32, 0, 63, 15), fill=(240, 0, 240, 255))
     draw.rectangle((42, 10, 45, 13), fill=(0, 0, 0, 0))
-    skin.save(texture)
+    # The pinned entity facts select slim/steve for unresolved placed heads
+    # (default_skins[6]); the special-item path selects wide/steve.
+    for model in ("slim", "wide"):
+        texture = pack / f"assets/minecraft/textures/entity/player/{model}/steve.png"
+        texture.parent.mkdir(parents=True)
+        skin.save(texture)
     (pack / "pack.mcmeta").write_text(json.dumps({
         "pack": {"description": "Authored player-head hat regression skin", "pack_format": 84},
     }) + "\n")
@@ -1276,43 +1279,52 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["placed_head_changed_pixels"] = placed
     probe.report["worn_head_changed_pixels"] = worn
     magenta = lambda r, g, b: r > 60 and b > 60 and r > g * 2 and b > g * 2
+    worn_hat = _count(shots["head-worn"][1], (580, 280, 700, 400), magenta)
+    probe.report["worn_head_hat_layer_pixels"] = worn_hat
     hat = _count(shots["head-block"][1], head_box, magenta)
     probe.report["placed_head_hat_layer_pixels"] = hat
     probe.report["placed_head_roi"] = list(head_box)
     probe.check("placed_head_renders", placed > 100)
     probe.check("placed_head_hat_layer_pixels", hat > 100)
-    probe.check("worn_head_renders", worn > 500)
+    probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
 
-def check_dropped_clock(probe: ProbeSteps, day: Any, night: Any) -> None:
-    """Compare only the gold-enclosed face, not HUD, sky or a rotating silhouette."""
-    # dynamic_context_scene lifts the clock to eye height, lights it equally in
-    # both phases, and keeps this search box above chat/hotbar and left of the mob.
-    box = (320, 260, 450, 400)
-    fractions = []
+def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
+    """Align the gold-enclosed face; compare its blue pattern, never HUD or rim motion."""
+    grids = []
     for phase, image in (("day", day), ("night", night)):
         crop = image.crop(box)
         gold = lambda r, g, b: r > b * 1.25 and g > b * 1.15 and g > 20 and r > g * 0.9
-        face = []
+        rows = []
         for y in range(crop.height):
             ring = [x for x in range(crop.width) if gold(*crop.getpixel((x, y)))]
             if len(ring) >= 2 and ring[-1] - ring[0] >= 12:
-                # Exclude the rim itself, including its shaded/antialiased edge.
-                face.extend(crop.getpixel((x, y)) for x in range(ring[0] + 3, ring[-1] - 2))
-        probe.report[f"dropped_clock_face_pixels_{phase}"] = len(face)
-        probe.check(f"dropped_clock_face_{phase}", len(face) >= 100)
-        blue = sum(b > r * 1.35 and b > g * 1.15 and b > 15 for r, g, b in face)
-        fractions.append(blue / len(face))
-    probe.report["dropped_clock_face_blue_fraction"] = fractions
-    # A proportion is invariant to the dropped sprite's rotation/size: a moving
-    # rim or background cannot masquerade as a changed clock texture.
-    probe.check("dropped_clock_face_changed", abs(fractions[0] - fractions[1]) > 0.15)
+                rows.append((y, ring[0] + 3, ring[-1] - 2))
+        pixels = sum(x1 - x0 for _, x0, x1 in rows)
+        probe.report[f"{name}_face_pixels_{phase}"] = pixels
+        probe.check(f"{name}_face_{phase}", pixels >= 100)
+        # Normalize each scanline between its rim edges. A dropped item's yaw,
+        # bob and changing projected width must not move the sampled background
+        # into the oracle. Time changes the pattern, not its total blue area.
+        top, bottom = rows[0][0], rows[-1][0] + 1
+        cells = [[] for _ in range(64)]
+        for y, x0, x1 in rows:
+            for x in range(x0, x1):
+                r, g, b = crop.getpixel((x, y))
+                index = min(7, (y - top) * 8 // (bottom - top)) * 8 + min(7, (x - x0) * 8 // (x1 - x0))
+                cells[index].append(b > r * 1.35 and b > g * 1.15 and b > 15)
+        grids.append([sum(cell) / len(cell) if cell else None for cell in cells])
+    changes = [abs(a - b) for a, b in zip(*grids) if a is not None and b is not None]
+    probe.report[f"{name}_face_blue_grid"] = grids
+    probe.report[f"{name}_face_changed_cells"] = sum(delta > 0.35 for delta in changes)
+    probe.check(f"{name}_face_sampled", len(changes) >= 48)
+    probe.check(f"{name}_face_changed", sum(delta > 0.35 for delta in changes) >= 4)
 
 
 def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-DYNAMIC-CONTEXT: shelf, dropped and held clocks plus two shelf
     compasses at different positions all receive world context."""
     import math
-    shots = _load_shots(probe, artifact, ("ctx-day", "ctx-night", "compass-day"))
+    shots = _load_shots(probe, artifact, ("ctx-day", "ctx-night", "compass-day", "held-day", "held-night"))
     ref = shots["ctx-day"][0]
     for name in ("ctx-night", "compass-day"):
         frame = shots[name][0]
@@ -1320,9 +1332,9 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
             abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
         ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
     probe.check("ctx_received_time_changed",
-                shots["ctx-day"][0]["environment"]["time_of_day"] == "1000"
-                and shots["ctx-night"][0]["environment"]["time_of_day"] == "13000"
-                and shots["compass-day"][0]["environment"]["time_of_day"] == "1000")
+                shots["ctx-day"][0]["environment"]["time_of_day"] == "6000"
+                and shots["ctx-night"][0]["environment"]["time_of_day"] == "18000"
+                and shots["compass-day"][0]["environment"]["time_of_day"] == "6000")
     def axis_angle(points):
         cx = sum(p[0] for p in points) / len(points)
         cy = sum(p[1] for p in points) / len(points)
@@ -1339,8 +1351,7 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
     day, night = shots["ctx-day"][1], shots["ctx-night"][1]
     for name, box, threshold in (
         ("shelf_clock_left", (385, 480, 410, 505), 20),
-        ("shelf_clock_right", (975, 470, 1005, 500), 20),
-        ("held_clock", (660, 390, 705, 435), 50),
+        ("shelf_clock_right", (948, 480, 982, 515), 20),
     ):
         m1 = [blue(*p) for p in day.crop(box).getdata()]
         m2 = [blue(*p) for p in night.crop(box).getdata()]
@@ -1348,7 +1359,15 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
         probe.report[f"{name}_blue_pixels"] = [sum(m1), sum(m2)]
         probe.report[f"{name}_changed"] = changed
         probe.check(f"{name}_face_changed", changed >= threshold)
-    check_dropped_clock(probe, day, night)
+    check_clock_face(probe, day, night, "dropped_clock", (300, 260, 460, 420))
+    held_day, held_night = shots["held-day"], shots["held-night"]
+    probe.check("held_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(held_day[0]["camera_position"], held_night[0]["camera_position"])
+    ) and abs(held_day[0]["yaw"] - held_night[0]["yaw"]) < 0.01
+      and abs(held_day[0]["pitch"] - held_night[0]["pitch"]) < 0.01)
+    probe.check("held_received_time_changed", held_day[0]["environment"]["time_of_day"] == "6000"
+                and held_night[0]["environment"]["time_of_day"] == "18000")
+    check_clock_face(probe, held_day[1], held_night[1], "held_clock", (570, 300, 710, 440))
     red = lambda r, g, b: r > g * 1.25 and r > b * 1.25 and r > 50
     comp = shots["compass-day"][1]
     angles = []
