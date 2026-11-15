@@ -262,6 +262,55 @@ restore a pre-upgrade native checkpoint and its matching WAL with the old binary
 or continue with the compatible binary. Do not strip the field or rewrite the
 save to make an older reader accept it.
 
+### Immutable datapack worldgen inputs
+
+The startup boundary folds checkpoint and contiguous WAL metadata before it
+constructs any dimension generator, searches for spawn, or materializes a replay
+chunk. The recovered Overworld datapack selection is the world-global authority.
+Fresh worlds discover directory and ZIP packs before constructing generators.
+Invalid new/selected resources refuse admission; missing packs are de-selected.
+
+Pack worldgen resources are binary, not UTF-8 by default. Each selected pack
+applies its filters to lower layers, then adds its own resources; builtin vanilla
+occupies its actual selected position. Biome tags merge in order, honor `replace`,
+and resolve required/optional references across namespaces. Worldgen JSON/NBT
+and cache reports are staged as a private bounded copy; neither shared vanilla
+files nor hard links are modified. Generators eagerly compile owned immutable
+values. The staging directory is removed after construction, including refusal;
+the reserved world-owned `.krasnokamen-worldgen` directory is disposable after a
+crash only with its fsynced sibling `.krasnokamen-worldgen.owner` marker (or when
+empty). The sibling marker is never deleted with the disposable tree, so a crash
+during cleanup cannot erase ownership proof. Unowned nonempty paths, unexpected
+top-level entries and symlinks refuse startup.
+
+`level.dat/Data/KrasnokamenWorldgenInputs` records diagnostic SHA-256 of effective
+worldgen inputs and registry reports, plus source/structure ownership for warnings.
+A startup change logs old/new identities and changed packs/cache, then continues:
+stored chunk baselines remain unchanged; new chunks use the selected inputs.
+Changed inputs mint a new terrain epoch so generated observations are invalidated.
+Fresh worlds record the identity in their first checkpoint (including offline
+pregeneration). Existing worlds without it adopt in memory and persist it at their
+next normal positive-tick checkpoint; a crash before that repeats adoption.
+Vanilla-only worlds require no packs or staged copy. Native seed/revision identity
+validation is unchanged and complementary.
+
+Generators do not hot-swap. Enable, disable or reload that changes effective
+worldgen inputs refuses atomically and retains the old packs, selection and
+registry. Gameplay-only changes and identical worldgen reloads remain valid.
+Unsupported worldgen domains/types fail by resource name through the one shared
+`mc-data`/`mc-worldgen` supported-type authority. This is not general modpack
+compatibility. Authored biome convention defaults are the lowest vanilla layer;
+pack filters, addition and replacement apply normally.
+Custom Moog `msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions`
+resources refuse admission until the generator implements their required-piece
+and count-cap semantics; they are never ignored as unrelated datapack content.
+
+When a stored chunk is loaded after removing a pack, unavailable structure starts
+remain untouched in its native data, including through WAL edits and checkpoints.
+They are inactive for generation/locate. Chunk loading warns once per missing ID,
+using persisted pack ownership where known; re-adding the pack reactivates them.
+There is no startup world scan or special native metadata transaction.
+
 Retained player and entity NBT is validated and tag-set-normalized at the shared
 recovery boundary before dimension copies, live hydration or offline
 export. A valid root followed by trailing bytes and repeated `Tags` keys refuse

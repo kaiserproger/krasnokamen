@@ -584,6 +584,12 @@ Supported resources (singular 26.1.2 directory names):
   one `minecraft:item` entry per pool, supported roll counts and
   `minecraft:set_count`; an empty table suppresses drops. Other conditions,
   entry types and loot domains are refused.
+- `data/<ns>/worldgen/{structure_set,structure,template_pool,processor_list}/<path>.json`,
+  `data/<ns>/structure/<path>.nbt` (binary, directory or ZIP), and
+  `data/<ns>/tags/worldgen/biome/<path>.json`: experimental selected jigsaw
+  inputs. Unsupported worldgen domains/types refuse startup by resource name.
+  Biome tags merge by pack priority with `replace` and required/optional nested
+  references. The selected tree overlays vanilla at its actual priority.
 
 Level-2 commands: `/function <id|#tag>`, `/schedule function <id|#tag> <time>
 [append|replace]`, `/schedule clear <id|#tag>`, `/reload` and
@@ -605,25 +611,37 @@ recomputed from the new catalog without changing their inputs or cursor.
 A candidate with load errors, or
 with a recipe the server cannot encode, is refused whole and the old packs, selection
 and registry are kept. The enabled/disabled selection is saved with the world,
-so a restart loads the same packs, recipes and loot. A pack that appears on disk is
-enabled by `/reload` and at startup but never as a side effect of enabling another
-pack. At startup and on `/reload` a new pack that cannot be read or loaded (a corrupt ZIP,
-a missing or truncated `pack.mcmeta`, a bad file, an unsupported resource, a `filter`
-that does not parse) is skipped with a warning naming the pack and the file, and the
-rest applies, so a pack that a live `enable` refused cannot stop the next start or
-block a reload. This deliberately differs from vanilla, which enables a new pack and
-refuses to start when it fails to load (it offers `--safeMode`); Krasnokamen has no safe
-mode. A pack the saved selection already holds that no longer loads still stops the
-start and refuses the reload (old state kept), with the same pack and file in the
-error: fix or remove the named pack and start again. A non-pack entry in the folder
-(a README, a stray file) is ignored with a warning. Every warning goes to the server log;
-a pack that stays skipped is named again by every `/reload`, and the operator's chat shows the first three and a count of the rest, as vanilla
-keeps such lines in the console. `/datapack list` keeps a selected pack whose files
-broke while it runs (its hover holds the error), and `/datapack disable` of a skipped
-pack answers "not enabled" as vanilla does for a pack the repository has. A pack's `pack.mcmeta` `filter` (`block` entries with
-optional `namespace` and `path` patterns) hides the matching functions, tags,
-recipes, block loot and predicates of every pack below it, the builtin recipes and
-block loot included. A `/datapack enable`, `disable` or
+so a restart restores the saved choice before any spawn search, generator or
+WAL replay chunk read. New packs are discovered at startup and `/reload`,
+but never as a side effect of enabling another pack. Any invalid new or selected
+pack refuses startup/reload whole, naming the pack and resource. A missing pack
+is de-selected with a warning; no partial invalid subset is reported enabled.
+Non-pack entries (README/stray files) are warned and ignored.
+
+**Worldgen changes apply on restart, not hot reload.** Startup records diagnostic
+SHA-256 of effective inputs. Adding, updating or removing a worldgen pack or
+changing effective priority/cache logs old/new identities and changed source
+names, then continues: saved chunks retain their existing terrain, new chunks
+generate using the newly selected inputs. Fresh worlds and pregeneration record
+the identity in their first checkpoint. Existing worlds without it adopt in
+memory and persist on the next normal positive-tick checkpoint; a crash before
+that repeats adoption. A changed identity invalidates the terrain epoch.
+Unsupported worldgen resources refuse startup by path, including Moog
+`msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions` rules; enabling a
+pack never silently drops those generation constraints.
+
+If a pack is removed, its saved structure starts are retained unchanged and are
+inactive for generation/locate. Loading such a chunk logs one warning per missing
+structure ID, naming its likely pack; restoring the pack reactivates its starts.
+No world scan or deletion is performed.
+
+`/reload`, enable or disable that would change worldgen refuses atomically while
+running, retaining old packs/selection/catalogs; immutable generators are not
+advertised as updated. Gameplay-only changes and identical worldgen reloads are
+supported. Vanilla-only worlds need no packs or staged copy. Private staging is
+bounded and deleted after eager compilation; the shared cache is never modified. A pack's
+`pack.mcmeta` `filter` (`block` entries with optional `namespace` and `path`
+patterns) hides matching lower resources, including builtin vanilla. A `/datapack enable`, `disable` or
 `reload` issued while another pack job is still compiling is refused with
 "Datapack reload already in progress" (vanilla would apply it at once; the
 selection changes only when the compile finishes, and a rare back-to-back
