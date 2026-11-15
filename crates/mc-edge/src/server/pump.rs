@@ -398,6 +398,14 @@ pub(super) fn route_changes(
     handles: &ConnectionHandles,
     server: &Arc<EdgeServer>,
 ) -> bool {
+    if changes.iter().any(|change| {
+        matches!(
+            change,
+            mc_core::boundary::PlayerChange::DimensionChanged { .. }
+        )
+    }) {
+        handles.world_tx.reset();
+    }
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
         if handles.reliable_tx.try_send(planned.data).is_err() {
             server

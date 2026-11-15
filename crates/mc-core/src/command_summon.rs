@@ -51,6 +51,7 @@ pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandE
     let Tag::Compound(fields) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
+    crate::command_tag::validate_fields(fields).map_err(error)?;
     let (mut value, mut count, mut motion) = (0i16, 1i32, [0.0f64; 3]);
     let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for (key, tag) in fields {
@@ -95,7 +96,7 @@ pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandE
     Ok((value, count, motion))
 }
 
-fn validate_tags(value: &Tag) -> Result<(), CommandError> {
+pub(crate) fn validate_tags(value: &Tag) -> Result<(), CommandError> {
     let Tag::List(list) = value else {
         return Err(error("Invalid Tags: expected a list of strings"));
     };
@@ -107,7 +108,7 @@ fn validate_tags(value: &Tag) -> Result<(), CommandError> {
         return Err(error("Invalid Tags: every list element must be a string"));
     }
     if list.elements.len() > 1024 {
-        return Err(error("Invalid Tags: expected at most 1024 strings"));
+        return Err(error("Invalid Tags: expected at most 1024 tags"));
     }
     for (index, tag) in list.elements.iter().enumerate() {
         let Tag::String(value) = tag else {
@@ -135,6 +136,7 @@ pub(crate) fn retained_tags(nbt: &Tag) -> Result<Option<Vec<u8>>, CommandError> 
     let Tag::Compound(fields) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
+    crate::command_tag::validate_fields(fields).map_err(error)?;
     let Some((_, tags)) = fields.iter().find(|(key, _)| key == "Tags") else {
         return Ok(None);
     };
@@ -384,6 +386,7 @@ fn authored_fields(
     name: &str,
     authored: &[(String, Tag)],
 ) -> Result<Authored, CommandError> {
+    crate::command_tag::validate_fields(authored).map_err(error)?;
     let horse = crate::taming::horse(name);
     let is_painting = name == crate::painting::PAINTING_ID;
     let mut fields = Vec::with_capacity(authored.len());

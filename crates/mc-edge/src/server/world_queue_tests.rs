@@ -71,3 +71,20 @@ fn recorder_and_player_queues_take_their_own_bounds() {
         (WORLD_QUEUE_FRAMES, WORLD_QUEUE_BYTES)
     );
 }
+
+#[tokio::test]
+async fn reset_discards_only_previous_generation_and_releases_its_credit() {
+    let (sender, mut receiver) = world_queue(4, 100);
+    let other = sender.clone();
+    sender.try_send(frame(30)).unwrap();
+    other.reset();
+    sender.try_send(frame(50)).unwrap();
+    assert_eq!(receiver.recv().await.unwrap().len(), 50);
+    assert_eq!((sender.queued_bytes(), sender.capacity()), (0, 4));
+    sender.try_send(frame(20)).unwrap();
+    sender.reset();
+    assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+    assert_eq!(sender.queued_bytes(), 0);
+    sender.try_send(frame(10)).unwrap();
+    assert_eq!(receiver.try_recv().unwrap().len(), 10);
+}

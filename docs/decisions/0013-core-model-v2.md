@@ -121,8 +121,13 @@ Entity ids remain stable through dimension travel: the observer resolves the
 recipient across current worlds after travel commits. If the ordered dimension
 reset moves a viewer away from that tick's explosion projection, only that
 recipient's stale old-world impulse is discarded. The connection stays open;
-other recipients and new-world impulses are unchanged. An old-world explosion
-must never be projected into the new world. This is accepted delivery policy,
+other recipients and new-world impulses are unchanged.
+Before queuing the reliable reset, the pump advances that recipient's world-FIFO
+generation. The writer discards queued older-generation frames, including
+best-effort explosion visuals from an earlier tick; destination frames retain
+the new generation. Already-taken bytes precede the reset in the single writer's
+stream. This fence does not clear another recipient's queue.
+An old-world explosion must never be projected into the new world. This is accepted delivery policy,
 not a claim that vanilla resets motion: 26.3 `ServerPlayer.teleport` sends
 respawn keep-data flags 3, and `ClientPacketListener.handleRespawn` copies old
 delta movement when bit 2 is set. Skipped publications still close only their

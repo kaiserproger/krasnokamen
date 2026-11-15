@@ -98,12 +98,14 @@ fn duplicate_tags_summon_load_add_and_remove_have_set_semantics() {
 
 #[test]
 fn tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn() {
+    // Vanilla Entity.TAG_LIST_CODEC is STRING.sizeLimitedListOf(1024)
+    // before Entity.load adds to its Set (26.3 Entity.javap:12054-12060).
     let too_many = format!("[{}]", vec!["'x'"; 1025].join(","));
     for (value, expected) in [
         ("[1b]".to_owned(), "every list element must be a string"),
         ("['ok',2]".to_owned(), "every list element must be a string"),
         ("[{a:1}]".to_owned(), "every list element must be a string"),
-        (too_many, "expected at most 1024 strings"),
+        (too_many, "expected at most 1024 tags"),
         (
             format!("['{}']", "C".repeat(70000)),
             "tag at index 0 is 70000 Modified UTF-8 bytes; maximum is 65535",
@@ -145,5 +147,41 @@ fn tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn() {
             elements: vec![Tag::String(value)],
         });
         validate_tags(&nbt).unwrap();
+    }
+}
+
+#[test]
+fn duplicate_tags_keys_are_refused_by_summon_and_data_before_mutation() {
+    let (mut state, id) = summon("cow", "{Tags:['original']}");
+    let uuid = state.entities.row(state.entities.slot_of(id).unwrap()).uuid;
+    let before = state.entities.len();
+    state.command_storage.insert(
+        "test:duplicate".into(),
+        Tag::Compound(vec![
+            ("Tags".into(), crate::command_snbt::parse("['a']").unwrap()),
+            ("Tags".into(), crate::command_snbt::parse("['b']").unwrap()),
+        ]),
+    );
+    for text in [
+        "summon cow ~ ~ ~ {Tags:['a'],Tags:['b']}".to_owned(),
+        "summon item ~ ~ ~ {Item:{id:'minecraft:stone'},Tags:['a'],Tags:['b']}".to_owned(),
+        "summon experience_orb ~ ~ ~ {Value:1,Tags:['a'],Tags:['b']}".to_owned(),
+        format!("data merge entity {uuid} {{Tags:['a'],Tags:['b']}}"),
+        format!("data modify entity {uuid} {{}} merge value {{Tags:['a'],Tags:['b']}}"),
+        format!("data modify entity {uuid} {{}} merge from storage test:duplicate"),
+    ] {
+        state.outbox.clear();
+        assert_eq!(command(&mut state, &text), 0, "{text}");
+        assert_eq!(state.entities.len(), before);
+        assert_eq!(tags(&state, id), vec![Tag::String("original".into())]);
+        assert!(
+            state.outbox.values().flatten().any(|change| matches!(
+                change, PlayerChange::Chat { message }
+                if message == "Duplicate SNBT key"
+                    || message.to_lowercase().contains("duplicate") && message.contains("Tags")
+            )),
+            "{text}: {:?}",
+            state.outbox
+        );
     }
 }

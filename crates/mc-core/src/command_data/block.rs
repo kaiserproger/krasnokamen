@@ -43,7 +43,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Vec<T
         .filter(|(key, _)| !crate::command_data::private_field(key))
         .collect();
     let mut edited = Tag::Compound(public.clone());
-    crate::command_storage::mutate(state, context, action, &mut edited, &mut input)?;
+    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |_| Ok(()))?;
     let Tag::Compound(edited) = edited else {
         return Err("Block entity data must be a compound".into());
     };

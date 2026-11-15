@@ -68,13 +68,19 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     let mut image = crate::command_data::entity_image(world, id)?;
     let previous = crate::command_data::entity(world, id)?;
     let mut edited = previous.clone();
-    crate::command_storage::mutate(state, context, action, &mut edited, &mut input)?;
+    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |source| {
+        if let Tag::Compound(fields) = source {
+            crate::command_tag::validate_fields(fields)?;
+        }
+        Ok(())
+    })?;
     if edited == previous {
         return Err("Nothing changed. The specified properties already have these values".into());
     }
     let (Tag::Compound(old), Tag::Compound(new)) = (&previous, edited) else {
         return Err("Entity data must be a compound".into());
     };
+    crate::command_tag::validate_fields(&new)?;
     // What the edit changed or removed. The entity keeps its identity and place:
     // those are not data to load back.
     let mut changed = Vec::new();
@@ -87,17 +93,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             return Err(format!("Editing {key} is not supported; use /tp"));
         }
         if key == "Tags" {
-            let Tag::List(list) = value else {
-                return Err("Tags must be a string list".into());
-            };
-            if list.elements.len() > 1024
-                || list
-                    .elements
-                    .iter()
-                    .any(|tag| !matches!(tag, Tag::String(_)))
-            {
-                return Err("Tags must contain at most 1024 strings".into());
-            }
+            crate::command_summon::validate_tags(value).map_err(|error| error.message())?;
             image.retain(|(existing, _)| existing != key);
             image.push((key.clone(), value.clone()));
             touched.push(key.clone());

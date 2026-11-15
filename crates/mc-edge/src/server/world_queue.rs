@@ -10,7 +10,7 @@
 //! world-view backlog, while the frame bound caps per-frame queue memory.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::{TryRecvError, TrySendError};
@@ -30,19 +30,27 @@ pub const RECORDER_WORLD_QUEUE_FRAMES: usize = 65_536;
 // A move and a head turn per due unit (vanilla 3-tick cadence) for two ticks.
 const _: () = assert!(RECORDER_WORLD_QUEUE_FRAMES >= 2 * 2 * 20_000_usize.div_ceil(3));
 
+#[derive(Debug)]
+struct WorldFrame {
+    bytes: bytes::Bytes,
+    generation: u64,
+}
+
 /// Producer half; clones share the byte count.
 #[derive(Debug, Clone)]
 pub struct WorldSender {
-    frames: mpsc::Sender<bytes::Bytes>,
+    frames: mpsc::Sender<WorldFrame>,
     queued: Arc<AtomicUsize>,
     byte_bound: usize,
+    generation: Arc<AtomicU64>,
 }
 
 /// Consumer half, owned by the connection's writer task.
 #[derive(Debug)]
 pub struct WorldReceiver {
-    frames: mpsc::Receiver<bytes::Bytes>,
+    frames: mpsc::Receiver<WorldFrame>,
     queued: Arc<AtomicUsize>,
+    generation: Arc<AtomicU64>,
 }
 
 /// A world queue of `frames` slots and a soft `bytes` bound.
@@ -50,15 +58,18 @@ pub struct WorldReceiver {
 pub fn world_queue(frames: usize, bytes: usize) -> (WorldSender, WorldReceiver) {
     let (sender, receiver) = mpsc::channel(frames);
     let queued = Arc::new(AtomicUsize::new(0));
+    let generation = Arc::new(AtomicU64::new(0));
     (
         WorldSender {
             frames: sender,
             queued: Arc::clone(&queued),
             byte_bound: bytes,
+            generation: Arc::clone(&generation),
         },
         WorldReceiver {
             frames: receiver,
             queued,
+            generation,
         },
     )
 }
@@ -85,9 +96,24 @@ impl WorldSender {
         // Counted before the receiver can see the frame, so its decrement
         // never runs ahead of this increment.
         self.queued.fetch_add(len, Ordering::AcqRel);
-        self.frames.try_send(frame).inspect_err(|_| {
-            self.queued.fetch_sub(len, Ordering::AcqRel);
-        })
+        self.frames
+            .try_send(WorldFrame {
+                bytes: frame,
+                generation: self.generation.load(Ordering::Acquire),
+            })
+            .map_err(|error| {
+                self.queued.fetch_sub(len, Ordering::AcqRel);
+                match error {
+                    TrySendError::Full(frame) => TrySendError::Full(frame.bytes),
+                    TrySendError::Closed(frame) => TrySendError::Closed(frame.bytes),
+                }
+            })
+    }
+
+    /// Fence queued world frames before enqueueing a reliable dimension reset.
+    /// Frames already taken by the writer precede that reset in its byte stream.
+    pub(crate) fn reset(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
     }
 
     /// Free frame slots (includes outstanding reservations, like `mpsc`).
@@ -120,18 +146,24 @@ impl WorldSender {
 }
 
 impl WorldReceiver {
-    /// Next item; `None` once every sender is gone. Cancel safe: nothing
-    /// awaits after the item is taken.
+    /// Next current-generation item; `None` once every sender is gone.
+    /// Cancel safe: only stale items can be discarded before another await.
     pub async fn recv(&mut self) -> Option<bytes::Bytes> {
-        let frame = self.frames.recv().await?;
-        self.taken(&frame);
-        Some(frame)
+        loop {
+            let frame = self.frames.recv().await?;
+            if let Some(bytes) = self.taken(frame) {
+                return Some(bytes);
+            }
+        }
     }
 
     pub fn try_recv(&mut self) -> Result<bytes::Bytes, TryRecvError> {
-        let frame = self.frames.try_recv()?;
-        self.taken(&frame);
-        Ok(frame)
+        loop {
+            let frame = self.frames.try_recv()?;
+            if let Some(bytes) = self.taken(frame) {
+                return Ok(bytes);
+            }
+        }
     }
 
     #[must_use]
@@ -144,8 +176,9 @@ impl WorldReceiver {
         self.frames.is_empty()
     }
 
-    fn taken(&self, frame: &bytes::Bytes) {
-        self.queued.fetch_sub(frame.len(), Ordering::AcqRel);
+    fn taken(&self, frame: WorldFrame) -> Option<bytes::Bytes> {
+        self.queued.fetch_sub(frame.bytes.len(), Ordering::AcqRel);
+        (frame.generation == self.generation.load(Ordering::Acquire)).then_some(frame.bytes)
     }
 }
 

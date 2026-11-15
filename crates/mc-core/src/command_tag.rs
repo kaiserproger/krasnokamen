@@ -25,7 +25,21 @@ pub(crate) fn normalized(value: &Tag) -> Result<Tag, String> {
     }))
 }
 
+pub(crate) fn validate_fields(fields: &[(String, Tag)]) -> Result<(), String> {
+    if fields
+        .iter()
+        .filter(|(key, _)| key == "Tags")
+        .take(2)
+        .count()
+        > 1
+    {
+        return Err("Invalid Tags: duplicate Tags field".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn normalize_fields(fields: &mut [(String, Tag)]) -> Result<(), String> {
+    validate_fields(fields)?;
     for (key, value) in fields {
         if key == "Tags" {
             *value = normalized(value)?;

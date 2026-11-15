@@ -104,6 +104,16 @@ refused chunk still creates no unsaved custody.
 4. Only then start native serving. No Anvil files or old JSON manifests are a
    serving recovery source.
 
+Scoreboard `Tags` retain the NBT string-list format but normalize duplicate
+members on checkpoint/WAL recovery, preserving first-occurrence order. More
+than one `Tags` key in a retained entity compound is corruption, not a
+choice between two lists: recovery refuses it before conversion or checkpoint
+capture can discard a key. The native checkpoint codec already refuses repeated
+compound names; opaque WAL entity fields additionally validate this tag owner.
+`duplicate_tags_checkpoint_and_wal_recovery_is_idempotent` reopens the actual
+native checkpoint twice, then appends a real WAL state image and reopens twice;
+the separate differing-key corruption tests refuse both checkpoints and WAL.
+
 Mob targets are runtime-only. Zombie-family aggressive-arms appearance is
 present in WAL entity post-images but is not stored in checkpoint entity
 records. Recovery preserves a WAL pose until the first admitted hostile
