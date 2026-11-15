@@ -233,9 +233,7 @@ fn horse_push(
 /// at the drive's speed, and the push never held off the gallop at a place
 /// round the target: in the G2 take 7 horses overlapped at the foot of a
 /// cliff for 35 s and a quarter of all live horses stood within half a block
-/// of another. One pass over the neighbours can turn the step into another
-/// one (horses on both sides), so the passes repeat; a step still closing on
-/// one after them is dropped.
+/// of another. The common guard satisfies all neighbour limits together.
 fn horse_gap(
     formation: &super::formation::FormationRuntime,
     bi: usize,
@@ -246,23 +244,7 @@ fn horse_gap(
     if bi >= formation.members.len() {
         return velocity;
     }
-    let tick = mc_physics::TICK_SECONDS;
-    let step = [velocity[0] * tick, velocity[2] * tick];
-    let mut kept = step;
-    for _ in 0..NEIGHBOURS {
-        let next = super::steering::keep_gap(&formation.members, bi, near, HORSE_SPACING, kept);
-        if next == kept {
-            break;
-        }
-        kept = next;
-    }
-    if kept == step {
-        return velocity;
-    }
-    if super::steering::keep_gap(&formation.members, bi, near, HORSE_SPACING, kept) != kept {
-        kept = [0.0; 2];
-    }
-    formation.constrain_velocity(position, [kept[0] / tick, velocity[1], kept[1] / tick])
+    super::steering::keep_gap(formation, bi, near, HORSE_SPACING, position, velocity)
 }
 
 /// Unengaged steady riders of a regiment with a plan take its heading as their

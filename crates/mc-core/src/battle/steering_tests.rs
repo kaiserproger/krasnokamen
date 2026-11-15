@@ -85,7 +85,18 @@ fn oblique_neighbour_cannot_reopen_an_already_closed_gap() {
     let mut near = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
     near[0] = (1.0, 1);
     near[1] = (1.0, 2);
-    let drive = keep_gap(&runtime.members, 0, &near, 1.0, [0.2, 0.2]);
+    let velocity = keep_gap(
+        &runtime,
+        0,
+        &near,
+        1.0,
+        runtime.members[0].pos,
+        [4.0, 0.0, 4.0],
+    );
+    let drive = [
+        velocity[0] * mc_physics::TICK_SECONDS,
+        velocity[2] * mc_physics::TICK_SECONDS,
+    ];
     for member in &runtime.members[1..] {
         let closing = drive[0] * member.pos[0] + drive[1] * member.pos[2];
         assert!(

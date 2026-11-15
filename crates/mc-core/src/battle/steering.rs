@@ -290,15 +290,7 @@ fn sample_movement(
         {
             turned
         } else {
-            let tick = mc_physics::TICK_SECONDS;
-            let step = keep_gap(
-                &runtime.members,
-                index,
-                &near,
-                MIN_SPACING,
-                [turned[0] * tick, turned[2] * tick],
-            );
-            runtime.constrain_velocity(m.pos, [step[0] / tick, turned[1], step[1] / tick])
+            keep_gap(runtime, index, &near, MIN_SPACING, m.pos, turned)
         };
     }
     (drive, examined, pushes)
@@ -392,10 +384,13 @@ fn drive_with_neighbours(
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
-    let drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
     // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
     (
-        runtime.constrain_velocity(
+        keep_gap(
+            runtime,
+            index,
+            &near,
+            MIN_SPACING,
             m.pos,
             [
                 drive[0] / mc_physics::TICK_SECONDS,
@@ -412,12 +407,16 @@ fn drive_with_neighbours(
 /// than that, and not at all inside `spacing`. This bounds closing even when
 /// the other row is steering towards us.
 pub(super) fn keep_gap(
-    members: &[Member],
+    runtime: &FormationRuntime,
     index: usize,
     near: &[(f64, usize); NEIGHBOURS],
     spacing: f64,
-    mut drive: [f64; 2],
-) -> [f64; 2] {
+    position: [f64; 3],
+    velocity: [f64; 3],
+) -> [f64; 3] {
+    let members = &runtime.members;
+    let tick = mc_physics::TICK_SECONDS;
+    let mut drive = [velocity[0] * tick, velocity[2] * tick];
     let m = &members[index];
     let mut limits = [([0.0; 2], 0.0); NEIGHBOURS];
     for (limit, &(distance, other)) in limits.iter_mut().zip(near) {
@@ -448,7 +447,8 @@ pub(super) fn keep_gap(
             scale = scale.min(allowed / closing);
         }
     }
-    drive.map(|component| component * scale)
+    let drive = drive.map(|component| component * scale);
+    runtime.constrain_velocity(position, [drive[0] / tick, velocity[1], drive[1] / tick])
 }
 
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
