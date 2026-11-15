@@ -43,6 +43,7 @@ fn source(
         light: Arc::clone(&registry.light),
         population: (dimension == 0).then(|| Population::new(42, registry)),
         geometry,
+        structure_catalog: registry.structure_catalog.clone(),
     })
 }
 

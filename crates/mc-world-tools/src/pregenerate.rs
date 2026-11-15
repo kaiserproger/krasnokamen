@@ -18,11 +18,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use mc_world::native::NativeStore;
-use mc_world::{Chunk, ChunkGenerator, ChunkPos};
+use mc_world::{Chunk, ChunkPos};
 
 use mc_core::chunk_loader::{ChunkLoader, ChunkSource};
 use mc_core::config::{CoreConfig, CoreError};
-use mc_core::core::{Core, overworld_terrain};
+use mc_core::core::Core;
 use mc_core::dimensions::Dimension;
 
 /// Chunks per durable native transaction; the runtime's generated save batch.
@@ -114,6 +114,7 @@ pub fn pregenerate(
     let core = Core::open(config.clone())?;
     let spawn = core.world_spawn();
     let registry = Arc::clone(core.registry());
+    let generator = core.overworld_generator()?;
     core.shutdown();
     let lease = mc_world::storage::open_for_lease(&config.world_dir).map_err(storage)?;
     lease.try_lock().map_err(|error| {
@@ -192,7 +193,6 @@ pub fn pregenerate(
         return Ok(report);
     }
 
-    let generator: Arc<dyn ChunkGenerator> = Arc::new(overworld_terrain(config, &registry)?);
     let source = Arc::new(ChunkSource::new_native(
         config.seed,
         Arc::clone(&store),

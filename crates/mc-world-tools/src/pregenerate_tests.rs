@@ -153,3 +153,72 @@ fn pregenerate_refuses_a_world_that_a_running_server_holds() {
     assert!(error.contains("leased"), "{error}");
     std::fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn pregenerate_uses_the_admitted_selected_worldgen_instead_of_rebuilding_vanilla() {
+    let (baseline_dir, baseline_config) = fresh_world(81);
+    let baseline = Core::open(baseline_config).unwrap();
+    let site = baseline
+        .overworld_generator()
+        .unwrap()
+        .village_sites_in_region((-68, -68), (101, 101))
+        .into_iter()
+        .next()
+        .expect("baseline village");
+    baseline.shutdown();
+    std::fs::remove_dir_all(baseline_dir).unwrap();
+    let (dir, config) = fresh_world(81);
+    let pack = dir.join("datapacks/no-villages");
+    let tags = pack.join("data/minecraft/tags/worldgen/biome/has_structure");
+    std::fs::create_dir_all(&tags).unwrap();
+    std::fs::write(
+        pack.join("pack.mcmeta"),
+        br#"{"pack":{"description":"selected worldgen"}}"#,
+    )
+    .unwrap();
+    for name in ["plains", "desert", "savanna", "snowy", "taiga"] {
+        std::fs::write(
+            tags.join(format!("village_{name}.json")),
+            br#"{"replace":true,"values":[]}"#,
+        )
+        .unwrap();
+    }
+    let pos = ChunkPos {
+        x: site.start_chunk.0,
+        z: site.start_chunk.1,
+    };
+    let request = PregenerateRequest {
+        radius: 1,
+        center: Some([pos.x * 16 + 8, pos.z * 16 + 8]),
+    };
+    let report = pregenerate(&config, &request, &mut no_progress).unwrap();
+    assert_eq!(report.generated, 1);
+    let core = Core::open(config.clone()).unwrap();
+    let registry = Arc::clone(core.registry());
+    let generator = core.overworld_generator().unwrap();
+    core.shutdown();
+    let store = NativeStore::open(
+        &dir.join("native/state.redb"),
+        mc_core::native_checkpoint::native_identity(&config),
+    )
+    .unwrap();
+    let chunk = store
+        .read_chunk(
+            0,
+            pos,
+            &registry.blocks,
+            &registry.items,
+            &registry.chest_loot,
+            generator.as_ref(),
+        )
+        .unwrap()
+        .unwrap();
+    let starts = mc_world::structure_starts::read(&chunk.extras, pos, false).unwrap();
+    assert!(
+        !starts
+            .iter()
+            .any(|start| start.structure.as_str().starts_with("minecraft:village_"))
+    );
+    drop(store);
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -415,15 +415,20 @@ struct CoreInner {
     terrain_epoch: String,
 }
 
-/// Immutable overworld terrain for this configuration and registry: the
-/// vanilla router/density cache when mc-edge supplies its content directory,
-/// the shared village plan source, and plugin worldgen rules.
-///
-/// Serving and the offline `world pregenerate` command build the same terrain
-/// here, so pregenerated chunks match what a join would otherwise generate.
-pub fn overworld_terrain(
+/// Baseline generator for data fixtures without selected packs.
+/// Production/offline callers retain [`Core::overworld_generator`] instead.
+#[cfg(test)]
+pub(crate) fn overworld_terrain(
     config: &CoreConfig,
     registry: &CoreRegistry,
+) -> Result<mc_worldgen::TerrainGenerator, CoreError> {
+    overworld_terrain_from(config, registry, None)
+}
+
+fn overworld_terrain_from(
+    config: &CoreConfig,
+    registry: &CoreRegistry,
+    inputs: Option<&crate::datapacks::worldgen::Inputs>,
 ) -> Result<mc_worldgen::TerrainGenerator, CoreError> {
     let mut terrain = mc_worldgen::TerrainGenerator::new(config.seed, Arc::clone(&registry.blocks));
     if let Some(vanilla_data_dir) = config.vanilla_data_dir.as_deref() {
@@ -436,6 +441,11 @@ pub fn overworld_terrain(
             .worldgen_tags
             .as_ref()
             .expect("full vanilla registry has shared worldgen tags");
+        let biome_tags: Arc<dyn mc_worldgen::vanilla_features::BiomeTagIndex + Send + Sync> =
+            match inputs {
+                Some(inputs) => inputs.biome_tags.clone(),
+                None => tags.clone(),
+            };
         let closure = Arc::new(
             mc_worldgen::village::load_village_closure(
                 vanilla_data_dir,
@@ -462,20 +472,38 @@ pub fn overworld_terrain(
             config.seed,
             Arc::clone(&registry.blocks),
             tags.clone(),
-            tags.clone(),
+            Arc::clone(&biome_tags),
         )
         .map_err(|error| CoreError::Worldgen(error.to_string()))?;
         terrain = terrain.with_village_plans(Arc::new(plans));
-        for set in ["ancient_cities", "trail_ruins", "trial_chambers"] {
+        let mut sets: Vec<_> = ["ancient_cities", "trail_ruins", "trial_chambers"]
+            .into_iter()
+            .map(|set| mc_data::Identifier::parse(format!("minecraft:{set}")).expect("static set"))
+            .collect();
+        if let Some(inputs) = inputs {
+            for set in &inputs.structure_sets {
+                if set.as_str() != "minecraft:villages" && !sets.contains(set) {
+                    sets.push(set.clone());
+                }
+            }
+        }
+        for set in sets {
             let closure = Arc::new(
                 mc_worldgen::village::load_village_closure(
                     vanilla_data_dir,
-                    &mc_data::Identifier::parse(format!("minecraft:{set}"))
-                        .expect("static structure set"),
+                    &set,
                     &registry.blocks,
                 )
                 .map_err(|error| CoreError::Worldgen(error.to_string()))?,
             );
+            if let Some(inputs) = inputs {
+                for structure in &closure.structures {
+                    inputs
+                        .biome_tags
+                        .validate_overworld(&structure.spec.biomes)
+                        .map_err(CoreError::Worldgen)?;
+                }
+            }
             let decor = Arc::new(
                 mc_worldgen::village::VillageDecor::compile(
                     vanilla_data_dir,
@@ -493,7 +521,7 @@ pub fn overworld_terrain(
                 config.seed,
                 Arc::clone(&registry.blocks),
                 tags.clone(),
-                tags.clone(),
+                Arc::clone(&biome_tags),
             )
             .map_err(|error| CoreError::Worldgen(error.to_string()))?;
             terrain = terrain.with_jigsaw_source(Arc::new(source));
@@ -665,7 +693,6 @@ impl Core {
         if let Some(runtime) = &mut plugin_runtime {
             runtime.load_catalogs(&registry)?;
         }
-        let datapack_root = config.world_dir.join("datapacks");
         let registry = Arc::new(registry);
         let plugin_commands = plugin_runtime
             .as_ref()
@@ -730,34 +757,9 @@ impl Core {
             plugin_runtime,
             build_queries,
         )?;
-        // The enabled packs are the ones the world last saved: recovery has
-        // restored that selection, so load it, not the default.
-        let datapacks = crate::datapacks::PackSet::open(
-            &datapack_root,
-            tick_state.datapacks.selection().clone(),
-            &registry,
-        )
-        .map_err(CoreError::Registry)?;
-        for warning in datapacks.warnings(None) {
-            tracing::warn!("{warning}");
-        }
-        // The registry before any datapack: what every reload rebuilds on.
-        let base = Arc::clone(&registry);
-        let registry = if datapacks.has_registry_content() {
-            let mut content = (*registry).clone();
-            datapacks
-                .install_content(&mut content)
-                .map_err(CoreError::Registry)?;
-            let content = Arc::new(content);
-            tick_state.registry = Arc::clone(&content);
-            for world in tick_state.other_dimensions.values_mut() {
-                world.registry = Arc::clone(&content);
-            }
-            content
-        } else {
-            registry
-        };
-        tick_state.datapacks.install(datapacks, datapack_root, base);
+        // Selection, registry content and immutable generators were installed
+        // together by recovery, before spawn discovery or replay chunk reads.
+        let registry = Arc::clone(&tick_state.registry);
         let live_registry = Arc::new(std::sync::RwLock::new(Arc::clone(&registry)));
         tick_state.published_registry = Some(Arc::clone(&live_registry));
         let command_feedback = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -797,8 +799,8 @@ impl Core {
             ),
         ];
         let world_dir = config.world_dir.clone();
-        // Fresh worlds, and reopened pre-salt worlds that just minted their
-        // entity salt (see install_salt), checkpoint before any tick.
+        // Fresh worlds pin worldgen inputs in their first checkpoint. Existing
+        // worlds adopt diagnostic metadata on the next positive-tick checkpoint.
         if fresh || (salt_minted && tick_state.tick > 0) {
             let (work_tx, work_rx) = journal_work_channel();
             let (done, _) = std::sync::mpsc::channel();
@@ -996,6 +998,12 @@ impl Core {
     #[must_use]
     pub fn registry(&self) -> &Arc<CoreRegistry> {
         &self.inner.registry
+    }
+
+    /// The exact immutable Overworld generator admitted by startup/recovery.
+    /// Offline tools retain only this generator, not native-store custody.
+    pub fn overworld_generator(&self) -> Result<Arc<dyn ChunkGenerator>, CoreError> {
+        self.inner.terrain[0].generator()
     }
 
     /// The registry the tick runs on now. Unlike [`Self::registry`], which is

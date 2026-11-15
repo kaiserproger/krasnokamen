@@ -11,6 +11,7 @@ pub(super) fn load_dimension_state(
     replay: Replay,
     store: Arc<mc_world::native::NativeStore>,
     settlement_globals: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
+    inputs: Option<&crate::datapacks::worldgen::Inputs>,
 ) -> Result<TickState, CoreError> {
     let manifest_now = if dimension == crate::dimensions::Dimension::Overworld {
         root_manifest.clone()
@@ -26,10 +27,18 @@ pub(super) fn load_dimension_state(
     crate::battle::persistence::validate_replay(&replay, &registry)?;
     let recovered_tick = replay.tick.max(manifest_tick);
 
-    // Worldgen: load the same vanilla router/density cache used by the
-    // production v1 startup when mc-edge supplies its content directory.
+    // The selected resource image is frozen before spawn discovery and every
+    // replay load-or-generate read. Generators eagerly compile and own it.
+    let mut generator_config = config.clone();
+    if let Some(inputs) = inputs {
+        generator_config.vanilla_data_dir = inputs.root().map(std::path::Path::to_path_buf);
+    }
     let terrain = if dimension == crate::dimensions::Dimension::Overworld {
-        Some(overworld_terrain(config, &registry)?)
+        Some(overworld_terrain_from(
+            &generator_config,
+            &registry,
+            inputs,
+        )?)
     } else {
         None
     };
@@ -45,8 +54,10 @@ pub(super) fn load_dimension_state(
     };
     let generator: Arc<dyn ChunkGenerator> = match dimension {
         crate::dimensions::Dimension::Overworld => Arc::new(terrain.expect("overworld terrain")),
-        crate::dimensions::Dimension::Nether => Arc::new(nether_terrain(config, &registry)?),
-        crate::dimensions::Dimension::End => Arc::new(end_terrain(config, &registry)?),
+        crate::dimensions::Dimension::Nether => {
+            Arc::new(nether_terrain(&generator_config, &registry)?)
+        }
+        crate::dimensions::Dimension::End => Arc::new(end_terrain(&generator_config, &registry)?),
     };
     let mut world = ChunkWorld::new_native(
         config.seed,
@@ -338,6 +349,7 @@ pub(crate) fn recover_dimension_state(
         replay,
         store,
         &recovered.checkpoint.globals,
+        None,
     )?;
     state.native_globals = recovered.checkpoint.globals;
     crate::settlements::persistence::refuse_legacy_plugin_state(&state)?;
@@ -356,7 +368,7 @@ pub(crate) fn recover_tick_state(
     plugin_runtime: Option<crate::plugin::PluginRuntime>,
     build_queries: Option<crate::build_precommit::PreviewQueries>,
 ) -> Result<(TickState, CheckpointManifest, bool), CoreError> {
-    let (root_manifest, mut replays, globals) = if fresh {
+    let (root_manifest, mut replays, mut globals) = if fresh {
         store
             .initialize_dimensions(
                 &crate::native_checkpoint::generation_records(config)?["dimensions"],
@@ -416,9 +428,28 @@ pub(crate) fn recover_tick_state(
             recovered.checkpoint.globals,
         )
     };
+    let root = config.world_dir.join("datapacks");
+    let selected = crate::datapacks::worldgen::selection(&replays)?;
+    let mut packs =
+        crate::datapacks::PackSet::open(&root, selected, registry).map_err(CoreError::Registry)?;
+    let inputs = packs
+        .prepare_worldgen(&config.world_dir, config.vanilla_data_dir.as_deref())
+        .map_err(CoreError::Worldgen)?;
+    let adoption = inputs.stage_identity(&mut globals)?;
+    if adoption.changed {
+        tracing::debug!("selected worldgen identity staged for the next checkpoint");
+    }
+    packs.bind_structure_catalog(adoption.catalog);
+    inputs.validate(registry).map_err(CoreError::Worldgen)?;
+    let base = Arc::clone(registry);
+    let mut content = registry.prepare_content();
+    packs
+        .install_content(&mut content)
+        .map_err(CoreError::Registry)?;
+    let registry = Arc::new(content);
     let mut tick_state = load_dimension_state(
         config,
-        Arc::clone(registry),
+        Arc::clone(&registry),
         crate::dimensions::Dimension::Overworld,
         &root_manifest,
         replays
@@ -426,6 +457,7 @@ pub(crate) fn recover_tick_state(
             .expect("root replay"),
         Arc::clone(store),
         &globals,
+        Some(&inputs),
     )?;
     for dimension in [
         crate::dimensions::Dimension::Nether,
@@ -433,18 +465,23 @@ pub(crate) fn recover_tick_state(
     ] {
         let child = load_dimension_state(
             config,
-            Arc::clone(registry),
+            Arc::clone(&registry),
             dimension,
             &root_manifest,
             replays.remove(&dimension).expect("child replay"),
             Arc::clone(store),
             &globals,
+            Some(&inputs),
         )?;
         tick_state
             .other_dimensions
             .insert(dimension, Box::new(child));
     }
     tick_state.native_globals = globals;
+    for warning in packs.warnings(None) {
+        tracing::warn!("{warning}");
+    }
+    tick_state.datapacks.install(packs, root, base);
     let salt_minted = crate::entity_uuid::install_salt(&mut tick_state)?;
     crate::settlements::persistence::refuse_legacy_plugin_state(&tick_state)?;
     crate::settlements::persistence::finish_recovery(&mut tick_state)?;

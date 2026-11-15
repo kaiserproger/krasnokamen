@@ -83,6 +83,7 @@ pub struct CoreRegistry {
     pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
     /// Selected, startup-validated datapack structure IDs; no tick filesystem scan.
     pub(crate) datapack_structures: Arc<[Identifier]>,
+    pub(crate) structure_catalog: Option<Arc<crate::datapacks::worldgen::StructureCatalog>>,
     /// Block loot tables used by native block breaks.
     pub loot: mc_data::loot::LootTables,
     /// Reloadable container loot, including selected datapack namespaces.
@@ -219,6 +220,7 @@ impl Clone for CoreRegistry {
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
             datapack_structures: Arc::clone(&self.datapack_structures),
+            structure_catalog: self.structure_catalog.clone(),
         }
     }
 }
@@ -246,6 +248,7 @@ impl CoreRegistry {
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
             datapack_structures: Arc::clone(&self.datapack_structures),
+            structure_catalog: self.structure_catalog.clone(),
             loot: self.loot.clone(),
             chest_loot: Arc::clone(&self.chest_loot),
         }
@@ -611,6 +614,7 @@ impl CoreRegistry {
             chest_loot,
             predicates: std::collections::BTreeMap::new(),
             datapack_structures: Arc::from([]),
+            structure_catalog: None,
             stable: Arc::new(RegistryTables {
                 blocks,
                 shears_item,

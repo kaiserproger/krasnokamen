@@ -51,6 +51,7 @@ pub struct ChunkSource {
     pub(crate) light: Arc<mc_data::block_light::BlockLightTable>,
     pub(crate) geometry: mc_world::ChunkGeometry,
     pub(crate) population: Option<Population>,
+    pub(crate) structure_catalog: Option<Arc<crate::datapacks::worldgen::StructureCatalog>>,
 }
 
 impl ChunkSource {
@@ -73,6 +74,7 @@ impl ChunkSource {
             light: Arc::clone(&registry.light),
             population: (dimension == 0).then(|| Population::new(seed, registry)),
             geometry,
+            structure_catalog: registry.structure_catalog.clone(),
         }
     }
 
@@ -114,6 +116,14 @@ impl ChunkSource {
                 &self.chest_loot,
                 self.generator.as_ref(),
             )
+            .and_then(|chunk| {
+                if let Some(chunk) = &chunk
+                    && let Some(catalog) = &self.structure_catalog
+                {
+                    catalog.observe(chunk).map_err(NativeError::Source)?;
+                }
+                Ok(chunk)
+            })
             .map_err(|error| self.load_error(pos, error))
     }
 

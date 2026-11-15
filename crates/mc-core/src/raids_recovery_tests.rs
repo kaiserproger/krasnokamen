@@ -94,6 +94,7 @@ fn raids_checkpoint_restart_and_wal_wave_removal_resume_without_duplicates() {
             replay,
             store,
             &settlement_globals,
+            None,
         )
         .unwrap()
     };

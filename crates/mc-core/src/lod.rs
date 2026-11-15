@@ -281,6 +281,7 @@ mod tests {
             light: Arc::clone(&registry.light),
             population: Some(crate::chunk_loader::Population::new(42, &registry)),
             geometry: crate::dimensions::Dimension::Overworld.geometry(),
+            structure_catalog: registry.structure_catalog.clone(),
         });
         let source = LodSource::new(Arc::clone(&chunks), &registry.materials);
         // Level 1 tile (0, 0): 2-block spacing over chunks (0..2, 0..2).

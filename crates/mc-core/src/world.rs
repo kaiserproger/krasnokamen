@@ -426,6 +426,7 @@ impl ChunkWorld {
                 light: Arc::clone(&registry.light),
                 population: Some(crate::chunk_loader::Population::new(seed, registry)),
                 geometry,
+                structure_catalog: registry.structure_catalog.clone(),
             }),
             air,
             world_spawn,

@@ -11,6 +11,9 @@ use crate::boundary::{ChangeSet, ConnectionId, EntityId, PlayerChange};
 use crate::command_feedback::{text, translated};
 use crate::tick::TickState;
 
+#[path = "datapacks_worldgen.rs"]
+pub(crate) mod worldgen;
+
 const COMMAND_BUDGET: usize = crate::command_context::LIMIT;
 const MAX_RESOURCES: usize = 16384;
 const MAX_BYTES: usize = 16 * 1024 * 1024;
@@ -71,19 +74,19 @@ pub(crate) struct PackSet {
     /// conditions the selector `predicate=` option can evaluate.
     pub(crate) predicates: BTreeMap<String, serde_json::Value>,
     resources: BTreeMap<String, String>,
-    /// Worldgen and dimension resources by pack id: the native generators are
-    /// Rust, so these are not applied. The rest of such a pack still loads.
-    pub(crate) ignored: BTreeMap<String, Vec<String>>,
-    /// Selected packs this load found gone from disk and dropped from the selection.
-    pub(crate) dropped: Vec<String>,
+    /// Ordered resource layers, including the builtin vanilla position.
+    worldgen_layers: Vec<worldgen::Layer>,
+    worldgen_base: Option<PathBuf>,
+    worldgen_identity: Option<String>,
+    worldgen_structures: Arc<[mc_data::Identifier]>,
+    structure_catalog: Option<Arc<worldgen::StructureCatalog>>,
+    dropped: Vec<String>,
     /// The pack that provided each recipe or loot resource, to name it in errors.
     origins: BTreeMap<String, String>,
     /// Pack entries of the folder that could not be read (id and why), not selected.
     failed: BTreeMap<String, String>,
     /// Entries of the folder that are no pack (a README, a stray file).
     not_packs: Vec<String>,
-    /// New packs this load left out because they cannot load, with the reason.
-    skipped: Vec<String>,
     /// The `pack.mcmeta` filters of every enabled pack: they hide the files of
     /// the packs below, the builtin `vanilla` pack included.
     filters: Vec<Filter>,
@@ -149,12 +152,15 @@ impl Default for PackSet {
             tags: BTreeMap::new(),
             predicates: BTreeMap::new(),
             resources: BTreeMap::new(),
-            ignored: BTreeMap::new(),
+            worldgen_layers: Vec::new(),
+            worldgen_base: None,
+            worldgen_identity: None,
+            worldgen_structures: Arc::from([]),
+            structure_catalog: None,
             dropped: Vec::new(),
             origins: BTreeMap::new(),
             failed: BTreeMap::new(),
             not_packs: Vec::new(),
-            skipped: Vec::new(),
             filters: Vec::new(),
         }
     }
@@ -293,17 +299,21 @@ fn files(
     Ok(())
 }
 
-/// Read at most the remaining byte budget as UTF-8 text.
-fn limited(reader: impl Read, remaining: &mut usize) -> Result<String, String> {
-    let mut text = String::new();
+/// Read a bounded binary resource; UTF-8 is required only by text consumers.
+fn limited_bytes(reader: impl Read, remaining: &mut usize) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
     reader
         .take((*remaining + 1) as u64)
-        .read_to_string(&mut text)
+        .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     *remaining = remaining
-        .checked_sub(text.len())
+        .checked_sub(bytes.len())
         .ok_or("Datapack byte limit exceeded")?;
-    Ok(text)
+    Ok(bytes)
+}
+
+fn limited(reader: impl Read, remaining: &mut usize) -> Result<String, String> {
+    String::from_utf8(limited_bytes(reader, remaining)?).map_err(|e| e.to_string())
 }
 
 fn read_text(path: &Path, remaining: &mut usize) -> Result<String, String> {
@@ -360,12 +370,12 @@ struct Scanned {
 }
 
 impl Source {
-    /// Every file below the pack's `data/` as `(path under data/, text)`.
+    /// Every binary resource below the pack's `data/`.
     fn data_files(
         &self,
         remaining: &mut usize,
         visited: &mut usize,
-    ) -> Result<Vec<(String, String)>, String> {
+    ) -> Result<Vec<(String, Vec<u8>)>, String> {
         match self {
             Self::Dir(path) => {
                 let data = path.join("data");
@@ -376,7 +386,8 @@ impl Source {
                     .map(|path| {
                         let relative = mc_data::resource_path::slash_relative(&data, &path)
                             .ok_or("Non-UTF8 datapack path")?;
-                        Ok((relative, read_text(&path, remaining)?))
+                        let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+                        Ok((relative, limited_bytes(file, remaining)?))
                     })
                     .collect()
             }
@@ -408,9 +419,12 @@ impl Source {
                     if *visited > MAX_RESOURCES {
                         return Err("Datapack resource limit exceeded".into());
                     }
-                    out.push((relative.to_owned(), limited(&mut file, remaining)?));
+                    out.push((relative.to_owned(), limited_bytes(&mut file, remaining)?));
                 }
-                out.sort();
+                out.sort_by(|a, b| a.0.cmp(&b.0));
+                if out.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+                    return Err("Duplicate datapack archive resource path".into());
+                }
                 Ok(out)
             }
         }
@@ -567,59 +581,15 @@ impl PackSet {
     fn load_known(root: &Path, selection: Selection) -> Result<Self, String> {
         Self::load_with(root, selection, false)
     }
-    /// The packs a starting server runs. A pack newly found on disk is enabled,
-    /// but one that cannot be read, cannot load, or whose recipes and loot cannot
-    /// install onto `base` is skipped with a warning naming it and the file, so a
-    /// pack that a live `/datapack enable` refused cannot stop the next start.
-    /// This deliberately differs from vanilla, which enables a new pack and refuses
-    /// to start when it fails (offering `--safeMode`); Krasnokamen has no safe mode.
-    /// A pack the saved selection holds that no longer loads still stops the start,
-    /// naming pack and file: fix or remove that pack and start again.
+    /// Startup/reload admission is atomic and fail-closed, including new packs.
     pub(crate) fn open(
         root: &Path,
         selection: Selection,
         base: &crate::registry::CoreRegistry,
     ) -> Result<Self, String> {
-        let usable = |packs: Self| -> Result<Self, String> {
-            packs.install_content(&mut base.prepare_content())?;
-            Ok(packs)
-        };
-        let first = match Self::load(root, selection.clone()).and_then(usable) {
-            Ok(packs) => return Ok(packs),
-            Err(error) => error,
-        };
-        let mut remaining = MAX_BYTES;
-        let found = scan(root, &mut remaining).map_err(|_| first.clone())?;
-        let failed = found.failed;
-        let new: Vec<String> = found
-            .packs
-            .into_keys()
-            .chain(failed.keys().cloned())
-            .filter(|id| !selection.enabled.contains(id) && !selection.disabled.contains(id))
-            .collect();
-        if new.is_empty() {
-            return Err(first);
-        }
-        let mut accepted = Self::load_known(root, selection).and_then(usable)?;
-        let mut skipped = Vec::new();
-        for id in new {
-            if let Some(error) = failed.get(&id) {
-                skipped.push(format!(
-                    "Skipping new datapack {id}, it is not enabled: {id}: {error}"
-                ));
-                continue;
-            }
-            let mut candidate = accepted.selection.clone();
-            candidate.enabled.push(id.clone());
-            match Self::load_known(root, candidate).and_then(usable) {
-                Ok(packs) => accepted = packs,
-                Err(error) => skipped.push(format!(
-                    "Skipping new datapack {id}, it is not enabled: {error}"
-                )),
-            }
-        }
-        accepted.skipped = skipped;
-        Ok(accepted)
+        let packs = Self::load(root, selection)?;
+        packs.install_content(&mut base.prepare_content())?;
+        Ok(packs)
     }
     fn load_with(root: &Path, mut selection: Selection, discover: bool) -> Result<Self, String> {
         selection.validate()?;
@@ -663,7 +633,6 @@ impl PackSet {
         selection
             .enabled
             .retain(|id| id == "vanilla" || packs.contains_key(id));
-        selection.disabled.retain(|id| packs.contains_key(id));
         for id in packs.keys() {
             if discover && !selection.enabled.contains(id) && !selection.disabled.contains(id) {
                 selection.enabled.push(id.clone());
@@ -683,6 +652,7 @@ impl PackSet {
         let enabled = result.selection.enabled.clone();
         for id in &enabled {
             if id == "vanilla" {
+                result.worldgen_layers.push(worldgen::Layer::vanilla());
                 continue;
             }
             let pack = &packs[id];
@@ -690,16 +660,30 @@ impl PackSet {
             let filters =
                 Filter::parse(&pack.metadata).map_err(|e| format!("{id}: pack.mcmeta: {e}"))?;
             result.hide(&filters, &mut raw_tags);
-            result.filters.extend(filters);
+            result.filters.extend(filters.iter().cloned());
+            let mut layer = worldgen::Layer::new(id.clone(), filters);
             let data = pack
                 .source
                 .data_files(&mut remaining, &mut visited)
                 .map_err(|e| format!("{id}: {e}"))?;
-            for (relative, text) in data {
-                result
-                    .add_file(&mut raw_tags, id, &relative, text)
-                    .map_err(|e| format!("{id}: {relative}: {e}"))?;
+            for (relative, bytes) in data {
+                let add = || -> Result<(), String> {
+                    worldgen::validate_path(&relative)?;
+                    if worldgen::is_resource(&relative) {
+                        let expanded = worldgen::validate_resource(&relative, &bytes)?;
+                        remaining = remaining
+                            .checked_sub(expanded.saturating_sub(bytes.len()))
+                            .ok_or("Datapack expanded byte limit exceeded")?;
+                        layer.resources.insert(relative.clone(), bytes.into());
+                    } else {
+                        let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
+                        result.add_file(&mut raw_tags, id, &relative, text)?;
+                    }
+                    Ok(())
+                };
+                add().map_err(|e| format!("{id}: {relative}: {e}"))?;
             }
+            result.worldgen_layers.push(layer);
         }
         fn expand(
             id: &str,
@@ -791,17 +775,6 @@ impl PackSet {
             .split_once('/')
             .ok_or("Resource must be namespaced")?;
         let (kind, resource) = tail.split_once('/').ok_or("Resource must have a type")?;
-        if matches!(kind, "worldgen" | "dimension" | "dimension_type")
-            || (kind == "tags" && resource.starts_with("worldgen/"))
-        {
-            // The native generators are Rust: these resources cannot be
-            // applied, so the rest of the pack loads and the operator is told.
-            self.ignored
-                .entry(pack.to_owned())
-                .or_default()
-                .push(relative.to_owned());
-            return Ok(());
-        }
         if kind == "function" && resource.ends_with(".mcfunction") {
             let id = identifier(&format!(
                 "{namespace}:{}",
@@ -933,51 +906,20 @@ impl PackSet {
             || self.filters != current.filters
     }
 
-    /// Whether the registry needs this pack set's recipes, loot or predicates.
-    pub(crate) fn has_registry_content(&self) -> bool {
-        !self.resources.is_empty() || !self.predicates.is_empty() || !self.filters.is_empty()
-    }
-
-    /// One operator-facing warning per condition this load found that `previous`
-    /// did not already have: a selected pack gone from disk, a non-pack entry in the
-    /// folder, and a pack whose worldgen or dimension resources cannot be applied.
-    /// A new pack this load skipped is always stated.
+    /// Operator-facing warnings for non-pack folder entries.
     pub(crate) fn warnings(&self, previous: Option<&Self>) -> Vec<String> {
-        const SHOWN: usize = 5;
         let mut warnings = Vec::new();
         for id in &self.dropped {
             if previous.is_none_or(|previous| !previous.dropped.contains(id)) {
-                warnings.push(format!(
-                    "Datapack {id} is selected but no longer on disk; it was dropped from the selection"
-                ));
+                warnings.push(format!("Datapack {id} is no longer on disk; saved starts are retained but inactive until its resources return"));
             }
         }
-        // A skipped new pack is stated by every start and `/reload` that finds it still
-        // broken (only those loads skip packs), so it is never silent the second time.
-        warnings.extend(self.skipped.iter().cloned());
         for name in &self.not_packs {
             if previous.is_none_or(|previous| !previous.not_packs.contains(name)) {
                 warnings.push(format!(
                     "Found non-pack entry '{name}' in the datapack folder, ignoring it"
                 ));
             }
-        }
-        for (id, paths) in &self.ignored {
-            if previous.is_some_and(|previous| previous.ignored.get(id) == Some(paths)) {
-                continue;
-            }
-            let shown = paths.iter().take(SHOWN).cloned().collect::<Vec<_>>();
-            let more = paths.len().saturating_sub(SHOWN);
-            warnings.push(format!(
-                "Datapack {id}: {} worldgen or dimension resource(s) are not supported by the native generators and were ignored: {}{}",
-                paths.len(),
-                shown.join(", "),
-                if more > 0 {
-                    format!(" and {more} more")
-                } else {
-                    String::new()
-                }
-            ));
         }
         warnings
     }
@@ -986,6 +928,10 @@ impl PackSet {
         &self,
         registry: &mut crate::registry::CoreRegistry,
     ) -> Result<(), String> {
+        registry.datapack_structures = Arc::clone(&self.worldgen_structures);
+        registry
+            .structure_catalog
+            .clone_from(&self.structure_catalog);
         // The builtin vanilla pack is below every pack: their filters hide its files too.
         if !self.filters.is_empty() {
             let hidden = |id: &mc_data::Identifier, directory: &str| {
@@ -1223,6 +1169,21 @@ fn prepare_packs(
     current: &PackSet,
     base: Option<&crate::registry::CoreRegistry>,
 ) -> Result<Completed, Failure> {
+    let mut packs = packs;
+    packs.worldgen_base.clone_from(&current.worldgen_base);
+    let identity = packs.worldgen_fingerprint()?;
+    let previous = match &current.worldgen_identity {
+        Some(identity) => identity.clone(),
+        None => current.worldgen_fingerprint()?,
+    };
+    if identity != previous {
+        return Err("Datapack worldgen inputs changed; immutable generators cannot be reloaded; restart the server to apply the selected inputs".into());
+    }
+    packs.worldgen_identity = Some(identity);
+    packs.worldgen_structures = Arc::clone(&current.worldgen_structures);
+    packs
+        .structure_catalog
+        .clone_from(&current.structure_catalog);
     let registry = if packs.changes_registry(current) {
         let mut registry = base
             .ok_or("No base registry for the reload")?
@@ -1244,8 +1205,7 @@ fn work(
     current: &PackSet,
 ) -> Result<Completed, Failure> {
     match job {
-        // Like a start: a new pack that cannot load is skipped with a named warning and the
-        // rest applies; a pack the selection holds that cannot load refuses the reload.
+        // Any invalid selected or newly discovered pack refuses the whole reload.
         Job::Reload => {
             let packs = PackSet::open(
                 root,
