@@ -293,11 +293,14 @@ Record each concrete finding and its before/after disposition in the result.
 
 ## Handoff across context loss or to another person
 
-Tracked state is enough to continue: [docs/STATUS.md](../STATUS.md) (release,
-priorities, known 1.0 gaps), the owner's open issues, the
-[bug ledger](../bugs/README.md) and the ADRs. The owner host may also keep an
-ignored cursor, `.analysis/MEMORY.md`; it is optional, and code, tests and
-tracked docs win over it.
+Tracked docs supply constraints, not a substitute for Main's complete ordered
+work queue. On the owner host load the complete current AND deferred ordered
+sections of `receipts/Stage3/PLAN.md`, including blocked rows, and the current
+`.analysis/MEMORY.md` index; read historical event logs only when needed.
+After every compaction/resume, read the actual tool TODO view and reconcile stable IDs,
+order, statuses, blockers and receipt links **before new dispatch**. Restore
+missing rows from the canonical plan/history without inventing completion;
+an active-pane summary alone is not proof that other rows were lost.
 
 A handoff, written at phase close or before a reboot (not per call), goes into
 `.analysis/MEMORY.md` on the owner host and into the result to the owner
@@ -308,6 +311,21 @@ SHA-256 and the changed files. Facts that outlive the slice move into the
 owning doc page.
 Older night runs wrote a tracked `docs/NIGHT_RUN_<date>.md`; that is
 superseded.
+
+Only an explicit owner instruction or a concrete recorded dependency may
+change order. Record the affected ID, old/new position and causal authority;
+preserve every other item's relative order. A blocker pauses the owned item
+with its rank, partial proof and receipts intact; it does not silently delete
+or demote it. Executing an eligible item while another is blocked does not
+rewrite their ranks.
+
+Side requests append to the existing queue, never `init`/replace it with only
+the new subtask. Keep current and future stable IDs in the plan, Main cursor
+and tool TODO. Cross-reference overlap rather than dropping either promise.
+Deferred phases remain **blocked**, with no automatic research/benchmark/
+implementation dispatch until announcement closure or explicit owner
+activation; the finite announcement's stop/owner-decision rule still applies.
+
 
 ## Moving repositories while agents run
 

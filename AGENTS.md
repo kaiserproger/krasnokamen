@@ -77,6 +77,12 @@ override the general queue and fleet defaults below.
    enter the blocking queue; record everything else as visible backlog.
    Outside that mode, issues are the queue outside a `/goal` and join its queue
    inside one.
+9. Preserve the complete ordered queue, including blocked and deferred items.
+   Only an explicit owner change or a concrete recorded dependency may change
+   order; blockers pause an owned item, not silently delete or demote it.
+   Side requests append. Before dispatch after compaction/resume, reconcile
+   the full queue and actual TODO view under the
+   [handoff rules](docs/development/agent-fleet.md#handoff-across-context-loss-or-to-another-person).
 
 ## Where to look
 
