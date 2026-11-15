@@ -213,6 +213,12 @@ class LifecycleGuardTests(unittest.TestCase):
             server.run_dir.mkdir(parents=True)
             server.log_path.write_text("checkpoint committed tick=7\n")
             calls: list[str] = []
+            (server.world_dir / "native").mkdir(parents=True)
+            (server.world_dir / "native" / "state.redb").write_bytes(b"checkpoint-seven")
+            journal = server.world_dir / "journal"
+            journal.mkdir()
+            (journal / "batch-8-9.bin").write_bytes(b"published-player-image")
+            (journal / "batch-10-10.tmp").write_bytes(b"unpublished-tail")
             old = SimpleNamespace(
                 pid=11,
                 poll=lambda: None,
@@ -223,27 +229,92 @@ class LifecycleGuardTests(unittest.TestCase):
             server._process = old
             server._argv = ["krasnokamen", "--config", "cfg"]
             server._log_handle = SimpleNamespace(close=lambda: None)
+            def start_after_snapshot(*args, **kwargs):
+                snapshot, = (server.run_dir / "crashes").iterdir()
+                self.assertEqual(
+                    (snapshot / "world" / "native" / "state.redb").read_bytes(),
+                    b"checkpoint-seven",
+                )
+                self.assertEqual(
+                    (snapshot / "world" / "journal" / "batch-8-9.bin").read_bytes(),
+                    b"published-player-image",
+                )
+                self.assertEqual(
+                    (snapshot / "world" / "journal" / "batch-10-10.tmp").read_bytes(),
+                    b"unpublished-tail",
+                )
+                self.assertEqual((snapshot / "server.log").read_text(), "checkpoint committed tick=7\n")
+                # Model a later checkpoint pruning/replacing the original evidence.
+                (journal / "batch-8-9.bin").unlink()
+                (server.world_dir / "native" / "state.redb").write_bytes(b"later-checkpoint")
+                return new
+
             with mock.patch.object(
                 lifecycle.runtime, "wait_port"
             ) as waited, mock.patch.object(lifecycle.subprocess, "Popen", return_value=new) as popen:
                 with mock.patch.object(lifecycle.runtime, "stop_process") as stopped:
+                    popen.side_effect = start_after_snapshot
                     receipt = server.kill9_restart()
             stopped.assert_not_called()
             self.assertEqual(calls, ["kill", "wait"])
             popen.assert_called_once()
             waited.assert_called_once()
+            snapshot = Path(receipt["crash_snapshot_dir"])
+            self.assertEqual((snapshot / "world" / "journal" / "batch-8-9.bin").read_bytes(),
+                             b"published-player-image")
+            proof = json.loads((snapshot / "proof.json").read_text())
+            self.assertEqual(proof, receipt)
             self.assertEqual(
                 receipt,
                 {
                     "old_pid": 11,
                     "new_pid": 13,
                     "old_exit": -9,
-                    "published_prefix_before_kill": 7,
+                    "published_prefix_before_kill": 9,
+                    "crash_snapshot_dir": str(snapshot),
+                    "log_offset_after_kill": len(b"checkpoint committed tick=7\n"),
+                    "mutation_tick_bounds": None,
                     "same_world_dir": str(server.world_dir),
                     "same_config": str(server.config_path),
                     "same_binary": str(server.binary),
                 },
             )
+            server._close_handles()
+
+    def test_kill9_snapshot_failure_refuses_successor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = _harness(tmp)
+            server.run_dir.mkdir(parents=True)
+            server.log_path.write_text("")
+            server.world_dir.mkdir()
+            server._process = SimpleNamespace(
+                pid=11, poll=lambda: None, kill=lambda: None, wait=lambda timeout: -9,
+            )
+            with mock.patch.object(lifecycle.shutil, "copytree", side_effect=OSError("disk full")), \
+                    mock.patch.object(lifecycle.runtime, "start_server") as started:
+                with self.assertRaisesRegex(OSError, "disk full"):
+                    server.kill9_restart()
+            started.assert_not_called()
+            self.assertIsNone(server._process)
+
+    def test_kill9_records_mutation_tick_bounds(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = _harness(tmp)
+            server.run_dir.mkdir(parents=True)
+            server.world_dir.mkdir()
+            server.log_path.write_text("")
+            server._argv = ["krasnokamen"]
+            server._process = SimpleNamespace(
+                pid=11, poll=lambda: None, kill=lambda: None, wait=lambda timeout: -9,
+            )
+            with mock.patch.object(lifecycle.runtime, "start_server",
+                                   return_value=SimpleNamespace(pid=13)), \
+                    mock.patch.object(lifecycle.runtime, "wait_port"):
+                receipt = server.kill9_restart(mutation_tick_bounds=(1599, 1642))
+            self.assertEqual(receipt["mutation_tick_bounds"], [1599, 1642])
+            self.assertEqual(json.loads(
+                (Path(receipt["crash_snapshot_dir"]) / "proof.json").read_text(),
+            )["mutation_tick_bounds"], [1599, 1642])
             server._close_handles()
 
     def test_kill9_restart_fails_closed_without_minus9(self) -> None:
@@ -530,6 +601,40 @@ class PortLeaseTests(unittest.TestCase):
                 proc.wait(timeout=10)
         self.assertEqual(len(set(ports)), 2,
                          f"cross-process leases collided despite different env: {ports}")
+
+
+class WalProbeBoundsTests(unittest.TestCase):
+    def test_grant_bounds_bracket_command_and_received_inventory(self) -> None:
+        from .backends.protocol_matrix import capability_probe
+
+        server = mock.Mock()
+        actor = mock.Mock(name="actor")
+        actor.name = "Proto0"
+        actor.snapshot.return_value = {
+            "inventory": [{"item_id": "minecraft:stone", "count": 16}],
+        }
+        actor.wait_until.side_effect = lambda predicate, **kwargs: self.assertTrue(predicate())
+        server.dashboard_stats.side_effect = [
+            {"simulation_tick": 1640}, {"simulation_tick": 1642},
+        ]
+        server.kill9_restart.return_value = {"mutation_tick_bounds": [1640, 1642]}
+        events = mock.Mock()
+        events.attach_mock(server, "server")
+        events.attach_mock(actor, "actor")
+        report = {}
+        capability_probe("server_kill9_wal_replay", server, [actor], report)
+        calls = events.mock_calls
+        checkpoint = calls.index(mock.call.server.save_all())
+        before = calls.index(mock.call.server.dashboard_stats())
+        give = calls.index(mock.call.server.command("give Proto0 stone 16"))
+        after = calls.index(mock.call.server.dashboard_stats(), before + 1)
+        kill = calls.index(mock.call.server.kill9_restart(mutation_tick_bounds=(1640, 1642)))
+        self.assertLess(checkpoint, before)
+        self.assertLess(before, give)
+        self.assertLess(give, after)
+        self.assertLess(after, kill)
+        self.assertTrue(any(call[0] == "actor.wait_until" for call in calls[give:after]))
+        self.assertEqual(report["kill9"]["mutation_tick_bounds"], [1640, 1642])
 
 
 if __name__ == "__main__":

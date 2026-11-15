@@ -28,6 +28,7 @@ import json
 import os
 import re
 import socket
+import shutil
 import subprocess
 import urllib.request
 import uuid
@@ -475,13 +476,25 @@ seed = {self.seed}
     def __exit__(self, *exc: Any) -> None:
         self.close()
 
-    def kill9_restart(self, timeout: float | None = None) -> dict[str, Any]:
+    def kill9_restart(
+        self, timeout: float | None = None, *,
+        mutation_tick_bounds: tuple[int, int] | None = None,
+    ) -> dict[str, Any]:
         """Direct SIGKILL restart on the same world/config/binary (WAL proof).
 
         ``proc.kill()`` + bounded ``proc.wait`` must report -9: a graceful
         SIGTERM checkpoint would not prove crash recovery. The new server
-        must reach the port fence. Returns pid + sameness evidence.
+        must reach the port fence. Before reopening, preserve the stopped world
+        and log: a later checkpoint may prune the only item-bearing WAL evidence.
+        Optional mutation bounds are inclusive dashboard ticks observed before
+        the command and after its received ACK, not a claim of WAL publication.
+        ``published_prefix_before_kill`` is only a filename/checkpoint high-water
+        mark sampled after exit; it validates neither continuity nor payloads.
         """
+        if mutation_tick_bounds is not None:
+            lo, hi = mutation_tick_bounds
+            if lo < 0 or hi < lo:
+                raise ValueError(f"invalid mutation tick bounds: {mutation_tick_bounds!r}")
         proc = self._process
         if proc is None or proc.poll() is not None:
             raise RuntimeError("server not running")
@@ -501,6 +514,25 @@ seed = {self.seed}
                                  self.log_path.read_text(errors="replace"))
         published_tick = max([published_tick, *map(int, checkpoints)])
         self._close_handles()
+        snapshot = self.run_dir / "crashes" / uuid.uuid4().hex
+        snapshot.mkdir(parents=True)
+        # The killed process has released its world lease. Copy before starting
+        # any successor; never copy a live redb database or hard-link mutable files.
+        shutil.copytree(self.world_dir, snapshot / "world")
+        shutil.copy2(self.log_path, snapshot / "server.log")
+        proof = {
+            "old_pid": old_pid,
+            "old_exit": killed,
+            "published_prefix_before_kill": published_tick,
+            "crash_snapshot_dir": str(snapshot),
+            "log_offset_after_kill": self.log_path.stat().st_size,
+            "mutation_tick_bounds": list(mutation_tick_bounds) if mutation_tick_bounds is not None else None,
+            "same_world_dir": str(self.world_dir),
+            "same_config": str(self.config_path),
+            "same_binary": str(self.binary),
+        }
+        proof_path = snapshot / "proof.json"
+        proof_path.write_text(json.dumps(proof, indent=2) + "\n")
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log_handle = self.log_path.open("ab")
         try:
@@ -518,15 +550,9 @@ seed = {self.seed}
             self._process = None
             raise
         assert self._process is not None
-        return {
-            "old_pid": old_pid,
-            "new_pid": self._process.pid,
-            "old_exit": killed,
-            "published_prefix_before_kill": published_tick,
-            "same_world_dir": str(self.world_dir),
-            "same_config": str(self.config_path),
-            "same_binary": str(self.binary),
-        }
+        proof["new_pid"] = self._process.pid
+        proof_path.write_text(json.dumps(proof, indent=2) + "\n")
+        return proof
 
     # -- backup / restore -----------------------------------------------
     def hot_backup(self, timeout: float | None = None) -> Path:
