@@ -1151,3 +1151,51 @@ class AssertEntitiesTests(unittest.TestCase):
                      "deep_water", "mob_doors", "after_hours_job", "breeding"):
             scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness" / f"village_{name}_scene.json").read_text())
             scene_shot.validate_steps(scene["steps"], "native")
+
+
+class VillagerClaimGateTests(unittest.TestCase):
+    def test_sleeping_observer_requires_received_pose(self):
+        self.assertTrue(scene_shot.received_sleeping({"6": {"kind": "pose", "value": 2}}))
+        self.assertFalse(scene_shot.received_sleeping({"6": {"kind": "pose", "value": 0}}))
+        for metadata in ({}, {"6": {"kind": "int", "value": 2}}, {"6": {"kind": "pose", "value": True}}):
+            with self.subTest(metadata=metadata), self.assertRaises(RuntimeError):
+                scene_shot.received_sleeping(metadata)
+
+    def test_player_sleeping_asserts_received_metadata_not_predicted_pose(self):
+        class Probe:
+            def __init__(self, pose):
+                self.pose = pose
+
+            def observe(self):
+                return {"player": {"pose": "standing", "received_metadata": {
+                    "6": {"kind": "pose", "value": self.pose}}}}
+
+            def check(self, name, condition):
+                if not condition:
+                    raise AssertionError(name)
+
+        step = {"assert_player_sleeping": {"name": "not_asleep", "sleeping": False}}
+        with tempfile.TemporaryDirectory() as tmp:
+            scene_shot.execute(Probe(0), Path(tmp), [step])
+            with self.assertRaisesRegex(AssertionError, "not_asleep"):
+                scene_shot.execute(Probe(2), Path(tmp), [step])
+        for bad in ({"name": "x", "sleeping": 0}, {"name": "x"}):
+            with self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"assert_player_sleeping": bad}], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([step], "java")
+
+    def test_entity_sleeping_filter_uses_received_pose(self):
+        awake = {**AssertEntitiesTests.villager(1, 70, 1),
+                 "received_metadata": {"6": {"kind": "pose", "value": 0}}}
+        asleep = {**awake, "received_metadata": {"6": {"kind": "pose", "value": 2}}}
+        spec = {"entity_type": "minecraft:villager"}
+        self.assertEqual(scene_shot.matching_entities([awake, asleep], {**spec, "sleeping": True}), [asleep])
+        self.assertEqual(scene_shot.matching_entities([awake, asleep], {**spec, "sleeping": False}), [awake])
+
+    def test_registered_claim_gates_have_native_valid_fixtures(self):
+        for name in ("moved-workstation", "occupied-bed", "open-air-home"):
+            entry = scenarios.SCENARIOS["native-village-" + name]
+            self.assertEqual(entry.evidence, "graphical")
+            path = scene_shot.runtime.REPO_ROOT / "tools/harness" / ("village_" + name.replace("-", "_") + "_scene.json")
+            scene_shot.validate_steps(json.loads(path.read_text())["steps"], "native")

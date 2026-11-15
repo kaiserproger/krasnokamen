@@ -1,0 +1,138 @@
+{
+  "seed": 100,
+  "server_view_distance": 6,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        30
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 3000"
+    },
+    {
+      "cmd": "fill 976 198 976 1040 199 1040 minecraft:stone"
+    },
+    {
+      "cmd": "fill 976 200 976 1040 206 1040 minecraft:air"
+    },
+    {
+      "cmd": "fill 1000 199 1000 1004 203 1004 minecraft:glass"
+    },
+    {
+      "cmd": "fill 1001 200 1001 1003 202 1003 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1004 200 1002 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1004 201 1002 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1001 200 1001 minecraft:composter"
+    },
+    {
+      "cmd": "summon minecraft:villager 1002.5 200 1002.5"
+    },
+    {
+      "tp": [
+        1006.5,
+        200,
+        1002.5,
+        0,
+        30
+      ]
+    },
+    {
+      "cmd": "settlement create movedqa 32"
+    },
+    {
+      "cmd": "settlement building certify farmer 1000 199 1000 1004 203 1004"
+    },
+    {
+      "wait_chat": "Certified farmer #"
+    },
+    {
+      "wait_ticks": 800
+    },
+    {
+      "assert_entities": {
+        "name": "original_station_farmer",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "profession": "farmer"
+      }
+    },
+    {
+      "shot": "station-before"
+    },
+    {
+      "cmd": "setblock 1001 200 1001 minecraft:air"
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "assert_entities": {
+        "name": "broken_station_jobless",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "profession": "none"
+      }
+    },
+    {
+      "cmd": "setblock 1001 200 1003 minecraft:composter"
+    },
+    {
+      "wait_ticks": 1000
+    },
+    {
+      "assert_entities": {
+        "name": "moved_station_farmer",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "profession": "farmer"
+      }
+    },
+    {
+      "shot": "station-after"
+    }
+  ]
+}

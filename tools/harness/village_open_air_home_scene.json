@@ -1,0 +1,237 @@
+{
+  "seed": 100,
+  "server_view_distance": 6,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        30
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "fill 976 198 976 1040 199 1040 minecraft:stone"
+    },
+    {
+      "cmd": "fill 976 200 976 1040 206 1040 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1001 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "cmd": "summon minecraft:villager 1005.5 200 1003.5 {Tags:[\"resident\"]}"
+    },
+    {
+      "tp": [
+        1006.5,
+        200,
+        1002.5,
+        0,
+        30
+      ]
+    },
+    {
+      "cmd": "settlement create homesqa 32"
+    },
+    {
+      "cmd": "scoreboard objectives add vg dummy"
+    },
+    {
+      "wait_ticks": 300
+    },
+    {
+      "assert_entities": {
+        "name": "one_bound_resident",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1
+      }
+    },
+    {
+      "cmd": "execute store success score bound_home vg run data get entity @e[type=minecraft:villager,tag=resident,limit=1] Brain.memories.\"minecraft:home\""
+    },
+    {
+      "cmd": "execute if score bound_home vg matches 0 run say vg_resident_no_home"
+    },
+    {
+      "cmd": "say resident_leaves_outdoor_bed_fence"
+    },
+    {
+      "wait_chat": "resident_leaves_outdoor_bed_fence"
+    },
+    {
+      "assert_chat": {
+        "name": "resident_leaves_outdoor_bed",
+        "contains": [
+          "vg_resident_no_home"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "summon minecraft:villager 1001.5 200 1003.5 {Tags:[\"unbound\"]}"
+    },
+    {
+      "wait_ticks": 1000
+    },
+    {
+      "assert_entities": {
+        "name": "unbound_uses_outdoor_bed",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "sleeping": true,
+        "box": [
+          1001,
+          199,
+          1000,
+          1003,
+          201,
+          1002
+        ]
+      }
+    },
+    {
+      "cmd": "data get entity @e[type=minecraft:villager,tag=unbound,limit=1] Brain.memories.\"minecraft:home\""
+    },
+    {
+      "cmd": "execute store success score unbound_home vg run data get entity @e[type=minecraft:villager,tag=unbound,limit=1] Brain.memories.\"minecraft:home\""
+    },
+    {
+      "cmd": "execute if score unbound_home vg matches 1 run say vg_unbound_has_home"
+    },
+    {
+      "cmd": "say unbound_claims_used_bed_fence"
+    },
+    {
+      "wait_chat": "unbound_claims_used_bed_fence"
+    },
+    {
+      "assert_chat": {
+        "name": "unbound_claims_used_bed",
+        "contains": [
+          "vg_unbound_has_home"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "fill 1010 199 1000 1014 203 1004 minecraft:glass"
+    },
+    {
+      "cmd": "fill 1011 200 1001 1013 202 1003 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1014 200 1002 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1014 201 1002 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1011 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 1012 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "cmd": "settlement building certify house 1010 199 1000 1014 203 1004"
+    },
+    {
+      "wait_chat": "Certified house #"
+    },
+    {
+      "wait_ticks": 1000
+    },
+    {
+      "assert_entities": {
+        "name": "resident_uses_roofed_home",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "sleeping": true,
+        "box": [
+          1011,
+          199,
+          1000,
+          1013,
+          201,
+          1002
+        ]
+      }
+    },
+    {
+      "cmd": "data get entity @e[type=minecraft:villager,tag=resident,limit=1] Brain.memories.\"minecraft:home\""
+    },
+    {
+      "cmd": "execute store success score roofed_home vg run data get entity @e[type=minecraft:villager,tag=resident,limit=1] Brain.memories.\"minecraft:home\""
+    },
+    {
+      "cmd": "execute if score roofed_home vg matches 1 run say vg_resident_has_roofed_home"
+    },
+    {
+      "cmd": "say resident_claims_used_bed_fence"
+    },
+    {
+      "wait_chat": "resident_claims_used_bed_fence"
+    },
+    {
+      "assert_chat": {
+        "name": "resident_claims_used_bed",
+        "contains": [
+          "vg_resident_has_roofed_home"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "tp": [
+        1007.5,
+        204,
+        1009.5,
+        180,
+        30
+      ]
+    },
+    {
+      "shot": "claimed-homes-used"
+    }
+  ]
+}
