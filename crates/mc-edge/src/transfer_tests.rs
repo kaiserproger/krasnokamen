@@ -66,13 +66,9 @@ fn register(
     let (world_tx, _) = world_queue(64, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(
-            id,
-            ConnectionHandles {
-                reliable_tx,
-                world_tx,
-            },
-        )
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+            server.hub.published_knockback_count(id)
+        })
         .unwrap();
     server.connections.set_name(id, name.into());
     server

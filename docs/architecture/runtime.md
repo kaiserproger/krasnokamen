@@ -58,6 +58,9 @@ Every published
 snapshot carries cumulative per-player knockback-tick counts and the last such
 tick: after broadcast `Lagged`, the next retained output identifies exactly
 which recipients lost impulses, even if that retained tick also knocks them.
+Queue registration seals the latest native count, not the first output the
+pump happens to process. Older outputs cannot lower that baseline or replay
+their impulses into the new client; later skipped impulses still close it.
 Those connections close with `skipped-explosion-knockback`; unaffected viewers
 reconcile snapshots. These counters are transient edge observations, not
 gameplay authority or persisted state. Socket completion and client rendering

@@ -16,10 +16,8 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
     registry
         .register(
             ConnectionId(1),
-            ConnectionHandles {
-                reliable_tx: reliable_tx.clone(),
-                world_tx: world_tx.clone(),
-            },
+            ConnectionHandles::new(reliable_tx.clone(), world_tx.clone()),
+            || 0,
         )
         .unwrap();
     let (reliable_tx2, _reliable_rx2) = mpsc::channel(2);
@@ -30,10 +28,8 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
     registry
         .register(
             ConnectionId(2),
-            ConnectionHandles {
-                reliable_tx: reliable_tx2,
-                world_tx: world_tx2,
-            },
+            ConnectionHandles::new(reliable_tx2, world_tx2),
+            || 0,
         )
         .unwrap();
     let snapshot = registry.load_queues().unwrap();
@@ -66,13 +62,7 @@ fn registry_insert_remove_roster() {
     let (reliable_tx, _) = mpsc::channel(2);
     let (world_tx, _) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
-        .register(
-            id,
-            ConnectionHandles {
-                reliable_tx,
-                world_tx,
-            },
-        )
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
         .unwrap();
     assert_eq!(registry.len(), 1);
     registry.set_name(id, "Alex".to_owned());
@@ -257,11 +247,11 @@ fn pending_reliable_keeps_burst_order() {
     });
     let (reliable_tx, _reliable_rx) = mpsc::channel(1);
     let (world_tx, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
-    let handles = ConnectionHandles {
-        reliable_tx,
-        world_tx,
-    };
-    assert_eq!(registry.register(id, handles.clone()).unwrap(), expected);
+    let handles = ConnectionHandles::new(reliable_tx, world_tx);
+    assert_eq!(
+        registry.register(id, handles.clone(), || 0).unwrap(),
+        expected
+    );
     // Once registered the pump routes instead of stashing.
     let mut routed = vec![expected[1].clone()];
     assert!(registry.handles_or_stash(id, &mut routed).is_some());
@@ -270,7 +260,22 @@ fn pending_reliable_keeps_burst_order() {
     registry.remove(id);
     assert!(registry.handles_or_stash(id, &mut routed).is_none());
     registry.remove(id);
-    assert!(registry.register(id, handles).is_err());
+    assert!(registry.register(id, handles, || 0).is_err());
+}
+
+#[test]
+fn queue_registration_seals_the_native_count_inside_its_critical_section() {
+    let registry = ConnectionRegistry::new();
+    let id = registry.joining_id();
+    let (reliable_tx, _reliable_rx) = mpsc::channel(1);
+    let (world_tx, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    registry
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+            assert!(registry.inner.try_lock().is_none());
+            7
+        })
+        .unwrap();
+    assert_eq!(registry.get(id).unwrap().knockback_baseline, 7);
 }
 
 /// P1: the stashed Joined is the viewer entity source, so repeated

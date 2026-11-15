@@ -4,7 +4,6 @@
 use super::*;
 use crate::singleplayer_pause::{SingleplayerPause, online_players};
 use crate::tick::phase_laps::Laps;
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Tick loop: 20 TPS, event-driven wake (no sleeps beyond the tick timer).
@@ -20,6 +19,7 @@ pub(super) struct TickChannels {
     /// Reliable FIFO handoff; only the tick owns the sender.
     pub(super) outbox: std::sync::mpsc::Sender<TimedOutboxBatch>,
     pub(super) tick_broadcast: broadcast::Sender<TickOutput>,
+    pub(super) knockback_publication: KnockbackPublication,
     pub(super) timing_broadcast: broadcast::Sender<(u64, TickTimes)>,
     #[cfg(test)]
     pub(super) pause_state: tokio::sync::watch::Sender<Option<u64>>,
@@ -65,7 +65,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
     let mut empty_ticks = 0u64;
     let mut paused = false;
     let mut singleplayer_pause = SingleplayerPause::default();
-    let mut knockback_ticks = Arc::new(BTreeMap::<ConnectionId, (u64, u64)>::new());
+    let mut knockback_ticks = Arc::clone(&channels.knockback_publication.read());
     'ticks: loop {
         let wall_start = std::time::Instant::now();
         let wall_start_unix_ns = std::time::SystemTime::now()
@@ -426,7 +426,18 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             source.finish_publish(snapshot, supplement, revision);
         }
         let mut tick_times = output.times.clone();
-        let _ = channels.tick_broadcast.send(output);
+        {
+            // Registration reads its count while holding the edge registry
+            // lock. Swap the canonical Arc and send under this write guard:
+            // registration therefore falls wholly before or after publication.
+            // This synchronous broadcast never enters the edge registry, so
+            // there is no reverse lock order and no second count authority.
+            let mut published = channels.knockback_publication.write();
+            if !Arc::ptr_eq(&published, &output.snapshot.player_knockback_ticks) {
+                *published = Arc::clone(&output.snapshot.player_knockback_ticks);
+            }
+            let _ = channels.tick_broadcast.send(output);
+        }
         // Disconnects sealed before this tick: the edge has had a full tick
         // to drain the `Disconnect`, so remove the player as a Leave would
         // (via synthetic input next tick, so despawns flow through `changes`).

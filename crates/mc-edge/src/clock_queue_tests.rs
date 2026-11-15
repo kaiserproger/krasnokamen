@@ -29,10 +29,8 @@ async fn queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer() {
         .connections
         .register(
             id,
-            ConnectionHandles {
-                reliable_tx,
-                world_tx: world_tx.clone(),
-            },
+            ConnectionHandles::new(reliable_tx, world_tx.clone()),
+            || server.hub.published_knockback_count(id),
         )
         .unwrap();
     let pool = rayon::ThreadPoolBuilder::new()
@@ -171,13 +169,9 @@ async fn byte_full_world_queue_routes_no_world_frame_until_drained() {
         .unwrap();
     server
         .connections
-        .register(
-            id,
-            ConnectionHandles {
-                reliable_tx,
-                world_tx,
-            },
-        )
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+            server.hub.published_knockback_count(id)
+        })
         .unwrap();
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
@@ -230,10 +224,8 @@ fn setup_world_fence_follows_queued_geometry_and_a_later_tick() {
         .connections
         .register(
             id,
-            ConnectionHandles {
-                reliable_tx: reliable_tx.clone(),
-                world_tx: world_tx.clone(),
-            },
+            ConnectionHandles::new(reliable_tx.clone(), world_tx.clone()),
+            || server.hub.published_knockback_count(id),
         )
         .unwrap();
     let mut viewer = crate::plan::ViewerState::new(id, EntityId(1), [8.0, 64.0, 8.0]);
@@ -400,13 +392,9 @@ async fn routing_snapshot_drops_overflow_victim_before_any_later_packets() {
         .unwrap();
     server
         .connections
-        .register(
-            id,
-            ConnectionHandles {
-                reliable_tx,
-                world_tx,
-            },
-        )
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+            server.hub.published_knockback_count(id)
+        })
         .unwrap();
     let (mut connections, _) = server.connections.routing_snapshot();
     let mut viewers = HashMap::from([(

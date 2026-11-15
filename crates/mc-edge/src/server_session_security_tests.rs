@@ -125,10 +125,8 @@ async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
     registry
         .register(
             self_id,
-            ConnectionHandles {
-                reliable_tx: self_tx,
-                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
-            },
+            ConnectionHandles::new(self_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            || 0,
         )
         .unwrap();
     let other = registry.joining_id();
@@ -136,10 +134,8 @@ async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
     registry
         .register(
             other,
-            ConnectionHandles {
-                reliable_tx: other_tx,
-                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
-            },
+            ConnectionHandles::new(other_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            || 0,
         )
         .unwrap();
     let (replies, reply_rx) = mpsc::channel(1);
@@ -184,10 +180,8 @@ fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
     registry
         .register(
             a,
-            ConnectionHandles {
-                reliable_tx: a_tx,
-                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
-            },
+            ConnectionHandles::new(a_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            || 0,
         )
         .unwrap();
     let b = registry.joining_id();
@@ -196,10 +190,8 @@ fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
     registry
         .register(
             b,
-            ConnectionHandles {
-                reliable_tx: b_tx,
-                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
-            },
+            ConnectionHandles::new(b_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            || 0,
         )
         .unwrap();
     let (pa, pb) = (uuid::Uuid::from_u128(42), uuid::Uuid::from_u128(43));
@@ -448,13 +440,9 @@ async fn edge_kick_flushes_terminal_packet_after_an_earlier_reliable_batch() {
         let (world, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(
-                id,
-                ConnectionHandles {
-                    reliable_tx: reliable.clone(),
-                    world_tx: world,
-                },
-            )
+            .register(id, ConnectionHandles::new(reliable.clone(), world), || {
+                server.hub.published_knockback_count(id)
+            })
             .unwrap();
         let (_replies, keepalive) = mpsc::channel(1);
         let task = tokio::spawn(play_writer(

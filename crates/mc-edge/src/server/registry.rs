@@ -48,6 +48,18 @@ pub struct ConnectionHandles {
     /// World queue sender (pre-framed chunk/entity packets), bounded in
     /// frames and bytes.
     pub world_tx: WorldSender,
+    /// Sealed under the registry lock from the latest native publication.
+    pub(super) knockback_baseline: u64,
+}
+
+impl ConnectionHandles {
+    pub fn new(reliable_tx: mpsc::Sender<bytes::Bytes>, world_tx: WorldSender) -> Self {
+        Self {
+            reliable_tx,
+            world_tx,
+            knockback_baseline: 0,
+        }
+    }
 }
 
 impl ConnectionRegistry {
@@ -99,16 +111,20 @@ impl ConnectionRegistry {
     /// [`handles_or_stash`][Self::handles_or_stash]: every drained change is
     /// either returned here for replay or routed by the pump through the
     /// registered handles, never stranded in between.
+    /// The count supplier runs inside the same critical section, so the pump
+    /// cannot observe handles without their immutable publication baseline.
     pub fn register(
         &self,
         id: ConnectionId,
-        handles: ConnectionHandles,
+        mut handles: ConnectionHandles,
+        published_knockback_count: impl FnOnce() -> u64,
     ) -> anyhow::Result<Vec<mc_core::boundary::PlayerChange>> {
         let mut inner = self.inner.lock();
         anyhow::ensure!(
             inner.joining.remove(&id),
             "connection admission already closed"
         );
+        handles.knockback_baseline = published_knockback_count();
         inner.handles.insert(id, handles);
         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
     }

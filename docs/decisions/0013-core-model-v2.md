@@ -106,6 +106,13 @@ independently of the visual spatial index. Visual-only explosions are
 best-effort and may drop; bursts cannot fill the reliable FIFO with visuals.
 No later snapshot restores a lost impulse. Each output therefore carries
 transient cumulative per-player knockback-tick counts plus the last such tick.
+Queue registration seals the latest native count under the registry lock.
+The publisher aliases the output's canonical map Arc under a write guard held
+through the synchronous broadcast; the scalar getter takes its read guard,
+so registration is ordered wholly before or after a publication without
+copying the map or introducing another count writer. The pump starts from that
+sealed count, never lowers it while draining older outputs, and does not replay
+pre-registration impulse publications into a newly registered world view.
 Comparing retained outputs detects lost impulses across broadcast `Lagged`,
 including a skipped impulse followed by another in the retained tick. Only
 affected connections close (`skipped-explosion-knockback`); this observation

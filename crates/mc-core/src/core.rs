@@ -355,6 +355,9 @@ pub struct Core {
     inner: Arc<CoreInner>,
 }
 
+type KnockbackPublication =
+    Arc<parking_lot::RwLock<Arc<std::collections::BTreeMap<ConnectionId, (u64, u64)>>>>;
+
 #[derive(Debug)]
 struct CoreInner {
     input_tx: Sender<PlayerInput>,
@@ -374,6 +377,8 @@ struct CoreInner {
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
     tick_tx: broadcast::WeakSender<TickOutput>,
+    /// Alias of the canonical epoch map in the latest native publication.
+    knockback_publication: KnockbackPublication,
     /// Read-only timings published after all active tick work, never blocking.
     timing_tx: broadcast::WeakSender<(u64, TickTimes)>,
     /// Test-only acknowledgement from the tick owner's pause branch.
@@ -903,6 +908,7 @@ impl Core {
         } else {
             None
         };
+        let knockback_publication = Arc::new(parking_lot::RwLock::new(Arc::default()));
         #[cfg(test)]
         let (pause_state_tx, pause_state_rx) = tokio::sync::watch::channel(None);
         let channels = TickChannels {
@@ -913,6 +919,7 @@ impl Core {
             ticket_rx,
             moderation_selector_rx,
             tick_broadcast: tick_tx.clone(),
+            knockback_publication: Arc::clone(&knockback_publication),
             timing_broadcast: timing_tx.clone(),
             #[cfg(test)]
             pause_state: pause_state_tx,
@@ -953,6 +960,7 @@ impl Core {
                 backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
                 tick_tx: tick_tx.downgrade(),
+                knockback_publication,
                 timing_tx: timing_tx.downgrade(),
                 #[cfg(test)]
                 pause_state: pause_state_rx,
@@ -1202,6 +1210,17 @@ impl Core {
             },
             |source| source.section(dimension, section_x, section_z),
         )
+    }
+
+    /// Cumulative explosion-knockback count in the latest native publication.
+    /// Queue registration reads this under its registry lock to fence out
+    /// impulses published before that connection could receive world packets.
+    pub fn published_knockback_count(&self, connection: ConnectionId) -> u64 {
+        self.inner
+            .knockback_publication
+            .read()
+            .get(&connection)
+            .map_or(0, |&(count, _)| count)
     }
 
     /// The terrain publication's resident snapshot, for regression probes.
