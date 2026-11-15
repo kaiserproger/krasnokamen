@@ -6122,3 +6122,16 @@ regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_fixtu
 fix_commit = "fad1cef1e"
 repro_check = "Added shelf clock at 997,160,1005 and a separate elevated held-clock camera; noon/midnight snapshots show distinct clock faces. Only right shelf clock removed: receipts/HarnessFix2/red-context-right-clock.log fails the fixture unit. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Native-dynamic-context passes three times: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. First run's dropped/held day/night frames reviewed; no item-frame assertion claimed."
 failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE"
+title = "Worn-head hat ROI clips a skull beside the avatar's still-bare head"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Visual review of rejected client 9f641fdf: 20261115T013251-native-player-head-lumcmo2a passes numerically although its skull is x486-597/y369-484, left of the head"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi"]
+fix_commit = "98900fb5c"
+repro_check = "The old x580-700/y280-400 box clipped 743 magenta pixels from the adjacent skull; actual head remained bare at x606-673/y305-375. The stricter x600-680/y280-375 box rejects it. Only ROI reverted: receipts/HarnessFix2/red-adjacent-head-roi.log fails the counterexample. Restore: green-adjacent-scene-units.log (73 pass). Re-evaluating the retained real candidate with the strict checker fails worn_head_renders: red-rejected-9f-realframe.log. The rejected graphical run's original passed status is invalid evidence, not candidate acceptance."
+failing_first = "reported"
