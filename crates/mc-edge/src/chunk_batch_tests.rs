@@ -251,7 +251,9 @@ fn chunk_batch_cold_cache_actual_bytes_admit_only_one_oversize_chunk() {
     let mut viewer = ViewerState::new(ConnectionId(1), EntityId(1), [0.5, 64.0, 0.5]);
     publish(&prelude, [&mut viewer].into_iter(), 3);
     viewer.chunk_batches.lock().acknowledge(64.0);
-    viewer.world_bytes = 1;
+    // More than the seven marker bytes, but less than one encoded chunk:
+    // placeholders must not turn this into sixteen oversize chunks.
+    viewer.world_bytes = 8;
     let packets = publish(&world(), [&mut viewer].into_iter(), 3);
     let batches: Vec<_> = packets
         .iter()
