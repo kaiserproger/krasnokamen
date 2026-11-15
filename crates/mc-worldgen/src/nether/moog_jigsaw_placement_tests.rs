@@ -105,6 +105,9 @@ fn structure(fixture: &Fixture) -> Value {
 }
 
 fn write_fixture(root: &Path, fixture: &Fixture) {
+    for registry in ["structure", "structure_set"] {
+        std::fs::create_dir_all(root.join("data/minecraft/worldgen").join(registry)).unwrap();
+    }
     write_json(
         root,
         "data/minecraft/worldgen/template_pool/empty.json",
@@ -325,15 +328,20 @@ fn assert_placement_and_reload(root: &Path, fixture: &Fixture, marker: &str) {
                     }
                 }
             }
-            let saved = mc_world::structure_starts::read(&chunk.extras, chunk.pos, false).unwrap();
-            assert!(
-                saved
-                    .iter()
-                    .any(|s| s.structure == plan.assembly().structure)
-            );
             chunks.push(chunk);
         }
     }
+    // Native starts belong to the raw placement chunk, not every chunk a
+    // rotated piece reaches.
+    if !chunks.iter().any(|chunk| chunk.pos == start) {
+        chunks.push(generator.generate(start));
+    }
+    let start_chunk = chunks.iter().find(|chunk| chunk.pos == start).unwrap();
+    let saved = mc_world::structure_starts::read(&start_chunk.extras, start, false).unwrap();
+    assert_eq!(
+        saved.iter().find(|saved| saved.structure == site.structure),
+        Some(&site)
+    );
     assert!(
         marker_count > 0,
         "the attached source must actually write {marker}"
@@ -353,7 +361,8 @@ fn persist_and_reload(root: &Path, generator: &NetherGenerator, chunks: &[Chunk]
     let store = NativeStore::create_with_cache(&path, [9; 32], 1024 * 1024).unwrap();
     let dimensions = json!({
         "0": {"name":"minecraft:overworld", "min_y":-64,"height":384,"generator":"fixture","seed":1234,"revision":1},
-        "1": {"name":"minecraft:the_nether", "min_y":0,"height":256,"generator":"fixture","seed":1234,"revision":1}
+        "1": {"name":"minecraft:the_nether", "min_y":0,"height":256,"generator":"fixture","seed":1234,"revision":1},
+        "2": {"name":"minecraft:the_end", "min_y":0,"height":256,"generator":"fixture","seed":1234,"revision":1}
     });
     store
         .initialize_dimensions(&NativeDomainRecord {
@@ -391,8 +400,19 @@ fn persist_and_reload(root: &Path, generator: &NetherGenerator, chunks: &[Chunk]
                 }
             }
         }
+        // Native encoding supplies the same canonical root metadata as the
+        // shared chunk codec before retaining all generated opaque fields.
+        let mut expected_extras = vec![
+            (
+                "DataVersion".to_owned(),
+                Tag::Int(mc_world::anvil::chunk_nbt::TARGET_DATA_VERSION),
+            ),
+            ("LastUpdate".to_owned(), Tag::Long(0)),
+            ("InhabitedTime".to_owned(), Tag::Long(0)),
+        ];
+        expected_extras.extend_from_slice(&chunk.extras);
         assert_eq!(
-            restored.extras, chunk.extras,
+            restored.extras, expected_extras,
             "all start metadata must survive native close/reopen unchanged"
         );
         assert_eq!(
@@ -510,7 +530,7 @@ fn unsupported_nether_layout_rules_keep_exact_refusal_messages() {
         (
             "pools_that_ignore_boundaries",
             json!(["mvs:ignored"]),
-            "structure mvs:nether_well has invalid value for pools_that_ignore_boundaries: unsupported Moog rule: [\"mvs:ignored\"]",
+            "structure mvs:nether_well has invalid value for type: unsupported Moog field pools_that_ignore_boundaries",
         ),
     ] {
         let mut value_with_rule = structure(fixture);

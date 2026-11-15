@@ -46,6 +46,18 @@ template-authored air is retained. Library generation/native-reload coverage is
 not a claim that a modpack loads, generates or plays correctly, nor live footage
 or inventory acceptance for the ATM caption.
 
+Nether regression coverage includes fixed-seed placement and native close/reopen
+for the three selected MVS starts (`nether_well`, `crimson_enchanting_table`,
+`nether_devil`). Starts are persisted in their raw placement chunk; all chunks
+reached by the pieces are also compared after reopening, including block entities
+and opaque metadata with the native codec's canonical root defaults. Removing
+the Nether occupied-land override makes all three starts fail admission.
+The local-input tests `licensed_mvs_nether_templates_place_and_reload_from_native_store`
+and `selected_mvs_nether_sets_route_to_the_serving_nether_generator` are ignored
+by default: they require `MVS_NETHER_INPUT_ROOT` and the canonical content cache.
+They exercise real templates and the serving dimension router, without tracking
+licensed input bytes or establishing crash-custody or live-client acceptance.
+
 
 Missing template resources follow vanilla's `StructureTemplateManager.getOrCreate`:
 the closure caches a zero-sized empty template and logs its identifier once during

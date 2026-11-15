@@ -166,7 +166,7 @@ pub(crate) fn synthetic_source_with_template(
         id: structure_id.clone(),
         structure_type: identifier("minecraft:jigsaw"),
         moog_start_checks: None,
-        biomes: BiomeSet::Biomes(vec![identifier("minecraft:plains")]),
+        biomes: BiomeSet::Tag(identifier("test:all_biomes")),
         spawn_overrides: Vec::new(),
         step: StructureStep::SurfaceStructures,
         terrain_adaptation: TerrainAdaptation::BeardThin,
