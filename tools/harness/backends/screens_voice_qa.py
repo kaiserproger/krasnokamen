@@ -707,7 +707,9 @@ def voice_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dict[
                 SoundCapture(run.root, sink=f"{name.lower()}_out", description=f"{name.lower()}_out")))
         clients = {}
         for name in (a_name, b_name):
-            files = {"config/voicechat/voicechat-client.properties": svc_config(outs[name].sink, mics[name].source)}
+            # The pinned SVC version leaves its group key unbound by default.
+            files = {"config/voicechat/voicechat-client.properties": svc_config(outs[name].sink, mics[name].source),
+                     "options.txt": java_options(8, 70) + "\nkey_key.voice_chat_group:key.keyboard.g\n"}
             clients[name] = run.java(name, address, "svc", outs[name].sink, files)
             register(clients[name])
         a, b = clients[a_name], clients[b_name]

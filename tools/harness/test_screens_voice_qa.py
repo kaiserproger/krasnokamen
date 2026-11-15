@@ -91,6 +91,24 @@ class ScreensVoiceHelperTests(unittest.TestCase):
             self.assertIn("-PminecraftVersion=26.1.2", commands[1])
             self.assertNotIn("KRASNOKAMEN_JAVA_VERSION", os.environ)
 
+    def test_voice_fixture_binds_the_group_key_it_presses(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(qa, "Run") as run_type, \
+             mock.patch.object(qa, "Microphone"), \
+             mock.patch.object(qa, "SoundCapture"), \
+             mock.patch.object(qa, "write_tone"), \
+             mock.patch.object(qa.runtime, "reserve_port", return_value=24454):
+            run = run_type.return_value
+            run.__enter__.return_value = run
+            run.root = Path(directory)
+            run.server.return_value = ("127.0.0.1:25565", run.root / "server.log")
+            run.java.side_effect = RuntimeError("captured-client-config")
+            with self.assertRaisesRegex(RuntimeError, "captured-client-config"):
+                qa.voice_leg(mock.Mock(), Path("/unused/server"), 60, {}, {})
+            files = run.java.call_args.args[4]
+            self.assertIn("key_key.voice_chat_group:key.keyboard.g",
+                          files.get("options.txt", "").splitlines())
+
 
 if __name__ == "__main__":
     unittest.main()

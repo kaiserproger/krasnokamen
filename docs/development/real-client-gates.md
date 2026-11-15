@@ -130,6 +130,8 @@ artifact's baseline (26.1.2/Fabric, the owner's PrismLauncher case). An explicit
 conflicting Java selector is rejected, not silently replaced. The SVC jar must
 be provisioned at the harness's pinned artifact path (or `KRASNOKAMEN_SVC_JAR`);
 the publisher size and both hashes are checked before staging it.
+The voice fixture explicitly binds SVC's group action to `G` in each client's
+`options.txt`; the pinned mod leaves that action unbound by default.
 
 Java launches keep private game homes but reuse `GRADLE_USER_HOME`, defaulting
 to the existing sibling `loader-gradle-home` on the owner host. The 180-second
