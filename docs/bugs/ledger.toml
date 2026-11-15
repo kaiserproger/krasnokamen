@@ -6352,3 +6352,117 @@ repro = "source"
 regression = []
 failing_first = "reported"
 repro_check = "Not reproduced: the original run respawned at file18 (-178.70,94,121.70) and ended at (-183.70,90,136.50) facing minecraft:dirt at (-185,91,136); later instrumented runs respawned at file35 and reached the targets, so their pass does not close the file18 path. Per-approach diagnostics now retained (loader d6a94c22 MinecraftClientFacadeTest.approachRetainsCombatDiagnosticsForBothArrivalAndRefusal). No movement, deadline, teleport, kit or damage change."
+
+[[bug]]
+id = "LOADER-ZOMBIE-SHIELD-MIXIN"
+title = "Fabric 26.3 client never enters Play: ZombieShieldPoseMixin targets getArmPose, absent from the 26.3 zombie renderer"
+area = "client"
+severity = "blocker"
+status = "open"
+source = "Stage3 S3Loader on loader dfad752: critical mixin injection failure, wt/S3LoaderCore/.analysis/validation/20261114T232908-loader-fabric-screen-admission-j0xk_52i/client.log:207"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Fixed in Loader commits 635e415 (ZombieShieldPoseMixin now injects at extractRenderState(Zombie, ZombieRenderState, float) RETURN and sets the arm BLOCK pose; WindowMixin.onFocus reads isFocused()) and 4e214443 (generic MixinTargetTest over every configured mixin selector against the 26.1.2, 26.2 and 26.3 client jars); no ledger fix_commit kind for the Loader repository. Loader Java tests (no ledger ref kind): receipts/LoaderMixinFix/generic-26.1.2-final.xml, generic-26.2-final.xml, generic-26.3-final.xml green; old zombie selector restored fails naming ZombieShieldPoseMixin/getArmPose (receipts/LoaderMixinFix/generic-negative-committed.xml). Real clients: Fabric screen admission enters Play (receipts/LoaderMixinFix/20261114T234416-loader-fabric-screen-admission-uvnk421h), NeoForge settlements smoke enters Play (20261114T234858-loader-v2-settlements-smoke-m8581t1b); S3Loader confirmed the blocking husk shield pose visually on loader 635e415 (receipts/Stage3/S3Loader/REPORT.md). Not promoted."
+
+[[bug]]
+id = "EDGE-JOIN-KNOCKBACK-BASELINE"
+title = "A player hit by an explosion between core join and edge registration is disconnected for a skipped knockback"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3Arch (receipts/Stage3/fable-persistence.md F1, verified at crates/mc-edge/src/server/pump.rs:426-433 on c7786910e): first sight of a connection seeded the knockback counter with 0, so impulses published before registration counted as skipped (`skipped-explosion-knockback`)"
+repro = "source"
+regression = [
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::published_knockback_epochs_count_ticks_and_fence_delayed_queue_registration",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::first_processed_output_after_registration_still_closes_a_skipped_impulse",
+]
+fix_commit = "d7d631092caa1dc2f18bab25a70325ea914c8be8"
+failing_first = "reported"
+repro_check = "The knockback baseline is fenced at queue admission from the latest processed publication; 2fe160103 adds both publication/registration orders with explicit synchronization. Red with only the fence reverted: receipts/XEdgeEvents/s3/negative-registration-baseline.log, race-negative-publication-first.log, race-negative-registration-first.log; green: race-explosion.log (8 passed), race-registration.log (11 passed). S3FixBreaker: 4 protocol bots, 3 joining during 40 TNT blasts, 0 pre-join impulses and no doubling (receipts/S3FixBreaker/REPORT.md). Not promoted."
+
+[[bug]]
+id = "WINDOWS-CLIENT-BUILD-BROKEN"
+title = "The native client does not compile for Windows: loopback.rs reads a PROPVARIANT field that windows-core 0.58 does not have"
+area = "client"
+severity = "blocker"
+status = "open"
+source = "Stage3 pin-release --client --target x86_64-pc-windows-gnu on client 12e076e9: src/computer/loopback.rs:115 `variant.Anonymous.Anonymous` no field (receipts/Stage3/pin-client-win.log); S3WindowsVM reproduced it on the isolated expression for MSVC"
+repro = "source"
+regression = []
+fix_commit = "client:1ecc7e9060832d3d995ef20ea9e7aa017cff90e0"
+failing_first = "reported"
+repro_check = "Loopback PROPVARIANT is constructed through the raw API. Cross-target compile is not a test ref: cargo check --target x86_64-pc-windows-gnu --workspace --all-targets --locked passes (receipts/WinClientBuild/windows-check-final.log); Windows client release pin pins/c7f4d239982b-client-x86_64-pc-windows-gnu-incr built. Full MSVC build needs a native MSVC C toolchain (not available); runtime on Windows unverified (no Windows host). Not promoted."
+
+[[bug]]
+id = "WINDOWS-CLIENT-SETUP-SYMLINK"
+title = "`krasnokamen-client setup` always fails on Windows: content linking requires Unix symlinks"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 S3WindowsVM F2 (receipts/Stage3/S3WindowsVM/REPORT.md:77-85, static): link() was a #[cfg(unix)] symlink and returned Err(\"setup currently requires Unix symlinks\") elsewhere (src/content_paths.rs:119-123 at 12e076e9), so setup failed on its first directory"
+repro = "source"
+regression = [
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_installs_nested_content_and_paired_index_without_source_dependency",
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_refuses_conflicts_without_overwriting_either_cache",
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_refuses_recursive_destination_and_missing_sources",
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_does_not_follow_nested_source_or_destination_symlinks",
+  "client:krasnokamen-client:content_paths::tests::setup_uses_platform_installation_and_keeps_the_paired_index",
+  "client:krasnokamen-client:content_paths::tests::setup_validates_inputs_before_creating_destination",
+]
+fix_commit = "client:e7086ab0008856a63fd7e9dd988d6d5dc18b7671"
+failing_first = "reported"
+repro_check = "Non-Unix setup copies the content recursively and refuses conflicts without overwriting either cache. Green: receipts/WinClientBuild/setup-tests.log (6 passed); former-error negative control: setup-negative-control.log. Runtime on Windows unverified (no Windows host). Not promoted."
+
+[[bug]]
+id = "WINDOWS-CONSOLE-WINDOW"
+title = "The Windows client and launcher open a console window on desktop start"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 S3WindowsVM/WinConsole: both entrypoints were PE console-subsystem binaries (receipts/WinConsole/old-objdump.log)"
+repro = "source"
+regression = []
+fix_commit = "client:c7f4d239982bb4e9c8a2ec7f0e6cf3ae8c6e074c"
+failing_first = "reported"
+repro_check = "Both entrypoints use windows_subsystem = \"windows\" and AttachConsole(ATTACH_PARENT_PROCESS) before CLI output. PE subsystem 2 on debug client, debug launcher and release client pin (receipts/WinConsole/debug-client-objdump.log, debug-launcher-objdump.log, release-client-objdump.log); packaging/check-windows-subsystem.py accepts them and rejects the old console artifact (positive-pe-regression.log, negative-control.log). Launcher integration tests launcher/tests/cli_console.rs (help_survives_redirected_stdout, argument_errors_survive_redirected_stderr) are not ledger refs: client refs run --lib and the launcher is bin-only (LEDGER-LAUNCHER-NO-LIB). Explorer start, terminal attachment and redirected output on Windows unverified (no Windows host). Not promoted."
+
+[[bug]]
+id = "LOADER-OBSERVATION-EQUIPMENT"
+title = "The Java agent's received-state observation omits hands, item models, blocking and vehicle, stopping the Java battle gate"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 S3Scenes Java battle: java-agent MinecraftClientObservation.java:292-366 lacked main_hand/off_hand/vehicle_id/blocking (receipts/Stage3/S3Scenes/REPORT.md)"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Fixed in Loader commit 7343bd38 (no ledger fix_commit kind for the Loader repository). Loader Java test MinecraftClientObservationTest (no ledger ref kind): red receipts/LoaderObs/equipment-red.log, green equipment-green.log. Real clients receipts/LoaderObs/fabric-46-cached/java-battle.json and neoforge-46-toolchains/java-battle.json pass the original failing observation and horse/rider assertions. Not promoted."
+
+[[bug]]
+id = "LOADER-PACK-DECLINED-CONNECTION"
+title = "The pack-loaded check accepts success on two connections while a third connection declines the pack"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 LoaderObs: success-only filtering accepted success on connections 11/12 plus a decline on 13 and did not bind the intended actors (receipts/LoaderObs/REPORT.md)"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Fixed in Loader commit 7343bd38 (no ledger fix_commit kind for the Loader repository): pack_loaded_once_per_connection checks every connection per actor. Loader test PackLoadedOncePerConnectionTest.test_successful_pair_does_not_hide_declined_third_connection plus actor/sequence cases: red receipts/LoaderObs/pack-isolated-red.log, green pack-green.log. Real endpoint traces show PovRed and CamSpec each sending 3,4,0 on their own connection; no live three-connection decline run. Not promoted."
+
+[[bug]]
+id = "HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV"
+title = "The correctness roundtrip passes the canonical runner to the Java servers as one string, so its Java legs fail"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 HarnessGraphical P1 (receipts/HarnessGraphical/report.md): after 675ec8cd8 the Java server spawns still used str(runner)"
+repro = "source"
+regression = [
+  "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner",
+  "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_run_directly_without_the_owner_host_runner",
+]
+fix_commit = "fc6b53988"
+failing_first = "reported"
+repro_check = "Java server commands now take the runner as an argv prefix. No revert-red receipt recorded at fix time; promotion runs its own control. Not promoted."
