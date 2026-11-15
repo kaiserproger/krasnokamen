@@ -40,24 +40,29 @@ pub(crate) fn contents(
     let Tag::List(list) = value else {
         return Err(invalid("expected list"));
     };
-    if list.elements.len() > 27 {
-        return Err(invalid("too many slots"));
-    }
     let mut occupied = 0_u32;
-    for entry in &list.elements {
+    for (index, entry) in list.elements.iter().enumerate() {
+        let bad_slot = |reason: &str| invalid(format!("entry {index} Slot: {reason}"));
         let Tag::Compound(fields) = entry else {
-            return Err(invalid("expected item compound"));
+            return Err(bad_slot("expected item compound"));
         };
-        let Some(Tag::Byte(slot)) = item_nbt::field(fields, "Slot") else {
-            return Err(invalid("missing byte Slot"));
+        let mut values = fields.iter().filter(|(name, _)| name == "Slot");
+        let Some((_, Tag::Byte(slot))) = values.next() else {
+            return Err(bad_slot("missing byte Slot"));
         };
-        if !(0..27).contains(slot) || occupied & (1 << *slot) != 0 {
-            return Err(invalid("invalid or duplicate Slot"));
+        if values.next().is_some() {
+            return Err(bad_slot(&format!("duplicate field for {slot}")));
+        }
+        if !(0..27).contains(slot) {
+            return Err(bad_slot(&format!("{slot} outside supported range 0..26")));
+        }
+        if occupied & (1 << *slot) != 0 {
+            return Err(bad_slot(&format!("duplicate {slot}")));
         }
         occupied |= 1 << *slot;
         slots[*slot as usize] = item_nbt::stack_from_fields(items, fields)
-            .map_err(invalid)?
-            .ok_or_else(|| invalid("empty item"))?;
+            .map_err(|error| bad_slot(&format!("{slot}: {error}")))?
+            .ok_or_else(|| bad_slot(&format!("{slot}: empty item")))?;
     }
     Ok(slots)
 }

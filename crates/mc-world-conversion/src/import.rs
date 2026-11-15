@@ -720,6 +720,50 @@ pub(super) fn normalize_missing_player_dimensions(
     Ok(())
 }
 
+// PlayerEquipmentFix (4312) folds old armor/offhand entries into a map.
+// Validate before that fold, not just before the native array projection.
+fn validate_legacy_player_slots(tag: &Tag, from: i32, path: &str) -> Result<(), CoreError> {
+    if from >= 4312 {
+        return Ok(());
+    }
+    if let Some(equipment) =
+        field(tag, "equipment").map_err(|error| fail(format!("{path}: {error}")))?
+        && !matches!(equipment, Tag::Compound(fields) if fields.is_empty())
+    {
+        return Err(fail(format!(
+            "{path}: equipment slot: unsupported before PlayerEquipmentFix 4312"
+        )));
+    }
+    let Some(value) = field(tag, "Inventory").map_err(|error| fail(format!("{path}: {error}")))?
+    else {
+        return Ok(());
+    };
+    let Tag::List(list) = value else {
+        return Err(fail(format!("{path}: Inventory: expected list")));
+    };
+    let mut occupied = 0_u64;
+    for (index, item) in list.elements.iter().enumerate() {
+        let bad_slot =
+            |reason: &str| fail(format!("{path}: Inventory entry {index} Slot: {reason}"));
+        let Some(Tag::Byte(slot)) =
+            field(item, "Slot").map_err(|error| bad_slot(&error.to_string()))?
+        else {
+            return Err(bad_slot("missing byte Slot"));
+        };
+        let bit = match *slot {
+            0..=35 => *slot as u8,
+            100..=103 => (*slot - 100) as u8 + 36,
+            -106 => 40,
+            _ => return Err(bad_slot(&format!("{slot} outside supported legacy slots"))),
+        };
+        if occupied & (1_u64 << bit) != 0 {
+            return Err(bad_slot(&format!("duplicate {slot}")));
+        }
+        occupied |= 1_u64 << bit;
+    }
+    Ok(())
+}
+
 fn admit_player(
     mut tag: Tag,
     uuid: uuid::Uuid,
@@ -735,7 +779,7 @@ fn admit_player(
         )));
     }
     let player = mc_core::journal::player_from_tag(&tag, items)
-        .map_err(|error| fail(format!("{path}: {error}")))?;
+        .map_err(|error| fail(format!("{path}: player {uuid}: {error}")))?;
     if player.pos.iter().any(|value| !value.is_finite())
         || !player.yaw.is_finite()
         || !player.pitch.is_finite()
@@ -888,6 +932,7 @@ pub(super) fn convert(
         } else {
             level_version
         };
+        validate_legacy_player_slots(player, from, path)?;
         let report = upgrade::upgrade_player(player, from)
             .map_err(|error| fail(format!("{path}: {error}")))?;
         let uuid = player_uuid(player, path)?.ok_or_else(|| {
@@ -2066,6 +2111,7 @@ pub(super) fn convert(
         // 1343 would skip most of it. The per-kind floor
         // (players/maps accept -1) lives in mc-world's upgrade module.
         let from = player_source_version(&tag, &path)?;
+        validate_legacy_player_slots(&tag, from, &relative.display().to_string())?;
         let report = upgrade::upgrade_player(&mut tag, from)
             .map_err(|error| fail(format!("{}: {error}", path.display())))?;
         record_upgrade(

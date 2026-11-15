@@ -183,6 +183,18 @@ complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
+Player custody admission refuses missing, non-byte, out-of-range or repeated
+inventory/ender-chest slots and repeated or unsupported equipment slots before
+projecting entries into native arrays. Offline import also checks legacy
+Inventory slots before PlayerEquipmentFix can collapse armor/offhand duplicates.
+The error identifies the source player and slot; a refusal publishes no world
+and leaves the source unchanged. This is a custody guard, not vanilla repair:
+local 26.2 bytecode defaults a missing Slot to 0, skips out-of-range entries and
+lets later repeated slots overwrite earlier stacks (ItemStackWithSlot.CODEC,
+Inventory.load, PlayerEnderChestContainer.fromSlots). Valid inventory, equipment
+and EnderItems survive import, native hydration, checkpoint and reopen; coverage
+is `mc-world-conversion::player_slot_import_tests`.
+
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened
 path or duplicated Windows handle). Positioned reads have independent cursors;

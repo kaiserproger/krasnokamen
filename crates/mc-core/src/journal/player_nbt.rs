@@ -323,9 +323,9 @@ pub fn player_from_tag(
         }
     }
     for (name, stack) in player.equipment {
-        if let Some(index) = equipment_to_v2_slot(&name) {
-            inventory[index] = stack;
-        }
+        let index = equipment_to_v2_slot(&name)
+            .ok_or_else(|| failure("equipment", format!("slot {name}: unsupported player slot")))?;
+        inventory[index] = stack;
     }
     let find = |name: &str| {
         entries
