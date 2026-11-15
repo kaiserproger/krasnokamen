@@ -53,6 +53,13 @@ def chat(probe: ProbeSteps, command: str, label: str) -> list[str]:
     return newer(state)
 
 
+def spectator(probe):
+    # An already-spectator reconnect emits no gamemode-change reply.
+    probe.fixture("gamemode spectator @s")
+    lines = chat(probe, 'execute if entity @s[gamemode=spectator] run tellraw @s "ATMCARRY_SPECTATOR_READY"', "spectator")
+    probe.check("spectator", any("ATMCARRY_SPECTATOR_READY" in line for line in lines))
+
+
 def teleport(probe: ProbeSteps, xyz: list[float], label: str) -> None:
     probe.fixture("tp @s " + " ".join(str(v) for v in xyz))
     probe.wait(lambda s: all(abs(float(s.get("player", {}).get(axis, 1e10)) - value) < 2
@@ -89,7 +96,7 @@ def session(ctx, binary: Path, config: Path, port: int, label: str, timeout: flo
         with ProbeSteps(mcp, artifact, timeout, "atm-" + label) as probe:
             require_tools(mcp.list_tools(), TOOLS, "atm-structures")
             probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
-            chat(probe, "gamemode spectator @s", "spectator")
+            spectator(probe)
             result = action(probe, artifact)
             chat(probe, "save-all flush", "save")
             probe.wait(lambda s: any("Saved" in str(line) for line in s.get("recent_chat", [])), "save_acknowledged")

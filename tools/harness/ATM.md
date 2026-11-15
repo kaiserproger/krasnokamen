@@ -158,3 +158,6 @@ This is offline tool coverage, not a substitute for the real-client runs.
 Only after live evidence and visual review may the caption say
 “adapted data from N ATM10 mods, EXPERIMENTAL”, with N the number of actually
 proved packs. Never use “N of 495”: 495 is the metadata jar census.
+
+Native reconnects verify spectator mode with a conditional command, not a
+mode-change notification: reopening an already-spectator player emits no change.

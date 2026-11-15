@@ -81,6 +81,32 @@ class CarryTests(unittest.TestCase):
                 self.assertIn(key, " ".join(atm_carry.conversion_errors(report, {name: b"{}"}, root)))
 
 
+class NativeModeTests(unittest.TestCase):
+    def test_already_spectator_reconnect_needs_no_change_reply(self):
+        class Probe:
+            def __init__(self):
+                self.lines = []
+                self.checked = False
+            def fixture(self, command):
+                if command.startswith("tellraw @s "):
+                    self.lines.insert(0, json.loads(command.removeprefix("tellraw @s ")))
+                elif command.startswith("execute if entity @s[gamemode=spectator]"):
+                    self.lines.insert(0, "ATMCARRY_SPECTATOR_READY")
+                # gamemode has no reply when the saved player is already spectator.
+            def wait(self, predicate, label):
+                state = {"recent_chat": self.lines}
+                if not predicate(state):
+                    raise ValueError("no reply: " + label)
+                return state
+            def check(self, label, value):
+                self.checked = value
+        probe = Probe()
+        atm_structures.spectator(probe)
+        self.assertTrue(probe.checked)
+        with self.assertRaisesRegex(ValueError, "no reply"):
+            atm_structures.chat(Probe(), "gamemode spectator @s", "spectator")
+
+
 class PartialTests(unittest.TestCase):
     def test_crystal_fixture_accounts_every_exclusion_and_keeps_nbt_unchanged(self):
         with tempfile.TemporaryDirectory() as directory:
