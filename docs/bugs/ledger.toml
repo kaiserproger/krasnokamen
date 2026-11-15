@@ -6490,9 +6490,9 @@ promotion = "docs/bugs/promotions/HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV.json"
 id = "NATIVE-UNLOADED-EYE-SESSION-END"
 title = "A far server teleport ends the native client session when the eye's terrain has not arrived yet"
 area = "client"
-severity = "major"
+severity = "blocker"
 status = "open"
-source = "Stage3 ScreensVoiceStart: teleport to 1000.5/176/1000.5 → `session failed: unloaded_eye_environment` (client 12e076e9 player.rs:644 eye_medium Err on an unloaded block ended the session)"
+source = "Stage3 ScreensVoiceStart: teleport to 1000.5/176/1000.5 → `session failed: unloaded_eye_environment` (client 12e076e9 player.rs:644 eye_medium Err on an unloaded block ended the session). Also hit ordinary gates on 12e076e9 + server c7786910e (S3ClientRegress): native-item-bars 20261115T005013-native-item-bars-eeprrqzp and native-v2-p4-damage 20261115T005042-native-v2-p4-damage-gwindu_y reach Play, then the session ends with the same error"
 repro = "client"
 regression = [
   "client:krasnokamen-client:session::observation::destruction_tests::unloaded_eye_keeps_play_frames_and_waits_for_terrain",
