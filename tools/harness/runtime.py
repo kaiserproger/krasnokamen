@@ -1019,29 +1019,19 @@ def start_client(
                 start_new_session=True,
             )
         else:
-            from .java_launcher import modded_gradle_arguments
+            from .java_launcher import modded_gradle_arguments, write_gradle_init
 
             loader_root = sibling_root("loader")
             gradlew = loader_root / "gradlew"
             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
-            # A global JDK_JAVA_OPTIONS heap cap also limits NeoForm's cold
-            # recompile JVM. Configure only the resolved game JavaExec task.
-            init = game_dir / "client-heap.gradle"
-            init.write_text(
-                "gradle.projectsEvaluated {\n"
-                "  gradle.rootProject.allprojects { project ->\n"
-                "    project.tasks.withType(JavaExec).configureEach {\n"
-                f"      if (path == {json.dumps(task)}) {{ maxHeapSize = '512m' }}\n"
-                "    }\n"
-                "  }\n"
-                "}\n")
+            init = write_gradle_init(game_dir, task, cap_heap="JDK_JAVA_OPTIONS" not in env)
             process = subprocess.Popen(
                 [
                     str(gradlew),
                     "--no-daemon",
                     "--no-configuration-cache",
-                    *([] if "JDK_JAVA_OPTIONS" in env else ["--init-script", str(init)]),
+                    "--init-script", str(init),
                     "-p",
                     str(loader_root),
                     f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",

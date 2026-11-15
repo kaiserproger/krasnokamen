@@ -127,6 +127,9 @@ class PreparedFabricLauncherTest(unittest.TestCase):
             self.assertIn("-PfabricLoaderVersion=0.19.3", argv)
             self.assertIn("-PfabricApiVersion=0.155.2+26.1.2", argv)
             self.assertEqual(argv[-1], ":loader-fabric:runClientMcp")
+            script = Path(argv[argv.index("--init-script") + 1]).read_text()
+            self.assertIn("project.layout.buildDirectory.set", script)
+            self.assertIn("version + '/loader-fabric'", script)
 
     def test_selectors_never_switch_a_resolved_task(self):
         for task in (":fabric-agent:runClientMcp", ":loader-neoforge:runClientMcp"):
@@ -135,6 +138,19 @@ class PreparedFabricLauncherTest(unittest.TestCase):
                                    "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}):
                 with self.assertRaisesRegex(MissingCapability, "conflicts with task"):
                     launcher.modded_gradle_arguments(task)
+
+    def test_build_root_uses_owner_targets_or_portable_local_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            with mock.patch.dict("os.environ", {"KRASNOKAMEN_WORK_ROOT": str(work)}):
+                local = launcher.write_gradle_init(work / "game", ":loader-fabric:runClientMcp").read_text()
+                self.assertIn("new File(project.rootDir, '.analysis/harness-builds')", local)
+                (work / "targets").mkdir()
+                owner = launcher.write_gradle_init(work / "game", ":loader-fabric:runClientMcp").read_text()
+                self.assertIn(json.dumps(str(work / "targets/loader-builds")), owner)
+                self.assertNotIn(".analysis/harness-builds", owner)
+                self.assertIn("project.rootDir.canonicalPath", owner)
+                self.assertIn("tree + '/' + version + '/loader-fabric'", owner)
 
 
 

@@ -6112,3 +6112,18 @@ regression = ["cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies
 fix_commit = "24a0eefd4"
 repro_check = "receipts/ServerSmallFix/negative-token-bound-harness/test.log records all three paths (raw reader, exact decoder, preserving writer) accepting the invalid 1025-byte block before the size guard. token-green-anvil-harness/result.json passes 397 Anvil tests; token-green-vanilla-lz4-harness/result.json passes both ignored vanilla fixture tests. Regression covers raw/compressed blocks at and one byte above the token limit for levels 0, 1 and 6, with no destination published on rejection. token-bound-javap.log records the local vanilla bytecode oracle."
 failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
+title = "Concurrent Java endpoints share mutable Loader classes and can lose live class files"
+area = "harness"
+severity = "major"
+status = "open"
+source = "ScreensVoiceStart real gate 20261115T011032: 26.1.2 SVC crashes with NoClassDefFoundError LoaderMinecraftInput while 26.3 builds against the same Loader checkout/build directories; the source and compiled class are present after the run."
+repro = "source"
+regression = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
+  "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
+]
+repro_check = "ScreensVoiceStart/build-red.log restores only the old init-script behavior and fails both Fabric and NeoForge wiring assertions; audible-build-final-green.log passes. Builds are keyed by canonical checkout hash/version/platform under owner-host targets, with an ignored local fallback; no existing outputs are removed."
+failing_first = "reported"
