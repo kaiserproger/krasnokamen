@@ -34,6 +34,7 @@ pub(crate) fn supports_store_result(command: &Command) -> bool {
         Command::Kill { .. }
         | Command::Summon { .. }
         | Command::Swing(_)
+        | Command::Spectate { .. }
         | Command::Attribute(_)
         | Command::Item(_)
         | Command::Loot(_)
@@ -356,6 +357,15 @@ pub(crate) fn execute(
     changes: &mut ChangeSet,
 ) -> CommandResult {
     match command {
+        Command::Spectate { target, player } => {
+            return crate::tick::spectator::execute(
+                state,
+                connection,
+                executor,
+                target.as_ref(),
+                player,
+            );
+        }
         Command::Battle(command) => {
             if matches!(command, crate::battle::staging::BattleCommand::Roster)
                 && connection != crate::command_console::CONNECTION

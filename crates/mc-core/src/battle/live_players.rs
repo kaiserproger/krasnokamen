@@ -1,5 +1,5 @@
 //! Live network players in a staged battle: a player who takes a front-rank
-//! slot with that rank's kit, and spectators kept behind a player.
+//! slot with that rank's kit, and spectators whose camera follows a player.
 //! Console only (`battle watch|live|spectate`).
 //!
 //! Invariant: a held slot is rank 0 of one file of a foot regiment. The file's
@@ -9,8 +9,8 @@
 //! `battle live` before start, and each respawn, which puts him back into the
 //! fight with the kit again: near where he fell, in his own regiment while it
 //! stands, else in a standing line of his side in contact (`respawn_slot`).
-//! A spectator bound to him (`battle spectate`) is placed behind him again
-//! whenever he respawns or is re-armed.
+//! A spectator bound to him (`battle spectate`) follows his live camera, with
+//! the named intent retained across target death, respawn and reconnect.
 //!
 //! Battle-mode custody: a holder's inventory IS his kit (`equip`). Placement,
 //! re-arming and every respawn replace his whole inventory. Plugin holds retire
@@ -41,10 +41,6 @@ use crate::tick::TickState;
 use mc_data::ItemStack;
 
 const MAX_WATCHED: usize = 8;
-/// Spectator offset behind the holder (blocks back, blocks up) and pitch.
-const SPECTATOR_BACK: f64 = 4.0;
-const SPECTATOR_UP: f64 = 2.5;
-const SPECTATOR_PITCH: f32 = 20.0;
 /// Player body for grounding a placement.
 const PLAYER_HALF_WIDTH: f64 = 0.3;
 const PLAYER_HEIGHT: f64 = 1.8;
@@ -78,8 +74,7 @@ pub(crate) struct LiveState {
     /// Entity last announced online for each watched name.
     announced: Vec<Option<EntityId>>,
     pub holds: Vec<Hold>,
-    /// (spectator, holder) of each `battle spectate`: the spectator goes
-    /// behind the holder again on each respawn and re-arm (`follow`).
+    /// Named camera intent retained across target death, respawn and reconnect.
     spectators: Vec<(String, String)>,
     /// Living holders this tick (entity, side): candidates for enemy
     /// soldiers' swings (`in_reach`).
@@ -687,7 +682,7 @@ fn keep_inventory(state: &mut TickState) {
 /// give the player that file's kit and stand him in rank 0 facing the enemy;
 /// the file's soldiers move one rank back. After start a held name is only
 /// re-armed (a rejoin): the battle moves him only on respawn. Either way a
-/// spectator bound to him goes behind him again.
+/// spectator bound to him resumes the same native camera authority.
 pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<String, String> {
     if state.hostile.battle.formation.regiments.is_empty() {
         return Err("no staged formation; setup required".into());
@@ -884,9 +879,8 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
     ))
 }
 
-/// `battle spectate <name> <target>`: spectator mode, standing behind the
-/// target (`place_behind`). The binding stays: he goes behind the target
-/// again whenever the target respawns or is re-armed (`follow`).
+/// `battle spectate <name> <target>`: spectator mode and the native camera
+/// authority, with named intent retained across target entity replacement.
 pub(crate) fn spectate(
     state: &mut TickState,
     changes: &mut ChangeSet,
@@ -918,13 +912,10 @@ pub(crate) fn spectate(
         Some(binding) => binding.1 = target.to_owned(),
         None => spectators.push((name.to_owned(), target.to_owned())),
     }
-    place_behind(state, name, target)
+    bind_camera(state, name, target)
 }
 
-/// Each spectator bound to `target` goes behind him again, wherever his
-/// respawn or re-arm put him, so the spectator's client gets the chunks and
-/// entities around him (trial-7: CamSpec stayed in the cave where PovRed
-/// died, 230 blocks from his respawn, for four minutes).
+/// Re-arm/respawn uses the same camera authority as the continuous follow.
 fn follow(state: &mut TickState, target: &str) {
     for index in 0..state.hostile.battle.live.spectators.len() {
         let (name, bound) = &state.hostile.battle.live.spectators[index];
@@ -932,59 +923,60 @@ fn follow(state: &mut TickState, target: &str) {
             continue;
         }
         let name = name.clone();
-        match place_behind(state, &name, target) {
+        match bind_camera(state, &name, target) {
             Ok(line) => tracing::info!("{line}"),
             Err(error) => tracing::warn!("Battle spectator not placed: {error}"),
         }
     }
 }
 
-/// Stand spectator `name` behind `target`, looking his way: his line's
-/// facing when he holds a slot. The core has no Set Camera packet, so the
-/// camera is the spectator's own. A spectator who left spectator mode is not
-/// moved.
-fn place_behind(state: &mut TickState, name: &str, target: &str) -> Result<String, String> {
+/// Explicit vanilla stop also cancels the battle's named intent.
+pub(crate) fn stop_camera(state: &mut TickState, viewer: EntityId) {
+    if let Some(name) = state.connections.name_of(viewer) {
+        state
+            .hostile
+            .battle
+            .live
+            .spectators
+            .retain(|(bound, _)| bound != name);
+    }
+}
+
+/// Resolve names only while a battle binding exists. Offline/dead targets keep
+/// intent, never a stale camera id; an offline or non-spectator viewer ends it.
+pub(crate) fn follow_cameras(state: &mut TickState) {
+    let mut bindings = std::mem::take(&mut state.hostile.battle.live.spectators);
+    bindings.retain(|(name, target)| {
+        let Some(viewer) = player_named(state, name) else {
+            return false;
+        };
+        if !state.players[&viewer].spectator() || is_dead(state, viewer) {
+            return false;
+        }
+        if let Some(subject) = player_named(state, target)
+            && !is_dead(state, subject)
+            && state.cameras.get(&viewer) != Some(&subject)
+        {
+            match crate::tick::spectator::bind(state, viewer, Some(subject)) {
+                Ok(()) => tracing::info!(
+                    "Battle spectator placed: {name} target={target} camera={} gamemode=spectator",
+                    subject.0
+                ),
+                Err(error) => tracing::warn!("Battle spectator not bound: {name}: {error}"),
+            }
+        }
+        true
+    });
+    state.hostile.battle.live.spectators = bindings;
+}
+
+fn bind_camera(state: &mut TickState, name: &str, target: &str) -> Result<String, String> {
     let viewer = player_named(state, name).ok_or_else(|| format!("{name} is not online"))?;
     let subject = player_named(state, target).ok_or_else(|| format!("{target} is not online"))?;
-    if is_dead(state, viewer) || is_dead(state, subject) {
-        return Err(format!("{name} or {target} is dead; respawn first"));
-    }
-    if !state.players[&viewer].spectator() {
-        return Err(format!("{name} left spectator mode"));
-    }
-    let subject_slot = state.entities.slot_of(subject).expect("live player");
-    let pos = state.entities.pos(subject_slot);
-    let battle = &state.hostile.battle;
-    let yaw = battle
-        .live
-        .holds
-        .iter()
-        .find(|hold| hold.name == target)
-        .map_or_else(
-            || state.entities.rot(subject_slot)[0],
-            |hold| {
-                battle
-                    .formation
-                    .regiments
-                    .get(hold.regiment)
-                    .map_or(hold.yaw, |r| yaw_of(r.spec.facing))
-            },
-        );
-    let radians = f64::from(yaw).to_radians();
-    // Vanilla look vector of a yaw: (-sin, cos).
-    let forward = [
-        -f64::from(mc_physics::mth::sin(radians)),
-        f64::from(mc_physics::mth::cos(radians)),
-    ];
-    let at = [
-        pos[0] - forward[0] * SPECTATOR_BACK,
-        pos[1] + SPECTATOR_UP,
-        pos[2] - forward[1] * SPECTATOR_BACK,
-    ];
-    teleport(state, viewer, at, yaw, SPECTATOR_PITCH);
+    crate::tick::spectator::bind(state, viewer, Some(subject)).map_err(str::to_owned)?;
     Ok(format!(
-        "Battle spectator placed: {name} target={target} at={:.2},{:.2},{:.2} yaw={yaw:.1} gamemode=spectator camera=own",
-        at[0], at[1], at[2]
+        "Battle spectator placed: {name} target={target} camera={} gamemode=spectator",
+        subject.0
     ))
 }
 

@@ -24,6 +24,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("settlement", 0),
     ("trigger", 0),
     ("gamemode", 2),
+    ("spectate", 2),
     ("defaultgamemode", 2),
     ("teleport", 2),
     ("tp", 2),
@@ -299,6 +300,10 @@ pub enum Command {
         mode: GameMode,
         target: Target,
     },
+    Spectate {
+        target: Option<Target>,
+        player: Target,
+    },
     /// `/defaultgamemode <mode>`: the mode new players join in.
     DefaultGameMode(GameMode),
     Teleport {
@@ -429,6 +434,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "battle" => crate::battle::staging::parse(args).map(Command::Battle),
         "settlement" => crate::settlements::commands::parse(args).map(Command::Settlement),
         "gamemode" => parse_gamemode(args),
+        "spectate" => crate::tick::spectator::parse(args),
         "defaultgamemode" => parse_defaultgamemode(args),
         "tp" | "teleport" => parse_teleport(args),
         "give" => parse_give(args),

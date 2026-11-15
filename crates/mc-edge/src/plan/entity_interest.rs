@@ -367,15 +367,6 @@ impl EntityInterest {
         self.clean(id);
     }
 
-    /// A profile replacement invalidates an already delivered entity, but
-    /// the unchanged snapshot will not otherwise schedule another spawn.
-    pub(super) fn respawn(&mut self, id: EntityId) {
-        self.removed(id);
-        if self.visible.contains_key(&id) {
-            self.spawns.insert(id);
-        }
-    }
-
     /// A delivered entity's frames were lost and its recorded identity no
     /// longer matches: the client may hold a stale copy, or none. Remove it,
     /// and spawn it again while it is in view, as for a type change, though

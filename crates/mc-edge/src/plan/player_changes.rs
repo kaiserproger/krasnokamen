@@ -26,8 +26,7 @@ use mc_protocol::packets::play::{
     EntityDataValue as WireEntityDataValue, EntityEffectFlags, EntityEvent as WireEntityEvent,
     GameEvent, LevelEvent, MerchantItemCost, MerchantOffer, MobEffectId,
     PLAYER_DATA_ABSORPTION_INDEX, PlayDisconnect, PlayerInfoActions, PlayerInfoEntry,
-    PlayerInfoRemove, PlayerInfoUpdate, RemoveEntities, SetEntityMotion, SynchronizePlayerPosition,
-    pack_block_pos,
+    PlayerInfoRemove, PlayerInfoUpdate, SetEntityMotion, SynchronizePlayerPosition, pack_block_pos,
 };
 
 use super::{PlannedPacket, ViewerState, per_tick, push_reliable};
@@ -284,19 +283,11 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 let previous = viewer.player_profiles.insert(player.entity, player.uuid);
                 if previous != Some(player.uuid)
                     && player.entity != viewer.entity_id
-                    && viewer.untrack(player.entity)
+                    && viewer.tracked_entities.contains_key(&player.entity)
                 {
-                    // A provisional auth body was not a trusted player profile.
-                    // Remove its old client object before respawning with the
-                    // verified UUID on the next world publication.
-                    push_reliable(
-                        out,
-                        conn,
-                        &RemoveEntities {
-                            entity_ids: vec![player.entity.0],
-                        },
-                    );
-                    viewer.entity_interest.respawn(player.entity);
+                    // Invalidate pairing on the world FIFO, where camera release,
+                    // removal and re-add stay ordered even behind a queue backlog.
+                    viewer.entity_unsent(player.entity);
                 }
             }
             if !removed.is_empty() {

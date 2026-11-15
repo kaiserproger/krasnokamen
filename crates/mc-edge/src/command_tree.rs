@@ -646,6 +646,10 @@ impl<'a> Tree<'a> {
 pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommands {
     let mut t = Tree::new(op_level, plugins);
     t.root("reload", true);
+    if let Some(root) = t.root("spectate", true) {
+        let target = t.argument(root, "target", entities(true), true);
+        t.argument(target, "player", players(true), true);
+    }
     if let Some(root) = t.root("data", false) {
         let get = t.literal(root, "get", false);
         for kind in ["entity", "block", "storage"] {

@@ -689,6 +689,8 @@ pub struct WorldSnapshot {
     /// own `faction` stays 0; the edge projects these names into faction
     /// teams. The same `Arc` while the holds are unchanged.
     pub player_factions: Arc<Vec<(String, u16)>>,
+    /// Transient camera bindings, reconciled by edge only after target tracking.
+    pub cameras: Arc<rustc_hash::FxHashMap<EntityId, EntityId>>,
     /// Names of the scoreboard's `/team` teams, ascending; the same `Arc`
     /// while they are unchanged. The edge never projects a faction team over
     /// one of these names.

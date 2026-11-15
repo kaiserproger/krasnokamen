@@ -54,6 +54,8 @@ pub use map_data::{ClientboundMapData, MapDecoration};
 mod rename_item;
 mod scoreboard;
 mod set_beacon;
+mod set_camera;
+pub use set_camera::ClientboundSetCamera;
 mod station_components;
 mod ticking;
 mod titles;

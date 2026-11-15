@@ -79,6 +79,22 @@ Inspect `net.minecraft.world.item.equipment.Equippable`,
 `net.minecraft.world.entity.EquipmentSlot`, and `net.minecraft.sounds.SoundEvent`
 in each version's jar when changing this codec.
 
+## Spectator camera
+
+`ClientboundSetCamera` carries one signed VarInt entity ID. Local `javap -p -c`
+inspection of `GameProtocols` and `ClientboundSetCameraPacket` in the official
+26.1.2, 26.2 and 26.3 client jars establishes Play clientbound IDs `0x5d`,
+`0x5d` and `0x5f`, respectively. Count common registrations and the bundle
+delimiter as well as game packets. Metadata and exact commands are retained
+outside Git under `receipts/SpectateFix/metadata-<version>.txt`; the counted
+registrations are in `ids-<version>.txt`.
+
+The canonical packet uses `0x5f`; the existing adjacent name-based translation
+maps older IDs without changing its body. Camera frames share the entity world
+FIFO, never the reliable queue: an entity must be paired before binding, and
+self-camera must precede target removal. Codec and adjacent-chain tests do not
+substitute for actual-client camera observation.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs

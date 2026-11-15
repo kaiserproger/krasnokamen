@@ -968,7 +968,7 @@ fn a_respawn_goes_to_his_files_men_when_the_leader_walked_far_ahead() {
 }
 
 #[test]
-fn spectator_goes_behind_the_holder_in_spectator_mode() {
+fn spectator_binds_the_holder_in_spectator_mode() {
     let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
     let mut changes = ChangeSet::default();
     command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
@@ -986,12 +986,8 @@ fn spectator_goes_behind_the_holder_in_spectator_mode() {
         "{reply}"
     );
     assert_eq!(state.players[&ids[1]].game_mode, GameMode::Spectator);
-    let hold = &state.hostile.battle.live.holds[0];
-    let at = state.entities.pos(state.entities.slot_of(ids[1]).unwrap());
-    // Red faces +z: behind is -z, above his head.
-    assert!((at[0] - hold.at[0]).abs() < 1e-6);
-    assert!((at[2] - (hold.at[2] - SPECTATOR_BACK)).abs() < 1e-6);
-    assert!((at[1] - (hold.at[1] + SPECTATOR_UP)).abs() < 1e-6);
+    assert_camera(&state, ids[1], ids[0]);
+    assert!(reply.contains(&format!("camera={}", ids[0].0)));
     assert!(
         command(
             &mut state,
@@ -1209,31 +1205,17 @@ fn a_respawn_after_his_regiment_is_gone_takes_the_sides_contact_nearest_where_he
     assert_in_rank_with_kit(&state, player);
 }
 
-fn assert_behind(state: &TickState, viewer: EntityId, player: EntityId) {
+fn assert_camera(state: &TickState, viewer: EntityId, player: EntityId) {
     assert_eq!(state.players[&viewer].game_mode, GameMode::Spectator);
-    let hold = &state.hostile.battle.live.holds[0];
-    let facing = state.hostile.battle.formation.regiments[hold.regiment]
-        .spec
-        .facing;
+    assert_eq!(state.cameras.get(&viewer), Some(&player));
     let pos = state.entities.pos(state.entities.slot_of(player).unwrap());
     let at = state.entities.pos(state.entities.slot_of(viewer).unwrap());
-    let behind = [
-        pos[0] - facing[0] * SPECTATOR_BACK,
-        pos[1] + SPECTATOR_UP,
-        pos[2] - facing[1] * SPECTATOR_BACK,
-    ];
-    assert!(
-        (0..3).all(|axis| (at[axis] - behind[axis]).abs() < 1e-3),
-        "spectator at {at:?}, not behind the holder at {pos:?}"
-    );
+    assert_eq!(at, pos);
 }
 
-/// Trial-7: after PovRed's death and respawn CamSpec stayed in the cave where
-/// he died, 230 blocks away, and saw nothing for four minutes. The spectator
-/// bound by `battle spectate` goes behind him again on each respawn and
-/// re-arm.
+/// Named camera binding survives the holder's death, respawn and re-arm.
 #[test]
-fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm() {
+fn the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm() {
     let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
     let (player, viewer) = (ids[0], ids[1]);
     let mut changes = ChangeSet::default();
@@ -1261,11 +1243,11 @@ fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm(
     run_tick(&mut state, &[]);
     respawn(&mut state, 1);
     assert!(!state.hostile.battle.live.holds[0].dead);
-    assert_behind(&state, viewer, player);
+    assert_camera(&state, viewer, player);
     away(&mut state);
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
-    assert_behind(&state, viewer, player);
+    assert_camera(&state, viewer, player);
 }
 
 fn team(state: &mut TickState, executor: EntityId, args: &[&str]) -> Result<String, String> {

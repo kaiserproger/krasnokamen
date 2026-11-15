@@ -48,6 +48,16 @@ Client game age follows simulated ticks, not journal frame identifiers.
 freeze/step projection and how recovery restores that age; daylight time remains
 independent.
 
+Spectator cameras are transient native bindings, published with the immutable
+world snapshot. `/spectate` and battle named-follow use that same authority;
+the native tick follows the target position for residency and ignores viewer
+movement while bound. Binding changes synchronize the viewer once, not on every
+follow tick. Death/disconnect releases the current camera; only battle's named
+intent retries a returning target. Explicit stop, sneak, viewer disconnect or
+leaving spectator mode clears that intent. Neither camera map is persisted.
+The edge binds only a paired target, with camera release, removal, pairing and
+rebind ordered on the entity world FIFO; credit loss retains delivery debt.
+
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first rider with a live body controls motion; absent recovery claims are skipped.
 Absent claims do not reserve attachment positions for live passengers.

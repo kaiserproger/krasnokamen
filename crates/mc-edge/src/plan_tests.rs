@@ -14,6 +14,9 @@ use std::sync::Arc;
 #[path = "plan/chunk_delta_tests.rs"]
 mod chunk_delta_tests;
 
+#[path = "plan/camera_tests.rs"]
+mod camera_tests;
+
 #[path = "plan/section_blocks_tests.rs"]
 mod section_blocks_tests;
 
@@ -76,14 +79,15 @@ fn authenticated_roster_replaces_a_provisional_player_object_once() {
         removed: Arc::from([]),
     };
     let packets = plan_player_changes(std::slice::from_ref(&roster), &mut viewer);
-    assert!(packets.iter().any(|packet| packet.id == RemoveEntities::ID));
-    assert!(!viewer.tracked_entities.contains_key(&entity));
+    assert!(!packets.iter().any(|packet| packet.id == RemoveEntities::ID));
+    assert!(is_undelivered(&viewer, entity));
     viewer
         .tracked_entities
         .insert(entity, TrackedEntity::default());
     let packets = plan_player_changes(&[roster], &mut viewer);
     assert!(!packets.iter().any(|packet| packet.id == RemoveEntities::ID));
     assert!(viewer.tracked_entities.contains_key(&entity));
+    assert!(!is_undelivered(&viewer, entity));
 }
 
 #[test]

@@ -29,6 +29,7 @@ mod player_changes;
 pub use player_changes::plan_player_changes;
 pub(crate) use player_changes::plan_routed_player_changes;
 
+mod camera;
 mod chunk_delta;
 mod entity_candidates;
 mod entity_interest;
@@ -456,6 +457,8 @@ fn relink_passengers(
 pub struct ViewerState {
     pub connection: ConnectionId,
     pub entity_id: EntityId,
+    /// Camera last planned on the ordered world FIFO; None means delivery debt.
+    camera: Option<EntityId>,
     pub position: [f64; 3],
     pub dimension: mc_core::dimensions::Dimension,
     /// Negotiated connection radius; None uses the caller's server limit.
@@ -552,6 +555,7 @@ impl ViewerState {
         Self {
             connection,
             entity_id,
+            camera: Some(entity_id),
             position,
             dimension: mc_core::dimensions::Dimension::Overworld,
             view_distance: None,
@@ -617,6 +621,7 @@ impl ViewerState {
     /// delivered, so held geometry and the client state of every entity that
     /// plan touched are repaired from the next plan.
     pub(crate) fn world_frame_unsent(&mut self) {
+        self.camera = None;
         self.geometry_unsent();
         for id in std::mem::take(&mut self.world_removed) {
             // The client may still hold it: track it again to have it removed.
@@ -715,6 +720,9 @@ fn forget_everything(
     credit: &mut WorldCredit,
     scratch: &mut PlanScratch,
 ) -> bool {
+    if !camera::send(viewer, viewer.entity_id, out, credit) {
+        return false;
+    }
     if !clear_seats(viewer, out, credit) {
         return false;
     }
@@ -890,6 +898,16 @@ fn plan_viewer_inner(
     };
     viewer.world_entities.clear();
     viewer.world_removed.clear();
+    let desired_camera = snapshot
+        .cameras
+        .get(&viewer.entity_id)
+        .copied()
+        .unwrap_or(viewer.entity_id);
+    if viewer.camera != Some(desired_camera)
+        && !camera::send(viewer, viewer.entity_id, &mut out, &mut credit)
+    {
+        return out;
+    }
     // Resolve the authoritative anchor before range-checking one-shot effects.
     if let Some(own) = own_entity(snapshot, viewer) {
         viewer.position = own.position;
@@ -1446,6 +1464,7 @@ fn plan_viewer_inner(
         &mut out,
         &mut credit,
     );
+    camera::reconcile(snapshot, viewer, &mut out, &mut credit);
     plan_seats(viewer, &mut out, &mut credit);
     out
 }
@@ -1702,6 +1721,15 @@ fn plan_entities(
         scratch,
         spawn_credit,
     );
+    if viewer.camera.is_some_and(|camera| {
+        camera != viewer.entity_id
+            && (scratch.removed.contains(&camera.0)
+                || scratch.spawns.iter().any(|(id, _)| *id == camera))
+    }) && !camera::send(viewer, viewer.entity_id, out, credit)
+    {
+        viewer.entity_interest = interest;
+        return;
+    }
     viewer.boss_baseline.sync(
         conn,
         scratch

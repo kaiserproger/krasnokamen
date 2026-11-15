@@ -759,8 +759,14 @@ world or a copy restored from backup: several of its effects stay after
   are closed first, every other slot is emptied and the overflow is discarded,
   not dropped. Each respawn and re-arm does the same. The player's previous
   items are gone; `battle reset` does not give them back.
-- `battle spectate <player> <target>` switches the player to spectator mode;
-  reset does not switch him back.
+- `/spectate [<target> [<player>]]` (permission level 2) binds an existing
+  spectator to one entity; without arguments it releases the executing player's
+  camera. Sneak and leaving spectator mode also release it. A dead or disconnected
+  target releases the camera without automatically resuming the vanilla command.
+- `battle spectate <player> <target>` switches the player to spectator mode and
+  follows the target's actual camera, retaining named intent across target death,
+  respawn and reconnect. Explicit stop, sneak, mode exit or viewer disconnect
+  cancels that intent. Reset does not switch the player's mode back.
 - Staged units are mobs tagged `krasnokamen:battle`, and setup adds a
   persisted `krasnokamen:battle` chunk ticket. Both survive a restart, while
   the battle state itself (formations, orders, live holds) is not saved. After
