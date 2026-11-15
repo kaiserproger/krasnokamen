@@ -6561,10 +6561,34 @@ area = "harness"
 severity = "major"
 status = "open"
 source = "Stage3 LoaderObs: receipts/LoaderObs/fabric-46-cached/java-battle.json, six blue targets in_reach=false then 90 s combat deadline; PovRed-failure.png faces dirt at arm length after descending four blocks"
-repro = "source"
+repro = "client"
 regression = []
 failing_first = "reported"
-repro_check = "Not reproduced: the original run respawned at file18 (-178.70,94,121.70) and ended at (-183.70,90,136.50) facing minecraft:dirt at (-185,91,136); later instrumented runs respawned at file35 and reached the targets, so their pass does not close the file18 path. Per-approach diagnostics now retained (loader d6a94c22 MinecraftClientFacadeTest.approachRetainsCombatDiagnosticsForBothArrivalAndRefusal). No movement, deadline, teleport, kit or damage change."
+repro_check = "Reproduced by JavaBattleQA (receipts/JavaBattleQA/REPORT.md, file18-navigation/, repro file18-navigation-command.json; core 5b43bb6e5, loader a559802, server pin c7786910eaa6): ordinary navigation, server selected file18 at (-178.67,94,121.78) (file18-navigation/battle/server.log:33); the unchanged 90 s combat deadline expired after four in_reach=false approaches with zero attacks; per-approach diagnostics out-of-reach 87/109/101/28, stuck_retreat 31/40/35/0, move_blocked 6/50/66/28, last snapshots dirt collision without position change (CamSpec-failure.png). Attributed to the Loader's approach steering on this terrain, not a server movement defect; fix the terrain-aware approach, never the deadline. Original run: respawn file18 (-178.70,94,121.70) ended facing dirt at (-185,91,136); file35 respawns reach the targets and do not close the file18 path."
+
+[[bug]]
+id = "JAVA-BATTLE-END-CAMERA-EMPTY-FRAME"
+title = "The Java battle's late shield capture can photograph empty terrain while the functional take passes"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 JavaBattleQA (receipts/JavaBattleQA/REPORT.md, P1): with capture held until completion.ready, neoforge-1 passes every functional check and take.json is clean, but screenshots/raised-shield-poses.png shows only grass and the recorder-leave message, no shield or combatants (1/5 late captures; repro neoforge-1-command.json); the other four frames contain troops but none clearly shows the selected guard's raised pose"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "The gate has no image-content assertion, so file existence passes an empty frame. Needs the camera to track a living selected guard at capture time and an assertion that the subject is in frame with a raised shield."
+
+[[bug]]
+id = "LOADER-MCP-ATTACK-IGNORES-USE-ITEM-GATE"
+title = "The Java agent's attack tool hits while the player is blocking with a shield, which vanilla input never does"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "Stage3 JavaBattleQA (receipts/JavaBattleQA/REPORT.md, P2): blocking-positive-control/weapon-exploration.json — a native click while blocking leaves the cow at 10 health, the MCP attack helper damages the same cow 10→4 with blocking observed before each action; after releasing the shield a native XTest click damages a fresh cow 10→4 (repro blocking-positive-control-command.json)"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Vanilla 26.1.2 Minecraft.handleKeybinds consumes attack clicks without startAttack while isUsingItem; the Loader helper changed by d6a94c22 (JAVA-BATTLE-SPEAR-PLAIN-ATTACK fix) calls startAttack directly. Battle takes therefore show blocking guards attacking."
 
 [[bug]]
 id = "LOADER-ZOMBIE-SHIELD-MIXIN"
