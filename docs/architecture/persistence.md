@@ -33,27 +33,34 @@ tick, not discard or reorder accepted work. A failed writer halts the core.
 Append acknowledgement is not a promise that the directory has been fsynced;
 a crash can consistently roll back an unflushed tail, even after a reply.
 
-When the selected datapack image changes vanilla generation, generated chunks
-are not reproducible from a future pack selection. Before enqueueing a tick's
-WAL append, the tick owner drains immutable pre-edit admission images from every
-dimension into required-baseline jobs. In FIFO order, the journal owner sends
-each to the sole native writer and waits for its Immediate fill-generated commit
-before appending dependent WAL. It does not write the DB itself or wait on the
-tick thread. Failure or a lost acknowledgement withholds that append and closes
-journal admission, halting authority. Required jobs do not wait for the ordinary
-64-chunk generated-save threshold; vanilla-only/effectively unchanged generation
-retains that existing asynchronous, best-effort path.
+All generated native chunks, including vanilla-only chunks, may outlive their
+selected inputs. Before enqueueing a tick's WAL append, the tick owner drains
+immutable pre-edit admission images from every dimension into required-baseline
+jobs. In FIFO order, the journal owner sends each to the sole native writer and
+waits for its Immediate fill-generated commit before appending dependent WAL.
+The tick does not await that commit or perform DB I/O. Failure or a lost
+acknowledgement withholds that append and closes journal admission. These jobs
+ignore the ordinary 64-chunk save threshold. Exhausting the bounded admission
+buffer refuses the chunk and records a load error; checkpointing cannot silently
+lose its baseline or prune its unmaterialized edits.
 
-Baseline fill only inserts absent slots and never overwrites a checkpointed or
-imported chunk. It commits no gameplay post-images and advances no whole-world
-checkpoint tick. A crash after baseline commit but before WAL publication can
-leave an unused generated baseline, not partial gameplay custody. After a
-published WAL and before checkpoint, recovery uses that original native baseline
-plus absolute edits even if the pack changed or disappeared; it must not replace
-untouched blocks/structure starts with the newly selected generator. A later
-checkpoint can prune the covered WAL normally. Process regressions SIGKILL after
-a real, flushed block WAL, change/remove the pack, recover twice, checkpoint and
-prune, then recover again.
+Baseline fill inserts only absent, uncovered slots, never overwriting imported
+or checkpointed chunks. The first dependent native snapshot also installs its
+original baseline atomically. Native metadata/overlays/watermarks without a
+physical baseline refuse reads, procedural fallback, fill and checkpoint; the
+current generator cannot prove historical ancestry. A WAL-only missing base may
+be reproduced only when the validated saved input digest matches current inputs
+(or the legacy world uses the fixed builtin generator without external inputs).
+Otherwise recovery refuses before materialization or writes, naming the
+dimension, position and input sources; restore the original inputs or baseline.
+
+Baseline jobs commit no gameplay post-images and advance no checkpoint tick.
+This is not a stronger publication guarantee: replies still permit rollback of
+a queued/unflushed tail, with no per-tick fsync or tick-thread durability await.
+A crash between baseline commit and WAL can leave an unused baseline. Retained
+WAL folds over the original base even after adding, changing or removing a pack.
+SIGKILL regressions use real flushed WAL, repeated recovery, checkpoint/prune and
+another recovery.
 
 ### Recovery evidence and clocks
 
@@ -147,10 +154,12 @@ refused chunk still creates no unsaved custody.
    are never modified.
 5. Validate `level.dat/Data/KrasnokamenWorldgenInputs` from normal native
    level-metadata custody, including its WAL post-image, before adopting current
-   inputs. Schema version 1 is required; unknown/missing/duplicate struct fields,
-   unsupported schema, malformed canonical lowercase SHA-256 digests, invalid
-   source/structure ownership or an oversized record refuse startup without
-   changing identity/epoch state. Historical owners may name removed packs.
+   inputs. Schema version 1 is required; unknown/missing/duplicate struct fields
+   or source/owner map keys, unsupported schema, malformed canonical lowercase
+   SHA-256 digests, invalid source/structure ownership or an oversized record
+   refuse startup without changing identity/epoch state. File pack IDs use the
+   same bounded direct-entry predicate as selection (including rejection of
+   backslashes and NUL). Historical owners may name removed packs.
    A well-formed changed identity is diagnostic, not a permanent pack lock:
    log old/new SHA and changed sources, mint a terrain epoch, retain stored
    baselines and use the selected generator only for new chunks.

@@ -1393,7 +1393,6 @@ fn copper_native_chest_metadata_and_seeded_loot_roundtrip_once() {
                 &state.registry.blocks,
                 &state.registry.items,
                 &state.registry.chest_loot,
-                &Empty(state.registry.states.air),
             )
             .map(|chunk| chunk.unwrap())
     };

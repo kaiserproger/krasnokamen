@@ -129,7 +129,7 @@ fn identity_rejects_oversized_saved_record() {
 }
 
 #[test]
-fn identity_schema_roundtrip_keeps_removed_pack_history_and_vanilla_policy() {
+fn identity_schema_roundtrip_keeps_removed_pack_history() {
     let dir = tempfile::tempdir().unwrap();
     let mut packs = PackSet::load(&dir.path().join("datapacks"), Selection::default()).unwrap();
     let inputs = packs.prepare_worldgen(dir.path(), None).unwrap();
@@ -143,10 +143,6 @@ fn identity_schema_roundtrip_keeps_removed_pack_history_and_vanilla_policy() {
     assert!(
         adoption.changed,
         "valid SHA changes stay diagnostic, not locked"
-    );
-    assert!(
-        !adoption.catalog.durable_baselines,
-        "vanilla keeps its existing best-effort generated-save path"
     );
     assert_eq!(
         adoption.catalog.owners["mod:old_start"],
@@ -163,4 +159,41 @@ fn identity_schema_roundtrip_keeps_removed_pack_history_and_vanilla_policy() {
         "file/removed-pack"
     );
     assert!(!inputs.stage_identity(&mut globals).unwrap().changed);
+}
+
+#[test]
+fn identity_rejects_pack_ids_forbidden_by_selection() {
+    for pack in [
+        "file/a\\b".to_owned(),
+        "file/a\0b".to_owned(),
+        format!("file/{}", "x".repeat(1024)),
+    ] {
+        assert_rejected(&replaced(
+            "sources",
+            serde_json::json!({"vanilla cache":"b".repeat(64),pack.clone():"c".repeat(64)}),
+        ));
+        assert_rejected(&replaced(
+            "structure_owners",
+            serde_json::json!({"mod:old_start":pack}),
+        ));
+    }
+}
+
+#[test]
+fn identity_rejects_duplicate_source_map_keys() {
+    assert_rejected(&format!(
+        r#"{{"version":1,"digest":"{}","sources":{{"vanilla cache":"{}","vanilla cache":"{}"}},"structure_owners":{{}}}}"#,
+        "a".repeat(64),
+        "b".repeat(64),
+        "c".repeat(64)
+    ));
+}
+
+#[test]
+fn identity_rejects_duplicate_historical_owner_map_keys() {
+    assert_rejected(&format!(
+        r#"{{"version":1,"digest":"{}","sources":{{"vanilla cache":"{}"}},"structure_owners":{{"mod:old_start":"file/old-a","mod:old_start":"file/old-b"}}}}"#,
+        "a".repeat(64),
+        "b".repeat(64)
+    ));
 }

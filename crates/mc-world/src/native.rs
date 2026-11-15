@@ -84,6 +84,62 @@ fn db<T, E: Into<redb::Error>>(result: Result<T, E>) -> Result<T, NativeError> {
     result.map_err(|error| NativeError::Database(error.into()))
 }
 
+fn chunk_covered(
+    key: &[u8],
+    applied: &impl ReadableTable<&'static [u8], u64>,
+    metadata: &impl ReadableTable<&'static [u8], &'static [u8]>,
+    overlays: &impl ReadableTable<&'static [u8], &'static [u8]>,
+) -> Result<bool, NativeError> {
+    if db(applied.get(key))?.is_some() || db(metadata.get(key))?.is_some() {
+        return Ok(true);
+    }
+    Ok(db(overlays.range(key..))?
+        .next()
+        .transpose()
+        .map_err(|error| NativeError::Database(error.into()))?
+        .is_some_and(|(stored, _)| stored.value().starts_with(key)))
+}
+
+fn read_chunk_covered(tx: &redb::ReadTransaction, key: &[u8]) -> Result<bool, NativeError> {
+    chunk_covered(
+        key,
+        &db(tx.open_table(APPLIED))?,
+        &db(tx.open_table(METADATA))?,
+        &db(tx.open_table(OVERLAYS))?,
+    )
+}
+
+fn missing_baseline(dimension: u32, position: ChunkPos) -> NativeError {
+    NativeError::Source(format!(
+        "missing immutable baseline for covered chunk dimension {dimension} at {},{}; restore its native baseline",
+        position.x, position.z
+    ))
+}
+
+/// The first dependent snapshot takes custody of its original immutable base
+/// in the same transaction. Coverage without that base is not proof of origin.
+fn ensure_baseline(
+    tx: &redb::WriteTransaction,
+    dimension: u32,
+    base: &Chunk,
+    blocks: &BlockRegistry,
+    items: &ItemRegistry,
+    covered: impl FnOnce() -> Result<bool, NativeError>,
+) -> Result<Option<usize>, NativeError> {
+    let key = chunk_key(dimension, base.pos);
+    let mut imported = db(tx.open_table(IMPORTED))?;
+    if db(imported.get(key.as_slice()))?.is_some() {
+        return Ok(None);
+    }
+    if covered()? {
+        return Err(missing_baseline(dimension, base.pos));
+    }
+    let bytes = codec::baseline(base, blocks, items)?;
+    db(imported.insert(key.as_slice(), bytes.as_slice()))?;
+    db(db(tx.open_table(GENERATED))?.insert(key.as_slice(), ()))?;
+    Ok(Some(bytes.len()))
+}
+
 fn read_only_database(
     path: &Path,
     cache_bytes: usize,
@@ -267,6 +323,9 @@ fn resolve_base(
         ticks::restore(&root, &mut chunk, blocks)?;
         check_geometry(&chunk)?;
         return Ok(Some(chunk));
+    }
+    if read_chunk_covered(&transaction, &key)? {
+        return Err(missing_baseline(dimension, position));
     }
     drop(imported);
     drop(transaction);
@@ -745,6 +804,18 @@ fn write_snapshots(
         let key = chunk_key(snapshot.dimension, position);
         if !seen.insert(key) {
             return Err(NativeError::Invalid("duplicate snapshot participant"));
+        }
+        if let Some(bytes) = ensure_baseline(
+            transaction,
+            snapshot.dimension,
+            snapshot.base,
+            blocks,
+            items,
+            || chunk_covered(&key, &applied, &metadata, &overlays),
+        )? {
+            if let Some(io) = io.as_deref_mut() {
+                io.chunk_payload_bytes += bytes as u64;
+            }
         }
         // The mask narrows only world checkpoints: replay probes every stored
         // section record to decide `changed`, so it keeps examining all of them.

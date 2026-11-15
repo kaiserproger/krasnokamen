@@ -114,7 +114,6 @@ impl ChunkSource {
                 &self.registry,
                 &self.items,
                 &self.chest_loot,
-                self.generator.as_ref(),
             )
             .and_then(|chunk| {
                 if let Some(chunk) = &chunk

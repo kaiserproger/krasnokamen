@@ -10,8 +10,8 @@ use super::{fail, hashes, write_receipt};
 use mc_core::dimensions::Dimension;
 use mc_core::journal::{CheckpointManifest, Replay, player_from_tag, visit_complete_batches_after};
 use mc_core::native_checkpoint::{
-    decode_tag, dimension_id, generation_records, generator, hydrate_visited_entity,
-    native_identity, validate_manifest,
+    decode_tag, dimension_id, generation_records, hydrate_visited_entity, native_identity,
+    validate_manifest,
 };
 use mc_core::{CoreConfig, CoreError};
 use mc_world::native::{NativeEntitySnapshot, NativeReadOnlyStore};
@@ -180,7 +180,6 @@ fn probe(
     // the typed container projection (the checkpoint persists block-entity
     // slots in the chunk metadata, not just the opaque client NBT image).
     let dimension = Dimension::Overworld;
-    let chunk_generator = generator(&config, &registry, dimension)?;
     for &[x, y, z] in blocks {
         let chunk_pos = mc_world::ChunkPos {
             x: x.div_euclid(16),
@@ -193,7 +192,6 @@ fn probe(
                 &registry.blocks,
                 &registry.items,
                 &registry.chest_loot,
-                chunk_generator.as_ref(),
             )
             .map_err(storage)?;
         let mut probe = ProbeBlock {

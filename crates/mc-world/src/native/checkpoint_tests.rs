@@ -673,13 +673,6 @@ fn native_checkpoint_chunk_stream_late_error_rolls_back_and_retries() {
     }
 }
 
-struct NoGeneration;
-impl crate::ChunkGenerator for NoGeneration {
-    fn generate(&self, _: ChunkPos) -> Chunk {
-        panic!("imported coverage must win");
-    }
-}
-
 #[test]
 fn native_checkpoint_three_geometries_absolute_imported_ticks_and_fill_guard() {
     let directory = tempfile::tempdir().unwrap();
@@ -739,7 +732,6 @@ fn native_checkpoint_three_geometries_absolute_imported_ticks_and_fill_guard() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration,
             )
             .unwrap()
             .unwrap();
@@ -770,7 +762,6 @@ fn native_checkpoint_three_geometries_absolute_imported_ticks_and_fill_guard() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration
             )
             .unwrap()
             .is_none()
@@ -785,7 +776,6 @@ fn native_checkpoint_three_geometries_absolute_imported_ticks_and_fill_guard() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration,
             )
             .unwrap()
             .is_some()
@@ -1006,7 +996,6 @@ fn native_noop_checkpoint_keeps_stored_chunk_and_entity_bytes() {
             &blocks,
             &items,
             &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-            &NoGeneration,
         )
         .unwrap()
         .unwrap();
@@ -1155,7 +1144,6 @@ fn native_checkpoint_chunks_roll_back_and_stamp_capture_tick() {
             &blocks,
             &items,
             &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-            &NoGeneration,
         )
         .unwrap()
         .unwrap();
@@ -1198,7 +1186,6 @@ fn native_checkpoint_chunks_roll_back_and_stamp_capture_tick() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration,
             )
             .unwrap()
             .unwrap()
@@ -1230,7 +1217,6 @@ fn native_checkpoint_chunks_roll_back_and_stamp_capture_tick() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration,
             )
             .unwrap()
             .unwrap()
@@ -1367,7 +1353,6 @@ fn native_checkpoint_staging_dimensions_are_not_a_world() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration,
             )
             .unwrap()
             .is_some()
@@ -1471,7 +1456,6 @@ fn native_checkpoint_writer_reopen_after_crash_keeps_last_immediate_commit() {
             &blocks,
             &items,
             &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-            &NoGeneration,
         )
         .unwrap()
         .unwrap();
@@ -1593,10 +1577,12 @@ fn generated_entity_markers_pass_checkpoint_and_generated_save() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &NoGeneration,
             )
             .unwrap()
             .unwrap();
         assert_eq!(restored.generated_entities(), vec![marker.clone()]);
     }
 }
+
+#[path = "baseline_gap_tests.rs"]
+mod baseline_gap;

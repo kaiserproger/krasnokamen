@@ -285,11 +285,12 @@ top-level entries and symlinks refuse startup.
 
 `level.dat/Data/KrasnokamenWorldgenInputs` records schema version 1, the canonical
 lowercase SHA-256 of effective worldgen inputs/reports, source hashes and
-historical structure ownership. Unknown/missing/duplicate struct fields,
-unsupported schema, invalid hashes/ownership and oversized metadata refuse
-adoption before any identity or epoch mutation. Removed-pack ownership remains
-valid diagnostic history. The normal checkpoint/WAL level-metadata path owns it,
-not a separate startup transaction.
+historical structure ownership. Unknown/missing/duplicate struct fields or map
+keys, unsupported schema, invalid hashes/ownership and oversized metadata refuse
+adoption before any identity or epoch mutation. File pack IDs share selection's
+bounded direct-directory-entry predicate. Removed-pack ownership remains valid
+diagnostic history. The normal checkpoint/WAL level-metadata path owns it, not a
+separate startup transaction.
 
 A valid startup change logs old/new identities and changed packs/cache, then
 continues: stored chunk baselines remain unchanged; new chunks use selected
@@ -299,18 +300,29 @@ without it adopt in memory and persist it at their next normal positive-tick
 checkpoint; a crash before that repeats adoption. Vanilla-only worlds require no
 packs or staged copy. Native seed/revision identity validation is unchanged.
 
-For generation changed by selected datapacks, immutable generated admission
-images must become durable native baselines before dependent WAL can publish.
-The tick queues required-baseline jobs before its append, regardless of the
-ordinary generated-save batch threshold. The journal owner waits for the sole
-native writer's Immediate fill-generated commit; failure closes admission and
-withholds the append. The tick performs no new synchronous DB write. A baseline
-commit inserts absent slots only, commits no gameplay changes and advances no
-checkpoint tick. A crash before WAL can leave an unused baseline; after WAL,
-recovery folds edits over the original baseline even after pack change/removal.
-Vanilla-only/effectively unchanged generation retains existing best-effort
-asynchronous saves. SIGKILL regressions cover real WAL, both selection changes,
-repeated recovery, then checkpoint/prune and another recovery.
+Every generated native admission image, including vanilla-only generation, must
+become a durable native baseline before dependent WAL can publish. The tick
+queues required-baseline jobs before its append, regardless of the ordinary
+generated-save batch threshold. The journal owner waits for the sole native
+writer's Immediate fill-generated commit; failure closes admission and withholds
+the append. The tick performs no new synchronous DB write or durability await.
+This does not strengthen gameplay publication: a queued/unflushed tail can still
+roll back consistently, and no per-tick fsync is required.
+
+Admission refuses and records a load error if the bounded required-baseline
+buffer is full; checkpoint cannot discard that chunk's unmaterialized edits.
+Fill inserts only absent, uncovered slots. A first dependent native snapshot
+installs its original base in the same transaction. Covered native state with
+no physical baseline refuses reads, fallback, fill and checkpoint instead of
+blessing current generation as historical ancestry. WAL-only missing bases may
+be reproduced only from matching validated saved inputs, or the fixed builtin
+legacy generator with no external inputs. Unknown/changed inputs refuse before
+replay materialization or persistent mutation with chunk and source context.
+
+Baseline jobs commit no gameplay changes and advance no checkpoint tick. A crash
+before WAL can leave an unused baseline; retained WAL folds edits over the
+original base after pack addition/change/removal. SIGKILL regressions cover all
+three transitions, repeated recovery, then checkpoint/prune and another recovery.
 
 Generators do not hot-swap. Enable, disable or reload that changes effective
 worldgen inputs refuses atomically and retains the old packs, selection and

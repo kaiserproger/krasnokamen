@@ -36,6 +36,15 @@ impl Default for Selection {
     }
 }
 
+/// The builtin pack or one direct entry of the datapack directory.
+fn valid_pack_id(id: &str) -> bool {
+    id.len() <= 1024
+        && (id == "vanilla"
+            || id.strip_prefix("file/").is_some_and(|name| {
+                !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
+            }))
+}
+
 impl Selection {
     pub(crate) fn validate(&self) -> Result<(), String> {
         if self.enabled.len().saturating_add(self.disabled.len()) > MAX_RESOURCES {
@@ -43,16 +52,7 @@ impl Selection {
         }
         let mut seen = BTreeSet::new();
         for id in self.enabled.iter().chain(&self.disabled) {
-            // A pack is the builtin `vanilla` or a `file/<name>` entry of the
-            // datapack folder; anything else is not a value this server writes.
-            let known = id == "vanilla"
-                || id.strip_prefix("file/").is_some_and(|name| {
-                    !name.is_empty()
-                        && name != "."
-                        && name != ".."
-                        && !name.contains(['/', '\\', '\0'])
-                });
-            if !known || id.len() > 1024 || !seen.insert(id) {
+            if !valid_pack_id(id) || !seen.insert(id) {
                 return Err(format!("Invalid or duplicate datapack selection id: {id}"));
             }
         }

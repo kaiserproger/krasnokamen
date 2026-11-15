@@ -174,13 +174,6 @@ fn native_tick_corruption_rejects_missing_fields_foreign_positions_and_unknown_t
     assert!(restore(&Tag::Compound(fields), &mut chunk, &blocks).is_err());
 }
 
-struct ImportedOnly;
-impl crate::ChunkGenerator for ImportedOnly {
-    fn generate(&self, _: crate::ChunkPos) -> Chunk {
-        panic!("stored imported coverage must not generate");
-    }
-}
-
 #[test]
 fn native_store_preserves_both_flowing_fluid_ids_after_reopen() {
     let directory = tempfile::tempdir().unwrap();
@@ -219,7 +212,6 @@ fn native_store_preserves_both_flowing_fluid_ids_after_reopen() {
             &blocks,
             &items,
             &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-            &ImportedOnly,
         )
         .unwrap()
         .unwrap();
@@ -270,7 +262,6 @@ fn native_store_rejects_unknown_fluid_ids_with_list_kind_and_name() {
                 &blocks,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                &ImportedOnly,
             )
             .unwrap_err();
         assert_eq!(
@@ -299,7 +290,6 @@ fn native_store_rejects_unknown_fluid_ids_with_list_kind_and_name() {
             &blocks,
             &items,
             &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-            &ImportedOnly,
         )
         .unwrap_err();
     assert_eq!(

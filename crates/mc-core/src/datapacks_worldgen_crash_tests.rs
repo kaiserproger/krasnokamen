@@ -181,7 +181,14 @@ fn assert_chunk(state: &mut crate::tick::TickState, expected: &mc_world::Chunk) 
     );
 }
 
-fn run_case(remove: bool, test: &str) {
+#[derive(Clone, Copy)]
+enum BaselineCase {
+    Change,
+    Remove,
+    Add,
+}
+
+fn run_case(case: BaselineCase, test: &str) {
     if let Some(root) = std::env::var_os(CHILD) {
         crash_child(Path::new(&root));
         unreachable!();
@@ -219,20 +226,23 @@ fn run_case(remove: bool, test: &str) {
         .iter()
         .map(|path| (path.as_str(), br#"{"replace":true,"values":[]}"#.as_slice()))
         .collect();
-    pack(
-        &directory.path().join("datapacks"),
-        "crash-baseline",
-        &resources,
-    );
+    if !matches!(case, BaselineCase::Add) {
+        pack(
+            &directory.path().join("datapacks"),
+            "crash-baseline",
+            &resources,
+        );
+    }
     let core = crate::Core::open(config.clone()).unwrap();
     let registry = Arc::clone(core.registry());
     let generator = core.overworld_generator().unwrap();
-    let expected = generator.generate(pos);
-    assert!(
-        !mc_world::structure_starts::read(&expected.extras, pos, false)
+    let mut expected = generator.generate(pos);
+    assert_eq!(
+        mc_world::structure_starts::read(&expected.extras, pos, false)
             .unwrap()
             .iter()
-            .any(|site| site.structure.as_str().starts_with("minecraft:village_"))
+            .any(|site| site.structure.as_str().starts_with("minecraft:village_")),
+        matches!(case, BaselineCase::Add)
     );
     core.shutdown();
     let checkpoint = crate::native_checkpoint::tests::read_manifest(&config)
@@ -250,15 +260,49 @@ fn run_case(remove: bool, test: &str) {
         checkpoint,
         "SIGKILL precedes checkpoint publication"
     );
+    // A real vanilla village can also publish legitimate farming/door edits
+    // before the gold command. Compare every untouched cell against the
+    // original baseline plus ALL actual durable block post-images.
+    let replay = crate::native_checkpoint::recover_with_reader(
+        &config,
+        Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .unwrap();
+    for (&(x, y, z), &state) in &replay.dimensions[&crate::dimensions::Dimension::Overworld].blocks
+    {
+        if x.div_euclid(16) == pos.x && z.div_euclid(16) == pos.z {
+            eprintln!("durable block post-image {x},{y},{z}={state}");
+            expected
+                .set_block(
+                    x.rem_euclid(16) as u8,
+                    y,
+                    z.rem_euclid(16) as u8,
+                    mc_world::BlockStateId(state),
+                )
+                .unwrap();
+        }
+    }
+    drop(replay);
     let pack_root = directory.path().join("datapacks/crash-baseline");
-    if remove {
-        std::fs::rename(&pack_root, directory.path().join("removed-pack")).unwrap();
-    } else {
-        for path in tags {
-            write(
-                &pack_root.join("data"),
-                &path,
-                &std::fs::read(cache.join("data").join(&path)).unwrap(),
+    match case {
+        BaselineCase::Remove => {
+            std::fs::rename(&pack_root, directory.path().join("removed-pack")).unwrap();
+        }
+        BaselineCase::Change => {
+            for path in tags {
+                write(
+                    &pack_root.join("data"),
+                    &path,
+                    &std::fs::read(cache.join("data").join(&path)).unwrap(),
+                );
+            }
+        }
+        BaselineCase::Add => {
+            pack(
+                &directory.path().join("datapacks"),
+                "crash-baseline",
+                &resources,
             );
         }
     }
@@ -289,7 +333,7 @@ fn run_case(remove: bool, test: &str) {
 #[ignore = "requires the local vanilla gameplay cache; run with --include-ignored"]
 fn sigkill_real_wal_then_pack_change_preserves_original_baseline() {
     run_case(
-        false,
+        BaselineCase::Change,
         concat!(
             module_path!(),
             "::sigkill_real_wal_then_pack_change_preserves_original_baseline"
@@ -301,10 +345,77 @@ fn sigkill_real_wal_then_pack_change_preserves_original_baseline() {
 #[ignore = "requires the local vanilla gameplay cache; run with --include-ignored"]
 fn sigkill_real_wal_then_pack_removal_preserves_original_baseline() {
     run_case(
-        true,
+        BaselineCase::Remove,
         concat!(
             module_path!(),
             "::sigkill_real_wal_then_pack_removal_preserves_original_baseline"
         ),
     );
+}
+
+#[test]
+#[ignore = "requires the local vanilla gameplay cache; run with --include-ignored"]
+fn sigkill_real_wal_then_added_pack_preserves_original_vanilla_baseline() {
+    run_case(
+        BaselineCase::Add,
+        concat!(
+            module_path!(),
+            "::sigkill_real_wal_then_added_pack_preserves_original_vanilla_baseline"
+        ),
+    );
+}
+
+#[test]
+#[ignore = "requires the local vanilla gameplay cache; run with --include-ignored"]
+fn wal_only_missing_baseline_refuses_changed_inputs_without_writing() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = config(directory.path());
+    let core = crate::Core::open(config.clone()).unwrap();
+    let registry = Arc::clone(core.registry());
+    core.shutdown();
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let before = store.read_checkpoint().unwrap();
+    let counts = store.record_counts().unwrap();
+    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    writer
+        .append(
+            before.tick + 1,
+            before.tick + 1,
+            &[crate::journal::JournalEntry::Block {
+                pos: [30_400, 200, 32_000],
+                state: registry.states.stone,
+            }],
+        )
+        .unwrap();
+    drop(writer);
+    let wal: Vec<_> = std::fs::read_dir(directory.path().join("journal"))
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    pack(
+        &directory.path().join("datapacks"),
+        "added-after-wal",
+        &[(
+            "minecraft/tags/worldgen/biome/has_structure/village_plains.json",
+            br#"{"replace":true,"values":[]}"#,
+        )],
+    );
+    let error = crate::core::recover_tick_state(&config, &registry, &store, false, None, None)
+        .err()
+        .expect("WAL-only missing baseline cannot use changed inputs");
+    assert!(error.to_string().contains("baseline"), "{error}");
+    assert!(
+        error.to_string().contains("file/added-after-wal"),
+        "{error}"
+    );
+    assert_eq!(store.read_checkpoint().unwrap().tick, before.tick);
+    assert_eq!(store.read_checkpoint().unwrap().globals, before.globals);
+    assert_eq!(store.record_counts().unwrap(), counts);
+    for (path, bytes) in wal {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
 }

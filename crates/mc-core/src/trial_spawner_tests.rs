@@ -555,9 +555,6 @@ fn trial_spawner_corrupt_native_chunk_is_unavailable_and_never_overwritten() {
             )
             .unwrap();
         let saved = store.read_checkpoint().unwrap();
-        let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(
-            mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks)),
-        );
         let stored_error = store
             .read_chunk(
                 0,
@@ -565,10 +562,12 @@ fn trial_spawner_corrupt_native_chunk_is_unavailable_and_never_overwritten() {
                 &registry.blocks,
                 &registry.items,
                 &registry.chest_loot,
-                &*generator,
             )
             .unwrap_err()
             .to_string();
+        let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(
+            mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks)),
+        );
         let mut world = ChunkWorld::new_native(
             42,
             Arc::clone(&store),
@@ -601,7 +600,6 @@ fn trial_spawner_corrupt_native_chunk_is_unavailable_and_never_overwritten() {
         let after = store.read_checkpoint().unwrap();
         assert_eq!(after.tick, saved.tick);
         assert_eq!(after.globals, saved.globals);
-        let generator = mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks));
         let durable_error = store
             .read_chunk(
                 0,
@@ -609,7 +607,6 @@ fn trial_spawner_corrupt_native_chunk_is_unavailable_and_never_overwritten() {
                 &registry.blocks,
                 &registry.items,
                 &registry.chest_loot,
-                &generator,
             )
             .unwrap_err()
             .to_string();
@@ -626,7 +623,6 @@ fn trial_spawner_truncated_resident_record_returns_error_without_tick_panic() {
     crate::world::world_tests::write_capture(&capture).unwrap();
     let store = capture.store().unwrap();
     let original = store.read_checkpoint().unwrap();
-    let generator = mc_worldgen::TerrainGenerator::new(42, Arc::clone(&state.registry.blocks));
     let saved = store
         .read_chunk(
             0,
@@ -634,7 +630,6 @@ fn trial_spawner_truncated_resident_record_returns_error_without_tick_panic() {
             &state.registry.blocks,
             &state.registry.items,
             &state.registry.chest_loot,
-            &generator,
         )
         .unwrap()
         .unwrap();
@@ -668,7 +663,6 @@ fn trial_spawner_truncated_resident_record_returns_error_without_tick_panic() {
             &state.registry.blocks,
             &state.registry.items,
             &state.registry.chest_loot,
-            &generator,
         )
         .unwrap()
         .unwrap();

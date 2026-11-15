@@ -584,11 +584,11 @@ fn fresh_restart_and_wal_generated_chunks_share_selected_worldgen() {
         &tags[0],
         br#"{"replace":true,"values":["minecraft:plains"]}"#,
     );
-    let (state, _, _) =
-        crate::core::recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
-    assert_eq!(state.datapacks.selection(), &selected);
-    assert_eq!(state.world.block_at(x, 200, z), Some(registry.states.air));
-    drop(state);
+    let error = crate::core::recover_tick_state(&config, &registry, &store, false, None, None)
+        .err()
+        .expect("changed inputs cannot prove a WAL-only original baseline");
+    assert!(error.to_string().contains("baseline"), "{error}");
+    assert!(error.to_string().contains("file/no-villages"), "{error}");
     for (path, bytes) in original_wal {
         assert_eq!(std::fs::read(path).unwrap(), bytes);
     }
@@ -826,7 +826,6 @@ fn removed_pack_saved_start_survives_live_wal_checkpoint_restart_and_reactivatio
     );
     assert!(core.checkpoint());
     let registry = Arc::clone(core.registry());
-    let generator = core.overworld_generator().unwrap();
     core.shutdown(); // The real tick WAL and native checkpoint save the touched chunk.
     let core = crate::Core::open(config.clone()).unwrap();
     assert!(!core.registry().datapack_structures().contains(&structure));
@@ -839,7 +838,6 @@ fn removed_pack_saved_start_survives_live_wal_checkpoint_restart_and_reactivatio
             &registry.blocks,
             &registry.items,
             &registry.chest_loot,
-            generator.as_ref(),
         )
         .unwrap()
         .unwrap();
@@ -882,7 +880,6 @@ fn removed_pack_saved_start_survives_live_wal_checkpoint_restart_and_reactivatio
             &registry.blocks,
             &registry.items,
             &registry.chest_loot,
-            generator.as_ref(),
         )
         .unwrap()
         .unwrap();
@@ -1029,7 +1026,6 @@ fn selected_namespaced_crystal_fixture_generates_and_persists_exact_id() {
             &registry.blocks,
             &registry.items,
             &registry.chest_loot,
-            generator.as_ref(),
         )
         .unwrap()
         .unwrap();

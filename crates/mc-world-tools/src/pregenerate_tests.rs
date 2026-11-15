@@ -195,7 +195,6 @@ fn pregenerate_uses_the_admitted_selected_worldgen_instead_of_rebuilding_vanilla
     assert_eq!(report.generated, 1);
     let core = Core::open(config.clone()).unwrap();
     let registry = Arc::clone(core.registry());
-    let generator = core.overworld_generator().unwrap();
     core.shutdown();
     let store = NativeStore::open(
         &dir.join("native/state.redb"),
@@ -209,7 +208,6 @@ fn pregenerate_uses_the_admitted_selected_worldgen_instead_of_rebuilding_vanilla
             &registry.blocks,
             &registry.items,
             &registry.chest_loot,
-            generator.as_ref(),
         )
         .unwrap()
         .unwrap();

@@ -144,7 +144,6 @@ pub(super) fn convert(
                         &world.registry.blocks,
                         &world.registry.items,
                         &world.registry.chest_loot,
-                        generator.as_ref(),
                     )
                     .map_err(fail)?
                     .unwrap_or_else(|| generator.generate(pos));

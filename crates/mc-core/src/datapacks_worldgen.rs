@@ -20,8 +20,37 @@ type Resources = BTreeMap<String, Arc<[u8]>>;
 struct Identity {
     version: u32,
     digest: String,
+    #[serde(deserialize_with = "unique_identity_map")]
     sources: BTreeMap<String, String>,
+    #[serde(deserialize_with = "unique_identity_map")]
     structure_owners: BTreeMap<String, String>,
+}
+
+fn unique_identity_map<'de, D: serde::Deserializer<'de>>(
+    decoder: D,
+) -> Result<BTreeMap<String, String>, D::Error> {
+    struct Unique;
+    impl<'de> serde::de::Visitor<'de> for Unique {
+        type Value = BTreeMap<String, String>;
+
+        fn expecting(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            out.write_str("identity map with unique keys")
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut input: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut values = BTreeMap::new();
+            while let Some((key, value)) = input.next_entry::<String, String>()? {
+                if values.insert(key, value).is_some() {
+                    return Err(serde::de::Error::custom("duplicate identity map key"));
+                }
+            }
+            Ok(values)
+        }
+    }
+    decoder.deserialize_map(Unique)
 }
 
 impl Identity {
@@ -63,16 +92,15 @@ impl Identity {
     }
 
     fn pack_id(value: &str) -> bool {
-        value.strip_prefix("file/").is_some_and(|name| {
-            Path::new(name)
-                .file_name()
-                .is_some_and(|file| file == std::ffi::OsStr::new(name))
-        })
+        value.starts_with("file/") && super::valid_pack_id(value)
     }
 }
 
 pub(crate) struct Adoption {
     pub(crate) changed: bool,
+    /// Missing WAL bases are reproducible only from the saved selected image.
+    /// Legacy worlds without external inputs use the immutable builtin contract.
+    pub(crate) unproven_baseline_sources: Option<BTreeSet<String>>,
     pub(crate) catalog: Arc<StructureCatalog>,
 }
 
@@ -80,8 +108,6 @@ pub(crate) struct Adoption {
 #[derive(Debug)]
 pub(crate) struct StructureCatalog {
     active: BTreeSet<mc_data::Identifier>,
-    /// Selected generation differs from vanilla and must survive a pack change.
-    pub(crate) durable_baselines: bool,
     owners: BTreeMap<String, String>,
     warned: parking_lot::Mutex<BTreeSet<mc_data::Identifier>>,
 }
@@ -618,6 +644,19 @@ impl Inputs {
         let changed = saved
             .as_ref()
             .is_none_or(|saved| saved.digest != self.identity);
+        let reproducible = saved
+            .as_ref()
+            .map_or(self.base_root.is_none() && self.stage.is_none(), |saved| {
+                saved.digest == self.identity
+            });
+        let unproven_baseline_sources = (!reproducible).then(|| {
+            saved
+                .iter()
+                .flat_map(|saved| saved.sources.keys())
+                .chain(self.sources.keys())
+                .cloned()
+                .collect()
+        });
         let mut owners = saved
             .as_ref()
             .map(|s| s.structure_owners.clone())
@@ -652,8 +691,8 @@ impl Inputs {
         crate::terrain::stage_data_field(globals, IDENTITY, &value)?;
         Ok(Adoption {
             changed,
+            unproven_baseline_sources,
             catalog: Arc::new(StructureCatalog {
-                durable_baselines: self.stage.is_some(),
                 active: self.catalog.clone(),
                 owners,
                 warned: parking_lot::Mutex::new(BTreeSet::new()),

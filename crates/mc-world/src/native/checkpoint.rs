@@ -3,7 +3,7 @@ use super::{
     NativeChunkSnapshot, NativeEntitySnapshot, NativeError, NativeReadOnlyStore, NativeStore,
     SnapshotCommit, codec, db, state,
 };
-use crate::{BlockRegistry, Chunk, ChunkGenerator, ChunkGeometry, ChunkPos, OVERWORLD_GEOMETRY};
+use crate::{BlockRegistry, Chunk, ChunkGeometry, ChunkPos, OVERWORLD_GEOMETRY};
 use mc_data::items::ItemRegistry;
 use mc_data::loot::chest_26_1_2::ChestLootCatalog;
 use mc_nbt::Tag;
@@ -921,16 +921,23 @@ impl NativeStore {
                 return Err(failure("chunks", "duplicate participant or future LSN"));
             }
             check_write_geometry(&tx, snapshot.dimension, snapshot.base)?;
-            let mut base_written = false;
-            {
-                let mut imported = db(tx.open_table(super::IMPORTED))?;
-                if db(imported.get(key.as_slice()))?.is_none() {
-                    let bytes = codec::baseline(snapshot.base, blocks, items)?;
-                    db(imported.insert(key.as_slice(), bytes.as_slice()))?;
-                    db(db(tx.open_table(super::GENERATED))?.insert(key.as_slice(), ()))?;
-                    io.chunk_payload_bytes += bytes.len() as u64;
-                    base_written = true;
-                }
+            let base_written = super::ensure_baseline(
+                &tx,
+                snapshot.dimension,
+                snapshot.base,
+                blocks,
+                items,
+                || {
+                    super::chunk_covered(
+                        &key,
+                        &db(tx.open_table(super::APPLIED))?,
+                        &db(tx.open_table(super::METADATA))?,
+                        &db(tx.open_table(super::OVERLAYS))?,
+                    )
+                },
+            )?;
+            if let Some(bytes) = base_written {
+                io.chunk_payload_bytes += bytes as u64;
             }
             let written = super::write_snapshots(
                 &tx,
@@ -941,7 +948,7 @@ impl NativeStore {
                 None,
                 Some(&mut io),
             )?;
-            if base_written && written == 0 {
+            if base_written.is_some() && written == 0 {
                 io.rewritten_chunks += 1;
             }
             Ok(())
@@ -995,10 +1002,9 @@ impl NativeStore {
         blocks: &BlockRegistry,
         items: &ItemRegistry,
         chest_loot: &ChestLootCatalog,
-        generator: &dyn ChunkGenerator,
     ) -> Result<Option<Chunk>, NativeError> {
         self.checkpoint_reader()?
-            .read_chunk(dimension, position, blocks, items, chest_loot, generator)
+            .read_chunk(dimension, position, blocks, items, chest_loot)
     }
     pub fn visit_chunk_positions(
         &self,
@@ -1025,25 +1031,14 @@ impl NativeStore {
             if !seen.insert(key) {
                 return Err(failure("generated", "duplicate participant"));
             }
-            let mut imported = db(tx.open_table(super::IMPORTED))?;
-            if db(imported.get(key.as_slice()))?.is_some()
-                || db(db(tx.open_table(super::APPLIED))?.get(key.as_slice()))?.is_some()
-                || db(db(tx.open_table(super::METADATA))?.get(key.as_slice()))?.is_some()
-            {
-                continue;
-            }
-            let overlays = db(tx.open_table(super::OVERLAYS))?;
-            if db(overlays.range(key.as_slice()..))?
-                .next()
-                .transpose()
-                .map_err(|e| NativeError::Database(e.into()))?
-                .is_some_and(|(k, _)| k.value().starts_with(&key))
-            {
-                continue;
-            }
-            let bytes = codec::baseline(chunk, blocks, items)?;
-            db(imported.insert(key.as_slice(), bytes.as_slice()))?;
-            db(db(tx.open_table(super::GENERATED))?.insert(key.as_slice(), ()))?;
+            super::ensure_baseline(&tx, dimension, chunk, blocks, items, || {
+                super::chunk_covered(
+                    &key,
+                    &db(tx.open_table(super::APPLIED))?,
+                    &db(tx.open_table(super::METADATA))?,
+                    &db(tx.open_table(super::OVERLAYS))?,
+                )
+            })?;
         }
         db(tx.commit())
     }
@@ -1108,10 +1103,9 @@ impl NativeReadOnlyStore {
         blocks: &BlockRegistry,
         items: &ItemRegistry,
         chest_loot: &ChestLootCatalog,
-        generator: &dyn ChunkGenerator,
     ) -> Result<Option<Chunk>, NativeError> {
         self.checkpoint_reader()?
-            .read_chunk(dimension, position, blocks, items, chest_loot, generator)
+            .read_chunk(dimension, position, blocks, items, chest_loot)
     }
     pub fn visit_chunk_positions(
         &self,
@@ -1227,7 +1221,6 @@ impl NativeCheckpointReader {
         blocks: &BlockRegistry,
         items: &ItemRegistry,
         chest_loot: &ChestLootCatalog,
-        generator: &dyn ChunkGenerator,
     ) -> Result<Option<Chunk>, NativeError> {
         let geometry = read_geometry(&self.tx, dimension)?;
         let key = super::chunk_key(dimension, position);
@@ -1246,22 +1239,13 @@ impl NativeCheckpointReader {
             super::ticks::restore(&root, &mut chunk, blocks)?;
             chunk
         } else {
-            let mut covered = db(db(self.tx.open_table(super::APPLIED))?.get(key.as_slice()))?
-                .is_some()
-                || db(db(self.tx.open_table(super::METADATA))?.get(key.as_slice()))?.is_some();
-            let overlays = db(self.tx.open_table(super::OVERLAYS))?;
-            covered |= db(overlays.range(key.as_slice()..))?
-                .next()
-                .transpose()
-                .map_err(|e| NativeError::Database(e.into()))?
-                .is_some_and(|(k, _)| k.value().starts_with(&key));
-            if !covered {
-                return Ok(None);
+            if super::read_chunk_covered(&self.tx, &key)? {
+                return Err(super::missing_baseline(dimension, position));
             }
-            generator.generate(position)
+            return Ok(None);
         };
         if base.pos != position {
-            return Err(failure("chunk", "generator position mismatch"));
+            return Err(failure("chunk", "baseline position mismatch"));
         }
         super::compose(&self.tx, dimension, &base, blocks, items, chest_loot).map(Some)
     }
