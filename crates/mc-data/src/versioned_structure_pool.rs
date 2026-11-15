@@ -25,7 +25,9 @@ pub(crate) fn select<'a>(
     fallback: &'a str,
     release: &str,
 ) -> Result<&'a str, ()> {
-    let Some(locations) = locations else { return Ok(fallback) };
+    let Some(locations) = locations else {
+        return Ok(fallback);
+    };
     let release = version(release).ok_or(())?;
     let mut selected = None;
     for (key, value) in locations.as_object().ok_or(())? {
@@ -53,15 +55,31 @@ mod tests {
             "1.21-1.21.4": "mvs:old",
             "1.21.5-26.3": "mvs:new"
         });
-        assert_eq!(select(Some(&versions), "mvs:fallback", "1.21.4"), Ok("mvs:old"));
-        assert_eq!(select(Some(&versions), "mvs:fallback", "26.3"), Ok("mvs:new"));
-        assert_eq!(select(Some(&versions), "mvs:fallback", "26.4"), Ok("mvs:fallback"));
+        assert_eq!(
+            select(Some(&versions), "mvs:fallback", "1.21.4"),
+            Ok("mvs:old")
+        );
+        assert_eq!(
+            select(Some(&versions), "mvs:fallback", "26.3"),
+            Ok("mvs:new")
+        );
+        assert_eq!(
+            select(Some(&versions), "mvs:fallback", "26.4"),
+            Ok("mvs:fallback")
+        );
         assert_eq!(select(None, "mvs:fallback", "26.3"), Ok("mvs:fallback"));
     }
 
     #[test]
     fn rejects_bad_or_ambiguous_ranges() {
-        assert!(select(Some(&json!({"1.21-26.3": "mvs:a", "26.3": "mvs:b"})), "mvs:d", "26.3").is_err());
+        assert!(
+            select(
+                Some(&json!({"1.21-26.3": "mvs:a", "26.3": "mvs:b"})),
+                "mvs:d",
+                "26.3"
+            )
+            .is_err()
+        );
         assert!(select(Some(&json!({"26.3-1.21": "mvs:a"})), "mvs:d", "26.3").is_err());
         assert!(select(Some(&json!({"broken": "mvs:a"})), "mvs:d", "26.3").is_err());
         assert!(select(Some(&json!({"1.21-26.3": 5})), "mvs:d", "26.3").is_err());

@@ -23,4 +23,3 @@ impl<F: Fn(i32, i32) -> i32> HeightQuery for F {
         self(x, z)
     }
 }
-

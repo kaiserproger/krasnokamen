@@ -670,7 +670,11 @@ pub fn apply_processors_with_metadata<'a>(
     blocks: &[PieceBlock],
     processors: &'a [Processor],
     reference_pos: BlockPos,
-) -> (Vec<PieceBlock>, Vec<(BlockPos, &'a Identifier)>, Vec<(BlockPos, &'a Identifier, &'a [i16; 7])>) {
+) -> (
+    Vec<PieceBlock>,
+    Vec<(BlockPos, &'a Identifier)>,
+    Vec<(BlockPos, &'a Identifier, &'a [i16; 7])>,
+) {
     if !processors
         .iter()
         .any(|processor| matches!(processor, Processor::Capped { .. }))

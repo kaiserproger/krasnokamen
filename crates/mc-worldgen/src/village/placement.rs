@@ -130,7 +130,11 @@ mod tests {
         assert!(!meets_minimum_origin_distance(3, 3, Some(80)));
         assert!(meets_minimum_origin_distance(3, 4, Some(80)));
         assert!(meets_minimum_origin_distance(-3, -4, Some(80)));
-        assert!(meets_minimum_origin_distance(i32::MAX, i32::MIN, Some(i32::MAX)));
+        assert!(meets_minimum_origin_distance(
+            i32::MAX,
+            i32::MIN,
+            Some(i32::MAX)
+        ));
     }
 
     #[test]

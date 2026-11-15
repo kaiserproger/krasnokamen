@@ -18,13 +18,19 @@ mod tests {
 
     #[test]
     fn structure_types_are_explicitly_namespaced() {
-        assert!(supports_structure_type(&Identifier::parse("minecraft:jigsaw").unwrap()));
-        assert!(!supports_structure_type(&Identifier::parse("example:jigsaw").unwrap()));
         assert!(supports_structure_type(
-            &Identifier::parse("moogs_structures:moogs_structures_generic_jigsaw_structure").unwrap()
+            &Identifier::parse("minecraft:jigsaw").unwrap()
         ));
         assert!(!supports_structure_type(
-            &Identifier::parse("moogs_structures:moogs_structures_generic_nether_jigsaw_structure").unwrap()
+            &Identifier::parse("example:jigsaw").unwrap()
+        ));
+        assert!(supports_structure_type(
+            &Identifier::parse("moogs_structures:moogs_structures_generic_jigsaw_structure")
+                .unwrap()
+        ));
+        assert!(!supports_structure_type(
+            &Identifier::parse("moogs_structures:moogs_structures_generic_nether_jigsaw_structure")
+                .unwrap()
         ));
     }
 }

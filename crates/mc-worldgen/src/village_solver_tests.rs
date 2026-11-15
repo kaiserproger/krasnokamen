@@ -571,10 +571,17 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
         average_land: false,
         terrain_check: Some((1, 3)),
     });
-    struct MoogColumns { liquid: bool, rough: bool }
+    struct MoogColumns {
+        liquid: bool,
+        rough: bool,
+    }
     impl crate::village::height_query::HeightQuery for MoogColumns {
         fn world_surface(&self, x: i32, z: i32) -> i32 {
-            if self.rough && (x, z) == (215, -105) { 68 } else { 64 }
+            if self.rough && (x, z) == (215, -105) {
+                68
+            } else {
+                64
+            }
         }
         fn top_is_liquid(&self, _x: i32, _z: i32) -> Option<bool> {
             Some(self.liquid)
@@ -582,43 +589,98 @@ fn the_start_piece_is_anchored_on_its_named_connector() {
     }
     let moog_start = |columns: &dyn crate::village::height_query::HeightQuery| {
         assemble_village(
-            &moog, 4242, chunk_x, chunk_z,
-            |_x, _y, _z| identifier("minecraft:plains"), |_tag, _biome| true, columns,
+            &moog,
+            4242,
+            chunk_x,
+            chunk_z,
+            |_x, _y, _z| identifier("minecraft:plains"),
+            |_tag, _biome| true,
+            columns,
         )
     };
-    let moog_assembly = moog_start(&MoogColumns { liquid: false, rough: false }).unwrap();
+    let moog_assembly = moog_start(&MoogColumns {
+        liquid: false,
+        rough: false,
+    })
+    .unwrap();
     let first = &moog_assembly.pieces[0];
-    assert_eq!(first.bounds_min.x + (first.bounds_max.x - first.bounds_min.x + 1) / 2, chunk_x * 16);
-    assert_eq!(first.bounds_min.z + (first.bounds_max.z - first.bounds_min.z + 1) / 2, chunk_z * 16);
-    assert!(moog_start(&MoogColumns { liquid: true, rough: false }).is_none());
-    assert!(moog_start(&MoogColumns { liquid: false, rough: true }).is_none());
+    assert_eq!(
+        first.bounds_min.x + (first.bounds_max.x - first.bounds_min.x + 1) / 2,
+        chunk_x * 16
+    );
+    assert_eq!(
+        first.bounds_min.z + (first.bounds_max.z - first.bounds_min.z + 1) / 2,
+        chunk_z * 16
+    );
+    assert!(
+        moog_start(&MoogColumns {
+            liquid: true,
+            rough: false
+        })
+        .is_none()
+    );
+    assert!(
+        moog_start(&MoogColumns {
+            liquid: false,
+            rough: true
+        })
+        .is_none()
+    );
     assert!(moog_start(&|_, _| 64).is_none());
     let mut radius = moog.clone();
-    radius.structures[0].spec.moog_start_checks.as_mut().unwrap().biome_radius = Some(1);
+    radius.structures[0]
+        .spec
+        .moog_start_checks
+        .as_mut()
+        .unwrap()
+        .biome_radius = Some(1);
     let rejected = assemble_village(
-        &radius, 4242, chunk_x, chunk_z,
-        |x, _, z| if (x, z) == (208, -112) {
-            identifier("minecraft:desert")
-        } else {
-            identifier("minecraft:plains")
+        &radius,
+        4242,
+        chunk_x,
+        chunk_z,
+        |x, _, z| {
+            if (x, z) == (208, -112) {
+                identifier("minecraft:desert")
+            } else {
+                identifier("minecraft:plains")
+            }
         },
         |_tag, _biome| true,
-        &MoogColumns { liquid: false, rough: false },
+        &MoogColumns {
+            liquid: false,
+            rough: false,
+        },
     );
     assert!(rejected.is_none(), "every biome in the radius must match");
 
     let mut buried = moog.clone();
-    let checks = buried.structures[0].spec.moog_start_checks.as_mut().unwrap();
+    let checks = buried.structures[0]
+        .spec
+        .moog_start_checks
+        .as_mut()
+        .unwrap();
     checks.cannot_spawn_in_liquid = false;
     checks.min_y = Some(0);
     checks.max_y = Some(100);
     checks.average_land = true;
     let buried = assemble_village(
-        &buried, 4242, chunk_x, chunk_z,
-        |_x, _y, _z| identifier("minecraft:plains"), |_tag, _biome| true,
-        &MoogColumns { liquid: false, rough: false },
-    ).unwrap();
-    assert_eq!(buried.pieces[0].bounds_min.y, 70, "average occupied ground plus start offset");
+        &buried,
+        4242,
+        chunk_x,
+        chunk_z,
+        |_x, _y, _z| identifier("minecraft:plains"),
+        |_tag, _biome| true,
+        &MoogColumns {
+            liquid: false,
+            rough: false,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        buried.pieces[0].bounds_min.y, 70,
+        "average occupied ground plus start offset"
+    );
     assert_eq!(assembly.structure, structure_id);
     assert_eq!(
         assembly.pieces.len(),

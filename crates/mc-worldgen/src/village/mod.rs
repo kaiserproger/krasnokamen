@@ -43,13 +43,13 @@ pub mod processors;
 pub mod shapes;
 pub mod solver;
 
-pub use mc_data::worldgen_structure_types::supports_structure_type;
 pub use beard::{BeardColumn, BeardContribution};
 pub use closure::{
     ClosureElement, ClosureError, ClosurePool, ClosureStructure, VillageClosure,
     load_village_closure,
 };
 pub use decor::{DecorError, VillageDecor};
+pub use mc_data::worldgen_structure_types::supports_structure_type;
 pub use placement::{
     RandomSpreadPlacement, set_large_feature_seed, set_large_feature_with_salt, start_origin,
 };

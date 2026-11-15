@@ -361,7 +361,6 @@ pub struct MoogStartChecks {
     pub average_land: bool,
 }
 
-
 /// A jigsaw structure and the settings needed to plan it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructureSpec {
@@ -746,13 +745,15 @@ impl VillageDataLoader {
         let worldgen_dir = if id.namespace() == "minecraft" {
             &self.worldgen_dir
         } else {
-            let data = self.worldgen_dir.parent().and_then(Path::parent).ok_or_else(|| {
-                VillageDataError::UnsupportedNamespace {
+            let data = self
+                .worldgen_dir
+                .parent()
+                .and_then(Path::parent)
+                .ok_or_else(|| VillageDataError::UnsupportedNamespace {
                     kind,
                     id: id.clone(),
                     referrer: referrer.clone(),
-                }
-            })?;
+                })?;
             namespace_dir = data.join(id.namespace()).join("worldgen");
             &namespace_dir
         };
@@ -840,7 +841,11 @@ fn parse_placement(
         });
     }
     if moog {
-        for field in ["super_exclusion_zone", "enhanced_exclusion_zone", "when_replacing"] {
+        for field in [
+            "super_exclusion_zone",
+            "enhanced_exclusion_zone",
+            "when_replacing",
+        ] {
             if let Some(unsupported) = value.get(field) {
                 return Err(VillageDataError::UnsupportedField {
                     kind: STRUCTURE_PLACEMENT,
@@ -990,7 +995,14 @@ fn parse_moog_start_checks(
         (None, None) => None,
         (Some(_), Some(_)) => Some((
             ranged_i32_field(value, "terrain_height_radius_check", STRUCTURE, id, 1, 100)?,
-            ranged_i32_field(value, "allowed_terrain_height_range", STRUCTURE, id, 1, 1000)?,
+            ranged_i32_field(
+                value,
+                "allowed_terrain_height_range",
+                STRUCTURE,
+                id,
+                1,
+                1000,
+            )?,
         )),
         _ => {
             return Err(VillageDataError::InvalidField {
@@ -1001,31 +1013,44 @@ fn parse_moog_start_checks(
             });
         }
     };
-    let biome_radius = value.get("valid_biome_radius_check")
+    let biome_radius = value
+        .get("valid_biome_radius_check")
         .map(|_| ranged_i32_field(value, "valid_biome_radius_check", STRUCTURE, id, 1, 100))
         .transpose()?;
     let (min_y, max_y) = if let Some(allowance) = value.get("y_allowance") {
         if !allowance.is_object() {
             return Err(VillageDataError::InvalidField {
-                kind: STRUCTURE, entry: id.clone(), field: "y_allowance",
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "y_allowance",
                 value: allowance.to_string(),
             });
         }
         if allowance.as_object().is_some_and(|object| {
-            object.keys().any(|key| key != "min_y_allowed" && key != "max_y_allowed")
+            object
+                .keys()
+                .any(|key| key != "min_y_allowed" && key != "max_y_allowed")
         }) {
             return Err(VillageDataError::InvalidField {
-                kind: STRUCTURE, entry: id.clone(), field: "y_allowance",
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "y_allowance",
                 value: "unsupported y_allowance field".to_owned(),
             });
         }
-        let min = allowance.get("min_y_allowed")
-            .map(|_| i32_field(allowance, "min_y_allowed", STRUCTURE, id)).transpose()?;
-        let max = allowance.get("max_y_allowed")
-            .map(|_| i32_field(allowance, "max_y_allowed", STRUCTURE, id)).transpose()?;
+        let min = allowance
+            .get("min_y_allowed")
+            .map(|_| i32_field(allowance, "min_y_allowed", STRUCTURE, id))
+            .transpose()?;
+        let max = allowance
+            .get("max_y_allowed")
+            .map(|_| i32_field(allowance, "max_y_allowed", STRUCTURE, id))
+            .transpose()?;
         if matches!((min, max), (Some(min), Some(max)) if min > max) {
             return Err(VillageDataError::InvalidField {
-                kind: STRUCTURE, entry: id.clone(), field: "y_allowance",
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "y_allowance",
                 value: "minimum exceeds maximum".to_owned(),
             });
         }
@@ -1038,7 +1063,9 @@ fn parse_moog_start_checks(
         Some(Value::String(burying)) if burying == "AVERAGE_LAND" => true,
         Some(unsupported) => {
             return Err(VillageDataError::InvalidField {
-                kind: STRUCTURE, entry: id.clone(), field: "burying_type",
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "burying_type",
                 value: format!("unsupported Moog burial: {unsupported}"),
             });
         }
@@ -1055,8 +1082,8 @@ fn parse_moog_start_checks(
 
 fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, VillageDataError> {
     let structure_type = parse_id(id, field_str(value, "type", STRUCTURE, id)?)?;
-    let is_moog = structure_type.as_str()
-        == "moogs_structures:moogs_structures_generic_jigsaw_structure";
+    let is_moog =
+        structure_type.as_str() == "moogs_structures:moogs_structures_generic_jigsaw_structure";
     if !crate::worldgen_structure_types::supports_structure_type(&structure_type) {
         return Err(VillageDataError::UnsupportedType {
             kind: STRUCTURE,
@@ -1066,12 +1093,24 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
     }
     let moog_start_checks = if is_moog {
         const FIELDS: &[&str] = &[
-            "type", "start_pool", "size", "project_start_to_heightmap",
-            "cannot_spawn_in_liquid", "terrain_height_radius_check",
-            "allowed_terrain_height_range", "valid_biome_radius_check",
-            "y_allowance", "burying_type", "biomes", "step", "terrain_adaptation",
-            "start_height", "use_bounding_box_hack", "spawn_overrides",
-            "max_distance_from_center", "liquid_settings",
+            "type",
+            "start_pool",
+            "size",
+            "project_start_to_heightmap",
+            "cannot_spawn_in_liquid",
+            "terrain_height_radius_check",
+            "allowed_terrain_height_range",
+            "valid_biome_radius_check",
+            "y_allowance",
+            "burying_type",
+            "biomes",
+            "step",
+            "terrain_adaptation",
+            "start_height",
+            "use_bounding_box_hack",
+            "spawn_overrides",
+            "max_distance_from_center",
+            "liquid_settings",
         ];
         if let Some(object) = value.as_object() {
             for key in object.keys() {
@@ -1097,21 +1136,33 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         TERRAIN_ADAPTATIONS,
         TerrainAdaptation::None,
     )?;
-    if is_moog && !matches!(terrain_adaptation, TerrainAdaptation::None | TerrainAdaptation::BeardThin) {
+    if is_moog
+        && !matches!(
+            terrain_adaptation,
+            TerrainAdaptation::None | TerrainAdaptation::BeardThin
+        )
+    {
         return Err(VillageDataError::InvalidField {
-            kind: STRUCTURE, entry: id.clone(), field: "terrain_adaptation",
+            kind: STRUCTURE,
+            entry: id.clone(),
+            field: "terrain_adaptation",
             value: "unsupported Moog terrain adaptation".to_owned(),
         });
     }
     let start_height = parse_height_provider(id, field_of(value, "start_height", STRUCTURE, id)?)?;
     if is_moog && !matches!(start_height, HeightProviderSpec::Constant(_)) {
         return Err(VillageDataError::InvalidField {
-            kind: STRUCTURE, entry: id.clone(), field: "start_height",
+            kind: STRUCTURE,
+            entry: id.clone(),
+            field: "start_height",
             value: "Moog layout currently requires a constant start height".to_owned(),
         });
     }
     let max_distance_from_center = match value.get("max_distance_from_center") {
-        None if is_moog => MaxDistance { horizontal: 80, vertical: 80 },
+        None if is_moog => MaxDistance {
+            horizontal: 80,
+            vertical: 80,
+        },
         _ => parse_max_distance(
             id,
             field_of(value, "max_distance_from_center", STRUCTURE, id)?,
@@ -1167,7 +1218,14 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         start_pool: parse_id(id, field_str(value, "start_pool", STRUCTURE, id)?)?,
         start_jigsaw_name: parse_optional_id(value, "start_jigsaw_name", STRUCTURE, id)?,
         // `Codec.intRange(0, 20)`
-        size: ranged_i32_field(value, "size", STRUCTURE, id, 0, if is_moog { 30 } else { 20 })?,
+        size: ranged_i32_field(
+            value,
+            "size",
+            STRUCTURE,
+            id,
+            0,
+            if is_moog { 30 } else { 20 },
+        )?,
         start_height,
         use_expansion_hack: if is_moog {
             value
@@ -1193,7 +1251,11 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
             STRUCTURE,
             id,
             LIQUID_SETTINGS,
-            if is_moog { LiquidSettings::IgnoreWaterlogging } else { LiquidSettings::ApplyWaterlogging },
+            if is_moog {
+                LiquidSettings::IgnoreWaterlogging
+            } else {
+                LiquidSettings::ApplyWaterlogging
+            },
         )?,
     })
 }
@@ -1519,17 +1581,16 @@ fn parse_pool_element(
             .last()
             .expect("supported protocol window is nonempty")
             .release;
-        let location = crate::versioned_structure_pool::select(
-            value.get("locations"),
-            fallback,
-            release,
-        )
-        .map_err(|()| VillageDataError::InvalidField {
-            kind: POOL_ELEMENT,
-            entry: referrer.clone(),
-            field: "locations",
-            value: value.get("locations").map_or_else(String::new, Value::to_string),
-        })?;
+        let location =
+            crate::versioned_structure_pool::select(value.get("locations"), fallback, release)
+                .map_err(|()| VillageDataError::InvalidField {
+                    kind: POOL_ELEMENT,
+                    entry: referrer.clone(),
+                    field: "locations",
+                    value: value
+                        .get("locations")
+                        .map_or_else(String::new, Value::to_string),
+                })?;
         single.location = parse_id(referrer, location)?;
         return Ok(PoolElementSpec::Single(single));
     }
@@ -1674,14 +1735,23 @@ fn parse_moog_spawner(
         value: detail,
     };
     let allowed = [
-        "processor_type", "weighted_entities", "delay", "min_spawn_delay",
-        "max_spawn_delay", "spawn_count", "max_nearby_entities",
-        "required_player_range", "spawn_range",
+        "processor_type",
+        "weighted_entities",
+        "delay",
+        "min_spawn_delay",
+        "max_spawn_delay",
+        "spawn_count",
+        "max_nearby_entities",
+        "required_player_range",
+        "spawn_range",
     ];
     if let Some(object) = value.as_object() {
         for key in object.keys() {
             if !allowed.contains(&key.as_str()) {
-                return Err(invalid("processor_type", format!("unsupported Moog spawner field {key}")));
+                return Err(invalid(
+                    "processor_type",
+                    format!("unsupported Moog spawner field {key}"),
+                ));
             }
         }
     }
@@ -1689,27 +1759,44 @@ fn parse_moog_spawner(
     let mut mobs = Vec::with_capacity(entries.len());
     let mut total = 0.0;
     for entry in entries {
-        let object = entry.as_object().ok_or_else(|| invalid(
-            "weighted_entities", "expected an entity object".to_owned(),
-        ))?;
+        let object = entry
+            .as_object()
+            .ok_or_else(|| invalid("weighted_entities", "expected an entity object".to_owned()))?;
         if object.keys().any(|key| key != "entity" && key != "weight") {
-            return Err(invalid("weighted_entities", "unsupported entity fields".to_owned()));
+            return Err(invalid(
+                "weighted_entities",
+                "unsupported entity fields".to_owned(),
+            ));
         }
         let entity = parse_id(referrer, field_str(entry, "entity", PROCESSOR, referrer)?)?;
-        let weight = entry.get("weight").and_then(Value::as_f64)
+        let weight = entry
+            .get("weight")
+            .and_then(Value::as_f64)
             .filter(|weight| weight.is_finite() && *weight > 0.0)
-            .ok_or_else(|| invalid("weighted_entities", "weight must be positive and finite".to_owned()))?;
+            .ok_or_else(|| {
+                invalid(
+                    "weighted_entities",
+                    "weight must be positive and finite".to_owned(),
+                )
+            })?;
         total += weight;
         mobs.push((entity, weight));
     }
     if mobs.is_empty() || !total.is_finite() {
-        return Err(invalid("weighted_entities", "empty or overflowing mob weights".to_owned()));
+        return Err(invalid(
+            "weighted_entities",
+            "empty or overflowing mob weights".to_owned(),
+        ));
     }
     let mut fields = [0; 7];
     for (slot, (key, default)) in fields.iter_mut().zip([
-        ("delay", 20), ("min_spawn_delay", 200), ("max_spawn_delay", 800),
-        ("spawn_count", 4), ("max_nearby_entities", 6),
-        ("required_player_range", 16), ("spawn_range", 4),
+        ("delay", 20),
+        ("min_spawn_delay", 200),
+        ("max_spawn_delay", 800),
+        ("spawn_count", 4),
+        ("max_nearby_entities", 6),
+        ("required_player_range", 16),
+        ("spawn_range", 4),
     ]) {
         let raw = optional_i32_field(value, key, PROCESSOR, referrer, default)?;
         *slot = i16::try_from(raw).map_err(|_| invalid(key, raw.to_string()))?;
@@ -1745,10 +1832,8 @@ fn parse_processor(
                 .transpose()?,
         },
         "capped" => {
-            let delegate = parse_processor(
-                referrer,
-                field_of(value, "delegate", PROCESSOR, referrer)?,
-            )?;
+            let delegate =
+                parse_processor(referrer, field_of(value, "delegate", PROCESSOR, referrer)?)?;
             if matches!(delegate, StructureProcessorSpec::MoogSpawner(_)) {
                 return Err(VillageDataError::InvalidField {
                     kind: PROCESSOR,

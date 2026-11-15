@@ -56,7 +56,10 @@ fn moog_start_rules_parse_and_layout_is_admitted() {
             average_land: false,
         })
     );
-    assert!(parse_structure(&id, &value).is_ok(), "supported piece-limited layout is admitted");
+    assert!(
+        parse_structure(&id, &value).is_ok(),
+        "supported piece-limited layout is admitted"
+    );
 }
 
 #[test]
@@ -71,7 +74,10 @@ fn moog_ocean_rules_include_biome_radius_and_burial() {
     });
     let id = identifier("mvs:ocean_tower");
     let rules = parse_moog_start_checks(&id, &value).unwrap();
-    assert_eq!((rules.biome_radius, rules.min_y, rules.max_y), (Some(4), Some(0), Some(41)));
+    assert_eq!(
+        (rules.biome_radius, rules.min_y, rules.max_y),
+        (Some(4), Some(0), Some(41))
+    );
     assert!(rules.average_land);
     value["y_allowance"]["min_y_allowed"] = serde_json::json!(42);
     assert!(parse_moog_start_checks(&id, &value).is_err());
@@ -93,7 +99,13 @@ fn moog_spawner_processor_parses_mvs_weights_and_timing() {
     let StructureProcessorSpec::MoogSpawner(spec) = parse_processor(&owner, &value).unwrap() else {
         panic!("expected Moog spawner");
     };
-    assert_eq!(spec.mobs, vec![(identifier("minecraft:drowned"), 6.0), (identifier("minecraft:guardian"), 8.0)]);
+    assert_eq!(
+        spec.mobs,
+        vec![
+            (identifier("minecraft:drowned"), 6.0),
+            (identifier("minecraft:guardian"), 8.0)
+        ]
+    );
     assert_eq!(spec.fields, [20, 200, 800, 4, 6, 16, 4]);
     value["weighted_entities"][0]["nbt"] = serde_json::json!({"Health": 10});
     assert!(parse_processor(&owner, &value).is_err());
@@ -258,7 +270,10 @@ fn moog_advanced_spread_scales_grid_and_keeps_origin_distance() {
     unsupported["super_exclusion_zone"] = serde_json::json!({"chunk_count": 3});
     assert!(matches!(
         parse_placement(&owner, &unsupported),
-        Err(VillageDataError::UnsupportedField { field: "super_exclusion_zone", .. })
+        Err(VillageDataError::UnsupportedField {
+            field: "super_exclusion_zone",
+            ..
+        })
     ));
     unsupported["type"] = serde_json::json!("example:random_spread");
     assert!(matches!(
@@ -1035,7 +1050,10 @@ fn structure_set_resolves_its_namespace() {
     let loaded = loader(dir.path())
         .load_structure_set(&identifier("krasnokamen:villages"))
         .unwrap();
-    assert_eq!(loaded.structures[0].structure, identifier("krasnokamen:house"));
+    assert_eq!(
+        loaded.structures[0].structure,
+        identifier("krasnokamen:house")
+    );
     let error = loader(dir.path())
         .load_structure_set(&identifier("other:villages"))
         .expect_err("another namespace must not resolve the vanilla entry");
@@ -1055,7 +1073,10 @@ fn structure_step_includes_namespaces_in_vanilla_order() {
         .unwrap();
     assert_eq!(
         ids,
-        vec![identifier("example:village_plains"), identifier("minecraft:village_plains")]
+        vec![
+            identifier("example:village_plains"),
+            identifier("minecraft:village_plains")
+        ]
     );
 }
 
@@ -1069,7 +1090,10 @@ fn structure_sets_include_all_namespaces_in_registry_order() {
     );
     assert_eq!(
         loader(dir.path()).structure_sets().unwrap(),
-        vec![identifier("example:villages"), identifier("minecraft:villages")]
+        vec![
+            identifier("example:villages"),
+            identifier("minecraft:villages")
+        ]
     );
 }
 
@@ -1090,17 +1114,29 @@ fn structure_pool_and_processors_resolve_their_own_namespace() {
         );
     }
     let loader = loader(dir.path());
-    assert!(loader.load_structure(&identifier("example:village_plains")).is_ok());
     assert!(
-        loader.load_template_pool(&identifier("example:village/plains/town_centers")).is_ok()
+        loader
+            .load_structure(&identifier("example:village_plains"))
+            .is_ok()
     );
-    assert!(loader.load_processor_list(&identifier("example:zombie_plains")).is_ok());
+    assert!(
+        loader
+            .load_template_pool(&identifier("example:village/plains/town_centers"))
+            .is_ok()
+    );
+    assert!(
+        loader
+            .load_processor_list(&identifier("example:zombie_plains"))
+            .is_ok()
+    );
 }
 
 #[test]
 fn structure_loader_rejects_an_unregistered_jigsaw_namespace() {
     let dir = fixture();
-    let path = dir.path().join("data/minecraft/worldgen/structure/village_plains.json");
+    let path = dir
+        .path()
+        .join("data/minecraft/worldgen/structure/village_plains.json");
     let contents = std::fs::read_to_string(&path)
         .unwrap()
         .replace("minecraft:jigsaw", "example:jigsaw");

@@ -416,8 +416,10 @@ fn assemble_structure(
         if let Some(radius) = checks.biome_radius {
             let mut random = LegacyRandom::new(set_large_feature_seed(seed, chunk_x, chunk_z));
             let mut y = sample_start_height(
-                structure.spec.start_height, closure.dimension_bounds.0,
-                closure.dimension_bounds.1, &mut random,
+                structure.spec.start_height,
+                closure.dimension_bounds.0,
+                closure.dimension_bounds.1,
+                &mut random,
             );
             if structure.spec.project_start_to_heightmap.is_some() {
                 let x = chunk_x.checked_mul(16)?.checked_add(7)?;
@@ -462,7 +464,13 @@ fn assemble_structure(
     if let Some(checks) = structure.spec.moog_start_checks {
         center_moog_layout(&mut assembly, chunk_x, chunk_z);
         if checks.average_land {
-            bury_moog_average(&mut assembly, &structure.spec, checks, start_height, free_height)?;
+            bury_moog_average(
+                &mut assembly,
+                &structure.spec,
+                checks,
+                start_height,
+                free_height,
+            )?;
         }
     }
     Some(assembly)
@@ -508,13 +516,23 @@ fn bury_moog_average(
     let depth = f64::from(first.bounds_max.z) - f64::from(first.bounds_min.z);
     let radius = (width.hypot(depth) as i32) / 2;
     let step = (radius / 2).max(1) as usize;
-    let heightmap = spec.project_start_to_heightmap.unwrap_or(HeightmapType::WorldSurfaceWg);
-    let (min, max) = (checks.min_y.unwrap_or(i32::MIN), checks.max_y.unwrap_or(i32::MAX));
+    let heightmap = spec
+        .project_start_to_heightmap
+        .unwrap_or(HeightmapType::WorldSurfaceWg);
+    let (min, max) = (
+        checks.min_y.unwrap_or(i32::MIN),
+        checks.max_y.unwrap_or(i32::MAX),
+    );
     let (mut sum, mut count) = (0_i64, 0_i64);
     for x in (-radius..=radius).step_by(step) {
         for z in (-radius..=radius).step_by(step) {
-            let height = projected_height(query, heightmap, center_x.checked_add(x)?, center_z.checked_add(z)?)?
-                .checked_sub(1)?;
+            let height = projected_height(
+                query,
+                heightmap,
+                center_x.checked_add(x)?,
+                center_z.checked_add(z)?,
+            )?
+            .checked_sub(1)?;
             if height > min && height < max {
                 sum += i64::from(height);
                 count += 1;
@@ -527,14 +545,19 @@ fn bury_moog_average(
         f64::from(checks.max_y.or(checks.min_y)?)
     };
     if checks.cannot_spawn_in_liquid
-        && !matches!(heightmap, HeightmapType::OceanFloor | HeightmapType::OceanFloorWg)
+        && !matches!(
+            heightmap,
+            HeightmapType::OceanFloor | HeightmapType::OceanFloorWg
+        )
     {
         average = average.max(f64::from(query.sea_level()?));
         if let Some(max) = checks.max_y {
             average = average.max(f64::from(max));
         }
     }
-    let dy = (average as i32).checked_sub(first.bounds_min.y)?.checked_add(start_height)?;
+    let dy = (average as i32)
+        .checked_sub(first.bounds_min.y)?
+        .checked_add(start_height)?;
     for piece in &mut assembly.pieces {
         piece.position.y = piece.position.y.checked_add(dy)?;
         piece.bounds_min.y = piece.bounds_min.y.checked_add(dy)?;
@@ -856,7 +879,8 @@ impl Placer<'_> {
 
             let mut target_elements = if self.spec.moog_start_checks.is_some() {
                 CandidateStream::Moog {
-                    primary: (depth != self.spec.size).then(|| WeightedCandidates::new(target_pool)),
+                    primary: (depth != self.spec.size)
+                        .then(|| WeightedCandidates::new(target_pool)),
                     fallback: fallback.map(WeightedCandidates::new),
                 }
             } else {
@@ -918,8 +942,9 @@ impl Placer<'_> {
                             source_box_y + delta_y
                         } else {
                             if source_jigsaw_base_height == i32::MIN {
-                                source_jigsaw_base_height =
-                                    self.free_height.world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
+                                source_jigsaw_base_height = self
+                                    .free_height
+                                    .world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
                             }
                             source_jigsaw_base_height - target_jigsaw.pos.y
                         };
@@ -985,8 +1010,9 @@ impl Placer<'_> {
                             target_box_y + target_jigsaw.pos.y
                         } else {
                             if source_jigsaw_base_height == i32::MIN {
-                                source_jigsaw_base_height =
-                                    self.free_height.world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
+                                source_jigsaw_base_height = self
+                                    .free_height
+                                    .world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
                             }
                             source_jigsaw_base_height + delta_y / 2
                         };
@@ -1028,7 +1054,11 @@ impl Placer<'_> {
                                     free: children_free.clone(),
                                     depth: depth + 1,
                                 },
-                                if self.spec.moog_start_checks.is_some() { 0 } else { source_jigsaw.placement_priority },
+                                if self.spec.moog_start_checks.is_some() {
+                                    0
+                                } else {
+                                    source_jigsaw.placement_priority
+                                },
                             );
                         }
                         // `continue label129`: the remaining candidates for this
@@ -1122,8 +1152,16 @@ struct WeightedCandidates<'a> {
 impl<'a> WeightedCandidates<'a> {
     fn new(pool: &'a ClosurePool) -> Self {
         let remaining = (0..pool.elements.len()).collect();
-        let total = pool.elements.iter().map(|(weight, _)| i64::from(*weight)).sum();
-        Self { pool, remaining, total }
+        let total = pool
+            .elements
+            .iter()
+            .map(|(weight, _)| i64::from(*weight))
+            .sum();
+        Self {
+            pool,
+            remaining,
+            total,
+        }
     }
 
     fn next(&mut self, random: &mut LegacyRandom) -> Option<PlacedElement> {
@@ -1168,7 +1206,10 @@ impl CandidateStream<'_> {
                     }
                     *primary = None;
                 }
-                fallback.as_mut()?.next(random).filter(|element| !matches!(element, PlacedElement::Empty))
+                fallback
+                    .as_mut()?
+                    .next(random)
+                    .filter(|element| !matches!(element, PlacedElement::Empty))
             }
         }
     }

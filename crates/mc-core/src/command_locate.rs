@@ -380,9 +380,8 @@ fn search_structure(
         centre.0.saturating_add(options.radius),
         centre.1.saturating_add(options.radius),
     );
-    let vanilla_village = |id: &Identifier| {
-        id.namespace() == "minecraft" && id.path().starts_with("village_")
-    };
+    let vanilla_village =
+        |id: &Identifier| id.namespace() == "minecraft" && id.path().starts_with("village_");
     let mut sites = if targets.iter().any(|id| !vanilla_village(id)) {
         generator.structure_sites_in_region(min, max)
     } else {

@@ -1109,8 +1109,8 @@ fn rotate_and_mirror_state_match_the_vanilla_reference() {
 
 #[test]
 fn moog_spawner_processor_writes_selected_entity_and_timing_nbt() {
-    use mc_data::village_data::MoogSpawnerSpec;
     use crate::structures::TemplateBlock;
+    use mc_data::village_data::MoogSpawnerSpec;
     use mc_nbt::Tag;
 
     let fixture = Fixture::new();
@@ -1119,8 +1119,14 @@ fn moog_spawner_processor_writes_selected_entity_and_timing_nbt() {
     let template = StructureTemplate::new(
         [2, 1, 1],
         vec![
-            TemplateBlock { pos: [0, 0, 0], state: spawner },
-            TemplateBlock { pos: [1, 0, 0], state: stone },
+            TemplateBlock {
+                pos: [0, 0, 0],
+                state: spawner,
+            },
+            TemplateBlock {
+                pos: [1, 0, 0],
+                state: stone,
+            },
         ],
     );
     let processors = vec![StructureProcessorSpec::MoogSpawner(MoogSpawnerSpec {
@@ -1130,19 +1136,36 @@ fn moog_spawner_processor_writes_selected_entity_and_timing_nbt() {
     let owner = identifier("mvs:cathedral");
     let mut writer = fixture.writer();
     place_piece(
-        &fixture.semantics(), &template,
-        &piece_settings(ORIGIN, Rotation::None, PieceElement::Single, &processors, &owner),
-        &mut writer, None,
-    ).unwrap();
+        &fixture.semantics(),
+        &template,
+        &piece_settings(
+            ORIGIN,
+            Rotation::None,
+            PieceElement::Single,
+            &processors,
+            &owner,
+        ),
+        &mut writer,
+        None,
+    )
+    .unwrap();
     assert_eq!(writer.block_entities.len(), 1);
     let nbt = &writer.block_entities[0].1.nbt;
     assert!(nbt.contains(&("SpawnCount".into(), Tag::Short(4))));
-    assert!(nbt.contains(&("SpawnData".into(), Tag::Compound(vec![(
-        "entity".into(), Tag::Compound(vec![(
-            "id".into(), Tag::String("minecraft:skeleton".into())
+    assert!(nbt.contains(&(
+        "SpawnData".into(),
+        Tag::Compound(vec![(
+            "entity".into(),
+            Tag::Compound(vec![(
+                "id".into(),
+                Tag::String("minecraft:skeleton".into())
+            )])
         )])
-    )]))));
-    assert!(nbt.iter().any(|(name, tag)| name == "SpawnPotentials" && matches!(tag, Tag::List(_))));
+    )));
+    assert!(
+        nbt.iter()
+            .any(|(name, tag)| name == "SpawnPotentials" && matches!(tag, Tag::List(_)))
+    );
 }
 
 #[test]

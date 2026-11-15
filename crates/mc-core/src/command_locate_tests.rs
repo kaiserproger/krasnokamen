@@ -167,7 +167,11 @@ fn locate_namespaced_village_prefix_uses_structure_sites() {
         ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
             vec![mc_world::chunk::GeneratedStructureSite {
                 structure: id("example:village_tower"),
-                position: BlockPos { x: 40, y: 70, z: 56 },
+                position: BlockPos {
+                    x: 40,
+                    y: 70,
+                    z: 56,
+                },
                 start_chunk: (2, 3),
             }]
         }
@@ -476,16 +480,36 @@ fn locate_admits_only_selected_datapack_structure_ids() {
     Arc::make_mut(&mut state.registry).datapack_structures =
         Arc::from([id("example:village_tower")]);
     let executor = state.connections.entity_of(connection).unwrap();
-    let target = |name| LocateCommand::Structure(ResourceOrTag {
-        tag: false,
-        id: id(name),
-    });
-    super::execute(&mut state, connection, executor, &target("other:village_tower"));
-    assert!(styled_key(&state, connection, "commands.locate.structure.invalid"));
+    let target = |name| {
+        LocateCommand::Structure(ResourceOrTag {
+            tag: false,
+            id: id(name),
+        })
+    };
+    super::execute(
+        &mut state,
+        connection,
+        executor,
+        &target("other:village_tower"),
+    );
+    assert!(styled_key(
+        &state,
+        connection,
+        "commands.locate.structure.invalid"
+    ));
     assert_eq!(state.locate.in_flight.get(&connection), None);
     state.outbox.clear();
-    super::execute(&mut state, connection, executor, &target("example:village_tower"));
-    assert!(styled_key(&state, connection, "commands.locate.structure.searching"));
+    super::execute(
+        &mut state,
+        connection,
+        executor,
+        &target("example:village_tower"),
+    );
+    assert!(styled_key(
+        &state,
+        connection,
+        "commands.locate.structure.searching"
+    ));
     assert_eq!(state.locate.in_flight.get(&connection), Some(&1));
 }
 

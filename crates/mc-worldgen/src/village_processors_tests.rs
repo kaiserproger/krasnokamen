@@ -1863,24 +1863,45 @@ fn moog_spawner_choices_are_position_seeded_and_only_touch_spawners() {
     let semantics = BlockSemantics::new(&fixture.blocks, &fixture.tags);
     let mut input = pieces(64, |_| fixture.state("minecraft:spawner", &[]));
     input.push(PieceBlock {
-        pos: BlockPos { x: 100, y: 64, z: 100 },
+        pos: BlockPos {
+            x: 100,
+            y: 64,
+            z: 100,
+        },
         template_y: 0,
         state: fixture.state("minecraft:stone", &[]),
         jigsaw_final_state: None,
     });
     let specs = [StructureProcessorSpec::MoogSpawner(MoogSpawnerSpec {
-        mobs: vec![(identifier("minecraft:zombie"), 1.0), (identifier("minecraft:skeleton"), 1.0)],
+        mobs: vec![
+            (identifier("minecraft:zombie"), 1.0),
+            (identifier("minecraft:skeleton"), 1.0),
+        ],
         fields: [20, 200, 800, 4, 6, 16, 4],
     })];
     let processors = compile_processors(&semantics, &owner(), &specs).unwrap();
-    let run = || crate::village::processors::apply_processors_with_metadata(
-        &semantics, &fixture.level, &input, &processors, BlockPos { x: 0, y: 0, z: 0 },
-    );
+    let run = || {
+        crate::village::processors::apply_processors_with_metadata(
+            &semantics,
+            &fixture.level,
+            &input,
+            &processors,
+            BlockPos { x: 0, y: 0, z: 0 },
+        )
+    };
     let (_, _, spawners) = run();
     assert_eq!(spawners.len(), 64);
     assert_eq!(spawners, run().2);
-    assert!(spawners.iter().any(|(_, mob, _)| mob.as_str() == "minecraft:zombie"));
-    assert!(spawners.iter().any(|(_, mob, _)| mob.as_str() == "minecraft:skeleton"));
+    assert!(
+        spawners
+            .iter()
+            .any(|(_, mob, _)| mob.as_str() == "minecraft:zombie")
+    );
+    assert!(
+        spawners
+            .iter()
+            .any(|(_, mob, _)| mob.as_str() == "minecraft:skeleton")
+    );
 }
 
 #[test]

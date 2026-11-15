@@ -694,32 +694,52 @@ pub fn place_piece(
         }) {
             writer.set_block_entity(block.pos, entity);
         }
-        if let Some((_, mob, fields)) = processor_spawners.iter().find(|(pos, _, _)| *pos == block.pos) {
+        if let Some((_, mob, fields)) = processor_spawners
+            .iter()
+            .find(|(pos, _, _)| *pos == block.pos)
+        {
             let data = mc_nbt::Tag::Compound(vec![(
                 "entity".into(),
                 mc_nbt::Tag::Compound(vec![("id".into(), mc_nbt::Tag::String(mob.to_string()))]),
             )]);
             let mut nbt = Vec::with_capacity(10);
-            nbt.push(("id".into(), mc_nbt::Tag::String("minecraft:mob_spawner".into())));
+            nbt.push((
+                "id".into(),
+                mc_nbt::Tag::String("minecraft:mob_spawner".into()),
+            ));
             for (name, value) in [
-                "Delay", "MinSpawnDelay", "MaxSpawnDelay", "SpawnCount",
-                "MaxNearbyEntities", "RequiredPlayerRange", "SpawnRange",
-            ].into_iter().zip(fields.iter()) {
+                "Delay",
+                "MinSpawnDelay",
+                "MaxSpawnDelay",
+                "SpawnCount",
+                "MaxNearbyEntities",
+                "RequiredPlayerRange",
+                "SpawnRange",
+            ]
+            .into_iter()
+            .zip(fields.iter())
+            {
                 nbt.push((name.into(), mc_nbt::Tag::Short(*value)));
             }
             nbt.push(("SpawnData".into(), data.clone()));
-            nbt.push(("SpawnPotentials".into(), mc_nbt::Tag::List(mc_nbt::ListTag {
-                element_type: mc_nbt::tag_type::COMPOUND,
-                elements: vec![mc_nbt::Tag::Compound(vec![
-                    ("data".into(), data),
-                    ("weight".into(), mc_nbt::Tag::Int(1)),
-                ])],
-            })));
-            writer.set_block_entity(block.pos, &crate::structures::TemplateBlockEntity {
-                pos: [0, 0, 0],
-                state,
-                nbt,
-            });
+            nbt.push((
+                "SpawnPotentials".into(),
+                mc_nbt::Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: vec![mc_nbt::Tag::Compound(vec![
+                        ("data".into(), data),
+                        ("weight".into(), mc_nbt::Tag::Int(1)),
+                    ])],
+                }),
+            ));
+            writer.set_block_entity(
+                block.pos,
+                &crate::structures::TemplateBlockEntity {
+                    pos: [0, 0, 0],
+                    state,
+                    nbt,
+                },
+            );
         }
         if let Some((_, table)) = processor_loot.iter().find(|(pos, _)| *pos == block.pos) {
             let entity = crate::structures::TemplateBlockEntity {

@@ -22,7 +22,10 @@ fn feature(name: &str) -> ClosureElement {
 
 #[test]
 fn moog_candidates_draw_raw_weighted_entries_without_replacement() {
-    let p = pool("mvs:pool", vec![(1, feature("mvs:a")), (5, feature("mvs:b"))]);
+    let p = pool(
+        "mvs:pool",
+        vec![(1, feature("mvs:a")), (5, feature("mvs:b"))],
+    );
     let mut candidates = WeightedCandidates::new(&p);
     let mut random = LegacyRandom::new(45);
     let first = candidates.next(&mut random).unwrap();
@@ -40,6 +43,8 @@ fn moog_empty_primary_advances_to_weighted_fallback() {
         fallback: Some(WeightedCandidates::new(&fallback)),
     };
     let mut random = LegacyRandom::new(7);
-    assert!(matches!(candidates.next(&mut random), Some(PlacedElement::Feature { placed_feature, .. }) if placed_feature == id("mvs:lower")));
+    assert!(
+        matches!(candidates.next(&mut random), Some(PlacedElement::Feature { placed_feature, .. }) if placed_feature == id("mvs:lower"))
+    );
     assert!(candidates.next(&mut random).is_none());
 }

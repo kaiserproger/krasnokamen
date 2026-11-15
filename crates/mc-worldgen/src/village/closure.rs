@@ -447,7 +447,10 @@ fn load_piece(
     referrer: &Identifier,
     registry: &BlockRegistry,
 ) -> Result<StructureTemplate, ClosureError> {
-    let root = cache_root.join("data").join(piece.namespace()).join("structure");
+    let root = cache_root
+        .join("data")
+        .join(piece.namespace())
+        .join("structure");
     let mut resource = ResourcePath::from_identifier_path(piece)?;
     resource.set_extension("nbt")?;
     let path = resource.lexical_under(&root);
