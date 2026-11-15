@@ -60,6 +60,7 @@ fn fresh_v2_sites_describe_generated_villagers_from_the_same_plans() {
         .resident_positions()
         .iter()
         .flat_map(|pos| state.world.chunk(*pos).unwrap().generated_entities())
+        .filter(|marker| marker.entity_type == "minecraft:villager")
         .filter(|marker| {
             site.pieces.iter().any(|piece| {
                 marker.claim.contains(&format!(

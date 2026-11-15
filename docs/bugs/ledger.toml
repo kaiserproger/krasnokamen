@@ -6641,3 +6641,42 @@ regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_stati
 fix_commit = "d3bc1c33a"
 failing_first = "reported"
 repro_check = "HarnessFix3/clock-pose-green.json: same-time/different-pose real day and night pairs fail dropped_clock_face_changed; noon blue/(blue+neutral-dark) proportions are 0.8414 and 0.8370 despite 17 shifted cells. Three real day/night full-context pairs still pass, including held clocks; dropped fraction changes are 0.65..0.70. Selection remains rim-coverage-only. clock-pose-control.log restores only the prior comparator and its sampling helper from 29800a709, retaining tests: the reported same-time day pair falsely passes again. clock-pose-unit-control.log produces the same false-green failure in the registered regression. Edge-on sampling replays and HUD-only/static controls remain green/red respectively; frame-level proof only, no graphical run or promotion."
+
+[[bug]]
+id = "DFU-PLAYER-SELECTED-ITEM-REMAINDER"
+title = "Player NBT upgrade rewrites opaque SelectedItem unlike official Java DFU"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage3 S3Ignored versionless-player differential: official Java 26.1.2 keeps SelectedItem.Count while native upgrade changes it to count; player-visible impact not established"
+repro = "cargo"
+regression = ["cargo:mc-world:anvil::upgrade::old_player_map::tests::player_selected_item_is_opaque_while_inventory_is_upgraded"]
+fix_commit = "14f6f10a0"
+failing_first = "reported"
+repro_check = "IgnoredRepair/dfu-selected-item-negative.log: retained regression fails from -1 with only the walk.rs fix reverted (Count Byte(1) becomes count Int(1)). dfu-selected-item-green.log passes the focused module and the original real versionless player/map official-Java oracle, two cases with zero residues; SelectedItem remains opaque while typed Inventory still upgrades."
+
+[[bug]]
+id = "BATTLE-OBLIQUE-GAP-REOPEN"
+title = "Oblique crowd steering reopens an earlier neighbour gap and heaps foot soldiers"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "IgnoredRepair native flat 1000-a-side pursuit gate: 4.51% foot heaps exceeds the existing 3% contract; steering projects away from a later neighbour back into an earlier one"
+repro = "cargo"
+regression = ["cargo:mc-core:battle::steering::tests::oblique_neighbour_cannot_reopen_an_already_closed_gap"]
+fix_commit = "4a2c83e44"
+failing_first = "reported"
+repro_check = "IgnoredRepair/battle-fix-reverted-unit.log and battle-fix-reverted-native.log revert only 4a2c83e44's steering fix, retaining all tests: closed gap drive [0.128, 0.096] and 4.51% foot heap are red. battle-gap-green-suite.log passes 180 ordinary battle tests. Restored battle-fix-restored-native.log runs the same 1000-a-side fixture through 200 pursuit ticks: foot heap 4.51% -> 1.12%, horse 6.01% -> 6.04%, deaths 266 -> 288, melee kills 167 -> 179, wounds 48 -> 42, native wounded survivors 12 -> 9. Heap limits stay 3% foot/15% horse; no graphical-client acceptance claimed."
+
+[[bug]]
+id = "BATTLE-BOUNDARY-REOPENS-GAP"
+title = "Field-boundary clipping turns tangential foot and horse movement into a neighbour"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "IgnoredRepair independent battle review: left-boundary clip removes an outward X component from tangential step (-0.04,-0.03), reopening the gap to neighbour (0.39,-0.52)"
+repro = "cargo"
+regression = ["cargo:mc-core:battle::steering::tests::boundary_clip_cannot_turn_tangential_foot_or_horse_drive_into_a_neighbour"]
+fix_commit = "eccb06974"
+failing_first = "reported"
+repro_check = "IgnoredRepair/battle-boundary-negative.log fails at spacing 0.65 with boundary-clipped step [0,-0.03]. The API-only dc83d55b8 keeps that fault reproducible so reversing eccb06974's production hunk retains a compiling regression. battle-boundary-green-suite.log passes the foot/horse spacing cases, outside-knockback recovery and the ordinary battle suite; battle-boundary-green-native.log retains the original 3% foot/15% horse and >300 deaths limits through actual pursuit."

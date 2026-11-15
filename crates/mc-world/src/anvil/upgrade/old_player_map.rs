@@ -276,6 +276,29 @@ mod tests {
     use super::super::{nbt::*, *};
 
     #[test]
+    fn player_selected_item_is_opaque_while_inventory_is_upgraded() {
+        // Official Java 26.1.2 DFU preserves SelectedItem verbatim: it is not
+        // an ITEM_STACK child of PLAYER (V99's player schema types only
+        // Inventory/EnderItems; later schemas add vehicles and shoulders).
+        let selected = compound(vec![
+            ("id", text("minecraft:diamond_sword")),
+            ("Damage", Tag::Short(0)),
+            ("Count", Tag::Byte(1)),
+        ]);
+        for from in [-1, 2586, 3700] {
+            let mut player = compound(vec![
+                ("SelectedItem", selected.clone()),
+                ("Inventory", sequence(vec![selected.clone()])),
+            ]);
+            upgrade_player(&mut player, from).unwrap();
+            assert_eq!(get(&player, "SelectedItem"), Some(&selected), "from {from}");
+            let inventory = &list(get(&player, "Inventory").unwrap()).unwrap()[0];
+            assert_eq!(get(inventory, "count"), Some(&Tag::Int(1)), "from {from}");
+            assert!(get(inventory, "Count").is_none(), "from {from}");
+        }
+    }
+
+    #[test]
     fn player_recipe_book_uses_all_three_historical_rename_tables() {
         let mut player = compound(vec![(
             "recipeBook",

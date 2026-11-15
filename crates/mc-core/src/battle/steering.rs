@@ -290,15 +290,7 @@ fn sample_movement(
         {
             turned
         } else {
-            let tick = mc_physics::TICK_SECONDS;
-            let step = keep_gap(
-                &runtime.members,
-                index,
-                &near,
-                MIN_SPACING,
-                [turned[0] * tick, turned[2] * tick],
-            );
-            runtime.constrain_velocity(m.pos, [step[0] / tick, turned[1], step[1] / tick])
+            keep_gap(runtime, index, &near, MIN_SPACING, m.pos, turned)
         };
     }
     (drive, examined, pushes)
@@ -392,10 +384,13 @@ fn drive_with_neighbours(
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
-    let drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
     // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
     (
-        runtime.constrain_velocity(
+        keep_gap(
+            runtime,
+            index,
+            &near,
+            MIN_SPACING,
             m.pos,
             [
                 drive[0] / mc_physics::TICK_SECONDS,
@@ -407,19 +402,23 @@ fn drive_with_neighbours(
     )
 }
 
-/// Reserve half the free gap to each of `near` for its simultaneous
-/// movement: `drive` (blocks per tick) never closes on a neighbour faster
-/// than that, and not at all inside `spacing`. This bounds closing even when
-/// the other row is steering towards us.
+/// Reserve half the free gap to each of `near` for its simultaneous movement.
+/// Input/output velocity is blocks per second; limits are blocks per tick.
+/// Closing is bounded even when the other row is steering towards us.
 pub(super) fn keep_gap(
-    members: &[Member],
+    runtime: &FormationRuntime,
     index: usize,
     near: &[(f64, usize); NEIGHBOURS],
     spacing: f64,
-    mut drive: [f64; 2],
-) -> [f64; 2] {
+    position: [f64; 3],
+    velocity: [f64; 3],
+) -> [f64; 3] {
+    let members = &runtime.members;
+    let tick = mc_physics::TICK_SECONDS;
+    let mut drive = [velocity[0] * tick, velocity[2] * tick];
     let m = &members[index];
-    for &(distance, other) in near {
+    let mut limits = [([0.0; 2], 0.0); NEIGHBOURS];
+    for (limit, &(distance, other)) in limits.iter_mut().zip(near) {
         if other == usize::MAX || distance < 1e-8 {
             continue;
         }
@@ -431,12 +430,33 @@ pub(super) fn keep_gap(
         ];
         let closing = drive[0] * towards[0] + drive[1] * towards[1];
         let allowed = ((dist - spacing) * 0.5).max(0.0);
+        *limit = (towards, allowed);
         if closing > allowed {
             drive[0] -= towards[0] * (closing - allowed);
             drive[1] -= towards[1] * (closing - allowed);
         }
     }
-    drive
+    let bounded =
+        runtime.constrain_velocity(position, [drive[0] / tick, velocity[1], drive[1] / tick]);
+    if runtime.bounds.is_some_and(|(min, max)| {
+        position[0] < min[0] || position[0] > max[0] || position[2] < min[1] || position[2] > max[1]
+    }) {
+        // External knockback must still recover into the loaded ticket.
+        return bounded;
+    }
+    drive = [bounded[0] * tick, bounded[2] * tick];
+    // Oblique projections and boundary clipping can reopen an earlier gap.
+    // All limits include zero drive, so a final common scale satisfies every
+    // half-gap without reopening another, allocating or iterating to convergence.
+    let mut scale: f64 = 1.0;
+    for (towards, allowed) in limits {
+        let closing = drive[0] * towards[0] + drive[1] * towards[1];
+        if closing > allowed {
+            scale = scale.min(allowed / closing);
+        }
+    }
+    let drive = drive.map(|component| component * scale);
+    [drive[0] / tick, bounded[1], drive[1] / tick]
 }
 
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {

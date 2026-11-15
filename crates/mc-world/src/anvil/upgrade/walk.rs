@@ -147,7 +147,6 @@ pub(super) fn visit(
                 "SaddleItem",
                 "body_armor_item",
                 "weapon",
-                "SelectedItem",
             ] {
                 field(tag, key, NodeKind::Item, version, report)?;
             }

@@ -70,7 +70,10 @@ fn vanilla_fixed_seed_region_block_fingerprint() {
             }
         }
     }
-    assert_eq!(hash, 7_212_625_076_892_161_529);
+    // Revision 31 aquifers (a5450357d, merged by 911e1b2fb) intentionally
+    // replace dry density caves with water/lava and pressure barriers. The
+    // b8ecfe99a baseline came from the parallel pre-aquifer branch.
+    assert_eq!(hash, 7_307_050_492_060_971_425);
 }
 
 #[test]

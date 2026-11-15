@@ -267,20 +267,48 @@ fn rank_and_heap_table() {
 
 /// Heaps through the first clash and the pursuit that follows. Run explicitly.
 #[test]
-#[ignore = "1000 a side, 2200 ticks; run explicitly"]
+#[ignore = "1000 a side through contact and pursuit, at most 6000 ticks; run explicitly"]
 fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
     let mut state = started(1000);
     let (mut foot, mut horse) = (0.0_f64, 0.0_f64);
-    for t in 1..=2200 {
+    let mut pursuit_ticks = 0;
+    let mut melee_kills = 0;
+    let mut wounds = 0;
+    // 9edae78e7 intentionally lengthened contact by reducing press lethality.
+    // The old 2200-tick cutoff could stop before pursuit. Preserve its >300
+    // casualty floor and both heap limits, but allow the deliberately longer
+    // battle to reach that exposure and at least 200 actual pursuit ticks.
+    for t in 1..=6000 {
         crate::tick::run_tick(&mut state, &[]);
+        let battle = &state.hostile.battle;
+        melee_kills += battle.combat.work.killed;
+        wounds += battle.combat.work.wounded;
+        if battle.formation.regiments.iter().any(|regiment| {
+            regiment.spec.order == formation::Order::Pursue
+                && regiment.enemy_routing
+                && regiment.live_count > 0
+        }) {
+            pursuit_ticks += 1;
+        }
         if t % 100 == 0 {
             let c = census(&state.hostile.battle);
             foot = foot.max(100.0 * c.heaped_foot as f64 / c.foot.max(1) as f64);
             horse = horse.max(100.0 * c.heaped_horse as f64 / c.horse.max(1) as f64);
         }
+        if t >= 2200 && pursuit_ticks >= 200 && dead(&state) > 300 {
+            break;
+        }
     }
-    eprintln!("RANKS max heap foot {foot:.2}% horse {horse:.2}%");
+    let (deaths, removed, native_wounds) = super::tests::native_battle_losses(&state);
+    eprintln!(
+        "RANKS max heap foot {foot:.2}% horse {horse:.2}% deaths={deaths:?} removed={removed:?} native_wounds={native_wounds} melee_kills={melee_kills} wounds={wounds} pursuit_ticks={pursuit_ticks}",
+    );
     assert!(foot < 3.0, "foot heap {foot}%");
     assert!(horse < 15.0, "horse heap {horse}%");
+    assert!(pursuit_ticks >= 200, "pursuit_ticks={pursuit_ticks}");
+    assert!(
+        melee_kills > 0,
+        "contact must still kill, melee_kills={melee_kills}"
+    );
     assert!(dead(&state) > 300, "contact must still kill");
 }

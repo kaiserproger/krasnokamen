@@ -75,6 +75,86 @@ fn frozen_simultaneous_rows_cannot_close_below_minimum_spacing() {
 }
 
 #[test]
+fn oblique_neighbour_cannot_reopen_an_already_closed_gap() {
+    let mut runtime = FormationRuntime::default();
+    for id in [10, 20, 30] {
+        single(&mut runtime, id, 1, 0.0, Order::Hold);
+    }
+    runtime.members[1].pos = [0.0, 64.0, 1.0];
+    runtime.members[2].pos = [0.6, 64.0, -0.8];
+    let mut near = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
+    near[0] = (1.0, 1);
+    near[1] = (1.0, 2);
+    let velocity = keep_gap(
+        &runtime,
+        0,
+        &near,
+        1.0,
+        runtime.members[0].pos,
+        [4.0, 0.0, 4.0],
+    );
+    let drive = [
+        velocity[0] * mc_physics::TICK_SECONDS,
+        velocity[2] * mc_physics::TICK_SECONDS,
+    ];
+    for member in &runtime.members[1..] {
+        let closing = drive[0] * member.pos[0] + drive[1] * member.pos[2];
+        assert!(
+            closing <= 1e-12,
+            "closed gap at {:?}: drive={drive:?}",
+            member.pos
+        );
+    }
+}
+
+#[test]
+fn boundary_clip_cannot_turn_tangential_foot_or_horse_drive_into_a_neighbour() {
+    for spacing in [MIN_SPACING, 1.5] {
+        let mut runtime = FormationRuntime::default();
+        single(&mut runtime, 10, 1, 0.0, Order::Hold);
+        single(&mut runtime, 20, 1, 0.0, Order::Hold);
+        runtime.members[1].pos = [0.6 * spacing, 64.0, -0.8 * spacing];
+        runtime
+            .set_bounds([0.0, -2.0 * spacing], [2.0 * spacing, 2.0 * spacing])
+            .unwrap();
+        let mut near = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
+        near[0] = (spacing * spacing, 1);
+        let velocity = keep_gap(
+            &runtime,
+            0,
+            &near,
+            spacing,
+            runtime.members[0].pos,
+            [-0.8, 0.0, -0.6],
+        );
+        let step = [
+            velocity[0] * mc_physics::TICK_SECONDS,
+            velocity[2] * mc_physics::TICK_SECONDS,
+        ];
+        assert!(step[0] >= 0.0, "escaped left boundary: {step:?}");
+        let closing = step[0] * 0.6 - step[1] * 0.8;
+        assert!(
+            closing <= 1e-12,
+            "boundary reopened spacing={spacing}: step={step:?}"
+        );
+
+        // External knockback outside the ticket still gets its exact inward
+        // recovery step, even if crowd limits would keep it outside.
+        runtime.members[0].pos[0] = -0.01;
+        near[0].0 = (runtime.members[1].pos[0] + 0.01).powi(2) + runtime.members[1].pos[2].powi(2);
+        let recovery = keep_gap(
+            &runtime,
+            0,
+            &near,
+            spacing,
+            runtime.members[0].pos,
+            [-0.8, 0.0, -0.6],
+        );
+        assert!((-0.01 + recovery[0] * mc_physics::TICK_SECONDS).abs() < 1e-12);
+    }
+}
+
+#[test]
 fn exact_overlap_has_deterministic_opposite_separation_not_a_permanent_stack() {
     let mut runtime = FormationRuntime::default();
     single(&mut runtime, 10, 1, 0.0, Order::Hold);

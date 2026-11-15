@@ -248,9 +248,9 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
+    use crate::Identifier;
     use crate::items::{ItemRegistry, ItemReport, load_items_report};
     use crate::tags::TagsData;
-    use crate::{Identifier, VanillaData};
 
     use super::{FuelValues, REQUIRED_FUEL_TAGS};
 
@@ -399,7 +399,8 @@ mod tests {
             tags_path.display()
         );
         let items = ItemRegistry::from_report(&load_items_report(report_path).unwrap());
-        let tags = crate::tags::load(&root, &VanillaData::from_registries("", vec![])).unwrap();
+        let data = crate::load(&root).unwrap();
+        let tags = crate::tags::load(&root, &data).unwrap();
         let from_tags = FuelValues::from_resolved_tags_26_1_2(&items, &tags);
         let embedded = FuelValues::embedded_26_1_2(&items);
 

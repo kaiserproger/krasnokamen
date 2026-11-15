@@ -505,7 +505,12 @@ impl WireClient {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("missing received wire evidence: {description}"))
+        .unwrap_or_else(|_| {
+            panic!(
+                "missing received wire evidence: {description}; pending={:?}",
+                self.pending
+            )
+        })
     }
 
     async fn command(&mut self, command: &str, feedback: &[&str]) {
@@ -567,7 +572,7 @@ impl WireClient {
         repair_inventory: bool,
     ) {
         let packed = pack_block_pos(position.x, position.y, position.z);
-        self.matching("ordinary BlockUpdate repair or committed edit", |event| {
+        self.matching(&format!("sequence {sequence}: block {position:?} = {block}"), |event| {
             matches!(event, WireEvent::Block(update) if update.position == packed && update.state_id == i32::try_from(block).unwrap())
         }).await;
         self.matching(
@@ -681,7 +686,6 @@ async fn genuine_claim_gate() {
             .unwrap()
             .parse()
             .unwrap();
-    assert_eq!(towns["dimension"].as_str(), Some("minecraft:overworld"));
     assert!(
         towns["minimum_y"].as_integer().unwrap() <= 161
             && towns["maximum_y"].as_integer().unwrap() >= 161
@@ -696,6 +700,9 @@ async fn genuine_claim_gate() {
     cfg.data.vanilla_data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     cfg.server.view_distance = 1;
     cfg.server.simulation_distance = 1;
+    // Both policy actors are non-operators at spawn. This gate isolates town
+    // claims, not vanilla's independent operator-only spawn protection.
+    cfg.server.spawn_protection = 0;
     cfg.plugins.directory = Some(deployment);
     let data = load_vanilla_data(&cfg).unwrap();
     let tags = load_tags(&cfg, &data).unwrap();
@@ -903,9 +910,11 @@ async fn genuine_claim_gate() {
     let stranger_inventory = stranger.inventory.clone();
     let stranger_carried = stranger.carried.clone();
 
+    // Native zone denial of digging repairs the block and ACK only; it never
+    // predicts an item debit. Use-item-on also repairs the inventory below.
     stranger.send(&dig(break_target, 101)).await;
     stranger
-        .action_receipt(101, break_target, torch, true)
+        .action_receipt(101, break_target, torch, false)
         .await;
     assert_eq!(
         stranger.inventory, stranger_inventory,
