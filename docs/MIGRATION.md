@@ -240,6 +240,11 @@ checksum mismatches and blocks exceeding their token's size limit still refuse
 import. Fresh export chunks use zlib, not LZ4.
 The region-preserving writer copies validated LZ4 slots byte-for-byte.
 
+Player NBT upgrades follow vanilla's typed schema, not field-name resemblance.
+`Inventory` and `EnderItems` contain upgraded item stacks; the unowned
+`SelectedItem` display snapshot remains unchanged, including legacy `Count`,
+as official Java 26.1.2 DFU preserves it. It is not an inventory authority.
+
 ### A world from Solaris 1.0.0-rc.5 or older
 
 This build refuses to open a world written before the Krasnokamen rename and
