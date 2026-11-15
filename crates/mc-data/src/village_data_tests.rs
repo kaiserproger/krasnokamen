@@ -58,6 +58,28 @@ fn moog_overworld_structure_parses_crystal_rules_and_refuses_unknown_layout() {
     assert!(parse_structure(&id, &value).is_err());
 }
 
+#[test]
+fn moog_spawner_processor_parses_mvs_weights_and_timing() {
+    let mut value = serde_json::json!({
+        "processor_type": "moogs_structures:spawner_randomizing_processor",
+        "weighted_entities": [
+            {"entity": "minecraft:drowned", "weight": 6},
+            {"entity": "minecraft:guardian", "weight": 8}
+        ],
+        "min_spawn_delay": 200, "max_spawn_delay": 800,
+        "spawn_count": 4, "max_nearby_entities": 6,
+        "required_player_range": 16, "spawn_range": 4
+    });
+    let owner = identifier("mvs:ocean_tower");
+    let StructureProcessorSpec::MoogSpawner(spec) = parse_processor(&owner, &value).unwrap() else {
+        panic!("expected Moog spawner");
+    };
+    assert_eq!(spec.mobs, vec![(identifier("minecraft:drowned"), 6.0), (identifier("minecraft:guardian"), 8.0)]);
+    assert_eq!(spec.fields, [20, 200, 800, 4, 6, 16, 4]);
+    value["weighted_entities"][0]["nbt"] = serde_json::json!({"Health": 10});
+    assert!(parse_processor(&owner, &value).is_err());
+}
+
 fn loader(root: &Path) -> VillageDataLoader {
     VillageDataLoader::new(root.join("data/minecraft/worldgen"))
 }

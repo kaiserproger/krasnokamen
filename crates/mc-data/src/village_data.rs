@@ -532,9 +532,18 @@ pub struct ProcessorRuleSpec {
     pub append_loot: Option<Identifier>,
 }
 
+/// Mob choice and base-spawner settings for a Moog spawner processor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MoogSpawnerSpec {
+    pub mobs: Vec<(Identifier, f64)>,
+    /// Delay, minimum/maximum delay, count, nearby limit, player range, range.
+    pub fields: [i16; 7],
+}
+
 /// Processor types supported by the shared jigsaw template pipeline.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StructureProcessorSpec {
+    MoogSpawner(MoogSpawnerSpec),
     BlockRot {
         integrity: f32,
         rottable_blocks: Option<Identifier>,
@@ -1587,6 +1596,60 @@ fn parse_processor_list(
     })
 }
 
+fn parse_moog_spawner(
+    referrer: &Identifier,
+    value: &Value,
+) -> Result<MoogSpawnerSpec, VillageDataError> {
+    let invalid = |field, detail: String| VillageDataError::InvalidField {
+        kind: PROCESSOR,
+        entry: referrer.clone(),
+        field,
+        value: detail,
+    };
+    let allowed = [
+        "processor_type", "weighted_entities", "delay", "min_spawn_delay",
+        "max_spawn_delay", "spawn_count", "max_nearby_entities",
+        "required_player_range", "spawn_range",
+    ];
+    if let Some(object) = value.as_object() {
+        for key in object.keys() {
+            if !allowed.contains(&key.as_str()) {
+                return Err(invalid("processor_type", format!("unsupported Moog spawner field {key}")));
+            }
+        }
+    }
+    let entries = field_array(value, "weighted_entities", PROCESSOR, referrer)?;
+    let mut mobs = Vec::with_capacity(entries.len());
+    let mut total = 0.0;
+    for entry in entries {
+        let object = entry.as_object().ok_or_else(|| invalid(
+            "weighted_entities", "expected an entity object".to_owned(),
+        ))?;
+        if object.keys().any(|key| key != "entity" && key != "weight") {
+            return Err(invalid("weighted_entities", "unsupported entity fields".to_owned()));
+        }
+        let entity = parse_id(referrer, field_str(entry, "entity", PROCESSOR, referrer)?)?;
+        let weight = entry.get("weight").and_then(Value::as_f64)
+            .filter(|weight| weight.is_finite() && *weight > 0.0)
+            .ok_or_else(|| invalid("weighted_entities", "weight must be positive and finite".to_owned()))?;
+        total += weight;
+        mobs.push((entity, weight));
+    }
+    if mobs.is_empty() || !total.is_finite() {
+        return Err(invalid("weighted_entities", "empty or overflowing mob weights".to_owned()));
+    }
+    let mut fields = [0; 7];
+    for (slot, (key, default)) in fields.iter_mut().zip([
+        ("delay", 20), ("min_spawn_delay", 200), ("max_spawn_delay", 800),
+        ("spawn_count", 4), ("max_nearby_entities", 6),
+        ("required_player_range", 16), ("spawn_range", 4),
+    ]) {
+        let raw = optional_i32_field(value, key, PROCESSOR, referrer, default)?;
+        *slot = i16::try_from(raw).map_err(|_| invalid(key, raw.to_string()))?;
+    }
+    Ok(MoogSpawnerSpec { mobs, fields })
+}
+
 fn parse_processor(
     referrer: &Identifier,
     value: &Value,
@@ -1595,6 +1658,9 @@ fn parse_processor(
         referrer,
         field_str(value, "processor_type", PROCESSOR, referrer)?,
     )?;
+    if type_id.as_str() == "moogs_structures:spawner_randomizing_processor" {
+        return parse_moog_spawner(referrer, value).map(StructureProcessorSpec::MoogSpawner);
+    }
     Ok(match type_id.path() {
         "block_rot" => StructureProcessorSpec::BlockRot {
             integrity: optional_ranged_f32_field(
@@ -1611,13 +1677,24 @@ fn parse_processor(
                 .map(|tag| parse_hashed_tag(referrer, tag))
                 .transpose()?,
         },
-        "capped" => StructureProcessorSpec::Capped {
-            delegate: Box::new(parse_processor(
+        "capped" => {
+            let delegate = parse_processor(
                 referrer,
                 field_of(value, "delegate", PROCESSOR, referrer)?,
-            )?),
-            limit: ranged_i32_field(value, "limit", PROCESSOR, referrer, 0, i32::MAX)?,
-        },
+            )?;
+            if matches!(delegate, StructureProcessorSpec::MoogSpawner(_)) {
+                return Err(VillageDataError::InvalidField {
+                    kind: PROCESSOR,
+                    entry: referrer.clone(),
+                    field: "delegate",
+                    value: "capped Moog spawner processors are unsupported".to_owned(),
+                });
+            }
+            StructureProcessorSpec::Capped {
+                delegate: Box::new(delegate),
+                limit: ranged_i32_field(value, "limit", PROCESSOR, referrer, 0, i32::MAX)?,
+            }
+        }
         "rule" => {
             let entries = field_array(value, "rules", PROCESSOR, referrer)?;
             let mut rules = Vec::with_capacity(entries.len());

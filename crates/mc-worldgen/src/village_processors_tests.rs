@@ -1857,6 +1857,33 @@ fn unresolvable_states_fail_closed_naming_the_owner() {
 }
 
 #[test]
+fn moog_spawner_choices_are_position_seeded_and_only_touch_spawners() {
+    use mc_data::village_data::MoogSpawnerSpec;
+    let fixture = Fixture::new();
+    let semantics = BlockSemantics::new(&fixture.blocks, &fixture.tags);
+    let mut input = pieces(64, |_| fixture.state("minecraft:spawner", &[]));
+    input.push(PieceBlock {
+        pos: BlockPos { x: 100, y: 64, z: 100 },
+        template_y: 0,
+        state: fixture.state("minecraft:stone", &[]),
+        jigsaw_final_state: None,
+    });
+    let specs = [StructureProcessorSpec::MoogSpawner(MoogSpawnerSpec {
+        mobs: vec![(identifier("minecraft:zombie"), 1.0), (identifier("minecraft:skeleton"), 1.0)],
+        fields: [20, 200, 800, 4, 6, 16, 4],
+    })];
+    let processors = compile_processors(&semantics, &owner(), &specs).unwrap();
+    let run = || crate::village::processors::apply_processors_with_metadata(
+        &semantics, &fixture.level, &input, &processors, BlockPos { x: 0, y: 0, z: 0 },
+    );
+    let (_, _, spawners) = run();
+    assert_eq!(spawners.len(), 64);
+    assert_eq!(spawners, run().2);
+    assert!(spawners.iter().any(|(_, mob, _)| mob.as_str() == "minecraft:zombie"));
+    assert!(spawners.iter().any(|(_, mob, _)| mob.as_str() == "minecraft:skeleton"));
+}
+
+#[test]
 fn modern_jigsaw_capped_loot_is_per_template_and_deterministic() {
     let fixture = Fixture::new();
     let semantics = BlockSemantics::new(&fixture.blocks, &fixture.tags);
@@ -1877,7 +1904,7 @@ fn modern_jigsaw_capped_loot_is_per_template_and_deterministic() {
     }];
     let processors = compile_processors(&semantics, &owner(), &specs).unwrap();
     let run = || {
-        crate::village::processors::apply_processors_with_loot(
+        crate::village::processors::apply_processors_with_metadata(
             &semantics,
             &fixture.level,
             &input,
@@ -1885,8 +1912,9 @@ fn modern_jigsaw_capped_loot_is_per_template_and_deterministic() {
             BlockPos { x: 0, y: 0, z: 0 },
         )
     };
-    let (output, loot) = run();
-    assert_eq!((output.clone(), loot.clone()), run());
+    let (output, loot, spawners) = run();
+    assert_eq!((output.clone(), loot.clone(), spawners.clone()), run());
+    assert!(spawners.is_empty());
     assert_eq!(loot.len(), 3);
     assert_eq!(
         output

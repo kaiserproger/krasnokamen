@@ -24,6 +24,18 @@ namespaces present in the supplied resource root. This library capability alone
 does not enable datapack worldgen in the running server; see the current
 [datapack limits](OPERATING.md#datapacks-and-command-blocks).
 
+The shared loader also handles Moog's generic overworld jigsaw type and advanced
+random-spread placement, including its minimum origin distance, liquid and
+terrain-radius start checks, and versioned single-pool elements. A generator
+must supply actual liquid and ocean-floor facts when those checks require them;
+missing facts reject the start. Moog spawner processors with weighted entity IDs
+and timing fields write the selected mob and spawner NBT. Custom per-mob NBT,
+replacement blocks, capped spawner processors, biome-radius checks and special
+burying or Y-allowance rules are refused, as is the Moog Nether jigsaw type.
+These library paths are not by themselves evidence that a whole modpack loads,
+generates or plays correctly.
+
+
 Missing template resources follow vanilla's `StructureTemplateManager.getOrCreate`:
 the closure caches a zero-sized empty template and logs its identifier once during
 loading. This is required by the shipped ancient-city `walls/no_corners` pool,
@@ -580,9 +592,9 @@ they are deliberate:
   it was placed, never claiming the bed, workstation or bell next to it. Vanilla's
   POI acquisition, breeding, trading, raids and patrols are outside this page
   entirely.
-- **Non-jigsaw structure algorithms.** This shared implementation accepts
-  `minecraft:jigsaw` structures driven by `minecraft:random_spread`; other
-  structure algorithms belong to their own generation paths.
+- **Non-jigsaw structure algorithms.** The shared implementation covers vanilla
+  jigsaws and the supported Moog overworld rules above; other structure
+  algorithms belong to their own generation paths.
 - **Other terrain adaptations.** Only `beard_thin` has a version of the
   analogue. `none` needs no behaviour, and `bury`, `beard_box` and
   `encapsulate` have no engine-side analogue; no structure in the villages set
