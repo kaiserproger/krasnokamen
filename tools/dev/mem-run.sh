@@ -341,13 +341,20 @@ cpu_pin=()
 # Preemptible (the watchdog may freeze it under memory pressure) only for plain
 # builds, decided once from argv: cargo build/check/clippy/doc/fetch and cargo
 # test/bench --no-run. Tests, harness runs, servers and clients never are.
+# `env NAME=value … cargo build …` (pin-release, per-tree CARGO_TARGET_DIR) is the
+# same build; before 2026-11-15 it was never frozen, so a -x window waited for it.
 preemptible=0
-if [ "${cmd[0]:-}" = cargo ]; then
+argv=("${cmd[@]}")
+if [ "${argv[0]:-}" = env ]; then
+  argv=("${argv[@]:1}")
+  while [[ ${argv[0]:-} =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do argv=("${argv[@]:1}"); done
+fi
+if [ "${argv[0]:-}" = cargo ]; then
   sub=
-  for w in "${cmd[@]:1}"; do [[ $w == [-+]* ]] || { sub=$w; break; }; done
+  for w in "${argv[@]:1}"; do [[ $w == [-+]* ]] || { sub=$w; break; }; done
   case "$sub" in
     build|b|check|c|clippy|doc|fetch) preemptible=1 ;;
-    test|t|bench) [[ " ${cmd[*]} " == *" --no-run "* ]] && preemptible=1 ;;
+    test|t|bench) [[ " ${argv[*]} " == *" --no-run "* ]] && preemptible=1 ;;
   esac
 fi
 # A nested build is part of its running ancestor (a promote's server build): freezing it
