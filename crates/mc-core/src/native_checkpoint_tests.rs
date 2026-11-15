@@ -1,6 +1,9 @@
 use super::*;
 use mc_world::native::{NativeCheckpoint, NativeStore};
 
+#[path = "native_player_custody_tests.rs"]
+mod player_custody;
+
 static STORES: std::sync::LazyLock<
     std::sync::Mutex<BTreeMap<std::path::PathBuf, std::sync::Weak<NativeStore>>>,
 > = std::sync::LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));

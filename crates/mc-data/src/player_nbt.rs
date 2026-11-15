@@ -125,6 +125,36 @@ fn float_list<const N: usize>(tag: &Tag) -> Option<[f32; N]> {
     Some(out)
 }
 
+/// Decode an item at the player custody boundary. Only an empty compound is
+/// an empty slot; nonempty payload without a string id must not be discarded.
+pub fn stack_from_player_fields(
+    items: &ItemRegistry,
+    fields: &[(String, Tag)],
+) -> Result<Option<ItemStack>, ItemNbtError> {
+    let stack = stack_from_fields(items, fields)?;
+    if stack.is_none() && !fields.is_empty() {
+        return Err(ItemNbtError::InvalidComponent(
+            "nonempty player item: missing or non-string id".into(),
+        ));
+    }
+    Ok(stack)
+}
+
+// Custody fields must be unique before projecting them into indexed storage.
+fn custody_field<'a>(
+    fields: &'a [(String, Tag)],
+    name: &str,
+) -> Result<Option<&'a Tag>, ItemNbtError> {
+    let mut values = fields.iter().filter(|(key, _)| key == name);
+    let value = values.next().map(|(_, value)| value);
+    if values.next().is_some() {
+        return Err(ItemNbtError::InvalidComponent(format!(
+            "duplicate player custody field {name}"
+        )));
+    }
+    Ok(value)
+}
+
 /// Decode the shared vanilla keys. Unknown/extra keys are ignored (the
 /// caller's extras live elsewhere); missing keys keep `base` values.
 pub fn player_from_fields(
@@ -170,36 +200,83 @@ pub fn player_from_fields(
     if let Some(mode) = int_field(fields, "playerGameType") {
         out.game_mode = mode;
     }
-    if let Some(Tag::List(list)) = field(fields, "Inventory") {
+    if let Some(value) = custody_field(fields, "Inventory")? {
+        let Tag::List(list) = value else {
+            return Err(ItemNbtError::InvalidComponent(
+                "Inventory: expected list".into(),
+            ));
+        };
         let mut inventory = Vec::new();
-        for element in &list.elements {
+        let mut occupied = 0_u64;
+        for (index, element) in list.elements.iter().enumerate() {
+            let invalid = |reason: &str| {
+                ItemNbtError::InvalidComponent(format!("Inventory entry {index} Slot: {reason}"))
+            };
             let Tag::Compound(item_fields) = element else {
-                continue;
+                return Err(invalid("expected item compound"));
             };
-            // `Slot` is an unsigned byte on the wire (`bfm.java:134`); only
-            // 0-35 belong to the player inventory (armor/offhand ride in
-            // `equipment`). Anything else is ignored, like vanilla.
-            let slot = match field(item_fields, "Slot") {
-                Some(Tag::Byte(slot)) => u8::try_from(*slot).ok(),
-                _ => None,
+            // Vanilla defaults missing Slot to 0, skips out-of-range slots and
+            // overwrites repeats. Custody admission refuses rather than repairs.
+            let Some(Tag::Byte(slot)) =
+                custody_field(item_fields, "Slot").map_err(|error| invalid(&error.to_string()))?
+            else {
+                return Err(invalid("missing byte Slot"));
             };
-            let Some(slot) = slot.filter(|slot| *slot < 36) else {
-                continue;
-            };
-            if let Some(stack) = stack_from_fields(items, item_fields)? {
+            if !(0..36).contains(slot) {
+                return Err(invalid(&format!("{slot} outside supported range 0..35")));
+            }
+            let slot = *slot as u8;
+            if occupied & (1_u64 << slot) != 0 {
+                return Err(invalid(&format!("duplicate {slot}")));
+            }
+            occupied |= 1_u64 << slot;
+            if let Some(stack) = stack_from_player_fields(items, item_fields)
+                .map_err(|error| invalid(&format!("{slot}: {error}")))?
+            {
                 inventory.push((slot, stack));
             }
         }
         inventory.sort_by_key(|(slot, _)| *slot);
         out.inventory = inventory;
     }
-    if let Some(Tag::Compound(slots)) = field(fields, "equipment") {
+    if let Some(value) = custody_field(fields, "equipment")? {
+        let Tag::Compound(slots) = value else {
+            return Err(ItemNbtError::InvalidComponent(
+                "equipment: expected compound".into(),
+            ));
+        };
         let mut equipment = Vec::new();
+        let mut occupied = 0_u8;
         for (name, tag) in slots {
-            let Tag::Compound(item_fields) = tag else {
-                continue;
+            let index = match name.as_str() {
+                "mainhand" => 0,
+                "offhand" => 1,
+                "feet" => 2,
+                "legs" => 3,
+                "chest" => 4,
+                "head" => 5,
+                "body" => 6,
+                "saddle" => 7,
+                _ => {
+                    return Err(ItemNbtError::InvalidComponent(format!(
+                        "equipment slot {name}: unsupported"
+                    )));
+                }
             };
-            if let Some(stack) = stack_from_fields(items, item_fields)? {
+            if occupied & (1 << index) != 0 {
+                return Err(ItemNbtError::InvalidComponent(format!(
+                    "equipment slot {name}: duplicate"
+                )));
+            }
+            occupied |= 1 << index;
+            let Tag::Compound(item_fields) = tag else {
+                return Err(ItemNbtError::InvalidComponent(format!(
+                    "equipment slot {name}: expected item compound"
+                )));
+            };
+            if let Some(stack) = stack_from_player_fields(items, item_fields).map_err(|error| {
+                ItemNbtError::InvalidComponent(format!("equipment slot {name}: {error}"))
+            })? {
                 equipment.push((name.clone(), stack));
             }
         }
@@ -441,10 +518,9 @@ mod tests {
         assert_eq!(back, player);
     }
 
-    /// Vanilla-issued `Inventory` entries outside 0-35 are ignored (vanilla
-    /// `ddl.java:349-365` loads only indices < 36 into storage).
+    /// Vanilla skips unsupported slots; custody admission must not lose them.
     #[test]
-    fn out_of_range_wire_slots_are_ignored() {
+    fn out_of_range_wire_slots_are_refused() {
         let items = items();
         let boots_id = items
             .id_of(&crate::Identifier::parse("minecraft:diamond_boots").expect("id"))
@@ -460,7 +536,11 @@ mod tests {
                 elements: vec![Tag::Compound(bogus)],
             }),
         )];
-        let back = player_from_fields(&items, VanillaPlayer::default(), &fields).expect("decode");
-        assert!(back.inventory.is_empty(), "slot 45 ignored in Inventory");
+        let error = player_from_fields(&items, VanillaPlayer::default(), &fields).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Slot: 45 outside supported range")
+        );
     }
 }

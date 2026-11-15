@@ -3,6 +3,9 @@ use mc_nbt::Tag;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
+#[path = "player_duplicate_custody_tests.rs"]
+mod player_duplicate_custody;
+
 pub(super) fn globals(tick: u64) -> BTreeMap<String, NativeDomainRecord> {
     let manifest = json!({"tick":tick,"dimensions":{},"end_fight":null,"raids":null,"tickets":{},"players":{},"world_spawn":[0,64,0],"world_spawn_rotation":[0,0],"generated_entity_claims":[],"climate":{},"border":{},"difficulty":"Normal","block_ticks":{"next_sequence":0,"chunks":[]},"fluid_ticks":{"next_sequence":0,"covered":[],"due":[]},"gamerules":{},"domain_versions":{"climate":1,"gamerules":1,"block_ticks":1,"fluid_ticks":1,"claims":1,"tickets":1,"raids":1,"end_fight":1}});
     let mut manifest = manifest;

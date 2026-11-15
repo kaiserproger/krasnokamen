@@ -6916,9 +6916,10 @@ severity = "major"
 status = "open"
 source = "Stage3 ReviewBattleGap (read-only review of the DFU import commit): crates/mc-data/src/player_nbt.rs:174-193 silently skips a stack without a valid Slot; crates/mc-core/src/journal/player_nbt.rs:316-325 writes stacks into the slot array in order, so two valid stacks with the same Slot keep only the last; crates/mc-world import.rs:723-777 accepts the player after that decode; the next serialization rebuilds Inventory from the array (journal/player_nbt.rs:47-59), losing the skipped or overwritten item"
 repro = "source"
-regression = []
+regression = ["cargo:mc-world-conversion:player_slot_import_tests", "cargo:mc-core:native_checkpoint::tests::player_custody", "cargo:mc-world:native::checkpoint_tests::player_duplicate_custody::repeated_player_custody_names_refuse_raw_checkpoint_recovery"]
+fix_commit = "patch:7a364f8eadd208bb3a56b68ad0b8a62b80a35dc4b7800ee0916fde16ae9ae462"
 failing_first = "reported"
-repro_check = "Pre-existing custody gap, not introduced by 14f6f10a0. Intended behaviour: refuse ambiguous or unsupported inventory slots before any step that can collapse entries, with no partial import published; regressions import→load→save for a missing and a repeated Slot."
+repro_check = "Round 1 slot control: missing/repeated/unsupported Inventory and legacy equipment duplicates incorrectly publish PASS. Round 2 controls: wrong WAL array lengths and malformed item ids incorrectly admit custody. Round 3 WAL-opaque duplicate Carried/CraftingGrid control publishes recovered state and offline export PASS; native raw checkpoint duplicates were already refused and are regression-pinned, not claimed as a new loss fix. Combined production patch: docs/bugs/fix-patches/IMPORT-INVENTORY-SLOT-AMBIGUOUS.patch. Per-ingress evidence, historical vanilla writer table and control-tree diffs: owner-host receipts/ImportSlotFix/REPORT.md. Row stays open; Main owns independent custody review and promotion."
 
 [[bug]]
 id = "LOADER-GAIT-SIDECAR-EMPTY"

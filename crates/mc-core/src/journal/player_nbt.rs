@@ -44,6 +44,7 @@ pub(super) fn player_image_to_tag(
         };
         fields
     };
+    validate_owned_custody_fields(&opaque_fields)?;
     // Exclude every owned key, even when its fresh optional value is absent.
     opaque_fields.retain(|(key, _)| !player_owned_field(key));
     let mut inventory = Vec::new();
@@ -303,6 +304,48 @@ pub(super) fn krasnokamen_custody_fields(
     Ok(out)
 }
 
+fn validate_owned_custody_fields(entries: &[(String, mc_nbt::Tag)]) -> Result<(), CoreError> {
+    let failure = |key: &str| {
+        CoreError::Storage(format!(
+            "player record: {key}: duplicate owned custody field"
+        ))
+    };
+    for (index, (key, value)) in entries.iter().enumerate() {
+        if (player_owned_field(key) || key == "recipeBook")
+            && entries[..index].iter().any(|(previous, _)| previous == key)
+        {
+            return Err(failure(key));
+        }
+        if key == "recipeBook"
+            && let mc_nbt::Tag::Compound(book) = value
+            && book.iter().filter(|(name, _)| name == "recipes").count() > 1
+        {
+            return Err(failure("recipeBook.recipes"));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_player_opaque_custody(bytes: &[u8]) -> Result<(), CoreError> {
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    let mut input = bytes;
+    let (_, tag) = mc_nbt::read_named(&mut input)
+        .map_err(|error| CoreError::Storage(format!("player opaque fields: {error}")))?;
+    if !input.is_empty() {
+        return Err(CoreError::Storage(
+            "player opaque fields: trailing NBT".into(),
+        ));
+    }
+    let mc_nbt::Tag::Compound(entries) = tag else {
+        return Err(CoreError::Storage(
+            "player opaque fields: expected compound".into(),
+        ));
+    };
+    validate_owned_custody_fields(&entries)
+}
+
 /// Decode a player image without touching filesystem state.
 pub fn player_from_tag(
     root: &mc_nbt::Tag,
@@ -314,6 +357,7 @@ pub fn player_from_tag(
     let mc_nbt::Tag::Compound(entries) = root else {
         return Err(failure("NBT", "root is not a compound".into()));
     };
+    validate_owned_custody_fields(entries)?;
     let player = player_from_fields(items, VanillaPlayer::default(), entries)
         .map_err(|err| failure("player fields", err.to_string()))?;
     let mut inventory = vec![mc_data::ItemStack::EMPTY; 41];
@@ -323,9 +367,9 @@ pub fn player_from_tag(
         }
     }
     for (name, stack) in player.equipment {
-        if let Some(index) = equipment_to_v2_slot(&name) {
-            inventory[index] = stack;
-        }
+        let index = equipment_to_v2_slot(&name)
+            .ok_or_else(|| failure("equipment", format!("slot {name}: unsupported player slot")))?;
+        inventory[index] = stack;
     }
     let find = |name: &str| {
         entries
@@ -378,9 +422,11 @@ pub fn player_from_tag(
         Some(_) => return Err(failure("unlocked recipes", "expected string list".into())),
     });
     let carried = match find("krasnokamen:Carried") {
-        Some(mc_nbt::Tag::Compound(fields)) => mc_data::item_nbt::stack_from_fields(items, fields)
-            .map_err(|err| failure("krasnokamen:Carried slot 0", err.to_string()))?
-            .unwrap_or(mc_data::ItemStack::EMPTY),
+        Some(mc_nbt::Tag::Compound(fields)) => {
+            mc_data::player_nbt::stack_from_player_fields(items, fields)
+                .map_err(|err| failure("krasnokamen:Carried slot 0", err.to_string()))?
+                .unwrap_or(mc_data::ItemStack::EMPTY)
+        }
         Some(_) => {
             return Err(failure(
                 "krasnokamen:Carried slot 0",
@@ -399,12 +445,14 @@ pub fn player_from_tag(
                         "expected item compound".into(),
                     ));
                 };
-                let stack = mc_data::item_nbt::stack_from_fields(items, fields).map_err(|err| {
-                    failure(
-                        &format!("krasnokamen:CraftingGrid slot {slot}"),
-                        err.to_string(),
-                    )
-                })?;
+                let stack = mc_data::player_nbt::stack_from_player_fields(items, fields).map_err(
+                    |err| {
+                        failure(
+                            &format!("krasnokamen:CraftingGrid slot {slot}"),
+                            err.to_string(),
+                        )
+                    },
+                )?;
                 grid.push(stack.unwrap_or(mc_data::ItemStack::EMPTY));
             }
             grid
