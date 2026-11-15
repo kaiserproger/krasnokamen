@@ -1153,17 +1153,54 @@ class PlayerHeadTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "placed_head_renders"):
                 scene_shot.check_player_head(self.Probe(), root)
 
+    def test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes(self):
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            path = root / "screenshots/head-worn.png"
+            with Image.open(path) as frame:
+                image = frame.convert("RGB")
+            draw = ImageDraw.Draw(image)
+            # Avatar pose/sky changes used to satisfy the changed-pixel check
+            # even when the magenta equipped head was down on the torso.
+            draw.rectangle((600, 300, 680, 380), fill=(110, 100, 90))
+            draw.rectangle((600, 420, 680, 506), fill=(200, 0, 200))
+            image.save(path)
+            with self.assertRaisesRegex(AssertionError, "worn_head_renders"):
+                scene_shot.check_player_head(self.Probe(), root)
+
+    def test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi(self):
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            path = root / "screenshots/head-worn.png"
+            with Image.open(path) as frame:
+                image = frame.convert("RGB")
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((600, 300, 680, 380), fill=(110, 100, 90))
+            # Real rejected candidate: skull left of the bare head. Its edge
+            # supplied 743 magenta pixels to the old x580-700/y280-400 box.
+            draw.rectangle((486, 369, 597, 484), fill=(200, 0, 200))
+            image.save(path)
+            with self.assertRaisesRegex(AssertionError, "worn_head_renders"):
+                scene_shot.check_player_head(self.Probe(), root)
+
     def test_authored_skin_has_opaque_contrasting_hat_and_base_window(self):
         from PIL import Image
 
         with tempfile.TemporaryDirectory() as directory:
             pack = scene_shot.player_head_skin_pack(Path(directory))
             self.assertEqual(json.loads((pack / "pack.mcmeta").read_text())["pack"]["pack_format"], 84)
-            with Image.open(pack / "assets/minecraft/textures/entity/player/wide/steve.png") as skin:
-                self.assertEqual(skin.size, (64, 64))
-                self.assertEqual(skin.getpixel((8, 8)), (0, 220, 220, 255))
-                self.assertEqual(skin.getpixel((40, 8)), (240, 0, 240, 255))
-                self.assertEqual(skin.getpixel((43, 11))[3], 0)
+            for model in ("slim", "wide"):
+                with Image.open(pack / f"assets/minecraft/textures/entity/player/{model}/steve.png") as skin:
+                    self.assertEqual(skin.size, (64, 64))
+                    self.assertEqual(skin.getpixel((8, 8)), (0, 220, 220, 255))
+                    self.assertEqual(skin.getpixel((40, 8)), (240, 0, 240, 255))
+                    self.assertEqual(skin.getpixel((43, 11))[3], 0)
             scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/player_head_scene.json").read_text())
             heads = [step["cmd"] for step in scene["steps"] if "profile" in step.get("cmd", "")]
             self.assertEqual(len(heads), 4)
@@ -1226,11 +1263,11 @@ class DroppedClockTests(unittest.TestCase):
         from PIL import Image, ImageDraw
 
         images = {phase: Image.new("RGB", scene_shot.WINDOW, (130, 130, 130))
-                  for phase in ("ctx-day", "ctx-night", "compass-day")}
+                  for phase in ("ctx-day", "ctx-night", "compass-day", "held-day", "held-night")}
         for phase, image in images.items():
             draw = ImageDraw.Draw(image)
             if phase == "ctx-day":
-                for box in ((385, 480, 410, 505), (975, 470, 1005, 500), (660, 390, 705, 435)):
+                for box in ((385, 480, 410, 505), (948, 480, 982, 515)):
                     draw.rectangle(box, fill=(10, 10, 200))
                 draw.rectangle((338, 645, 390, 650), fill="black")
             elif phase == "ctx-night":
@@ -1238,12 +1275,13 @@ class DroppedClockTests(unittest.TestCase):
             else:
                 draw.rectangle((430, 490, 445, 493), fill=(200, 10, 10))
                 draw.rectangle((1007, 482, 1010, 499), fill=(200, 10, 10))
-            if clock and phase != "compass-day":
-                draw.ellipse((355, 300, 415, 355), fill=(180, 150, 20))
-                draw.ellipse((360, 305, 410, 350), fill=(
-                    (10, 10, 200) if phase == "ctx-day" or clock == "static" else (45, 45, 45)))
+            if clock and phase in ("ctx-day", "ctx-night", "held-day", "held-night"):
+                x, y = (355, 300) if phase.startswith("ctx-") else (600, 330)
+                draw.ellipse((x, y, x + 60, y + 55), fill=(180, 150, 20))
+                draw.ellipse((x + 5, y + 5, x + 55, y + 50), fill=(
+                    (10, 10, 200) if phase.endswith("day") or clock == "static" else (45, 45, 45)))
         return {phase: ({"camera_position": [1000.5, 161.62, 1001.5], "yaw": 0, "pitch": 0,
-                         "environment": {"time_of_day": "13000" if phase == "ctx-night" else "1000"}}, image)
+                         "environment": {"time_of_day": "18000" if phase.endswith("night") else "6000"}}, image)
                 for phase, image in images.items()}
 
     def test_only_clock_face_change_passes_not_hud_or_static_clock(self):
@@ -1256,8 +1294,8 @@ class DroppedClockTests(unittest.TestCase):
         with patch.object(scene_shot, "_load_shots", return_value=self.frames("changed")):
             probe = self.Probe()
             scene_shot.check_dynamic_context(probe, Path("/unused"))
-            self.assertGreater(abs(probe.report["dropped_clock_face_blue_fraction"][0]
-                                   - probe.report["dropped_clock_face_blue_fraction"][1]), 0.15)
+            self.assertGreaterEqual(probe.report["dropped_clock_face_changed_cells"], 4)
+            self.assertGreaterEqual(probe.report["held_clock_face_changed_cells"], 4)
 
     @unittest.skipUnless(os.environ.get("KRASNOKAMEN_CLOCK_TEST_FRAMES"), "requires retained original scene frames")
     def test_stored_original_frames_reject_hud_contamination(self):
@@ -1266,7 +1304,8 @@ class DroppedClockTests(unittest.TestCase):
         root = Path(os.environ["KRASNOKAMEN_CLOCK_TEST_FRAMES"])
         with Image.open(root / "ctx-day.png") as day, Image.open(root / "ctx-night.png") as night:
             with self.assertRaisesRegex(AssertionError, "dropped_clock_face_day"):
-                scene_shot.check_dropped_clock(self.Probe(), day.convert("RGB"), night.convert("RGB"))
+                scene_shot.check_clock_face(self.Probe(), day.convert("RGB"), night.convert("RGB"),
+                                            "dropped_clock", (300, 260, 460, 420))
 
     def test_fixture_lifts_and_lights_dropped_clock_away_from_hud(self):
         scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/dynamic_context_scene.json").read_text())
@@ -1274,6 +1313,9 @@ class DroppedClockTests(unittest.TestCase):
         self.assertTrue(any(command.startswith("summon minecraft:item 1001.5 161.4 1003.5 ")
                             and "minecraft:clock" in command for command in commands))
         self.assertIn("setblock 1001 162 1003 minecraft:sea_lantern", commands)
+        self.assertIn('setblock 997 160 1005 minecraft:oak_shelf[facing=north]{Items:[{Slot:0b,id:"minecraft:clock",count:1},{Slot:1b,id:"minecraft:compass",count:1}]}', commands)
+        self.assertTrue(any(step.get("tp") == [1000.5, 162, 1001.5, 10, 37] for step in scene["steps"]))
+        self.assertTrue(all({"shot": name} in scene["steps"] for name in ("held-day", "held-night")))
 
 
 class AssertEntitiesTests(unittest.TestCase):

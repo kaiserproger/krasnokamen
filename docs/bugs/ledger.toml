@@ -5993,7 +5993,7 @@ source = "Stage3 S3Issue1 F2: scene_shot.check_player_head uses x880-1080 rather
 repro = "source"
 regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels"]
 fix_commit = "f645ca39a"
-repro_check = "Fixture camera/geometry frames the placed head in x580-700/y520-655. Stored original frame measurement at channel delta >25: old ROI 0, corrected ROI 10750 changed pixels (receipts/HarnessFix2/stored-head-roi.json). Only ROI reverted: receipts/HarnessFix2/red-head-roi.log fails placed_head_renders. Restore: receipts/HarnessFix2/green-final-units.log. Synthetic stored-image regression plus original-frame measurement, not a graphical candidate/control run; Main owns that pair."
+repro_check = "Fixture camera/geometry frames the placed head in x580-700/y520-655. Stored original frame measurement at channel delta >25: old ROI 0, corrected ROI 10750 changed pixels (receipts/HarnessFix2/stored-head-roi.json). Only ROI reverted: receipts/HarnessFix2/red-head-roi.log fails placed_head_renders. Restore: receipts/HarnessFix2/green-final-units.log. Followup real-client placed-head evidence: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 authored hat pixels; 20261115T010623-native-player-head-vwnycn1k hat-only control has zero. Full head acceptance additionally requires the worn attachment fix and tightened worn assertion."
 failing_first = "not recorded"
 
 [[bug]]
@@ -6009,7 +6009,7 @@ regression = [
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window",
 ]
 fix_commit = "f645ca39a"
-repro_check = "The named scene installs an authored offline default-skin pack (cyan base, magenta opaque hat, transparent face window) and uses unresolved HarnessHat rather than pretending to resolve an online skin. placed_head_hat_layer_pixels requires >100 magenta pixels separately from placed/worn changes. Only hat assertion removed: receipts/HarnessFix2/red-head-hat-assertion.log fails because the no-hat frame is wrongly accepted. Restore: receipts/HarnessFix2/green-final-units.log. Unit image/fixture evidence only; Main's actual candidate/hat-only-control graphical pair is still required for MODEL-OPUS-N3 promotion."
+repro_check = "The scene installs an authored offline default-skin pack (cyan base, magenta opaque hat, transparent face window) and unresolved HarnessHat, not an online skin. Only hat assertion removed: receipts/HarnessFix2/red-head-hat-assertion.log wrongly accepts the no-hat frame. Restore: receipts/HarnessFix2/green-final-units.log. Followup fad1cef1e authors both wide and slim Steve fallback paths; the real UUID selects slim Steve. Real-client placed hat: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 magenta pixels, hat-only control 20261115T010623-native-player-head-vwnycn1k has zero and fails placed_head_hat_layer_pixels. These frames exposed a separate worn-head-on-back product failure; full gate acceptance is not inferred from the placed head."
 failing_first = "not recorded"
 
 [[bug]]
@@ -6033,9 +6033,9 @@ severity = "minor"
 status = "open"
 source = "Stage3 tooling audit: vanilla_world_roundtrip.main v2 conversion command hardcodes mem-run -x"
 repro = "source"
-regression = ["python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_conversion_uses_normal_lane"]
+regression = ["python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner"]
 fix_commit = "f645ca39a"
-repro_check = "Removed only -x from the correctness driver's conversion command, retaining its memory budget and Cargo check. Only -x restored: receipts/HarnessFix2/red-roundtrip-lane.log fails at the captured command prefix. Restore: receipts/HarnessFix2/green-final-units.log. Test intercepts admission before Cargo; no real world roundtrip rerun."
+repro_check = "Removed only -x from the correctness driver's conversion command, retaining its memory budget and Cargo check. Only -x restored: receipts/HarnessFix2/red-roundtrip-lane.log fails at the captured command prefix. Original restore: receipts/HarnessFix2/green-final-units.log. Main's fc6b53988 portable canonical-runner cutover renamed the retained normal-lane regression; integrated restore: receipts/HarnessFix2/green-postmerge-units.log (146 tests, no skips). Test intercepts admission before Cargo; no real world roundtrip rerun."
 failing_first = "not recorded"
 
 [[bug]]
@@ -6080,8 +6080,60 @@ regression = [
   "python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud",
 ]
 fix_commit = "f645ca39a"
-repro_check = "Lifted the dropped fixture to y161.4 with fixed block lighting. The x320-450/y260-400 search excludes HUD/chat; only pixels enclosed by the clock's gold rim contribute to the day/night blue-face proportion. HUD-only changes and a static clock fail. Stored original ctx-day/ctx-night frames from 20261115T000416-native-dynamic-context-fzv1vs1e are rejected by DroppedClockTests.test_stored_original_frames_reject_hud_contamination using KRASNOKAMEN_CLOCK_TEST_FRAMES (green-final-units.log; no skip). Only the original HUD/dark-angle oracle restored: receipts/HarnessFix2/red-clock-only.log fails because the HUD-only counterexample is accepted. Restore: receipts/HarnessFix2/green-final-units.log. Main still needs a graphical run of the lifted fixture; this unit evidence does not accept MODEL-DYNAMIC-CONTEXT."
+repro_check = "The dropped fixture is y161.4 with fixed block lighting. Followup fad1cef1e measures blue occupancy in an 8x8 grid inside the gold rim, not total blue area (opposite phases can have equal areas), and excludes HUD/chat. Only the original HUD/dark-angle oracle restored: receipts/HarnessFix2/red-clock-only.log accepts the HUD-only counterexample. Followup unit suite: receipts/HarnessFix2/green-followup-scene-units.log, 72 tests pass. Real-client native-dynamic-context passes 3/3: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. Dropped and held day/night frames of the first run were reviewed; no item-frame coverage or general MODEL-DYNAMIC-CONTEXT promotion is claimed."
 failing_first = "not recorded"
+
+[[bug]]
+id = "HARNESS-PLAYER-HEAD-SLIM-FALLBACK"
+title = "Authored player-head skin fixture misses the UUID-selected slim Steve fallback"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 followup: native-player-head keeps plain Steve although the authored pack overrides wide Steve; entity default_skins[6] is slim Steve"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window"]
+fix_commit = "fad1cef1e"
+repro_check = "Only slim fallback entry removed: receipts/HarnessFix2/red-slim-default-skin.log fails the skin-pack unit. Both wide and slim entries are authored; no online profile is simulated. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Real placed-head magenta pixels 9822 at .analysis/validation/20261115T010513-native-player-head-93kmva1a; hat-only control zero at 20261115T010623-native-player-head-vwnycn1k."
+failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-WORN-HEAD-BACK-FALSE-POSITIVE"
+title = "Worn-head gate accepts unrelated head-region changes while the authored skull is on the back"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 followup: head-worn.png in 20261115T010550-native-player-head-iplrnv4q shows the skull at x600-680/y420-506 rather than head y306-375"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes"]
+fix_commit = "fad1cef1e"
+repro_check = "worn_head_renders now requires >100 authored magenta pixels inside the actual head ROI x580-700/y280-400 as well as changed pixels. ROI was not moved to the back. Only this predicate reverted: receipts/HarnessFix2/red-worn-back-false-positive.log wrongly accepts back attachment plus unrelated head changes. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Tightened real-client candidate 20261115T011500-native-player-head-k682egi4 correctly fails worn_head_renders, exposing WORN-PLAYER-HEAD-ON-BACK rather than hiding it."
+failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-CONTEXT-CLOCK-FIXTURE"
+title = "Dynamic-context scene omits its right shelf clock and frames the held clock edge-on"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 followup: native-dynamic-context right shelf contains compass but no clock; old held-clock ROI samples torso"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud"]
+fix_commit = "fad1cef1e"
+repro_check = "Added shelf clock at 997,160,1005 and a separate elevated held-clock camera; noon/midnight snapshots show distinct clock faces. Only right shelf clock removed: receipts/HarnessFix2/red-context-right-clock.log fails the fixture unit. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Native-dynamic-context passes three times: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. First run's dropped/held day/night frames reviewed; no item-frame assertion claimed."
+failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE"
+title = "Worn-head hat ROI clips a skull beside the avatar's still-bare head"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Visual review of rejected client 9f641fdf: 20261115T013251-native-player-head-lumcmo2a passes numerically although its skull is x486-597/y369-484, left of the head"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi"]
+fix_commit = "98900fb5c"
+repro_check = "The old x580-700/y280-400 box clipped 743 magenta pixels from the adjacent skull; actual head remained bare at x606-673/y305-375. The stricter x600-680/y280-375 box rejects it. Only ROI reverted: receipts/HarnessFix2/red-adjacent-head-roi.log fails the counterexample. Restore: green-adjacent-scene-units.log (72 pass, one optional stored-clock-frame test skipped). Re-evaluating the retained real candidate with the strict checker fails worn_head_renders: red-rejected-9f-realframe.log. The rejected graphical run's original passed status is invalid evidence, not candidate acceptance."
+failing_first = "reported"
 
 [[bug]]
 id = "LZ4-CHECKSUM-MASK"
