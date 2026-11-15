@@ -278,13 +278,31 @@ def require_java_audio_isolation(env: dict[str, str], game_dir: Path) -> dict[st
     return result
 
 
+def require_java_private_audio(env: dict[str, str], game_dir: Path, sink: str) -> None:
+    """Allow audible Java only on the verified, hardware-free graph's named sink."""
+    for key in ("KRASNOKAMEN_PW_ROOT", "PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR",
+                "PULSE_SERVER", "PULSE_SOURCE", "ALSOFT_DRIVERS", "ALSA_CONFIG_PATH"):
+        if env.get(key) != os.environ.get(key):
+            raise MissingCapability(f"java_audio:private_graph_child_environment_mismatch:{key}")
+    result = private_audio_preflight(game_dir / ".audio", require_alsa=True)
+    sinks = [entry.get("info", {}).get("props", {}) for entry in result["graph"]
+             if isinstance(entry.get("info"), dict)]
+    if not any(props.get("node.name") == sink and props.get("media.class") == "Audio/Sink"
+               and props.get("node.description") == sink for props in sinks):
+        raise MissingCapability(f"java_audio:private_named_sink_missing:{sink}")
+    env["PULSE_SINK"] = sink
+    env.pop("PIPEWIRE_NODE", None)
+    result["playback_sink"] = sink
+    (game_dir / JAVA_AUDIO_RECEIPT).write_text(json.dumps(result, indent=2) + "\n")
+
+
 def private_audio_preflight(artifact_dir: Path, *, require_source: bool = True,
                             require_alsa: bool = False) -> dict[str, Any]:
     """Fail before any native client starts unless capture is hardware-free.
 
-    Native client only: Java clients never use this graph (they run OpenAL
-    ``null``, see ``require_java_audio_isolation``). The ScreenAudio wrapper
-    owns the graph; an explicit private Pulse socket prevents ALSA/default-server fallback.
+    Native and explicitly audible Java clients use this graph; ordinary Java
+    clients stay on OpenAL null. The ScreenAudio wrapper owns the graph; an
+    explicit private Pulse socket prevents ALSA/default-server fallback.
     """
     root_text = os.environ.get("KRASNOKAMEN_PW_ROOT")
     if not root_text:

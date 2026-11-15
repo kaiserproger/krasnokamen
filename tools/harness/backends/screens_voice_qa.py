@@ -131,6 +131,32 @@ def _split_run(ctx: ProfileContext, timeout: float) -> dict[str, Any]:
     return merge_leg_parts(blocks, legs)
 
 
+@contextlib.contextmanager
+def java_endpoint(leg: str):
+    """Use the pinned SVC game's endpoint only for voice; screens stays canonical."""
+    version = "26.3"
+    if leg == "voice":
+        pin = json.loads(runtime._mod_artifact_path("svc").read_text())
+        version = pin["baseline"]["minecraft"]
+        entry = runtime._select_mod_entry("svc", "fabric")
+        if version not in entry["game_versions"]:
+            raise ValueError(f"SVC pin does not cover its baseline Minecraft {version}")
+    selectors = {"KRASNOKAMEN_JAVA_VERSION": version, "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}
+    previous = {key: os.environ.get(key) for key in selectors}
+    for key, value in selectors.items():
+        if previous[key] is not None and previous[key] != value:
+            raise ValueError(f"screens-voice-qa {leg} requires {key}={value}, got {previous[key]}")
+    os.environ.update(selectors)
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     if ctx.parts > 1 and split_part_label() is None:
@@ -150,7 +176,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     ctx.client_evidence["screens_voice"] = evidence
     try:
         for leg in legs:
-            {"screens": screens_leg, "voice": voice_leg}[leg](ctx, binary, timeout, verdicts, evidence)
+            with java_endpoint(leg):
+                {"screens": screens_leg, "voice": voice_leg}[leg](ctx, binary, timeout, verdicts, evidence)
     finally:
         (ctx.artifact_dir / "verdicts.json").write_text(json.dumps(verdicts, indent=2) + "\n")
     failed = [name for name, value in verdicts.items() if value is not True]

@@ -213,6 +213,33 @@ class LoaderV2Tests(unittest.TestCase):
                 runtime.ensure_loader_gradle_home(lonely)
                 self.assertNotIn("GRADLE_USER_HOME", runtime.os.environ)
 
+    def test_client_launch_reuses_gradle_cache_despite_private_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "loader-gradle-home"
+            shared.mkdir()
+            for explicit in (None, str(root / "explicit-gradle")):
+                with self.subTest(explicit=explicit), \
+                     mock.patch.dict(runtime.os.environ), \
+                     mock.patch.object(runtime, "sibling_root", return_value=root / "loader"), \
+                     mock.patch.object(Path, "is_file", return_value=True), \
+                     mock.patch.object(runtime.os, "access", return_value=True), \
+                     mock.patch.object(runtime, "port_open", return_value=False), \
+                     mock.patch.object(runtime, "wait_port") as ready, \
+                     mock.patch.object(runtime.subprocess, "Popen") as launch:
+                    runtime.os.environ.pop("GRADLE_USER_HOME", None)
+                    if explicit is not None:
+                        runtime.os.environ["GRADLE_USER_HOME"] = explicit
+                    _, handle = runtime.start_client(
+                        game_dir=root / "game", log_path=root / "client.log",
+                        token="test-only", mcp_port=12345, username="GateFabric",
+                        display=":99", platform="fabric", client_profile="loader")
+                    handle.close()
+                    env = launch.call_args.kwargs["env"]
+                    self.assertEqual(env["HOME"], str(root / "game" / ".home"))
+                    self.assertEqual(env.get("GRADLE_USER_HOME"), explicit or str(shared))
+                    self.assertEqual(ready.call_args.args[1], 180.0)
+
     def test_smoke_uses_native_settlement_commands_without_package(self) -> None:
         from . import loader_settlements
 

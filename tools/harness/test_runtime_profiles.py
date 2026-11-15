@@ -359,6 +359,44 @@ class ProfileTaskTests(unittest.TestCase):
                 finally:
                     handle.close()
 
+    def test_audible_client_uses_only_verified_named_private_sink(self):
+        with tempfile.TemporaryDirectory() as directory, _gradlew_present(), \
+                mock.patch.object(runtime.os, "access", return_value=True), \
+                mock.patch.object(runtime, "port_open", return_value=False), \
+                mock.patch.object(runtime, "wait_port"), \
+                mock.patch.object(runtime.subprocess, "Popen") as launch, \
+                mock.patch.dict(os.environ, {"ALSOFT_DRIVERS": "pulse",
+                                            "PULSE_SERVER": "unix:/private/pulse/native"}), \
+                mock.patch.object(audio, "private_audio_preflight") as preflight:
+            root = Path(directory)
+            preflight.return_value = {"graph": [{"info": {"props": {
+                "node.name": "viewer", "media.class": "Audio/Sink", "node.description": "viewer"}}}],
+                "openal_backend": "pulse"}
+            _, handle = runtime.start_client(**_valid_kwargs(
+                root / "game", root / "client.log", client_profile="loader",
+                platform="fabric", sound_sink="viewer"))
+            handle.close()
+            env = launch.call_args.kwargs["env"]
+            self.assertEqual(env["ALSOFT_DRIVERS"], "pulse")
+            self.assertEqual(env["PULSE_SERVER"], "unix:/private/pulse/native")
+            self.assertEqual(env["PULSE_SINK"], "viewer")
+            preflight.assert_called_once_with(root / "game" / ".audio", require_alsa=True)
+            options = (root / "game" / "options.txt").read_text()
+            self.assertIn("soundDevice:viewer\n", options)
+            self.assertIn("soundCategory_master:1.0\n", options)
+
+    def test_audible_client_without_private_graph_is_refused_before_spawn(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ), \
+                mock.patch.object(runtime, "port_open", return_value=False), \
+                mock.patch.object(runtime.subprocess, "Popen") as launch:
+            os.environ.pop("KRASNOKAMEN_PW_ROOT", None)
+            root = Path(directory)
+            with self.assertRaisesRegex(MissingCapability, "screen_audio_graph_wrapper_required"):
+                runtime.start_client(**_valid_kwargs(
+                    root / "game", root / "client.log", client_profile="loader",
+                    platform="fabric", sound_sink="host-speakers"))
+            launch.assert_not_called()
+
     def test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap(self):
         for platform in ("fabric", "neoforge"):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, \
