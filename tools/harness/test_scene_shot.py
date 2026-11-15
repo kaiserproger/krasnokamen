@@ -1335,6 +1335,88 @@ class DroppedClockTests(unittest.TestCase):
                          "environment": {"time_of_day": "18000" if phase.endswith("night") else "6000"}}, image)
                 for phase, image in images.items()}
 
+    @staticmethod
+    def store_capture(artifact, name, frame):
+        metadata, image = frame
+        target = artifact / "screenshots" / f"{name}.png"
+        target.parent.mkdir(exist_ok=True)
+        image.save(target)
+        target.with_suffix(".json").write_text(json.dumps({**metadata, "gpu_completion": True}))
+        return str(target)
+
+    def test_clock_scene_samples_past_edge_on_without_changing_oracle(self):
+        scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/dynamic_context_scene.json").read_text())
+        visible, edge = self.frames("changed"), self.frames(None)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = self.Probe()
+            captures = []
+            def capture(probe, artifact, name):
+                captures.append(name)
+                phase = name.split("-attempt-")[0]
+                frames = visible if name.endswith("-attempt-2") else edge
+                return self.store_capture(artifact, name, frames[phase])
+            with patch.object(scene_shot, "capture_native", side_effect=capture), \
+                    patch.object(probe, "call", create=True) as advance:
+                for phase in ("ctx-day", "ctx-night"):
+                    step = next(step for step in scene["steps"]
+                                if step.get("dropped_clock_capture", step.get("shot")) == phase)
+                    scene_shot.execute(probe, root, [step], "native")
+                for phase in ("compass-day", "held-day", "held-night"):
+                    self.store_capture(root, phase, visible[phase])
+                scene_shot.check_dynamic_context(probe, root)
+            self.assertEqual(len(captures), 4)
+            self.assertEqual([call.args for call in advance.call_args_list],
+                             [("minecraft_wait_ticks", {"ticks": 4})] * 2)
+            for phase in ("ctx-day", "ctx-night"):
+                evidence = json.loads((root / f"{phase}-clock-capture.json").read_text())
+                self.assertEqual([a["sampled_cells"] for a in evidence["attempts"]], [0, 64])
+                for suffix in (".png", ".json"):
+                    self.assertEqual((root / f"screenshots/{phase}{suffix}").read_bytes(),
+                                     (root / f"screenshots/{phase}-attempt-2{suffix}").read_bytes())
+
+    def test_clock_capture_is_bounded_and_does_not_accept_hud_only(self):
+        frame = self.frames(None)["ctx-day"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = self.Probe()
+            with patch.object(scene_shot, "capture_native",
+                              side_effect=lambda probe, artifact, name: self.store_capture(artifact, name, frame)), \
+                    patch.object(probe, "call", create=True) as advance:
+                with self.assertRaisesRegex(AssertionError, "ctx-day_clock_face_captured"):
+                    scene_shot.execute(probe, root, [{"dropped_clock_capture": "ctx-day"}], "native")
+            evidence = json.loads((root / "ctx-day-clock-capture.json").read_text())
+            self.assertEqual(len(evidence["attempts"]), 32)
+            self.assertIsNone(evidence["selected"])
+            self.assertEqual(advance.call_count, 31)
+            self.assertFalse((root / "screenshots/ctx-day.png").exists())
+
+    def test_clock_capture_selects_static_face_but_animation_oracle_rejects_it(self):
+        frames = self.frames("static")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = self.Probe()
+            def capture(probe, artifact, name):
+                return self.store_capture(artifact, name, frames[name.split("-attempt-")[0]])
+            with patch.object(scene_shot, "capture_native", side_effect=capture), \
+                    patch.object(probe, "call", create=True) as advance:
+                scene_shot.execute(probe, root, [{"dropped_clock_capture": phase}
+                                                for phase in ("ctx-day", "ctx-night")], "native")
+                advance.assert_not_called()
+            for phase in ("compass-day", "held-day", "held-night"):
+                self.store_capture(root, phase, frames[phase])
+            with self.assertRaisesRegex(AssertionError, "dropped_clock_face_changed"):
+                scene_shot.check_dynamic_context(probe, root)
+
+    def test_clock_capture_contract_and_tick_subscription(self):
+        step = {"dropped_clock_capture": "ctx-day"}
+        scene_shot.validate_steps([step], "native")
+        self.assertEqual(list(scene_shot.scene_mcp_calls([step])),
+                         [("minecraft_wait_ticks", {"ticks": 4})])
+        for client, value in (("java", "ctx-day"), ("native", "held-day"), ("native", False)):
+            with self.subTest(client=client, value=value), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"dropped_clock_capture": value}], client)
+
     def test_only_clock_face_change_passes_not_hud_or_static_clock(self):
         with patch.object(scene_shot, "_load_shots", return_value=self.frames(None)):
             with self.assertRaisesRegex(AssertionError, "dropped_clock_face_day"):

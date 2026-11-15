@@ -395,6 +395,14 @@ The phase pair uses noon (6000) and midnight (18000), not similar-looking
 sunrise/sunset sprites. Both shelves contain an explicit clock and compass.
 The held clock gets a separate elevated camera pair so its face is visible
 instead of edge-on; it uses the same face oracle.
+`dropped_clock_capture` samples the spinning dropped item at client-tick events
+(four ticks between captures, at most 32 captures per phase). It retains every
+attempt and selects the first face with at least 100 interior pixels and all
+64 grid cells sampled. Selection uses rim coverage only, never a day/night
+colour difference. The selected PNG and same-frame JSON become `ctx-day` or
+`ctx-night` unchanged; `<phase>-clock-capture.json` names the original attempt.
+Missing/edge-on-only frames fail closed. The unchanged day/night comparison
+still requires at least 48 shared cells and four changed cells.
 A static clock or changing HUD without that face fails. Retained old frames
 exercise the rejection test with `KRASNOKAMEN_CLOCK_TEST_FRAMES` naming their
 screenshot directory; actual graphical receipts remain required.

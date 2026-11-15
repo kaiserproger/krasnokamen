@@ -287,6 +287,8 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
         elif kind == "walk_capture":
             yield "minecraft_list_entities", {"radius": 32, "limit": 128}
             yield "minecraft_wait_ticks", {"ticks": 1}
+        elif kind == "dropped_clock_capture":
+            yield "minecraft_wait_ticks", {"ticks": 4}
         elif kind == "falling_block_capture":
             yield "minecraft_wait_for_visible_entity", {"entity_type": "minecraft:falling_block", "radius": 32, "timeout_seconds": 30}
             yield "minecraft_wait_ticks", {"ticks": 1}
@@ -424,6 +426,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and 0 <= value["phase"] < math.tau and 0 < value["tolerance"] < math.pi
                      and 0 < value["min_speed"] <= 1
                      and type(value["max_ticks"]) is int and 1 <= value["max_ticks"] <= 300)
+        elif kind == "dropped_clock_capture":
+            valid = client == "native" and value in ("ctx-day", "ctx-night")
         elif kind == "falling_block_capture":
             valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "mob_motion":
@@ -633,6 +637,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "dropped_clock_capture":
+            shots.append(_capture_dropped_clock(probe, artifact, value))
         elif kind == "assert_same_game_time":
             before = json.loads((artifact / f"{value['before']}.json").read_text())
             after = json.loads((artifact / f"{value['after']}.json").read_text())
@@ -1302,31 +1308,65 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
     probe.check("worn_head_back_unchanged", added_back_hat <= 100)
 
-def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
-    """Align the gold-enclosed face; compare its blue pattern, never HUD or rim motion."""
-    grids = []
-    for phase, image in (("day", day), ("night", night)):
-        crop = image.crop(box)
-        gold = lambda r, g, b: r > b * 1.25 and g > b * 1.15 and g > 20 and r > g * 0.9
-        rows = []
-        for y in range(crop.height):
-            ring = [x for x in range(crop.width) if gold(*crop.getpixel((x, y)))]
-            if len(ring) >= 2 and ring[-1] - ring[0] >= 12:
-                rows.append((y, ring[0] + 3, ring[-1] - 2))
-        pixels = sum(x1 - x0 for _, x0, x1 in rows)
-        probe.report[f"{name}_face_pixels_{phase}"] = pixels
-        probe.check(f"{name}_face_{phase}", pixels >= 100)
-        # Normalize each scanline between its rim edges. A dropped item's yaw,
-        # bob and changing projected width must not move the sampled background
-        # into the oracle. Time changes the pattern, not its total blue area.
+def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list]:
+    """Sample only the blue pattern enclosed by the gold rim, excluding the HUD."""
+    crop = image.crop(box)
+    gold = lambda r, g, b: r > b * 1.25 and g > b * 1.15 and g > 20 and r > g * 0.9
+    rows = []
+    for y in range(crop.height):
+        ring = [x for x in range(crop.width) if gold(*crop.getpixel((x, y)))]
+        if len(ring) >= 2 and ring[-1] - ring[0] >= 12:
+            rows.append((y, ring[0] + 3, ring[-1] - 2))
+    pixels = sum(x1 - x0 for _, x0, x1 in rows)
+    cells = [[] for _ in range(64)]
+    if rows:
         top, bottom = rows[0][0], rows[-1][0] + 1
-        cells = [[] for _ in range(64)]
+        # Normalize between rim edges so yaw/bob cannot move the background
+        # into the oracle. Time changes the pattern, not its total blue area.
         for y, x0, x1 in rows:
             for x in range(x0, x1):
                 r, g, b = crop.getpixel((x, y))
                 index = min(7, (y - top) * 8 // (bottom - top)) * 8 + min(7, (x - x0) * 8 // (x1 - x0))
                 cells[index].append(b > r * 1.35 and b > g * 1.15 and b > 15)
-        grids.append([sum(cell) / len(cell) if cell else None for cell in cells])
+    return pixels, [sum(cell) / len(cell) if cell else None for cell in cells]
+
+
+def _capture_dropped_clock(probe: ProbeSteps, artifact: Path, name: str) -> str:
+    # Item entities spin. Select on face coverage alone, never on animation
+    # success: the unchanged day/night oracle must still reject a static clock.
+    attempts = []
+    selected = None
+    for index in range(32):
+        if index:
+            probe.call("minecraft_wait_ticks", {"ticks": 4})
+        sample = f"{name}-attempt-{index + 1}"
+        image = capture_native(probe, artifact, sample)
+        _, frame = _load_shots(probe, artifact, (sample,))[sample]
+        pixels, grid = _clock_face_samples(frame, (300, 260, 460, 420))
+        occupied = sum(cell is not None for cell in grid)
+        attempts.append({"image": image, "face_pixels": pixels, "sampled_cells": occupied})
+        if pixels >= 100 and occupied == 64:
+            selected = Path(image)
+            break
+    (artifact / f"{name}-clock-capture.json").write_text(
+        json.dumps({"attempts": attempts, "selected": str(selected) if selected else None}, indent=2) + "\n")
+    probe.check(f"{name}_clock_face_captured", selected is not None)
+    # Keep the selected bytes and their original same-frame sidecar; do not
+    # take another screenshot after the item has advanced to a different yaw.
+    target = artifact / f"screenshots/{name}.png"
+    shutil.copyfile(selected, target)
+    shutil.copyfile(selected.with_suffix(".json"), target.with_suffix(".json"))
+    return str(target)
+
+
+def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
+    """Align the gold-enclosed face; compare its blue pattern, never HUD or rim motion."""
+    grids = []
+    for phase, image in (("day", day), ("night", night)):
+        pixels, grid = _clock_face_samples(image, box)
+        probe.report[f"{name}_face_pixels_{phase}"] = pixels
+        probe.check(f"{name}_face_{phase}", pixels >= 100)
+        grids.append(grid)
     changes = [abs(a - b) for a, b in zip(*grids) if a is not None and b is not None]
     probe.report[f"{name}_face_blue_grid"] = grids
     probe.report[f"{name}_face_changed_cells"] = sum(delta > 0.35 for delta in changes)
