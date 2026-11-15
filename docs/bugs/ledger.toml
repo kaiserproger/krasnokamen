@@ -3123,12 +3123,13 @@ title = "Arrow-consumption probe043124-bc41wx1w preferred old menu1 arrow4 over 
 area = "harness"
 repro = "cargo"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-INVENTORY-FRESHNESS"
 regression = ["python:tools.harness.test_protocol_wire:ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot", "python:tools.harness.test_protocol_wire:ProtocolWireTests.test_newer_window_zero_updates_override_stale_open_menu"]
 repro_check = "python3 -m unittest tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot; candidate: no control from the real fix - that SHA's wire.py hunks do not reverse on HEAD (apply -R/-C1/-C0/--3way all fail; wire.py rewritten by 0a54b273d/0b5923451), and a hand revert of _cache_player_suffix is synthetic; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "not recorded"
 fix_commit = "ef67d139e"
+promotion = "docs/bugs/promotions/TEST-INVENTORY-FRESHNESS.json"
 
 [[bug]]
 id = "AUDIT-CHAT-VISIBILITY"
@@ -4584,11 +4585,12 @@ title = "Validation planner invents an additional mandatory reviewer for depende
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "tools/harness/plan.py _expand_innovation added a required innovation reviewer although AGENTS.md names the review checkpoints and adding-a-feature.md requires only a decision record for an innovation token. Corrected by preserving the decision record without the extra reviewer; two focused assertions failed before the fix, all 42 planner tests and actual dependency/persistence CLI smokes passed after it. Formal ledger promotion remains pending."
 regression = ["python:tools.harness.test_plan:InnovationTests.test_added_dependency_needs_a_decision_record_without_an_extra_reviewer", "python:tools.harness.test_plan:InnovationTests.test_toolchain_and_cargo_config_change_is_innovation"]
 failing_first = "reported"
 fix_commit = "6333b8d8a29d2e02a8f75720cc431275937a781a"
+promotion = "docs/bugs/promotions/HARNESS-PLAN-UNAUTHORISED-INNOVATION-REVIEW.json"
 
 [[bug]]
 id = "NATIVE-NAV-GROUNDED-EDGE-ORIGIN"
@@ -5967,7 +5969,7 @@ id = "HARNESS-JAVA-ENDPOINT-SELECTORS-DROPPED"
 title = "Exact Java endpoint selectors are dropped before Gradle launches"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 S3Scenes: requested 26.1.2 Fabric launches 26.3; runtime.start_client and java_launcher.prepare_fabric_launch"
 repro = "source"
 regression = [
@@ -5987,19 +5989,21 @@ Post-merge 26.1.2 claim inventory (no reruns; paths relative to the shared work 
 Search covered wt/*/.analysis/validation result.json and Java logs, plus receipts result.json and Stage3 logs/reports. No post-merge 26.2 Java claim found. The explicit 26.1.2 claims under receipts/JavaGateBreaker, receipts/JavaLoaderGate and receipts/ClientQ02B predate the removal timestamp and are not classified as affected by this merge. Full inventory: receipts/HarnessFix2/java-receipt-inventory.json.
 Isolated helper/dispatch reversal: receipts/HarnessFix2/red-endpoints-clean.log, all four tests red at missing selectors or missing conflict refusal (eight assertion failures across endpoint subtests). Restore: receipts/HarnessFix2/green-final-units.log. No real Java gate rerun or gameplay acceptance claimed."""
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/HARNESS-JAVA-ENDPOINT-SELECTORS-DROPPED.json"
 
 [[bug]]
 id = "HARNESS-PLAYER-HEAD-ROI"
 title = "Player-head scene measures an empty region instead of the placed head"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 S3Issue1 F2: scene_shot.check_player_head uses x880-1080 rather than the head at x590-690"
 repro = "source"
 regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels"]
 fix_commit = "f645ca39a"
 repro_check = "Fixture camera/geometry frames the placed head in x580-700/y520-655. Stored original frame measurement at channel delta >25: old ROI 0, corrected ROI 10750 changed pixels (receipts/HarnessFix2/stored-head-roi.json). Only ROI reverted: receipts/HarnessFix2/red-head-roi.log fails placed_head_renders. Restore: receipts/HarnessFix2/green-final-units.log. Followup real-client placed-head evidence: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 authored hat pixels; 20261115T010623-native-player-head-vwnycn1k hat-only control has zero. Full head acceptance additionally requires the worn attachment fix and tightened worn assertion."
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/HARNESS-PLAYER-HEAD-ROI.json"
 
 [[bug]]
 id = "HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE"
@@ -6048,7 +6052,7 @@ id = "LOADER-NEOFORGE-COLD-BOOTSTRAP"
 title = "The harness game heap cap also limits NeoForm's cold Java compiler"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 S3Loader cold bootstrap: NeoForm recompile reports Java heap space with inherited JDK_JAVA_OPTIONS=-Xmx512M"
 repro = "source"
 regression = [
@@ -6058,6 +6062,7 @@ regression = [
 fix_commit = "f645ca39a"
 repro_check = "S3LoaderCore 20261114T233700-loader-v2-settlements-smoke-mn7qespn failed compiling 7301 sources; its client log and S3Loader REPORT.md:100 confirm the game-wide JDK_JAVA_OPTIONS cap reached NeoForm. Both runtime and client_group injected the cap. Runtime now configures maxHeapSize only on the resolved runClientMcp JavaExec task via a private Gradle init script; prepared/plain Java commands retain their direct cap. Explicit operator JDK_JAVA_OPTIONS remains untouched. Only the two automatic environment injections restored: receipts/HarnessFix2/red-neoforge-heap.log fails both environment assertions. Restore: receipts/HarnessFix2/green-final-units.log. Cold NeoForge compilation was not rerun here; no timeout change (already fixed by a39164dc9)."
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/LOADER-NEOFORGE-COLD-BOOTSTRAP.json"
 
 [[bug]]
 id = "HARNESS-SOUND-CAPTURE-API-DRIFT"
@@ -6077,7 +6082,7 @@ id = "HARNESS-DROPPED-CLOCK-HUD-ORACLE"
 title = "Dropped-clock scene can accept changing hotbar pixels as a changed clock face"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 S3Scenes: dynamic_context_scene clock is mostly below HUD; scene_shot dark-angle ROI overlaps the hotbar"
 repro = "source"
 regression = [
@@ -6087,6 +6092,7 @@ regression = [
 fix_commit = "f645ca39a"
 repro_check = "The dropped fixture is y161.4 with fixed block lighting. Followup fad1cef1e measures blue occupancy in an 8x8 grid inside the gold rim, not total blue area (opposite phases can have equal areas), and excludes HUD/chat. Only the original HUD/dark-angle oracle restored: receipts/HarnessFix2/red-clock-only.log accepts the HUD-only counterexample. Followup unit suite: receipts/HarnessFix2/green-followup-scene-units.log, 72 tests pass. Real-client native-dynamic-context passes 3/3: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. Dropped and held day/night frames of the first run were reviewed; no item-frame coverage or general MODEL-DYNAMIC-CONTEXT promotion is claimed."
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/HARNESS-DROPPED-CLOCK-HUD-ORACLE.json"
 
 [[bug]]
 id = "HARNESS-PLAYER-HEAD-SLIM-FALLBACK"
@@ -6267,26 +6273,28 @@ id = "HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST"
 title = "Java matrix preparation launches Fabric instead of exporting a command and times out"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "HarnessGraphical Java matrix capability group times out in prepare_fabric_launch before private Xvfb starts; current Loader has no launch-manifest exporter"
 repro = "source"
 regression = ["python:tools.harness.test_java_clients:JavaClientsTests.test_matrix_fabric_group_uses_only_private_runtime_launches"]
 fix_commit = "b6f1ac655"
 failing_first = "reported"
 repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log reverses only fix-only.patch while retaining tests, and fails on the unexpected Gradle prelaunch. green-restored.log passes both fixes; green-isolation-merge.log passes ordinary runtime/cache wiring. Original matrix command on 3c2279125 reaches 26.1.2 Fabric (0.155.2 API), capability passed=true and simultaneous_in_play=1 on private display :150; real-java/20261115T013000-java-matrix-fd94b0mk/capability-fabric_krasnokamen_loader/result.json. Full invocation later fails separately on the armadillo cell's unloaded block; not a full matrix pass. Loader exporter existed at 2bc292e64d9083537e3f97bca6c635c0b9ba5590 only on unmerged bots-runjava. Ordinary runtime preserves endpoint build/project-cache and audio isolation. See report.md."
+promotion = "docs/bugs/promotions/HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST.json"
 
 [[bug]]
 id = "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED"
 title = "Gait capture shows a dying zombie over the spider"
 area = "harness"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "HarnessGraphical gait scene: zombie and spider approach the same camera on the same lane, and the zombie death animation occludes the spider"
 repro = "source"
 regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view"]
 fix_commit = "b6f1ac655"
 failing_first = "reported"
 repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log fails the original fixture's camera-frustum assertion with tests retained. green-restored.log passes. Three native windowed gait runs pass on 3c2279125: real-gait/20261115T012844-scene-shot-j9w3a8qy, 20261115T013328-scene-shot-mgy_ub0y, 20261115T013411-scene-shot-4da3qs2q. All three accepted spider frames and the first zombie frame were visually reviewed: subject unobstructed, no overlapping zombie. Spider capture uses 2, 2 and 3 uniquely named attempts respectively. Server c7786910eaa6 and client 12e076e9c761 pins; report.md retains commands and review."
+promotion = "docs/bugs/promotions/HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED.json"
 
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-FIXTURE-CHUNK-NOT-LOADED"
@@ -6466,7 +6474,7 @@ id = "HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV"
 title = "The correctness roundtrip passes the canonical runner to the Java servers as one string, so its Java legs fail"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 HarnessGraphical P1 (receipts/HarnessGraphical/report.md): after 675ec8cd8 the Java server spawns still used str(runner)"
 repro = "source"
 regression = [
@@ -6476,6 +6484,7 @@ regression = [
 fix_commit = "fc6b53988"
 failing_first = "reported"
 repro_check = "Java server commands now take the runner as an argv prefix. No revert-red receipt recorded at fix time; promotion runs its own control. Not promoted."
+promotion = "docs/bugs/promotions/HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV.json"
 
 [[bug]]
 id = "NATIVE-UNLOADED-EYE-SESSION-END"

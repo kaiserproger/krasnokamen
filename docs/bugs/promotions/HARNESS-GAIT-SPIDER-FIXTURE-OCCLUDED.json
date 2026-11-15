@@ -1,0 +1,38 @@
+{
+  "id": "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED",
+  "verdict": "promoted",
+  "fix_commit": "b6f1ac655",
+  "fix_commit_full": "b6f1ac655a00667614d9aa87eb2de1387813a265",
+  "promoted_at": "2026-11-15T02:16:05+00:00",
+  "tree_head": "d18656b6732cf995847ac172ef5325c7d4014914",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/backends/java_matrix.py",
+    "tools/harness/gait_phase_scene.json",
+    "tools/harness/java_clients.py",
+    "tools/harness/java_launcher.py",
+    "tools/harness/runtime.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_java_clients.py",
+    "tools/harness/test_java_launcher.py",
+    "tools/harness/test_scene_shot.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness/.analysis/validation/20261115T021553-ledger-promote-kz_4cmw4"
+}

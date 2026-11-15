@@ -1,0 +1,40 @@
+{
+  "id": "HARNESS-PLAN-UNAUTHORISED-INNOVATION-REVIEW",
+  "verdict": "promoted",
+  "fix_commit": "6333b8d8a29d2e02a8f75720cc431275937a781a",
+  "fix_commit_full": "6333b8d8a29d2e02a8f75720cc431275937a781a",
+  "promoted_at": "2026-11-15T02:12:18+00:00",
+  "tree_head": "d18656b6732cf995847ac172ef5325c7d4014914",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/plan.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_plan.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_plan:InnovationTests.test_added_dependency_needs_a_decision_record_without_an_extra_reviewer": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_plan:InnovationTests.test_toolchain_and_cargo_config_change_is_innovation": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_plan:InnovationTests.test_added_dependency_needs_a_decision_record_without_an_extra_reviewer": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_plan:InnovationTests.test_toolchain_and_cargo_config_change_is_innovation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness/.analysis/validation/20261115T021207-ledger-promote-4to45kou"
+}

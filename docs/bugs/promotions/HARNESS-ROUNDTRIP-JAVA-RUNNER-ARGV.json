@@ -1,0 +1,40 @@
+{
+  "id": "HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV",
+  "verdict": "promoted",
+  "fix_commit": "fc6b53988",
+  "fix_commit_full": "fc6b53988c3418dd6a5b0b21a7309f452f8949b0",
+  "promoted_at": "2026-11-15T02:16:28+00:00",
+  "tree_head": "d18656b6732cf995847ac172ef5325c7d4014914",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/vanilla_world_roundtrip.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_vanilla_world_roundtrip.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_run_directly_without_the_owner_host_runner": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_run_directly_without_the_owner_host_runner": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness/.analysis/validation/20261115T021621-ledger-promote-fr0z_u7r"
+}
