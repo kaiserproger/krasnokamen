@@ -288,6 +288,13 @@ impl Admin {
                     .find(|entry| entry.name.eq_ignore_ascii_case(name))
                     .map(|entry| (entry.uuid, entry.name.clone()))
             })
+            .or_else(|| {
+                lists
+                    .whitelist
+                    .iter()
+                    .find(|entry| entry.name.eq_ignore_ascii_case(name))
+                    .map(|entry| (entry.uuid, entry.name.clone()))
+            })
     }
     pub(crate) fn find(
         &self,
@@ -810,6 +817,7 @@ mod whitelist_tests {
         .unwrap();
         assert_eq!(admin.reload_whitelist().unwrap(), 1);
         assert_eq!(admin.whitelist_names(), vec!["Edited".to_owned()]);
+        assert_eq!(admin.profile("edited"), Some((edited, "Edited".into())));
         assert!(!admin.whitelist_remove(uuid).unwrap());
         assert!(admin.whitelist_remove(edited).unwrap());
         assert!(!admin.whitelist_remove(edited).unwrap());

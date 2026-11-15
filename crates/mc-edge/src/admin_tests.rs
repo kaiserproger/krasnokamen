@@ -1175,6 +1175,18 @@ async fn profile_selectors_op_deop_and_whitelist_use_native_players() {
         server.admin.whitelist_names().is_empty(),
         "a renamed selected UUID must still be removed"
     );
+    let imported = uuid::Uuid::new_v4();
+    server.admin.whitelist_add(imported, "Imported").unwrap();
+    assert!(
+        server
+            .handle_admin_command(console, "whitelist remove Imported")
+            .await
+            .unwrap()
+    );
+    assert!(
+        server.admin.whitelist_names().is_empty(),
+        "literal names must resolve a persisted non-offline UUID"
+    );
     // Literal offline names retain their existing admission path.
     assert!(
         server
