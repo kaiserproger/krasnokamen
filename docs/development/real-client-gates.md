@@ -190,16 +190,17 @@ The negative-control tree needs its own pin.
   (`krasnokamen content import --version 26.3 --download --cache data/vanilla`,
   see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
   private client data root as `servers/content/26.3`.
-- Run each graphical gate through the scene slot so at most four run on the
+- Run each graphical gate through the scene slot so at most two run on the
   host and the gate's scope outranks tests and builds for CPU:
   `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
-  Four is the measured budget (owner, 2026-11-15): with six slots plus builds the
-  host reached load 134 on 16 threads (CPU PSI 75%); each CPU-rendered native
-  client under Xvfb took 140-170% CPU and Java or multi-client scenes several
-  cores, so starved gates failed by timeout. A gate that times out or misses
-  frames while the host is overloaded is not evidence: rerun it at normal load.
-  One graphical run per agent at a time.
+  Two is the measured budget (owner, 2026-11-15: start new gates only below load
+  ~32 on the 16-thread host): six slots plus builds reached load 134 (CPU PSI
+  75%) and four still reached load 70 (PSI 54%). A CPU-rendered native client
+  under Xvfb takes 140-170% CPU, and screen, voice and Java battle scenes run two
+  or three clients, so starved gates failed by timeout. A gate that times out or
+  misses frames while the host is overloaded is not evidence: rerun it at normal
+  load. One graphical run per agent at a time.
 
 ### 4. Which gates need owner-held access
 
