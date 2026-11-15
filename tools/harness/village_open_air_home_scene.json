@@ -45,7 +45,7 @@
       "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
     },
     {
-      "cmd": "summon minecraft:villager 1005.5 200 1003.5 {Tags:[\"resident\"]}"
+      "cmd": "summon minecraft:villager 1005.5 200 1003.5 {CustomName:'resident'}"
     },
     {
       "tp": [
@@ -78,7 +78,7 @@
       }
     },
     {
-      "cmd": "execute store success score bound_home vg run data get entity @e[type=minecraft:villager,tag=resident,limit=1] Brain.memories.\"minecraft:home\""
+      "cmd": "execute store success score bound_home vg run data get entity @e[type=minecraft:villager,name=resident,limit=1] Brain.memories.\"minecraft:home\""
     },
     {
       "cmd": "execute if score bound_home vg matches 0 run say vg_resident_no_home"
@@ -99,7 +99,7 @@
       }
     },
     {
-      "cmd": "summon minecraft:villager 1001.5 200 1003.5 {Tags:[\"unbound\"]}"
+      "cmd": "summon minecraft:villager 1001.5 200 1003.5 {CustomName:'unbound'}"
     },
     {
       "wait_ticks": 1000
@@ -126,10 +126,10 @@
       }
     },
     {
-      "cmd": "data get entity @e[type=minecraft:villager,tag=unbound,limit=1] Brain.memories.\"minecraft:home\""
+      "cmd": "data get entity @e[type=minecraft:villager,name=unbound,limit=1] Brain.memories.\"minecraft:home\""
     },
     {
-      "cmd": "execute store success score unbound_home vg run data get entity @e[type=minecraft:villager,tag=unbound,limit=1] Brain.memories.\"minecraft:home\""
+      "cmd": "execute store success score unbound_home vg run data get entity @e[type=minecraft:villager,name=unbound,limit=1] Brain.memories.\"minecraft:home\""
     },
     {
       "cmd": "execute if score unbound_home vg matches 1 run say vg_unbound_has_home"
@@ -198,10 +198,10 @@
       }
     },
     {
-      "cmd": "data get entity @e[type=minecraft:villager,tag=resident,limit=1] Brain.memories.\"minecraft:home\""
+      "cmd": "data get entity @e[type=minecraft:villager,name=resident,limit=1] Brain.memories.\"minecraft:home\""
     },
     {
-      "cmd": "execute store success score roofed_home vg run data get entity @e[type=minecraft:villager,tag=resident,limit=1] Brain.memories.\"minecraft:home\""
+      "cmd": "execute store success score roofed_home vg run data get entity @e[type=minecraft:villager,name=resident,limit=1] Brain.memories.\"minecraft:home\""
     },
     {
       "cmd": "execute if score roofed_home vg matches 1 run say vg_resident_has_roofed_home"
