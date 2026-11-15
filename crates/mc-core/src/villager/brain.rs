@@ -676,6 +676,19 @@ fn wander_to(
                             height,
                             true,
                         )?;
+                        // LandRandomPos rejects water. A short land stroll
+                        // must not inherit the work router's wading/floating
+                        // permission and descend into a roofed village well.
+                        let foot = state.world.block_at(
+                            next.x,
+                            end[1].floor() as i32,
+                            next.z,
+                        )?;
+                        if state.registry.materials.classify(foot)
+                            == mc_physics::BlockMaterial::Water
+                        {
+                            return None;
+                        }
                         clear_step(state, begin, end, width, height).then_some(next)
                     });
                     let Some(next) = next else {

@@ -7111,3 +7111,15 @@ repro = "cargo"
 regression = ["cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_rejoin_is_not_issued_twice", "cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_respawn_is_not_issued_twice", "cargo:mc-core:battle::live_players::tests::a_rearm_keeps_the_worn_battle_piece_not_a_plain_twin", "cargo:mc-core:battle::live_players::tests::a_rearm_returns_a_worn_kit_piece_to_its_slot_with_its_wear"]
 fix_commit = "b06399a7e288f92be1e53c9d99118df4119a114b"
 failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-LAND-STROLL-WET-WELL"
+title = "Short land strolls descend into a roofed village well and trap the resident workforce"
+area = "core"
+severity = "major"
+status = "open"
+source = "SpainCulture fresh seed-100 real-client trial on Main pin b1ba4d8b3e25: seven of nine villagers in water at 116,69,7, church stuck at 347/351 after 12 native game days. Exact geometry, AABBs, real goals/path nodes and local vanilla LandRandomPos bytecode: receipts/SpainCulture/STUCK-WELL.md."
+repro = "source"
+regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::short_stroll_rejects_a_roofed_well_but_keeps_a_dry_neighbor"]
+failing_first = "reported"
+repro_check = "Fix-only baseline red: wt/SpainCulture/.analysis/validation/20261115T100236-test-6x5764yk/test.log. Existing production wander_to accepted a water-bed node between the two dry rim nodes. Narrow fix rejects wet-foot steps only for short land strolls; purpose-driven routing and collision physics are unchanged. Entry-prevention regression is not proof that a villager already trapped under the 1.95-body/2-block roof can escape; no teleport/unstick fallback. Main owns independent promotion."

@@ -303,3 +303,42 @@ fn resident_wading_a_sunken_ford_climbs_out_onto_the_far_bank() {
         "resident must climb out onto the far bank, stopped at {pos:?}"
     );
 }
+
+#[test]
+fn short_stroll_rejects_a_roofed_well_but_keeps_a_dry_neighbor() {
+    let (mut state, _) = village_state();
+    let wood = block(&state, "minecraft:acacia_wood", &[]);
+    let leaves = block(&state, "minecraft:acacia_leaves", &[]);
+    let water = block(&state, "minecraft:water", &[]);
+    for x in 7..=9 {
+        for z in 7..=9 {
+            state.world.set_block(x, 201, z, wood);
+            state.world.set_block(x, 204, z, leaves);
+        }
+    }
+    state.world.set_block(8, 200, 8, wood);
+    state.world.set_block(8, 201, 8, water);
+    state.world.fold_overlay();
+    let slot = villager(&mut state, [7.5, 202.0, 8.5]);
+    let mut v = VillagerState::default();
+    wander_to(
+        &mut state,
+        slot,
+        &mut v,
+        Some(BlockPos { x: 9, y: 202, z: 8 }),
+        Activity::Idle,
+    );
+    assert!(
+        v.navigation_path.is_empty(),
+        "a land stroll must not descend through well water: {:?}",
+        v.navigation_path
+    );
+    wander_to(
+        &mut state,
+        slot,
+        &mut v,
+        Some(BlockPos { x: 6, y: 202, z: 8 }),
+        Activity::Idle,
+    );
+    assert!(!v.navigation_path.is_empty(), "ordinary dry stroll still works");
+}
