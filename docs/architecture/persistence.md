@@ -211,11 +211,19 @@ They share the entity capture's WAL coverage gate and atomic native transaction.
 A reset publishes an empty post-image, not an absent update.
 
 Native entity custody remains sole authority for life, pose, equipment in hand
-and mounts. Battle bodies additionally journal changed intra-chunk poses through
+and mounts. Live battle bodies additionally journal changed intra-chunk poses through
 `EntityMotion`, so replay cannot pair a new order/action with an older pose.
 The compact pose does not move the native age/chunk-clock anchor; the existing
 full crossing image still owns that anchor. Transient slots, position/faction
 caches, grids, projections, work counters and connection IDs rebuild.
+
+A native death image immediately tombstones the body. Its remaining 20-tick
+presentation corpse can move, but no longer emits compact persisted poses;
+replay still rejects every pose referencing an absent authoritative body.
+
+An image-encoding failure propagates through journal capture as a typed error.
+The tick owner halts before queuing the WAL or publishing that tick, reliably
+disconnects live players, and does not checkpoint its unjournaled state.
 
 Removed roster IDs and execution-tail IDs are retained historical identities,
 not permission to spawn replacements. A missing live roster member, mismatched
@@ -230,8 +238,10 @@ No downtime catch-up or tag-based formation reconstruction occurs. Running
 state resumes automatically; paused state remains paused. `battle setup` reports
 the existing battle. Native backups retain this authority; Anvil does not.
 Production-tick regressions:
-`battle_resume_wal_published_tick_excludes_inflight_decisions_and_motion` and
-`battle_resume_abrupt_checkpoint_commit_recovers_whole_history`.
+`battle_resume_wal_published_tick_excludes_inflight_decisions_and_motion`,
+`battle_resume_abrupt_checkpoint_commit_recovers_whole_history`,
+`battle_resume_encoding_failure_halts_before_wal_or_publication` and
+`battle_resume_sigkill_during_dying_body_keeps_tombstone_authority`.
 
 ## Quarantined chunks
 
