@@ -76,6 +76,18 @@ LootTable references inside templates remain unchanged. No-loot variants are
 with `generated-only`, without entering its photograph session; the native
 photograph scenario refuses them. Neither status is footage or loot acceptance.
 
+`--crystal-loot` instead creates a separately hashed seven-file fixture: the
+same generation closure plus `mvs:crystal` loot. It does not alter the no-loot
+fixture. Its `container_loot_probe` requires the Horizon gate to find a persisted
+unopened generated barrel with that exact table inside the proven start bounds,
+open it with a real client, and assert a nonempty 27-slot menu containing only
+items permitted by the retained table. Player inventory slots cannot satisfy
+this check. The gate captures the barrel menu and reopens it without item input
+to prove the inventory did not reroll. This is one table's admission/rolling
+proof, not whole-mod loot or RNG fidelity.
+The native screenshot-only backend refuses this manifest rather than silently
+skipping its required barrel-open evidence.
+
 ### Horizon offscreen client
 
 The independent Horizon GPU client uses the same native export/start/block

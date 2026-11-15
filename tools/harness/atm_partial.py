@@ -1,7 +1,7 @@
 """Derive explicitly partial MVS pilot packs; preserve the full conversion.
 
 No-loot variants are generation-test-only. Containers' LootTable references
-remain unchanged. The crystal-only fixture retains its two pools and templates.
+remain unchanged. Crystal fixtures retain two pools/templates, optionally with loot.
 """
 from __future__ import annotations
 
@@ -53,7 +53,8 @@ def exclude_nether(pack: Path) -> list[dict]:
     return removed
 
 
-def variants(full: Path, output: Path, *, crystal_only: bool = False) -> dict:
+def variants(full: Path, output: Path, *, crystal_only: bool = False, crystal_loot: bool = False) -> dict:
+    crystal_only = crystal_only or crystal_loot
     manifest = json.loads(full.read_text())
     if manifest.get("status") != "converted-unproven" or len(manifest.get("packs", [])) != 1 or manifest["packs"][0]["id"] != "mvs":
         raise ValueError("requires the full single-pack MVS carry manifest")
@@ -62,8 +63,8 @@ def variants(full: Path, output: Path, *, crystal_only: bool = False) -> dict:
     if inventory(source) != original["server_files"]:
         raise ValueError("full MVS conversion changed after receipt")
     results = {}
-    for no_loot in ((True,) if crystal_only else (False, True)):
-        suffix = "crystal-noloot" if crystal_only else "no-nether" + ("-no-loot" if no_loot else "")
+    for no_loot in ((not crystal_loot,) if crystal_only else (False, True)):
+        suffix = ("crystal" if crystal_loot else "crystal-noloot") if crystal_only else "no-nether" + ("-no-loot" if no_loot else "")
         name = f"mvs-{original['version']}-partial-{suffix}"
         directory = output / name
         target = directory / name
@@ -77,13 +78,15 @@ def variants(full: Path, output: Path, *, crystal_only: bool = False) -> dict:
                 "data/mvs/structure/1_21_0/crystal/base.nbt",
                 "data/mvs/structure/1_21_0/crystal/lower.nbt",
             }
+            if crystal_loot:
+                keep.add("data/mvs/loot_table/crystal.json")
             if not keep <= original["server_files"].keys():
                 raise ValueError("MVS crystal dependency closure changed")
             excluded = []
             for path in sorted((target / "data").rglob("*")):
                 if path.is_file() and path.relative_to(target).as_posix() not in keep:
                     excluded.append({"path": path.relative_to(target).as_posix(), "sha256": digest(path),
-                                     "reason": "generation-test-only: outside crystal's two-pool/two-template closure; loot excluded"})
+                                     "reason": "outside crystal's two-pool/two-template closure" + ("; generation-test-only, loot excluded" if no_loot else "; crystal loot retained")})
                     path.unlink()
         else:
             excluded = exclude_nether(target)
@@ -103,10 +106,12 @@ def variants(full: Path, output: Path, *, crystal_only: bool = False) -> dict:
         pack["server_sha256"] = tree_hash(pack["server_files"])
         if crystal_only:
             pack["structures"] = ["mvs:crystal"]
+            if crystal_loot:
+                pack["container_loot_probe"] = {"block": "minecraft:barrel", "table": "mvs:crystal"}
         pack["excluded_count"] = len(excluded)
         pack["retained_data_count"] = sum(path.startswith("data/") for path in pack["server_files"])
         result.update(partial=True, generation_only=no_loot,
-                      exclusions="Only crystal generation closure; ALL loot excluded" if crystal_only else
+                      exclusions=("Only crystal generation closure; " + ("ALL loot excluded" if no_loot else "crystal loot retained")) if crystal_only else
                       "Custom Nether structures and their structure sets; unused local biome tags" + ("; ALL loot tables" if no_loot else ""))
         write_json(directory / "result.json", result)
         results[name] = {"manifest": str(directory / "result.json"), "server_sha256": pack["server_sha256"],
@@ -120,14 +125,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--crystal-only", action="store_true", help="generation-only two-template MVS crystal fixture")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--crystal-only", action="store_true", help="generation-only two-template MVS crystal fixture")
+    selection.add_argument("--crystal-loot", action="store_true", help="crystal fixture retaining its loot and requiring a client barrel-open proof")
     args = parser.parse_args()
     output = args.output.resolve()
     if "targets" not in output.parts:
         parser.error("derived pack bytes must remain beneath targets/")
     output.mkdir(parents=True, exist_ok=False)
     try:
-        results = variants(args.full.resolve(), output, crystal_only=args.crystal_only)
+        results = variants(args.full.resolve(), output, crystal_only=args.crystal_only, crystal_loot=args.crystal_loot)
     except (ValueError, OSError, KeyError) as error:
         write_json(output / "result.json", {"status": "failed", "error": str(error)})
         return 1

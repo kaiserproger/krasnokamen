@@ -17,6 +17,7 @@ import subprocess
 from . import runtime
 from .atm_carry import digest, inventory, tree_hash, write_json
 from .atm_evidence import prove_site
+from .atm_loot import open_generated_container
 from .backends.atm_structures import SEED, USERNAME, locate_coordinates
 from .backends.chisel import rewrite_config
 from .backends.gameplay import prepare_operator_fixture
@@ -117,6 +118,7 @@ def session(args, config, port, label, receipt):
 def run(args, receipt):
     vanilla = args.vanilla_root is not None
     generation_only = False
+    loot_probes = {}
     if vanilla:
         targets = [(args.vanilla_root.resolve(), args.structure)]
         manifest_hash = None
@@ -133,6 +135,10 @@ def run(args, receipt):
             if inventory(source) != pack["server_files"] or tree_hash(pack["server_files"]) != pack["server_sha256"]:
                 raise ValueError(f"converted pack changed: {source}")
             targets.extend((source, identifier) for identifier in pack["structures"])
+            if pack.get("container_loot_probe"):
+                if generation_only:
+                    raise ValueError("generation-only fixture cannot require a loot proof")
+                loot_probes[source] = pack["container_loot_probe"]
         receipt.update(scope="adapted ATM structure data, EXPERIMENTAL", packs=[p["id"] for p in manifest["packs"]])
         shutil.copyfile(args.manifest, args.output / "conversion.json")
     if not 1 <= len(targets) <= 12:
@@ -187,7 +193,7 @@ def run(args, receipt):
                        scope="PARTIAL generation fixture only; no footage, loot or compatibility claim")
         return
     with session(args, config, port, "photographs", receipt) as client:
-        for index, site in enumerate(sites):
+        for index, (site, (pack, _identifier)) in enumerate(zip(sites, targets)):
             center = site["anchor"]
             camera = [center[0], center[1]+16, center[2]-24]
             state = client.teleport(camera)
@@ -205,6 +211,10 @@ def run(args, receipt):
                 raise ValueError("Horizon screenshot did not produce a PNG")
             site.update(camera=camera, client_state=state, client_blocks=samples,
                         screenshot={"path": str(picture), "sha256": digest(picture), "capture": capture})
+            if pack in loot_probes:
+                site["container_loot"] = open_generated_container(
+                    client, site, pack, loot_probes[pack],
+                    args.output / "photographs" / f"container-{index}.png")
             write_json(args.output / "photographs" / f"structure-{index}-coordinates.json", site)
     receipt.update(status="passed", sites=sites, seed=SEED,
                    limits="Selected generated starts and sampled blocks only; PNGs still require visual inspection")

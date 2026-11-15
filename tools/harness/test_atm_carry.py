@@ -142,6 +142,15 @@ class PartialTests(unittest.TestCase):
             for name in retained:
                 self.assertEqual(pack["server_files"]["data/mvs/" + name], before["data/mvs/" + name])
             self.assertEqual(atm_carry.inventory(source), before)
+            loot_results = atm_partial.variants(full, root / "loot", crystal_loot=True)
+            loot_row = loot_results["mvs-5.1.3-partial-crystal"]
+            self.assertEqual(loot_row["retained_data_count"], 7)
+            self.assertEqual(loot_row["excluded_count"], 1)
+            self.assertFalse(loot_row["generation_only"])
+            loot_pack = json.loads(Path(loot_row["manifest"]).read_text())["packs"][0]
+            self.assertEqual(loot_pack["container_loot_probe"], {"block": "minecraft:barrel", "table": "mvs:crystal"})
+            self.assertEqual(loot_pack["server_files"]["data/mvs/loot_table/crystal.json"], before["data/mvs/loot_table/crystal.json"])
+            self.assertEqual(atm_carry.inventory(source), before)
 
     def test_mixed_structure_set_cannot_silently_drop_overworld_member(self):
         with tempfile.TemporaryDirectory() as directory:

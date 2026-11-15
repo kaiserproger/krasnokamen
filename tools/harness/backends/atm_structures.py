@@ -130,6 +130,8 @@ def run(ctx) -> dict:
         raise ValueError(f"{manifest_path}: successful local conversion receipt required")
     if manifest.get("generation_only") or any(p.get("generation_only") for p in manifest["packs"]):
         raise ValueError("generation-only fixtures cannot enter the native photograph gate; use atm_horizon")
+    if any(p.get("container_loot_probe") for p in manifest["packs"]):
+        raise ValueError("container-loot fixtures require the Horizon barrel-open gate; use atm_horizon")
     binary = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).resolve()
     if not binary.is_file() or "slot-" in str(binary):
         raise ValueError("atm-structures needs Main's immutable release server pin")
