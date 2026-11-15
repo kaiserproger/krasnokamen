@@ -767,19 +767,21 @@ impl BiomeTags {
             BiomeSet::Biomes(values) => values.iter().collect(),
         };
         for biome in values {
-            if matches!(
-                biome.as_str(),
-                "minecraft:nether_wastes"
-                    | "minecraft:warped_forest"
-                    | "minecraft:crimson_forest"
-                    | "minecraft:soul_sand_valley"
-                    | "minecraft:basalt_deltas"
-                    | "minecraft:the_end"
-                    | "minecraft:end_highlands"
-                    | "minecraft:end_midlands"
-                    | "minecraft:small_end_islands"
-                    | "minecraft:end_barrens"
-            ) {
+            if biome.namespace() == "minecraft"
+                && matches!(
+                    biome.path(),
+                    "nether_wastes"
+                        | "warped_forest"
+                        | "crimson_forest"
+                        | "soul_sand_valley"
+                        | "basalt_deltas"
+                        | "the_end"
+                        | "end_highlands"
+                        | "end_midlands"
+                        | "small_end_islands"
+                        | "end_barrens"
+                )
+            {
                 return Err(format!(
                     "Datapack jigsaw biome {biome} requires a Nether/End jigsaw consumer"
                 ));

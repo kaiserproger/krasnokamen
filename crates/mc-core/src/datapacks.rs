@@ -961,10 +961,13 @@ impl PackSet {
             if let Some(resource) = tail.strip_prefix("loot_table/") {
                 let value: serde_json::Value =
                     serde_json::from_str(text).map_err(|error| named(error.to_string()))?;
-                if matches!(
-                    value.get("type").and_then(serde_json::Value::as_str),
-                    None | Some("minecraft:chest" | "minecraft:empty")
-                ) {
+                if value
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .is_none_or(|kind| {
+                        matches!(kind.split_once(':'), Some(("minecraft", "chest" | "empty")))
+                    })
+                {
                     let id = mc_data::Identifier::parse(format!(
                         "{namespace}:{}",
                         resource
