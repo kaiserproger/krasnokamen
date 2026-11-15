@@ -87,8 +87,11 @@ def run(client: Any, runtime: Any, artifact_dir: Path, server_log: Path) -> dict
             report["first_after_second_build"] = {"hashes": after_hashes}
             report["assertions"]["first_classes_preserved"] = after_hashes == first_hashes
             report["assertions"]["second_classes_present"] = bool(report["second_after_build"]["hashes"])
-            for name, endpoint in (("first-after-second-build", client), ("second-ready", second)):
-                loader.capture_ui(endpoint, artifact_dir, name)
+            loader.capture_ui(client, artifact_dir, "first-after-second-build")
+            # The second endpoint is deliberately at TitleScreen, with no world ticks.
+            second.call_tool("minecraft_screenshot", {
+                "path": str(artifact_dir / "screenshots/second-ready.png"),
+            })
             failed = [name for name, value in report["assertions"].items() if not value]
             if failed:
                 raise AssertionError(f"mixed-version Loader build overlap failed: {failed}")
