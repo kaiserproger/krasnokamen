@@ -2,7 +2,7 @@
 """Real Java -> offline import -> native v2 -> offline export -> Java -> native gate.
 
 Requires an existing accepted eula.txt; this driver does not accept legal terms.
-Run: python3 tools/harness/vanilla_world_roundtrip.py --eula-file PATH
+Run: python3 -m tools.harness.vanilla_world_roundtrip --eula-file PATH
 Receipts and complete process logs are retained under --output.
 All runtime worlds are native-only; Java uses separate offline Anvil exports.
 The original 18 checks remain, including Java mutations and fresh native import.
@@ -21,6 +21,8 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+
+from tools.harness.regressions import MEM_RUN
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST = "roundtrip_tests::vanilla_headless_world_roundtrip"
@@ -124,7 +126,7 @@ def main():
         home.mkdir()
         shutil.copyfile(args.eula_file, home / "eula.txt")
         world = home / "world"
-        runner = ROOT / "tools/dev/mem-run.sh"
+        runner = MEM_RUN
 
         def v2(phase, native, anvil):
             command = [str(runner), "-m", "8G", "env", "CARGO_BUILD_JOBS=6",

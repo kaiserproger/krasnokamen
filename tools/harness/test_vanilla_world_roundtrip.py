@@ -29,7 +29,7 @@ class RoundtripLaneTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(roundtrip.main(), 1)
             command = run.call_args.args[0]
-            self.assertEqual(command[:4], [str(roundtrip.ROOT / "tools/dev/mem-run.sh"), "-m", "8G", "env"])
+            self.assertEqual(command[:4], [str(roundtrip.MEM_RUN), "-m", "8G", "env"])
             self.assertNotIn("-x", command)
             self.assertEqual(command[command.index("cargo"):],
                              ["cargo", "test", "-p", "mc-world-conversion", roundtrip.TEST,
