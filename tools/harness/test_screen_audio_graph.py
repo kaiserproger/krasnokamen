@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from . import runtime
 
@@ -45,11 +46,11 @@ print(wait_for_path_condition(p, 5, lambda: (p.exists(), p.read_text() if p.exis
 
 
 class PrivateGraphCleanupTests(unittest.TestCase):
-    def private_graph_run(self, command, overrides=None):
-        directory = tempfile.TemporaryDirectory()
+    def private_graph_run(self, command, overrides=None, *, scratch_name='scratch'):
+        directory = tempfile.TemporaryDirectory(dir='/tmp')
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
-        scratch = root / 'scratch'
+        scratch = root / scratch_name
         scratch.mkdir()
         bin_dir = root / 'bin'
         bin_dir.mkdir()
@@ -66,6 +67,25 @@ class PrivateGraphCleanupTests(unittest.TestCase):
         result = subprocess.run(['sh', str(SCRIPT), *command], env=env,
                                 capture_output=True, text=True, timeout=120)
         return result, scratch
+
+    def test_long_explicit_scratch_is_rejected_before_daemons(self):
+        result, scratch = self.private_graph_run(
+            ['sh', '-c', 'echo CHILD-RAN'],
+            {'dbus-run-session': '#!/bin/sh\necho DAEMON-STARTED\n'},
+            scratch_name='x' * 100)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn('private audio runtime path is too long', result.stderr)
+        self.assertNotIn('DAEMON-STARTED', result.stdout)
+        self.assertEqual(list(scratch.iterdir()), [])
+
+    def test_long_tmpdir_keeps_socket_fixture_short(self):
+        with tempfile.TemporaryDirectory(dir='/tmp') as directory:
+            long_tmp = Path(directory) / ('x' * 100)
+            long_tmp.mkdir()
+            with mock.patch.dict(os.environ, {'TMPDIR': str(long_tmp)}), \
+                 mock.patch.object(tempfile, 'tempdir', str(long_tmp)):
+                result, _ = self.private_graph_run(['true'])
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_private_graph_directory_is_gone_when_the_run_ends(self):
         probe = ('test -d "$KRASNOKAMEN_PW_ROOT" && '

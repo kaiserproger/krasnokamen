@@ -257,6 +257,9 @@ proofs need a physical XTest click (pattern: `_scroll` in
   before starting WirePlumber, then requires its `sm-settings` metadata before
   starting any client. Socket, registry and session-manager readiness failures
   abort preflight; daemon logs are retained in the audio receipt directory.
+  Runtime directories default to `/tmp`, independently of `TMPDIR`. An explicit
+  `SA_SCRATCH` must keep the generated runtime path within 80 bytes; longer
+  paths fail before starting daemons rather than exceeding Unix socket limits.
   Java defaults remain OpenAL null. An explicitly requested `sound_sink` is
   audible only after the same hardware-free preflight verifies the private
   Pulse socket, ALSA config, silent input and the named output sink; it cannot
