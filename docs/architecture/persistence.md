@@ -54,6 +54,14 @@ be reproduced only when the validated saved input digest matches current inputs
 Otherwise recovery refuses before materialization or writes, naming the
 dimension, position and input sources; restore the original inputs or baseline.
 
+Offline Anvil export applies the same selected-input identity and replay-baseline
+fence before procedural fallback. Its generators use the validated effective
+pack image and the serving dimension constructors, including selected Nether
+structure sets. A genuine WAL-only chunk remains exportable with matching saved
+ancestry; unknown or changed inputs refuse instead of supplying today's terrain.
+Disposable input staging lives under the unpublished export destination, never
+in the read-only native source. Export does not persist an adopted identity.
+
 Baseline jobs commit no gameplay post-images and advance no checkpoint tick.
 This is not a stronger publication guarantee: replies still permit rollback of
 a queued/unflushed tail, with no per-tick fsync or tick-thread durability await.

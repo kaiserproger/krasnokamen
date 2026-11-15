@@ -319,6 +319,14 @@ be reproduced only from matching validated saved inputs, or the fixed builtin
 legacy generator with no external inputs. Unknown/changed inputs refuse before
 replay materialization or persistent mutation with chunk and source context.
 
+The offline export consumer uses that same identity authority and ancestry fence
+before reconstructing a WAL-only chunk, then builds the serving generators from
+the admitted effective inputs for each dimension. In particular, selected Nether
+sets must not disappear through a config-only fallback. Input staging belongs to
+the unpublished destination; neither identity adoption nor temporary input files
+modify the native source. This keeps genuine matching-input WAL reconstruction,
+not a blanket prohibition on export.
+
 Baseline jobs commit no gameplay changes and advance no checkpoint tick. A crash
 before WAL can leave an unused baseline; retained WAL folds edits over the
 original base after pack addition/change/removal. SIGKILL regressions cover all

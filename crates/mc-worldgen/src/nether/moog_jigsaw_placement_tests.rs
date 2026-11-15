@@ -385,7 +385,6 @@ fn persist_and_reload(root: &Path, generator: &NetherGenerator, chunks: &[Chunk]
                 &generator.registry,
                 &items,
                 &mc_data::loot::chest_26_1_2::ChestLootCatalog::new(),
-                generator,
             )
             .unwrap()
             .unwrap();

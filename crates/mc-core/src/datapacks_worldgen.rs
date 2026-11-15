@@ -104,6 +104,52 @@ pub(crate) struct Adoption {
     pub(crate) catalog: Arc<StructureCatalog>,
 }
 
+impl Adoption {
+    /// Shared live/offline ancestry fence, before any procedural WAL base is used.
+    pub(crate) fn validate_replay_baselines(
+        &self,
+        replays: &BTreeMap<crate::dimensions::Dimension, crate::journal::Replay>,
+        reader: &mc_world::native::NativeCheckpointReader,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), crate::CoreError> {
+        let Some(sources) = &self.unproven_baseline_sources else {
+            return Ok(());
+        };
+        for (dimension, replay) in replays {
+            let mut positions: BTreeSet<[i32; 2]> = replay
+                .blocks
+                .keys()
+                .chain(replay.block_entities.keys())
+                .chain(replay.opaque_block_entities.keys())
+                .map(|(x, _, z)| [x.div_euclid(16), z.div_euclid(16)])
+                .collect();
+            positions.extend(replay.block_ticks.chunks.iter().map(|image| image.chunk));
+            positions.extend(replay.fluid_ticks.covered.iter().copied());
+            positions.extend(replay.inhabited_time.keys().copied());
+            positions.extend(replay.sim_debt.keys().copied());
+            for [x, z] in positions {
+                let base = reader
+                    .read_chunk(
+                        crate::native_checkpoint::dimension_id(*dimension),
+                        mc_world::ChunkPos { x, z },
+                        &registry.blocks,
+                        &registry.items,
+                        &registry.chest_loot,
+                    )
+                    .map_err(|error| {
+                        crate::CoreError::Storage(format!("{error}; input sources {sources:?}"))
+                    })?;
+                if base.is_none() {
+                    return Err(crate::CoreError::Storage(format!(
+                        "missing immutable baseline in {dimension:?} at {x},{z}; original worldgen inputs are unknown or changed: {sources:?}; restore the baseline or original inputs"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Saved starts remain opaque durable data when their pack is absent.
 #[derive(Debug)]
 pub(crate) struct StructureCatalog {

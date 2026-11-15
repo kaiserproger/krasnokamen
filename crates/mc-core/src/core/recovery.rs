@@ -357,50 +357,6 @@ pub(crate) fn recover_dimension_state(
     Ok(state)
 }
 
-/// Refuse unknown/changed procedural ancestry before replay can materialize,
-/// persist, or prune any chunk-dependent state. Native coverage by itself is
-/// never evidence that today's generator is the lost original base.
-fn validate_replay_baselines(
-    replays: &std::collections::BTreeMap<crate::dimensions::Dimension, Replay>,
-    store: &mc_world::native::NativeStore,
-    registry: &CoreRegistry,
-    sources: &std::collections::BTreeSet<String>,
-) -> Result<(), CoreError> {
-    for (dimension, replay) in replays {
-        let mut positions: std::collections::BTreeSet<[i32; 2]> = replay
-            .blocks
-            .keys()
-            .chain(replay.block_entities.keys())
-            .chain(replay.opaque_block_entities.keys())
-            .map(|(x, _, z)| [x.div_euclid(16), z.div_euclid(16)])
-            .collect();
-        positions.extend(replay.block_ticks.chunks.iter().map(|image| image.chunk));
-        positions.extend(replay.fluid_ticks.covered.iter().copied());
-        positions.extend(replay.inhabited_time.keys().copied());
-        positions.extend(replay.sim_debt.keys().copied());
-        for [x, z] in positions {
-            let base = store
-                .resolve_base(
-                    crate::native_checkpoint::dimension_id(*dimension),
-                    mc_world::ChunkPos { x, z },
-                    &registry.blocks,
-                    &registry.items,
-                    &registry.chest_loot,
-                    || Ok(None),
-                )
-                .map_err(|error| {
-                    CoreError::Storage(format!("{error}; input sources {sources:?}"))
-                })?;
-            if base.is_none() {
-                return Err(CoreError::Storage(format!(
-                    "missing immutable baseline in {dimension:?} at {x},{z}; original worldgen inputs are unknown or changed: {sources:?}; restore the baseline or original inputs"
-                )));
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Recover the three dimension worlds and the global native state from the
 /// store: the checkpoint-recovery half of [`Core::open`], shared with the
 /// input-log replayer. No thread is started.
@@ -480,9 +436,13 @@ pub(crate) fn recover_tick_state(
         .prepare_worldgen(&config.world_dir, config.vanilla_data_dir.as_deref())
         .map_err(CoreError::Worldgen)?;
     let adoption = inputs.stage_identity(&mut globals)?;
-    if let Some(sources) = &adoption.unproven_baseline_sources {
-        validate_replay_baselines(&replays, store, registry, sources)?;
-    }
+    adoption.validate_replay_baselines(
+        &replays,
+        &store
+            .checkpoint_reader()
+            .map_err(|error| CoreError::Storage(error.to_string()))?,
+        registry,
+    )?;
     if adoption.changed {
         tracing::debug!("selected worldgen identity staged for the next checkpoint");
     }

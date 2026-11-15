@@ -441,6 +441,58 @@ pub struct RecoveredWorld {
     pub reader: NativeCheckpointReader,
 }
 
+impl RecoveredWorld {
+    /// Validate historical WAL ancestry and build the selected serving generators.
+    /// Scratch belongs to the converter's unpublished destination, never the source.
+    pub fn selected_generators(
+        &self,
+        scratch: &std::path::Path,
+    ) -> Result<BTreeMap<Dimension, Arc<dyn mc_world::ChunkGenerator>>, CoreError> {
+        let selected = crate::datapacks::worldgen::selection(&self.dimensions)?;
+        let mut packs = crate::datapacks::PackSet::open(
+            &self.config.world_dir.join("datapacks"),
+            selected,
+            &self.registry,
+        )
+        .map_err(CoreError::Registry)?;
+        let mut inputs = packs
+            .prepare_worldgen(scratch, self.config.vanilla_data_dir.as_deref())
+            .map_err(CoreError::Worldgen)?;
+        // The normal native level-metadata image owns the saved identity.
+        // Adoption here is in memory only; offline export never rewrites it.
+        let mut globals = self.checkpoint.globals.clone();
+        let adoption = inputs.stage_identity(&mut globals)?;
+        adoption.validate_replay_baselines(&self.dimensions, &self.reader, &self.registry)?;
+        packs.bind_structure_catalog(adoption.catalog);
+        inputs
+            .validate(&self.registry)
+            .map_err(CoreError::Worldgen)?;
+        let mut registry = self.registry.prepare_content();
+        packs
+            .install_content(&mut registry)
+            .map_err(CoreError::Registry)?;
+        let mut config = self.config.clone();
+        config.vanilla_data_dir = inputs.root().map(std::path::Path::to_path_buf);
+        let overworld = crate::core::overworld_terrain_from(&config, &registry, Some(&inputs))?;
+        let nether = crate::core::nether_terrain(&config, &registry, Some(&inputs))?;
+        let end = crate::core::end_terrain(&config, &registry)?;
+        Ok(BTreeMap::from([
+            (
+                Dimension::Overworld,
+                Arc::new(overworld) as Arc<dyn mc_world::ChunkGenerator>,
+            ),
+            (
+                Dimension::Nether,
+                Arc::new(nether) as Arc<dyn mc_world::ChunkGenerator>,
+            ),
+            (
+                Dimension::End,
+                Arc::new(end) as Arc<dyn mc_world::ChunkGenerator>,
+            ),
+        ]))
+    }
+}
+
 pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
     let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // Offline recovery resolves the same pinned native types as live startup.

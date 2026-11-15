@@ -427,7 +427,7 @@ pub(crate) fn overworld_terrain(
     overworld_terrain_from(config, registry, None)
 }
 
-fn overworld_terrain_from(
+pub(crate) fn overworld_terrain_from(
     config: &CoreConfig,
     registry: &CoreRegistry,
     inputs: Option<&crate::datapacks::worldgen::Inputs>,

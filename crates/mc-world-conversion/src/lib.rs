@@ -16,6 +16,8 @@ mod export;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]
+mod export_worldgen_tests;
+#[cfg(test)]
 mod falling_import_tests;
 mod import;
 #[cfg(test)]
