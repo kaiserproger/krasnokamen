@@ -11,13 +11,64 @@ const MAX_CACHE_BYTES: usize = 256 * 1024 * 1024;
 const STAGE: &str = ".krasnokamen-worldgen";
 const OWNER: &str = ".krasnokamen-worldgen.owner";
 const IDENTITY: &str = "KrasnokamenWorldgenInputs";
+const IDENTITY_SCHEMA: u32 = 1;
+const MAX_IDENTITY_BYTES: usize = 32_767;
 type Resources = BTreeMap<String, Arc<[u8]>>;
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Identity {
+    version: u32,
     digest: String,
     sources: BTreeMap<String, String>,
     structure_owners: BTreeMap<String, String>,
+}
+
+impl Identity {
+    fn decode(value: &str) -> Result<Self, String> {
+        if value.len() > MAX_IDENTITY_BYTES {
+            return Err("exceeds native metadata string limit".into());
+        }
+        let identity: Self = serde_json::from_str(value).map_err(|error| error.to_string())?;
+        if identity.version != IDENTITY_SCHEMA {
+            return Err(format!("unsupported schema version {}", identity.version));
+        }
+        let sha = |value: &str| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        };
+        if !sha(&identity.digest) {
+            return Err("digest must be a lowercase SHA-256".into());
+        }
+        if !identity.sources.contains_key("vanilla cache") {
+            return Err("missing vanilla cache source".into());
+        }
+        for (source, digest) in &identity.sources {
+            if (source != "vanilla cache" && !Self::pack_id(source)) || !sha(digest) {
+                return Err(format!("invalid source identity {source:?}"));
+            }
+        }
+        for (structure, owner) in &identity.structure_owners {
+            if !mc_data::Identifier::parse(structure).is_ok_and(|id| id.as_str() == structure)
+                || !Self::pack_id(owner)
+            {
+                return Err(format!(
+                    "invalid structure ownership {structure:?}: {owner:?}"
+                ));
+            }
+        }
+        Ok(identity)
+    }
+
+    fn pack_id(value: &str) -> bool {
+        value.strip_prefix("file/").is_some_and(|name| {
+            Path::new(name)
+                .file_name()
+                .is_some_and(|file| file == std::ffi::OsStr::new(name))
+        })
+    }
 }
 
 pub(crate) struct Adoption {
@@ -559,8 +610,8 @@ impl Inputs {
         let saved = crate::terrain::read_data_field(globals, IDENTITY)
             .map_err(crate::CoreError::Storage)?
             .map(|saved| {
-                serde_json::from_str::<Identity>(&saved).map_err(|e| {
-                    crate::CoreError::Storage(format!("datapack worldgen identity: {e}"))
+                Identity::decode(&saved).map_err(|error| {
+                    crate::CoreError::Storage(format!("datapack worldgen identity: {error}"))
                 })
             })
             .transpose()?;
@@ -587,12 +638,13 @@ impl Inputs {
             crate::terrain::stage_epoch(globals, &crate::terrain::mint_epoch())?;
         }
         let value = serde_json::to_string(&Identity {
+            version: IDENTITY_SCHEMA,
             digest: self.identity.clone(),
             sources: self.sources.clone(),
             structure_owners: owners.clone(),
         })
         .map_err(|e| crate::CoreError::Storage(e.to_string()))?;
-        if value.len() > 32_767 {
+        if value.len() > MAX_IDENTITY_BYTES {
             return Err(crate::CoreError::Storage(
                 "datapack worldgen identity exceeds native metadata string limit".into(),
             ));
