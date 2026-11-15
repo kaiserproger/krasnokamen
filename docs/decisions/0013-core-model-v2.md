@@ -283,16 +283,34 @@ empty). The sibling marker is never deleted with the disposable tree, so a crash
 during cleanup cannot erase ownership proof. Unowned nonempty paths, unexpected
 top-level entries and symlinks refuse startup.
 
-`level.dat/Data/KrasnokamenWorldgenInputs` records diagnostic SHA-256 of effective
-worldgen inputs and registry reports, plus source/structure ownership for warnings.
-A startup change logs old/new identities and changed packs/cache, then continues:
-stored chunk baselines remain unchanged; new chunks use the selected inputs.
-Changed inputs mint a new terrain epoch so generated observations are invalidated.
-Fresh worlds record the identity in their first checkpoint (including offline
-pregeneration). Existing worlds without it adopt in memory and persist it at their
-next normal positive-tick checkpoint; a crash before that repeats adoption.
-Vanilla-only worlds require no packs or staged copy. Native seed/revision identity
-validation is unchanged and complementary.
+`level.dat/Data/KrasnokamenWorldgenInputs` records schema version 1, the canonical
+lowercase SHA-256 of effective worldgen inputs/reports, source hashes and
+historical structure ownership. Unknown/missing/duplicate struct fields,
+unsupported schema, invalid hashes/ownership and oversized metadata refuse
+adoption before any identity or epoch mutation. Removed-pack ownership remains
+valid diagnostic history. The normal checkpoint/WAL level-metadata path owns it,
+not a separate startup transaction.
+
+A valid startup change logs old/new identities and changed packs/cache, then
+continues: stored chunk baselines remain unchanged; new chunks use selected
+inputs. Changed inputs mint a terrain epoch. Fresh worlds record identity in
+their first checkpoint (including offline pregeneration). Existing worlds
+without it adopt in memory and persist it at their next normal positive-tick
+checkpoint; a crash before that repeats adoption. Vanilla-only worlds require no
+packs or staged copy. Native seed/revision identity validation is unchanged.
+
+For generation changed by selected datapacks, immutable generated admission
+images must become durable native baselines before dependent WAL can publish.
+The tick queues required-baseline jobs before its append, regardless of the
+ordinary generated-save batch threshold. The journal owner waits for the sole
+native writer's Immediate fill-generated commit; failure closes admission and
+withholds the append. The tick performs no new synchronous DB write. A baseline
+commit inserts absent slots only, commits no gameplay changes and advances no
+checkpoint tick. A crash before WAL can leave an unused baseline; after WAL,
+recovery folds edits over the original baseline even after pack change/removal.
+Vanilla-only/effectively unchanged generation retains existing best-effort
+asynchronous saves. SIGKILL regressions cover real WAL, both selection changes,
+repeated recovery, then checkpoint/prune and another recovery.
 
 Generators do not hot-swap. Enable, disable or reload that changes effective
 worldgen inputs refuses atomically and retains the old packs, selection and
