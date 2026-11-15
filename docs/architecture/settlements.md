@@ -79,3 +79,43 @@ second native authority. Building state lives in its settlement record.
 native owner. Guests receive handles and outcomes rather than direct access to
 records or entity slots. Native admission revalidates identities and custody.
 The shared [persistence contract](persistence.md) governs replay and backups.
+
+## Spanish teaser culture and chronicle
+
+The teaser's faction is the existing settlement owner UUID (Main decision,
+2026-11-15), not a new diplomatic faction type. A completed native
+`spanish_house`, `spanish_church`, `spanish_plaza`, `spanish_fortress` or
+`spanish_wall` establishes the owner's style through committed structure-ledger
+provenance. Every settlement with that owner subsequently selects the Spanish
+variant for the corresponding building kinds. Unowned settlements do not share
+style with one another. Pending orders, names, painted blocks and generated
+village provenance never establish style. Other kinds retain their native
+blueprints. Upgrades resolve the actually committed blueprint, not the first
+catalog entry of the same kind.
+
+The houses use white calcite masonry and terracotta/red-sandstone tiled roofs;
+the chapel includes a real hanging bell in its contiguous tower and a cleric's
+workstation; the plaza has a covered dry well and storage barrels; the fortress
+and wall use masonry. These are authored vanilla-block interpretations, not a
+claim of historical reconstruction. Calcite, roof material, bell and cleric
+supplies must be physically delivered: the native miners do not manufacture
+them. Builders pay and place each cell with the existing construction executor.
+The plaza is a storage building, not a new civic simulation or free water source.
+
+`python3 tools/settlement_chronicle.py --run RUN.json --telemetry TELEMETRY.jsonl
+--server-log SERVER.log --out OUTPUT` extracts JSON and plain caption lines.
+The run envelope records seed/server identity and an ordered `snapshots` list.
+Each snapshot contains native `tick`, simulated `game_time` and `settlements`;
+each settlement has native `id`, `name`, `owner`, observed `population`, and
+`buildings` (`id`, `level`, and a proven native `blueprint` when available).
+This is an offline observation format, not another persisted world field.
+The first census is baseline. New records, native certificates and population
+milestones receive observation-interval dates; building audit events replace
+those intervals with exact simulation ages. Days are simulated age / 24,000,
+not wall time or a `/time add` reconstruction. Missing tick telemetry is reported,
+never interpolated into a TPS claim.
+
+Lineage requires a native `settlement_daughter_founded` audit event with parent,
+daughter, tick and simulation age, plus same-owner native records. A second
+same-owner town alone is never a daughter event. Audit logs must be retained
+alongside the world and telemetry; the chronicle does not invent lost history.

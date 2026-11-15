@@ -750,9 +750,7 @@ fn project_estimate(
     let building = building_of(state, ctx, payload).and_then(|id| record.buildings.get(&id));
     let blueprint = building
         .and_then(|building| {
-            super::blueprints::all(&state.registry)
-                .iter()
-                .find(|blueprint| blueprint.kind == building.kind)
+            super::construction::placement(state, ctx.id, building).map(|(blueprint, ..)| blueprint)
         })
         .or_else(|| {
             payload
@@ -2209,9 +2207,7 @@ fn project_upgrade(
         .get(ctx.id)
         .and_then(|record| record.buildings.get(&id))
         .and_then(|building| {
-            super::blueprints::all(&state.registry)
-                .iter()
-                .find(|blueprint| blueprint.kind == building.kind)
+            super::construction::placement(state, ctx.id, building).map(|(blueprint, ..)| blueprint)
         })
         .map(|blueprint| blueprint.id.clone())
         .unwrap_or_default();

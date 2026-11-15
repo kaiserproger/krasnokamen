@@ -860,7 +860,15 @@ fn candidate_kinds<'a>(
     images: &'a [super::inventory::Image],
 ) -> impl Iterator<Item = BuildingKind> + 'a {
     let _ = images;
-    needed_kinds(record, state.settlements.member_count(record.id))
+    let cleric = BuildingKind::Workshop(Profession::Cleric);
+    needed_kinds(record, state.settlements.member_count(record.id)).chain(
+        (spanish_faction(state, record)
+            && !record
+                .buildings
+                .values()
+                .any(|building| building.kind == cleric))
+        .then_some(cleric),
+    )
 }
 
 pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
@@ -1300,18 +1308,41 @@ pub(super) fn placement<'a>(
     if building.natural_zone {
         return None;
     }
-    let blueprint = blueprints::all(&state.registry)
+    blueprints::all(&state.registry)
         .iter()
-        .find(|blueprint| blueprint.kind == building.kind)?;
-    let current = blueprint.level(building.level)?;
-    Rotation::ALL.into_iter().find_map(|rotation| {
-        let rotated = current.rotated(rotation);
-        let corner = rotated.bounds([0, 0, 0]).min;
-        let origin: [i32; 3] = std::array::from_fn(|axis| building.bounds.min[axis] - corner[axis]);
-        (rotated.bounds(origin) == building.bounds
-            && executor::built_at(state, id, &blueprint.id, origin))
-        .then_some((blueprint, origin, rotation.0))
+        .filter(|blueprint| blueprint.kind == building.kind)
+        .find_map(|blueprint| {
+            let current = blueprint.level(building.level)?;
+            Rotation::ALL.into_iter().find_map(|rotation| {
+                let rotated = current.rotated(rotation);
+                let corner = rotated.bounds([0, 0, 0]).min;
+                let origin: [i32; 3] =
+                    std::array::from_fn(|axis| building.bounds.min[axis] - corner[axis]);
+                (rotated.bounds(origin) == building.bounds
+                    && executor::built_at(state, id, &blueprint.id, origin))
+                .then_some((blueprint, origin, rotation.0))
+            })
+        })
+}
+
+/// The teaser's faction is the existing owner UUID. Unowned towns never share
+/// a culture merely because both owners are absent. Only completed native
+/// construction establishes style; pending orders and player-painted walls do not.
+fn spanish_faction(state: &TickState, record: &SettlementRecord) -> bool {
+    state.settlements.records().any(|town| {
+        (town.id == record.id || (record.owner.is_some() && town.owner == record.owner))
+            && town.buildings.values().any(|building| {
+                placement(state, town.id, building)
+                    .is_some_and(|(blueprint, ..)| blueprints::spanish(&blueprint.id))
+            })
     })
+}
+
+fn catalog(
+    state: &TickState,
+    record: &SettlementRecord,
+) -> impl Iterator<Item = &'static blueprints::Blueprint> + Clone + use<> {
+    blueprints::catalog(&state.registry, spanish_faction(state, record))
 }
 
 /// The next-level blueprint of a blueprint-built building, with the placement
@@ -1535,11 +1566,11 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // of the entire planner: another resident can build a funded later kind.
     let gathering = gatherer_demand(state, record, &images)
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
-    let catalog = blueprints::all(&state.registry);
-    let mut funded = [None; AUTONOMOUS_KINDS];
+    let catalog = catalog(state, record);
+    let mut funded = [None; AUTONOMOUS_KINDS + 1];
     let mut funded_count = 0;
     for kind in candidate_kinds(state, record, &images) {
-        let Some(blueprint) = catalog.iter().find(|blueprint| blueprint.kind == kind) else {
+        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
             continue;
         };
         if blueprint
@@ -1663,9 +1694,8 @@ fn meadow_site(
             .name_of(item)
             .is_some_and(|name| matches!(name.path(), "wheat_seeds"))
     };
-    let catalog = blueprints::all(&state.registry);
+    let mut catalog = catalog(state, record);
     let level = catalog
-        .iter()
         .find(|blueprint| blueprint.kind == farmer)?
         .level(1)?;
     let need: u64 = level
@@ -2292,6 +2322,16 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
     let record = state.settlements.get_mut(id).expect("certified settlement");
     record.project = None;
     record.revision = record.revision.saturating_add(1);
+    tracing::info!(
+        target: "settlement_audit",
+        settlement = id.0,
+        building = building.0,
+        blueprint = %project.blueprint,
+        level = project.level,
+        tick = state.tick,
+        game_time = state.tick_control.game_ticks(state.tick),
+        "settlement_building_completed"
+    );
     if project.borrowed_builder.is_some() {
         release_builder(state, id, project.borrowed_builder);
     }
@@ -2392,11 +2432,11 @@ fn gatherer_demand(
     if let Some(order) = &record.pending_order {
         return demand(order.blueprint.as_str(), order.level);
     }
-    let catalog = blueprints::all(&state.registry);
+    let catalog = catalog(state, record);
     candidate_kinds(state, record, images).find_map(|kind| {
         demand(
             catalog
-                .iter()
+                .clone()
                 .find(|blueprint| blueprint.kind == kind)?
                 .id
                 .as_str(),
@@ -2467,9 +2507,9 @@ pub(crate) fn iron_demand(
                 demand(&bill)
             })
     });
-    let catalog = blueprints::all(&state.registry);
+    let catalog = catalog(state, record);
     candidate_kinds(state, record, &images)
-        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|kind| catalog.clone().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
         .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .map(|bill| demand(&bill))
@@ -2510,9 +2550,9 @@ pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
             .and_then(|level| selected_bed_bill(state, id, &level.materials, &images))
             .is_some_and(|bill| availability::needs_wool(state, &bill, &images));
     }
-    let catalog = blueprints::all(&state.registry);
+    let catalog = catalog(state, record);
     candidate_kinds(state, record, &images)
-        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|kind| catalog.clone().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
         .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .any(|bill| availability::needs_wool(state, &bill, &images))
@@ -2560,9 +2600,9 @@ pub(crate) fn wool_color(state: &TickState, id: SettlementId) -> Option<u8> {
         let level = blueprints::get(&state.registry, &order.blueprint)?.level(order.level)?;
         return color_for(&selected_bed_bill(state, id, &level.materials, &images)?);
     }
-    let catalog = blueprints::all(&state.registry);
+    let catalog = catalog(state, record);
     candidate_kinds(state, record, &images)
-        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|kind| catalog.clone().find(|blueprint| blueprint.kind == kind))
         .filter_map(|blueprint| blueprint.level(1))
         .filter_map(|level| selected_bed_bill(state, id, &level.materials, &images))
         .find_map(|bill| color_for(&bill))
@@ -2591,10 +2631,10 @@ fn funded_candidate(
                 funded_variant(state, record.id, &level.materials, images).is_some()
             });
     }
-    let catalog = blueprints::all(&state.registry);
+    let catalog = catalog(state, record);
     candidate_kinds(state, record, images).any(|kind| {
         catalog
-            .iter()
+            .clone()
             .find(|blueprint| blueprint.kind == kind)
             .and_then(|blueprint| blueprint.level(1))
             .is_some_and(|level| {
@@ -2610,7 +2650,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
         return Vec::new();
     };
     let images = executor::source_images(state, id);
-    let catalog = blueprints::all(&state.registry);
+    let catalog = catalog(state, record);
     let active = record
         .project
         .as_ref()
@@ -2622,7 +2662,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
     });
     let autonomous = candidate_kinds(state, record, &images)
         .filter(|_| pending.is_none())
-        .filter_map(|kind| catalog.iter().find(|blueprint| blueprint.kind == kind))
+        .filter_map(|kind| catalog.clone().find(|blueprint| blueprint.kind == kind))
         .filter(|blueprint| active != Some(blueprint.id.as_str()))
         .map(|blueprint| (blueprint, 1));
     for (blueprint, level) in queued.into_iter().chain(autonomous) {
@@ -2808,6 +2848,10 @@ pub(super) fn validate_pending(
 #[cfg(test)]
 #[path = "construction_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "construction_culture_tests.rs"]
+mod culture_tests;
 
 #[cfg(test)]
 #[path = "construction_fencing_tests.rs"]

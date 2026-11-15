@@ -1,0 +1,74 @@
+{
+  "id": "spanish_plaza",
+  "kind": "storage",
+  "palette": {
+    "P": "stone_bricks",
+    "C": "calcite",
+    "R": "terracotta",
+    "b": "barrel[facing=up]",
+    "f": "oak_fence",
+    "B": "bell[attachment=ceiling,facing=north]",
+    "t": "torch"
+  },
+  "levels": [
+    {
+      "cert": [
+        7,
+        5,
+        7
+      ],
+      "entrance": [
+        3,
+        1,
+        6
+      ],
+      "layers": [
+        [
+          "PPPPPPP",
+          "PPPPPPP",
+          "PPPPPPP",
+          "PPPPPPP",
+          "PPPPPPP",
+          "PPPPPPP",
+          "PPPPPPP"
+        ],
+        [
+          ".......",
+          ".b...b.",
+          "..CCC..",
+          "..C.C..",
+          "..CCC..",
+          ".b...b.",
+          "......."
+        ],
+        [
+          ".......",
+          ".......",
+          "..f.f..",
+          ".......",
+          "..f.f..",
+          ".......",
+          "......."
+        ],
+        [
+          ".......",
+          ".......",
+          "..f.f..",
+          "...B...",
+          "..f.f..",
+          ".......",
+          "......."
+        ],
+        [
+          ".......",
+          ".......",
+          "..RRR..",
+          "..RRR..",
+          "..RRR..",
+          ".......",
+          "......."
+        ]
+      ]
+    }
+  ]
+}

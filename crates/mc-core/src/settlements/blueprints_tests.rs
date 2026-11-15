@@ -3,7 +3,7 @@ use crate::settlements::allocator::tests::test_state;
 use crate::settlements::buildings::{certify, upgrade};
 use crate::tick::TickState;
 
-const IDS: [(&str, usize); 21] = [
+const IDS: [(&str, usize); 26] = [
     ("house", 3),
     ("storage", 3),
     ("farm", 3),
@@ -25,6 +25,11 @@ const IDS: [(&str, usize); 21] = [
     ("librarian", 3),
     ("toolsmith", 3),
     ("weaponsmith", 3),
+    ("spanish_house", 3),
+    ("spanish_church", 1),
+    ("spanish_plaza", 1),
+    ("spanish_fortress", 3),
+    ("spanish_wall", 3),
 ];
 
 /// The vanilla job-site block each new workshop is built around.
@@ -64,12 +69,10 @@ fn catalog_has_every_blueprint_and_level_within_size_limits() {
     }
 }
 
-/// Most materials bottom out in worker-produced resources. The shepherd's
-/// loom also accepts real delivered string, which the planner reports when absent.
-/// A workshop's own job-site block (iron, flint, books or a blaze rod behind it)
-/// is delivered or crafted from delivered stock, never produced by a worker.
+/// The default catalog is supplied by native extraction and crafting. Spanish
+/// masonry, roof tiles and the church bell require explicitly delivered stock.
 #[test]
-fn materials_use_only_worker_producible_items() {
+fn default_materials_use_only_worker_producible_items() {
     let state = test_state();
     let wood = ["oak", "spruce", "birch", "dark_oak"];
     let derived = [
@@ -97,7 +100,7 @@ fn materials_use_only_worker_producible_items() {
         "dirt",
         "wheat_seeds",
     ];
-    for blueprint in all(&state.registry) {
+    for blueprint in catalog(&state.registry, false) {
         for level in &blueprint.levels {
             for (item, count) in &level.materials {
                 assert!(*count > 0);
@@ -417,23 +420,37 @@ pub(super) fn build(
     (settlement, building.unwrap())
 }
 
-/// Planner, menus and upgrade orders resolve a blueprint by building kind, so
-/// every kind may have only one.
+/// Each culture has one unambiguous autonomous choice per kind.
 #[test]
-fn every_blueprint_owns_a_distinct_building_kind() {
+fn blueprint_selection_is_unique_and_culture_specific() {
     let state = test_state();
-    let kinds: Vec<_> = all(&state.registry).iter().map(|b| b.kind).collect();
-    for (index, kind) in kinds.iter().enumerate() {
-        assert!(
-            !kinds[..index].contains(kind),
-            "two blueprints build {kind:?}"
-        );
-    }
-    assert!(kinds.contains(&BuildingKind::Gate));
-    for (id, _) in WORKSHOP_STATIONS {
-        let kind = BuildingKind::parse(id).unwrap();
-        assert!(kinds.contains(&kind), "{id} has no blueprint");
-        assert_eq!(get(&state.registry, id).unwrap().kind, kind);
+    for styled in [false, true] {
+        let catalog: Vec<_> = catalog(&state.registry, styled).collect();
+        let kinds: Vec<_> = catalog.iter().map(|b| b.kind).collect();
+        for (index, kind) in kinds.iter().enumerate() {
+            assert!(!kinds[..index].contains(kind), "duplicate {kind:?}");
+        }
+        assert_eq!(catalog.len(), 21);
+        for (kind, expected) in [
+            (BuildingKind::House, "spanish_house"),
+            (BuildingKind::Storage, "spanish_plaza"),
+            (BuildingKind::Barracks, "spanish_fortress"),
+            (BuildingKind::Wall, "spanish_wall"),
+            (
+                BuildingKind::Workshop(crate::villager::VillagerProfession::Cleric),
+                "spanish_church",
+            ),
+        ] {
+            let selected = catalog.iter().find(|b| b.kind == kind).unwrap();
+            assert_eq!(spanish(&selected.id), styled);
+            if styled {
+                assert_eq!(selected.id, expected);
+            }
+        }
+        assert!(kinds.contains(&BuildingKind::Gate));
+        for (id, _) in WORKSHOP_STATIONS {
+            assert!(kinds.contains(&BuildingKind::parse(id).unwrap()));
+        }
     }
 }
 

@@ -32,7 +32,7 @@ pub type ItemId = u32;
 /// at most the street plan's `LOT_DEPTH` (11).
 pub const MAX_SIZE: [u8; 3] = [13, 11, 11];
 
-const SOURCES: [&str; 21] = [
+const SOURCES: [&str; 26] = [
     include_str!("../../assets/blueprints/house.json"),
     include_str!("../../assets/blueprints/storage.json"),
     include_str!("../../assets/blueprints/farm.json"),
@@ -54,6 +54,11 @@ const SOURCES: [&str; 21] = [
     include_str!("../../assets/blueprints/librarian.json"),
     include_str!("../../assets/blueprints/toolsmith.json"),
     include_str!("../../assets/blueprints/weaponsmith.json"),
+    include_str!("../../assets/blueprints/spanish_house.json"),
+    include_str!("../../assets/blueprints/spanish_church.json"),
+    include_str!("../../assets/blueprints/spanish_plaza.json"),
+    include_str!("../../assets/blueprints/spanish_fortress.json"),
+    include_str!("../../assets/blueprints/spanish_wall.json"),
 ];
 const DIRS: [&str; 4] = ["north", "east", "south", "west"];
 
@@ -155,6 +160,32 @@ pub fn all(registry: &CoreRegistry) -> &'static [Blueprint] {
 #[must_use]
 pub fn get(registry: &CoreRegistry, id: &str) -> Option<&'static Blueprint> {
     all(registry).iter().find(|b| b.id == id)
+}
+
+/// Teaser culture is inferred from real committed construction, not a saved flag.
+pub(super) fn spanish(id: &str) -> bool {
+    matches!(
+        id,
+        "spanish_house" | "spanish_church" | "spanish_plaza" | "spanish_fortress" | "spanish_wall"
+    )
+}
+
+/// One blueprint per kind; kinds without a Spanish variant retain the native design.
+pub(super) fn catalog(
+    registry: &CoreRegistry,
+    spanish_style: bool,
+) -> impl Iterator<Item = &'static Blueprint> + Clone + use<> {
+    all(registry).iter().filter(move |blueprint| {
+        let styled_kind = matches!(
+            blueprint.kind,
+            BuildingKind::House
+                | BuildingKind::Storage
+                | BuildingKind::Barracks
+                | BuildingKind::Wall
+                | BuildingKind::Workshop(crate::villager::VillagerProfession::Cleric)
+        );
+        spanish(&blueprint.id) == (spanish_style && styled_kind)
+    })
 }
 
 #[derive(Deserialize)]

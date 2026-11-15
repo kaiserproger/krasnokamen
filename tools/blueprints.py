@@ -27,6 +27,7 @@ PLAIN = {
     "cobblestone_wall", "cobblestone_stairs", "cobblestone_slab", "furnace", "hay_block", "wheat",
     "farmland", "dirt", "stonecutter", "smithing_table", "fletching_table", "loom",
     "blast_furnace", "smoker", "cartography_table", "brewing_stand", "cauldron", "lectern", "grindstone",
+    "calcite", "terracotta", "red_sandstone_stairs", "stone_bricks", "stone_brick_stairs", "stone_brick_wall", "bell",
 }
 STATIONS = {
     "stonecutter", "smithing_table", "fletching_table", "loom", "blast_furnace", "smoker",
@@ -274,4 +275,5 @@ def main():
     sys.exit(1 if failed else 0)
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,180 @@
+{
+  "id": "spanish_wall",
+  "kind": "wall",
+  "palette": {
+    "C": "stone_brick_stairs[facing=east,half=bottom]",
+    "c": "stone_bricks",
+    "p": "stone_brick_wall",
+    "t": "torch"
+  },
+  "levels": [
+    {
+      "cert": [
+        9,
+        4,
+        3
+      ],
+      "entrance": [
+        1,
+        1,
+        3
+      ],
+      "layers": [
+        [
+          "ccccccccc",
+          "ccccccccc",
+          "ccccccccc",
+          "........."
+        ],
+        [
+          "ccccccccc",
+          "ccccccccc",
+          "ccccccccc",
+          ".Ccc....."
+        ],
+        [
+          "ccccccccc",
+          "ccccccccc",
+          "ccccccccc",
+          "..Cc....."
+        ],
+        [
+          "ccccccccc",
+          "ccccccccc",
+          "ccccccccc",
+          "...C....."
+        ],
+        [
+          "cpcpcpcpc",
+          ".........",
+          ".........",
+          "........."
+        ],
+        [
+          "c.c.c.c.c",
+          ".........",
+          "t.......t",
+          "........."
+        ]
+      ]
+    },
+    {
+      "cert": [
+        11,
+        5,
+        3
+      ],
+      "entrance": [
+        1,
+        1,
+        3
+      ],
+      "layers": [
+        [
+          "ccccccccccc",
+          "ccccccccccc",
+          "ccccccccccc",
+          "..........."
+        ],
+        [
+          "ccccccccccc",
+          "ccccccccccc",
+          "ccccccccccc",
+          ".Cccc......"
+        ],
+        [
+          "ccccccccccc",
+          "ccccccccccc",
+          "ccccccccccc",
+          "..Ccc......"
+        ],
+        [
+          "ccccccccccc",
+          "ccccccccccc",
+          "ccccccccccc",
+          "...Cc......"
+        ],
+        [
+          "ccccccccccc",
+          "ccccccccccc",
+          "ccccccccccc",
+          "....C......"
+        ],
+        [
+          "cpcpcpcpcpc",
+          "...........",
+          ".ppp.ppppp.",
+          "..........."
+        ],
+        [
+          "c.c.c.c.c.c",
+          "...........",
+          "t....t....t",
+          "..........."
+        ]
+      ]
+    },
+    {
+      "cert": [
+        13,
+        6,
+        3
+      ],
+      "entrance": [
+        1,
+        1,
+        3
+      ],
+      "layers": [
+        [
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "............."
+        ],
+        [
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "ccccccccccccc",
+          ".Ccccc......."
+        ],
+        [
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "..Cccc......."
+        ],
+        [
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "...Ccc......."
+        ],
+        [
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "....Cc......."
+        ],
+        [
+          "ccccccccccccc",
+          "ccccccccccccc",
+          "ccccccccccccc",
+          ".....C......."
+        ],
+        [
+          "cpcpcpcpcpcpc",
+          ".............",
+          "ppppp.ppppppp",
+          "............."
+        ],
+        [
+          "c.c.c.c.c.c.c",
+          ".............",
+          "t.....t.....t",
+          "............."
+        ]
+      ]
+    }
+  ]
+}

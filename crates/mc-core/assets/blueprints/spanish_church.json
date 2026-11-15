@@ -1,0 +1,130 @@
+{
+  "id": "spanish_church",
+  "kind": "cleric",
+  "palette": {
+    "C": "calcite",
+    "R": "terracotta",
+    "S": "brewing_stand",
+    "c": "chest[facing=south]",
+    "o": "oak_door[facing=north,half=lower]",
+    "O": "oak_door[facing=north,half=upper]",
+    "f": "oak_fence",
+    "b": "bell[attachment=ceiling,facing=north]",
+    "t": "torch"
+  },
+  "levels": [
+    {
+      "cert": [
+        9,
+        5,
+        7
+      ],
+      "entrance": [
+        6,
+        1,
+        6
+      ],
+      "layers": [
+        [
+          "CCCCCCCCC",
+          "CCCCCCCCC",
+          "CCCCCCCCC",
+          "CCCCCCCCC",
+          "CCCCCCCCC",
+          "CCCCCCCCC",
+          "CCCCCCCCC"
+        ],
+        [
+          "CCCCCCCCC",
+          "C.CCS..cC",
+          "C.CC....C",
+          "C.......C",
+          "C.CC....C",
+          "C.CC....C",
+          "CCCCCCoCC"
+        ],
+        [
+          "CfCCCfCfC",
+          "C.CC....C",
+          "CfCf....f",
+          "C.......C",
+          "CfCf....f",
+          "C.CC....C",
+          "CfCCCCOCC"
+        ],
+        [
+          "CCCCCCCCC",
+          "C.CC....C",
+          "C.CC....C",
+          "C.......C",
+          "C.CC....C",
+          "C.CC....C",
+          "CCCCCCCCC"
+        ],
+        [
+          "CCCCCCCCC",
+          "C.CRRRRRR",
+          "C.CRRRRRR",
+          "CCCRRRRRR",
+          "...RRRRRR",
+          "...RRRRRR",
+          "...RRRRRR"
+        ],
+        [
+          "CCC......",
+          "C.C.RRRR.",
+          "C.C.RRRR.",
+          "CCC.RRRR.",
+          "....RRRR.",
+          "....RRRR.",
+          "....RRRR."
+        ],
+        [
+          "CCC......",
+          "C.C..RR..",
+          "C.C..RR..",
+          "CCC..RR..",
+          ".....RR..",
+          ".....RR..",
+          ".....RR.."
+        ],
+        [
+          "CCC......",
+          "C.C......",
+          "C.C......",
+          "CCC......",
+          ".........",
+          ".........",
+          "........."
+        ],
+        [
+          "C.C......",
+          ".b.......",
+          ".........",
+          "C.C......",
+          ".........",
+          ".........",
+          "........."
+        ],
+        [
+          "RRR......",
+          "RRR......",
+          "RRR......",
+          "RRR......",
+          ".........",
+          ".........",
+          "........."
+        ],
+        [
+          ".R.......",
+          ".R.......",
+          ".R.......",
+          ".R.......",
+          ".........",
+          ".........",
+          "........."
+        ]
+      ]
+    }
+  ]
+}
