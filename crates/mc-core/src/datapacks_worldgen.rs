@@ -29,6 +29,8 @@ pub(crate) struct Adoption {
 #[derive(Debug)]
 pub(crate) struct StructureCatalog {
     active: BTreeSet<mc_data::Identifier>,
+    /// Selected generation differs from vanilla and must survive a pack change.
+    pub(crate) durable_baselines: bool,
     owners: BTreeMap<String, String>,
     warned: parking_lot::Mutex<BTreeSet<mc_data::Identifier>>,
 }
@@ -599,6 +601,7 @@ impl Inputs {
         Ok(Adoption {
             changed,
             catalog: Arc::new(StructureCatalog {
+                durable_baselines: self.stage.is_some(),
                 active: self.catalog.clone(),
                 owners,
                 warned: parking_lot::Mutex::new(BTreeSet::new()),

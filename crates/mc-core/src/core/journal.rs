@@ -650,6 +650,10 @@ pub(super) enum NativeWork {
         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
     },
     SaveGenerated(Box<crate::world::ChunkCapture>),
+    RequireGenerated {
+        chunks: Box<crate::world::ChunkCapture>,
+        done: std::sync::mpsc::Sender<Result<(), CoreError>>,
+    },
     /// Copy the last committed checkpoint and the WAL after it (hot backup).
     Backup {
         job: BackupJob,
@@ -799,6 +803,26 @@ pub(super) fn journal_loop(
                         let _ = job.reply.send(Err(error));
                     }
                 },
+                JournalWork::RequireGenerated(chunks) => {
+                    let (done, durable) = std::sync::mpsc::channel();
+                    if native_tx
+                        .send(NativeWork::RequireGenerated { chunks, done })
+                        .is_err()
+                    {
+                        tracing::error!("required baseline handoff failed; world halting");
+                        return;
+                    }
+                    match durable.recv() {
+                        Ok(Ok(())) => {}
+                        outcome => {
+                            tracing::error!(
+                                ?outcome,
+                                "required generated baseline not durable; WAL withheld, world halting"
+                            );
+                            return;
+                        }
+                    }
+                }
                 JournalWork::SaveGenerated(chunks) => {
                     if native_tx.send(NativeWork::SaveGenerated(chunks)).is_err() {
                         tracing::error!(
@@ -856,7 +880,10 @@ pub(super) fn native_writer_loop(
     while let Ok(work) = work_rx.recv() {
         let notify = match &work {
             NativeWork::Checkpoint { job, .. } => Some((job.done.clone(), job.reply.clone())),
-            NativeWork::SaveGenerated(_) | NativeWork::Backup { .. } | NativeWork::Shutdown => None,
+            NativeWork::SaveGenerated(_)
+            | NativeWork::RequireGenerated { .. }
+            | NativeWork::Backup { .. }
+            | NativeWork::Shutdown => None,
         };
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             run_native_work(
@@ -999,6 +1026,11 @@ pub(super) fn run_native_work(
                 #[cfg(test)]
                 checkpoint_stage(world_dir, "pruned");
             }
+        }
+        NativeWork::RequireGenerated { chunks, done } => {
+            // The same sole native writer performs an Immediate baseline
+            // commit before the journal owner can append its dependent edits.
+            let _ = done.send(chunks.fill_generated());
         }
         NativeWork::SaveGenerated(chunks) => {
             // Best effort: a failed save only means generating again.

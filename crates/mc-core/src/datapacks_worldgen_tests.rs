@@ -1046,3 +1046,8 @@ fn selected_namespaced_crystal_fixture_generates_and_persists_exact_id() {
     drop(store);
     core.shutdown();
 }
+
+#[cfg(unix)]
+#[path = "datapacks_worldgen_crash_tests.rs"]
+mod crash;
+

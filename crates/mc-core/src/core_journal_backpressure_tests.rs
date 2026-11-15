@@ -64,6 +64,7 @@ fn stalled_journal_receiver_applies_backpressure_and_drains_fifo() {
                 }
                 JournalWork::Checkpoint(_)
                 | JournalWork::SaveGenerated(_)
+                | JournalWork::RequireGenerated(_)
                 | JournalWork::Backup(_)
                 | JournalWork::Shutdown => panic!("journal FIFO order broken"),
             }
@@ -343,4 +344,66 @@ fn cloud_hit_history_grows_the_estimate() {
             >= empty + HITS * (std::mem::size_of::<uuid::Uuid>() + std::mem::size_of::<u64>())
     );
     assert_reserves_heap_and_blocks(full, HITS * 24);
+}
+
+#[test]
+fn refused_required_generated_baseline_withholds_dependent_wal_and_closes_admission() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut registry = CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut registry,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let registry = Arc::new(registry);
+    let (mut state, manifest, _) =
+        recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    // A regular dirty capture cannot be accepted as an immutable generated
+    // baseline. Exercise a real native-worker refusal, not a fake writer.
+    let invalid = state.world.capture_dirty(&Default::default());
+    let (work_tx, work_rx) = journal_work_channel();
+    work_tx
+        .send(JournalWork::RequireGenerated(Box::new(invalid)))
+        .unwrap();
+    let budget = JournalBudget::new(1 << 20);
+    send_append(
+        &work_tx,
+        &budget,
+        manifest.tick + 1,
+        vec![JournalEntry::Block {
+            pos: [0, 200, 0],
+            state: registry.states.dirt,
+        }],
+        None,
+    )
+    .unwrap();
+    work_tx.send(JournalWork::Shutdown).unwrap();
+    journal::journal_loop(
+        directory.path(),
+        Arc::clone(&store),
+        work_rx,
+        JournalWriter::open(directory.path(), 1).unwrap(),
+        &std::sync::atomic::AtomicBool::new(false),
+        &budget,
+        manifest,
+        crate::plugin::PluginState::default(),
+    );
+    assert!(matches!(
+        work_tx.try_send(JournalWork::Shutdown),
+        Err(std::sync::mpsc::TrySendError::Disconnected(_))
+    ));
+    assert!(
+        std::fs::read_dir(directory.path().join("journal"))
+            .unwrap()
+            .all(|entry| entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_none_or(|ext| ext != "bin"))
+    );
+    assert_eq!(store.read_checkpoint().unwrap().tick, 0);
 }

@@ -255,6 +255,8 @@ enum JournalWork {
     /// Save generated chunks into their still-empty slots. Forwarded to the
     /// native writer so the native DB has one writer, ordered with checkpoints.
     SaveGenerated(Box<crate::world::ChunkCapture>),
+    /// Freeze changed-datapack generation before any dependent WAL can publish.
+    RequireGenerated(Box<crate::world::ChunkCapture>),
     /// Stop the thread.
     Shutdown,
     /// Copy the native database and WAL after the last committed checkpoint into

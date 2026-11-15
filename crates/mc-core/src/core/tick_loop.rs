@@ -284,6 +284,30 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
                 break;
             }
         };
+        // A changed datapack image cannot reproduce an absent old baseline on
+        // restart. Drain immutable admission images before this tick's WAL;
+        // the journal owner waits for their native durability, not the tick.
+        if state
+            .registry
+            .structure_catalog
+            .as_ref()
+            .is_some_and(|catalog| catalog.durable_baselines)
+        {
+            while let Some(batch) = crate::dimensions::checkpoint::take_generated(&mut state, 0) {
+                if channels
+                    .work_tx
+                    .send(JournalWork::RequireGenerated(Box::new(batch)))
+                    .is_err()
+                {
+                    halt_authority(
+                        &mut state,
+                        &channels,
+                        "generated baseline failed: world halted (fail closed)",
+                    );
+                    break 'ticks;
+                }
+            }
+        }
         let journal_dead = send_append(
             &channels.work_tx,
             &channels.journal_budget,
