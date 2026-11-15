@@ -144,10 +144,12 @@ ordinary block collision, ordered movement writeback and native intent merge.
 No position writer or second physics path is introduced.
 
 Crowd steering reserves half the free gap for each simultaneous neighbour.
-After directional projections, a common bounded scale enforces all five
-neighbour limits together: projecting off an oblique body must not reopen a
+After directional projections and field-boundary clipping, a common bounded
+scale enforces all five neighbour limits together: neither operation may reopen a
 previously closed gap. This uses only the frozen roster and fixed stack storage;
 it does not write another body's position or introduce a collision authority.
+An externally displaced body already outside the ticket retains its bounded
+inward recovery step instead; crowd avoidance must not strand it outside.
 
 Melee targeting retains exact nearest-enemy queries at six blocks. Registered
 archers select a live member of the cached nearest enemy regiment in constant

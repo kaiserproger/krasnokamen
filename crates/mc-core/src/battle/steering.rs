@@ -402,10 +402,9 @@ fn drive_with_neighbours(
     )
 }
 
-/// Reserve half the free gap to each of `near` for its simultaneous
-/// movement: `drive` (blocks per tick) never closes on a neighbour faster
-/// than that, and not at all inside `spacing`. This bounds closing even when
-/// the other row is steering towards us.
+/// Reserve half the free gap to each of `near` for its simultaneous movement.
+/// Input/output velocity is blocks per second; limits are blocks per tick.
+/// Closing is bounded even when the other row is steering towards us.
 pub(super) fn keep_gap(
     runtime: &FormationRuntime,
     index: usize,
@@ -437,7 +436,16 @@ pub(super) fn keep_gap(
             drive[1] -= towards[1] * (closing - allowed);
         }
     }
-    // Projecting off an oblique neighbour can point back into an earlier one.
+    let bounded =
+        runtime.constrain_velocity(position, [drive[0] / tick, velocity[1], drive[1] / tick]);
+    if runtime.bounds.is_some_and(|(min, max)| {
+        position[0] < min[0] || position[0] > max[0] || position[2] < min[1] || position[2] > max[1]
+    }) {
+        // External knockback must still recover into the loaded ticket.
+        return bounded;
+    }
+    drive = [bounded[0] * tick, bounded[2] * tick];
+    // Oblique projections and boundary clipping can reopen an earlier gap.
     // All limits include zero drive, so a final common scale satisfies every
     // half-gap without reopening another, allocating or iterating to convergence.
     let mut scale: f64 = 1.0;
@@ -448,7 +456,7 @@ pub(super) fn keep_gap(
         }
     }
     let drive = drive.map(|component| component * scale);
-    runtime.constrain_velocity(position, [drive[0] / tick, velocity[1], drive[1] / tick])
+    [drive[0] / tick, bounded[1], drive[1] / tick]
 }
 
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
