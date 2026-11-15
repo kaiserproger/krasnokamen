@@ -99,6 +99,16 @@ fails closed with a completion-barrier error; owned processes are cleaned up.
 This extends only the live capture lifecycle, not the recorded take window.
 This does not establish real-time performance or all-dirty residency.
 
+For crash drills, `--crash-handoff` writes `server-pid.json` for the direct
+server process. If it is SIGKILLed, the runner stops its recorder, copies the
+entire stopped world and backups into `crash-copy/` before any restart, and
+writes `crash-handoff.json`; other failures still fail. WAL pruning remains
+normal. Restart the original world and server with
+`python3 tools/battle/run-battle.py --recover-from-crash /absolute/run-dir`.
+This replaces the runner process with the server, using the original config;
+its console is on stdin. The crash copy stays untouched. This mode refuses
+server wrappers and systemd scopes so the published PID is the server PID.
+
 ## Take mode (the recorded shot)
 
 `--take` records a shot, not a measurement ladder. Everything that costs ticks in

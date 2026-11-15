@@ -84,6 +84,7 @@ def arguments():
     p.add_argument('--resource-pack-sha1', default='', help='SHA-1 of the server-pushed pack')
     p.add_argument('--console-fifo', action='store_true', help='create RUN_DIR/console.fifo: each line written to it is sent to the server console (recorded in commands.txt), e.g. `echo "kill PovRed" > RUN_DIR/console.fifo`')
     p.add_argument('--completion-timeout', type=int, metavar='SECONDS', help='after recording, publish RUN_DIR/completion.ready and wait at most SECONDS for RUN_DIR/completion.done before pausing or stopping; the live scenario creates completion.done only after its captures')
+    p.add_argument('--crash-handoff', action='store_true', help='copy the stopped world before restart if the server is SIGKILLed; write crash-handoff.json')
     p.add_argument('--trace', type=trace_point, metavar='X,Z,R', help='from the end of the population barrier until the recorder stops, send `battle trace X Z R` about every --trace-every recorded ticks and write the replies to trace.jsonl; needs a server pin with the command (b31c2540 or later); default off')
     p.add_argument('--trace-every', type=int, metavar='TICKS', help=f'trace cadence in recorded ticks, with --trace (default {DEFAULT_TRACE_EVERY_TICKS})')
     p.add_argument('--dry-run', action='store_true')
@@ -132,6 +133,8 @@ def arguments():
         p.error('live timeout must be at least one second')
     if a.completion_timeout is not None and a.completion_timeout < 1:
         p.error('completion timeout must be at least one second')
+    if a.crash_handoff and (a.server_scope is not None or a.server_wrapper):
+        p.error('--crash-handoff requires a direct server process, without scope or wrapper')
     try:
         a.live_players, a.live_spectators = live_roles(a.live_player, a.live_spectator)
     except ValueError as error:
@@ -273,6 +276,8 @@ def take_checkpoint_ticks(duration):
 
 def server_config_text(a, server_name, world, cache):
     config = f'''[server]\nname = {quote(server_name)}\nview_distance = {a.view_distance}\nsimulation_distance = 12\npause_when_empty_seconds = 0\n[network]\nbind_address = "127.0.0.1"\nport = {a.port}\n[auth]\nonline_mode = false\n[dashboard]\nenabled = true\nbind_address = "127.0.0.1"\nport = {a.dashboard_port}\n[recorder]\nplayers = ["BattleRecorder"]\nworld_queue_bytes = 16777216\n[data]\nworld_dir = {quote(world)}\nvanilla_data_dir = {quote(cache)}\nseed = {a.world_seed}\ncheckpoint_every_ticks = {a.checkpoint_every_ticks}\n'''
+    if a.crash_handoff:
+        config += f'backup_dir = {quote(a.run_dir / "backups")}\n'
     if a.resource_pack_url:
         config += f'\n[resource_pack]\nurl = {quote(a.resource_pack_url)}\nsha1 = {quote(a.resource_pack_sha1)}\nrequired = false\n'
     return config
@@ -281,6 +286,9 @@ def server_config_text(a, server_name, world, cache):
 def server_environment(a, base):
     """MC_CORE_PHASE_LOG is read by presence, so off must remove it even if the caller exported it."""
     environment = dict(base)
+    if getattr(a, 'crash_handoff', False):
+        existing = environment.get('RUST_LOG', 'info')
+        environment['RUST_LOG'] = existing + ',mc_core::journal=debug,mc_core::core::journal=debug'
     if a.phase_log:
         environment['MC_CORE_PHASE_LOG'] = '1'
     else:
@@ -747,6 +755,8 @@ def run(a):
     root = a.run_dir.resolve()
     root.mkdir(parents=True, exist_ok=False)
     a.created_dir = root
+    if a.crash_handoff:
+        (root / 'backups').mkdir()
     world = root / 'world'
     arena_info = None
     if a.arena:
@@ -758,6 +768,7 @@ def run(a):
     config.write_text(server_config_text(a, server_name, world, cache))
     (root / 'commands.txt').touch(exist_ok=False)
     recorder_argv = [str(client), 'record', '--server', f'127.0.0.1:{a.port}', '--username', 'BattleRecorder', '--output', str(root / 'take.solrec'), '--header', str(root / 'header.json'), '--duration', str(a.duration), '--ready-file', str(root / 'take.ready'), '--roster-file', str(root / 'roster.txt'), '--roster-ready-file', str(root / 'roster.ready'), '--roster-timeout', '900', '--data-dir', str(client_data)]
+    (root / 'server-command.json').write_text(json.dumps({'binary': str(binary), 'config': str(config)}) + '\n')
     launch_argv = server_argv(a, binary, config, server_name)
     (root / 'manifest.json').write_text(json.dumps({'server_pin': manifest, 'client_sha256': sha256_file(client), 'seed': a.seed, 'world_seed': a.world_seed, 'scenario': a.scenario, 'count_per_side_override': a.count, 'world_source': str(a.world) if a.world else None, 'platform': platform.platform(), 'uname': list(platform.uname()), 'server_argv': launch_argv, 'recorder_argv': recorder_argv, 'server_environment_overrides': {'MC_CORE_PHASE_LOG': '1'} if a.phase_log else {}, 'server_environment_removed': [] if a.phase_log else ['MC_CORE_PHASE_LOG'], 'take': a.take, 'checkpoint_every_ticks': a.checkpoint_every_ticks, 'status_every': a.status_every, 'view_distance': a.view_distance, 'allow_marker_gaps': a.allow_marker_gaps, 'server_scope': a.server_scope, **({'trace': trace_command(a.trace), 'trace_every': a.trace_every} if a.trace is not None else {})}, indent=2) + '\n')
     with (root / 'host-commands.txt').open('x') as host:
@@ -778,6 +789,8 @@ def run(a):
     try:
         environment = server_environment(a, os.environ)
         server = subprocess.Popen(launch_argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, env=environment, cwd=root)
+        if a.crash_handoff:
+            (root / 'server-pid.json').write_text(json.dumps({'pid': server.pid}) + '\n')
         command_lock = threading.Lock()
         def send(command):
             with command_lock:
@@ -810,6 +823,11 @@ def run(a):
         header.write_text(json.dumps({'protocol_version': 777, 'server_build': manifest['head'], 'seed': a.seed, 'start_tick': 0, 'wall_time': 0}) + '\n')
         with (root / 'recorder.log').open('x') as recorder_log:
             recorder = subprocess.Popen(recorder_argv, stdout=recorder_log, stderr=subprocess.STDOUT, cwd=root)
+            if a.crash_handoff:
+                def stop_recorder_on_crash():
+                    if server.wait() == -signal.SIGKILL:
+                        stop_child(recorder, 10)
+                threading.Thread(target=stop_recorder_on_crash, daemon=True).start()
             watch_ready(root / 'take.ready', recorder)
             initial = json.loads((root / 'take.ready').read_text())
             if initial.get('phase') != 'play' or not initial.get('pose_known') or not initial.get('tick_marker_received'):
@@ -940,6 +958,12 @@ def run(a):
             if not report['clean']:
                 print('take is not clean: ' + '; '.join(report['unclean_reasons']), file=sys.stderr)
         (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+    except Exception:
+        if not (a.crash_handoff and server is not None and server.poll() == -signal.SIGKILL):
+            raise
+        crashed = True
+    else:
+        crashed = False
     finally:
         stop.set()
         stop_child(recorder, 10)
@@ -951,9 +975,40 @@ def run(a):
         if presence is not None:
             # Every join, leave, placement, death and respawn of the live names, with wall time.
             (root / 'live-players.json').write_text(json.dumps({'players': a.live_players, 'spectators': a.live_spectators, **presence.receipt()}, indent=2) + '\n')
+    if crashed:
+        preserve_crash(root, server)
+
+
+def preserve_crash(root, server):
+    """Preserve the stopped world before any recovery can prune its WAL."""
+    if server.returncode != -signal.SIGKILL:
+        raise RuntimeError('crash handoff requires SIGKILL')
+    snapshot = root / 'crash-copy'
+    snapshot.mkdir()
+    shutil.copytree(root / 'world', snapshot / 'world')
+    shutil.copy2(root / 'server.log', snapshot / 'server.log')
+    if (root / 'backups').exists():
+        shutil.copytree(root / 'backups', snapshot / 'backups')
+    receipt = {'status': 'crashed', 'pid': server.pid, 'exit': server.returncode,
+               'world': str(root / 'world'), 'crash_copy': str(snapshot)}
+    (root / 'crash-handoff.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    (root / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')
+
+
+def recover_crash(root):
+    """Exec the original server/config on the original world after preserving it."""
+    root = root.resolve(strict=True)
+    receipt = json.loads((root / 'crash-handoff.json').read_text())
+    if receipt['exit'] != -signal.SIGKILL or not (root / 'crash-copy/world').is_dir():
+        raise RuntimeError('missing preserved SIGKILL crash copy')
+    command = json.loads((root / 'server-command.json').read_text())
+    os.chdir(root)
+    os.execv(command['binary'], [command['binary'], '--config', command['config']])
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 3 and sys.argv[1] == '--recover-from-crash':
+        recover_crash(Path(sys.argv[2]))
     args = arguments()
     # A stop request (a long trial ended by `kill`) unwinds through run()'s finally: the recorder and
     # server are stopped and the live-player receipt is written.

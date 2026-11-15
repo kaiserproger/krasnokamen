@@ -762,6 +762,48 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertEqual((run / 'commands.txt').read_text().splitlines(), ['battle watch PovRed'])
             self.assertFalse((run / 'recorder.log').exists())
 
+    def test_crash_handoff_on_real_sigkill_keeps_world_and_reports_restart(self):
+        runner = load_runner()
+        def kill_server(process, run):
+            runner.watch_ready(run, process, 30)
+            runner.watch_ready(run / 'completion.ready', process, 30)
+            (run / 'world/journal').mkdir(parents=True)
+            (run / 'world/journal/evidence').write_bytes(b'wal')
+            pid = json.loads((run / 'server-pid.json').read_text())['pid']
+            os.kill(pid, 9)
+        with tempfile.TemporaryDirectory() as directory:
+            _, run = self.run_fake_battle(Path(directory), '--crash-handoff', '--completion-timeout', '30',
+                                          during_run=kill_server)
+            self.assertEqual((run / 'crash-copy/world/journal/evidence').read_bytes(), b'wal')
+            self.assertEqual(json.loads((run / 'result.json').read_text())['exit'], -9)
+            self.assertNotIn('retain_journal', (run / 'server.toml').read_text())
+
+    def test_crash_handoff_copies_stopped_world_and_backups_before_recovery(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'world/journal').mkdir(parents=True)
+            (root / 'world/journal/batch-1.bin').write_bytes(b'wal')
+            (root / 'backups/saved').mkdir(parents=True)
+            (root / 'backups/saved/manifest').write_bytes(b'backup')
+            (root / 'server.log').write_text('log')
+            server = unittest.mock.Mock(pid=123, returncode=-9)
+            runner.preserve_crash(root, server)
+            (root / 'world/journal/batch-1.bin').write_bytes(b'changed')
+            self.assertEqual((root / 'crash-copy/world/journal/batch-1.bin').read_bytes(), b'wal')
+            self.assertEqual((root / 'crash-copy/backups/saved/manifest').read_bytes(), b'backup')
+            self.assertEqual(json.loads((root / 'crash-handoff.json').read_text())['exit'], -9)
+            (root / 'server-command.json').write_text(json.dumps({'binary': '/pin/server', 'config': '/run/server.toml'}))
+            with unittest.mock.patch.object(runner.os, 'execv') as execute, unittest.mock.patch.object(runner.os, 'chdir'):
+                runner.recover_crash(root)
+            execute.assert_called_once_with('/pin/server', ['/pin/server', '--config', '/run/server.toml'])
+
+    def test_crash_handoff_rejects_non_sigkill(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'SIGKILL'):
+                runner.preserve_crash(Path(directory), unittest.mock.Mock(pid=1, returncode=0))
+
     def test_console_fifo_forwards_each_written_line_to_the_console(self):
         runner = load_runner()
         with tempfile.TemporaryDirectory() as directory:
