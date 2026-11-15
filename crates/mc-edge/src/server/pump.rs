@@ -524,25 +524,38 @@ pub(super) async fn publish_and_route(
             .fetch_add(1, Ordering::Relaxed);
         viewers.remove(&victim);
     }
+    route_planned_packets(server, viewers, connections, packets);
+    flush_setup_world_fences(server, viewers, connections, out, view_distance);
+    // Last: `/telemetry.jsonl` serves a tick only once its fanout is done.
+    server.dashboard.record_fanout_tick(out.tick, recorders);
+}
+
+/// Preserve each viewer's world dependency order even if its writer frees
+/// queue slots after a refused frame. Reliable traffic and other viewers
+/// remain independent; snapshot repair retries the omitted world suffix.
+fn route_planned_packets(
+    server: &Arc<EdgeServer>,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    packets: impl IntoIterator<Item = crate::fanout::AddressedPacket>,
+) {
+    use crate::fanout::Priority;
+    let mut refused = std::collections::HashSet::new();
     let mut packets = packets.into_iter();
     while let Some(packet) = packets.next() {
-        // Consume the complete group even if the connection has just closed.
-        let batch = match packet.priority {
-            crate::fanout::Priority::ChunkBatch(chunks) => {
-                let mut frames = Vec::with_capacity(chunks + 2);
-                frames.push(packet.data.clone());
-                frames.extend(packets.by_ref().take(chunks + 1).map(|packet| packet.data));
-                Some((chunks, frames))
+        let skip = !connections.contains_key(&packet.connection)
+            || (packet.priority != Priority::Reliable && refused.contains(&packet.connection));
+        if skip {
+            // A skipped group still owns its following chunk/finished frames.
+            // Do not enqueue them separately or charge unacknowledged debt.
+            if let Priority::ChunkBatch(chunks) = packet.priority {
+                for _ in packets.by_ref().take(chunks + 1) {}
             }
-            _ => None,
-        };
-        let Some(handles) = connections.get(&packet.connection) else {
             continue;
-        };
-        match packet.priority {
-            crate::fanout::Priority::Reliable => {
-                // In-order, never dropped: a full reliable queue
-                // disconnects the connection.
+        }
+        let handles = &connections[&packet.connection];
+        let world_refused = match packet.priority {
+            Priority::Reliable => {
                 if handles.reliable_tx.try_send(packet.data).is_err() {
                     server
                         .connections
@@ -554,32 +567,26 @@ pub(super) async fn publish_and_route(
                         .fetch_add(1, Ordering::Relaxed);
                     viewers.remove(&packet.connection);
                 }
+                false
             }
-            crate::fanout::Priority::ChunkBatch(_) => {
-                let (chunks, frames) = batch.expect("batch priority collected its frames");
-                if handles
+            Priority::ChunkBatch(chunks) => {
+                let mut frames = Vec::with_capacity(chunks + 2);
+                frames.push(packet.data);
+                frames.extend(packets.by_ref().take(chunks + 1).map(|packet| packet.data));
+                handles
                     .world_tx
                     .try_send_chunk_batch(&frames, chunks, &handles.chunk_batches)
                     .is_err()
-                    && let Some(viewer) = viewers.get_mut(&packet.connection)
-                {
-                    viewer.world_frame_unsent();
-                }
             }
-            crate::fanout::Priority::BestEffort => {
-                if handles.world_tx.try_send(packet.data).is_err()
-                    && let Some(viewer) = viewers.get_mut(&packet.connection)
-                {
-                    // The viewer recorded this publication as delivered:
-                    // repair the geometry and entity state it carried.
-                    viewer.world_frame_unsent();
-                }
+            Priority::BestEffort => handles.world_tx.try_send(packet.data).is_err(),
+        };
+        if world_refused {
+            refused.insert(packet.connection);
+            if let Some(viewer) = viewers.get_mut(&packet.connection) {
+                viewer.world_frame_unsent();
             }
         }
     }
-    flush_setup_world_fences(server, viewers, connections, out, view_distance);
-    // Last: `/telemetry.jsonl` serves a tick only once its fanout is done.
-    server.dashboard.record_fanout_tick(out.tick, recorders);
 }
 
 /// Broadcast tab-list latencies at vanilla cadence: every
@@ -807,7 +814,7 @@ mod roster_seed_tests {
     use mc_protocol::frame::{Compression, try_decode_frame};
     use mc_protocol::packets::play::RemoveEntities;
 
-    fn test_server(root: &std::path::Path) -> Arc<EdgeServer> {
+    pub(super) fn test_server(root: &std::path::Path) -> Arc<EdgeServer> {
         let mut config = mc_core::CoreConfig::new(root.join("world"), 42);
         config.vanilla_data_dir =
             Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
@@ -945,3 +952,7 @@ mod roster_seed_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "pump_delivery_tests.rs"]
+mod delivery_tests;

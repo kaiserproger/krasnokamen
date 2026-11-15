@@ -96,6 +96,14 @@ FIFO, never the reliable queue: an entity must be paired before binding, and
 self-camera must precede target removal. Codec and adjacent-chain tests do not
 substitute for actual-client camera observation.
 
+If any world frame or atomic chunk group is refused, the pump omits that
+viewer's remaining world frames for that publication, even if its writer
+immediately frees capacity. Snapshot repair retries the missing suffix next
+publication. Reliable frames and other viewers continue independently. Skipped
+chunk groups are consumed whole without charging ACK debt. This preserves
+spawn-before-camera and release-before-removal dependencies under queue races,
+not just during planning.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs
