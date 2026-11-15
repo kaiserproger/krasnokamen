@@ -79,6 +79,29 @@ class DebugOverlayAndPixelSteps(unittest.TestCase):
 
 
 class SceneShotTests(unittest.TestCase):
+    def test_gait_fixture_keeps_previous_subject_outside_spider_view(self):
+        fixture = json.loads(Path(__file__).with_name("gait_phase_scene.json").read_text())
+        camera = None
+        subjects = {}
+        for step in fixture["steps"]:
+            if "tp" in step:
+                camera = step["tp"]
+            command = step.get("cmd", "").split()
+            if command[:1] == ["summon"]:
+                subjects[command[1]] = tuple(map(float, command[2:5]))
+            if step.get("walk_capture", {}).get("entity_type") == "minecraft:spider":
+                spider = subjects["minecraft:spider"]
+                zombie = subjects["minecraft:zombie"]
+                self.assertIsNotNone(camera)
+                self.assertAlmostEqual(camera[0], spider[0])
+                self.assertEqual(camera[3], 0)  # Looking down +Z along the spider's approach.
+                # Include a two-block body margin around the dying zombie's lane.
+                lateral = abs(zombie[0] - camera[0]) - 2
+                forward = zombie[2] - camera[2]
+                self.assertGreater(lateral, forward * math.tan(math.radians(35)))
+                return
+        self.fail("gait fixture has no spider capture")
+
     def test_java_chat_hidden_is_opt_in(self):
         self.assertIn("chatVisibility:0\n", scene_shot.java_options(8, 70))
         self.assertIn("chatVisibility:2\n", scene_shot.java_options(8, 70, hide_chat=True))

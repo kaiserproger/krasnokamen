@@ -208,7 +208,6 @@ def client_group(
     client_profile: str = "vanilla",
     timeout_seconds: float = 180.0,
     authenticate: bool = False,
-    prepare_launch: bool = False,
 ) -> Iterator[list[McpClient]]:
     """Bring up ``count`` ready Java clients and yield their MCP sessions."""
     if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= MAX_CLIENTS:
@@ -230,10 +229,6 @@ def client_group(
     timeout_seconds = float(timeout_seconds)
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    launch_manifest = None
-    if prepare_launch and (platform == "fabric" or client_profile in {"svc", "dh"}):
-        from .java_launcher import prepare_fabric_launch
-        launch_manifest = prepare_fabric_launch(artifact_dir, runtime.sibling_root("loader"), timeout_seconds)
     xvfb_process, display, xvfb_log = runtime.start_xvfb(artifact_dir)
     launched: list[dict[str, Any]] = []
     launched_lock = threading.Lock()
@@ -315,8 +310,6 @@ def client_group(
             "display": display,
             "client_profile": client_profile,
         }
-        if launch_manifest is not None:
-            start_kwargs["launch_manifest"] = launch_manifest
         if platform is not None:
             start_kwargs["platform"] = platform
         record: dict[str, Any] = {

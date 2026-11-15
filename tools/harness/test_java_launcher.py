@@ -97,39 +97,7 @@ class VanillaLauncherTest(unittest.TestCase):
         with self.assertRaisesRegex(MissingCapability, "a:b:1"):
             self.command()
 
-    def test_prepared_javaexec_rewrites_only_per_client_identity_and_game(self):
-        manifest = self.root / "fabric.json"
-        manifest.write_text(json.dumps({
-            "java": "/java", "main_class": "net.fabricmc.devlaunchinjector.Main",
-            "classpath": [str(self.agent)], "jvm_args": ["-Xmx4G", "-Dkrasnokamen.loader.cacheDir=/prepared/game/cache"],
-            "args": ["--username", "PreparedJava", "--gameDir", "/prepared/game"],
-            "game_dir": "/prepared/game", "username": "PreparedJava"}))
-        command = launcher.prepared_fabric_command(manifest, self.game, "JMatrix07")
-        self.assertNotIn("-Xmx4G", command)
-        self.assertIn("-Xmx512M", command)
-        self.assertIn("JMatrix07", command)
-        self.assertIn(str(self.game), command)
-        self.assertIn("-Dkrasnokamen.loader.cacheDir=" + str(self.game / "cache"), command)
-
-class PreparedFabricLauncherTest(unittest.TestCase):
-    def test_prepared_launch_passes_exact_version_to_gradle(self):
-        with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.1.2",
-                                              "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}), \
-                mock.patch("subprocess.Popen") as launch:
-            root = Path(directory)
-            manifest = root / "fabric-java-launch.json"
-            manifest.write_text("{}")
-            launch.return_value.wait.return_value = 0
-            self.assertEqual(launcher.prepare_fabric_launch(root, root / "loader", 20), manifest)
-            argv = launch.call_args.args[0]
-            self.assertIn("-PminecraftVersion=26.1.2", argv)
-            self.assertIn("-PfabricLoaderVersion=0.19.3", argv)
-            self.assertIn("-PfabricApiVersion=0.155.2+26.1.2", argv)
-            self.assertEqual(argv[-1], ":loader-fabric:runClientMcp")
-            script = Path(argv[argv.index("--init-script") + 1]).read_text()
-            self.assertIn("project.layout.buildDirectory.set", script)
-            self.assertIn("version + '/loader-fabric'", script)
+class ModdedLauncherTest(unittest.TestCase):
 
     def test_selectors_never_switch_a_resolved_task(self):
         for task in (":fabric-agent:runClientMcp", ":loader-neoforge:runClientMcp"):
