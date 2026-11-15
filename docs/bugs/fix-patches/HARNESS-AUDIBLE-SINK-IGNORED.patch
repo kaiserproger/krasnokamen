@@ -1,0 +1,30 @@
+--- a/tools/harness/runtime.py
++++ b/tools/harness/runtime.py
+@@ -955,7 +955,10 @@
+     game_dir = REPO_ROOT / game_dir if not game_dir.is_absolute() else game_dir
+     game_dir.mkdir(parents=True, exist_ok=True)
+     options = game_dir / "options.txt"
+-    audio_options = {"soundCategory_master": "0.0", "soundCategory_music": "0.0"}
++    audio_options = {"soundCategory_master": "1.0" if sound_sink is not None else "0.0",
++                     "soundCategory_music": "0.0"}
++    if sound_sink is not None:
++        audio_options["soundDevice"] = sound_sink
+     lines = options.read_text().splitlines() if options.exists() else ["version:4790", "onboardAccessibility:false"]
+     lines = [line for line in lines if line.partition(":")[0] not in (*audio_options, "soundDevice")]
+     options.write_text("\n".join(lines + [f"{key}:{value}" for key, value in audio_options.items()]) + "\n")
+@@ -994,9 +997,12 @@
+             "KRASNOKAMEN_CLIENT_MCP_USERNAME": username,
+         }
+     )
+-    from .audio import force_java_audio_isolation, require_java_audio_isolation
+-    force_java_audio_isolation(env, game_dir)
+-    require_java_audio_isolation(env, game_dir)
++    from .audio import force_java_audio_isolation, require_java_audio_isolation, require_java_private_audio
++    if sound_sink is None:
++        force_java_audio_isolation(env, game_dir)
++        require_java_audio_isolation(env, game_dir)
++    else:
++        require_java_private_audio(env, game_dir, sound_sink)
+     log_path.parent.mkdir(parents=True, exist_ok=True)
+     log_handle = log_path.open("wb")
+     try:

@@ -6128,6 +6128,7 @@ regression = [
 ]
 repro_check = "ScreensVoiceStart/audio-red.log: original wrapper fails all three retained assertions; audio-endpoint-green.log passes after socket/registry ordering and fail-closed waits."
 failing_first = "reported"
+fix_commit = "patch:9658694306dc854d1b8284122c4745006a1c6e12440f68c160aeba3e23adde1b"
 
 [[bug]]
 id = "HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE"
@@ -6140,6 +6141,7 @@ repro = "source"
 regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_client_launch_reuses_gradle_cache_despite_private_home"]
 repro_check = "ScreensVoiceStart/cache-red.log: original runtime has no GRADLE_USER_HOME in the child; unit-green.log passes after resolving the shared cache before launch, without changing the deadline or private HOME."
 failing_first = "reported"
+fix_commit = "patch:3dbbcf100f025ce386988349e2ffac065faa0fc2b718185597546e4897d3d63a"
 
 [[bug]]
 id = "HARNESS-VOICE-PIN-ENDPOINT"
@@ -6147,14 +6149,15 @@ title = "Voice gate launches the Loader default instead of the Minecraft version
 area = "harness"
 severity = "major"
 status = "open"
-source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader defaults to 26.3. Owner case is PrismLauncher 26.1.2; screens remains on 26.3."
+source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader defaults to 26.3. Owner case is PrismLauncher 26.1.2; screens remains on 26.3. The independent fix patch restores the unscoped run loop; java_endpoint stays available for retained API tests but is unused by the reversed live path."
 repro = "source"
 regression = [
   "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg",
   "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors",
 ]
 repro_check = "ScreensVoiceStart/endpoint-red.log fails with the old unscoped launcher; endpoint-green.log passes pinned screen/voice selection and conflicting-selector rejection."
-failing_first = "not recorded"
+failing_first = "reported"
+fix_commit = "patch:77d413d418a6b5e268adc8dc53e7dc68590cda6bc99fadcb421c2fd6dfbcc3bc"
 
 [[bug]]
 id = "HARNESS-AUDIBLE-SINK-IGNORED"
@@ -6162,7 +6165,7 @@ title = "Java launch ignores its explicit private sound sink and forces No Outpu
 area = "harness"
 severity = "major"
 status = "open"
-source = "ScreensVoiceStart real gate 20261115T011032: FabricViewer reaches Play but OpenAL reports No Output rather than fabric_viewer_out because runtime.start_client ignores sound_sink."
+source = "ScreensVoiceStart real gate 20261115T011032: FabricViewer reaches Play but OpenAL reports No Output rather than fabric_viewer_out because runtime.start_client ignores sound_sink. The independent fix patch restores null audio and muted options; the private-audio helper remains for retained API tests but is unused by the reversed live path."
 repro = "source"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink",
@@ -6171,6 +6174,7 @@ regression = [
 ]
 repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode."
 failing_first = "reported"
+fix_commit = "patch:2de35e50f2f5b7abf8bf82a0fb7dbf2dc10845cdc5aa8bcc3042ebbb666f0733"
 
 [[bug]]
 id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
@@ -6178,12 +6182,12 @@ title = "Concurrent Java endpoints share mutable Loader classes and can lose liv
 area = "harness"
 severity = "major"
 status = "open"
-source = "ScreensVoiceStart real gate 20261115T011032: 26.1.2 SVC crashes with NoClassDefFoundError LoaderMinecraftInput while 26.3 builds against the same Loader checkout/build directories; the source and compiled class are present after the run."
+source = "ScreensVoiceStart real gates 20261115T011032 and 20261115T011838 lose live Loader classes while another endpoint builds. Independent fix patch covers the runtime and prepared launch wiring from 3aca2c4ec and 495367bce, restoring the old heap-only script and shared project cache; new helpers remain only for retained API tests. endpoint-startup/result.json proves both real endpoints remain live after the second build with private project caches."
 repro = "source"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
   "python:tools.harness.test_java_launcher:PreparedFabricLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
 ]
 repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
-fix_commit = "495367bce"
+fix_commit = "patch:ae29d7a30d5dcdf843a6b14b99a606cffddf9ead95ec269ed4730d16205eceed"
 failing_first = "reported"
