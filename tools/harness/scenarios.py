@@ -617,7 +617,7 @@ SCENARIOS: dict[str, Scenario] = {
         summary="Real loader system-chat receipts reach the Java matrix adapter",
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="java-matrix-system-chat", requires=("xvfb",),
-        sources=("tools/harness/backends/java_system_chat.py",),
+        sources=("tools/harness/backends/java_system_chat.py", "tools/harness/java_matrix_system_chat_scene.json"),
         fixture="one Java join and one unique server system-chat message",
         proves="the loader's received packet journal reaches matrix snapshot events",
         limits="one message; does not prove journal capacity or multi-message ordering",

@@ -1498,6 +1498,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
     named_fixtures = {
+        "java-matrix-system-chat": "java_matrix_system_chat_scene.json",
         "native-263-entity-rigs": "entity_263_rigs_scene.json",
         "native-shelf-clock": "shelf_clock_scene.json",
         "native-entity-visuals": "entity_visuals_scene.json",
@@ -1528,13 +1529,10 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
         "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
-    if ctx.scenario_id == "java-matrix-system-chat":
-        if ctx.client != "java" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
-            raise ValueError("java-matrix-system-chat requires its registered Java fixture without overrides")
-        scenario = {"steps": [], "operator": True, "server_view_distance": 2, "java_plain": True}
-    elif ctx.scenario_id in named_fixtures:
-        if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
-            raise ValueError(f"{ctx.scenario_id} requires its registered native fixture without overrides")
+    if ctx.scenario_id in named_fixtures:
+        client = "java" if ctx.scenario_id.startswith("java-") else "native"
+        if ctx.client != client or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError(f"{ctx.scenario_id} requires its registered {client} fixture without overrides")
         scenario = json.loads((runtime.REPO_ROOT / "tools/harness" / named_fixtures[ctx.scenario_id]).read_text())
     elif scenario is None:
         args = ctx.extra_args

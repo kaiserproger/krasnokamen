@@ -579,7 +579,7 @@ class SceneShotTests(unittest.TestCase):
             self.assertEqual(len(fixture), 1, name)
 
             class Context:
-                client = "native"
+                client = "java" if name.startswith("java-") else "native"
                 windowed = True
                 platform = None
                 scenario_id = entry.scenario_id
@@ -589,6 +589,30 @@ class SceneShotTests(unittest.TestCase):
                 scenario = scene_shot.validate_scenario(Context())[0]
                 expected = json.loads((scene_shot.runtime.REPO_ROOT / fixture[0]).read_text())
                 self.assertEqual(scenario["steps"], expected["steps"])
+
+    def test_named_java_chat_scene_preserves_fixture_and_rejects_overrides(self):
+        class Context:
+            client = "java"
+            windowed = True
+            platform = None
+            scenario_id = "java-matrix-system-chat"
+            extra_args = []
+            timeout_seconds = 120
+        ctx = Context()
+        with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+            self.assertEqual(scene_shot.validate_scenario(ctx)[0],
+                             {"steps": [], "operator": True, "server_view_distance": 2, "java_plain": True})
+            with self.assertRaisesRegex(ValueError, "without overrides"):
+                scene_shot.validate_scenario(ctx, {"steps": []})
+            with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": "/tmp/other.json"}):
+                with self.assertRaisesRegex(ValueError, "without overrides"):
+                    scene_shot.validate_scenario(ctx)
+            with patch.object(ctx, "extra_args", ["/tmp/other.json"]):
+                with self.assertRaisesRegex(ValueError, "without overrides"):
+                    scene_shot.validate_scenario(ctx)
+            with patch.object(ctx, "client", "native"):
+                with self.assertRaisesRegex(ValueError, "registered java fixture"):
+                    scene_shot.validate_scenario(ctx)
 
     def test_named_feedback_scene_rejects_overrides(self):
         class Context:
