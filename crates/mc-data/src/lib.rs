@@ -38,6 +38,7 @@ static REQUIRED_REGISTRY_ENTRIES: OnceLock<BTreeMap<String, Vec<Identifier>>> = 
 
 pub mod advancements;
 pub mod armor;
+pub mod biome_convention_tags;
 pub mod biomes;
 pub mod block_entity_kinds;
 pub mod block_entity_types;
