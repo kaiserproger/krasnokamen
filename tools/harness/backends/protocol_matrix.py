@@ -66,10 +66,14 @@ def capability_probe(name, server, clients, report):
     server.command(f'clear {actor.name}')
     if name == 'server_kill9_wal_replay':
         server.save_all()  # Empty baseline checkpoint, mutation must replay WAL.
+        give_tick_min = server.dashboard_stats()['simulation_tick']
     server.command(f'give {actor.name} stone 16')
     actor.wait_until(lambda: stone_count(actor) == 16, description='finite received grant')
     if name == 'server_kill9_wal_replay':
-        report['kill9'] = server.kill9_restart()  # No save between ACK and SIGKILL.
+        give_tick_max = server.dashboard_stats()['simulation_tick']
+        report['kill9'] = server.kill9_restart(
+            mutation_tick_bounds=(give_tick_min, give_tick_max),
+        )  # No save between ACK and SIGKILL; inspect retained WAL before claiming publication.
         actor.disconnect()
         actor.reconnect()
         actor.wait_until(lambda: stone_count(actor) == 16, description='WAL-restored inventory')

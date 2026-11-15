@@ -80,6 +80,16 @@ exit -9 and reopens the same world; backups verify manifest hashes and a restore
 native store. World directories, plugin copies, access files and logs are per
 artifact. Restart logs append; they are never truncated.
 
+`kill9_restart(mutation_tick_bounds=(before_give, after_received_ack))` records
+inclusive dashboard tick bounds for a mutation. After SIGKILL has exited, before
+starting the successor, it copies the complete stopped world and current log to
+`crashes/<unique-id>/` and writes `proof.json` there. Copy failure refuses restart.
+Use the retained native checkpoint plus framed, CRC-validated player WAL
+post-images to decide custody, not merely `published_prefix_before_kill`: that
+field is a maximum batch filename/checkpoint tick, sampled after process exit,
+not a payload/contiguity check or proof that the mutation's tick was published.
+Later checkpoints can prune the working journal; the crash copy stays unchanged.
+
 ## Canonical invocation and evidence
 
 With the protocol worktree as cwd (all paths below are on the games disk):
