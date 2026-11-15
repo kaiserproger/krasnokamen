@@ -789,8 +789,10 @@ class BattleRunnerTests(unittest.TestCase):
             pid = json.loads((run / 'server-pid.json').read_text())['pid']
             os.kill(pid, 9)
         with tempfile.TemporaryDirectory() as directory:
-            _, run = self.run_fake_battle(Path(directory), '--crash-handoff', '--completion-timeout', '30',
-                                          during_run=kill_server)
+            root = Path(directory)
+            (root / 'fixture').mkdir()
+            _, run = self.run_fake_battle(root, '--world', str(root / 'fixture'), '--crash-handoff',
+                                          '--completion-timeout', '30', during_run=kill_server)
             self.assertEqual((run / 'crash-copy/world/journal/evidence').read_bytes(), b'wal')
             self.assertEqual(json.loads((run / 'result.json').read_text())['exit'], -9)
             self.assertNotIn('retain_journal', (run / 'server.toml').read_text())

@@ -108,8 +108,9 @@ in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
 Restart the original world and server with
 `python3 tools/battle/run-battle.py --recover-from-crash /absolute/run-dir`.
 This replaces the runner process with the server, using the original config;
-its console is on stdin. The crash copy stays untouched. This mode refuses
-server wrappers and systemd scopes so the published PID is the server PID.
+its console is on stdin. The crash copy stays untouched. This mode requires a
+stopped `--world` or `--arena` fixture and refuses server wrappers and systemd
+scopes so the published PID is the server PID.
 
 ## Take mode (the recorded shot)
 

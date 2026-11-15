@@ -136,6 +136,8 @@ def arguments():
         p.error('completion timeout must be at least one second')
     if a.crash_handoff and (a.server_scope is not None or a.server_wrapper):
         p.error('--crash-handoff requires a direct server process, without scope or wrapper')
+    if a.crash_handoff and not (a.world or a.arena):
+        p.error('--crash-handoff requires a stopped --world or --arena fixture')
     try:
         a.live_players, a.live_spectators = live_roles(a.live_player, a.live_spectator)
     except ValueError as error:
