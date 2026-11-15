@@ -16,7 +16,20 @@ pub(in crate::tick) fn permission_level(
 ) {
     if state.connections.entity_of(*connection).is_some() {
         state.plugin_players.observe_permission(*connection, *level);
+        sync_permission(state, *connection);
     }
+}
+
+pub(in crate::tick) fn sync_permission(state: &mut TickState, connection: ConnectionId) {
+    let level = if state.session_locked(connection) {
+        0
+    } else {
+        state
+            .plugin_players
+            .permission(connection)
+            .expect("joined session has an authoritative permission level")
+    };
+    state.push_player(connection, PlayerChange::PermissionLevel { level });
 }
 
 pub(in crate::tick) fn set_view_distance(
@@ -330,6 +343,7 @@ pub(in crate::tick) fn join(
             game_mode,
         },
     );
+    sync_permission(state, *connection);
     crate::scoreboard::sync_join(state, *connection);
     crate::tick_control::sync_join(state, *connection);
     crate::bossbar::sync_join(state, *connection);
@@ -413,6 +427,7 @@ pub(in crate::tick) fn leave(
     // Disconnect closes transient menus before freezing custody.
     // Return only real inputs/cursor; result slots are projections.
     if let Some(entity) = state.connections.entity_of(*connection) {
+        crate::tick::spectator::stop(state, entity);
         if let Some(player) = state.players.get_mut(&entity) {
             player.statistics.increment_custom(CustomStat::LeaveGame, 1);
             player.statistics.advance_tick(state.tick);

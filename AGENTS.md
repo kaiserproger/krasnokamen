@@ -56,10 +56,10 @@ override the general queue and fleet defaults below.
    a ledger promotion batch of five or more rows; a change to persistence,
    protocol, custody or the battle core before Main commits it (and the design
    of a client threading or entity-tick change before implementation and its code
-   before merging), reviewed by the `architect-fable` agent (owner, 2026-11-14);
-   two release reviewers before a tag. Docs-only and test-only slices get no
-   reviewer. The owner contract authorizes these reviewers; fixing their
-   findings needs no second review.
+   before merging), under the [portable critical-review policy](docs/development/review-committee-and-breaker.md#independent-reviewer)
+   (permanent owner decision, 2026-11-15); two release reviewers before a tag.
+   Docs-only and test-only slices get no reviewer. The owner contract authorizes
+   these reviewers; fixing their findings needs no second review.
 6. An autonomous `/goal` covers the approved objective, not a slice; a context
    handoff neither pauses nor completes it. For this announcement the owner
    explicitly authorized the finite acceptance and stop condition linked above.
@@ -77,6 +77,12 @@ override the general queue and fleet defaults below.
    enter the blocking queue; record everything else as visible backlog.
    Outside that mode, issues are the queue outside a `/goal` and join its queue
    inside one.
+9. Preserve the complete ordered queue, including blocked and deferred items.
+   Only an explicit owner change or a concrete recorded dependency may change
+   order; blockers pause an owned item, not silently delete or demote it.
+   Side requests append. Before dispatch after compaction/resume, reconcile
+   the full queue and actual TODO view under the
+   [handoff rules](docs/development/agent-fleet.md#handoff-across-context-loss-or-to-another-person).
 
 ## Where to look
 

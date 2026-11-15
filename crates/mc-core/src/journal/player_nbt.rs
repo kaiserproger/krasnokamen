@@ -343,7 +343,22 @@ pub(crate) fn validate_player_opaque_custody(bytes: &[u8]) -> Result<(), CoreErr
             "player opaque fields: expected compound".into(),
         ));
     };
-    validate_owned_custody_fields(&entries)
+    validate_owned_custody_fields(&entries)?;
+    if let Some((key, _)) = entries.iter().find(|(key, _)| player_owned_field(key)) {
+        return Err(CoreError::Storage(format!(
+            "owned field in WAL player opaque: {key}; expected typed player post-image"
+        )));
+    }
+    if entries.iter().any(|(key, value)| {
+        key == "recipeBook"
+            && matches!(value, mc_nbt::Tag::Compound(book) if book.iter().any(|(key, _)| key == "recipes"))
+    }) {
+        return Err(CoreError::Storage(
+            "owned field in WAL player opaque: recipeBook.recipes; expected typed unlocked_recipes"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Decode a player image without touching filesystem state.

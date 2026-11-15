@@ -515,6 +515,79 @@ async fn suggestion_round_trip_and_permission_tree_refresh() {
     // The fixture's TempDir removes this directory when it is dropped.
 }
 
+#[tokio::test]
+async fn operator_changes_reach_own_entity_permission_consumer() {
+    async fn permission(
+        server: &EdgeServer,
+        ticks: &mut tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
+        viewer: &mut crate::plan::ViewerState,
+    ) -> EntityEvent {
+        tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                ticks.recv().await.unwrap();
+                for (connection, changes) in server.hub.try_drain_outbox() {
+                    if connection != viewer.connection {
+                        continue;
+                    }
+                    for packet in crate::plan::plan_player_changes(&changes, viewer) {
+                        if packet.id == EntityEvent::ID {
+                            assert!(packet.reliable);
+                            let mut bytes = bytes::BytesMut::from(&packet.data[..]);
+                            let frame = mc_protocol::frame::try_decode_frame(
+                                &mut bytes,
+                                mc_protocol::frame::Compression::Threshold(256),
+                            )
+                            .unwrap()
+                            .unwrap();
+                            return EntityEvent::decode(&mut &frame.body[..]).unwrap();
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .expect("native permission reaches the reliable wire consumer")
+    }
+    let (server, _dir) = fixture_in_temp_dir();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let (alex, _alex_rx) = register(&server, "Alex", true);
+    let mut ticks = server.hub.subscribe();
+    assert!(server.hub.submit(mc_core::boundary::PlayerInput::Join {
+        connection: alex,
+        uuid: crate::crypto::offline_uuid("Alex"),
+        name: "Alex".into(),
+        permission_level: server.admin.session_level(alex),
+    }));
+    let mut viewer = configured_viewer(
+        &server,
+        alex,
+        mc_core::boundary::EntityId(-1),
+        [0.0; 3],
+        Default::default(),
+    );
+    let joined = permission(&server, &mut ticks, &mut viewer).await;
+    assert_ne!(joined.entity_id, alex.0 as i32);
+    assert_eq!(joined.entity_id, viewer.entity_id.0);
+    assert_eq!(joined.event_id, 28);
+    for (command, event_id) in [("deop Alex", 24), ("op Alex", 28), ("deop Alex", 24)] {
+        assert!(
+            server
+                .handle_admin_command(operator, command)
+                .await
+                .unwrap()
+        );
+        let changed = permission(&server, &mut ticks, &mut viewer).await;
+        assert_eq!(
+            changed,
+            EntityEvent {
+                entity_id: joined.entity_id,
+                event_id
+            }
+        );
+    }
+    server.hub.shutdown();
+}
+
 fn native_checkpoint_identity() -> [u8; 32] {
     let mut identity = [0; 32];
     identity[..16].copy_from_slice(b"KrasnoV2Native\0\0");

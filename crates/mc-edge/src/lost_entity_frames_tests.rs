@@ -14,7 +14,8 @@ use mc_core::boundary::{
 };
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::play::{
-    AddEntity, ClientboundSetEntityData, ClientboundSetPassengers, RemoveEntities,
+    AddEntity, ClientboundChunkBatchFinished, ClientboundSetEntityData, ClientboundSetPassengers,
+    RemoveEntities,
 };
 
 const VIEWER: EntityId = EntityId(1);
@@ -111,43 +112,46 @@ fn scene(
 
 /// The entity frames queued, in order: `add 10`, `passengers 10 [11]`,
 /// `remove [10]`.
-fn entity_frames(world_rx: &mut WorldReceiver) -> Vec<String> {
+fn entity_frames(
+    world_rx: &mut WorldReceiver,
+    batches: &parking_lot::Mutex<crate::plan::chunk_batch::ChunkBatchState>,
+) -> Vec<String> {
     let mut frames = Vec::new();
     while let Ok(data) = world_rx.try_recv() {
         let mut bytes = bytes::BytesMut::from(data.as_ref());
-        let frame = try_decode_frame(&mut bytes, Compression::Threshold(256))
-            .unwrap()
-            .unwrap();
-        let mut body = frame.body.clone();
-        match frame.id {
-            AddEntity::ID => {
-                frames.push(format!(
-                    "add {}",
-                    AddEntity::decode(&mut body).unwrap().entity_id
-                ));
+        while let Some(frame) = try_decode_frame(&mut bytes, Compression::Threshold(256)).unwrap() {
+            let mut body = frame.body.clone();
+            match frame.id {
+                ClientboundChunkBatchFinished::ID => batches.lock().acknowledge(64.0),
+                AddEntity::ID => {
+                    frames.push(format!(
+                        "add {}",
+                        AddEntity::decode(&mut body).unwrap().entity_id
+                    ));
+                }
+                ClientboundSetPassengers::ID => {
+                    let link = ClientboundSetPassengers::decode(&mut body).unwrap();
+                    frames.push(format!(
+                        "passengers {} {:?}",
+                        link.vehicle_id, link.passenger_ids
+                    ));
+                }
+                ClientboundSetEntityData::ID => {
+                    frames.push(format!(
+                        "data {}",
+                        ClientboundSetEntityData::decode(&mut body)
+                            .unwrap()
+                            .entity_id
+                    ));
+                }
+                RemoveEntities::ID => {
+                    frames.push(format!(
+                        "remove {:?}",
+                        RemoveEntities::decode(&mut body).unwrap().entity_ids
+                    ));
+                }
+                _ => {}
             }
-            ClientboundSetPassengers::ID => {
-                let link = ClientboundSetPassengers::decode(&mut body).unwrap();
-                frames.push(format!(
-                    "passengers {} {:?}",
-                    link.vehicle_id, link.passenger_ids
-                ));
-            }
-            ClientboundSetEntityData::ID => {
-                frames.push(format!(
-                    "data {}",
-                    ClientboundSetEntityData::decode(&mut body)
-                        .unwrap()
-                        .entity_id
-                ));
-            }
-            RemoveEntities::ID => {
-                frames.push(format!(
-                    "remove {:?}",
-                    RemoveEntities::decode(&mut body).unwrap().entity_ids
-                ));
-            }
-            _ => {}
         }
     }
     frames
@@ -224,7 +228,7 @@ impl Pump {
     async fn publish_delivered_into(&mut self, output: &TickOutput, slots: usize) -> Vec<String> {
         let (world_tx, mut world_rx) = world_queue(slots, WORLD_QUEUE_BYTES);
         self.publish(output, world_tx).await;
-        entity_frames(&mut world_rx)
+        entity_frames(&mut world_rx, &self.connections[&self.id].chunk_batches)
     }
 
     async fn publish(&mut self, output: &TickOutput, world_tx: WorldSender) {

@@ -728,7 +728,7 @@ fn block_container_and_queue_post_images_share_actual_commit_batch() {
         0,
     ));
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry, JournalEntry::Block { pos, state } if *pos == [1,200,1] && *state == chest)));
     assert!(
         entries.iter().any(
@@ -740,7 +740,7 @@ fn block_container_and_queue_post_images_share_actual_commit_batch() {
     assert_eq!(replay.blocks[&(1, 200, 1)], chest);
     assert_eq!(replay.block_entities[&(1, 200, 1)].slots.len(), 27);
     assert_eq!(replay.block_ticks.chunks[0].ticks[0].trigger_tick, 20);
-    let next = crate::core::journal_entries_for_tick(&mut state, &output);
+    let next = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         !next
             .iter()

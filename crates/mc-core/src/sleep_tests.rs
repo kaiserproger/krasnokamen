@@ -253,7 +253,7 @@ fn tamed_cat_relaxes_and_waking_rolls_gift_table() {
         })
         .collect();
     assert_eq!(gifts.len(), 1, "gift must spawn in the wake tick");
-    let entries = crate::core::journal_entries_for_tick(&mut rig.state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut rig.state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(1, rig.state.tick, &entries).unwrap();

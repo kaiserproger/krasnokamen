@@ -560,7 +560,7 @@ fn tick_capture_wraps_all_dimension_images_in_envelopes() {
         changes: Arc::new(ChangeSet::default()),
         times: Default::default(),
     };
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut enveloped: Vec<(Dimension, SettlementId)> = Vec::new();
     let mut bare = 0u32;
     fn visit(
@@ -947,7 +947,7 @@ fn sigkill_child_reopen_keeps_identical_records_and_high_water() {
             }),
             times: Default::default(),
         };
-        let mut entries = crate::core::journal_entries_for_tick(&mut live, &output);
+        let mut entries = crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
         assert!(entries.iter().any(|entry| matches!(
             entry, JournalEntry::Dimension { dimension: Dimension::Overworld, entries }
                 if entries.iter().filter(|entry| matches!(entry, JournalEntry::Settlement { .. })).count() == 2

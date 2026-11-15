@@ -151,7 +151,7 @@ impl Drill {
         let (output, _, _) = crate::tick::run_tick(&mut self.state, inputs);
         Batch {
             tick: output.tick,
-            entries: journal_entries_for_tick(&mut self.state, &output),
+            entries: journal_entries_for_tick(&mut self.state, &output).unwrap(),
         }
     }
     fn append(&mut self, batch: &Batch) -> Result<(), CoreError> {
@@ -910,3 +910,6 @@ fn abrupt_stop_at_each_wal_publication_stage_conserves_transferred_items() {
     }
     assert_eq!(actual_stops, STAGES.len());
 }
+
+#[path = "native_battle_persistence_drill_tests.rs"]
+mod battle_resume;

@@ -397,7 +397,7 @@ fn checkpoint_nbt_and_replayed_tail_preserve_fuse_block_state_and_motion() {
     state.world.set_block(0, 201, 0, tnt.0);
     let id = prime_block(&mut state, BlockPos { x: 0, y: 201, z: 0 }, 9).unwrap();
     let (birth, _, _) = run_tick(&mut state, &[]);
-    let first = crate::core::journal_entries_for_tick(&mut state, &birth);
+    let first = crate::core::journal_entries_for_tick(&mut state, &birth).unwrap();
     let (_, regions, _) = crate::core::checkpoint_data_for(&state, birth.tick);
     let dir = std::env::temp_dir().join(format!("krasnokamen-tnt-state-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(
@@ -440,7 +440,7 @@ fn checkpoint_nbt_and_replayed_tail_preserve_fuse_block_state_and_motion() {
     saved_base.vel = native.motion.map(|value| value * 20.0);
     saved_base.ground = native.on_ground;
     let (tail, _, _) = run_tick(&mut state, &[]);
-    let second = crate::core::journal_entries_for_tick(&mut state, &tail);
+    let second = crate::core::journal_entries_for_tick(&mut state, &tail).unwrap();
     let batches = vec![(tail.tick, tail.tick, second)];
     let replay = replay_batches(checkpoint, &batches);
     let replay = replay_batches(replay, &batches);

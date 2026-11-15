@@ -515,7 +515,7 @@ fn native_checkpoint_plus_disk_wal_replays_equipment_and_item_custody_once() {
                     .contains(&dropped)
             );
         }
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
         writer.flush().unwrap();

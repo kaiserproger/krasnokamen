@@ -320,7 +320,7 @@ fn wal_restart_matures_and_checkpoint_restart_collects_without_recrediting_or_re
             use_input(1, Hand::Main),
         ],
     );
-    let mut entries = crate::core::journal_entries_for_tick(&mut state, &filled);
+    let mut entries = crate::core::journal_entries_for_tick(&mut state, &filled).unwrap();
     for x in -3..=3 {
         for z in -3..=3 {
             entries.push(JournalEntry::Block {

@@ -19,7 +19,7 @@ fn integrity_partial_allay_pickup_preserves_custody_in_wal_recovery() {
         entities_spawned: vec![allay, ground],
         ..Default::default()
     });
-    let birth = crate::core::journal_entries_for_tick(&mut state, &output);
+    let birth = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     state.appearance_changed.clear();
     state.tick = 20;
     let mut changes = ChangeSet::default();
@@ -40,7 +40,7 @@ fn integrity_partial_allay_pickup_preserves_custody_in_wal_recovery() {
     changes.entities_appearance_changed = std::mem::take(&mut state.appearance_changed);
     output.tick = state.tick;
     output.changes = Arc::new(changes);
-    let tail = crate::core::journal_entries_for_tick(&mut state, &output);
+    let tail = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
@@ -362,7 +362,7 @@ fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
         .entities_spawned
         .push(id);
     let birth_tick = output.tick;
-    let birth = crate::core::journal_entries_for_tick(&mut original, &output);
+    let birth = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     original
         .entities
         .row_mut(slot)
@@ -382,10 +382,10 @@ fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
     assert_eq!(output.changes.entities_spawned.len(), 1);
     let child = output.changes.entities_spawned[0];
     let duplication_tick = output.tick;
-    let duplication = crate::core::journal_entries_for_tick(&mut original, &output);
+    let duplication = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
     let cooldown_tick = output.tick;
-    let cooldown = crate::core::journal_entries_for_tick(&mut original, &output);
+    let cooldown = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     assert!(cooldown.iter().any(|entry| matches!(
         entry,
         crate::journal::JournalEntry::EntityState { id: saved, .. } if *saved == id.0
@@ -505,7 +505,7 @@ fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
             .entities_spawned
             .push(id);
         let birth_tick = output.tick;
-        let birth = crate::core::journal_entries_for_tick(&mut original, &output);
+        let birth = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
         let (output, _, _) = crate::tick::run_tick(
             &mut original,
             &[PlayerInput::Attack {
@@ -540,7 +540,7 @@ fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
             );
         }
         let death_tick = output.tick;
-        let death = crate::core::journal_entries_for_tick(&mut original, &output);
+        let death = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
         let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
         assert!(output.changes.entities_spawned.is_empty());
         for _ in 2..=20 {

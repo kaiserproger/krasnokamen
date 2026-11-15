@@ -113,7 +113,7 @@ async fn native_inventory_and_storage_share_one_replayable_tick_batch() {
         Some("purchased")
     );
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         entries
             .iter()

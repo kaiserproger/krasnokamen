@@ -43,12 +43,23 @@ class WindowConfig(unittest.TestCase):
         path.write_text(text)
         return path
 
-    def test_the_shipped_schedule_is_valid_and_ends_before_the_nightly_fuzz(self) -> None:
-        windows = helper(HERE / "measurement-windows", "00:00")
-        self.assertIn(windows.returncode, (0, 75))
-        text = (HERE / "measurement-windows").read_text()
-        self.assertIn("01:00-02:30", text)
-        self.assertIn("03:00", text, "the schedule explains the nightly fuzz it avoids")
+    def test_dated_overnight_grant_does_not_repeat_on_other_nights(self) -> None:
+        config = self.write("2026-11-17T22:00/2026-11-18T01:00\n")
+        for now in ("2026-11-17T22:00", "2026-11-17T23:59", "2026-11-18T00:59"):
+            with self.subTest(now=now):
+                self.assertEqual(helper(config, now).returncode, 0)
+        for now in ("2026-11-16T23:00", "2026-11-17T21:59",
+                    "2026-11-18T01:00", "2026-11-18T23:00"):
+            with self.subTest(now=now):
+                self.assertEqual(helper(config, now).returncode, 75)
+
+    def test_dated_extensions_leave_other_nights_normal(self) -> None:
+        config = self.write("01:00-02:30\n2026-11-16T02:30/2026-11-16T05:30\n")
+        for now, expected in (("2026-11-15T23:00", 75), ("2026-11-16T00:30", 75),
+                              ("2026-11-16T01:00", 0), ("2026-11-16T02:30", 0),
+                              ("2026-11-16T05:30", 75), ("2026-11-17T03:00", 75)):
+            with self.subTest(now=now):
+                self.assertEqual(helper(config, now).returncode, expected)
 
     def test_inside_a_window(self) -> None:
         config = self.write("# comment\n01:00-02:30\n")
@@ -77,6 +88,8 @@ class WindowConfig(unittest.TestCase):
         self.assertNotEqual(helper(self.write("01:00\n"), "01:30").returncode, 0)
         self.assertNotEqual(helper(self.write("23:00-01:00\n"), "23:30").returncode, 0)
         self.assertNotEqual(helper(self.write("# only comments\n"), "01:30").returncode, 0)
+        self.assertNotEqual(helper(self.write("2026-11-31T22:00/2026-12-01T01:00\n"), "01:30").returncode, 0)
+        self.assertNotEqual(helper(self.write("2026-11-18T01:00/2026-11-17T22:00\n"), "01:30").returncode, 0)
 
 
 class WindowInMemRun(unittest.TestCase):

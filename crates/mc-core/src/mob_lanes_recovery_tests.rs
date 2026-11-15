@@ -28,7 +28,7 @@ fn checkpoint(
         ..Default::default()
     };
     let out = output(state, changes);
-    let entries = journal_entries_for_tick(state, &out);
+    let entries = journal_entries_for_tick(state, &out).unwrap();
     let mut writer = JournalWriter::open(root, 1).unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     for dimension in [Dimension::Nether, Dimension::End] {
@@ -97,7 +97,7 @@ fn wandering_trader_native_checkpoint_wal_restart_and_despawn() {
         .offers[0]
         .uses = 1;
     let out = output(&restarted, ChangeSet::default());
-    let entries = journal_entries_for_tick(&mut restarted, &out);
+    let entries = journal_entries_for_tick(&mut restarted, &out).unwrap();
     // Journal capture refreshes the derived active-brain flag.
     let expected = restarted.entities.row(trader).villager.clone().unwrap();
     let mut writer = JournalWriter::open(root.path(), 1).unwrap();

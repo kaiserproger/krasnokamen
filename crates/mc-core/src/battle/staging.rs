@@ -397,7 +397,7 @@ fn tag_bytes() -> Vec<u8> {
     bytes
 }
 
-fn owned(bytes: &[u8]) -> bool {
+pub(super) fn owned(bytes: &[u8]) -> bool {
     let mut input = bytes;
     let Ok((_, Tag::Compound(fields))) = mc_nbt::read_named(&mut input) else {
         return false;
@@ -427,7 +427,9 @@ fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
         }
     }
     state.tickets.remove(OWNER);
+    let journaled = state.hostile.battle.journaled.take();
     state.hostile.battle = Default::default();
+    state.hostile.battle.journaled = journaled;
     ids.len()
 }
 
@@ -813,6 +815,10 @@ pub(crate) fn execute(
 ) -> Result<String, String> {
     match command {
         BattleCommand::Setup { seed, count } => {
+            if !state.hostile.battle.formation.regiments.is_empty() {
+                return execute(state, changes, origin, &BattleCommand::Status)
+                    .map(|status| format!("Battle restored: {status}"));
+            }
             setup(state, changes, origin, *seed, *count)?;
             Ok(format!("Battle staged: {count} per side, seed {seed}"))
         }

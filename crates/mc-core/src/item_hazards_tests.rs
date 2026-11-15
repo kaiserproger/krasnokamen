@@ -104,7 +104,7 @@ fn item_hazards_destroyed_drop_tombstone_replays_idempotently_without_resurrecti
         .unwrap()
         .entities_spawned
         .push(item);
-    let image = crate::core::journal_entries_for_tick(&mut state, &first);
+    let image = crate::core::journal_entries_for_tick(&mut state, &first).unwrap();
     let initial = crate::journal::replay_batches(
         crate::journal::Replay::default(),
         &[(first.tick, first.tick, image)],
@@ -112,7 +112,7 @@ fn item_hazards_destroyed_drop_tombstone_replays_idempotently_without_resurrecti
     assert!(initial.entities.contains_key(&item.0));
     place(&mut state, pos, "lava", &[]);
     let output = run_tick(&mut state, &[]).0;
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::RemoveEntity { id, .. } if *id == item.0)));
     let tail = [(output.tick, output.tick, entries)];
     let replay = crate::journal::replay_batches(initial, &tail);

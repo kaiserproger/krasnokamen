@@ -33,6 +33,23 @@ tick, not discard or reorder accepted work. A failed writer halts the core.
 Append acknowledgement is not a promise that the directory has been fsynced;
 a crash can consistently roll back an unflushed tail, even after a reply.
 
+### Recovery evidence and clocks
+
+Network acknowledgement, native tick, game time and durable WAL coverage are
+different observations. A held/frozen game clock need not advance with journal
+frames; unloaded or unadmitted entities need not age for every elapsed game tick.
+Establish the checkpoint/envelope and replay-clock mapping before comparing a
+multi-tick census. An asynchronously published dashboard/pump tick is not an
+upper bound on the census interval. See the clock images in
+[`journal.rs`](../../crates/mc-core/src/journal.rs) and their
+[`replay`](../../crates/mc-core/src/journal/replay.rs).
+
+A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
+hardware durability. The [drills below](#hazards-and-defense-layers) state their
+fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)
+keeps lifecycle uncertainty separate from proved loss or conservation.
+
+
 ## Checkpoints
 
 The default capture interval is 1,200 ticks (`CoreConfig.checkpoint_every_ticks`).
@@ -184,7 +201,7 @@ Missing allegiance is zero; a wrong NBT type, out-of-range value or malformed WA
 value refuses decoding. Recovery and `/summon` use the same setter.
 The key is visible to `/data` and NBT selectors while allegiance is nonzero;
 no wire metadata or protocol change is needed. Allegiance travels with the body on transfer and
-dense compaction. Restart restores allegiance, not runtime battle targets or timers.
+dense compaction.
 The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's
 allegiance extension. Persistence changes require Main's independent review.
@@ -194,9 +211,69 @@ living-flags byte in `appearance.extra` is present in WAL entity post-images but
 not in checkpoint entity records (`core/capture.rs`
 `appearance_from_vanilla_entity` restores no living flags). Recovery keeps a WAL
 pose until the next admitted AI decision; a checkpoint-only restart starts with
-the shield lowered, like the zombie-arms pose above. Guard/swing/stagger/rout
-decisions remain runtime-only. Staging raises shields before the initial spawn,
-so starting a staged battle does not republish every shield bearer's appearance.
+the shield lowered, like the zombie-arms pose above. Persisted staged-battle
+action history rebuilds the visible guard pose on the first resumed battle tick.
+Staging raises shields before the initial spawn, so starting a staged battle
+does not republish every shield bearer's appearance.
+
+### Battle decision history
+
+Dimension-local `battle/<dimension-id>` native global rows (version 1) and
+dimension-enveloped `Battle` tick-WAL post-images own the staged/running/paused
+phase and battle-local clock, regiment specifications/leaders/orders/sections,
+stable entity-ID roster and rank/file assignments, morale/rout/charge clocks,
+retained targets and escape plans, action/ammunition/weapon-swap history,
+retaliation windows, live holds/kits and named spectator bindings.
+They share the entity capture's WAL coverage gate and atomic native transaction.
+A reset publishes an empty post-image, not an absent update.
+Recovery installs the recovered image as the journal baseline, so even a reset
+on the first live tick publishes the empty image before any new checkpoint.
+
+Native entity custody remains sole authority for life, pose, equipment in hand
+and mounts. Live battle bodies additionally journal changed intra-chunk poses through
+`EntityMotion`, so replay cannot pair a new order/action with an older pose.
+The compact pose does not move the native age/chunk-clock anchor; the existing
+full crossing image still owns that anchor. Transient slots, position/faction
+caches, grids, projections, work counters and connection IDs rebuild.
+
+A native death image immediately tombstones the body. Its remaining 20-tick
+presentation corpse can move, but no longer emits compact persisted poses;
+replay still rejects every pose referencing an absent authoritative body.
+
+Both WAL and checkpoint capture reconcile staging decisions with proven native
+tombstones: dead pending/refused bodies no longer await ground. An absent ID is
+not proof of death and remains a recovery error. Pending retaliation drops only
+a native player with a known account name and no named live hold: the ordinary
+next battle pass cannot accept that attacker. Held players, native attackers
+and unknown identities remain unchanged; replay's identity checks stay strict.
+
+An image-encoding failure propagates through journal capture as a typed error.
+The tick owner halts before queuing the WAL or publishing that tick, reliably
+disconnects live players, and does not checkpoint its unjournaled state.
+
+Removed roster IDs and execution-tail IDs are retained historical identities,
+not permission to spawn replacements. A missing live roster member, mismatched
+side/liveness, unknown target/action identity, invalid roster index, invalid
+motion identity, malformed payload or unsupported version refuses online and
+offline recovery. A dead roster member may lack its native body. Named live
+roles retain only their last wire ID; recovery reserves those IDs and roster/
+execution tombstones against allocator reuse, and a reconnect transfers that
+role's retained targeting references to its new wire ID.
+Named roles remain pending while a connection is auth-locked. Re-arm and
+spectator binding run only after private player state has been hydrated.
+
+No downtime catch-up or tag-based formation reconstruction occurs. Running
+state resumes automatically; paused state remains paused. `battle setup` reports
+the existing battle. Native backups retain this authority; Anvil does not.
+Production-tick regressions:
+`battle_resume_wal_published_tick_excludes_inflight_decisions_and_motion`,
+`battle_resume_abrupt_checkpoint_commit_recovers_whole_history`,
+`battle_resume_encoding_failure_halts_before_wal_or_publication` and
+`battle_resume_sigkill_during_dying_body_keeps_tombstone_authority`.
+Capture-boundary SIGKILL regressions cover an ordinary unheld player's actual
+blow and staged-body death before settlement, after real terrain refusal, and
+after waiting settlement. Each compares recovered history/native poses and a
+subsequent checkpoint/restart; running battles also land further native damage.
 
 ## Quarantined chunks
 

@@ -1,0 +1,35 @@
+--- a/crates/mc-core/src/copper.rs
++++ b/crates/mc-core/src/copper.rs
+@@ -126,6 +126,21 @@
+     // chance is 1, so the gate alone decides.
+     if waxed || age == 3 || gate_roll % (1 << 24) >= 954438 {
+         return None;
++    }
++    if chest(block.block.id.path()) {
++        let partner = crate::chests::storage_partner(&state.registry.blocks, pos, &|p| {
++            state.world.block_at(p.x, p.y, p.z)
++        })
++        .map(|(_, p)| (p.x, p.y, p.z));
++        // Menus belong to this dimension's TickState. Query the existing
++        // custody map, including an opener on either half, without allocating.
++        if state
++            .open_containers
++            .values()
++            .any(|cell| *cell == (pos.x, pos.y, pos.z) || Some(*cell) == partner)
++        {
++            return None;
++        }
+     }
+     if !oxidation_scan_passes(state, pos, scan_roll) {
+         return None;
+--- a/crates/mc-core/src/tick/damage.rs
++++ b/crates/mc-core/src/tick/damage.rs
+@@ -769,6 +769,8 @@
+                 .get_mut(&id)
+                 .map(|player| player.die(&rules, keep_inventory, keep_experience))
+                 .unwrap_or_default();
++            // Death closes the menu without waiting for a client close packet.
++            self.open_containers.remove(&id);
+             let pos = self.entities.pos(slot);
+             crate::experience_orbs::award(self, pos, death_xp, spawned);
+             let mut dropped = effects.dropped;

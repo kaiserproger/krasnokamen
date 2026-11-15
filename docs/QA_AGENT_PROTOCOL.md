@@ -13,10 +13,11 @@ These failures required different checks, not more repetitions of the same
 happy path. The protocol below makes those attacks part of acceptance; a green
 receipt remains evidence only for the exact path and artifact it exercised.
 
-The reviewer is independent of the implementing agent. The owner chooses the
-model; no vendor or model names belong in repo docs. Every agent-launched
-Java/Minecraft client uses `ALSOFT_DRIVERS=null` (or `ALSOFT_DRIVERS=wave`
-writing to a file on the games disk when audio must be recorded).
+The reviewer is independent of the implementing agent. Reviewer selection follows
+[AGENTS.md](../AGENTS.md), including any specifically required reviewer; unavailable
+coverage stays blocked unless the owner explicitly changes that requirement.
+Every agent-launched Java/Minecraft client uses `ALSOFT_DRIVERS=null` (or
+`ALSOFT_DRIVERS=wave` writing to the games disk when audio must be recorded).
 
 ## Roles
 
@@ -81,6 +82,33 @@ A gate counts as evidence only when all of these hold:
    through the shipping packaging path. After publication, download the actual
    assets and check their hashes, contents and clean install. Neither a local
    binary beside dev data nor a successful CI build proves shipped installation.
+
+### Crash census evidence
+
+- Preserve a stopped snapshot, original WAL/checkpoint/census hashes and the
+  original verdict before reopening. A database open may repair an unclean image:
+  inspect or repair a hash-verified copy, never the primary evidence.
+- Use the [persistence authority and clocks](architecture/persistence.md#recovery-evidence-and-clocks),
+  not a network reply or asynchronous pump statistic, to bound the observation.
+  Compare dimension-scoped UUIDs, entity IDs and exact holder/slot/item images;
+  reject identity reuse, history gaps or an unproved game-time/WAL mapping.
+- A missing short-lived entity is not explained by “it probably expired”.
+  Establish a conservative admitted-lifecycle bound or an ordered durable removal.
+  A removal overlapping a multi-tick pre-census interval does not establish that
+  it followed that entity's observation. Unverifiable cases remain **incomplete**,
+  not passes obtained by dropping those entities.
+- A removal control alters a derived census copy, not the world or saved evidence,
+  and must detect loss of an actually observed, nonexpired entity. Offline
+  classification/reconstruction and source review retain their own scope; neither
+  becomes a completed live crash campaign or a combined-candidate review.
+
+These are evidence requirements, not a claim that every current profile implements
+a crash campaign. Select the actual candidate's
+[declared scenario](AGENT_TOOLING.md#profiles-and-scenarios); the
+[native drills](architecture/persistence.md#hazards-and-defense-layers) retain their
+bounded fault model. A logged filesystem event establishes observed ordering, not
+an atomic syscall breakpoint. Record missing cut moments, never invented counts.
+
 
 ## Release-candidate breaker pass
 

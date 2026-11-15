@@ -1,0 +1,20 @@
+--- a/crates/mc-core/src/command_world.rs
++++ b/crates/mc-core/src/command_world.rs
+@@ -432,7 +432,16 @@
+             Failed,
+         ),
+     };
+-    if result == Failed || crate::command_execution::accepts_success(state, connection) {
++    if let (WorldCommand::Fill { .. }, crate::command_execution::CommandResult::Success(count)) =
++        (command, result)
++    {
++        crate::command_execution::success_feedback(
++            state,
++            connection,
++            "commands.fill.success",
++            vec![crate::command_feedback::text(count)],
++        );
++    } else if result == Failed || crate::command_execution::accepts_success(state, connection) {
+         state.push_player(connection, PlayerChange::Chat { message: text });
+     }
+     result

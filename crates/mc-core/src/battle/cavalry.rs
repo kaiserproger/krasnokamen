@@ -312,7 +312,8 @@ pub fn impact_bonus(elapsed: u64) -> f32 {
     2.0 * (CHARGE_DECAY_TICKS.saturating_sub(elapsed) as f32 / CHARGE_DECAY_TICKS as f32)
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Charge {
     impact: Option<u64>,
     refused: bool,

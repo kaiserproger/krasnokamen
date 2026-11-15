@@ -39,6 +39,8 @@ mod tests;
 mod v263_tests;
 #[cfg(test)]
 mod variant_import_tests;
+#[cfg(test)]
+mod wal_owned_player_fields_tests;
 
 use mc_core::{CoreConfig, CoreError};
 use mc_nbt::Tag;

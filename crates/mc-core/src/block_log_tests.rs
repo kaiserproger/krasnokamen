@@ -126,7 +126,7 @@ impl Rig {
         inputs: &[PlayerInput],
     ) -> (TickOutput, Drains, Vec<crate::journal::JournalEntry>) {
         let (output, drains, _) = run_tick(&mut self.state, inputs);
-        let entries = crate::core::journal_entries_for_tick(&mut self.state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut self.state, &output).unwrap();
         (output, drains, entries)
     }
 

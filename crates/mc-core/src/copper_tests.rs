@@ -141,7 +141,7 @@ fn step(state: &mut TickState) -> (u64, Vec<JournalEntry>) {
     let (output, _, _) = run_tick(state, &[]);
     (
         output.tick,
-        crate::core::journal_entries_for_tick(state, &output),
+        crate::core::journal_entries_for_tick(state, &output).unwrap(),
     )
 }
 fn golem(state: &mut TickState, pos: [f64; 3]) -> EntityId {
@@ -397,6 +397,232 @@ fn copper_paired_weathering_wax_and_offhand_scrape_keep_inventory() {
     state.world.fold_overlay();
     for (key, record) in before {
         assert_eq!(state.block_entities[&key].slots, record.slots);
+    }
+}
+
+fn weather(state: &mut TickState, pos: BlockPos) {
+    for (cell, id) in random_tick(state, pos, at(state, pos).id.0, 0, 0)
+        .into_iter()
+        .flatten()
+    {
+        state.world.set_block(cell.x, cell.y, cell.z, id);
+    }
+}
+
+#[test]
+fn copper_weathering_waits_for_last_menu_close_in_its_dimension() {
+    for paired in [false, true] {
+        let mut state = fixture(None);
+        let first = join(&mut state);
+        run_tick(
+            &mut state,
+            &[PlayerInput::Join {
+                connection: ConnectionId(2),
+                uuid: uuid::Uuid::new_v4(),
+                name: "second-opener".into(),
+                permission_level: 0,
+            }],
+        );
+        let second = state.connections.entity_of(ConnectionId(2)).unwrap();
+        let slot = state.entities.slot_of(second).unwrap();
+        state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+        let contents = vec![stack("diamond", 3)];
+        install(
+            &mut state,
+            A,
+            "copper_chest",
+            if paired { "left" } else { "single" },
+            contents.clone(),
+        );
+        if paired {
+            install(&mut state, B, "copper_chest", "right", contents.clone());
+        }
+        let control = BlockPos { x: 8, ..A };
+        install(&mut state, control, "copper_chest", "single", vec![]);
+        for (connection, position) in [
+            (ConnectionId(1), A),
+            (ConnectionId(2), if paired { B } else { A }),
+        ] {
+            run_tick(
+                &mut state,
+                &[PlayerInput::UseItemOn {
+                    connection,
+                    hand: Hand::Main,
+                    position,
+                    face: 1,
+                    cursor: [0.5; 3],
+                    sequence: 1,
+                }],
+            );
+        }
+        assert!(state.players[&first].open.is_some());
+        assert!(state.players[&second].open.is_some());
+        weather(&mut state, A);
+        if paired {
+            weather(&mut state, B);
+            assert_eq!(family(at(&state, B).block.id.path()).unwrap().1, 0);
+        }
+        assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 0);
+        weather(&mut state, control);
+        assert_eq!(family(at(&state, control).block.id.path()).unwrap().1, 1);
+
+        // An identical position in another dimension has independent custody.
+        let mut other = fixture(None);
+        other.dimension = crate::dimensions::Dimension::Nether;
+        install(&mut other, A, "copper_chest", "single", vec![]);
+        weather(&mut other, A);
+        assert_eq!(family(at(&other, A).block.id.path()).unwrap().1, 1);
+
+        let window = state.players[&first].open.as_ref().unwrap().window;
+        run_tick(
+            &mut state,
+            &[PlayerInput::ContainerClose {
+                connection: ConnectionId(1),
+                window,
+            }],
+        );
+        weather(&mut state, A);
+        assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 0);
+        // Disconnect is also a real close; the remaining opener cannot linger.
+        run_tick(
+            &mut state,
+            &[PlayerInput::Leave {
+                connection: ConnectionId(2),
+            }],
+        );
+        weather(&mut state, A);
+        assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 1);
+        if paired {
+            assert_eq!(family(at(&state, B).block.id.path()).unwrap().1, 1);
+        }
+        run_tick(
+            &mut state,
+            &[PlayerInput::UseItemOn {
+                connection: ConnectionId(1),
+                hand: Hand::Main,
+                position: A,
+                face: 1,
+                cursor: [0.5; 3],
+                sequence: 2,
+            }],
+        );
+        let window = state.players[&first].open.as_ref().unwrap().window;
+        weather(&mut state, A);
+        assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 1);
+        run_tick(
+            &mut state,
+            &[PlayerInput::ContainerClose {
+                connection: ConnectionId(1),
+                window,
+            }],
+        );
+        weather(&mut state, A);
+        assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 2);
+        assert_eq!(state.block_entities[&(A.x, A.y, A.z)].slots[0], contents[0]);
+    }
+}
+
+#[test]
+fn copper_weathering_resumes_after_last_opener_dies_and_respawns() {
+    for paired in [false, true] {
+        let mut state = fixture(None);
+        let first = join(&mut state);
+        run_tick(
+            &mut state,
+            &[PlayerInput::Join {
+                connection: ConnectionId(2),
+                uuid: uuid::Uuid::new_v4(),
+                name: "second-opener".into(),
+                permission_level: 0,
+            }],
+        );
+        let second = state.connections.entity_of(ConnectionId(2)).unwrap();
+        let slot = state.entities.slot_of(second).unwrap();
+        state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
+        // Respawn admission requires all nine chunks surrounding world spawn.
+        let spawn = state.world.world_spawn();
+        let (x, z) = (spawn[0].div_euclid(16), spawn[2].div_euclid(16));
+        let chunks = (-1..=1)
+            .flat_map(|dx| {
+                (-1..=1).map(move |dz| {
+                    (
+                        ChunkPos {
+                            x: x + dx,
+                            z: z + dz,
+                        },
+                        1,
+                    )
+                })
+            })
+            .collect();
+        state.world.ensure_blocking(&chunks);
+        state.gamerules.insert("respawn_radius".into(), "0".into());
+        state
+            .gamerules
+            .insert("random_tick_speed".into(), "0".into());
+        let contents = vec![stack("diamond", 3)];
+        install(
+            &mut state,
+            A,
+            "copper_chest",
+            if paired { "left" } else { "single" },
+            contents.clone(),
+        );
+        if paired {
+            install(&mut state, B, "copper_chest", "right", contents.clone());
+        }
+        for (connection, position) in [
+            (ConnectionId(1), A),
+            (ConnectionId(2), if paired { B } else { A }),
+        ] {
+            run_tick(
+                &mut state,
+                &[PlayerInput::UseItemOn {
+                    connection,
+                    hand: Hand::Main,
+                    position,
+                    face: 1,
+                    cursor: [0.5; 3],
+                    sequence: 1,
+                }],
+            );
+        }
+        assert!(state.players[&first].open.is_some());
+        assert!(state.players[&second].open.is_some());
+        for (connection, entity, expected_age) in
+            [(ConnectionId(1), first, 0), (ConnectionId(2), second, 1)]
+        {
+            run_tick(
+                &mut state,
+                &[PlayerInput::Command {
+                    connection,
+                    command: "kill".into(),
+                    permission_level: 2,
+                }],
+            );
+            let slot = state.entities.slot_of_any(entity).unwrap();
+            assert!(!state.entities.body(slot).alive);
+            assert!(state.players[&entity].open.is_none());
+            run_tick(&mut state, &[PlayerInput::Respawn { connection }]);
+            assert!(state.entities.body(slot).alive);
+            assert_eq!(state.players[&entity].vitals.health, 20.0);
+            assert!(state.players[&entity].open.is_none());
+            weather(&mut state, A);
+            assert_eq!(
+                family(at(&state, A).block.id.path()).unwrap().1,
+                expected_age,
+                "weathering after opener {} died and respawned (paired={paired})",
+                connection.0,
+            );
+            if paired {
+                assert_eq!(
+                    family(at(&state, B).block.id.path()).unwrap().1,
+                    expected_age,
+                );
+            }
+            assert_eq!(state.block_entities[&(A.x, A.y, A.z)].slots[0], contents[0]);
+        }
+        assert!(state.open_containers.is_empty());
     }
 }
 
@@ -1006,7 +1232,7 @@ fn copper_carried_items_drop_on_non_player_death_once_after_double_wal_replay() 
     assert!(output.changes.entity_events.iter().any(|event| {
         matches!(event, crate::boundary::EntityEvent::Death { entity } if *entity == id)
     }));
-    let death_entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let death_entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(death_entries.iter().any(|entry| match entry {
         JournalEntry::Entity {
             id: dead,

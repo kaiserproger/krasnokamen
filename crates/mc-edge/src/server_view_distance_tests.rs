@@ -59,14 +59,10 @@ fn information_chat(language: &str, distance: i8, chat_visibility: ChatVisibilit
 fn drain(mut next: impl FnMut() -> Option<bytes::Bytes>) -> Vec<RawFrame> {
     let mut frames = Vec::new();
     while let Some(data) = next() {
-        frames.push(
-            try_decode_frame(
-                &mut bytes::BytesMut::from(data.as_ref()),
-                Compression::Threshold(256),
-            )
-            .unwrap()
-            .unwrap(),
-        );
+        let mut bytes = bytes::BytesMut::from(data.as_ref());
+        while let Some(frame) = try_decode_frame(&mut bytes, Compression::Threshold(256)).unwrap() {
+            frames.push(frame);
+        }
     }
     frames
 }
@@ -186,6 +182,18 @@ async fn client_view_distance_join_grow_and_shrink() {
             .await;
             radius_packets.extend(radii(&drain(|| reliable_rx.try_recv().ok())));
             for frame in drain(|| world_rx.try_recv().ok()) {
+                if frame.id == ClientboundChunkBatchFinished::ID {
+                    assert!(
+                        server
+                            .handle_edge_frame(
+                                id,
+                                ServerboundChunkBatchReceived::ID,
+                                &64.0f32.to_be_bytes(),
+                            )
+                            .await
+                            .unwrap()
+                    );
+                }
                 if frame.id == LevelChunkWithLight::ID {
                     let packet = LevelChunkWithLight::decode(&mut &frame.body[..]).unwrap();
                     assert!(
@@ -555,3 +563,6 @@ fn the_wire_chat_setting_maps_to_the_core_setting() {
         assert_eq!(crate::configuration::chat_visibility(wire), expected);
     }
 }
+
+#[path = "server_chunk_batch_tests.rs"]
+mod chunk_batch_tests;

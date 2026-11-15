@@ -3,6 +3,9 @@ use adjacent::tables::{Formats, Packets, Reports, Tables};
 use bytes::Bytes;
 use mc_protocol::codec::{ReadMc, WriteMc};
 
+#[path = "camera_tests.rs"]
+mod camera_tests;
+
 const PACKETS: &str = r#"{
  "login":{"clientbound":{"minecraft:login_finished":{"protocol_id":2}},"serverbound":{"minecraft:login_acknowledged":{"protocol_id":3}}},
  "configuration":{"clientbound":{"minecraft:finish_configuration":{"protocol_id":3},"minecraft:registry_data":{"protocol_id":7}},"serverbound":{"minecraft:finish_configuration":{"protocol_id":3}}},

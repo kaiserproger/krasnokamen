@@ -29,6 +29,8 @@ mod player_changes;
 pub use player_changes::plan_player_changes;
 pub(crate) use player_changes::plan_routed_player_changes;
 
+mod camera;
+pub(crate) mod chunk_batch;
 mod chunk_delta;
 mod entity_candidates;
 mod entity_interest;
@@ -312,8 +314,8 @@ pub struct PlannedPacket {
     pub chunk_dimension: mc_core::dimensions::Dimension,
 }
 
-/// Last sent `(position, yaw, pitch, head_yaw)` of an entity: the client's
-/// state relative moves are encoded against.
+/// Last sent authoritative `(position, yaw, pitch, head_yaw)` of an entity.
+/// Relative positions subtract quantized endpoints; thresholds use raw ones.
 type MoveBaseline = ([f64; 3], f32, f32, f32);
 
 /// One publish's world-queue room ([`crate::server::WorldSender`]): free
@@ -456,10 +458,13 @@ fn relink_passengers(
 pub struct ViewerState {
     pub connection: ConnectionId,
     pub entity_id: EntityId,
+    /// Camera last planned on the ordered world FIFO; None means delivery debt.
+    camera: Option<EntityId>,
     pub position: [f64; 3],
     pub dimension: mc_core::dimensions::Dimension,
     /// Negotiated connection radius; None uses the caller's server limit.
     pub(crate) view_distance: Option<i32>,
+    pub(crate) chunk_batches: Arc<parking_lot::Mutex<chunk_batch::ChunkBatchState>>,
     /// Registry indices resolved by the edge from its exact vanilla data.
     pub dimension_type_ids: [i32; 3],
     pub advancements: Arc<crate::advancements::AdvancementPackets>,
@@ -552,9 +557,11 @@ impl ViewerState {
         Self {
             connection,
             entity_id,
+            camera: Some(entity_id),
             position,
             dimension: mc_core::dimensions::Dimension::Overworld,
             view_distance: None,
+            chunk_batches: Arc::default(),
             dimension_type_ids: [0; 3],
             advancements: Arc::default(),
             recipe_catalog: None,
@@ -617,6 +624,7 @@ impl ViewerState {
     /// delivered, so held geometry and the client state of every entity that
     /// plan touched are repaired from the next plan.
     pub(crate) fn world_frame_unsent(&mut self) {
+        self.camera = None;
         self.geometry_unsent();
         for id in std::mem::take(&mut self.world_removed) {
             // The client may still hold it: track it again to have it removed.
@@ -715,6 +723,9 @@ fn forget_everything(
     credit: &mut WorldCredit,
     scratch: &mut PlanScratch,
 ) -> bool {
+    if !camera::send(viewer, viewer.entity_id, out, credit) {
+        return false;
+    }
     if !clear_seats(viewer, out, credit) {
         return false;
     }
@@ -890,6 +901,16 @@ fn plan_viewer_inner(
     };
     viewer.world_entities.clear();
     viewer.world_removed.clear();
+    let desired_camera = snapshot
+        .cameras
+        .get(&viewer.entity_id)
+        .copied()
+        .unwrap_or(viewer.entity_id);
+    if viewer.camera != Some(desired_camera)
+        && !camera::send(viewer, viewer.entity_id, &mut out, &mut credit)
+    {
+        return out;
+    }
     // Resolve the authoritative anchor before range-checking one-shot effects.
     if let Some(own) = own_entity(snapshot, viewer) {
         viewer.position = own.position;
@@ -1351,7 +1372,16 @@ fn plan_viewer_inner(
 
     // Admit unseen chunks first, then repair held chunks. Both share the same
     // bounded send budget; a deferred repair remains owed across publishes.
-    let mut chunks_left = CHUNKS_PER_TICK;
+    let mut chunks_left = viewer.chunk_batches.lock().allowance();
+    // Two framing slots travel atomically with the chunks. Reserve them
+    // before admission; unused reservations are returned below.
+    let batch_credit = credit;
+    if credit.frames >= 3 && credit.bytes > 0 {
+        credit.frames -= 2;
+    } else {
+        chunks_left = 0;
+    }
+    let batch_start = out.len();
     for repairs in [false, true] {
         if !admit {
             break;
@@ -1370,11 +1400,12 @@ fn plan_viewer_inner(
                 admission_debt = true;
                 break;
             }
-            chunks_left -= 1;
+            // Missing resident chunks do not spend client quota.
             chunk_stat!(stats.probes += 1);
             let Some(resident) = find_chunk(&snapshot.chunks, pos) else {
                 continue;
             };
+            chunks_left -= 1;
             let data = chunk_cache
                 .get(
                     snapshot.dimension,
@@ -1392,12 +1423,21 @@ fn plan_viewer_inner(
                 chunk_dimension: snapshot.dimension,
             });
             credit.charge(&out[out.len() - 1..]);
+            if out.len() == batch_start + 1 {
+                // Threshold-256 framing: empty start = 3 bytes, one-byte count
+                // finish = 4. Charge with the first chunk so any remaining
+                // byte credit still admits one complete (possibly large) group.
+                credit.bytes = credit.bytes.saturating_sub(7);
+            }
             viewer.loaded_chunks.insert(pos, resident.revision);
             viewer.chunk_repairs.remove(&pos);
             viewer
                 .light_baseline
                 .record(pos, &resident.chunk, resident.revision);
         }
+    }
+    if out.len() == batch_start {
+        credit = batch_credit;
     }
     if let Some(delta) = delta {
         let quiet = !unload_debt
@@ -1446,6 +1486,7 @@ fn plan_viewer_inner(
         &mut out,
         &mut credit,
     );
+    camera::reconcile(snapshot, viewer, &mut out, &mut credit);
     plan_seats(viewer, &mut out, &mut credit);
     out
 }
@@ -1702,6 +1743,15 @@ fn plan_entities(
         scratch,
         spawn_credit,
     );
+    if viewer.camera.is_some_and(|camera| {
+        camera != viewer.entity_id
+            && (scratch.removed.contains(&camera.0)
+                || scratch.spawns.iter().any(|(id, _)| *id == camera))
+    }) && !camera::send(viewer, viewer.entity_id, out, credit)
+    {
+        viewer.entity_interest = interest;
+        return;
+    }
     viewer.boss_baseline.sync(
         conn,
         scratch
@@ -2057,7 +2107,15 @@ fn entity_movement(
     if !moved && !rotated {
         return None;
     }
-    let rel = (delta_to_short(dx), delta_to_short(dy), delta_to_short(dz));
+    let rel = if moved {
+        (
+            relative_move_delta(entity.position[0], last_pos[0]),
+            relative_move_delta(entity.position[1], last_pos[1]),
+            relative_move_delta(entity.position[2], last_pos[2]),
+        )
+    } else {
+        (Some(0), Some(0), Some(0))
+    };
     let fits = rel.0.is_some() && rel.1.is_some() && rel.2.is_some();
     let packet = match (moved, rotated, fits) {
         (true, false, true) => MovePacket::Pos(MoveEntityPos {
@@ -2094,9 +2152,9 @@ fn entity_movement(
             on_ground: entity.on_ground,
         }),
     };
-    // The baseline is exactly what the packet tells the client: a
-    // position-only move keeps the old rotation and vice versa; an absolute
-    // sync carries both.
+    // Keep the last sent authoritative endpoint: relative moves subtract its
+    // quantized value, not the raw displacement. Position-only moves preserve
+    // rotation and rotation-only moves preserve position; sync carries both.
     let synced = moved && !fits;
     let position = if moved { entity.position } else { last_pos };
     let (yaw, pitch) = if rotated || synced {
@@ -2793,10 +2851,18 @@ fn pack_degrees(degrees: f32) -> u8 {
     floor_f32_i32(degrees * 256.0 / 360.0) as u8
 }
 
-/// `Mth.floor(delta * 4096)` clamped to `i16`, or `None` when the delta
-/// exceeds relative-move range (caller falls back to absolute sync).
-fn delta_to_short(delta: f64) -> Option<i16> {
-    i16::try_from(floor_i32(delta * 4096.0)).ok()
+/// Vanilla VecDeltaCodec (775–777): subtract endpoints rounded to 1/4096
+/// blocks, with ties toward positive infinity. Retain the raw baseline for
+/// movement thresholds; an out-of-range difference needs absolute sync.
+fn relative_move_delta(position: f64, baseline: f64) -> Option<i16> {
+    let quantize = |coordinate: f64| {
+        let scaled = coordinate * 4096.0;
+        let lower = scaled.floor();
+        // Adding 0.5 before flooring would round the float immediately below
+        // a positive half-step up as well. Compare the fraction instead.
+        lower as i64 + i64::from(scaled - lower >= 0.5)
+    };
+    i16::try_from(quantize(position).checked_sub(quantize(baseline))?).ok()
 }
 
 /// Frame `body` once (threshold-256 compression) and push it; nothing is

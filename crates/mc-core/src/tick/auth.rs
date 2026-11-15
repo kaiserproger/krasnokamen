@@ -214,6 +214,7 @@ pub(crate) fn unlock_session(state: &mut TickState, connection: ConnectionId) {
             );
         }
     }
+    super::input::session::sync_permission(state, connection);
     crate::mounts::join(state, entity);
     crate::effects::sync_join(state, entity);
     crate::advancements::sync_join(state, entity);

@@ -1,0 +1,28 @@
+--- a/crates/mc-core/src/tick/input/session.rs
++++ b/crates/mc-core/src/tick/input/session.rs
+@@ -16,6 +16,7 @@
+ ) {
+     if state.connections.entity_of(*connection).is_some() {
+         state.plugin_players.observe_permission(*connection, *level);
++        sync_permission(state, *connection);
+     }
+ }
+ 
+@@ -342,6 +343,7 @@
+             game_mode,
+         },
+     );
++    sync_permission(state, *connection);
+     crate::scoreboard::sync_join(state, *connection);
+     crate::tick_control::sync_join(state, *connection);
+     crate::bossbar::sync_join(state, *connection);
+--- a/crates/mc-core/src/tick/auth.rs
++++ b/crates/mc-core/src/tick/auth.rs
+@@ -214,6 +214,7 @@
+             );
+         }
+     }
++    super::input::session::sync_permission(state, connection);
+     crate::mounts::join(state, entity);
+     crate::effects::sync_join(state, entity);
+     crate::advancements::sync_join(state, entity);

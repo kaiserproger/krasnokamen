@@ -759,14 +759,28 @@ world or a copy restored from backup: several of its effects stay after
   are closed first, every other slot is emptied and the overflow is discarded,
   not dropped. Each respawn and re-arm does the same. The player's previous
   items are gone; `battle reset` does not give them back.
-- `battle spectate <player> <target>` switches the player to spectator mode;
-  reset does not switch him back.
-- Staged units are mobs tagged `krasnokamen:battle`, and setup adds a
-  persisted `krasnokamen:battle` chunk ticket. Both survive a restart, while
-  the battle state itself (formations, orders, live holds) is not saved. After
-  a restart `battle setup` refuses with "battle already staged; reset it first":
-  run `battle reset` (it removes the tagged mobs and the ticket), then
-  `battle setup` again.
+- `/spectate [<target> [<player>]]` (permission level 2) binds an existing
+  spectator to one entity; without arguments it releases the executing player's
+  camera. Sneak and leaving spectator mode also release it. A dead or disconnected
+  target releases the camera without automatically resuming the vanilla command.
+- `battle spectate <player> <target>` switches the player to spectator mode and
+  follows the target's actual camera, retaining named intent across target death,
+  respawn and reconnect. Explicit stop, sneak, mode exit or viewer disconnect
+  cancels that intent. Reset does not switch the player's mode back.
+- Staged units, the `krasnokamen:battle` chunk ticket and battle decision history
+  survive restart together. A running battle resumes automatically at the last
+  complete published tick; a paused battle stays paused. Formations, orders,
+  retained targets, morale/rout and action clocks are not reset or advanced for
+  downtime. `battle setup` reports the restored battle instead of spawning a
+  second army; use `battle status` and `battle roster` to inspect it.
+- Existing live holds re-arm once when the named player reconnects, without
+  taking another slot; restored named spectator intent resumes the native entity
+  camera. The existing inventory-replacement rules above still apply.
+- Missing, malformed or unsupported battle history refuses startup; tagged mobs
+  or a staging ticket without history are not reconstructed into a fresh battle.
+  Restore a consistent native backup, not an Anvil export. `battle reset` removes
+  the durable battle history, tagged units and ticket together on the next
+  published tick; it does not restore the other world/player settings above.
 
 ### Block log and rollback
 

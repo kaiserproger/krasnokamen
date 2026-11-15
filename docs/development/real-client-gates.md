@@ -182,10 +182,11 @@ whether `computer:monitor` was admitted. Missing content after that terminal
 handshake is a false verdict, not a wait for an impossible later registration.
 
 Java launches keep private game homes but reuse `GRADLE_USER_HOME`, defaulting
-to the existing sibling `loader-gradle-home` on the owner host. The 180-second
-MCP readiness deadline includes Gradle startup; do not accidentally discard a
-warmed build cache by letting Gradle resolve its home under a fresh game home.
-An explicitly selected Gradle home is preserved.
+to the existing sibling `loader-gradle-home` on the owner host; an explicitly
+selected home is preserved. Keep build completion separate from owned MCP
+readiness and scenario deadlines: the Loader's cold build uses the
+[event-only readiness contract](../AGENT_TOOLING.md#harness-entrypoint), not a
+guessed fixed startup delay. Do not discard a warm build cache with each game home.
 Gradle init scripts separate build outputs by checkout path, Minecraft version
 and launch platform. The matching `--project-cache-dir` also isolates task
 history and Loom launch metadata: separate output paths alone do not prevent
@@ -283,6 +284,22 @@ Keep them separate in every report:
 - **Java client:** proves vanilla-client compatibility for the path it ran; it is
   diagnostic for native-client rendering claims. Each retained release uses
   its own automatically imported endpoint cache and adjacent translation route.
+
+Match the original actor, candidate and failed scenario. An operator or an
+independent observer does not prove a non-operator's private inventory/UI path.
+A read-only instrumentation extension must disclose its diff and cannot silently
+change input, rendering or network behaviour. For crowd/FPS claims retain
+received counts, actual submitted bodies and drawn-frame evidence under the
+[performance methodology](performance-windows-and-profiling.md#comparing-builds);
+headless receipt counts and a closer diagnostic fixture do not replace the
+failed primary scene.
+
+Setup is not the assertion: await a fresh ordered command reply, then the actual
+loaded blocks, authoritative inventory or reached player position the action
+requires. A forceload/teleport acknowledgement is not resident terrain or arrival.
+Distinguish requested, server-accepted, collision-resolved and client-received
+positions before diagnosing corrections as rubber-banding; correction count
+alone does not establish it.
 
 Native `minecraft_click_container_slot` bypasses hit-testing; GUI-scale or layout
 proofs need a physical XTest click (pattern: `_scroll` in
@@ -759,16 +776,16 @@ is the pin owner.
 
 ## Flakes that are environment
 
-- Load above ~25 on 12 cores: the client never enters Play, or
-  `stale_dimension_epoch` after a respawn. Rerun at low load before debugging.
-- `renderer_initialization_failed: Parent device is lost`: transient GPU/Xvfb
-  flake; rerun once.
-- Under Xvfb about 25-30 ms per frame goes to `xcb_put_image`; it exists only in
-  harness runs and is not client FPS cost.
-- A graphical settlement war gate once failed with `stale-revision` while a cargo
-  matrix ran on the same host and passed on an idle host. Run long graphical gates
-  on a quiet host and count such passes as host-idle evidence.
-- A debug server runs at about 2-9 TPS while a joining player's chunks generate;
+- Treat historical overload/GPU symptoms as hypotheses, not automatic exceptions.
+  Retain the first failed receipt and record actual load, cgroup/CPU pressure,
+  renderer/backend and failure phase; rerun once under a corrected environment
+  only when that supplies new evidence. `Parent device is lost`, a missing frame
+  or `stale_dimension_epoch` is not exonerated by its wording.
+- Xvfb/software rendering and capture overhead belong to the recorded backend.
+  Label that environment and compare like-for-like; never subtract a historical
+  `xcb_put_image` estimate to manufacture physical-display FPS. Completed capture
+  frames still do not prove monitor scanout.
+- A debug server runs at about 2–9 TPS while a joining player's chunks generate;
   timing-sensitive checks (bow draw, eating, cooldowns) need the release server
   (AGENTS.md).
 

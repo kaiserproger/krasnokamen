@@ -598,7 +598,7 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
         }
         let pending = row(&state, piglin).special_mob.as_deref().cloned();
         assert!(admiring(row(&state, piglin)));
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
         writer.flush().unwrap();
         let mid = crate::native_checkpoint::recover_with_reader(
@@ -627,7 +627,7 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
                 assert_eq!(output.changes.entities_spawned.len(), 1);
                 reward_id = Some(output.changes.entities_spawned[0]);
             }
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             writer.append(output.tick, output.tick, &entries).unwrap();
         }
         let reward_id = reward_id.expect("barter payout");

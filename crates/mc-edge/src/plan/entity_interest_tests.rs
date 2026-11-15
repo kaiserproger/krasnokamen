@@ -89,13 +89,17 @@ fn late_player_profile_respawns_previously_tracked_stationary_player() {
         removed: Arc::from([]),
     };
     let packets = crate::plan::plan_player_changes(&[roster], &mut viewer);
-    assert!(packets.iter().any(|p| p.id == RemoveEntities::ID));
+    assert!(!packets.iter().any(|p| p.id == RemoveEntities::ID));
     assert!(packets.iter().any(|p| p.id == PlayerInfoUpdate::ID));
+    let repaired = plan_entities_for(&out, &mut viewer, 32);
+    let remove = repaired
+        .iter()
+        .position(|p| p.id == RemoveEntities::ID)
+        .unwrap();
+    let add = repaired.iter().position(|p| p.id == AddEntity::ID).unwrap();
     assert!(
-        plan_entities_for(&out, &mut viewer, 32)
-            .iter()
-            .any(|p| p.id == AddEntity::ID),
-        "player must be spawned again after its profile arrives"
+        remove < add,
+        "profile replacement is ordered on the world FIFO"
     );
 }
 

@@ -213,7 +213,7 @@ fn filled_named_box_break_pickup_and_normal_place_restore_once_and_wal_replays()
     );
     assert_eq!(state.block_entities[&KEY].slots, before);
     assert!(state.players[&actor].inventory.slots[0].is_empty());
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let batches = vec![(state.tick, state.tick, entries)];
     let once = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     let twice = crate::journal::replay_batches(

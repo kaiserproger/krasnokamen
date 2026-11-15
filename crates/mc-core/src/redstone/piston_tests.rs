@@ -455,7 +455,7 @@ fn adhesive_move_source_clears_destinations_and_destroyed_loot_share_tick_wal() 
     put(&mut s, BlockPos { x: 4, y: 199, z: 4 }, "redstone_block");
     wake(&mut s, base);
     let (output, _, _) = crate::tick::run_tick(&mut s, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut s, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut s, &output).unwrap();
     let replay = replay_batches(Replay::default(), &[(output.tick, output.tick, entries)]);
     assert_eq!(replay.blocks[&(5, 200, 5)], s.registry.states.air);
     assert_eq!(replay.blocks[&(6, 200, 4)], block(&s, "slime_block", &[]));
@@ -532,7 +532,7 @@ fn queued_adhesive_piston_cycle_survives_native_checkpoint_and_wal_tail_replay()
     put(&mut original, supply, "air");
     schedule_cell(&mut original, base, 5, 0);
     let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
-    let mut entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let mut entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     entries.push(JournalEntry::Block {
         pos: [supply.x, supply.y, supply.z],
         state: original.registry.states.air,

@@ -70,7 +70,7 @@ pub(crate) fn near_bounds(
     })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Order {
     Advance,
     Hold,
@@ -80,7 +80,8 @@ pub(crate) enum Order {
     Pursue,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RegimentSpec {
     pub id: u32,
     pub faction: u16,
@@ -171,15 +172,19 @@ pub(crate) struct SoldierSample {
     pub faction: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Member {
     pub id: EntityId,
+    #[serde(skip)]
     pub slot: Option<EntitySlot>,
     pub regiment: usize,
     pub file: usize,
     pub original_rank: u16,
     pub rank: u16,
+    #[serde(skip)]
     pub pos: [f64; 3],
+    #[serde(skip)]
     pub alive: bool,
     pub wounded: bool,
     pub missile_loss: bool,
@@ -196,7 +201,8 @@ pub(crate) struct Member {
     pub close_on: Option<[f64; 3]>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Section {
     pub phase: u64,
     pub pulse_until: u64,
@@ -205,7 +211,8 @@ pub(crate) struct Section {
     pub exchange: i16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Regiment {
     pub spec: RegimentSpec,
     pub start: usize,
@@ -217,15 +224,19 @@ pub(crate) struct Regiment {
     pub enemy: Option<[f64; 3]>,
     pub enemy_regiment: Option<usize>,
     pub enemy_routing: bool,
+    #[serde(with = "super::persistence::distance")]
     pub gap: f64,
     pub speed: f64,
     pub interval: f64,
     pub removed: usize,
+    #[serde(skip)]
     pub live_sum: [f64; 3],
+    #[serde(skip)]
     pub live_count: usize,
     pub charge_started: Option<u64>,
     pub broke_now: bool,
     pub evacuating: Vec<bool>,
+    #[serde(skip)]
     pub live_members: Vec<usize>,
     /// Virtual leader at the start of the current stall window, (x, z).
     pub anchor: [f64; 2],
@@ -248,20 +259,26 @@ pub(crate) struct Work {
     pub push_calls: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct FormationRuntime {
     pub members: Vec<Member>,
     pub regiments: Vec<Regiment>,
+    #[serde(skip)]
     index: FxHashMap<EntityId, usize>,
+    #[serde(skip)]
     pub work: Work,
     pub tick: u64,
+    #[serde(skip)]
     pub neighbours: super::steering::SeparationGrid,
     pub bounds: Option<([f64; 2], [f64; 2])>,
+    #[serde(skip)]
     /// Last stall census: live, steady members of regiments whose leader
     /// advanced at least four blocks in the window and is not in melee reach
     /// (gap > 6), and those of them that moved less than one block (blocked
     /// by terrain or crowd).
     pub advancing: usize,
+    #[serde(skip)]
     pub stalled: usize,
     /// (regiment, file) whose rank 0 a live player holds: that file's
     /// soldiers rank from 1 back (live_players.rs).
@@ -269,6 +286,15 @@ pub(crate) struct FormationRuntime {
 }
 
 impl FormationRuntime {
+    pub(super) fn restore_index(&mut self) {
+        self.index = self
+            .members
+            .iter()
+            .enumerate()
+            .map(|(i, m)| (m.id, i))
+            .collect();
+    }
+
     #[cfg(test)]
     pub fn clear(&mut self) {
         *self = Self::default();

@@ -406,6 +406,17 @@ pub(crate) fn change_dimension(
             .push(id);
         return Ok(());
     }
+    let followers = {
+        let world = if source == state.dimension {
+            &mut *state
+        } else {
+            state
+                .other_dimensions
+                .get_mut(&source)
+                .expect("source world")
+        };
+        crate::tick::spectator::transfer::detach_for_transfer(world, id)
+    };
     if source == state.dimension {
         let mut target = state
             .other_dimensions
@@ -456,6 +467,9 @@ pub(crate) fn change_dimension(
         .entities_spawned
         .push(id);
     sync_wire_ids(state);
+    for viewer in followers {
+        change_dimension(state, viewer, dimension, position, rotation, changes)?;
+    }
     Ok(())
 }
 
@@ -476,6 +490,9 @@ pub(crate) fn execute(
     request: Request,
     changes: &mut BTreeMap<Dimension, ChangeSet>,
 ) -> Result<crate::command_execution::CommandResult, String> {
+    if matches!(request.command, Command::Spectate { .. }) {
+        return crate::tick::spectator::transfer::execute(state, request, changes);
+    }
     if !matches!(request.command, Command::Teleport { .. }) {
         return super::commands::execute(state, request, changes);
     }
@@ -561,6 +578,17 @@ pub(crate) fn execute(
         rot = [wrap(rot[0]), wrap(rot[1]).clamp(-90.0, 90.0)];
         change_dimension(state, entity, dimension, position, rot, changes)
             .map_err(|_| "commands.teleport.invalidPosition".to_owned())?;
+        // Explicit /teleport releases the moved player's camera even when
+        // custody stays in this dimension. Invalid destinations leave it intact.
+        let destination = if dimension == state.dimension {
+            &mut *state
+        } else {
+            state
+                .other_dimensions
+                .get_mut(&dimension)
+                .expect("destination world")
+        };
+        crate::tick::spectator::stop(destination, entity);
     }
     let suffix = if selected.len() == 1 {
         "single"
@@ -598,6 +626,9 @@ pub(crate) fn execute(
 }
 
 fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSet) {
+    Arc::get_mut(&mut output.snapshot)
+        .expect("unpublished dimensional snapshot")
+        .cameras = Arc::clone(&world.cameras);
     let entity_changes = !changes.entities_spawned.is_empty()
         || !changes.entities_removed.is_empty()
         || !changes.entities_appearance_changed.is_empty()

@@ -53,10 +53,9 @@ pub(super) struct CheckpointJob {
     pub(super) difficulty: crate::survival::Difficulty,
     pub(super) default_game_mode: crate::commands::GameMode,
     pub(super) gamerules: std::collections::BTreeMap<String, String>,
-    /// Per-record settlement rows (`settlement/<id>`) plus the shared
-    /// `settlement_sequence` row. No aggregate registry blob.
-    pub(super) settlements:
-        std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
+    /// Dimension-local native gameplay globals: settlement records/sequence
+    /// and battle history, frozen at this job's entity/checkpoint boundary.
+    pub(super) gameplay: std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
     /// Block-log deltas since the previous capture and retention floors.
     pub(super) block_log: crate::block_log::Persist,
     /// Chunks written at which revision, or `None` when the checkpoint
@@ -246,8 +245,20 @@ pub(super) fn start_checkpoint_with_reply(
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect(),
-        settlements: match crate::settlements::persistence::checkpoint_rows(state, tick) {
-            Ok(rows) => rows,
+        gameplay: match crate::settlements::persistence::checkpoint_rows(state, tick) {
+            Ok(mut rows) => {
+                match crate::battle::persistence::checkpoint_rows(state, tick) {
+                    Ok(battle) => rows.extend(battle),
+                    Err(error) => {
+                        tracing::error!(tick, %error, "battle checkpoint declined; journal retained");
+                        if let Some(reply) = reply {
+                            let _ = reply.send(false);
+                        }
+                        return false;
+                    }
+                }
+                rows
+            }
             Err(error) => {
                 tracing::warn!(tick, %error, "settlement checkpoint skipped; journal retained");
                 if let Some(reply) = reply {
@@ -361,18 +372,19 @@ pub(super) fn player_journal_entry(
 pub(crate) fn journal_entries_for_tick(
     state: &mut TickState,
     output: &TickOutput,
-) -> Vec<JournalEntry> {
+) -> Result<Vec<JournalEntry>, CoreError> {
     let start = std::time::Instant::now();
     // Classify item births/crossings before entity_images advances the
     // existing WAL baselines (restored items already have a baseline).
     crate::abstract_sim::cancel_external_writes(state);
     let mut entries = Vec::new();
     crate::plugin::journal(state, &mut entries);
-    // Settlement images always ride an explicit Dimension envelope, every
-    // dimension including Overworld. Child ticks extend the raw images and the
-    // existing child wrap below supplies their envelope.
+    // Native gameplay owners always ride an explicit Dimension envelope,
+    // including Overworld. Child ticks extend the raw images and the existing
+    // child wrap below supplies their envelope.
     let mut settlement_entries = Vec::new();
     crate::settlements::persistence::journal_entries(state, output.tick, &mut settlement_entries);
+    crate::battle::persistence::journal_entries(state, &mut settlement_entries)?;
     if state.dimension == crate::dimensions::Dimension::Overworld {
         if !settlement_entries.is_empty() {
             entries.push(JournalEntry::Dimension {
@@ -618,13 +630,13 @@ pub(crate) fn journal_entries_for_tick(
             .expect("every resident dimension publishes in the same tick");
         entries.push(JournalEntry::Dimension {
             dimension: *dimension,
-            entries: journal_entries_for_tick(world, child_output),
+            entries: journal_entries_for_tick(world, child_output)?,
         });
     }
     state.world.journal_debt(&mut entries);
     state.journal_scan.times.before_entities = entities_start - start;
     state.journal_scan.times.after_entities = entities_end.elapsed();
-    entries
+    Ok(entries)
 }
 
 /// Work for the native writer thread, the single redb writer. FIFO, so saves
@@ -1114,10 +1126,10 @@ pub(super) fn commit_checkpoint(
     let mut globals = job.globals.clone();
     // Per-record settlement rows ride the same atomic native transaction.
     // Tombstones are row deletions: drop checkpoint rows the WAL removed.
-    for (key, row) in &job.settlements {
+    for (key, row) in &job.gameplay {
         globals.insert(key.clone(), row.clone());
     }
-    for key in list_stale_settlement_rows(&globals, &job.settlements) {
+    for key in list_stale_settlement_rows(&globals, &job.gameplay) {
         globals.remove(&key);
     }
     // This runs only on the journal thread (or startup before tick ownership).

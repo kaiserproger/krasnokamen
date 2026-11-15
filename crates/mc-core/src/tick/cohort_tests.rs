@@ -123,7 +123,7 @@ fn cohort_arrival_benchmark() {
     state.day_time = 2000;
     for _ in 0..1000 {
         let (output, _, _) = run_tick(&mut state, &[]);
-        std::hint::black_box(crate::core::journal_entries_for_tick(&mut state, &output));
+        std::hint::black_box(crate::core::journal_entries_for_tick(&mut state, &output).unwrap());
     }
     // Keep spawn terrain resident before the cohort arrives; no chunk load is
     // part of the comparison. Existing villagers remain in their 25 quarters.
@@ -139,7 +139,7 @@ fn cohort_arrival_benchmark() {
         let (output, _, _) = run_tick(&mut state, if iteration == 0 { &joins } else { &[] });
         let core_us = start.elapsed().as_micros();
         let journal_start = std::time::Instant::now();
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let journal_us = journal_start.elapsed().as_micros();
         samples.push(serde_json::json!({
             "tick": state.tick,

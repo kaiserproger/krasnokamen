@@ -403,7 +403,7 @@ fn placed_sign_editor_enforces_owner_range_and_journals_chunk_nbt() {
         }],
     );
     assert!(state.sign_editors.is_empty());
-    let entries = crate::core::journal_entries_for_tick(&mut state, &out);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(1, out.tick, &entries).unwrap();
@@ -934,7 +934,7 @@ fn ceiling_and_wall_hanging_signs_open_editor_publish_type_eight_and_keep_text_w
             }],
         );
         assert!(outbox.iter().flat_map(|(_, changes)| changes).any(|change| matches!(change, PlayerChange::BlockEntityData { block_entity_type: 8, position, .. } if *position == pos)));
-        let entries = crate::core::journal_entries_for_tick(&mut state, &out);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
         let bytes = entries
             .iter()
             .find_map(|entry| match entry {
@@ -1074,7 +1074,7 @@ fn accepted_same_state_sign_replacement_clears_old_opaque_text() {
             ]),
             "fresh default owner contains no old sign text"
         );
-        let entries = crate::core::journal_entries_for_tick(&mut state, &out);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
         let tombstone = entries
             .iter()
             .position(|entry| {

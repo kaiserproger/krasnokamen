@@ -595,7 +595,8 @@ pub(crate) fn deflect_foot(
 const ESCAPE_TICKS: u64 = 60;
 
 /// A mounted body's way back out of a terrain pocket and the tick it ends.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Escape {
     way: [f64; 2],
     until: u64,

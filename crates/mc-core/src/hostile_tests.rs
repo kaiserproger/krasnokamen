@@ -346,7 +346,7 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
                 moved.insert(entity.id);
             }
         }
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         if checkpoint.is_none() && !initial.is_empty() {
             assert_eq!(elapsed, 21, "twenty tick bow draw before the first launch");
             let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
@@ -1007,7 +1007,7 @@ fn fresh_hits_publish_damage_and_excess_hits_journal_mob_health_without_wire_eve
         &[(
             output.tick,
             output.tick,
-            crate::core::journal_entries_for_tick(&mut state, &output),
+            crate::core::journal_entries_for_tick(&mut state, &output).unwrap(),
         )],
     );
     let changes = Arc::get_mut(&mut output.changes).expect("unique tick change set");
@@ -1041,7 +1041,7 @@ fn fresh_hits_publish_damage_and_excess_hits_journal_mob_health_without_wire_eve
         let changes = Arc::get_mut(&mut output.changes).expect("unique tick change set");
         changes.entity_events = events;
         changes.entities_appearance_changed = std::mem::take(&mut state.appearance_changed);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         if accepted {
             let health = state.entities.row(slot).health;
             assert!(entries.iter().any(|entry| match entry {

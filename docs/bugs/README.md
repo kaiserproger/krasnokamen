@@ -59,10 +59,12 @@ A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for t
 `cargo metadata --no-deps --format-version 1` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
 `krasnokamen-client` checkout, then runs `cargo test -p <crate> --lib -- <test>` for a
 library or `--bin <name>` for a bin-only package with one testable binary; unknown or
-ambiguous targets fail closed naming the package). A ref may name one test or a whole
-module; it is green only when it selected at least one test and none failed.
-A ref the tooling cannot find is unrunnable, never green: a client
-test that does not exist yet at that checkout reports "ran no matching test" rather than passing.
+ambiguous targets fail closed naming the package). A `cargo:` registration names
+the full exact, non-ignored test function: [`regressions.py`](../../tools/harness/regressions.py)
+uses `test(=name)`, so a module literal is not a wildcard. Client selectors use
+the client runner's filter and must execute at least one test with none failed.
+Unknown or ignored tests are unrunnable, never green. A successful discovery/list
+only proves the selector exists, not that its test executed or passed.
 
 `fix_commit` (optional until promotion) is the lowercase hex id of the commit
 that fixes the row; `promotion` is set only by `ledger promote`, see

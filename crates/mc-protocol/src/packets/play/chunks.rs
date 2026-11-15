@@ -2,6 +2,47 @@
 
 use super::*;
 
+/// Empty batch delimiter; local GameProtocols metadata for 775/776/777.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientboundChunkBatchStart;
+
+impl Packet for ClientboundChunkBatchStart {
+    const ID: i32 = 0x0C;
+
+    fn encode<B: BufMut>(&self, _buf: &mut B) -> Result<(), CodecError> {
+        Ok(())
+    }
+
+    fn decode<B: Buf>(_buf: &mut B) -> Result<Self, CodecError> {
+        Ok(Self)
+    }
+}
+
+/// Completes a batch with its number of chunk packets (one VarInt).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientboundChunkBatchFinished {
+    pub batch_size: i32,
+}
+
+impl Packet for ClientboundChunkBatchFinished {
+    const ID: i32 = 0x0B;
+
+    fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
+        buf.write_varint(self.batch_size);
+        Ok(())
+    }
+
+    fn decode<B: Buf>(buf: &mut B) -> Result<Self, CodecError> {
+        Ok(Self {
+            batch_size: buf.read_varint()?,
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "chunk_batch_tests.rs"]
+mod chunk_batch_tests;
+
 /// `Clientbound Forget Level Chunk` (CB). Unloads one chunk from the
 /// client's currently loaded view.
 ///

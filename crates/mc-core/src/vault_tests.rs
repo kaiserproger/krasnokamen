@@ -307,7 +307,7 @@ fn vault_wal_recovers_rewarded_player_pending_rewards_and_key_debit_together() {
             sequence: 1,
         }],
     );
-    let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let before = original.vaults[&key(POS)].clone();
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();

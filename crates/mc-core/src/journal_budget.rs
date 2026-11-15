@@ -469,6 +469,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
         | E::RemoveBlockEntity { .. }
         | E::EntityVitals { .. }
         | E::ItemMotion { .. }
+        | E::EntityMotion { .. }
         | E::RemoveEntity { .. } => 0,
         // Rare per tick: a fixed allowance for small nested state, plus direct
         // lengths where the payload can grow without bound.
@@ -494,6 +495,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
                     .as_ref()
                     .map_or(0, crate::settlements::SettlementRecord::heap_estimate)
         }
+        E::Battle { value } => std::mem::size_of::<String>() + value.capacity(),
         E::Scoreboard { value } => scoreboard_heap(value),
         E::CommandStorage { value } => value.capacity(),
         E::SavedMap { value, .. } => {

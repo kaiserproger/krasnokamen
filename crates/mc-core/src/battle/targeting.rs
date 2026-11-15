@@ -15,7 +15,8 @@ pub struct Unit {
     pub pos: [f64; 3],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EnemyTarget {
     pub id: EntityId,
     pub pos: [f64; 3],

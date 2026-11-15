@@ -275,7 +275,7 @@ fn decoration_journal_and_chunk_nbt_keep_both_sides_and_wax() {
         }],
     );
     let expected = image(&state);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let replay = crate::journal::replay_batches(
         crate::journal::Replay::default(),
         &[(output.tick, output.tick, entries)],
