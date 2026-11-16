@@ -9,6 +9,9 @@ use mc_world::native::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+mod crash_census;
+pub use crash_census::crash_census;
+
 /// Anvil import keeps vanilla tolerance for `variant`: the game ignores a
 /// malformed or unknown value and keeps the species default, so the importer
 /// drops such a field and never stores it. (The native hydrate also tolerates

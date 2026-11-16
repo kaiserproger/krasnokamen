@@ -178,6 +178,18 @@ at least 100 GiB free before starting a world run; a campaign stops with
 
 ## Profiles and scenarios
 
+`battle-crash` drives the battle runner with a live kit, a separately
+acknowledged `/give`, SIGKILL and recovery at the four WAL/checkpoint boundaries.
+It requires `KRASNOKAMEN_SERVER_BINARY`, `KRASNOKAMEN_CLIENT_BINARY`,
+`KRASNOKAMEN_BATTLE_CLIENT_ROOT` and `KRASNOKAMEN_BATTLE_WORLD`; run
+`python3 -m tools.harness run battle-crash`. Each cut retains the crash copy,
+published WAL and backup. The server starts recovery with `--start-frozen` so
+autonomous simulation is held before its first tick; a separate disposable
+copy supplies the checkpoint-plus-published-WAL census. The before-crash live
+census is a witness, not the durable oracle. Reconnected players are compared
+while simulation remains frozen. A missing witnessed arrow without an
+identity-scoped removal proof remains unverified and makes the cut incomplete.
+
 Do not copy the catalog into prose; ask the harness:
 
 - `python3 -m tools.harness list` prints every profile with its family

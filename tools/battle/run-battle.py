@@ -1086,7 +1086,7 @@ def preserve_crash(root, server):
     (root / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')
 
 
-def recover_crash(root):
+def recover_crash(root, start_frozen=False):
     """Exec the original server/config on the original world after preserving it."""
     root = root.resolve(strict=True)
     receipt = json.loads((root / 'crash-handoff.json').read_text())
@@ -1094,12 +1094,17 @@ def recover_crash(root):
         raise RuntimeError('missing preserved SIGKILL crash copy')
     command = json.loads((root / 'server-command.json').read_text())
     os.chdir(root)
-    os.execv(command['binary'], [command['binary'], '--config', command['config']])
+    args = [command['binary'], '--config', command['config']]
+    if start_frozen:
+        args.append('--start-frozen')
+    os.execv(command['binary'], args)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 3 and sys.argv[1] == '--recover-from-crash':
-        recover_crash(Path(sys.argv[2]))
+    if len(sys.argv) in (3, 4) and sys.argv[1] == '--recover-from-crash':
+        if len(sys.argv) == 4 and sys.argv[3] != '--start-frozen':
+            raise ValueError(f'unknown recovery option: {sys.argv[3]}')
+        recover_crash(Path(sys.argv[2]), len(sys.argv) == 4)
     args = arguments()
     # A stop request (a long trial ended by `kill`) unwinds through run()'s finally: the recorder and
     # server are stopped and the live-player receipt is written.
