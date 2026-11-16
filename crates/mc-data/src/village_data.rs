@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::vanilla_feature_closure::BlockStateSpec;
+use crate::vanilla_feature_closure::{BlockStateSpec, FeatureClosure, IntProviderSpec};
 use crate::{Identifier, ResourcePathError, read_json_resource};
 
 /// How a reference is named in error messages, e.g. "template pool".
@@ -1426,18 +1426,45 @@ fn parse_spawn_overrides(
     Ok(overrides)
 }
 
-/// `WeightedList.codec(SpawnerData.CODEC)` of the 26.3 jar: a list of flat
-/// `{type, count, weight}` entries (`Weighted.codec(MapCodec)` adds `weight`;
-/// `SpawnerData.CODEC` is `{type, count: IntProvider}`). The pre-26.3 `minCount` and
-/// `maxCount` fields and a nested `data` object are not read by that codec.
+/// `WeightedList.codec(SpawnerData.CODEC)`: a list of flat entries, `Weighted.codec`
+/// adding `weight` to a `MapCodec`. Two `SpawnerData` shapes exist in the releases this
+/// server reads, with disjoint fields, so both are accepted and a mix is refused:
+/// - 26.1.2 (the grammar of the content cache's gameplay data pack and of the converted
+///   packs): `{type, minCount, maxCount}`, each count positive and `minCount <= maxCount`
+///   (`ExtraCodecs.POSITIVE_INT`, a `validate`);
+/// - 26.3 (the jar's own data, e.g. `pillager_outpost.json`): `{type, count}` where
+///   `count` is an `IntProvider`.
+///
+/// A nested `data` object belongs to neither codec.
 fn parse_weighted_spawns(
     id: &Identifier,
     entries: &[Value],
 ) -> Result<Vec<WeightedSpawn>, VillageDataError> {
     let mut spawns = Vec::with_capacity(entries.len());
     for entry in entries {
-        let (min_count, max_count) =
-            parse_spawn_count(id, field_of(entry, "count", SPAWN_OVERRIDE, id)?)?;
+        let (min_count, max_count) = if entry.get("count").is_some() {
+            if entry.get("minCount").is_some() || entry.get("maxCount").is_some() {
+                return Err(VillageDataError::InvalidField {
+                    kind: SPAWN_OVERRIDE,
+                    entry: id.clone(),
+                    field: "count",
+                    value: "26.3 count mixed with 26.1.2 minCount/maxCount".to_owned(),
+                });
+            }
+            parse_spawn_count(id, field_of(entry, "count", SPAWN_OVERRIDE, id)?)?
+        } else {
+            let min = ranged_i32_field(entry, "minCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
+            let max = ranged_i32_field(entry, "maxCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
+            if min > max {
+                return Err(VillageDataError::InvalidField {
+                    kind: SPAWN_OVERRIDE,
+                    entry: id.clone(),
+                    field: "minCount",
+                    value: format!("{min} is larger than maxCount {max}"),
+                });
+            }
+            (min, max)
+        };
         spawns.push(WeightedSpawn {
             weight: ranged_i32_field(entry, "weight", SPAWN_OVERRIDE, id, 0, i32::MAX)?,
             entity_type: parse_id(id, field_str(entry, "type", SPAWN_OVERRIDE, id)?)?,
@@ -1448,41 +1475,31 @@ fn parse_weighted_spawns(
     Ok(spawns)
 }
 
-/// `IntProviders.CODEC` for a spawn count: a bare integer is `ConstantInt`, an
-/// object dispatches on `type`. The constant and uniform providers are modelled; any
-/// other provider type refuses by name instead of being read as a range it is not.
+/// `IntProviders.CODEC` for a spawn count, read by the feature closure's
+/// `parse_int_provider` (one `IntProvider` convention; it models constant, uniform,
+/// trapezoid, biased_to_bottom and weighted_list, and refuses the other vanilla
+/// providers by name). A [`WeightedSpawn`] holds only a `[min, max]` range drawn
+/// uniformly, so only the constant and uniform providers are exact; the others refuse
+/// instead of being flattened into a range with a different distribution.
 fn parse_spawn_count(id: &Identifier, value: &Value) -> Result<(i32, i32), VillageDataError> {
-    if value.is_number() {
-        let count = codec_int(value).expect("a JSON number reads as an int");
-        return Ok((count, count));
-    }
-    let invalid = |field: &'static str, reason: String| VillageDataError::InvalidField {
+    let invalid = |reason: String| VillageDataError::InvalidField {
         kind: SPAWN_OVERRIDE,
         entry: id.clone(),
-        field,
+        field: "count",
         value: reason,
     };
-    let provider = field_str(value, "type", SPAWN_OVERRIDE, id)?;
-    match Identifier::parse(provider.to_owned()) {
-        Ok(provider) if provider.namespace() == "minecraft" && provider.path() == "constant" => {
-            let count = i32_field(value, "value", SPAWN_OVERRIDE, id)?;
-            Ok((count, count))
-        }
-        Ok(provider) if provider.namespace() == "minecraft" && provider.path() == "uniform" => {
-            let min = i32_field(value, "min_inclusive", SPAWN_OVERRIDE, id)?;
-            let max = i32_field(value, "max_inclusive", SPAWN_OVERRIDE, id)?;
-            if min > max {
-                return Err(invalid(
-                    "count",
-                    format!("max_inclusive {max} is smaller than min_inclusive {min}"),
-                ));
-            }
-            Ok((min, max))
-        }
-        _ => Err(invalid(
-            "count",
-            format!("unsupported int provider {provider}"),
-        )),
+    let provider = FeatureClosure::new(PathBuf::new())
+        .parse_int_provider(id, value)
+        .map_err(|error| invalid(error.to_string()))?;
+    match provider {
+        IntProviderSpec::Constant(count) => Ok((count, count)),
+        IntProviderSpec::Uniform {
+            min_inclusive,
+            max_inclusive,
+        } => Ok((min_inclusive, max_inclusive)),
+        other => Err(invalid(format!(
+            "int provider {other:?} is not a uniform range"
+        ))),
     }
 }
 

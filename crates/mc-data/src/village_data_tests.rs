@@ -1578,10 +1578,11 @@ fn codec_int_fields_wrap_like_vanilla() {
     assert!(set("\"7\"").is_err());
 }
 
-/// The 26.3 jar's `{type, count, weight}` shape is read; the pre-26.3 flat
-/// `minCount`/`maxCount` and nested `data` shapes are not accepted by its codec.
+/// Both `SpawnerData` shapes are read: the 26.1.2 `{type, minCount, maxCount}` of the
+/// content cache and converted packs, and the 26.3 jar's `{type, count}`. A mix and the
+/// nested `data` object belong to neither codec.
 #[test]
-fn spawn_overrides_follow_the_26_3_spawner_codec() {
+fn spawn_overrides_read_the_26_1_2_and_26_3_spawner_codecs() {
     let spawn = |spec: &StructureSpec| {
         let spawn = &spec.spawn_overrides[0].spawns[0];
         (spawn.weight, spawn.min_count, spawn.max_count)
@@ -1595,16 +1596,73 @@ fn spawn_overrides_follow_the_26_3_spawner_codec() {
     )
     .unwrap();
     assert_eq!(spawn(&uniform), (2, 2, 5));
-    for legacy in [
-        r#"[{ "type": "minecraft:zombie", "weight": 1, "minCount": 1, "maxCount": 2 }]"#,
+    let flat = structure_with_spawns(
+        r#"[{ "type": "minecraft:zombie", "weight": 2, "minCount": 2, "maxCount": 5 }]"#,
+    )
+    .unwrap();
+    assert_eq!(spawn(&flat), (2, 2, 5));
+    for refused in [
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "minCount": 3, "maxCount": 2 }]"#,
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "minCount": 0, "maxCount": 2 }]"#,
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "count": 1, "maxCount": 2 }]"#,
         r#"[{ "data": { "type": "minecraft:zombie", "minCount": 1, "maxCount": 2 }, "weight": 1 }]"#,
     ] {
-        let error = structure_with_spawns(legacy).expect_err("not a 26.3 spawner");
-        assert!(error.to_string().contains("count"), "{error}");
+        let error = structure_with_spawns(refused).expect_err("not a SpawnerData codec shape");
+        assert!(!error.to_string().is_empty(), "{refused}");
     }
     let error = structure_with_spawns(
         r#"[{ "type": "minecraft:zombie", "weight": 1, "count": { "type": "minecraft:clamped" } }]"#,
     )
     .expect_err("unmodelled provider");
     assert!(error.to_string().contains("minecraft:clamped"), "{error}");
+    // Modelled by the feature closure but not a uniform range: refused, not flattened.
+    let error = structure_with_spawns(
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "count": { "type": "minecraft:biased_to_bottom", "min_inclusive": 1, "max_inclusive": 4 } }]"#,
+    )
+    .expect_err("distribution is not representable");
+    assert!(error.to_string().contains("BiasedToBottom"), "{error}");
+}
+
+/// Real `swamp_hut.json` spawn overrides: the host content cache's copy (26.1.2
+/// grammar, from the `GAMEPLAY_DATAPACK_RELEASE` bundle) and the 26.3 jar's copy
+/// (`minecraft-merged.jar`, `data/minecraft/worldgen/structure/swamp_hut.json`).
+#[test]
+fn real_swamp_hut_spawn_overrides_read_in_both_grammars() {
+    for (source, text) in [
+        (
+            "26.1.2 cache",
+            include_str!("village_data_fixtures/swamp_hut_26_1_2_cache.json"),
+        ),
+        (
+            "26.3 jar",
+            include_str!("village_data_fixtures/swamp_hut_26_3_jar.json"),
+        ),
+    ] {
+        let json: Value = serde_json::from_str(text).unwrap();
+        let overrides = parse_spawn_overrides(
+            &identifier("minecraft:swamp_hut"),
+            json.get("spawn_overrides").unwrap(),
+        )
+        .unwrap_or_else(|error| panic!("{source}: {error}"));
+        let spawns: Vec<_> = overrides
+            .iter()
+            .map(|entry| {
+                let spawn = &entry.spawns[0];
+                (
+                    spawn.entity_type.to_string(),
+                    spawn.weight,
+                    spawn.min_count,
+                    spawn.max_count,
+                )
+            })
+            .collect();
+        assert_eq!(
+            spawns,
+            [
+                ("minecraft:cat".to_owned(), 1, 1, 1),
+                ("minecraft:witch".to_owned(), 1, 1, 1)
+            ],
+            "{source}"
+        );
+    }
 }

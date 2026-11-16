@@ -921,7 +921,7 @@ impl FeatureClosure {
         })
     }
 
-    fn parse_int_provider(
+    pub(crate) fn parse_int_provider(
         &self,
         referrer: &Identifier,
         value: &Value,
