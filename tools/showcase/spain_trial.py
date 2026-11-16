@@ -179,6 +179,7 @@ def main() -> None:
     parser.add_argument('--scratch', type=Path, help='run on this (tmpfs) directory and copy the result to --out')
     parser.add_argument('--server-cpus', help='taskset CPU list for the server')
     parser.add_argument('--client-cpus', help='taskset CPU list for the client and its Xvfb')
+    parser.add_argument('--client-max-fps', type=int, help='isolated client settings with vsync off and this FPS cap')
     args = parser.parse_args()
     if args.days < 1 or args.days * 24000 % 60:
         parser.error('days must yield 60 integral simulation intervals')
@@ -240,11 +241,19 @@ def main() -> None:
             pin(xvfb, args.client_cpus)
             # llvmpipe/lavapipe size their render pools from this, not from affinity.
             os.environ['LP_NUM_THREADS'] = str(cpu_count(args.client_cpus))
+        if args.client_max_fps:
+            # The client caps frames only with vsync off (solaris-client frame_interval).
+            settings = {'vsync': False, 'max_fps': args.client_max_fps}
+            dump(out / 'client-settings.json', settings)
+            os.environ['KRASNOKAMEN_CLIENT_SETTINGS'] = str(out / 'client-settings.json')
         client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f'127.0.0.1:{port}', USERNAME, 180, display=display)
         if args.client_cpus:
             pin(client, args.client_cpus)
         with ProbeSteps(mcp, out / 'probe', args.timeout, 'spain-trial') as probe:
             probe.call('minecraft_wait_for_play', {'timeout_seconds': 180})
+            if args.client_max_fps:
+                run['client_settings'] = {key: probe.observe()['client_settings'].get(key) for key in ('vsync', 'max_fps')}
+                probe.check('client_fps_cap_applied', run['client_settings'] == settings)
             def console(command: str) -> None:
                 run['fixture_commands'].append(command)
                 item_merge._console(server, command)
