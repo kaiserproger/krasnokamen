@@ -16,6 +16,7 @@ Acceptance needs 60 frames.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import shutil
 import tempfile
 from collections import Counter
@@ -156,9 +157,22 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
-def pin(process: subprocess.Popen, cpus: str) -> None:
-    """Restrict every thread of a started process; new threads inherit it."""
-    subprocess.run(['taskset', '-a', '-p', '-c', cpus, str(process.pid)], check=True, stdout=subprocess.DEVNULL)
+@contextlib.contextmanager
+def spawn_on(cpus: set[int] | None):
+    """Processes started inside run on `cpus` from their first instruction.
+
+    Children inherit the spawning thread's affinity at fork, so this pins the
+    Xvfb and client before they start; the driver thread gets its mask back.
+    """
+    if not cpus:
+        yield
+        return
+    previous = os.sched_getaffinity(0)
+    os.sched_setaffinity(0, cpus)
+    try:
+        yield
+    finally:
+        os.sched_setaffinity(0, previous)
 
 
 def cpu_list(text: str) -> set[int]:
@@ -248,13 +262,22 @@ def publish(scratch: Path, destination: Path, run: dict) -> None:
     published['scratch'] = old
     published['as_run'] = {'scratch': old, 'server_command': run['server'].get('command'),
                            'census_command': run.get('census', {}).get('command')}
-    dump(destination / 'run.json', published)
+    unparsed = []
     for path in destination.rglob('*.json'):
         if path == destination / 'run.json':
             continue
-        text = path.read_text(errors='surrogateescape')
-        if old in text:
-            path.write_text(text.replace(old, new), errors='surrogateescape')
+        # Parsed, not text-replaced: JSON writers escape non-ASCII and quotes in paths.
+        try:
+            value = json.loads(path.read_text())
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            unparsed.append(str(path.relative_to(destination)))
+            continue
+        moved = relocate(value, old, new)
+        if moved != value:
+            dump(path, moved)
+    if unparsed:
+        published['unrelocated_json'] = unparsed
+    dump(destination / 'run.json', published)
     # The tmpfs run directory goes only after the receipt is complete.
     shutil.rmtree(scratch)
 
@@ -338,9 +361,6 @@ def main() -> None:
         server = runtime.start_server(command, cwd=runtime.REPO_ROOT, env=env, stdin=subprocess.PIPE,
                                       stdout=log_handle, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, 180, server, log_path=log_path)
-        xvfb, display, _ = runtime.start_xvfb(out)
-        if args.client_cpus:
-            pin(xvfb, args.client_cpus)
         if args.client_render_threads:
             os.environ['LP_NUM_THREADS'] = str(args.client_render_threads)
         if args.client_max_fps:
@@ -348,9 +368,9 @@ def main() -> None:
             settings = {'vsync': False, 'max_fps': args.client_max_fps}
             dump(out / 'client-settings.json', settings)
             os.environ['KRASNOKAMEN_CLIENT_SETTINGS'] = str(out / 'client-settings.json')
-        client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f'127.0.0.1:{port}', USERNAME, 180, display=display)
-        if args.client_cpus:
-            pin(client, args.client_cpus)
+        with spawn_on(roles.get('client')):
+            xvfb, display, _ = runtime.start_xvfb(out)
+            client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f'127.0.0.1:{port}', USERNAME, 180, display=display)
         with ProbeSteps(mcp, out / 'probe', args.timeout, 'spain-trial') as probe:
             probe.call('minecraft_wait_for_play', {'timeout_seconds': 180})
             if args.client_max_fps:

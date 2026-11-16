@@ -1,24 +1,28 @@
 """Bounded received-entity census used by the real Spain trial."""
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from tools.showcase.spain_trial import hud_visible, publish, resident_census
+from tools.showcase.spain_trial import hud_visible, publish, resident_census, spawn_on
 
 
 class ScratchPublishTests(unittest.TestCase):
     def test_receipt_paths_name_the_copy_and_keep_the_run_history(self):
         with tempfile.TemporaryDirectory() as base:
-            scratch = Path(base) / 'scratch-run'
+            # mkdtemp names scratch after --out; json.dumps escapes non-ASCII and quotes.
+            scratch = Path(base) / 'испания "x"-scratch'
             (scratch / 'screenshots').mkdir(parents=True)
             frame = scratch / 'screenshots/frame-000.png'
             (scratch / 'screenshots/frame-000.json').write_text(json.dumps({'retained_path': str(frame)}))
             run = {'server': {'command': ['krasnokamen', '--config', str(scratch / 'server.toml')]},
                    'census': {'command': ['census', str(scratch / 'world')], 'receipt': str(scratch / 'census.json')},
                    'frames': [{'capture': {'path': str(frame)}}], 'scratch': str(scratch)}
-            receipt = Path(base) / 'receipt'
+            receipt = Path(base) / 'испания "x"'
             publish(scratch, receipt, run)
             published = json.loads((receipt / 'run.json').read_text())
             frame_meta = json.loads((receipt / 'screenshots/frame-000.json').read_text())
@@ -28,6 +32,17 @@ class ScratchPublishTests(unittest.TestCase):
             self.assertEqual(frame_meta['retained_path'], str(receipt / 'screenshots/frame-000.png'))
             self.assertEqual(published['as_run']['census_command'], ['census', str(scratch / 'world')])
             self.assertEqual(published['scratch'], str(scratch))
+
+
+class SpawnAffinityTests(unittest.TestCase):
+    def test_child_starts_on_the_role_cpus_and_the_driver_mask_returns(self):
+        before = os.sched_getaffinity(0)
+        cpu = min(before)
+        with spawn_on({cpu}):
+            child = subprocess.run([sys.executable, '-c', 'import os; print(sorted(os.sched_getaffinity(0)))'],
+                                   capture_output=True, text=True, check=True)
+        self.assertEqual(child.stdout.split()[-1], f'[{cpu}]')
+        self.assertEqual(os.sched_getaffinity(0), before)
 
 
 class HudObservationTests(unittest.TestCase):
