@@ -105,6 +105,12 @@ def restart_selection(rows: list[dict]) -> set[str]:
     return set(overworld[::10]) | nether
 
 
+def control_selection(rows: list[dict], subset: str) -> set[str]:
+    if subset not in ("", "1", "all"):
+        raise ValueError("KRASNOKAMEN_ATM_CONTROL_SUBSET must be absent, 1 or all")
+    return {row["id"] for row in rows} if subset == "all" else restart_selection(rows)
+
+
 def locate_failure(messages: dict, identifier: str) -> str | None:
     """Only a server's explicit, ID-matched failure is a finding."""
     for item in messages.get("styled", []):
@@ -135,9 +141,9 @@ def dimension_teleport(client, dimension: str, xyz: list[float]):
     return state
 
 
-def template_metadata(pack: Path, row: dict) -> tuple[set[str], int]:
+def template_metadata(pack: Path, row: dict) -> tuple[set[str], list[dict[str, int]]]:
     blocks = set()
-    counts = []
+    variants = []
     for identifier in row["templates"]:
         nbt = parse_nbt(gzip.decompress(resource(pack, identifier, "structure", ".nbt").read_bytes()))
         palettes = nbt.get("palettes", [nbt.get("palette", [])])
@@ -145,17 +151,19 @@ def template_metadata(pack: Path, row: dict) -> tuple[set[str], int]:
             raise ValueError(f"{row['id']}: start template {identifier} has no block palette")
         for palette in palettes:
             names = [entry["Name"] for entry in palette]
-            blocks.update(name for name in names if name not in NON_PROOF_BLOCKS)
-            count = 0
+            counts = {}
             for block in nbt["blocks"]:
                 index = block["state"]
                 if not isinstance(index, int) or not 0 <= index < len(names):
                     raise ValueError(f"{row['id']}: start template {identifier} has invalid state index {index!r}")
-                count += names[index] not in NON_PROOF_BLOCKS
-            counts.append(count)
-    if not counts:
+                name = names[index]
+                if name not in NON_PROOF_BLOCKS:
+                    counts[name] = counts.get(name, 0) + 1
+                    blocks.add(name)
+            variants.append(counts)
+    if not variants:
         raise ValueError(f"{row['id']}: no start templates")
-    return blocks, min(counts)
+    return blocks, variants
 
 
 def find_site(export: Path, row: dict) -> dict:
@@ -192,7 +200,18 @@ def differential_candidates(blocks: dict, baseline: dict, natural: set[str], pal
     return matches
 
 
-def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase: str) -> dict:
+def placement_control_count(row: dict, controls: dict) -> int | None:
+    control = controls.get(row["id"])
+    site = row.get("initial_site")
+    if not control or not site or control["dimension"] != row["dimension"]:
+        return None
+    old_site = control["site"]
+    if (site["anchor"], site["bounds"]) != (old_site["anchor"], old_site["bounds"]):
+        return None
+    return control["count"]
+
+def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase: str,
+               *, control_mode: bool = False, control_count: int | None = None) -> dict:
     site = find_site(export, row)
     dimension_dir = Path(site["dimension_dir"])
     baseline_dir = baseline_export / dimension_dir.relative_to(export)
@@ -201,22 +220,27 @@ def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase
     require_chunks(dimension_dir, expanded_bounds(bounds, 6))
     require_chunks(baseline_dir, baseline_bounds)
     palette = set(row["template_palette"])
-    minimum = row["differential_minimum"]
-    if minimum == 0:
-        raise ValueError(f"{row['id']}: start template has zero proof blocks; unprovable")
+    variants = row["template_variant_counts"]
     audit = row.setdefault("palette_audit", {}).setdefault(phase, {"candidate": {}, "baseline": {}})
     blocks = read_world(dimension_dir, [bounds], palette_audit=audit["candidate"])[0]["blocks"]
     baseline = read_world(baseline_dir, [baseline_bounds], palette_audit=audit["baseline"])[0]["blocks"]
     natural = {state.split("[", 1)[0] for state in baseline.values()} | {"minecraft:air"}
+    count = min(sum(value for name, value in variant.items() if name not in natural) for variant in variants)
+    minimum = min(MAX_DIFFERENTIAL_BLOCKS, count)
     matches = differential_candidates(blocks, baseline, natural, palette)
     self_control = differential_candidates(baseline, baseline, natural, palette)
     row.setdefault("differential", {})[phase] = {
-        "eligible_blocks": len(matches), "minimum": minimum,
+        "eligible_blocks": len(matches), "minimum": minimum, "start_template_blocks": count,
+        "control_eligible_blocks": control_count,
         "natural_types": len(natural), "baseline_self_control_blocks": len(self_control),
         "baseline_dimension": str(baseline_dir),
     }
     if self_control:
         raise ValueError(f"{row['id']}: pack-absent self-control unexpectedly matched")
+    if minimum == 0:
+        raise ValueError(f"{row['id']}: start template has zero non-natural proof blocks; unprovable")
+    if not control_mode and (control_count is None or control_count >= minimum):
+        raise ValueError(f"{row['id']}: placement control {control_count!r} does not establish threshold {minimum}")
     if len(matches) < minimum:
         raise ValueError(f"{row['id']}: only {len(matches)} non-natural differential template blocks "
                          f"(minimum {minimum})")
@@ -320,16 +344,10 @@ def run(ctx: ProfileContext) -> dict:
         raise ValueError("converted MVS pack changed")
     rows = selected_definitions(pack)
     for row in rows:
-        palette, count = template_metadata(pack, row)
-        row.update(template_palette=sorted(palette), start_template_blocks=count,
-                   differential_minimum=min(MAX_DIFFERENTIAL_BLOCKS, count))
-        if count == 0:
-            row.update(status="verification_failed",
-                       reason=f"{row['id']}: start template has zero proof blocks; unprovable")
-    chosen = restart_selection(rows)
+        palette, variants = template_metadata(pack, row)
+        row.update(template_palette=sorted(palette), template_variant_counts=variants)
     subset = os.environ.get("KRASNOKAMEN_ATM_CONTROL_SUBSET", "")
-    if subset not in ("", "1"):
-        raise ValueError("KRASNOKAMEN_ATM_CONTROL_SUBSET must be absent or 1")
+    chosen = control_selection(rows, subset)
     active = [row for row in rows if not subset or row["id"] in chosen]
     if subset:
         for row in rows:
@@ -342,11 +360,40 @@ def run(ctx: ProfileContext) -> dict:
                            ctl=env_path("KRASNOKAMEN_BATTLE_HORIZON_CTL"),
                            resources=env_path("KRASNOKAMEN_BATTLE_HORIZON_RESOURCES"),
                            cache=env_path("KRASNOKAMEN_ATM_CACHE"), timeout=ctx.timeout_seconds or 600)
+    pin_manifest = json.loads((args.server.parent / "manifest.json").read_text())
+    if pin_manifest.get("binary_sha256") != digest(args.server):
+        raise ValueError("server pin manifest does not match executable")
+    controls = {}
+    control_path = None
+    if not subset:
+        control_path = env_path("KRASNOKAMEN_ATM_CONTROL_REPORT")
+        control_report = json.loads(control_path.read_text())
+        if (not control_report.get("control_subset") or control_report.get("seed") != SEED
+                or control_report.get("manifest_sha256") != digest(manifest_path)
+                or not pin_manifest.get("head") or control_report.get("server_pin_head") != pin_manifest["head"]
+                or control_report.get("server_sha256") == pin_manifest["binary_sha256"]
+                or not control_report.get("server_pin_diff_sha256")
+                or control_report["server_pin_diff_sha256"] == pin_manifest.get("diff_sha256")):
+            raise ValueError("placement control report does not match candidate pack, seed and distinct control pin")
+        for control_row in control_report["definitions"]:
+            proof = control_row.get("differential", {}).get("before", {})
+            value = proof.get("eligible_blocks")
+            site = control_row.get("initial_site")
+            if (isinstance(value, int) and not isinstance(value, bool) and value >= 0
+                    and proof.get("baseline_self_control_blocks") == 0
+                    and isinstance(site, dict) and "anchor" in site and "bounds" in site):
+                if control_row["id"] in controls:
+                    raise ValueError(f"duplicate placement control ID {control_row['id']}")
+                controls[control_row["id"]] = {"count": value, "site": site, "dimension": control_row["dimension"]}
     report = {"status": "failed", "commands": [], "seed": SEED, "definitions": rows,
               "restart_rule": "every tenth sorted Overworld ID starting at index 0 and all Nether IDs",
               "dimension_travel": "execute in <dimension> run tp @s", "manifest_sha256": digest(manifest_path),
               "server_sha256": digest(args.server), "client_sha256": digest(args.client), "ctl_sha256": digest(args.ctl)}
+    report["server_pin_head"] = pin_manifest.get("head")
+    report["server_pin_diff_sha256"] = pin_manifest.get("diff_sha256")
+    report["control_report_sha256"] = digest(control_path) if control_path else None
     report["control_subset"] = bool(subset)
+    report["control_selection"] = subset or None
     report["differential_maximum"] = MAX_DIFFERENTIAL_BLOCKS
     ctx.failure_scenario = report
     write_json(output / "definitions.json", rows)
@@ -404,7 +451,8 @@ def run(ctx: ProfileContext) -> dict:
     for row in active:
         if row["status"] == "located":
             try:
-                row["before"] = site_proof(export, baseline_export, pack, row, "before")
+                row["before"] = site_proof(export, baseline_export, pack, row, "before",
+                                           control_mode=bool(subset), control_count=placement_control_count(row, controls))
             except ValueError as error:
                 row.update(status="verification_failed", reason=str(error))
             write_json(output / "result.json", report)
@@ -424,7 +472,8 @@ def run(ctx: ProfileContext) -> dict:
     for row in active:
         if row["status"] == "visited":
             try:
-                proof = site_proof(after, baseline_export, pack, row, "after")
+                proof = site_proof(after, baseline_export, pack, row, "after",
+                                   control_mode=bool(subset), control_count=placement_control_count(row, controls))
                 if (proof["anchor"], proof["bounds"], proof["chunk"]) != (row["before"]["anchor"], row["before"]["bounds"], row["before"]["chunk"]):
                     raise ValueError(f"{row['id']}: start changed across restart")
                 blocks = read_world(Path(proof["dimension_dir"]), [proof["bounds"]])[0]["blocks"]

@@ -130,11 +130,14 @@ worlds across the expanded start bounds and verifies exported chunk coverage.
 Only a start-template palette type that differs at the same position and is
 absent from the pack-free vocabulary within 16 blocks of the bounds counts.
 Each ID needs `min(8, K)` such blocks, where K is the smallest selected start
-template's non-air, non-structure-void, non-jigsaw block count. K and the
-threshold are recorded per ID; K=0 is unprovable. Natural-only or otherwise
-insufficient starts remain findings, not passes. The pack-absent self-diff
-must be zero. A visible differential block is photographed from a grounded
-survival position within 4.5 blocks.
+template's non-air, non-structure-void, non-jigsaw cell count after excluding
+types present in its pack-free natural vocabulary. K and the threshold are
+recorded per ID; K=0 is unprovable. Natural-only or otherwise insufficient
+starts remain findings, not passes. The pack-absent self-diff must be zero.
+Candidate runs also require `KRASNOKAMEN_ATM_CONTROL_REPORT`, a matching
+placement-disabled report with a measured control count for each ID; the
+count must be below that ID's threshold. A visible differential block is
+photographed from a grounded survival position within 4.5 blocks.
 The per-ID palette audit records chunk counts by DataVersion and encoding for
 each candidate and baseline read. The Anvil reader requires `Name`/`Properties`
 through DataVersion 4790 and `id`/`properties` or a bare identifier at 5023;
@@ -145,9 +148,10 @@ revisits every tenth sorted Overworld ID starting at zero plus all three Nether
 IDs with the client. Missing locate results remain per-ID findings, not silently
 removed successes; infrastructure failures leave unrun rows. For a separate
 placement-disabled negative-control pin, `KRASNOKAMEN_ATM_CONTROL_SUBSET=1`
-limits execution to that same deterministic subset. A subset never accepts the
-full target; inspect every selected ID's differential count before calling the
-control successful. Screenshots still require visual review; start metadata does
+limits execution to that same deterministic subset; `all` measures every ID.
+A subset never accepts the full target; inspect each differential count before
+calling the control successful.
+Screenshots still require visual review; start metadata does
 not identify individual piece poses, so this differential does not prove exact
 piece attribution, complete template fidelity or mod compatibility.
 
