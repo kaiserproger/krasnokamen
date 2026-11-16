@@ -17,7 +17,10 @@ tests, graphical gates) while the two slots are taken by review or research;
 the builder-token, disk-floor and `mem-run` limits are unchanged. This mode
 overrides the general fleet defaults/history below, until the
 [finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
-is reached or the owner changes it.
+is reached or the owner changes it. Owner, 2026-11-16: the off-screen
+settlement simulation goal runs in parallel with up to three executing agents
+of its own, absorbed by the [generalist roster](#generalist-roster); at most
+10 live agents in total.
 
 Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`:
 finish/integrate/accept a returned vertical slice or its named dependency
@@ -52,11 +55,10 @@ as-is: this spending brake is not a restart or a claimed dollar-budget cap.
   builders enforced by the runner's
   [build tokens](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28);
   no child agent for a part under 30 minutes; reserve the
-  review and breaker budget before spawning builders. One agent session per
-  bounded task (a batch of related rows): the agent returns when the task is
-  done and Main starts a fresh agent for the next task, instead of one agent
-  running for many hours (owner, 2026-11-15: BvItemCache ran 16.9 h and 1080
-  turns; long sessions re-read their own growing context every turn). Larger
+  review and breaker budget before spawning builders. Long sessions re-read
+  their own growing context every turn (owner, 2026-11-15: BvItemCache ran
+  16.9 h and 1080 turns), so a generalist hands its lane over when its context
+  is nearly exhausted rather than running on. Larger
   fleets (the 22-slice QA hunt of 2026-10-29) run only on explicit owner request.
 - **Batch related bugs.** Give one fixer a batch of related bugs (same module,
   feature or repro) with one combined gate and proof per batch; route to the
@@ -68,7 +70,8 @@ as-is: this spending brake is not a restart or a claimed dollar-budget cap.
   spawn (`spawns:`), but a worker spawns only when its brief allows it. The
   spawner gives disjoint write sets and reviews every returned diff itself (see
   [review committee and breaker](review-committee-and-breaker.md)).
-- **Models** are the owner's choice. Briefs link the standing reviewer
+- **Models** are chosen by Main per lane, by task and budget
+  ([generalist roster](#generalist-roster)). Briefs link the standing reviewer
   requirements in AGENTS.md rather than restating them; a specifically named
   reviewer cannot be replaced or an older review relabelled without owner
   authorization and actual source coverage. Reserved provider limits remain binding.
@@ -81,6 +84,30 @@ as-is: this spending brake is not a restart or a claimed dollar-budget cap.
   replaces in the same change. A check fails only on what it names: one that
   fails ordinary correct changes is fixed or deleted, never routinely raised
   or skipped, because a check everyone learns to override defends nothing.
+
+### Generalist roster
+
+Owner rule, 2026-11-16 (`receipts/Stage3/OWNER-RULE-GENERALISTS-20261116.md`):
+no agent per task. Main runs a few long-lived generalists, one per lane, each
+with a queue of tasks and a write set disjoint from the other lanes. New work
+joins the matching lane's queue. A new agent starts only for a new lane or when
+a generalist's context runs out; the new one takes over that lane's queue and
+the previous one's handoff.
+
+- **Never idle on a wait.** A generalist starts its build, test, gate or trial
+  in the background, works on the next queued task, and handles the completion
+  when it arrives. With nothing else queued it tells Main it has free capacity
+  instead of waiting.
+- **One result per task.** Each finished task gets its YAML result (template
+  below) as a message to Main; the agent keeps going. Its last message hands
+  over whatever is left in its queue. Claims are per task, as below.
+- **Reviewers and breakers are not generalists.** They are separate, read-only,
+  and from a different vendor than the author where possible.
+- **Model by task and budget.** Main chooses each lane's model and records the
+  choice and reason in `receipts/Stage3/PLAN.md`; the owner's proposal is the
+  starting point: Opus for core authority and persistence, Sol for settlements
+  implementation, Terra for gates, QA and harness, Sonnet for performance
+  research, Mistral or Astra for review, Muse or DeepSeek for mechanical bulk.
 
 ## Briefs
 

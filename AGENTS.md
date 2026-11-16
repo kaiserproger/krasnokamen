@@ -228,17 +228,30 @@ python3 -m tools.harness list
   [current operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode).
   Outside announcement stabilization, the general limit is 15 active agents
   plus 2 reviewers (owner, 2026-11-14), with 3 concurrent builders.
-  No child agent for a part under 30 minutes. Workers spawn only when their
-  brief allows it.
-  Larger fleets need explicit owner permission. Give disjoint responsibilities
-  and write sets, pass a bounded task, base commit, paths and evidence contract
-  (no conversation forks), never delegate the immediate blocker and then idle,
-  and close finished agents. Exploit, fuzz, dupe or attack work goes only to
-  workers whose role description warns of no provider filter for it.
+  Workers spawn only when their brief allows it.
+  Larger fleets need explicit owner permission.
+- **Generalists, not an agent per task (owner, 2026-11-16).** Main runs a small
+  roster of long-lived generalists, one per lane with disjoint write sets; new
+  work joins an existing lane's queue. A new agent starts only for a new lane
+  or when a generalist's context is exhausted, and it takes over that lane's
+  queue and handoff. While a build, test, gate or trial runs, a generalist works
+  on its next queued task and consumes the completion when it arrives (no
+  polling, no sleep); an empty queue is reported to Main as free capacity.
+  Reviewers and breakers stay separate, read-only and, where possible, from a
+  different vendor than the author. Main picks each lane's model by task and
+  budget and records the choice and reason in PLAN
+  ([roster](docs/development/agent-fleet.md#generalist-roster)).
+  Give disjoint responsibilities and write sets, pass each task's base commit,
+  paths and evidence contract (no conversation forks), never delegate the
+  immediate blocker and then idle, and close generalists whose lane is empty.
+  Exploit, fuzz, dupe or attack work goes only to workers whose role
+  description warns of no provider filter for it.
 - Delegated validation and QA use the harness lifecycle and receipts, not
   hand-rolled tmux/PID/log plumbing. Reviewers neither edit nor delegate.
-- Each agent sends Main at most three messages (a blocker or a decision only
-  Main or the owner can make). Its LAST message is one compact YAML result:
+- Each agent sends Main at most three messages per task (a blocker or a decision
+  only Main or the owner can make). Each finished task ends with one compact
+  YAML result (a generalist sends it as a message and continues its queue; its
+  LAST message hands over the remaining queue):
   implementers `status: done|partial|blocked`, reviewers and breakers
   `verdict: pass|changes|blocked`, plus `changed_files`, `validation` and
   optional `report_path`. A gap is work, not an ending (owner, 2026-11-07):
