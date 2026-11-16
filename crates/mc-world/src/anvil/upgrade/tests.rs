@@ -1260,3 +1260,36 @@ fn java_115_level_generator_reaches_current_saved_data() {
         assert!(nbt::get(dimensions, dimension).is_some(), "{dimension}");
     }
 }
+
+#[test]
+fn block_state_upgrade_applies_only_fixes_registered_after_its_version() {
+    let chain = || {
+        c(vec![
+            ("Name", s("minecraft:chain")),
+            ("Properties", c(vec![("axis", s("y"))])),
+        ])
+    };
+    let mut old = chain();
+    let report = upgrade_block_state(&mut old, 3953).unwrap();
+    assert_eq!(nbt::get(&old, "Name"), Some(&s("minecraft:iron_chain")));
+    assert!(report.steps.iter().any(|step| step.version == 4541));
+    // Written at the rename's own version, the name is already current.
+    let mut current = chain();
+    upgrade_block_state(&mut current, 4541).unwrap();
+    assert_eq!(nbt::get(&current, "Name"), Some(&s("minecraft:chain")));
+    // A property rename registered later than the template (4305) applies too.
+    let mut test_block = c(vec![
+        ("Name", s("minecraft:test_block")),
+        ("Properties", c(vec![("test_block_mode", s("fail"))])),
+    ]);
+    upgrade_block_state(&mut test_block, 4189).unwrap();
+    let properties = nbt::get(&test_block, "Properties").unwrap();
+    assert_eq!(nbt::get(properties, "mode"), Some(&s("fail")));
+    assert!(nbt::get(properties, "test_block_mode").is_none());
+    for from in [MIN_DATA_VERSION - 1, TARGET_DATA_VERSION + 1] {
+        assert_eq!(
+            upgrade_block_state(&mut chain(), from),
+            Err(UpgradeError::UnsupportedVersion(from))
+        );
+    }
+}
