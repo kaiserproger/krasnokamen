@@ -732,11 +732,12 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
         scenario_id="battle-rearm-recovery", requires=("xvfb",),
         sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
-        fixture="field-1k 1500/side, real Horizon holder and spectator; drop spear, rearm twice, SIGKILL",
-        proves="both rearm acknowledgements precede the SIGKILL; full issued, dropped, rearm, crash, "
-               "rejoin, respawn, reconnect and clean-stop custody censuses reconcile; production recovery "
-               "cleanly checkpoints and independent world export/reopen succeeds",
-        limits="one kit and one dropped spear; timing-dependent battle state, not exhaustive target coverage",
+        fixture="field-1k 1500/side, real Horizon holder and spectator; drop spear, rearm twice, freeze, "
+                "kill a horse extra targeted by an observed fresh soldier windup, checkpoint, SIGKILL",
+        proves="a published windup targets the horse extra, which departs before impact; the resulting "
+               "checkpoint reopens and exports, and the issued, dropped, rearm, crash, rejoin, respawn, "
+               "reconnect and clean-stop custody censuses reconcile",
+        limits="one kit and one dropped spear; custody exports share an entity-restore projection",
     ),
     "battle-crash-handoff": _entry(
         id="battle-crash-handoff", summary="The battle runner keeps the crash handoff for pre-stage and staged SIGKILLs",
