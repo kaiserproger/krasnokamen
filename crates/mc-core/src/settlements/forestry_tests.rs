@@ -51,7 +51,7 @@ impl mc_world::ChunkGenerator for ForestGenerator {
     }
 }
 
-fn forest() -> (
+pub(crate) fn forest() -> (
     TickState,
     SettlementId,
     crate::entities::EntitySlot,
@@ -970,12 +970,39 @@ fn checkpoint_forest(state: &mut TickState, config: &crate::CoreConfig) {
 // Drive only navigation; construction itself advances in run_tick.
 fn guide_builder(state: &mut TickState, slot: crate::entities::EntitySlot) {
     let mut villager = state.entities.row_mut(slot).villager.take().unwrap();
+    let pickup = villager
+        .settlement
+        .and_then(|id| {
+            state
+                .settlements
+                .get(id)
+                .and_then(|record| record.project.as_ref().map(|project| (id, project)))
+        })
+        .and_then(|(id, project)| {
+            crate::plugin_structures::settlement_builds::next_material(
+                state,
+                id,
+                &project.structure,
+            )
+            .ok()
+            .flatten()
+        })
+        .is_some_and(|(item, count)| {
+            villager
+                .inventory
+                .iter()
+                .flatten()
+                .filter(|stack| stack.item_id == item && stack.count > 0)
+                .map(|stack| stack.count as u32)
+                .sum::<u32>()
+                < count
+        });
     let target =
         crate::villager::building::work(state, slot, &mut villager, &mut Default::default());
     state.entities.row_mut(slot).villager = Some(villager);
-    if let Some(target) = target {
+    if let Some(target) = target.filter(|target| pickup || target.exact) {
         let pos = target.pos;
-        let z = if target.exact { pos.z } else { pos.z + 1 };
+        let z = if pickup { pos.z + 1 } else { pos.z };
         let y = if state
             .world
             .block_at(pos.x, pos.y, z)

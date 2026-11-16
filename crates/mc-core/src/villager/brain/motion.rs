@@ -412,12 +412,17 @@ pub(super) fn move_to(
                 vertical,
                 true,
             );
+            // Exact cell arrival still owes the sub-cell approach. The motion
+            // consumer drops this waypoint immediately when already in range.
+            if found && exact && seek_path.is_empty() {
+                seek_path.push(target);
+            }
             let exhausted = ctx
                 .budget
                 .allowance(ctx.dimension, ctx.consumer, Kind::PathNode)
                 == 0;
             // Preserve only a budget-denied route whose target and geometry
-            // remain valid. Successful zero-step arrival clears the old path.
+            // remain valid. A successful search replaces the old path.
             if found || !exhausted || new_target || changed || v.navigation_path.is_empty() {
                 std::mem::swap(&mut seek_path, &mut v.navigation_path);
                 v.navigation_target = Some(target);
