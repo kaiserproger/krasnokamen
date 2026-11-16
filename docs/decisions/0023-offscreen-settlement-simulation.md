@@ -151,9 +151,9 @@ This restates the binding design (`receipts/SpainCulture/IMMIGRATION-DESIGN.md`,
   records; binaries without the row kind refuse the store (unknown global
   domain), so downgrade means restoring the pre-upgrade backup.
 - **Native store.** Settlement and transit rows are complete per checkpoint:
-  the store deletes a stored row the image omits (before this, a deleted
-  settlement left a stale row that the next read refused with a capture-tick
-  mismatch). A member's entity row is tombstoned at the checkpoint after
+  the store deletes a stored row the image omits (the settlement half is the
+  fix for `SETTLEMENT-REMOVAL-STALE-ROW-BLOCKS-STARTUP`; transit extends it to
+  `transit/` rows). A member's entity row is tombstoned at the checkpoint after
   departure; the store accepts that identity's live row again only in the
   checkpoint that drops it from every transit row. Every other tombstone stays
   final (ADR 0020).
