@@ -131,7 +131,7 @@ fn stored_food_village_roofed(beds: usize, roofed: bool) -> (TickState, [EntityS
 
 #[test]
 fn test_acceleration_scales_native_courtship_and_birth_cooldown() {
-    for factor in [1.0, 4.0] {
+    for factor in [1.0, 4.0, 8.0, 16.0] {
         let (mut state, parents, bread) = stored_food_village(3);
         state.test_acceleration.birth_chance = factor;
         let mut duration = None;

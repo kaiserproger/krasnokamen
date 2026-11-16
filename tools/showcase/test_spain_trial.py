@@ -6,9 +6,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from tools.showcase.spain_trial import hud_visible, publish, resident_census, spawn_on
+from tools.showcase.spain_trial import hud_visible, order_build, publish, resident_census, spawn_on
 
 
 class ScratchPublishTests(unittest.TestCase):
@@ -97,6 +97,44 @@ class ResidentCensusTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "did not advance"):
             resident_census(probe)
         self.assertEqual(probe.call.call_count, 2)
+
+
+class BuildingOrderTests(unittest.TestCase):
+    def test_started_and_queued_are_native_admission_not_client_send_success(self):
+        for reply in ['Started spanish_house construction.', 'Queued spanish_house: busy']:
+            with self.subTest(reply=reply):
+                probe, run = Mock(), {}
+                with patch('tools.showcase.spain_trial.village._send',
+                           return_value={'recent_chat': [reply]}) as send:
+                    order_build(probe, 'spanish_house', run)
+                send.assert_called_once_with(probe, 'settlement build spanish_house')
+                self.assertEqual(run['building_orders'], [{
+                    'command': 'settlement build spanish_house',
+                    'recent_chat': [reply], 'admitted': True,
+                }])
+                probe.check.assert_called_once_with('spanish_house_order_admitted', True)
+
+    def test_laptop_site_refusal_fails_immediately_and_retains_its_cause(self):
+        reply = 'No free loaded construction site is available within the material budget.'
+        probe, run = Mock(), {}
+        with patch('tools.showcase.spain_trial.village._send',
+                   return_value={'recent_chat': [reply]}):
+            with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted.*No free loaded'):
+                order_build(probe, 'spanish_house', run)
+        self.assertFalse(run['building_orders'][0]['admitted'])
+        self.assertEqual(run['building_orders'][0]['recent_chat'], [reply])
+        probe.check.assert_not_called()
+
+    def test_absent_or_other_blueprint_acknowledgement_cannot_advance_order(self):
+        for lines in [[], ['Started spanish_plaza construction.']]:
+            with self.subTest(lines=lines):
+                probe, run = Mock(), {}
+                with patch('tools.showcase.spain_trial.village._send',
+                           return_value={'recent_chat': lines}):
+                    with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted'):
+                        order_build(probe, 'spanish_house', run)
+                self.assertFalse(run['building_orders'][0]['admitted'])
+                probe.check.assert_not_called()
 
 
 if __name__ == "__main__":

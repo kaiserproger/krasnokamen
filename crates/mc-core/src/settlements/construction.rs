@@ -975,7 +975,13 @@ pub(crate) fn replant_conflicts(state: &TickState, root: [i32; 3]) -> bool {
             root[2].saturating_add(crown),
         ],
     );
-    bounds.map_or(true, |bounds| executor::area_held(state, bounds))
+    bounds.map_or(true, |bounds| {
+        executor::area_held(state, bounds)
+            || state
+                .settlements
+                .records()
+                .any(|record| layout::planting_blocks_access(state, record, bounds))
+    })
 }
 
 fn candidate_kinds<'a>(
@@ -1306,6 +1312,12 @@ fn planned_cells(
     // interference fencing; certification uses the narrower authored bounds.
     let mut min = [project.origin[0], bottom, project.origin[2]];
     let mut max = std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1);
+    // A winding access walk can enclose unrelated managed trees. Protect
+    // the actual lot here and the walk's columns in forestry::cells, not
+    // the empty space inside their combined executor envelope.
+    if super::forestry::planted_crown_overlaps(state, ScriptWorldBounds::new(min, max).ok()?) {
+        return None;
+    }
     for cell in &cells {
         for axis in 0..3 {
             min[axis] = min[axis].min(cell.at[axis]);
@@ -1319,9 +1331,6 @@ fn planned_cells(
         }
     }
     let bounds = ScriptWorldBounds::new(min, max).ok()?;
-    if super::forestry::planted_crown_overlaps(state, bounds) {
-        return None;
-    }
     Some((bounds, cells))
 }
 
@@ -1677,7 +1686,7 @@ fn street_site(
     };
     for tile in &served {
         if let Some(work) = network.road_work(tile)
-            && !executor::area_reserved(state, work.bounds)
+            && !executor::area_held(state, work.bounds)
         {
             return Some(FundedSite {
                 project: project(layout::ROAD, work.bounds, tile.axis),
@@ -1688,7 +1697,7 @@ fn street_site(
     }
     for tile in &served {
         if let Some(mut work) = network.lamp_work(tile)
-            && !executor::area_reserved(state, work.bounds)
+            && !executor::area_held(state, work.bounds)
             && let Some(bill) = cell_bill(state, &work.cells)
             && let Some(species) = select_species(state, &bill, images, false)
             && apply_species(state, &mut work.cells, species).is_some()

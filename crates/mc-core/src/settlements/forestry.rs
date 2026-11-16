@@ -503,6 +503,14 @@ pub(crate) fn cells(
         }
         None => return None,
     };
+    for &[x, y, z] in &columns {
+        if planted_crown_overlaps(
+            state,
+            mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
+        ) {
+            return None;
+        }
+    }
     let corridor = if let Some(&first) = columns.first() {
         let mut min = first;
         let mut max = [first[0], first[1] + 2, first[2]];

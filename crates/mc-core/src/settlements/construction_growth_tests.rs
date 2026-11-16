@@ -492,3 +492,105 @@ fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_house_site() {
 fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_access_corridor() {
     planted_sapling_before_admission(true);
 }
+
+/// Seed-100 laptop trial 2 had funded, free lots, but every preparation
+/// envelope enclosed a managed tree beside (not on) its winding access walk.
+#[test]
+fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    let blueprint = blueprints::get(&state.registry, "spanish_house").unwrap();
+    let record = state.settlements.get(id).unwrap();
+    let mut network = layout::Network::for_construction(&state, record);
+    let (project, root, envelope) = network
+        .frontage()
+        .into_iter()
+        .find_map(|(front, normal)| {
+            let lot = network.lot(blueprint, front, normal)?;
+            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+            if !site_free(&state, record, lot.origin, size) {
+                return None;
+            }
+            let project = Project {
+                settlement: id,
+                blueprint: blueprint.id.clone(),
+                level: 1,
+                origin: lot.origin,
+                rotation: lot.rotation,
+                building: None,
+                structure: String::new(),
+                ordered: true,
+                borrowed_builder: None,
+            };
+            let (bounds, _) = planned_cells(&state, &project, "oak")?;
+            let route = network.construction_access(&project)?;
+            let crown = super::super::forestry::PLANTED_CROWN_RADIUS as i32;
+            let root = (bounds.min[0]..=bounds.max[0]).find_map(|x| {
+                (bounds.min[2]..=bounds.max[2]).find_map(|z| {
+                    let outside_lot = [0, 2].into_iter().any(|axis| {
+                        let value = if axis == 0 { x } else { z };
+                        value + crown < lot.origin[axis]
+                            || value - crown >= lot.origin[axis] + i32::from(size[axis])
+                    });
+                    (outside_lot
+                        && route
+                            .iter()
+                            .all(|at| (x - at[0]).abs() > crown || (z - at[2]).abs() > crown)
+                        && state.world.block_at(x, 201, z) == Some(state.registry.states.air))
+                    .then_some([x, 201, z])
+                })
+            })?;
+            Some((project, root, bounds))
+        })
+        .expect("a bent access walk has empty space inside its rectangular envelope");
+    drop(network);
+    let sapling = block(&state, "minecraft:oak_sapling", &[("stage", "1")]);
+    let dirt = block(&state, "minecraft:dirt", &[]);
+    state.world.set_block(root[0], root[1] - 1, root[2], dirt);
+    state.world.set_block(root[0], root[1], root[2], sapling);
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    assert!(super::super::forestry::planted_crown_overlaps(
+        &state, envelope
+    ));
+    let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
+    assert!(site_free(
+        &state,
+        state.settlements.get(id).unwrap(),
+        project.origin,
+        size
+    ));
+    assert!(super::super::forestry::cells(&state, &project, size).is_some());
+    let (bounds, cells) = planned_cells(&state, &project, "oak")
+        .expect("a crown outside the lot and actual access walk must not veto their envelope");
+    fund(&mut state, "spanish_house", 1);
+    assert!(begin_cells(&mut state, project, bounds, cells));
+    complete(&mut state, id, builder);
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .any(|b| {
+                placement(&state, id, b).is_some_and(|(bp, _, _)| bp.id == "spanish_house")
+            })
+    );
+    assert_eq!(
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(sapling)
+    );
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&root)
+    );
+}

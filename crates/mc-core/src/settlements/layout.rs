@@ -359,6 +359,14 @@ fn sample(
     let Some(y) = construction::surface_y(state, anchor_y, x, z) else {
         return Column::Blocked;
     };
+    if prepare_forest
+        && super::forestry::planted_crown_overlaps(
+            state,
+            ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).expect("street headroom"),
+        )
+    {
+        return Column::Occupied;
+    }
     if state.block_entities.contains_key(&(x, y, z))
         || state.block_entities.contains_key(&(x, y + 1, z))
     {
@@ -395,6 +403,47 @@ fn sample(
         y,
         soil: SOIL.contains(&name),
     }
+}
+
+/// Keep new managed crowns out of loaded, potentially walkable street and
+/// frontage strips, even before a building reserves its access envelope.
+pub(super) fn planting_blocks_access(
+    state: &TickState,
+    record: &SettlementRecord,
+    crown: ScriptWorldBounds,
+) -> bool {
+    let misses = state
+        .settlements
+        .forest
+        .lock()
+        .expect("forest cache poisoned")
+        .misses();
+    for x in crown.min[0]..=crown.max[0] {
+        for z in crown.min[2]..=crown.max[2] {
+            if !level_inside(record, x, z)
+                || !matches!(
+                    cell(record.anchor, x, z),
+                    Cell::Road | Cell::Plaza | Cell::Verge
+                )
+            {
+                continue;
+            }
+            match sample(state, record, x, z, true) {
+                Column::Ground { y, .. } if y <= crown.max[1] && y + 2 >= crown.min[1] => {
+                    return true;
+                }
+                Column::Unloaded => return true,
+                _ => {}
+            }
+        }
+    }
+    state
+        .settlements
+        .forest
+        .lock()
+        .expect("forest cache poisoned")
+        .misses()
+        != misses
 }
 
 fn vacant(state: &TickState, block: u32) -> bool {
