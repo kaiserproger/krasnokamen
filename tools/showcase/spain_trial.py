@@ -155,15 +155,6 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
-def cpu_count(spec: str) -> int:
-    """Number of CPUs in a taskset list such as `6,7,14-15`."""
-    total = 0
-    for part in spec.split(','):
-        low, _, high = part.partition('-')
-        total += int(high or low) - int(low) + 1
-    return total
-
-
 def pin(process: subprocess.Popen, cpus: str) -> None:
     """Restrict every thread of a started process; new threads inherit it."""
     subprocess.run(['taskset', '-a', '-p', '-c', cpus, str(process.pid)], check=True, stdout=subprocess.DEVNULL)
@@ -176,25 +167,30 @@ def main() -> None:
     parser.add_argument('--days', type=int, default=4)
     parser.add_argument('--timeout', type=float, default=3600)
     parser.add_argument('--frames', type=int, default=60, help='census frames; must divide the 60 sprints')
+    parser.add_argument('--sprints', type=int, default=60,
+                        help='stop after this many sprints: a tick-matched diagnostic slice without the final checks')
     parser.add_argument('--scratch', type=Path, help='run on this (tmpfs) directory and copy the result to --out')
     parser.add_argument('--server-cpus', help='taskset CPU list for the server')
     parser.add_argument('--client-cpus', help='taskset CPU list for the client and its Xvfb')
+    parser.add_argument('--client-render-threads', type=int, help='LP_NUM_THREADS for the client renderer')
     parser.add_argument('--client-max-fps', type=int, help='isolated client settings with vsync off and this FPS cap')
     args = parser.parse_args()
     if args.days < 1 or args.days * 24000 % 60:
         parser.error('days must yield 60 integral simulation intervals')
     if args.frames < 1 or 60 % args.frames:
         parser.error('frames must divide 60')
+    if not 1 <= args.sprints <= 60:
+        parser.error('sprints must be 1..60')
     every = 60 // args.frames
-    final = args.out.resolve()
-    if final.exists():
-        parser.error(f'{final} already exists')
+    destination = args.out.resolve()
+    if destination.exists():
+        parser.error(f'{destination} already exists')
     if args.scratch is None:
-        out = final
+        out = destination
         out.mkdir(parents=True)
     else:
-        final.parent.mkdir(parents=True, exist_ok=True)
-        out = Path(tempfile.mkdtemp(prefix=f'{final.name}-', dir=args.scratch)).resolve()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        out = Path(tempfile.mkdtemp(prefix=f'{destination.name}-', dir=args.scratch)).resolve()
     binary = Path(os.environ['KRASNOKAMEN_SERVER_BINARY']).resolve()
     if not binary.is_file():
         raise RuntimeError(f'missing Main-pinned server: {binary}')
@@ -202,8 +198,10 @@ def main() -> None:
         sha = hashlib.file_digest(executable, 'sha256').hexdigest()
     run = {'seed': args.seed, 'days_requested': args.days, 'server': {'path': str(binary), 'sha256': sha},
            'snapshots': [], 'frames': [], 'fixture_commands': [], 'status': 'running',
-           'frames_requested': args.frames, 'scratch': None if args.scratch is None else str(out),
+           'frames_requested': args.frames, 'sprints_requested': args.sprints,
+           'scratch': None if args.scratch is None else str(out),
            'cpus': {'server': args.server_cpus, 'client': args.client_cpus},
+           'client_render_threads': args.client_render_threads,
            'fixture_disclosure': 'Bounded gifted supplies in real storage; no structure paste, no population grant, no time add.'}
     driver = Path(__file__).resolve()
     run['driver'] = {'path': str(driver), 'sha256': hashlib.sha256(driver.read_bytes()).hexdigest()}
@@ -239,8 +237,8 @@ def main() -> None:
         xvfb, display, _ = runtime.start_xvfb(out)
         if args.client_cpus:
             pin(xvfb, args.client_cpus)
-            # llvmpipe/lavapipe size their render pools from this, not from affinity.
-            os.environ['LP_NUM_THREADS'] = str(cpu_count(args.client_cpus))
+        if args.client_render_threads:
+            os.environ['LP_NUM_THREADS'] = str(args.client_render_threads)
         if args.client_max_fps:
             # The client caps frames only with vsync off (solaris-client frame_interval).
             settings = {'vsync': False, 'max_fps': args.client_max_fps}
@@ -279,7 +277,7 @@ def main() -> None:
             supplied_children = set()
             queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
             ordered = 'spanish_plaza'
-            for step in range(60):
+            for step in range(args.sprints):
                 run.setdefault('sprints', []).append(item_merge._sprint(server, log_path, args.days * 24000 // 60, probe.remaining(limit=None)))
                 with urlopen(run['dashboard'] + f'/telemetry.jsonl?after_tick={max(0, telemetry_tick)}', timeout=20) as response:
                     raw = response.read().decode()
@@ -357,8 +355,9 @@ def main() -> None:
             final = run['snapshots'][-1]
             native_events = log_path.read_text(errors='replace')
             run['culture_completed'] = sorted({building.get('blueprint') for town in final['settlements'] for building in town['buildings'] if building.get('blueprint')})
-            probe.check('four_cultural_buildings_completed', all(name in run['culture_completed'] for name in ['spanish_house', 'spanish_church', 'spanish_plaza', 'spanish_fortress']))
-            probe.check('daughter_founded', 'settlement_daughter_founded' in native_events)
+            if args.sprints == 60:
+                probe.check('four_cultural_buildings_completed', all(name in run['culture_completed'] for name in ['spanish_house', 'spanish_church', 'spanish_plaza', 'spanish_fortress']))
+                probe.check('daughter_founded', 'settlement_daughter_founded' in native_events)
         run['status'] = 'passed'
     except BaseException as error:
         run['status'], run['error'] = 'failed', f'{type(error).__name__}: {error}'
@@ -395,7 +394,7 @@ def main() -> None:
             if args.scratch is not None:
                 # The receipt is the complete copy; the tmpfs run directory is
                 # removed only after copytree returned.
-                shutil.copytree(out, final, symlinks=True)
+                shutil.copytree(out, destination, symlinks=True)
                 shutil.rmtree(out)
 
 
