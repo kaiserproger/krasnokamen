@@ -281,6 +281,14 @@ python3 -m tools.harness list
   stays in the native tick and intent merge; the edge owns presentation and
   connection state. Root orchestration routes work, not domain policy;
   substantial tests go in focused sibling `*_tests.rs` modules.
+- New features are modular (owner, 2026-11-16): each lives in its own module,
+  or its own crate when it needs no `mc-core` internals, with its state,
+  systems and sibling `*_tests.rs` inside; it reaches the rest only through a
+  narrow explicit interface, adds no edge to `mc-core`'s module cycle (the
+  code-health cycle ratchet must not rise), and is wired in at one registration
+  point owned by its host module. Existing code is not moved now; extracting it
+  is a later goal along [ADR 0021](docs/decisions/0021-build-time-and-crate-split.md)
+  ([how-to](docs/development/adding-a-feature.md#new-features-are-modules)).
 - Krasnokamen has no released compatibility surface of its own: migrate callers and
   delete superseded APIs, schemas, authorities, adapters, flags and fallbacks.
   Compatibility targets are the vanilla protocol and Anvil, not old Krasnokamen

@@ -11,6 +11,13 @@ remain under acceptance.
 The cycle ratchet
 (owner-approved 2026-11-07, implemented) makes code-health fail when the module
 cycle grows.
+**Direction (owner, 2026-11-16):** no big-bang split now. Every new feature is
+built as its own module (or crate) with its state, systems and tests inside, a
+narrow interface, no new cycle edges and one registration point
+([how-to](../development/adding-a-feature.md#new-features-are-modules)).
+Moving existing code into modules is a separate goal after the 21 November
+announcement, along this ADR's cycle-cut plan; until then existing code stays
+where it is and only its fixes land there.
 **Related:** [0011](0011-core-crate-topology-and-threading.md) (rejected
 one-crate-per-domain without an enforceable boundary),
 [0013](0013-core-model-v2.md) (current crate ownership),

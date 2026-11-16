@@ -121,6 +121,9 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Base       <sha>; worktree name
 # Claim      task id and timebox; Main runs `task-claim` before launch (below)
 # Write set  owned files and dirs; everything else read-only
+# Module     a new feature only: its module or crate path, host module, the one
+#            registration point, exported interface; code-health cycle count
+#            must not rise ([new features are modules](adding-a-feature.md#new-features-are-modules))
 # Evidence   per row: cargo:<crate>:<test> | harness:<profile> (real client) |
 #            review-only
 # Commits    none (leave the diff and its SHA-256) | local commits on the branch
@@ -342,7 +345,10 @@ A handoff, written at phase close or before a reboot (not per call), goes into
 `.analysis/MEMORY.md` on the owner host and into the result to the owner
 elsewhere. It lists for each slice in flight: worktree path, base commit and
 branch tip, state (committed, complete but unverified, or partial), receipt
-paths, and one next action. Without commit permission add the tree, the diff
+paths, and one next action; a slice building a new feature also names its
+module path, host registration point and interface, since new features are
+[modules](adding-a-feature.md#new-features-are-modules) and that survives the
+handoff. Without commit permission add the tree, the diff
 SHA-256 and the changed files. Durable lessons follow the
 [slice-close owning-doc rule](#mains-integration-checklist), not a second
 tracked knowledge dump.

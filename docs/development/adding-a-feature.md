@@ -42,6 +42,38 @@ much the shared code cost or how complex it has grown is no reason to keep it.
 Never do that to gameplay authority: a rule implemented in two places is
 worse, so split the function by behaviour instead.
 
+## New features are modules
+
+Owner rule, 2026-11-16 (`receipts/Stage3/OWNER-RULE-MODULAR-NEW-FEATURES-20261116.md`):
+every new feature is built as its own module now; existing code is not moved
+during this work (that is a later goal along
+[ADR 0021](../decisions/0021-build-time-and-crate-split.md)). Fixes to existing
+code stay where the code is.
+
+- **Place it.** One module (a file, or a directory with `mod.rs` when it grows)
+  under the host that owns the domain, for example
+  `crates/mc-core/src/settlements/migration.rs`. A feature that needs no
+  `mc-core` internals is its own crate below the core.
+- **Own it.** Its state types, its systems (the functions the tick calls) and
+  its tests (sibling `*_tests.rs`) are inside it. Persisted state goes through
+  the host's existing persistence path; the codec for the feature's rows lives
+  in the feature module.
+- **Narrow interface.** Other code calls a few named functions or a small trait
+  the module exports. The module itself reads the rest of the core only through
+  existing interfaces; it adds no ad-hoc `pub(crate)` reach-ins into unrelated
+  modules.
+- **No new cycle edges.** The module adds no edge to `mc-core`'s big module
+  cycle; the code-health cycle ratchet
+  ([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07))
+  stays equal or goes down for the change.
+- **One registration point.** The host module wires it in at one place (its
+  module declaration plus one tick/system call or one state field), owned by the
+  host. No scattered edits through `tick.rs`, `registry.rs` or other shared files.
+
+Checklist for the change and its review: module path and host named; state,
+systems and tests inside; exported interface listed; `python3 -m tools.harness
+run code-health` shows no cycle growth; exactly one registration point.
+
 ## New dependencies and components
 
 A new external crate, toolchain or component (nightly Rust, `cargo-component`),
