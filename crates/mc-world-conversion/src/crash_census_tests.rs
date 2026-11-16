@@ -189,8 +189,10 @@ fn crash_census_folds_ordered_wal_and_refuses_a_gap_or_corrupt_frame() {
     drop(writer);
     let census = crash_census(&config).unwrap();
     assert_eq!((census.checkpoint_tick, census.durable_tick), (0, 2));
-    assert!(census.entities[&uuid].holders["Item"].contains("minecraft:diamond"));
-    assert!(census.entities[&uuid].holders["Item"].contains("count: 2"));
+    let item = &census.entities["minecraft:overworld"][&uuid];
+    assert_eq!(item.wire_id, Some(1));
+    assert!(item.holders["Item"].contains("minecraft:diamond"));
+    assert!(item.holders["Item"].contains("count: 2"));
 
     let first = config
         .world_dir
@@ -208,5 +210,42 @@ fn crash_census_folds_ordered_wal_and_refuses_a_gap_or_corrupt_frame() {
     assert!(
         crash_census(&config).is_err(),
         "corrupt published payload must refuse"
+    );
+}
+
+#[test]
+fn census_keys_dimension_and_rejects_duplicate_uuid_across_dimensions() {
+    use mc_core::dimensions::Dimension;
+    let make_entity = || CrashEntity {
+        kind: "minecraft:item".into(),
+        wire_id: Some(7),
+        holders: BTreeMap::new(),
+    };
+    let mut overworld = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    insert_entity(
+        &mut overworld,
+        &mut seen,
+        Dimension::Overworld,
+        "u".into(),
+        make_entity(),
+    )
+    .unwrap();
+    assert!(
+        insert_entity(&mut overworld, &mut seen, Dimension::Nether, "u".into(), make_entity())
+            .is_err()
+    );
+    let mut nether = BTreeMap::new();
+    insert_entity(
+        &mut nether,
+        &mut BTreeSet::new(),
+        Dimension::Nether,
+        "u".into(),
+        make_entity(),
+    )
+    .unwrap();
+    assert_ne!(
+        serde_json::to_value(overworld).unwrap(),
+        serde_json::to_value(nether).unwrap()
     );
 }

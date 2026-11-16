@@ -1921,32 +1921,17 @@ fn meadow_site(
     })
 }
 
-/// Chunk-local resident index, with a hard admission cap. Other mob populations
-/// never contribute to planner or builder search cost.
+/// Living settlement members, including builders travelling to remote outposts.
+/// The derived occupancy index keeps this bounded and independent of position.
 pub(crate) fn residents(
     state: &TickState,
     id: SettlementId,
 ) -> impl Iterator<Item = crate::entities::EntitySlot> + '_ {
-    let (anchor, radius) = state.settlements.get(id).map_or(([0; 3], 0), |record| {
-        (record.anchor, record.radius.min(256) as i32)
-    });
-    let min_x = (anchor[0] - radius).div_euclid(16);
-    let max_x = (anchor[0] + radius).div_euclid(16);
-    let min_z = (anchor[2] - radius).div_euclid(16);
-    let max_z = (anchor[2] + radius).div_euclid(16);
-    (min_x..=max_x)
-        .flat_map(move |x| {
-            (min_z..=max_z).flat_map(move |z| {
-                state
-                    .entities
-                    .villager_chunks()
-                    .get(&crate::boundary::ChunkPos { x, z })
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|id| state.entities.slot_of(*id))
-            })
-        })
+    state
+        .settlements
+        .member_ids(id)
         .take(1024)
+        .filter_map(|entity| state.entities.slot_of(entity))
 }
 
 /// Builders fetch every block's material from storage. A resident that cannot

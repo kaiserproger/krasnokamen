@@ -1,8 +1,9 @@
 import unittest
 from uuid import UUID
 
-from tools.harness.battle_crash import (MOMENTS, campaign, census, combine_censuses, compare_durable, compare_entities,
-                                        cut_verdict, fields, grant_images, projectile_lifetimes,
+from tools.harness.battle_crash import (MOMENTS, apply_wire_comparison, campaign, census, combine_censuses,
+                                        compare_durable, compare_entities, compare_wire_ids, cut_verdict,
+                                        dimension_census, fields, grant_images, projectile_lifetimes,
                                         published_removal, recipient_custody, simulation_tick, uuid_snbt)
 
 
@@ -104,9 +105,11 @@ class BattleCrashTest(unittest.TestCase):
         actual = {'husk': {'type': 'Husk', 'holders': {'equipment': '{mainhand: sword}'}},
                   'arrow': {'type': 'Arrow', 'holders': {}},
                   'player': {'type': 'Proto1', 'holders': {'Inventory': '[]'}}}
+        for row in (*expected.values(), *actual.values()):
+            row['dimension'] = 'minecraft:overworld'
         self.assertEqual(compare_durable(expected, actual),
                          {'missing': [], 'new': [], 'changed': [], 'unverified': {}})
-        switched = {**actual, 'husk': {'type': 'Husk', 'holders': {'equipment': '{mainhand: spear}'}}}
+        switched = {**actual, 'husk': {**actual['husk'], 'holders': {'equipment': '{mainhand: spear}'}}}
         self.assertEqual(compare_durable(expected, switched)['changed'], ['husk'])
         self.assertEqual(compare_durable(expected, {k: v for k, v in actual.items() if k != 'arrow'})['missing'],
                          ['arrow'])
@@ -116,6 +119,7 @@ class BattleCrashTest(unittest.TestCase):
         expected = {'drop': {'kind': 'minecraft:item',
                              'holders': {'Item': '{id: "minecraft:iron_spear", count: 1}'}}}
         intact = {'drop': {'type': 'Item', 'holders': expected['drop']['holders']}}
+        expected['drop']['dimension'] = intact['drop']['dimension'] = 'minecraft:overworld'
         self.assertEqual(cut_verdict(compare_durable(expected, intact),
                                     valid=True, custody_ok=True, probe_ok=True), 'passed')
         for restored in ({}, {'drop': {'type': 'Item', 'holders': {}}}):
@@ -130,10 +134,11 @@ class BattleCrashTest(unittest.TestCase):
             with self.subTest(kind=kind):
                 stack = f'{{count: 1, id: "minecraft:{kind}"}}'
                 expected = {ident: {'kind': f'minecraft:{kind}', 'holders': {key: stack}}}
+                expected[ident]['dimension'] = 'minecraft:overworld'
 
                 def observed(holder):
                     return census(f'{label} has the following entity data: '
-                                  f'{{UUID: {ident}{holder}}}')
+                                  f'{{UUID: {ident}{holder}}}', 'minecraft:overworld')
 
                 intact = observed(f', {key}: {stack}')
                 self.assertEqual(intact[ident]['holders'], expected[ident]['holders'])
@@ -144,6 +149,36 @@ class BattleCrashTest(unittest.TestCase):
                     self.assertEqual(comparison['changed'], [ident])
                     self.assertEqual(cut_verdict(comparison, valid=True, custody_ok=True, probe_ok=True),
                                      'failed')
+
+    def test_dimension_and_wire_id_mismatches_fail_closed(self):
+        expected = {'u': {'kind': 'minecraft:arrow', 'dimension': 'minecraft:overworld',
+                          'wire_id': 8, 'holders': {}}}
+        live = {'u': {'type': 'Arrow', 'dimension': 'minecraft:the_nether', 'holders': {}}}
+        self.assertEqual(compare_durable(expected, live)['changed'], ['u'])
+        projected = {'u': {**expected['u'], 'dimension': 'minecraft:the_nether'}}
+        self.assertEqual(compare_wire_ids(expected, projected)['changed'], ['u'])
+        projected['u'] = {**expected['u'], 'wire_id': 9}
+        self.assertEqual(compare_wire_ids(expected, projected)['changed'], ['u'])
+        player = {'p': {'kind': 'player', 'dimension': 'minecraft:overworld', 'wire_id': None}}
+        self.assertEqual(compare_wire_ids(player, {'p': {**player['p'], 'wire_id': 19}})['changed'], [])
+        clean = {'missing': [], 'new': [], 'changed': [], 'unverified': {}}
+        apply_wire_comparison(clean, {'missing': ['u'], 'new': [], 'changed': []})
+        self.assertEqual(cut_verdict(clean, valid=True, custody_ok=True, probe_ok=True), 'incomplete')
+        changed = {'missing': [], 'new': [], 'changed': [], 'unverified': {}}
+        apply_wire_comparison(changed, {'missing': [], 'new': [], 'changed': ['u']})
+        self.assertEqual(cut_verdict(changed, valid=True, custody_ok=True, probe_ok=True), 'failed')
+
+    def test_dimension_census_requires_exact_global_coverage(self):
+        line = 'Arrow has the following entity data: {UUID: [I; 1, 2, 3, 4]}'
+        class Console:
+            def command(self, text):
+                return line if 'minecraft:the_nether' in text or text.startswith('execute as') else ''
+        self.assertEqual(dimension_census(Console())['[I; 1, 2, 3, 4]']['dimension'], 'minecraft:the_nether')
+        class Missing(Console):
+            def command(self, text):
+                return line if text.startswith('execute as') else ''
+        with self.assertRaisesRegex(ValueError, 'does not cover'):
+            dimension_census(Missing())
 
     def test_tombstone_requires_continuous_identity_scoped_wal(self):
         ident = '00112233-4455-6677-8899-aabbccddeeff'

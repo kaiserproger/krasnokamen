@@ -1125,6 +1125,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="persisted exact-ID generated starts and template-palette block samples match the real client's received blocks; actual-window screenshots retain coordinates",
         limits="not full-mod or NeoForge compatibility; screenshots need visual inspection; requires integrated worldgen support, immutable binaries and a separate pack-absent negative run",
     ),
+    "horizon-atm-full": _entry(
+        id="horizon-atm-full",
+        summary="Generate and visit the full selected MVS Overworld and Nether definitions",
+        owner="core:harness", evidence="graphical", profile="atm-full",
+        requires=("xvfb",),
+        sources=("tools/harness/atm_full.py", "tools/harness/atm_horizon.py"),
+        seed="20261115",
+        fixture="fresh native world; full hash-pinned locally converted MVS pack; dimension teleport",
+        proves="each located exact-ID start and template block is persisted, visited by Horizon, and rechecked after restart; deterministic client revisit sample",
+        limits="not NeoForge compatibility or full template fidelity; screenshots require visual inspection; individual non-generating definitions remain findings",
+    ),
     "native-datapack-reload": _entry(
         id="native-datapack-reload",
         summary="Live /datapack enable and disable change the recipe a native player crafts, with no restart",

@@ -839,6 +839,11 @@ fn battle_resume_clean_checkpoint_after_a_windup_target_horse_dies_reopens() {
         !drill.state.hostile.battle.columns.ids.contains(&horse),
         "the dead horse left the execution columns"
     );
+    checkpoint_reopens(drill);
+}
+
+/// A clean checkpoint, offline recovery, and the reopened battle fights on.
+fn checkpoint_reopens(mut drill: Drill) {
     drill.checkpoint();
     let config = drill.config.clone();
     drop(drill);
@@ -851,4 +856,287 @@ fn battle_resume_clean_checkpoint_after_a_windup_target_horse_dies_reopens() {
     drop(offline);
     let mut recovered = Drill::open(config);
     continues(&mut recovered);
+}
+
+/// A soldier of `side` outside his hurt window, so a light blow takes health
+/// and the damage merge reports it to the battle (`retaliation::hurt`).
+fn fresh_soldier(state: &TickState, side: u16) -> crate::entities::EntitySlot {
+    let formation = &state.hostile.battle.formation;
+    formation
+        .members
+        .iter()
+        .filter(|member| formation.regiments[member.regiment].spec.faction == side)
+        .find_map(|member| {
+            let slot = state.entities.slot_of(member.id)?;
+            let hurt = state.entities.body(slot).hurt_at;
+            hurt.is_none_or(|at| {
+                state.tick.saturating_sub(at) >= crate::entities::HURT_INVULNERABLE_TICKS
+            })
+            .then_some(slot)
+        })
+        .expect("a soldier outside his hurt window")
+}
+
+fn melee_blow(attacker: EntityId) -> crate::tick::DamagePiece {
+    crate::tick::DamagePiece {
+        amount: 1.0,
+        kind: crate::survival::DamageKind::Melee,
+        source: Some(crate::intent::DamageSource::Melee {
+            attacker,
+            position: [0.0; 3],
+            yaw: 0.0,
+            bonus_knockback: 0.0,
+            sweep: false,
+            fire_ticks: 0,
+            bane_ticks: 0,
+        }),
+        physical: None,
+        custom_armor: false,
+    }
+}
+
+/// The merged blows awaiting the next battle pass name `attacker`.
+fn pending_blow_by(state: &TickState, attacker: EntityId) -> bool {
+    image(state)["battle"]["retaliation"]["pending"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|pair| pair[1] == attacker.0)
+}
+
+/// BATTLE-RECOVERY-PENDING-BLOW-DEPARTED-ATTACKER: a blow merged after the
+/// pass in which its attacker, a dead horse extra, left the execution columns
+/// waits in `retaliation.pending` for the next pass. A clean checkpoint in
+/// that tick named an identity the image did not carry (the dying row gets no
+/// record), and every start refused `unknown retaliation identity`.
+#[test]
+fn battle_resume_clean_checkpoint_with_a_pending_blow_by_a_departed_horse_reopens() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let red = drill.state.entities.pos(fresh_soldier(&drill.state, 1));
+    let horse = drill.state.spawn_mob(
+        drill
+            .state
+            .registry
+            .entity_type_id("minecraft:horse")
+            .unwrap(),
+        [red[0] - 1.5, red[1], red[2]],
+        20.0,
+    );
+    let slot = drill.state.entities.slot_of(horse).unwrap();
+    drill.state.entities.set_faction(slot, 2);
+    drill.state.entities.set_ground(slot, true);
+    drill.run(&[]).unwrap();
+    assert!(
+        drill.state.hostile.battle.columns.ids.contains(&horse),
+        "the horse is a blue execution-column extra"
+    );
+    queue_ground_death(&mut drill, horse);
+    drill.state.commit_merge_effects();
+    drill.run(&[]).unwrap();
+    assert!(
+        !drill.state.hostile.battle.columns.ids.contains(&horse),
+        "the dead horse left the execution columns"
+    );
+    // A blow the horse dealt before it died, merged after its departure.
+    let victim = fresh_soldier(&drill.state, 1);
+    drill.state.merge_damage.push((victim, melee_blow(horse)));
+    drill.state.commit_merge_effects();
+    assert!(pending_blow_by(&drill.state, horse));
+    checkpoint_reopens(drill);
+}
+
+/// BATTLE-RECOVERY-PENDING-BLOW-DEPARTED-ATTACKER: a foreign mob hurts a
+/// soldier and dies in the same damage merge; its pending blow named a dying
+/// row without a checkpoint record.
+#[test]
+fn battle_resume_clean_checkpoint_after_a_foreign_attacker_dies_in_its_blow_merge_reopens() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let victim = fresh_soldier(&drill.state, 1);
+    let at = drill.state.entities.pos(victim);
+    let zombie = drill.state.spawn_mob(
+        drill
+            .state
+            .registry
+            .entity_type_id("minecraft:zombie")
+            .unwrap(),
+        [at[0] + 1.0, at[1], at[2]],
+        20.0,
+    );
+    drill.state.merge_damage.push((victim, melee_blow(zombie)));
+    queue_ground_death(&mut drill, zombie);
+    drill.state.commit_merge_effects();
+    let slot = drill.state.entities.slot_of_any(zombie).unwrap();
+    assert!(!drill.state.entities.body(slot).alive);
+    assert!(pending_blow_by(&drill.state, zombie));
+    checkpoint_reopens(drill);
+}
+
+/// BATTLE-RECOVERY-PENDING-BLOW-DEPARTED-ATTACKER: a foreign creeper's blast
+/// hurts soldiers. The creeper's row is removed before its blast is merged,
+/// so every pending blow it leaves names an identity no record carries.
+#[test]
+fn battle_resume_clean_checkpoint_after_a_creeper_blast_on_soldiers_reopens() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    // Keep the slab the soldiers stand on.
+    drill
+        .state
+        .gamerules
+        .insert("mob_griefing".into(), "false".into());
+    let red = drill.state.entities.pos(fresh_soldier(&drill.state, 1));
+    let creeper = drill.state.spawn_mob(
+        drill
+            .state
+            .registry
+            .entity_type_id("minecraft:creeper")
+            .unwrap(),
+        [red[0], red[1], red[2] - 3.0],
+        20.0,
+    );
+    let slot = drill.state.entities.slot_of(creeper).unwrap();
+    drill.state.entities.set_ground(slot, true);
+    let row = drill.state.entities.row_mut(slot);
+    row.persistent = true;
+    row.controls.ignited = true;
+    let mut blast = None;
+    for _ in 0..200 {
+        let (output, _, _) = crate::tick::run_tick(&mut drill.state, &[]);
+        if drill.state.entities.slot_of_any(creeper).is_none() {
+            blast = Some(output);
+            break;
+        }
+        append_capture_tick(&mut drill, &output);
+    }
+    let output = blast.expect("the ignited creeper exploded");
+    assert!(
+        pending_blow_by(&drill.state, creeper),
+        "the blast hurt a soldier"
+    );
+    append_capture_tick(&mut drill, &output);
+    checkpoint_reopens(drill);
+}
+
+fn battle_command(drill: &mut Drill, command: crate::battle::staging::BattleCommand) {
+    crate::battle::staging::execute(
+        &mut drill.state,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 200.0, 8.5],
+        &command,
+    )
+    .unwrap_or_else(|error| panic!("{command:?}: {error}"));
+}
+
+/// BATTLE-RECOVERY-PENDING-BLOW-DEPARTED-ATTACKER (review B1): a held
+/// player's blow waits in `retaliation.pending` while the battle is paused,
+/// and he leaves: his row goes, the image keeps his last identity. WAL and
+/// checkpoint capture keep the blow, so after recovery his reconnect rebinds
+/// it to his new wire ID and the resumed battle answers him.
+#[test]
+fn battle_resume_pending_blow_by_a_held_player_who_left_rebinds_after_recovery() {
+    use crate::battle::staging::BattleCommand;
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let uuid = uuid::Uuid::new_v4();
+    let join = |connection| PlayerInput::Join {
+        connection,
+        uuid,
+        name: "PovRed".into(),
+        permission_level: 0,
+    };
+    battle_command(&mut drill, BattleCommand::Pause);
+    drill.run(&[join(ConnectionId(77))]).unwrap();
+    battle_command(
+        &mut drill,
+        BattleCommand::Live {
+            name: "PovRed".into(),
+            side: 1,
+        },
+    );
+    drill.run(&[]).unwrap();
+    battle_command(&mut drill, BattleCommand::Start);
+    let holder = drill.state.connections.entity_of(ConnectionId(77)).unwrap();
+    let blue = {
+        let slot = fresh_soldier(&drill.state, 2);
+        drill.state.entities.body(slot).id
+    };
+    let face_blue = |state: &mut TickState, player: EntityId| {
+        let at = state
+            .entities
+            .pos(state.entities.slot_of(blue).expect("blue soldier alive"));
+        let slot = state.entities.slot_of(player).unwrap();
+        state.entities.set_pos(slot, [at[0], at[1], at[2] - 1.5]);
+        state.entities.set_ground(slot, true);
+    };
+    let health = |state: &TickState| {
+        let slot = state.entities.slot_of(blue).unwrap();
+        state.entities.row(slot).health
+    };
+    face_blue(&mut drill.state, holder);
+    let before = health(&drill.state);
+    let (output, _, _) = crate::tick::run_tick(
+        &mut drill.state,
+        &[PlayerInput::Attack {
+            connection: ConnectionId(77),
+            target: blue,
+        }],
+    );
+    assert!(health(&drill.state) < before, "actual held player blow");
+    assert!(pending_blow_by(&drill.state, holder));
+    append_capture_tick(&mut drill, &output);
+    // Paused before the next battle pass weighs the blow; then he leaves.
+    battle_command(&mut drill, BattleCommand::Pause);
+    drill
+        .run(&[PlayerInput::Leave {
+            connection: ConnectionId(77),
+        }])
+        .unwrap();
+    assert!(drill.state.entities.slot_of_any(holder).is_none());
+    assert!(
+        pending_blow_by(&drill.state, holder),
+        "WAL capture keeps the offline holder's blow"
+    );
+    let mut drill = drill.crash();
+    assert!(pending_blow_by(&drill.state, holder), "WAL-only recovery");
+    drill.checkpoint();
+    let config = drill.config.clone();
+    drop(drill);
+    let offline = crate::native_checkpoint::recover_offline(&config).unwrap();
+    assert!(
+        offline.dimensions[&crate::dimensions::Dimension::Overworld]
+            .battle
+            .is_some()
+    );
+    drop(offline);
+    let mut recovered = Drill::open(config);
+    hydrate_battle(&mut recovered.state);
+    assert!(
+        pending_blow_by(&recovered.state, holder),
+        "checkpoint capture and recovery keep it"
+    );
+    recovered.run(&[join(ConnectionId(78))]).unwrap();
+    let mut rejoined = None;
+    for _ in 0..40 {
+        rejoined = recovered
+            .state
+            .connections
+            .entity_of(ConnectionId(78))
+            .filter(|&id| pending_blow_by(&recovered.state, id));
+        if rejoined.is_some() {
+            break;
+        }
+        recovered.run(&[]).unwrap();
+    }
+    let rejoined = rejoined.expect("his reconnect rebinds the pending blow");
+    assert_ne!(rejoined, holder);
+    assert!(!pending_blow_by(&recovered.state, holder));
+    face_blue(&mut recovered.state, rejoined);
+    battle_command(&mut recovered, BattleCommand::Start);
+    recovered.run(&[]).unwrap();
+    assert_eq!(
+        image(&recovered.state)["battle"]["retaliation"]["grudges"][blue.0.to_string()]["attacker"],
+        rejoined.0,
+        "the resumed battle answers the reconnected holder's blow"
+    );
 }
