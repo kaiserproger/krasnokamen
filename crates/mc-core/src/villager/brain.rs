@@ -209,7 +209,7 @@ struct FoodItem {
     farmer_pickup: bool,
 }
 
-fn food_points_for_name(name: &str) -> u8 {
+pub(crate) fn food_points_for_name(name: &str) -> u8 {
     match name {
         "bread" => 4,
         "carrot" | "potato" | "beetroot" => 1,
@@ -1265,7 +1265,54 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             };
             let mut short_wander = false;
             let mut exact_target = false;
-            let target = if shelter_night {
+            let outbound = (v.activity != Activity::Panic)
+                .then(|| {
+                    crate::settlements::migration::target(state, state.entities.row(slot).uuid)
+                })
+                .flatten();
+            let soldier_target = v.data.profession == Profession::Soldier
+                && !crate::settlements::economy::worker_reserved(
+                    state,
+                    v.settlement,
+                    state.entities.row(slot).uuid,
+                );
+            let economy_target =
+                if !soldier_target && !matches!(v.activity, Activity::Rest | Activity::Panic) {
+                    crate::settlements::economy::target(
+                        state,
+                        v.settlement,
+                        state.entities.row(slot).uuid,
+                    )
+                } else {
+                    None
+                };
+            let useful_target = merchant_busy
+                || outbound.is_some()
+                || v.activity == Activity::Panic
+                || if v.activity == Activity::Rest {
+                    home.is_some()
+                } else if soldier_target {
+                    worker_target.is_some()
+                } else {
+                    economy_target.is_some()
+                        || v.partner
+                            .is_some_and(|id| state.entities.slot_of(id).is_some())
+                        || food_target.is_some()
+                        || (awaiting_profession && job_site.is_some())
+                        || worker_target.is_some()
+                        || (v.activity == Activity::Work
+                            && job_site.is_some_and(|job| {
+                                distance(pos, centre(job)) > JOB_SITE_REACH_SQUARED
+                            }))
+                };
+            let returning =
+                super::return_home::step(state, &mut cache, slot, &mut v, useful_target);
+            let target = if returning {
+                None
+            } else if let Some(exit) = outbound {
+                exact_target = true;
+                Some(exit)
+            } else if shelter_night {
                 let (target, exact) = night_shelter(state, &mut cache, slot, &mut v, pos);
                 exact_target = exact;
                 target
@@ -1307,20 +1354,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 // Rest owns the destination even when a worker still carries
                 // a delivery or an economy task has reserved its next shift.
                 home
-            } else if v.data.profession == Profession::Soldier
-                && !crate::settlements::economy::worker_reserved(
-                    state,
-                    v.settlement,
-                    state.entities.row(slot).uuid,
-                )
-            {
+            } else if soldier_target {
                 exact_target = worker_exact;
                 worker_target
-            } else if let Some(target) = crate::settlements::economy::target(
-                state,
-                v.settlement,
-                state.entities.row(slot).uuid,
-            ) {
+            } else if let Some(target) = economy_target {
                 exact_target = true;
                 Some(target)
             } else if let Some(partner) = v.partner.and_then(|id| state.entities.slot_of(id)) {
@@ -1403,7 +1440,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             decision_phase!(
                 cache,
                 5,
-                if short_wander {
+                if returning {
+                    let unchanged = !route_changed(state, &v);
+                    move_committed_with_route(state, slot, &mut v, scheduled, unchanged);
+                } else if short_wander {
                     wander_to(
                         state,
                         slot,

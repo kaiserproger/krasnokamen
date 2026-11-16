@@ -105,7 +105,7 @@ pub(super) fn settlement(
                 Some(record) => {
                     let members = crate::settlements::member_count(state, record.id);
                     let message = format!(
-                        "{}\n{} | owner={} anchor={:?} radius={} members={} revision={}",
+                        "{}\n{} | owner={} anchor={:?} radius={} members={} revision={}\n{}",
                         crate::settlements::presentation::summary(state, record),
                         record.name,
                         record.owner.as_deref().unwrap_or("autonomous"),
@@ -113,6 +113,7 @@ pub(super) fn settlement(
                         record.radius,
                         members,
                         record.revision,
+                        crate::settlements::migration::info(state, record.id),
                     );
                     error(state, connection, message);
                 }

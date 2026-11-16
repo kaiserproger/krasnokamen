@@ -34,6 +34,7 @@ mod lumber_tests;
 pub(crate) mod mining;
 #[cfg(test)]
 mod mining_tests;
+pub(crate) mod return_home;
 pub(crate) mod shepherd;
 #[cfg(test)]
 mod shepherd_tests;

@@ -926,8 +926,18 @@ pub(crate) fn find_path_ctx(
     can_open_doors: bool,
 ) -> bool {
     find_path_limited_ctx(
-        ctx, cache, start, target, width, height, path, exact, horizontal, vertical,
-        can_open_doors, usize::MAX,
+        ctx,
+        cache,
+        start,
+        target,
+        width,
+        height,
+        path,
+        exact,
+        horizontal,
+        vertical,
+        can_open_doors,
+        usize::MAX,
     )
 }
 
@@ -1206,7 +1216,6 @@ fn bed_allowed(state: &TickState, scope: HousingScope, poi: Poi) -> bool {
         || poi.kind != PoiKind::Home
         || roofed(&state.world, &state.registry, poi.pos)
 }
-
 
 /// The allocator's Home admission facts without a reach/window or a route
 /// search. Remote fallback goals must also have an intact native bed pair.
