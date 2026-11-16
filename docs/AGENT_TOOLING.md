@@ -178,6 +178,38 @@ at least 100 GiB free before starting a world run; a campaign stops with
 
 ## Profiles and scenarios
 
+`battle-crash` drives the battle runner with a live kit, a separately
+acknowledged `/give`, SIGKILL and recovery at the four WAL/checkpoint boundaries.
+It requires `KRASNOKAMEN_SERVER_BINARY`, `KRASNOKAMEN_CLIENT_BINARY`,
+`KRASNOKAMEN_BATTLE_CLIENT_ROOT` and `KRASNOKAMEN_BATTLE_WORLD`; run
+`python3 -m tools.harness run battle-crash`. Each cut retains the crash copy,
+published WAL and backup. The ordinary production option `--start-frozen` is
+a diagnostic recovery barrier: it freezes autonomous simulation before the
+first tick, not all mutation. Joins, commands, plugins, chunk generation,
+generated-entity admission, WAL and checkpoints continue; `tick unfreeze`
+resumes simulation. This harness uses an explicitly empty plugin directory,
+and takes its initial recovery census as the first console input, before any
+client joins or client commands. It is not a universal immutable snapshot.
+The internal `world crash-census --copy` command may repair redb metadata in
+the world it opens: give it only the harness-created disposable copy, never a
+retained source or a live world. Its entity and player holder census comes
+directly from the ordered checkpoint-plus-WAL replay, before `restore_entity`/live
+hydration and checkpoint encoding; it shares the replay decoder and WAL fold
+with recovery, so defects in those stages can compare equal.
+The before-crash live census is only a witness.
+Both durable and console holder filters include case-sensitive projectile `item`
+and `FireworksItem` stacks, as well as the ordinary `Item` holder.
+G3 covers entity and player holders only, not block-entity containers (chests,
+furnaces, hoppers or shulkers).
+The holder projection mirrors mc-core capture encoders; drift in compared fields
+fails closed as `changed`, but a key excluded by both filters remains invisible.
+The battle kit gate retains its export-based censuses: its separate client-checked
+issued kit and cross-phase custody reconciliation reject restore-only loss even
+when both exports lose the same piece. Export agreement alone is not that proof.
+Reconnected players are compared while simulation remains frozen. A missing
+witnessed arrow without an identity-scoped removal proof remains unverified and makes the cut
+incomplete.
+
 Do not copy the catalog into prose; ask the harness:
 
 - `python3 -m tools.harness list` prints every profile with its family

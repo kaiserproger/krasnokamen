@@ -279,6 +279,12 @@ To use server jars you already have, replace `--download` with
 `--from /path/to/26.3/server.jar --gameplay-from /path/to/26.1.2/server.jar`
 (see [the content cache](docs/OPERATING.md#vanilla-content-cache)).
 
+For plugins with a source-built server, follow the
+[default-plugins deployment workflow](https://github.com/kaiserproger/krasnokamen-default-plugins#deployment-workflow)
+using a plugin checkout compatible with this server's SDK/WIT. The RC5 plugin
+tag in the release quick start above is for the RC5 release, not a guarantee
+of compatibility with current source.
+
 ## FAQ
 
 **Do players need a special client?** No. The unmodified Minecraft Java 26.3

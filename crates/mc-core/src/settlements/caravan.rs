@@ -99,6 +99,9 @@ pub(crate) struct Shipment {
     /// Admission tick: the immutable route epoch in every receipt op id.
     pub epoch: u64,
     pub max_ticks: u64,
+    /// First expired game tick; epoch remains immutable receipt identity.
+    #[serde(default)]
+    pub game_deadline: Option<u64>,
     pub paid_mandate: Option<String>,
     /// Fences captured at admission; any unrelated stock change afterwards
     /// blocks instead of moving wrong cargo.
@@ -123,6 +126,8 @@ pub(crate) struct Shipment {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default = "super::commerce::Clock::legacy")]
+    pub(super) clock: super::commerce::Clock,
     #[serde(default)]
     pub shipments: BTreeMap<String, Shipment>,
     #[serde(skip)]
@@ -400,8 +405,37 @@ pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
         if id != &shipment.id {
             return Err("invalid shipment map identity");
         }
+        if shipment.game_deadline.is_some() != (state.clock == super::commerce::Clock::GameTicks) {
+            return Err("shipment deadline does not match economy clock units");
+        }
         validate_shipment(shipment)?;
     }
+    Ok(())
+}
+
+pub(super) fn restore_clock(state: &mut State, now: u64, game: u64) -> Result<(), String> {
+    if state.clock == super::commerce::Clock::GameTicks {
+        return Ok(());
+    }
+    for (id, shipment) in &mut state.shipments {
+        let invalid = || format!("shipment {id} has inconsistent or overflowing legacy clock");
+        if shipment.epoch > now {
+            return Err(invalid());
+        }
+        let deadline = shipment
+            .epoch
+            .checked_add(shipment.max_ticks)
+            .ok_or_else(invalid)?;
+        let deadline = if deadline < now {
+            game
+        } else {
+            game.checked_add(deadline - now)
+                .and_then(|due| due.checked_add(1))
+                .ok_or_else(invalid)?
+        };
+        shipment.game_deadline = Some(deadline);
+    }
+    state.clock = super::commerce::Clock::GameTicks;
     Ok(())
 }
 
@@ -815,9 +849,12 @@ fn step(world: &mut TickState, settlement: SettlementId, shipment: &mut Shipment
     if terminal(shipment.status) {
         return false;
     }
-    // Deadlines use the native clock, not calls or offscreen movement. An idle
-    // step leaves all durable fields untouched.
-    if world.tick.saturating_sub(shipment.epoch) > shipment.max_ticks {
+    // The receipt epoch is identity, not a second deadline clock.
+    if world.tick_control.game_ticks(world.tick)
+        >= shipment
+            .game_deadline
+            .expect("recovered caravan game clock")
+    {
         block(shipment, "finite route tick budget exhausted");
         return true;
     }
@@ -949,6 +986,15 @@ pub(crate) fn execute(
             if max_ticks == 0 || max_ticks > MAX_ROUTE_TICKS {
                 return Err(Failure::InvalidRequest);
             }
+            let game_deadline = world
+                .tick_control
+                .game_ticks(world.tick)
+                .checked_add(max_ticks)
+                .and_then(|due| due.checked_add(1))
+                .ok_or(Failure::InvalidRequest)?;
+            if state.clock != super::commerce::Clock::GameTicks {
+                return Err(Failure::InvalidRequest);
+            }
             if paid_mandate
                 .as_ref()
                 .is_some_and(|id| super::commerce::sequence(id).is_err())
@@ -1012,6 +1058,7 @@ pub(crate) fn execute(
                     waypoints,
                     epoch: world.tick,
                     max_ticks,
+                    game_deadline: Some(game_deadline),
                     paid_mandate,
                     source_fence: source_live.fence,
                     destination_fence: destination_live.fence,

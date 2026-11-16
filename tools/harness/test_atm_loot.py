@@ -8,7 +8,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from . import atm_loot
+from . import atm_horizon, atm_loot
 from .backends import atm_structures
 from .test_atm_carry import region
 
@@ -41,7 +41,7 @@ class ContainerProofTests(unittest.TestCase):
             region(region_file, chunk)
             site = {"id": "demo:structure", "anchor": [0, 64, 0], "bounds": [0, 64, 0, 8, 70, 8], "dimension_dir": str(root / "world")}
             probe = {"block": "minecraft:barrel", "table": "demo:barrel"}
-            proof = atm_loot.container_candidate(site, pack, probe)
+            proof = atm_loot.container_candidates(site, pack, probe)[0]
             self.assertEqual(proof["position"], [0, 64, 0])
             self.assertEqual(proof["saved_block_entity"]["LootTableSeed"], 17)
             self.assertEqual(proof["allowed_items"], ["minecraft:iron_ingot"])
@@ -50,7 +50,71 @@ class ContainerProofTests(unittest.TestCase):
                 bad["block_entities"][0].update(update)
                 region(region_file, bad)
                 with self.assertRaisesRegex(ValueError, "no reachable generated unopened"):
-                    atm_loot.container_candidate(site, pack, probe)
+                    atm_loot.container_candidates(site, pack, probe)
+
+    def test_crystal_barrel_standable_diagonals_above_waterlogged_stairs(self):
+        # Crystal lower.nbt: local (6,0,7), translated to the counted world.
+        x, y, z = 3504, 60, -5057
+        blocks = {(x, y, z): "minecraft:barrel", (x, y + 1, z): "minecraft:water"}
+        for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            blocks[x + dx, y, z + dz] = "minecraft:stone"  # terrain in absent y=0 cells
+            blocks[x + dx, y + 1, z + dz] = "minecraft:stone_brick_stairs"
+        for dx in (-1, 1):
+            for dz in (-1, 1):
+                blocks[x + dx, y, z + dz] = "minecraft:stone"
+                blocks[x + dx, y + 1, z + dz] = "minecraft:polished_andesite"
+        block = lambda pos: blocks.get(tuple(pos), "minecraft:air")
+        stands = atm_loot.stand_positions([x, y, z], block)
+        self.assertIn([3503.5, 62, -5057.5], stands)
+        self.assertNotIn([3504.5, 60, -5057.5], stands)
+        self.assertNotIn([3505.5, 61, -5056.5], stands)
+
+    def test_clip_ray_distance_and_next_container_are_required(self):
+        class Client:
+            def __init__(self):
+                self.receipt = {}
+                self.mode = "spectator"
+                self.position = None
+                self.target = None
+
+            def command(self, text, _response):
+                self.mode = text.split()[1]
+
+            def teleport(self, pos):
+                self.position = pos
+
+            def call(self, command, *args):
+                if command == "state":
+                    return {"gamemode": self.mode, "player": {"position": self.position, "on_ground": True}}
+                if command == "look-at":
+                    self.target = args
+                    return {}
+                if command == "looking-at":
+                    if self.position[0] == 0.5:
+                        return {"kind": "block", "block": {"pos": [1, 1, 0], "distance": 1, "face": "west"}}
+                    return {"kind": "block", "block": {"pos": [4, 0, 0], "distance": 4.5, "face": "up"}}
+                return {}
+
+        client = Client()
+        rows = [{"position": [0, 0, 0], "stands": [[0.5, 1, 0.5]]},
+                {"position": [4, 0, 0], "stands": [[4.5, 1, 0.5]]}]
+        chosen = atm_loot.select_reachable(client, rows)
+        self.assertEqual(chosen["position"], [4, 0, 0])
+        self.assertEqual(client.receipt["container_selection"]["candidate_order"], [[0, 0, 0], [4, 0, 0]])
+        self.assertEqual(len(chosen["selection_attempts"]), 2)
+        with patch.object(client, "call", return_value={"kind": "block", "block": {
+            "pos": [4, 0, 0], "distance": 4.5001, "face": "up"}}):
+            self.assertIsNone(atm_loot.visible_face(client, [4, 0, 0]))
+
+    def test_control_socket_is_short_private_and_removed_on_failure(self):
+        with self.assertRaisesRegex(RuntimeError, "test failure"):
+            with atm_horizon.control_socket() as socket:
+                directory = socket.parent
+                self.assertLess(len(os.fsencode(socket)), 108)
+                self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+                socket.write_text("temporary")
+                raise RuntimeError("test failure")
+        self.assertFalse(directory.exists())
 
     def test_player_inventory_empty_menu_and_unallowed_items_cannot_pass(self):
         slots = [{"slot": index, "item": None} for index in range(300, 327)]

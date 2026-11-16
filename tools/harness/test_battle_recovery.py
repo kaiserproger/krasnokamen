@@ -45,6 +45,58 @@ def batch(directory: Path, low: int, high: int, lines: list[dict], *, corrupt: b
     return path
 
 
+class CleanupFailureTests(unittest.TestCase):
+    def test_primary_traceback_survives_broken_control_pipe_and_cleanup_continues(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = object.__new__(br.RunnerSession)
+            session.ctx = mock.Mock(artifact_dir=Path(directory), exits=[None, None])
+            session.runner = mock.Mock(pid=11, returncode=0, poll=mock.Mock(return_value=0))
+            session.recovery = mock.Mock(pid=12, returncode=-15, poll=mock.Mock(return_value=-15))
+            session.runner_index, session.recovery_index = 0, 1
+            session.archive = None
+            session.driver_log = None
+            session.battle = mock.Mock()
+            dead_ctl = mock.Mock(pid=13, poll=mock.Mock(return_value=-9))
+            client = mock.Mock(name="client")
+            client.name = "PovRed"
+            client.process = mock.Mock(pid=14, poll=mock.Mock(return_value=-9))
+            client.driver.proc = dead_ctl
+            client.stop.side_effect = BrokenPipeError("control stdin")
+            session.clients = [client]
+
+            def failing_gate():
+                try:
+                    raise ValueError("original gate failure")
+                finally:
+                    session.close()
+
+            with self.assertRaisesRegex(ValueError, "original gate failure"):
+                failing_gate()
+            diagnostic = json.loads((Path(directory) / "battle-failure-diagnostics.json").read_text())
+            self.assertIn("ValueError: original gate failure", diagnostic["primary_traceback"])
+            self.assertIn("BrokenPipeError: control stdin", diagnostic["cleanup_errors"][0]["traceback"])
+            self.assertEqual(diagnostic["before_cleanup"]["control:PovRed"]["exit"], -9)
+            self.assertEqual(diagnostic["after_cleanup"]["recovery_server"]["exit"], -15)
+            self.assertEqual(session.battle.stop_child.call_count, 2)
+
+    def test_teardown_failure_without_primary_still_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = object.__new__(br.RunnerSession)
+            session.ctx = mock.Mock(artifact_dir=Path(directory))
+            session.runner = session.recovery = session.archive = session.driver_log = None
+            session.runner_index = session.recovery_index = -1
+            session.battle = mock.Mock()
+            client = mock.Mock()
+            client.name, client.process, client.driver = "PovRed", None, None
+            client.stop.side_effect = BrokenPipeError("control stdin")
+            session.clients = [client]
+            with self.assertRaises(BrokenPipeError):
+                session.close()
+            diagnostic = json.loads((Path(directory) / "battle-failure-diagnostics.json").read_text())
+            self.assertIsNone(diagnostic["primary_traceback"])
+            self.assertIn("BrokenPipeError", diagnostic["cleanup_errors"][0]["traceback"])
+
+
 class ExportReadingTests(unittest.TestCase):
     def test_every_player_custody_place_and_nested_container_is_a_stack(self):
         damaged = {**SPEAR, "components": {**SPEAR["components"], "minecraft:damage": 17}}
@@ -134,6 +186,16 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(explained["removals"][0]["tick"], 125)
         early = history(100, 200, spawns=[self.spawn], removals=[{"dimension": "minecraft:overworld", "id": 42, "tick": 105}])
         self.assertEqual(br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [early])["verdict"], "incomplete")
+
+    def test_common_restore_loss_in_both_exports_still_fails_issued_kit_reconciliation(self):
+        dropped = census("dropped", 110, [stack(f"player:{HOLDER}", "player", SHIELD)])
+        crash = census("crash", 120, dropped["stacks"])
+        result = br.reconcile([self.issued, dropped, crash], self.kit, set(), [self.history])
+        self.assertTrue(all(phase["reopen"]["agree"] for phase in result["phases"]))
+        self.assertEqual(result["verdict"], "incomplete")
+        self.assertTrue(any(row.get("key") == br.kit_key(SPEAR)
+                            and "1 unit(s) left custody with 0 ordered removal(s)" in row["reason"]
+                            for row in result["incomplete"]), result)
 
     def test_identity_reuse_gaps_and_clocks_are_incomplete(self):
         gone = census("death", 130, [stack(f"player:{HOLDER}", "player", SHIELD)])
@@ -375,6 +437,51 @@ class InputsAndOutputsTests(unittest.TestCase):
             br.run(ctx)
         with self.assertRaises(ValueError):
             br.run(profiles.ProfileContext(Path("/nonexistent"), scenario_id="battle-kit-census", extra_args=["--x"]))
+
+
+class RearmScenarioTests(unittest.TestCase):
+    def test_windup_observer_selects_only_fresh_horse_extra(self):
+        image = {"battle": {"elapsed_ticks": 100,
+                            "formation": {"members": [{"id": 1}, {"id": 2}]},
+                            "combat": {"ids": [1, 2, 3], "fighters": [
+                                {"action": {"Windup": {"target": 3, "start": 98, "weapon": "Sword"}}},
+                                {"action": {"Windup": {"target": 2, "start": 99, "weapon": "Sword"}}},
+                                {"action": "Wounded"}]}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch(root, 1, 1, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}},
+                               {"Battle": {"value": json.dumps(image)}}])
+            observer = br.WindupObserver(root, 67)
+            observer.update()
+            target = br.windup_horse(observer.image, observer.horses)
+            self.assertEqual((target["actor"], target["target"], target["uuid"], target["impact"]),
+                             (1, 3, "horse-id", 108))
+            image["battle"]["elapsed_ticks"] = 105
+            self.assertIsNone(br.windup_horse({"tick": 2, "image": image}, observer.horses),
+                              "three ticks before impact is too late for the kill")
+            image["battle"]["elapsed_ticks"] = 100
+            image["battle"]["formation"]["members"].append({"id": 3})
+            self.assertIsNone(br.windup_horse({"tick": 2, "image": image}, observer.horses),
+                              "a roster member is not a horse extra")
+
+    def test_rearm_scenario_runs_two_acknowledged_commands_before_census(self):
+        fifo = mock.Mock()
+        fifo.mark.side_effect = [11, 22]
+        fifo.wait.return_value.group.return_value = "Battle live rearmed: PovRed side=1"
+        session = mock.Mock()
+        session.clients = [session.holder, session.viewer]
+        backups = []
+        report = {"scenario": "battle-rearm-recovery", "assertions": {}}
+        with mock.patch.object(br, "_phase_census", return_value={"phase": "precut-repeated-rearm"}) as census:
+            br._rearm_twice(fifo, session, ["minecraft:iron_spear"], {}, backups, report)
+        self.assertEqual(fifo.send.call_args_list,
+                         [mock.call("battle live PovRed red"), mock.call("battle live PovRed red")])
+        self.assertEqual([call.args[1] for call in fifo.wait.call_args_list], [11, 22])
+        self.assertEqual(backups, [{"phase": "precut-repeated-rearm"}])
+        census.assert_called_once()
+        session.holder.capture.assert_called_once_with("precut-repeated-rearm")
+        self.assertTrue(report["assertions"]["rearmed_twice_before_crash"])
+        self.assertIs(br.VERDICTS["battle-rearm-recovery"], br.kit_census)
 
 
 class ClientKitTests(unittest.TestCase):

@@ -180,3 +180,121 @@ fn battle_resume_capture_prunes_only_proven_ground_tombstones() {
         );
     }
 }
+
+/// Recovery's view of the living roster: each member's record with its life,
+/// health and side, as a checkpoint carries it. No other entity is known.
+fn member_records(state: &crate::tick::TickState) -> BTreeMap<i32, crate::journal::ReplayEntity> {
+    let entities = &state.entities;
+    let members = &state.hostile.battle.formation.members;
+    members
+        .iter()
+        .filter_map(|member| {
+            let slot = entities.slot_of(member.id)?;
+            let (body, row) = (entities.body(slot), entities.row(slot));
+            let image = crate::journal::EntityStateImage {
+                faction: body.faction,
+                ..Default::default()
+            };
+            let record = crate::journal::ReplayEntity {
+                uuid: row.uuid.to_string(),
+                type_id: match body.kind {
+                    crate::entities::EntityKind::Mob { type_id } => type_id,
+                    _ => u32::MAX,
+                },
+                pos: entities.pos(slot),
+                vel: [0.0; 3],
+                yaw: 0.0,
+                pitch: 0.0,
+                ground: true,
+                health: row.health,
+                alive: body.alive,
+                age: 0,
+                breed_cooldown: 0,
+                pickup_delay: 0,
+                item: None,
+                appearance: Default::default(),
+                active_effects: Default::default(),
+                villager: None,
+                state: image,
+                projectile: None,
+                tick: state.tick,
+            };
+            Some((member.id.0, record))
+        })
+        .collect()
+}
+
+/// Only a column that just left clears a reference (combat `prepare`). An
+/// identity that never was a column keeps its Windup or shield block through
+/// the real tick in which a dead horse leaves the columns, and recovery of
+/// the capture still refuses it.
+#[test]
+fn battle_resume_still_refuses_an_unknown_windup_target_or_block_attacker() {
+    use crate::battle::combat::{Action, Weapon};
+    let unknown = EntityId(i32::MAX - 1);
+    let validate = |state: &mut crate::tick::TickState| {
+        let tick = state.tick;
+        let rows = checkpoint_rows(state, tick).unwrap();
+        let replay = Replay {
+            battle: checkpoint_image(&rows, state.dimension, tick).unwrap(),
+            entities: member_records(state),
+            ..Replay::default()
+        };
+        validate_replay(&replay, &state.registry)
+    };
+    for block in [false, true] {
+        let mut state = crate::battle::tests::staged_flat_fixture(100);
+        execute(
+            &mut state,
+            &mut ChangeSet::default(),
+            [8.5, 64.0, 8.5],
+            &BattleCommand::Start,
+        )
+        .unwrap();
+        crate::tick::run_tick(&mut state, &[]);
+        validate(&mut state).expect("the capture of a running battle recovers");
+        let horse = state
+            .entities
+            .rider_slots()
+            .next()
+            .expect("a cavalry horse");
+        let horse_id = state.entities.body(horse).id;
+        assert!(state.hostile.battle.columns.ids.contains(&horse_id));
+        state.merge_damage.push((
+            horse,
+            crate::tick::DamagePiece {
+                amount: 1000.0,
+                kind: crate::survival::DamageKind::GenericKill,
+                source: None,
+                physical: None,
+                custom_armor: false,
+            },
+        ));
+        state.commit_merge_effects();
+        assert!(!state.entities.body(horse).alive);
+        let battle = &mut state.hostile.battle;
+        let elapsed = battle.elapsed_ticks;
+        let fighter = &mut battle.combat.fighters[0];
+        if block {
+            crate::battle::combat::tests::set_block(fighter, Some((unknown, elapsed + 5)));
+        } else {
+            fighter.action = Action::Windup {
+                target: unknown,
+                start: elapsed,
+                weapon: Weapon::Sword,
+            };
+        }
+        crate::tick::run_tick(&mut state, &[]);
+        assert!(
+            !state.hostile.battle.columns.ids.contains(&horse_id),
+            "the dead horse left the execution columns"
+        );
+        let error = validate(&mut state).unwrap_err().to_string();
+        let expected = if block {
+            "unknown shield-block attacker".to_string()
+        } else {
+            format!("unknown windup target {}", unknown.0)
+        };
+        assert!(error.contains(&expected), "{error}");
+    }
+}

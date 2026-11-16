@@ -767,3 +767,88 @@ fn battle_resume_capture_boundary_death_after_waiting_settle() {
         },
     );
 }
+
+/// The start tick of a fighter's windup on `target` in the battle image.
+fn windup_on(state: &TickState, target: EntityId) -> Option<u64> {
+    image(state)["battle"]["combat"]["fighters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|fighter| {
+            let windup = &fighter["action"]["Windup"];
+            (windup["target"] == target.0).then(|| windup["start"].as_u64().unwrap())
+        })
+}
+
+/// A11 P0 (BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET): a cavalry horse extra died
+/// while a soldier wound up on it. The next battle pass dropped the horse from
+/// the execution columns and its dying row never gets a checkpoint record, yet
+/// the soldier's Windup kept naming it: a clean checkpoint inside the windup
+/// window made every later start refuse `unknown windup target`.
+#[test]
+fn battle_resume_clean_checkpoint_after_a_windup_target_horse_dies_reopens() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    // Red's file-0 front-rank soldier stands on red's -x flank.
+    let red = drill.state.hostile.battle.formation.members[0].id;
+    let flank = |state: &TickState| {
+        let at = state.entities.pos(state.entities.slot_of(red)?);
+        Some([at[0] - 1.5, at[1], at[2]])
+    };
+    let horse = drill.state.spawn_mob(
+        drill
+            .state
+            .registry
+            .entity_type_id("minecraft:horse")
+            .unwrap(),
+        flank(&drill.state).expect("red file 0 alive"),
+        20.0,
+    );
+    let slot = drill.state.entities.slot_of(horse).unwrap();
+    // Blue's side outside blue's roster: an execution-column extra, as a
+    // cavalry horse that lost its rider.
+    drill.state.entities.set_faction(slot, 2);
+    drill.state.entities.set_ground(slot, true);
+    let mut start = None;
+    for _ in 0..2000 {
+        if let Some(at) = flank(&drill.state) {
+            drill.state.entities.set_pos(slot, at);
+            drill.state.entities.set_vel(slot, [0.0; 3]);
+        }
+        drill.run(&[]).unwrap();
+        start = windup_on(&drill.state, horse);
+        if start.is_some() {
+            break;
+        }
+    }
+    let start = start.expect("a red soldier winds up on the horse extra");
+    let battle = &drill.state.hostile.battle;
+    assert!(battle.columns.ids.contains(&horse));
+    let impact = start + u64::from(crate::battle::combat::Weapon::Sword.windup());
+    assert!(
+        impact > battle.elapsed_ticks + 1,
+        "the death and the capture fall inside the windup window"
+    );
+    queue_ground_death(&mut drill, horse);
+    drill.state.commit_merge_effects();
+    assert!(!drill.state.entities.body(slot).alive);
+    for _ in 0..2 {
+        drill.run(&[]).unwrap();
+    }
+    assert!(
+        !drill.state.hostile.battle.columns.ids.contains(&horse),
+        "the dead horse left the execution columns"
+    );
+    drill.checkpoint();
+    let config = drill.config.clone();
+    drop(drill);
+    let offline = crate::native_checkpoint::recover_offline(&config).unwrap();
+    assert!(
+        offline.dimensions[&crate::dimensions::Dimension::Overworld]
+            .battle
+            .is_some()
+    );
+    drop(offline);
+    let mut recovered = Drill::open(config);
+    continues(&mut recovered);
+}

@@ -209,6 +209,17 @@ class BattleRunnerTests(unittest.TestCase):
         self.assertNotIn('resource_pack', tomllib.loads(
             runner.server_config_text(args, 'battle', '/world', '/cache')))
 
+    def test_crash_handoff_uses_explicit_empty_plugin_directory(self):
+        import tomllib
+        runner = load_runner()
+        argv = ['run-battle.py', '--dry-run', '--pin', '/pin', '--client', '/client',
+                '--client-data', '/data', '--cache', '/cache', '--run-dir', '/run',
+                '--world', '/world', '--crash-handoff']
+        with unittest.mock.patch('sys.argv', argv):
+            args = runner.arguments()
+        config = tomllib.loads(runner.server_config_text(args, 'battle', '/world', '/cache'))
+        self.assertEqual(config['plugins']['directory'], '/run/empty-plugins')
+
     def test_non_ascii_pack_url_is_refused_not_written_as_surrogates(self):
         # Red before the fix: a non-BMP character became a \ud83d\ude00 surrogate pair, and TOML
         # rejects that escape, so the server never started with a readable config.

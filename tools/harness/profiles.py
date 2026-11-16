@@ -922,6 +922,23 @@ def run_catalog_load(ctx: ProfileContext) -> dict[str, Any]:
     return details
 
 
+def run_battle_crash(ctx: ProfileContext) -> dict[str, Any]:
+    extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
+    receipt = ctx.artifact_dir / "battle-crash" / "campaign.json"
+    try:
+        details = _run_command(
+            [sys.executable, "-m", "tools.harness.battle_crash",
+             "--out", str(receipt.parent), *extra],
+            ctx, "battle-crash.log", env=_backend_env(ctx),
+        )
+    except BaseException:
+        if receipt.exists():
+            ctx.failure_scenario = json.loads(receipt.read_text())
+        raise
+    details["campaign"] = json.loads(receipt.read_text())
+    return details
+
+
 def run_server_load_profile(ctx: ProfileContext) -> dict[str, Any]:
     """Always capture stacks, exact tick budgets and neighbour receipts."""
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
@@ -1387,6 +1404,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Owner catalog v2 open-loop controls, exact wall windows and classified receipts (explicit release binaries)",
         "run": run_catalog_load,
     },
+    "battle-crash": {
+        "scope": "harness",
+        "description": "SIGKILL under battle with a kit and give; 5 attempts per WAL/checkpoint moment",
+        "run": run_battle_crash,
+    },
     "server-load-profile": {
         "scope": "scale",
         "description": "Always-profile a real server window: call stacks, CPU ms/tick, budget and first/mid/last neighbours",
@@ -1491,6 +1513,7 @@ PROFILE_PREREQUISITES = {
     "oracle-check": _NONE,
     "quirk-parity": _NONE,
     "catalog-load": _NONE,
+    "battle-crash": _NONE,
     "server-load-profile": _NONE,
     "constantinople": _NONE,
     "seed-review": (("optional_server_binary", "seed_review_client"), (), (), ()),

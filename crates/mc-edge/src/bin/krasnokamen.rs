@@ -38,7 +38,8 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
     mc_edge::content_cache::prepare_startup(&mut cfg).await?;
     let data = mc_edge::server::load_vanilla_data(&cfg)?;
     let tags = mc_edge::server::load_tags(&cfg, &data)?;
-    let core_config = mc_edge::server::core_config(&cfg);
+    let mut core_config = mc_edge::server::core_config(&cfg);
+    core_config.start_frozen = cli.start_frozen;
     // Registered before the core opens: a stop requested during startup must
     // still reach the clean shutdown below instead of the default signal kill.
     let shutdown = shutdown_signal();
