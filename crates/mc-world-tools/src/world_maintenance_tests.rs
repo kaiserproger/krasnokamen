@@ -52,7 +52,7 @@ fn prune_forgets_far_pregenerated_chunks_and_they_regenerate_on_demand() {
     assert_eq!(dry.chunks.kept_inside_rectangle, 9);
     assert_eq!(
         dry.bytes_before, dry.bytes_after,
-        "a dry run writes nothing"
+        "a dry run neither prunes nor compacts"
     );
 
     let report = prune_world(&config, &prune_request(16, false)).expect("prune");

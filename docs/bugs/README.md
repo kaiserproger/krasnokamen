@@ -112,8 +112,9 @@ bugs, require a real-client check; source/test findings may use a Cargo test
 through the same real tick/gameplay path or a TCP/native scenario. A `command`
 repro (an offline operator command such as `world prune` or `world census`,
 with no client surface) needs a Cargo test that drives the same command path on
-an equivalent input, and the original command rerun on the fixed build with its
-receipt named in `source`. Tests must
+an equivalent input (validation refuses a `fixed` command row without a `cargo:`
+ref), and the original command rerun on the fixed build with its receipt named
+in `source`; the reviewer checks that receipt. Tests must
 assert vanilla or owner-accepted behavior, not merely the current output.
 One row describes one symptom: split covered behavior from remaining gaps.
 The phase reviewer confirms each promotion batch matches the symptom and has

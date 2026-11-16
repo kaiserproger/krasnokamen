@@ -2,8 +2,10 @@
 //! overworld chunks nobody changed or lived in, `world compact` repacks rows
 //! written before compression and returns free pages to the file system.
 //!
-//! Both take the world lease for the whole run, so a running server is refused
-//! instead of raced, and both validate the world identity like a normal open.
+//! Both hold the world lease while they read or rewrite the store, so a running
+//! server is refused instead of raced, and both validate the world identity like
+//! a normal open. Prune first opens and closes the world like a server (which
+//! takes and releases the lease itself), then takes the lease again.
 
 use std::path::PathBuf;
 

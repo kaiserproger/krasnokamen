@@ -1038,10 +1038,11 @@ generator-made"). A pruned chunk is generated afresh with the current generator
 when next visited, so after `upgrade-worldgen` that is new terrain. The command
 first opens and closes the world once to fold the crash journal tail into the
 store, then compacts and prints the file size before and after. `--dry-run`
-prunes and compacts nothing, but that first open still happens: like starting
-the server it recovers an uncleanly stopped world, so a dry run on a crash
-image changes the store by the recovery alone. The Nether and
-the End are not pruned.
+prunes and compacts nothing, but that first open and close still happens, like
+a server start and clean stop: it replays a crash journal tail, writes a
+checkpoint and removes the journal batches the checkpoint covers, even on a
+cleanly stopped world. Copy a crash image you want to keep as evidence before
+running prune on it. The Nether and the End are not pruned.
 
 ### Native backup and restore
 

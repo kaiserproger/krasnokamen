@@ -276,6 +276,24 @@ regression = ["harness:inventory:inventory-client"]
                 with self.assertRaisesRegex(ValueError, 'OWNER.*real-client'):
                     regressions.run(profiles.ProfileContext(root))
 
+    def test_command_repro_fix_needs_cargo_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'docs/bugs').mkdir(parents=True)
+            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+id = "PRUNE"
+title = "offline command"
+area = "gameplay"
+repro = "command"
+severity = "major"
+status = "fixed"
+source = "example"
+regression = ["python:tools.harness.test_example:Example.test_case"]
+''')
+            with patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', side_effect=AssertionError("must reject before executing")):
+                with self.assertRaisesRegex(ValueError, 'PRUNE.*cargo check'):
+                    regressions.run(profiles.ProfileContext(root))
+
     def test_player_visible_fix_requires_real_client_check(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

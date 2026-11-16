@@ -582,6 +582,8 @@ def run(ctx):
                 clients[ref].add(ident)
         if bug.get('status') == 'fixed' and needs_real_client(bug) and not any(is_graphical_ref(ref) for ref in refs):
             errors.append(f'{ident}: original or client-surface repro needs a real-client check')
+        if bug.get('status') == 'fixed' and bug.get('repro') == 'command' and not any(ref.startswith('cargo:') for ref in refs):
+            errors.append(f'{ident}: a command repro needs a cargo check through the same command path')
     statuses = {b['id']: b.get('status') for b in bugs if isinstance(b, dict) and isinstance(b.get('id'), str)}
     errors.extend(f'{ident}: reopened row is still in BASE_FIXED; remove it from ledger_base_fixed.py' for ident in sorted(BASE_FIXED) if statuses.get(ident) == 'open')
     fixed = sum(isinstance(b, dict) and b.get('status') == 'fixed' for b in bugs)
