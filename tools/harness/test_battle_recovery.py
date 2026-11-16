@@ -323,6 +323,11 @@ class InputsAndOutputsTests(unittest.TestCase):
                 for name in ("plugin.toml", "plugin.wasm"):
                     (root / "plugins/krasnokamen-auth" / name).write_bytes(b"p")
                 self.assertIn("auth_package", br.resolve_inputs(profiles.ProfileContext(root), "battle-auth-hydration", auth_env))
+                (pin / "manifest.json").write_text('{"incremental": true}')
+                with self.assertRaisesRegex(ValueError, "--no-incremental"):
+                    br.resolve_inputs(profiles.ProfileContext(root), "battle-crash-handoff", env)
+                self.assertIn("auth_package", br.resolve_inputs(profiles.ProfileContext(root), "battle-auth-hydration",
+                                                                auth_env), "the auth scenario runs no battle runner")
             os.unlink(pin / "manifest.json")
             with self.assertRaisesRegex(ValueError, "manifest"):
                 br.resolve_inputs(profiles.ProfileContext(root), "battle-kit-census", env)

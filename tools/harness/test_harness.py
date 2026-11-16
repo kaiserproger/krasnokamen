@@ -1015,6 +1015,7 @@ def load_tests(loader, tests, pattern):
         "tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts",
         "tools.harness.test_matrix_items.ItemAdaptersTest.test_ack_missing_chat_is_capability_failure_not_type_error",
         "tools.harness.test_protocol_wire.ProtocolWireTests.test_received_container_suffix_survives_menu_closure",
+        "tools.harness.test_battle_recovery",
     ]))
     return tests
 

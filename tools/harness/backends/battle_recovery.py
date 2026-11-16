@@ -169,6 +169,9 @@ def resolve_inputs(ctx: ProfileContext, scenario: str, env: dict[str, str] | Non
     binary = Path(server).expanduser().resolve()
     if not (binary.parent / "manifest.json").is_file():
         raise ValueError(f"KRASNOKAMEN_SERVER_BINARY must sit in a pin directory with manifest.json: {binary}")
+    if scenario != "battle-auth-hydration" and json.loads((binary.parent / "manifest.json").read_text()).get("incremental"):
+        raise ValueError(f"{scenario} runs tools/battle/run-battle.py, which refuses an incremental server pin: "
+                         f"pin the tree with `tools/dev/pin-release --no-incremental <tree>` ({binary.parent})")
     inputs["server"] = binary
     evidence["KRASNOKAMEN_SERVER_BINARY"] = {"path": str(binary), "sha256": _sha256(binary)}
     cache = REPO_ROOT / "data" / "vanilla"

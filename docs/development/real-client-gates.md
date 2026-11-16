@@ -56,7 +56,10 @@ pass without this assertion is not proof of the late-capture regression.
 `battle-crash-handoff` and `battle-auth-hydration` (profile
 `battle-crash-recovery`; ledger refs `harness:battle-crash-recovery:<id>`). The
 server comes only from `KRASNOKAMEN_SERVER_BINARY` (a pin directory with its
-`manifest.json`); the other inputs fail closed: `KRASNOKAMEN_BATTLE_WORLD` and
+`manifest.json`; the two runner scenarios need `tools/dev/pin-release
+--no-incremental`, since `tools/battle/run-battle.py` refuses incremental pins,
+also under `ledger probe --client`); the other inputs fail closed:
+`KRASNOKAMEN_BATTLE_WORLD` and
 `KRASNOKAMEN_BATTLE_WORLD_SEED` (a stopped native battle world and its seed),
 `KRASNOKAMEN_BATTLE_HORIZON_CLIENT`, `KRASNOKAMEN_BATTLE_HORIZON_CTL`,
 `KRASNOKAMEN_BATTLE_HORIZON_RESOURCES` (the Horizon client pin), and for the two
