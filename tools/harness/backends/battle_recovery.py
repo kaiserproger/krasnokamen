@@ -59,6 +59,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import uuid
 import zlib
 from pathlib import Path
@@ -1269,16 +1270,45 @@ class RunnerSession:
         check(report, name, code == 0 and not errors, {"recovery_exit": code, "wal_archive_errors": errors})
 
     def close(self) -> None:
+        primary = sys.exc_info()[1]
+        processes = {"runner": self.runner, "recovery_server": self.recovery}
         for client in self.clients:
-            client.stop()
+            processes[f"client:{client.name}"] = client.process
+            processes[f"control:{client.name}"] = client.driver.proc if client.driver is not None else None
+
+        def statuses():
+            return {name: None if proc is None else {"pid": proc.pid, "exit": proc.poll()}
+                    for name, proc in processes.items()}
+
+        before = statuses()
+        failures = []
+
+        def cleanup(label, action):
+            try:
+                action()
+            except Exception as error:
+                failures.append((label, error, traceback.format_exc()))
+
+        for client in self.clients:
+            cleanup(f"client:{client.name}", client.stop)
         if self.archive is not None:
-            self.archive.close()
-        self.battle.stop_child(self.recovery, 30)
-        _record_exit(self.ctx, self.recovery_index, self.recovery)
-        self.battle.stop_child(self.runner, 30)
-        _record_exit(self.ctx, self.runner_index, self.runner)
+            cleanup("archive", self.archive.close)
+        cleanup("recovery", lambda: self.battle.stop_child(self.recovery, 30))
+        cleanup("recovery_exit", lambda: _record_exit(self.ctx, self.recovery_index, self.recovery))
+        cleanup("runner", lambda: self.battle.stop_child(self.runner, 30))
+        cleanup("runner_exit", lambda: _record_exit(self.ctx, self.runner_index, self.runner))
         if self.driver_log is not None:
-            self.driver_log.close()
+            cleanup("runner_log", self.driver_log.close)
+        if primary is not None or failures:
+            diagnostic = {"primary_traceback": None if primary is None else
+                          "".join(traceback.format_exception(primary)),
+                          "before_cleanup": before, "after_cleanup": statuses(),
+                          "cleanup_errors": [{"step": label, "traceback": trace}
+                                             for label, _, trace in failures]}
+            (self.ctx.artifact_dir / "battle-failure-diagnostics.json").write_text(
+                json.dumps(diagnostic, indent=2) + "\n")
+        if primary is None and failures:
+            raise failures[0][1]
 
 
 def _holder_entity(console: Any, mark: int = 0) -> int:
