@@ -125,13 +125,16 @@ live enemy within six blocks is in contact, not advancing, even when its virtual
 leader is farther ahead. An invalid retained target cannot hide a blocked soldier;
 the census is derived telemetry and never changes motion.
 
-`battle live` replaces the holder's entire inventory with exactly his kit.
-It retires plugin reservations before changing stock, clears the old inventory,
-and routes the close through the ordinary native/plugin/settlement menu owners.
-The cursor and crafting grid fit in that emptied inventory, then are discarded
-with all non-kit contents; no overflow item entities are minted. Menu ownership
-and the client's open window close together. A held player's respawn re-arms him;
-reconnecting alone does not: the console must run `battle live` again.
+A new `battle live` hold replaces the holder's entire inventory with a fresh
+copy of his kit. It retires plugin reservations before changing stock, clears
+the old inventory, and routes the close through the ordinary
+native/plugin/settlement menu owners. The cursor and crafting grid fit in that
+emptied inventory, then are discarded with all non-kit contents; no overflow
+item entities are minted. Menu ownership and the client's open window close
+together. A held player's respawn, reconnect (once per connection) or repeated
+`battle live` re-arms him under the same custody, but only with the kit pieces
+he still carries (matched by every identity field except count and wear, wear
+kept): a piece he dropped or stored is never issued a second time.
 
 Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
 two-block XZ grid from the frozen native body snapshot. Conservative half-extent

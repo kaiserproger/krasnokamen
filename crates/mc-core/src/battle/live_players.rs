@@ -7,18 +7,21 @@
 //! steps into the holder's place. The holder is an ordinary player: he takes
 //! damage and dies. The battle moves him only when he (re)enters the rank:
 //! `battle live` before start, and each respawn, which puts him back into the
-//! fight with the kit again: near where he fell, in his own regiment while it
-//! stands, else in a standing line of his side in contact (`respawn_slot`).
+//! fight with the kit pieces he still carries: near where he fell, in his own
+//! regiment while it stands, else in a standing line of his side in contact
+//! (`respawn_slot`).
 //! A spectator bound to him (`battle spectate`) follows his live camera, with
 //! the named intent retained across target death, respawn and reconnect.
 //!
-//! Battle-mode custody: a holder's inventory IS his kit (`equip`). Placement,
-//! re-arming and every respawn replace his whole inventory. Plugin holds retire
-//! first; the previous inventory is discarded so the normal menu close can fold
-//! its cursor and crafting grid without overflowing onto the field. The folded
-//! contents are then replaced by exactly the kit, once, in its fixed slots.
-//! Reconnecting re-arms an existing holder once; it never takes a second slot.
-//! `keep_inventory` keeps the kit from littering the field when he dies.
+//! Battle-mode custody: a holder's inventory IS his kit (`equip`). A new hold
+//! issues a fresh copy of the kit once; re-arming and every respawn put back
+//! only the kit pieces he still carries (wear kept) and retire everything else,
+//! so a dropped, stored or broken piece is never issued twice. Plugin holds
+//! retire first; the previous inventory is discarded so the normal menu close
+//! can fold its cursor and crafting grid without overflowing onto the field.
+//! The kit pieces then go into their fixed slots. Reconnecting re-arms an
+//! existing holder once; it never takes a second slot. `keep_inventory` keeps
+//! the kit from littering the field when he dies.
 //!
 //! A living holder of the other side in weapon reach is one more candidate
 //! for a soldier's own swing (`combat`): the same ready state, cadence and
@@ -58,8 +61,8 @@ pub(crate) struct Hold {
     /// Where the holder was placed before start, and his yaw.
     pub at: [f64; 3],
     pub yaw: f32,
-    /// The kit taken from his file's soldier at placement, given again on
-    /// every respawn and rejoin wherever the rank puts him.
+    /// The kit taken from his file's soldier at placement: issued once, then
+    /// the identity a respawn or rejoin matches carried pieces against.
     pub kit: [Option<ItemStack>; 6],
     pub kit_from: uuid::Uuid,
     /// The holder was seen dead and is placed again when he respawns.
@@ -281,10 +284,11 @@ pub(crate) fn update(state: &mut TickState) {
             match reenter(state, index, player) {
                 Ok(line) => tracing::info!("{line}"),
                 Err(error) => {
-                    // Not left bare: the kit again where the respawn put him.
+                    // Not left bare: his carried kit pieces back in their
+                    // slots where the respawn put him.
                     let kit = state.hostile.battle.live.holds[index].kit.clone();
-                    equip(state, player, &kit);
-                    tracing::warn!("Battle live respawn not placed (kit restored): {error}");
+                    equip(state, player, &kit, Custody::Keep);
+                    tracing::warn!("Battle live respawn not placed (kit re-placed): {error}");
                 }
             }
             let name = state.hostile.battle.live.holds[index].name.clone();
@@ -750,17 +754,35 @@ fn player_index(equipment: usize, selected: usize) -> usize {
     [selected, 40, 36, 37, 38, 39][equipment]
 }
 
+/// Who supplies the kit pieces an [`equip`] puts in place.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Custody {
+    /// A new hold: hand out a fresh copy of the file's kit.
+    Issue,
+    /// Rejoin, respawn or re-place: put back only the kit pieces the holder
+    /// still carries, so a piece he dropped or stored is never issued twice.
+    Keep,
+}
+
 /// Replace-all battle custody: retire reservations, empty the old inventory
-/// before the full menu close so its cursor/grid fit without drops, then replace
-/// the folded contents with the kit. Every emptied or refilled slot is synced.
-fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> usize {
+/// before the full menu close so its cursor/grid fit without drops, then
+/// replace the folded contents with the kit (`custody` decides whether pieces
+/// are issued or taken from what was carried; everything else is retired).
+/// Every emptied or refilled slot is synced.
+fn equip(
+    state: &mut TickState,
+    id: EntityId,
+    kit: &[Option<ItemStack>; 6],
+    custody: Custody,
+) -> usize {
     crate::plugin_inventories::invalidate_player(state, id);
     let player = state.players.get_mut(&id).expect("online player");
     let connection = player.connection;
     let mut changed = 0_u64;
+    let mut carried = Vec::new();
     for (index, stack) in player.inventory.slots.iter_mut().enumerate() {
         if !stack.is_empty() {
-            *stack = ItemStack::EMPTY;
+            carried.push(std::mem::replace(stack, ItemStack::EMPTY));
             changed |= 1 << index;
         }
     }
@@ -769,16 +791,28 @@ fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> u
     let selected = usize::from(player.inventory.selected.min(8));
     for (index, stack) in player.inventory.slots.iter_mut().enumerate() {
         if !stack.is_empty() {
-            *stack = ItemStack::EMPTY;
+            carried.push(std::mem::replace(stack, ItemStack::EMPTY));
             changed |= 1 << index;
         }
     }
-    for (equipment, stack) in kit.iter().enumerate() {
-        if let Some(stack) = stack {
-            let index = player_index(equipment, selected);
-            player.inventory.slots[index] = stack.clone();
-            changed |= 1 << index;
-        }
+    let mut placed = 0;
+    for (equipment, piece) in kit.iter().enumerate() {
+        let Some(piece) = piece else {
+            continue;
+        };
+        let stack = match custody {
+            Custody::Issue => piece.clone(),
+            Custody::Keep => {
+                let Some(found) = carried.iter().position(|stack| same_piece(stack, piece)) else {
+                    continue;
+                };
+                carried.swap_remove(found)
+            }
+        };
+        let index = player_index(equipment, selected);
+        player.inventory.slots[index] = stack;
+        changed |= 1 << index;
+        placed += 1;
     }
     let changes = player.pickup_changes(changed);
     for change in changes {
@@ -795,7 +829,19 @@ fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> u
             rearmed.push((name.to_owned(), id));
         }
     }
-    kit.iter().filter(|stack| stack.is_some()).count()
+    placed
+}
+
+/// The carried stack is this kit piece: every identity field (item, model,
+/// components such as the battle look and dye) equal; wear and count may differ.
+fn same_piece(stack: &ItemStack, piece: &ItemStack) -> bool {
+    let identity = |stack: &ItemStack| {
+        let mut stack = stack.clone();
+        stack.count = 1;
+        stack.damage = None;
+        stack
+    };
+    identity(stack) == identity(piece)
 }
 
 /// The kit must not litter the field when the holder dies.
@@ -809,11 +855,12 @@ fn keep_inventory(state: &mut TickState) {
 }
 
 /// `battle live <name> <side>`: before start, hold a free infantry
-/// front-rank file nearest the line centre (or the name's existing hold),
-/// give the player that file's kit and stand him in rank 0 facing the enemy;
-/// the file's soldiers move one rank back. After start a held name is only
-/// re-armed (a rejoin): the battle moves him only on respawn. Either way a
-/// spectator bound to him resumes the same native camera authority.
+/// front-rank file nearest the line centre and issue that file's kit (the
+/// name's existing hold is only re-armed with the pieces he carries), then
+/// stand him in rank 0 facing the enemy; the file's soldiers move one rank
+/// back. After start a held name is only re-armed (a rejoin): the battle moves
+/// him only on respawn. Either way a spectator bound to him resumes the same
+/// native camera authority.
 pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<String, String> {
     if state.hostile.battle.formation.regiments.is_empty() {
         return Err("no staged formation; setup required".into());
@@ -878,7 +925,12 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
             (at, yaw, source, kit)
         }
     };
-    let slots = equip(state, player, &kit);
+    let custody = if existing.is_some() {
+        Custody::Keep
+    } else {
+        Custody::Issue
+    };
+    let slots = equip(state, player, &kit, custody);
     let reply = if running {
         format!(
             "Battle live rearmed: {name} side={side} regiment={} file={file} kit_slots={slots} kit_from={source} moved=false",
@@ -930,9 +982,9 @@ fn take_front(state: &mut TickState, regiment: usize, file: usize) -> Result<[f6
     Ok(at)
 }
 
-/// A respawned holder goes back into the rank with his kit again: before
-/// start to where he was placed; once running to the front of the men of the
-/// file `respawn_slot` picks.
+/// A respawned holder goes back into the rank with the kit pieces he still
+/// carries: before start to where he was placed; once running to the front of
+/// the men of the file `respawn_slot` picks.
 fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<String, String> {
     let hold = state.hostile.battle.live.holds[index].clone();
     let running = state.hostile.battle.running;
@@ -1004,7 +1056,7 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
         .reason
         .map_or(String::new(), |reason| format!(" reason={reason}"));
     let rule = if pick.centre { " rule=centre" } else { "" };
-    let slots = equip(state, player, &kit);
+    let slots = equip(state, player, &kit, Custody::Keep);
     teleport(state, player, at, yaw, 0.0);
     Ok(format!(
         "Battle live respawned: {} side={} regiment={id} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source} deaths={} contact={}{changed}{reason}{rule}",

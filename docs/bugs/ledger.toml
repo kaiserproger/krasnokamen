@@ -7087,3 +7087,26 @@ regression = ["cargo:mc-world-conversion:wal_owned_player_fields_tests::repeated
 fix_commit = "patch:81e40fc89c6a483fc964c376b54afc072fcd1aabf99f1d19a3273c06da141e21"
 failing_first = "reported"
 repro_check = "Root-only fix control 0f7c003bdc172f2638b7c455678eacff7f55ffe9342a0a41ad0547fc4dbc4a40: four refusal assertions fail; clean synthetic WAL/export passes. Independent ReviewBattleGap additionally found one nested recipeBook.recipes is replaced by export from the typed unlocked set. Recipe-only reversal d3ba4cdce0a0e5d1413d7cc4ba590bd2c6f882b011e32c9b048ab2d3f8b6d57e admits that list; restored module 6/6 and L1 fmt/code-health passed. Other recipeBook fields remain retained. Full multi-commit production patch: docs/bugs/fix-patches/WAL-OPAQUE-OWNED-ITEM-FIELD-DROPPED.patch. Report/control receipts: owner-host receipts/ImportSlotFix/REPORT.md. Actual server-produced clean WAL receipt must be collected with Main's candidate pin before merge; row stays open for independent custody re-review and promotion."
+
+[[bug]]
+id = "HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL"
+title = "Battle runner crash handoff exits on telemetry closure without preserving the SIGKILLed world"
+area = "harness"
+severity = "major"
+status = "open"
+source = "A11SigkillBreaker 2026-11-16: run-battle.py --crash-handoff exited 1 with 'telemetry exporter failed: Remote end closed connection without response' and no crash-handoff.json/crash-copy in 2/5 pre-stage/staged SIGKILL cuts. The crash watcher thread blocks in Popen.wait() holding the waitpid lock, so the except branch's poll() returned None and re-raised. Work-root receipts/A11SigkillBreaker/REPORT.md; fixed-runner real-client verification receipts/BattleResume/runner-sigkill-race/RECEIPT.txt (0/6 failures)."
+repro = "client"
+regression = ["python:tools.battle.test_run_battle:BattleRunnerTests.test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid"]
+fix_commit = "610f31cb00ac9c423b9e87846964edcb14d0895b"
+failing_first = "reported"
+
+[[bug]]
+id = "BATTLE-LIVE-KIT-DUPLICATED-ON-REARM"
+title = "A battle holder's dropped kit piece stays in the world while rejoin or respawn re-issues it"
+area = "gameplay"
+severity = "blocker"
+status = "open"
+source = "A11SigkillBreaker census gap plus advisor: DropSelected spawns the held kit piece as an item entity, and on rejoin (also after SIGKILL recovery) or respawn live_players::update -> live/reenter -> equip handed out a fresh copy of the whole kit. Native repro on f4c0 lineage: spear units before 1, after 2."
+repro = "cargo"
+regression = ["cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_rejoin_is_not_issued_twice", "cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_respawn_is_not_issued_twice", "cargo:mc-core:battle::live_players::tests::a_rearm_keeps_the_worn_battle_piece_not_a_plain_twin", "cargo:mc-core:battle::live_players::tests::a_rearm_returns_a_worn_kit_piece_to_its_slot_with_its_wear"]
+failing_first = "reported"

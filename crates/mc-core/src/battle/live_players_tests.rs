@@ -310,8 +310,14 @@ fn each_respawn_in_battle_puts_the_holder_back_into_the_front_rank_with_the_kit(
         let hold = &state.hostile.battle.live.holds[0];
         assert!(hold.dead && hold.deaths == death);
         assert!(command(&mut state, &mut changes, live_cmd("PovRed")).is_err());
-        // The kit lost as if looted: the respawn restores it.
-        state.players.get_mut(&player).unwrap().inventory.slots[38] = ItemStack::EMPTY;
+        // He moved his chestplate into the backpack: the respawn puts it back on.
+        state
+            .players
+            .get_mut(&player)
+            .unwrap()
+            .inventory
+            .slots
+            .swap(38, 20);
         run_tick(
             &mut state,
             &[PlayerInput::Respawn {
@@ -486,7 +492,15 @@ fn rearm_closes_a_full_crafting_table_without_spawning_items() {
         item("minecraft:arrow", 3),
     );
     let player_state = state.players.get_mut(&player).unwrap();
-    player_state.inventory.slots.fill(dirt);
+    // Full around the carried kit: a rearm keeps only kit pieces the holder carries.
+    for slot in player_state
+        .inventory
+        .slots
+        .iter_mut()
+        .filter(|slot| slot.is_empty())
+    {
+        *slot = dirt.clone();
+    }
     let menu = player_state
         .open
         .as_mut()
@@ -899,6 +913,189 @@ fn a_rejoin_after_start_only_rearms() {
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
     assert_eq!(state.entities.pos(body), before);
+}
+
+/// Item units of `item_id` held anywhere: online player inventories plus
+/// dropped item entities.
+fn units_in_world(state: &TickState, item_id: u32) -> i64 {
+    let held: i64 = state
+        .players
+        .values()
+        .flat_map(|player| player.inventory.slots.iter())
+        .filter(|stack| !stack.is_empty() && stack.item_id == item_id)
+        .map(|stack| i64::from(stack.count))
+        .sum();
+    let dropped: i64 = state
+        .entities
+        .item_slots()
+        .filter_map(|slot| state.entities.row(slot).item.as_ref())
+        .filter(|item| item.item_id == item_id)
+        .map(|item| i64::from(item.count))
+        .sum();
+    held + dropped
+}
+
+/// Every kit piece except the main hand is in its fixed slot.
+fn assert_kit_besides_the_main_hand(state: &TickState, player: EntityId) {
+    let kit = &state.hostile.battle.live.holds[0].kit;
+    let inventory = &state.players[&player].inventory;
+    let selected = usize::from(inventory.selected);
+    for (equipment, piece) in kit.iter().enumerate().skip(1) {
+        let expected = piece.clone().unwrap_or(ItemStack::EMPTY);
+        assert_eq!(
+            inventory.slots[player_index(equipment, selected)],
+            expected,
+            "kit piece {equipment}"
+        );
+    }
+}
+
+#[test]
+fn a_kit_item_dropped_before_a_rejoin_is_not_issued_twice() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    let player = ids[0];
+    let inventory = &state.players[&player].inventory;
+    let spear = inventory.slots[usize::from(inventory.selected)].item_id;
+    let uuid = state.connections.uuid_of(ConnectionId(1)).unwrap();
+    let before = units_in_world(&state, spear);
+    assert!(before >= 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::DropSelected {
+            connection: ConnectionId(1),
+            whole_stack: true,
+        }],
+    );
+    assert_eq!(units_in_world(&state, spear), before, "drop conserves");
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid,
+            name: "PovRed".to_owned(),
+            permission_level: 0,
+        }],
+    );
+    for _ in 0..4 {
+        run_tick(&mut state, &[]);
+    }
+    let rejoined = player_named(&state, "PovRed").unwrap();
+    assert!(
+        state
+            .hostile
+            .battle
+            .live
+            .rearmed
+            .contains(&("PovRed".into(), rejoined))
+    );
+    assert_eq!(
+        units_in_world(&state, spear),
+        before,
+        "rejoin rearm conserves the kit"
+    );
+    assert_kit_besides_the_main_hand(&state, rejoined);
+}
+
+#[test]
+fn a_kit_item_dropped_before_a_respawn_is_not_issued_twice() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    let player = ids[0];
+    let inventory = &state.players[&player].inventory;
+    let spear = inventory.slots[usize::from(inventory.selected)].item_id;
+    let before = units_in_world(&state, spear);
+    run_tick(
+        &mut state,
+        &[PlayerInput::DropSelected {
+            connection: ConnectionId(1),
+            whole_stack: true,
+        }],
+    );
+    kill(&mut state, 1);
+    run_tick(&mut state, &[]);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(&mut state, &[]);
+    assert!(!state.hostile.battle.live.holds[0].dead);
+    assert_eq!(
+        units_in_world(&state, spear),
+        before,
+        "respawn conserves the kit"
+    );
+    assert_kit_besides_the_main_hand(&state, player);
+}
+
+#[test]
+fn a_rearm_returns_a_worn_kit_piece_to_its_slot_with_its_wear() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    let kit = state.hostile.battle.live.holds[0].kit.clone();
+    let equipment = (1..kit.len())
+        .find(|&index| kit[index].is_some())
+        .expect("a kit piece besides the main hand");
+    let inventory = &mut state.players.get_mut(&player).unwrap().inventory;
+    let slot = player_index(equipment, usize::from(inventory.selected));
+    // The piece took hits, then he moved it into the backpack.
+    let mut worn = std::mem::replace(&mut inventory.slots[slot], ItemStack::EMPTY);
+    worn.damage = Some(17);
+    inventory.slots[20] = worn.clone();
+    let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
+    let inventory = &state.players[&player].inventory;
+    assert_eq!(inventory.slots[slot], worn, "back in its slot, wear kept");
+    assert!(inventory.slots[20].is_empty());
+}
+
+#[test]
+fn a_rearm_keeps_the_worn_battle_piece_not_a_plain_twin() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    let kit = state.hostile.battle.live.holds[0].kit.clone();
+    let (equipment, piece) = kit
+        .iter()
+        .enumerate()
+        .find_map(|(index, stack)| {
+            stack
+                .as_ref()
+                .filter(|stack| stack.components.is_some())
+                .map(|stack| (index, stack.clone()))
+        })
+        .expect("a kit piece with battle components");
+    // An ordinary item of the same id sits before the worn piece, so a weak
+    // identity match would take the twin first.
+    let selected = usize::from(state.players[&player].inventory.selected);
+    assert!(player_index(equipment, selected) > 9);
+    state.players.get_mut(&player).unwrap().inventory.slots[9] = ItemStack::new(piece.item_id, 1);
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    let inventory = &state.players[&player].inventory;
+    assert_eq!(
+        inventory.slots[player_index(equipment, usize::from(inventory.selected))],
+        piece
+    );
+    assert_exactly_the_kit(&state, player);
 }
 
 #[test]
@@ -1357,7 +1554,13 @@ fn battle_resume_restored_roles_rearm_once_and_rebind_after_rejoin() {
     let history = crate::battle::persistence::encode(&state).unwrap();
     state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
     crate::battle::persistence::restore(&mut state).unwrap();
-    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&ids[0])
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     let viewer = state.entities.slot_of(ids[1]).unwrap();
     state.entities.set_pos(viewer, [0.0, 90.0, 0.0]);
     run_tick(&mut state, &[]);
@@ -1371,7 +1574,13 @@ fn battle_resume_restored_roles_rearm_once_and_rebind_after_rejoin() {
         "restored binding moves spectator to holder camera"
     );
     assert_eq!(state.hostile.battle.formation.held, held);
-    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&ids[0])
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     run_tick(&mut state, &[]);
     assert!(
         state.players[&ids[0]].inventory.slots[0].is_empty(),
@@ -1429,7 +1638,13 @@ fn battle_resume_restored_roles_rearm_once_and_rebind_after_rejoin() {
     );
     let respawned = player_named(&state, "PovRed").unwrap();
     assert!(!state.players[&respawned].inventory.slots[0].is_empty());
-    state.players.get_mut(&respawned).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&respawned)
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     run_tick(&mut state, &[]);
     assert!(
         state.players[&respawned].inventory.slots[0].is_empty(),
@@ -1453,7 +1668,13 @@ fn battle_resume_locked_roles_wait_for_private_state_hydration() {
     .unwrap();
     let uuids =
         [ids[0], ids[1]].map(|id| state.entities.row(state.entities.slot_of(id).unwrap()).uuid);
-    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&ids[0])
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     let history = crate::battle::persistence::encode(&state).unwrap();
     run_tick(
         &mut state,
@@ -1509,7 +1730,13 @@ fn battle_resume_locked_roles_wait_for_private_state_hydration() {
     run_tick(&mut state, &[]);
     assert_exactly_the_kit(&state, holder);
     assert_camera(&state, viewer, holder);
-    state.players.get_mut(&holder).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&holder)
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     run_tick(&mut state, &[]);
     assert!(
         state.players[&holder].inventory.slots[0].is_empty(),
@@ -1526,7 +1753,13 @@ fn battle_resume_failed_rearm_retries_same_identity_only_after_equipment_succeed
     let history = crate::battle::persistence::encode(&state).unwrap();
     state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
     crate::battle::persistence::restore(&mut state).unwrap();
-    state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&player)
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     // Exercise an actual live() refusal without changing the player identity.
     team(&mut state, player, &["add", "blocked"]).unwrap();
     state
@@ -1556,7 +1789,13 @@ fn battle_resume_failed_rearm_retries_same_identity_only_after_equipment_succeed
         state.hostile.battle.live.rearmed,
         vec![("PovRed".into(), player)]
     );
-    state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    state
+        .players
+        .get_mut(&player)
+        .unwrap()
+        .inventory
+        .slots
+        .swap(0, 20);
     run_tick(&mut state, &[]);
     assert!(state.players[&player].inventory.slots[0].is_empty());
 }

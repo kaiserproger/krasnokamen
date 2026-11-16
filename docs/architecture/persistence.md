@@ -264,7 +264,9 @@ roles retain only their last wire ID; recovery reserves those IDs and roster/
 execution tombstones against allocator reuse, and a reconnect transfers that
 role's retained targeting references to its new wire ID.
 Named roles remain pending while a connection is auth-locked. Re-arm and
-spectator binding run only after private player state has been hydrated.
+spectator binding run only after private player state has been hydrated; a
+restored holder's kit comes only from the pieces in his durable player record,
+never from a fresh copy of the saved hold's kit.
 
 No downtime catch-up or tag-based formation reconstruction occurs. Running
 state resumes automatically; paused state remains paused. `battle setup` reports

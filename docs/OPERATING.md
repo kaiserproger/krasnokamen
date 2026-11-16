@@ -760,8 +760,12 @@ world or a copy restored from backup: several of its effects stay after
 - `battle live <player> <side>` sets `keep_inventory` to `true` (not restored)
   and replaces the player's whole inventory with the rank's kit: open menus
   are closed first, every other slot is emptied and the overflow is discarded,
-  not dropped. Each respawn and re-arm does the same. The player's previous
-  items are gone; `battle reset` does not give them back.
+  not dropped. Each respawn and re-arm (a reconnect, or `battle live` again for
+  an existing hold) puts back only the kit pieces the player still carries
+  (wear kept) and discards the rest the same way; a piece he threw away, stored
+  or broke is not issued again, and a fresh kit needs a new hold after
+  `battle reset`. The player's previous items are gone; `battle reset` does not
+  give them back.
 - `/spectate [<target> [<player>]]` (permission level 2) binds an existing
   spectator to one entity; without arguments it releases the executing player's
   camera. Sneak and leaving spectator mode also release it. A dead or disconnected
