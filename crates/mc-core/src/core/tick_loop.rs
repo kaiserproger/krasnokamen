@@ -611,7 +611,9 @@ pub(super) fn acknowledge_checkpoint(state: &mut TickState, ack: CheckpointAck) 
 /// depend on a base that a crash or input change could regenerate. Even vanilla
 /// inputs may change before restart. Only the journal owner waits; publication
 /// still permits an unflushed tail. Returns the baseline handoff time, or the
-/// halt reason when the journal thread is gone.
+/// halt reason when the journal thread is gone. A refused send says only that
+/// the thread ended (it logs its own cause), so either send reports the same
+/// journal halt, not the work item that happened to find it gone.
 pub(super) fn send_tick_journal(
     state: &mut TickState,
     work_tx: &std::sync::mpsc::SyncSender<JournalWork>,
@@ -620,15 +622,15 @@ pub(super) fn send_tick_journal(
     entries: Vec<JournalEntry>,
     plugin_ack: Option<std::sync::mpsc::Sender<u64>>,
 ) -> Result<std::time::Duration, &'static str> {
+    const JOURNAL_HALT: &str = "journal failed: world halted (fail closed)";
     let generated_start = std::time::Instant::now();
     while let Some(batch) = crate::dimensions::checkpoint::take_generated(state) {
         work_tx
             .send(JournalWork::RequireGenerated(Box::new(batch)))
-            .map_err(|_| "generated baseline failed: world halted (fail closed)")?;
+            .map_err(|_| JOURNAL_HALT)?;
     }
     let generated_time = generated_start.elapsed();
-    send_append(work_tx, budget, tick, entries, plugin_ack)
-        .map_err(|_| "journal failed: world halted (fail closed)")?;
+    send_append(work_tx, budget, tick, entries, plugin_ack).map_err(|_| JOURNAL_HALT)?;
     Ok(generated_time)
 }
 
