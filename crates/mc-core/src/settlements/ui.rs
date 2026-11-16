@@ -2105,7 +2105,7 @@ fn source_reason(lang: Lang, reason: Option<super::construction::SourceReason>) 
     }
 }
 
-fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
+fn blueprint_label<'a>(ctx: &Ctx, blueprint: &'a str) -> &'a str {
     match (ctx.lang, blueprint) {
         (Lang::En, "house") => "House",
         (Lang::Ru, "house") => "Дом",
@@ -2155,8 +2155,7 @@ fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
         (Lang::Ru, "lamp") => "Фонарь",
         (Lang::En, "meadow") => "Meadow clearing",
         (Lang::Ru, "meadow") => "Расчистка луга",
-        (Lang::En, _) => "Building",
-        (Lang::Ru, _) => "Здание",
+        _ => blueprint,
     }
 }
 
