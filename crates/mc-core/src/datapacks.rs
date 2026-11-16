@@ -16,7 +16,80 @@ pub(crate) mod worldgen;
 
 const COMMAND_BUDGET: usize = crate::command_context::LIMIT;
 const MAX_RESOURCES: usize = 16384;
-const MAX_BYTES: usize = 16 * 1024 * 1024;
+/// Whether `relative` (below `data/`) is `<namespace>/<directory>/...` with a
+/// directory vanilla does not load.
+fn is_ignored_directory(relative: &str) -> bool {
+    let mut parts = relative.splitn(3, '/');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(_), Some(kind), Some(_)) if !VANILLA_DATA_DIRECTORIES.contains(&kind)
+    )
+}
+/// Bytes one load may read and expand across every selected pack: raw files plus
+/// the decompressed size of gzip structure NBT. The full converted MVS structure
+/// pack is 4,110,276 B on disk and 48,122,266 B decompressed (measured 2026-11-17),
+/// so 128 MiB leaves about 2.7x headroom for a larger pack while still bounding the
+/// memory a hostile pack can make the server allocate.
+const MAX_BYTES: usize = 128 * 1024 * 1024;
+/// Largest datapack `.zip` (its central directory is read whole into memory).
+const MAX_ARCHIVE_BYTES: u64 = 16 * 1024 * 1024;
+/// Directories below `data/<namespace>/` that vanilla 26.3 loads: the first path
+/// segment of every data-driven registry in `RegistryDataLoader` (`WORLD_REGISTRIES`,
+/// `DIMENSION_REGISTRIES`, `RELOADABLE_REGISTRIES`; each registry's directory is its
+/// key path, read from the 26.3 merged client+server jar), plus the three non-registry
+/// loaders `function` (`ServerFunctionLibrary`), `tags` and `structure` (templates,
+/// `StructureTemplateManager`). Vanilla ignores every other directory (mod
+/// configuration such as `moogs_structures/`); this server ignores them too, but
+/// refuses the vanilla ones it does not implement, so no semantics are dropped silently.
+const VANILLA_DATA_DIRECTORIES: &[&str] = &[
+    "advancement",
+    "banner_pattern",
+    "block_transformer",
+    "cat_sound_variant",
+    "cat_variant",
+    "chat_type",
+    "chicken_sound_variant",
+    "chicken_variant",
+    "context_float_provider",
+    "context_int_provider",
+    "cow_sound_variant",
+    "cow_variant",
+    "damage_type",
+    "decorated_pot_pattern",
+    "dialog",
+    "dimension",
+    "dimension_type",
+    "enchantment",
+    "enchantment_provider",
+    "frog_variant",
+    "function",
+    "instrument",
+    "item_modifier",
+    "jukebox_song",
+    "loot_table",
+    "painting_variant",
+    "pig_sound_variant",
+    "pig_variant",
+    "predicate",
+    "recipe",
+    "slot_source",
+    "structure",
+    "sulfur_cube_archetype",
+    "tags",
+    "test_environment",
+    "test_instance",
+    "timeline",
+    "trade_set",
+    "trial_spawner",
+    "trim_material",
+    "trim_pattern",
+    "villager_trade",
+    "wolf_sound_variant",
+    "wolf_variant",
+    "world_clock",
+    "worldgen",
+    "zombie_nautilus_variant",
+];
 /// Feature flags enabled for this world and advertised during configuration.
 pub const ENABLED_FEATURES: &[&str] = &["minecraft:vanilla"];
 
@@ -87,6 +160,8 @@ pub(crate) struct PackSet {
     failed: BTreeMap<String, String>,
     /// Entries of the folder that are no pack (a README, a stray file).
     not_packs: Vec<String>,
+    /// Files of selected packs below a directory vanilla does not load (`pack: path`).
+    ignored: Vec<String>,
     /// New packs this load left out because they cannot load, with the reason.
     skipped: Vec<String>,
     /// The `pack.mcmeta` filters of every enabled pack: they hide the files of
@@ -163,6 +238,7 @@ impl Default for PackSet {
             origins: BTreeMap::new(),
             failed: BTreeMap::new(),
             not_packs: Vec::new(),
+            ignored: Vec::new(),
             skipped: Vec::new(),
             filters: Vec::new(),
         }
@@ -351,7 +427,7 @@ fn open_zip(path: &Path) -> Result<zip::ZipArchive<std::fs::File>, String> {
     }
     // Opening reads the whole central directory into memory, whatever
     // the entries are: bound it by the file, then by the entry count.
-    if metadata.len() > MAX_BYTES as u64 {
+    if metadata.len() > MAX_ARCHIVE_BYTES {
         return Err(format!("Datapack archive too large: {}", path.display()));
     }
     let archive = zip::ZipArchive::new(std::fs::File::open(path).map_err(|e| e.to_string())?)
@@ -751,6 +827,9 @@ impl PackSet {
                             .checked_sub(expanded.saturating_sub(bytes.len()))
                             .ok_or("Datapack expanded byte limit exceeded")?;
                         layer.resources.insert(relative.clone(), bytes.into());
+                    } else if is_ignored_directory(&relative) {
+                        // Not decoded: vanilla never reads such a file, whatever its bytes.
+                        result.ignored.push(format!("{id}: {relative}"));
                     } else {
                         let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
                         result.add_file(&mut raw_tags, id, &relative, text)?;
@@ -1009,6 +1088,13 @@ impl PackSet {
             if previous.is_none_or(|previous| !previous.not_packs.contains(name)) {
                 warnings.push(format!(
                     "Found non-pack entry '{name}' in the datapack folder, ignoring it"
+                ));
+            }
+        }
+        for path in &self.ignored {
+            if previous.is_none_or(|previous| !previous.ignored.contains(path)) {
+                warnings.push(format!(
+                    "Ignoring datapack file {path}: its directory is not a vanilla data resource type"
                 ));
             }
         }
