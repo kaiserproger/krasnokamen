@@ -249,7 +249,7 @@ pub(crate) fn work(
         let here = crate::settlements::allocator::at(state.entities.pos(slot));
         return Some(WorkTarget {
             pos: here,
-            exact: true,
+            exact: false,
         });
     }
     Some(WorkTarget {
@@ -303,6 +303,38 @@ fn in_reach(
         pos[axis] + width <= min || pos[axis] - width >= min + f64::from(size[axis])
     });
     outside && super::mining::near(state, slot, block_pos(next), REACH)
+}
+
+pub(crate) fn wait_reason(
+    state: &TickState,
+    slot: EntitySlot,
+    project: &construction::Project,
+    next: [i32; 3],
+) -> &'static str {
+    let Some(v) = state.entities.row(slot).villager.as_ref() else {
+        return "no_builder";
+    };
+    if crate::settlements::economy::worker_reserved(
+        state,
+        Some(project.settlement),
+        state.entities.row(slot).uuid,
+    ) {
+        return "reserved_worker";
+    }
+    if !working(state, v) {
+        return "builder_inactive";
+    }
+    if executor::next_material(state, project.settlement, &project.structure)
+        .ok()
+        .flatten()
+        .is_some_and(|(item, count)| !carried(v, item, count))
+    {
+        return "collecting_material";
+    }
+    if !in_reach(state, slot, project, next) {
+        return "worksite_unreached";
+    }
+    "placement_not_advancing"
 }
 
 /// Called once per construction admission, before the brain detaches carry.
@@ -376,7 +408,10 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
                 return;
             }
             Ok(false) => {}
-            Err(_) => return,
+            Err(reason) => {
+                construction::note_build_refusal(state, id, reason);
+                return;
+            }
         }
     }
 }
