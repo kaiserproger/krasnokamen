@@ -389,3 +389,114 @@ fn work_route_avoids_roofed_well_and_reaches_the_opposite_rim() {
         v.navigation_path
     );
 }
+
+#[test]
+fn meeting_route_stays_on_the_dry_rim_of_a_roofed_well() {
+    for start in [[9.5, 202.0, 8.5], [15.5, 201.0, 8.5]] {
+        let (mut state, _) = village_state();
+        let wood = block(&state, "minecraft:acacia_wood", &[]);
+        let water = block(&state, "minecraft:water", &[]);
+        let leaves = block(&state, "minecraft:acacia_leaves", &[]);
+        let fence = block(&state, "minecraft:acacia_fence", &[]);
+        let slab = block(&state, "minecraft:acacia_slab", &[]);
+        let bell = block(&state, "minecraft:bell", &[]);
+        let chest = block(&state, "minecraft:chest", &[]);
+        for x in 5..=11 {
+            for z in 3..=12 {
+                state
+                    .world
+                    .set_block(x, 201, z, state.registry.states.stone);
+            }
+        }
+        for x in 7..=9 {
+            for z in [4, 5, 7, 8, 9] {
+                state.world.set_block(x, 201, z, wood);
+            }
+            for z in 5..=7 {
+                state.world.set_block(x, 204, z, slab);
+            }
+            for z in 8..=9 {
+                state.world.set_block(x, 204, z, leaves);
+            }
+        }
+        for x in [7, 9] {
+            for z in [5, 7] {
+                for y in 202..=203 {
+                    state.world.set_block(x, y, z, fence);
+                }
+            }
+        }
+        state.world.set_block(8, 201, 4, water);
+        state.world.set_block(8, 201, 8, water);
+        state.world.set_block(8, 200, 8, wood);
+        let meeting = BlockPos { x: 8, y: 203, z: 6 };
+        state.world.set_block(meeting.x, meeting.y, meeting.z, bell);
+        state.world.set_block(9, 202, 6, chest);
+        state.world.fold_overlay();
+        state.day_time = 10_000;
+        let slot = villager(&mut state, start);
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .meeting_point = Some(meeting);
+        let mut arrived = false;
+        for _ in 0..400 {
+            step(&mut state);
+            let pos = state.entities.pos(slot);
+            let v = state.entities.row(slot).villager.as_ref().unwrap();
+            assert_eq!(v.activity, Activity::Meet);
+            assert!(
+                !(pos[0] > 8.0 && pos[0] < 9.0 && pos[2] > 8.0 && pos[2] < 9.0),
+                "MEET enters the well at {pos:?}; target={:?}, path={:?}",
+                v.navigation_target,
+                v.navigation_path
+            );
+            let here = at(pos);
+            arrived |= here.x.abs_diff(meeting.x)
+                + here.y.abs_diff(meeting.y)
+                + here.z.abs_diff(meeting.z)
+                <= 6;
+        }
+        assert!(
+            arrived,
+            "MEET from {start:?} never reached the bell's gathering area"
+        );
+    }
+}
+
+#[test]
+fn meeting_arrival_stops_committed_motion_but_not_a_different_delivery() {
+    let mut state = test_state();
+    let meeting = BlockPos { x: 8, y: 201, z: 8 };
+    let bell = block(&state, "minecraft:bell", &[]);
+    state.world.set_block(meeting.x, meeting.y, meeting.z, bell);
+    state.world.fold_overlay();
+    let slot = villager(&mut state, [10.5, 201.0, 8.5]);
+    let mut v = VillagerState {
+        meeting_point: Some(meeting),
+        navigation_target: Some(meeting),
+        navigation_path: vec![BlockPos { x: 9, y: 201, z: 8 }],
+        ..Default::default()
+    };
+    move_committed(&mut state, slot, &mut v, Activity::Meet);
+    assert!(
+        v.navigation_path.is_empty(),
+        "a committed meeting route must stop on arrival"
+    );
+    assert_eq!(state.entities.pos(slot)[0], 10.5);
+    let delivery = BlockPos {
+        x: 14,
+        y: 201,
+        z: 8,
+    };
+    v.navigation_target = Some(delivery);
+    v.navigation_path.push(delivery);
+    move_committed(&mut state, slot, &mut v, Activity::Meet);
+    assert!(
+        state.entities.pos(slot)[0] > 10.5,
+        "a different destination must still be approached"
+    );
+}

@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// Horizontal arrival radius of a committed resident waypoint.
+pub(crate) const WAYPOINT_REACH: f64 = 0.3;
+
 /// Test-only immutable A/B reference: disabling both caches leaves the same
 /// single-standing algorithm and ordinary per-tick collision integration.
 #[cfg(test)]
@@ -305,6 +308,40 @@ impl mc_physics::BlockSampler for MotionSampler<'_> {
         }
     }
 }
+// Vanilla's MEET walk target stops at Manhattan distance six from the bell.
+// It is a gathering area, not a request to pack bodies into the POI's cell.
+fn meeting_arrived(
+    state: &TickState,
+    slot: EntitySlot,
+    v: &VillagerState,
+    target: Option<BlockPos>,
+    scheduled: Activity,
+) -> bool {
+    if scheduled != Activity::Meet {
+        return false;
+    }
+    let Some(meeting) = v.meeting_point.filter(|point| Some(*point) == target) else {
+        return false;
+    };
+    let here = at(state.entities.pos(slot));
+    let body = state.entities.body(slot);
+    here.x
+        .abs_diff(meeting.x)
+        .saturating_add(here.y.abs_diff(meeting.y))
+        .saturating_add(here.z.abs_diff(meeting.z))
+        <= 6
+        // Leaving fluid or overlapping a bank edge is not a dry-cell arrival.
+        && !immersion(state, slot).0
+        && allocator::standing(
+            &state.world,
+            &state.registry,
+            here,
+            body.half_width,
+            body.height,
+        )
+        .is_some()
+}
+
 pub(super) fn move_to(
     state: &mut TickState,
     cache: &mut PoiCache,
@@ -316,6 +353,8 @@ pub(super) fn move_to(
     let pos = state.entities.pos(slot);
     let body = state.entities.body(slot);
     let (width, height) = (body.half_width, body.height);
+    let scheduled = cache.activity_for(v.age, v.data.profession, state.day_time);
+    let target = target.filter(|_| !meeting_arrived(state, slot, v, target, scheduled));
     let mut unchanged = false;
     if let Some(target) = target {
         let new_target = v.navigation_target != Some(target);
@@ -409,7 +448,6 @@ pub(super) fn move_to(
         v.navigation_chunks.clear();
         v.navigation_search_failed = false;
     }
-    let scheduled = cache.activity_for(v.age, v.data.profession, state.day_time);
     move_committed_with_route(state, slot, v, scheduled, unchanged);
 }
 
@@ -434,6 +472,10 @@ pub(super) fn move_committed_with_route(
     unchanged: bool,
 ) {
     let pos = state.entities.pos(slot);
+    if meeting_arrived(state, slot, v, v.navigation_target, scheduled) {
+        v.navigation_path.clear();
+        v.navigation_chunks.clear();
+    }
     let body = state.entities.body(slot);
     let (width, height) = (body.half_width, body.height);
     let mut geometry = std::mem::take(&mut v.motion_geometry);
@@ -444,7 +486,8 @@ pub(super) fn move_committed_with_route(
         };
         let standing = geometry.standing(state, v, cell, unchanged);
         let reached = standing.unwrap_or_else(|| centre(cell));
-        if (pos[0] - reached[0]).powi(2) + (pos[2] - reached[2]).powi(2) < 0.09
+        if (pos[0] - reached[0]).powi(2) + (pos[2] - reached[2]).powi(2)
+            < WAYPOINT_REACH * WAYPOINT_REACH
             && (pos[1] - reached[1]).abs() < 0.6
         {
             v.navigation_path.pop();

@@ -44,6 +44,12 @@ ledger; repairs use the same material custody and one-cell transaction as
 ordinary work, and completion reconciles the world before issuing a
 certificate.
 
+Building perimeter goals use real supported terrain and must put the next cell
+within the existing 12-block placement reach, with room for navigation's arrival
+tolerance. The bounded perimeter search can choose another side of a hillside
+site; a fixed blueprint-height point over a lower slope is not a standing place.
+Builders still stay outside the future footprint and pay for each placed cell.
+
 Street and workstation construction are temporary Builder employment. Completing
 that infrastructure releases its Builder, so production's live free-resident list
 can change between dialogs. Opening or refusing a production plan does not own a
@@ -165,5 +171,12 @@ scaled to 80 against a cardinal step of 10). A standable water bed is not a
 dry-land preference: without that cost, workers cut through a roofed well
 instead of following its dry rim and can no longer reach food or construction.
 Water is still traversable when needed; swimming, fords, collision and physical
-escape rules are unchanged. This prevents new route entry, not recovery of an
-already trapped saved resident.
+escape rules are unchanged. This preference is not an unconditional water-entry
+fence and does not recover an already trapped saved resident.
+
+MEET approaches the bell's gathering area, not its exact block. Like vanilla
+`SetWalkTargetFromBlockMemory` in the meeting package, it stops within Manhattan
+distance six on a supported, dry cell; an immersed resident still follows
+its ordinary shore route. Both route admission and already committed movement
+honour that arrival distance, including ticks without a new brain decision. Other work,
+food, household and military destinations keep their own arrival contracts.

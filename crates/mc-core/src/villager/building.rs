@@ -175,15 +175,44 @@ fn site_target(
         min[1],
         min[2] + i32::from(size[2]),
     ];
-    [
-        [min[0] - MARGIN, min[1] + 1, next[2]],
-        [max[0] - 1 + MARGIN, min[1] + 1, next[2]],
-        [next[0], min[1] + 1, min[2] - MARGIN],
-        [next[0], min[1] + 1, max[2] - 1 + MARGIN],
-    ]
-    .into_iter()
-    .min_by_key(|point| point[0].abs_diff(next[0]) + point[2].abs_diff(next[2]))
-    .map(block_pos)
+    let body = state.entities.body(slot);
+    let here = state.entities.pos(slot);
+    let mut best: Option<(f64, BlockPos)> = None;
+    // The nearest horizontal side can be below a hillside site's roof reach.
+    // Choose an actual supported perimeter stand, with arrival clearance, not
+    // a point at the blueprint's fixed base height above a lower slope.
+    let edge_min = [min[0] - MARGIN, min[2] - MARGIN];
+    let edge_max = [max[0] - 1 + MARGIN, max[2] - 1 + MARGIN];
+    let perimeter = (edge_min[0]..=edge_max[0])
+        .flat_map(|x| [[x, edge_min[1]], [x, edge_max[1]]])
+        .chain((edge_min[1] + 1..edge_max[1]).flat_map(|z| [[edge_min[0], z], [edge_max[0], z]]));
+    for [x, z] in perimeter {
+        let Some(at) =
+            crate::settlements::forestry::footing(state, project.settlement, [x, min[1], z])
+        else {
+            continue;
+        };
+        let Some(stand) = crate::settlements::allocator::standing(
+            &state.world,
+            &state.registry,
+            at,
+            body.half_width,
+            body.height,
+        ) else {
+            continue;
+        };
+        let placement_distance = (stand[0] - f64::from(next[0]) - 0.5).powi(2)
+            + (stand[1] - f64::from(next[1])).powi(2)
+            + (stand[2] - f64::from(next[2]) - 0.5).powi(2);
+        if placement_distance > (REACH - super::brain::WAYPOINT_REACH).powi(2) {
+            continue;
+        }
+        let distance = (0..3).map(|axis| (here[axis] - stand[axis]).powi(2)).sum();
+        if best.as_ref().is_none_or(|(known, _)| distance < *known) {
+            best = Some((distance, at));
+        }
+    }
+    best.map(|(_, at)| at)
 }
 
 /// Brain hook only selects a navigation target while villager state is detached.
@@ -340,3 +369,7 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         construction::finish_project(state, id);
     }
 }
+
+#[cfg(test)]
+#[path = "building_site_reach_tests.rs"]
+mod site_reach_tests;
