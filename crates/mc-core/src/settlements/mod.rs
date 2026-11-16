@@ -22,6 +22,7 @@ pub(crate) mod economy_commands;
 pub(crate) mod economy_customization;
 pub(crate) mod forestry;
 pub(crate) mod layout;
+pub(crate) mod migration;
 pub mod presentation;
 mod production;
 pub(crate) use crate::plugin_inventories::native as inventory;
@@ -29,6 +30,7 @@ pub mod districts;
 pub mod households;
 pub mod persistence;
 pub mod startup;
+pub(crate) mod transit;
 pub(crate) mod ui;
 pub(crate) mod ui_text;
 pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeSet) -> u64 {
@@ -36,6 +38,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeS
     let elapsed = allocator::tick(state, changes);
     construction::tick(state);
     army::tick(state);
+    let arrivals = transit::tick(state, changes);
+    migration::tick(state, changes, &arrivals);
     elapsed
 }
 
@@ -47,6 +51,25 @@ pub(crate) fn bind(
     state: &mut TickState,
     id: SettlementId,
     entity: EntityId,
+) -> Result<(), &'static str> {
+    bind_validated(state, id, entity, true)
+}
+
+/// Only route-proven outside entrants use this admission; manual bind still
+/// requires the body to be physically present inside the civil radius.
+pub(crate) fn admit_arrival(
+    state: &mut TickState,
+    id: SettlementId,
+    entity: EntityId,
+) -> Result<(), &'static str> {
+    bind_validated(state, id, entity, false)
+}
+
+fn bind_validated(
+    state: &mut TickState,
+    id: SettlementId,
+    entity: EntityId,
+    require_presence: bool,
 ) -> Result<(), &'static str> {
     let record = state.settlements.get(id).ok_or("settlement not found")?;
     let slot = state.entities.slot_of(entity).ok_or("villager not found")?;
@@ -66,7 +89,7 @@ pub(crate) fn bind(
         .zip(record.anchor)
         .map(|(coordinate, anchor)| (coordinate - f64::from(anchor)).powi(2))
         .sum();
-    if distance > f64::from(record.radius).powi(2) {
+    if require_presence && distance > f64::from(record.radius).powi(2) {
         return Err("villager is outside the settlement");
     }
     if villager.settlement == Some(id) {
@@ -156,6 +179,7 @@ pub(crate) fn remove(state: &mut TickState, id: SettlementId) -> bool {
     if !state.settlements.remove(id) {
         return false;
     }
+    state.settlements.migration.remove(id);
     fn clear(world: &mut TickState, id: SettlementId) {
         for index in 0..world.entities.len() {
             let slot = crate::entities::EntitySlot(index as u32);

@@ -59,6 +59,13 @@ struct BrainCadence {
     was_busy: bool,
 }
 
+#[cfg(test)]
+#[derive(Debug, Default)]
+pub(crate) struct ExecutionTrace {
+    expected: Vec<EntityId>,
+    actual: Vec<EntityId>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResidentBrain {
     id: EntityId,
@@ -209,7 +216,7 @@ struct FoodItem {
     farmer_pickup: bool,
 }
 
-fn food_points_for_name(name: &str) -> u8 {
+pub(crate) fn food_points_for_name(name: &str) -> u8 {
     match name {
         "bread" => 4,
         "carrot" | "potato" | "beetroot" => 1,
@@ -830,18 +837,30 @@ fn recover_penetration(state: &mut TickState, slot: EntitySlot) {
 pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
     #[cfg(test)]
     let brain_start = std::time::Instant::now();
-    if state.entities.villager_chunks().is_empty() {
+    if state.entities.villager_chunks().is_empty() && state.villager_pois.residents.is_empty() {
         state.tick_budget.finish(state.dimension, Consumer::Brain);
         return;
     }
-    // The allocator ran immediately before this tick and owns every POI
-    // memory; the brain never acquires or validates claims itself.
+    // POI allocation precedes settlement policy. Reconcile only the entity
+    // projection after policy can remove, move or introduce bodies.
     let mut cache = std::mem::take(&mut state.villager_pois);
+    cache.reconcile_entities(state);
     #[cfg(test)]
     let refreshed = brain_start.elapsed().as_micros();
     cache.prepare_brains(state);
     #[cfg(test)]
     let prepared = brain_start.elapsed().as_micros();
+    #[cfg(test)]
+    if let Some(trace) = cache.execution_trace.as_mut() {
+        trace.expected.clear();
+        trace.actual.clear();
+        trace
+            .expected
+            .extend(cache.execution_indices.iter().filter_map(|&index| {
+                let brain = cache.resident_data[index];
+                brain.active.then_some(brain.id)
+            }));
+    }
     #[cfg(test)]
     let acquired = brain_start.elapsed().as_micros();
     #[cfg(test)]
@@ -853,6 +872,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let slot = cache.residents[index];
         let id = cache.resident_data[index].id;
+        #[cfg(test)]
+        if let Some(trace) = cache.execution_trace.as_mut() {
+            trace.actual.push(state.entities.body(slot).id);
+        }
         if state
             .entities
             .row(slot)
@@ -1265,7 +1288,54 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             };
             let mut short_wander = false;
             let mut exact_target = false;
-            let target = if shelter_night {
+            let outbound = (v.activity != Activity::Panic)
+                .then(|| {
+                    crate::settlements::migration::target(state, state.entities.row(slot).uuid)
+                })
+                .flatten();
+            let soldier_target = v.data.profession == Profession::Soldier
+                && !crate::settlements::economy::worker_reserved(
+                    state,
+                    v.settlement,
+                    state.entities.row(slot).uuid,
+                );
+            let economy_target =
+                if !soldier_target && !matches!(v.activity, Activity::Rest | Activity::Panic) {
+                    crate::settlements::economy::target(
+                        state,
+                        v.settlement,
+                        state.entities.row(slot).uuid,
+                    )
+                } else {
+                    None
+                };
+            let useful_target = merchant_busy
+                || outbound.is_some()
+                || v.activity == Activity::Panic
+                || if v.activity == Activity::Rest {
+                    home.is_some()
+                } else if soldier_target {
+                    worker_target.is_some()
+                } else {
+                    economy_target.is_some()
+                        || v.partner
+                            .is_some_and(|id| state.entities.slot_of(id).is_some())
+                        || food_target.is_some()
+                        || (awaiting_profession && job_site.is_some())
+                        || worker_target.is_some()
+                        || (v.activity == Activity::Work
+                            && job_site.is_some_and(|job| {
+                                distance(pos, centre(job)) > JOB_SITE_REACH_SQUARED
+                            }))
+                };
+            let returning =
+                super::return_home::step(state, &mut cache, slot, &mut v, useful_target);
+            let target = if returning {
+                None
+            } else if let Some(exit) = outbound {
+                exact_target = true;
+                Some(exit)
+            } else if shelter_night {
                 let (target, exact) = night_shelter(state, &mut cache, slot, &mut v, pos);
                 exact_target = exact;
                 target
@@ -1307,20 +1377,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 // Rest owns the destination even when a worker still carries
                 // a delivery or an economy task has reserved its next shift.
                 home
-            } else if v.data.profession == Profession::Soldier
-                && !crate::settlements::economy::worker_reserved(
-                    state,
-                    v.settlement,
-                    state.entities.row(slot).uuid,
-                )
-            {
+            } else if soldier_target {
                 exact_target = worker_exact;
                 worker_target
-            } else if let Some(target) = crate::settlements::economy::target(
-                state,
-                v.settlement,
-                state.entities.row(slot).uuid,
-            ) {
+            } else if let Some(target) = economy_target {
                 exact_target = true;
                 Some(target)
             } else if let Some(partner) = v.partner.and_then(|id| state.entities.slot_of(id)) {
@@ -1403,7 +1463,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             decision_phase!(
                 cache,
                 5,
-                if short_wander {
+                if returning {
+                    let unchanged = !route_changed(state, &v);
+                    move_committed_with_route(state, slot, &mut v, scheduled, unchanged);
+                } else if short_wander {
                     wander_to(
                         state,
                         slot,
@@ -1491,3 +1554,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
 #[cfg(test)]
 #[path = "brain_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "roster_tests.rs"]
+pub(crate) mod roster_tests;

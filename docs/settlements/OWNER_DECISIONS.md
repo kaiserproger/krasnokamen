@@ -77,3 +77,25 @@ This is not an approved war/faction model and must not be described as one.
 
 Implementation and gate evidence belong to the SpainCulture report. Public
 claims require the actual pinned-server run, not this design decision.
+
+## Two-way migration — owner direction 2026-11-16
+
+- Physical housing, food, jobs, seven-day resident deaths and completed buildings
+  determine attractiveness with weights 30/30/15/15/10. The outside world scores
+  35; moves need a gain greater than ten after five points per hundred blocks.
+- Whole households or household-less individuals move. Founding expeditions and
+  reserved members are excluded. Pending walks and transit count against beds.
+- Proven loaded routes use existing relocate/leave/join membership operations;
+  other moves walk to the simulated edge before durable transit. Civil radius
+  is not the simulation boundary. Outside outflow cannot remove carried stock.
+- Outside entrants are ordinary adults, members from their spawn tick with
+  `household = None`; manual bind retains its presence check.
+- Homeless return is below useful work and native urgent targets. It shares the
+  allocator's Home result and bed predicate, native paths, collision and doors.
+- Main resolved the runtime-only Hold restart conflict on 2026-11-17: use one
+  `1200 + entity-id % 40` cadence between **all failed attempts**, not 200 ticks
+  for initial failures. Successful route legs remain immediate; no saved intent.
+  Searches cap at 1024 nodes; no more than three initial failures before Hold.
+- See [migration authority and physical return](../architecture/settlements.md#migration-policy-and-physical-return)
+  for formulas, cadence, notifications and the native custody boundary.
+

@@ -361,6 +361,31 @@ blow and staged-body death before settlement, after real terrain refusal, and
 after waiting settlement. Each compares recovered history/native poses and a
 subsequent checkpoint/restart; running battles also land further native damage.
 
+### Migration transit custody
+
+`transit/<uuid>` native global rows (version 1, canonical lowercase hyphenated
+UUID, the record's lowest member) and dimension-enveloped `Transit` tick-WAL
+post-images (a `None` image deletes) own households and lone residents between
+settlements ([ADR 0023](../decisions/0023-offscreen-settlement-simulation.md)).
+A member is never both a world entity and a transit member: the departure tick
+removes the bodies (WAL `RemoveEntity`, checkpoint entity tombstones) and
+inserts the record; the arrival tick restores the same UUIDs and deletes the
+record. The checkpoint drops `transit/` rows the WAL deleted in the same native
+transaction. Recovery fails closed when a UUID is both an entity and a member,
+a member of two records, or a record household is also a settlement's; the
+offline census reports `transit_records` / `transit_members` and refuses the
+same duplicates. Binaries without this domain refuse such a store.
+
+Crash evidence reads the durable boundary itself: `krasnokamen world
+custody-census --copy <disposable copy> --receipt <new file>` repairs the
+copy, folds the checkpoint and the contiguous published WAL through offline
+recovery's replay records (before any entity is restored), lists every villager
+UUID and every transit record with its members, and fails when a member is
+also an entity, is held by two records or its household is still a
+settlement's. The `transit-crash` harness profile SIGKILLs a pinned release
+server at the departure, in-transit and arrival cuts and checks that census,
+the frozen recovery at the durable tick and the clean-stop `world census`.
+
 ## Quarantined chunks
 
 A chunk whose stored record cannot be loaded (decode error, invalid block

@@ -85,6 +85,10 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
         "Move a household; requires ownership of both towns or operator.",
     ),
     (
+        "transit",
+        "Operator-only migration custody: depart <settlement> <household> <destination> | list.",
+    ),
+    (
         "production",
         "Run real worker recipes: status/start/pause/resume/cancel.",
     ),

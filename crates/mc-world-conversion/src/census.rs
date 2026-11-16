@@ -14,7 +14,9 @@ use mc_core::journal::{CheckpointManifest, Replay};
 use mc_core::native_checkpoint::{
     dimension_id, generation_records, hydrate_visited_entity, native_identity, validate_manifest,
 };
-use mc_core::settlements::persistence::{Row, checkpoint_sequence, parse_row_key};
+use mc_core::settlements::persistence::{
+    Row, checkpoint_sequence, parse_row_key, transit_census_rows,
+};
 use mc_core::{CoreConfig, CoreError};
 use mc_nbt::Tag;
 use mc_world::native::NativeReadOnlyStore;
@@ -24,7 +26,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const SCOPE: &str = "pinned native checkpoint only: entities are the stored table incl. nested \
-Passengers, chunks are persisted native chunk positions, settlements are persisted core rows; \
+Passengers, chunks are persisted native chunk positions, settlements and migration transit \
+records are persisted core rows; every entity and transit member UUID is checked to occur once; \
 no journal replay, no Core load, no tick; refused when journal batches follow the checkpoint";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -160,6 +163,7 @@ fn census(
     // Authoritative settlement rows, validated as hydration validates them.
     let invalid = |reason: String| CoreError::Storage(format!("native settlement: {reason}"));
     let mut settlements = BTreeMap::new();
+    let mut households = BTreeSet::new();
     for (key, record) in &image.globals {
         let Some(id) = parse_row_key(key) else {
             continue;
@@ -178,6 +182,7 @@ fn census(
             .get_mut(&row.dimension)
             .expect("closed set")
             .settlements += 1;
+        households.extend(row.value.households.keys().cloned());
         settlements.insert(
             id.0,
             SettlementCensus {
@@ -204,10 +209,23 @@ fn census(
             "settlement {highest} exceeds persisted sequence {sequence}"
         )));
     }
+    // Migration transit custody (ADR 0023), validated as recovery validates it.
+    let transits = transit_census_rows(&image.globals)?;
+    for transit in &transits {
+        if let Some(household) = &transit.household
+            && households.contains(household)
+        {
+            return Err(invalid(format!(
+                "household {household} is both in transit record {} and a settlement's",
+                transit.id
+            )));
+        }
+    }
 
     // Stream every entity once; the scratch replay holds at most one record.
     let mut scratch = Replay::default();
     let mut wire_ids = BTreeSet::new();
+    let mut entity_uuids = BTreeSet::new();
     let mut orphan_members = 0u64;
     let mut members_total = 0u64;
     let mut household_members_total = 0u64;
@@ -246,8 +264,15 @@ fn census(
                 )));
             }
             census.entity_roots += 1;
-            let mut pending = vec![payload];
-            while let Some(tag) = pending.pop() {
+            let root = uuid::Uuid::from_bytes(entity.identity);
+            if !entity_uuids.insert(root) {
+                return Err(mc_world::native::NativeError::Source(format!(
+                    "{}: duplicate entity UUID {root}",
+                    dimension.name()
+                )));
+            }
+            let mut pending = vec![(payload, true)];
+            while let Some((tag, is_root)) = pending.pop() {
                 let Tag::Compound(fields) = tag else {
                     return Err(mc_world::native::NativeError::Source(format!(
                         "{}: {}: chunk ({}, {}): passenger is not a compound",
@@ -258,6 +283,15 @@ fn census(
                     )));
                 };
                 census.entities += 1;
+                if !is_root
+                    && let Some(uuid) = nbt_uuid(fields)
+                    && !entity_uuids.insert(uuid)
+                {
+                    return Err(mc_world::native::NativeError::Source(format!(
+                        "{}: duplicate entity UUID {uuid}",
+                        dimension.name()
+                    )));
+                }
                 if matches!(mc_data::item_nbt::field(fields, "id"),
                     Some(Tag::String(id)) if id == "minecraft:villager")
                 {
@@ -279,7 +313,7 @@ fn census(
                     }
                 }
                 if let Some(Tag::List(list)) = mc_data::item_nbt::field(fields, "Passengers") {
-                    pending.extend(list.elements.iter());
+                    pending.extend(list.elements.iter().map(|tag| (tag, false)));
                 }
             }
             Ok(())
@@ -295,6 +329,18 @@ fn census(
             Ok(())
         })
         .map_err(storage)?;
+    // Invariant: every member UUID exactly once across entities and records.
+    let mut transit_members = BTreeSet::new();
+    for transit in &transits {
+        for uuid in &transit.members {
+            if entity_uuids.contains(uuid) || !transit_members.insert(*uuid) {
+                return Err(invalid(format!(
+                    "UUID {uuid} of transit record {} occurs more than once",
+                    transit.id
+                )));
+            }
+        }
+    }
 
     let mut tail = 0u64;
     mc_core::journal::visit_complete_batches_after(&source.join("journal"), manifest.tick, |_| {
@@ -332,6 +378,8 @@ fn census(
         ("household_members".into(), household_members_total),
         ("tombstones".into(), total(|d| d.tombstones)),
         ("settlement_sequence".into(), sequence),
+        ("transit_records".into(), transits.len() as u64),
+        ("transit_members".into(), transit_members.len() as u64),
     ]);
     receipt.dimensions = dimensions
         .into_iter()
@@ -340,4 +388,17 @@ fn census(
     receipt.settlement_details = settlements.into_values().collect();
     receipt.status = "PASS".into();
     Ok(())
+}
+
+/// Vanilla `UUID` int-array of one entity compound.
+fn nbt_uuid(fields: &[(String, Tag)]) -> Option<uuid::Uuid> {
+    let Some(Tag::IntArray(ints)) = mc_data::item_nbt::field(fields, "UUID") else {
+        return None;
+    };
+    let ints: [i32; 4] = ints.as_slice().try_into().ok()?;
+    let mut bytes = [0; 16];
+    for (chunk, int) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(ints) {
+        *chunk = int.to_be_bytes();
+    }
+    Some(uuid::Uuid::from_bytes(bytes))
 }

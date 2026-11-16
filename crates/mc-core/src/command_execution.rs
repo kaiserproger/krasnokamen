@@ -1442,7 +1442,7 @@ pub(crate) fn execute(
             return crate::command_text::execute_title(state, connection, executor, target, action);
         }
         Command::Settlement(command) => {
-            settlement(state, connection, executor, command);
+            settlement(state, connection, executor, command, changes);
         }
         Command::Seed => success_feedback(
             state,

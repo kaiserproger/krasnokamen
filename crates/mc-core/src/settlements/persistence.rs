@@ -23,6 +23,8 @@
 
 use std::collections::BTreeMap;
 
+/// Offline census of migration transit rows (ADR 0023), owned by the transit module.
+pub use super::transit::{CensusRow as TransitCensusRow, census_rows as transit_census_rows};
 use crate::config::CoreError;
 use crate::journal::{JournalEntry, Replay};
 use crate::settlements::{RecordImage, SettlementId, SettlementRecord, validate_record};
@@ -85,6 +87,7 @@ pub(crate) fn checkpoint_rows(
                 crate::native_checkpoint::record(tick, payload),
             );
         }
+        super::transit::checkpoint_rows(world, tick, &mut rows)?;
     }
     let sequence = std::iter::once(state)
         .chain(state.other_dimensions.values().map(|world| &**world))
@@ -117,6 +120,7 @@ pub(crate) fn journal_entries(state: &mut TickState, tick: u64, entries: &mut Ve
             tick,
         });
     }
+    super::transit::journal_entries(state, tick, entries);
 }
 
 /// Hydrate one dimension's registry from the global checkpoint rows folded
@@ -192,6 +196,7 @@ pub(crate) fn hydrate_dimension(
     let water = state.settlements.high_water().max(sequence);
     state.settlements.set_high_water(water);
     state.settlement_sequence = state.settlement_sequence.max(water);
+    super::transit::hydrate(state, checkpoint, replay)?;
     // Drained: hydration images must not re-enter the next tick's WAL.
     let _ = state.settlements.take_images();
     Ok(())
@@ -351,6 +356,9 @@ pub(crate) fn finish_recovery(state: &mut TickState) -> Result<(), CoreError> {
             }
         }
     }
+    // Custody first: a member that is both a body and in transit is the
+    // specific corruption, whatever stale membership the body also carries.
+    super::transit::validate_custody(state)?;
     crate::settlements::validate_memberships(state)?;
     crate::settlements::rebuild_counts(state);
     for world in state.other_dimensions.values_mut() {

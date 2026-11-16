@@ -125,6 +125,23 @@ pub(in crate::settlements) fn validate_claims(state: &TickState) -> Result<(), &
     Ok(())
 }
 
+/// Shared founding/migration exclusion, independent of household size or food.
+pub(crate) fn member_unreserved(
+    state: &TickState,
+    parent: SettlementId,
+    entity: crate::boundary::EntityId,
+) -> bool {
+    let Some(slot) = state.entities.slot_of(entity) else {
+        return false;
+    };
+    let row = state.entities.row(slot);
+    row.villager.as_ref().is_some_and(|v| {
+        v.soldier.is_none()
+            && v.conversion_time.is_none()
+            && !super::super::economy::worker_reserved(state, Some(parent), row.uuid)
+    })
+}
+
 fn household_ready(state: &TickState, parent: SettlementId, household: &str, food: bool) -> bool {
     let members = super::super::households::members(state, parent, household);
     if !(2..=3).contains(&members.len())
@@ -166,14 +183,8 @@ fn household_ready(state: &TickState, parent: SettlementId, household: &str, foo
             .slot_of(entity)
             .expect("living household member");
         let v = state.entities.row(slot).villager.as_ref().unwrap();
-        v.soldier.is_none()
-            && v.conversion_time.is_none()
+        member_unreserved(state, parent, entity)
             && (!food || v.data.profession != Profession::Builder)
-            && !super::super::economy::worker_reserved(
-                state,
-                Some(parent),
-                state.entities.row(slot).uuid,
-            )
             && (!food
                 || v.age < 0
                 || v.food_level >= 12

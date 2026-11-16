@@ -1,5 +1,4 @@
 //! Village POI cache: claims, lookups and invalidation.
-//! Moved verbatim from `brain.rs`.
 
 use super::*;
 
@@ -521,6 +520,7 @@ impl PoiCache {
                         self.updates.push(previous.id);
                         self.resident_threats.remove(&previous.id);
                         self.search_at.remove(&previous.id);
+                        self.home_search.remove(&previous.id);
                     }
                 }
             }
@@ -654,42 +654,27 @@ impl PoiCache {
             self.refresh_resident(state, self.allocator_updates[update]);
         }
         self.allocator_updates.clear();
+        // Allocator writes are reflected above; later policy writes must still
+        // invalidate the projection even when their IDs were already dirty.
+        self.entity_revision = Some(state.entities.projection_revision());
     }
 
-    pub(crate) fn refresh(&mut self, state: &TickState) {
-        self.food.refresh(&state.registry.items);
-        if self.kinds.is_empty() {
-            self.kinds
-                .resize(state.registry.collision_boxes.len(), None);
-            for block in state.registry.blocks.states() {
-                self.kinds[block.id.0 as usize] = poi_kind(&state.registry, block.id.0);
-            }
+    pub(super) fn reconcile_entities(&mut self, state: &TickState) {
+        if self.entity_revision == Some(state.entities.projection_revision()) {
+            return;
         }
-        std::mem::swap(&mut self.occupied_beds, &mut self.previous_occupied_beds);
-        self.occupied_beds.clear();
-        self.occupied_beds
-            .extend(state.sleepers.values().map(|s| s.bed));
-        for pos in self
-            .occupied_beds
-            .symmetric_difference(&self.previous_occupied_beds)
-        {
-            if let Some(owners) = self.homes.get(pos) {
-                for &id in owners {
-                    if self.dirty_claims.insert(id) {
-                        self.validation_queue.push_back(id);
-                    }
-                }
-            }
-        }
-        self.merchants.clear();
-        self.merchants
-            .extend(state.players.values().filter_map(|player| {
-                player
-                    .open
-                    .as_ref()
-                    .and_then(crate::villager::trades::merchant_entity)
-            }));
-        self.merchants.sort_unstable();
+        // Old slot bits and scratch cannot survive a same-tick compaction.
+        // Clearing keeps capacity; prepare_brains fills the new slot domain.
+        self.selected.clear();
+        self.full_brains.clear();
+        self.nearby_items.clear();
+        self.nearby_residents.clear();
+        self.defense_slots.clear();
+        self.removed_items.clear();
+        self.refresh_entities(state);
+    }
+
+    fn refresh_entities(&mut self, state: &TickState) {
         self.threats.clear();
         self.threat_max_range = 0.0;
         for threats in self.threat_chunks.values_mut() {
@@ -700,19 +685,6 @@ impl PoiCache {
         }
         self.golems.clear();
         self.refresh_residents(state);
-        for chunk in self
-            .revised_chunks
-            .iter()
-            .chain(state.world.pending_block_chunks())
-        {
-            if let Some(owners) = self.claim_chunks.get(chunk) {
-                for &id in owners {
-                    if self.dirty_claims.insert(id) {
-                        self.validation_queue.push_back(id);
-                    }
-                }
-            }
-        }
         self.refresh_sensor_chunks(state);
         let near_sensor_chunks = &self.near_sensor_chunks;
         for ids in state
@@ -768,6 +740,57 @@ impl PoiCache {
         }
         self.threat_chunks.retain(|_, threats| !threats.is_empty());
         self.items.retain(|_, items| !items.is_empty());
+        self.entity_revision = Some(state.entities.projection_revision());
+    }
+
+    pub(crate) fn refresh(&mut self, state: &TickState) {
+        self.food.refresh(&state.registry.items);
+        if self.kinds.is_empty() {
+            self.kinds
+                .resize(state.registry.collision_boxes.len(), None);
+            for block in state.registry.blocks.states() {
+                self.kinds[block.id.0 as usize] = poi_kind(&state.registry, block.id.0);
+            }
+        }
+        std::mem::swap(&mut self.occupied_beds, &mut self.previous_occupied_beds);
+        self.occupied_beds.clear();
+        self.occupied_beds
+            .extend(state.sleepers.values().map(|s| s.bed));
+        for pos in self
+            .occupied_beds
+            .symmetric_difference(&self.previous_occupied_beds)
+        {
+            if let Some(owners) = self.homes.get(pos) {
+                for &id in owners {
+                    if self.dirty_claims.insert(id) {
+                        self.validation_queue.push_back(id);
+                    }
+                }
+            }
+        }
+        self.merchants.clear();
+        self.merchants
+            .extend(state.players.values().filter_map(|player| {
+                player
+                    .open
+                    .as_ref()
+                    .and_then(crate::villager::trades::merchant_entity)
+            }));
+        self.merchants.sort_unstable();
+        self.refresh_entities(state);
+        for chunk in self
+            .revised_chunks
+            .iter()
+            .chain(state.world.pending_block_chunks())
+        {
+            if let Some(owners) = self.claim_chunks.get(chunk) {
+                for &id in owners {
+                    if self.dirty_claims.insert(id) {
+                        self.validation_queue.push_back(id);
+                    }
+                }
+            }
+        }
         self.refresh_poi_revisions(state);
         // FIFO admission makes every changed resident chunk progress even if
         // another chunk changes again before its turn. Scan the latest image.

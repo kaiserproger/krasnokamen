@@ -67,7 +67,7 @@ View and request construction from **Projects**; see [owner build requests](cons
 
 ## Commands
 
-Names contain 1–64 ASCII letters, digits, `_` or `-`. For management commands below, owner/operator means the owner of the claimed settlement or an operator; an autonomous settlement must first be claimed. Additional action-specific requirements still apply.
+Names contain 1–64 ASCII letters, digits, `_` or `-`. For management commands below, owner/operator means the owner of the claimed settlement or an operator; an autonomous settlement must first be claimed. Operator-only transit commands are a separate custody-control path. Additional action-specific requirements still apply.
 
 | Command | Purpose | Who can run |
 |---|---|---|
@@ -76,13 +76,15 @@ Names contain 1–64 ASCII letters, digits, `_` or `-`. For management commands 
 | `/settlement create <name> [radius]` | Found at your position; radius 1–256 blocks, default 48. | Any authenticated player |
 | `/settlement claim` | Claim the autonomous settlement containing you. | Any player standing inside it |
 | `/settlement list` | List settlement names. | Anyone |
-| `/settlement info [name]` | Show settlement details; without a name, selects the first record. | Anyone |
+| `/settlement info [name]` | Settlement details, migration attractiveness/components, last decision and inbound/outbound transit; without a name, selects the first record. | Anyone |
 | `/settlement layout` | Show the street plan of the settlement containing you. | Anyone |
 | `/settlement rename <name> <new-name>` | Rename. | Owner/operator |
 | `/settlement remove <name>` | Dissolve and release membership. | Owner/operator |
 | `/settlement bind <name> [villager-uuid]` | Bind a resident. | Owner/operator of the target settlement |
 | `/settlement unbind [villager-uuid]` | Release a resident. | Owner/operator of the resident's settlement |
 | `/settlement relocate <source> <household> <destination>` | Move a household; housing claims are reacquired. | Owner of both settlements or operator |
+| `/settlement transit depart <source> <household> <destination>` | Put the household in durable transit from its current position; members must be together and free of construction/economic reservations. Arrival waits for the destination's simulated edge. | Operator (level 2+) or console |
+| `/settlement transit list` | Read this dimension's transit records, member counts, status and departure/arrival game times. | Operator (level 2+) or console |
 | `/settlement` or `/settlement menu [page]` | Open the screens above. | Anyone; mutations require owner/operator |
 | `/settlement building list` | List certificates in the settlement containing you. | Anyone |
 | `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` | Certify a building. | Owner/operator |

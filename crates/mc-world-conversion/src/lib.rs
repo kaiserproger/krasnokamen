@@ -10,6 +10,10 @@ mod census_tests;
 pub use census::{CensusReceipt, DimensionCensus, SettlementCensus, census_native};
 mod crash_census;
 pub use crash_census::crash_census;
+mod custody_census;
+#[cfg(test)]
+mod custody_census_tests;
+pub use custody_census::{CustodyReceipt, TransitCustody, VillagerCustody, custody_census};
 mod probe;
 #[cfg(test)]
 mod probe_tests;

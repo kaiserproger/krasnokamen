@@ -598,13 +598,21 @@ def _wait_port(port: int, timeout_seconds: float | None, process: subprocess.Pop
             os.close(pid_fd)
 
 
-def wait_for_path_condition(path: Path, timeout_seconds: float, condition: Any) -> Any:
-    """Evaluate a filesystem condition again only when its parent changes."""
+def wait_for_path_condition(path: Path, timeout_seconds: float, condition: Any,
+                            process: subprocess.Popen[Any] | None = None) -> Any:
+    """Evaluate a filesystem condition again only when its parent changes or,
+    with `process`, when it exits (pidfd): an exit that leaves the condition
+    unmet raises ChildExited at once, never at the timeout."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    selector, notify_fd, _ = _require_event_fds(None, path.parent)
+    if process is not None and process.poll() is not None:
+        # Already reaped: it has no pidfd and nothing is left to wait for.
+        return _judge_after_exit(path, condition, process)
+    selector, notify_fd, pid_fd = _require_event_fds(process, path.parent)
     try:
         deadline = time.monotonic() + timeout_seconds
         while True:
+            if process is not None and process.poll() is not None:
+                return _judge_after_exit(path, condition, process)
             matched, value = condition()
             if matched:
                 return value
@@ -615,6 +623,17 @@ def wait_for_path_condition(path: Path, timeout_seconds: float, condition: Any) 
     finally:
         selector.close()
         os.close(notify_fd)
+        if pid_fd >= 0:
+            os.close(pid_fd)
+
+
+def _judge_after_exit(path: Path, condition: Any, process: subprocess.Popen[Any]) -> Any:
+    """The condition evaluated once after `process` exited: its value, else ChildExited."""
+    matched, value = condition()
+    if matched:
+        return value
+    raise ChildExited(f"process exited with {process.returncode} while waiting on {path}",
+                      process.returncode, path)
 
 
 @in_phase("server_start")

@@ -106,11 +106,92 @@ recovery boundary. Recovery validates settlement references instead of silently
 clearing them; unsupported old plugin settlement state does not become a
 second native authority. Building state lives in its settlement record.
 
+Migration transit (`settlements/transit.rs`, [ADR 0023](../decisions/0023-offscreen-settlement-simulation.md))
+holds a departing household or lone resident between two settlements of one
+dimension. Departure removes the bodies and inserts one `transit/<uuid>` record
+(keyed by the lowest member UUID) in the same tick; arrival restores the same
+entities at the destination's simulated edge, joins them and deletes the record
+in the same tick. The record keeps each member's complete WAL entity image and
+the household record `leave` removed; member images name no settlement or
+household of their own. Records ride the tick WAL as `Transit` entries and the
+checkpoint as `transit/<uuid>` global rows; a checkpoint deletes the rows the WAL
+deleted in the same transaction as the entity tombstones. Recovery refuses a
+store in which a member UUID is both a world entity and in a record, in two
+records, or whose record household also belongs to a settlement; the offline
+census applies the same exactly-once check. A unit is refused before any
+mutation while a member has construction work, wages owed or another custody,
+so the stored image is exactly the body that left. Older binaries refuse a store
+with transit rows (unknown global domain); downgrade is unsupported.
+
 `crates/mc-script/wit/plugin.wit` defines `query-settlement` and
 `request-settlement-action`; `plugin_settlements.rs` routes the requests to the
 native owner. Guests receive handles and outcomes rather than direct access to
 records or entity slots. Native admission revalidates identities and custody.
 The shared [persistence contract](persistence.md) governs replay and backups.
+
+## Migration policy and physical return
+
+`settlements/migration.rs` evaluates each simulated settlement once per game
+day, at a stable settlement-id phase of `game_time % 24000`. There is no
+catch-up; changing daylight time does not trigger evaluation. Its runtime
+observation contains physical beds in certified houses, body-backed members,
+inbound transit members, storage food, vacant certified jobs, resident deaths
+over seven game days and completed buildings. Attractiveness is
+`100 × (0.30 housing + 0.30 food + 0.15 jobs + 0.15 safety + 0.10 development)`;
+components clamp to `[0,1]`. Housing subtracts members and inbound migrants,
+food divides by twelve food points per resident, jobs and deaths by population,
+and development by twelve buildings (zero population uses one).
+
+A destination must beat the source by more than ten points after a cost of
+five points per hundred horizontal blocks. The outside world scores 35.
+Unsimulated destinations need a cached observation from this runtime. Units
+are whole households or household-less individuals. Founding families and
+military, conversion, economic or construction reservations refuse before
+mutation. Destination beds cover the whole unit, including inbound transit
+and pending walks. One unit per source may leave daily; only one outbound
+walk may be active. Proven loaded routes relocate membership immediately;
+otherwise bodies walk to a route-proven simulated edge before transit takes
+custody. The civil radius does not constrain that edge. Outside emigration
+rechecks empty carry/equipment at departure and leaves no transit record.
+
+Outside immigration creates ordinary adult villagers only at a route-proven
+simulated entry. The shared bind admission omits presence only for this
+internal path; manual bind still requires the civil sphere. Newcomers are
+members from their spawn tick and have no household, so normal first-birth
+adoption can form a family. Daily arrivals have expectation
+`(1 + min(0.5, (gain - 10) / 100)) × migration_rate`, capped by free beds.
+Owner chat and structured INFO events report arrivals, departures and
+cancellations. `settlement info` displays observations, components, reasons
+and inbound/outbound transit.
+
+`villager/return_home.rs` is a weak-goal fallback, not a work order. It uses
+the allocator's completed empty Home search and shared bed eligibility,
+choosing the nearest certified house's free native bed. Only outside the
+civil sphere may it fall back to an anchor approach when no bed is known.
+Homes, panic and useful native worker, army, economy, food and partner targets
+win; explicit outbound migration travel also wins. Arrival within 32 blocks
+wakes one actual allocator search and holds position until that result.
+Useful-target preemption delays a fresh return search for at least 40 game
+ticks without shortening an existing failure retry.
+
+Return routes reuse the native router, shared Brain budget and committed
+movement: supported simulated legs of at most 64 horizontal blocks, a resident
+one-block halo, and a 1024-node ceiling. Truncation and stalled/no-waypoint
+segments count as failures; admission denial does not. Three failures outside
+enter runtime-only Hold, with one INFO reason; inside residents return to
+normal work with backoff. Membership/anchor/radius changes reset an episode;
+eight-block displacement never bypasses its deadline. **Main decision,
+2026-11-17:** every failed attempt uses the same `1200 + entity-id % 40`
+retry cadence. The reviewed design's 200-tick initial retries were dropped:
+because Hold is not persisted, restored homeless bodies cannot be distinguished
+from new returners. Successful legs still continue immediately. No return
+intent or retry bookkeeping enters native entity rows or WAL images.
+Outbound walk timeouts and return retry/watchdog deadlines use simulated game
+time: `/tick freeze` neither expires a walk nor rejects a returner's bed.
+Removing a settlement clears its runtime observations and return episodes,
+and cancels outbound walks both from it and toward it, including their
+per-resident targets. These derived maps have no checkpoint image.
+
 
 ## Spanish teaser culture and chronicle
 

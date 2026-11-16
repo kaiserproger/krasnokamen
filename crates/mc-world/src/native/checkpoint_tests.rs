@@ -364,6 +364,140 @@ fn native_checkpoint_battle_rows_are_canonical_or_rejected() {
     assert_eq!(store.read_checkpoint().unwrap().tick, 1);
 }
 
+const TRANSIT: &str = "0000000a-0000-4000-8000-00000000002a";
+
+/// A `transit/` row payload listing `members` (the core's record shape).
+fn transit_row(tick: u64, members: &[&str]) -> NativeDomainRecord {
+    let members: Vec<Value> = members.iter().map(|uuid| json!({"uuid": uuid})).collect();
+    NativeDomainRecord {
+        version: 1,
+        captured_tick: tick,
+        payload: serde_json::to_vec(&json!({"dimension":"overworld","value":{"members":members}}))
+            .unwrap(),
+    }
+}
+
+/// ADR 0023: migration transit rows ride the checkpoint under their canonical
+/// UUID key with canonical member UUIDs; any other spelling, tick or payload
+/// refuses the commit.
+#[test]
+fn native_checkpoint_transit_rows_are_canonical_or_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    let row = |tick| transit_row(tick, &[TRANSIT]);
+    let mut canonical = globals(1);
+    canonical.insert(format!("transit/{TRANSIT}"), row(1));
+    commit(&store, 1, 0, &canonical, &[], &[]).unwrap();
+    assert_eq!(store.read_checkpoint().unwrap().globals, canonical);
+    for key in [
+        "transit/".to_owned(),
+        format!("transit/{}", TRANSIT.to_uppercase()),
+        format!("transit/{}", TRANSIT.replace('-', "")),
+        format!("transit/{TRANSIT}/extra"),
+    ] {
+        let mut bad = globals(2);
+        bad.insert(key.clone(), row(2));
+        assert!(commit(&store, 2, 1, &bad, &[], &[]).is_err(), "{key}");
+    }
+    let upper = TRANSIT.to_uppercase();
+    for record in [
+        row(1),
+        NativeDomainRecord {
+            payload: b"{".to_vec(),
+            ..row(2)
+        },
+        transit_row(2, &[]),
+        transit_row(2, &[&upper]),
+        transit_row(2, &["member"]),
+    ] {
+        let mut bad = globals(2);
+        bad.insert(format!("transit/{TRANSIT}"), record);
+        assert!(commit(&store, 2, 1, &bad, &[], &[]).is_err());
+    }
+    assert_eq!(store.read_checkpoint().unwrap().tick, 1);
+}
+
+/// Settlement and transit rows are complete per checkpoint: a row the owner
+/// omits (a deleted settlement, a finished transit) is deleted in the same
+/// transaction instead of lingering with an older capture tick.
+#[test]
+fn native_checkpoint_deletes_omitted_settlement_and_transit_rows() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    let row = |tick, payload: &[u8]| NativeDomainRecord {
+        version: 1,
+        captured_tick: tick,
+        payload: payload.to_vec(),
+    };
+    let mut first = globals(1);
+    first.insert("settlement/9".into(), row(1, br#"{"id":9}"#));
+    first.insert("settlement_sequence".into(), row(1, b"9"));
+    first.insert(format!("transit/{TRANSIT}"), transit_row(1, &[TRANSIT]));
+    commit(&store, 1, 0, &first, &[], &[]).unwrap();
+    let mut second = globals(2);
+    second.insert("settlement_sequence".into(), row(2, b"9"));
+    commit(&store, 2, 1, &second, &[], &[]).unwrap();
+    let stored = store.read_checkpoint().unwrap();
+    assert_eq!((stored.tick, stored.globals), (2, second));
+}
+
+/// ADR 0023: a member's entity row is tombstoned when it enters a transit row
+/// and may be stored again only by the checkpoint that releases it from that
+/// row (arrival). Any other tombstone stays final.
+#[test]
+fn native_checkpoint_stores_a_member_again_only_on_release_from_transit() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    let member = uuid::Uuid::parse_str(TRANSIT).unwrap().into_bytes();
+    let body = |identity, tick| NativeEntitySnapshot {
+        identity,
+        dimension: 0,
+        position: ChunkPos { x: 0, z: 0 },
+        generated_slot: None,
+        journal_lsn: tick,
+        payload: Some(Tag::Compound(vec![("Health".into(), Tag::Float(20.0))])),
+    };
+    let gone = |identity, tick| NativeEntitySnapshot {
+        payload: None,
+        ..body(identity, tick)
+    };
+    commit(
+        &store,
+        1,
+        0,
+        &globals(1),
+        &[body(member, 1), body([9; 16], 1)],
+        &[],
+    )
+    .unwrap();
+    let travelling = |tick| {
+        let mut records = globals(tick);
+        records.insert(format!("transit/{TRANSIT}"), transit_row(tick, &[TRANSIT]));
+        records
+    };
+    commit(
+        &store,
+        2,
+        1,
+        &travelling(2),
+        &[gone(member, 2), gone([9; 16], 2)],
+        &[],
+    )
+    .unwrap();
+    // Still held by the transit row: the tombstone stands.
+    assert!(commit(&store, 3, 2, &travelling(3), &[body(member, 3)], &[]).is_err());
+    // The release covers only the transit row's members.
+    let both = [body(member, 3), body([9; 16], 3)];
+    assert!(commit(&store, 3, 2, &globals(3), &both, &[]).is_err());
+    // Arrival: the row is gone and the same identity is stored again.
+    commit(&store, 3, 2, &globals(3), &[body(member, 3)], &[]).unwrap();
+    assert_eq!(
+        store.entity(member).unwrap().unwrap().payload,
+        body(member, 3).payload
+    );
+    assert!(store.entity([9; 16]).unwrap().unwrap().payload.is_none());
+}
+
 #[test]
 fn native_checkpoint_settlement_record_plus_sequence_roundtrip() {
     let directory = tempfile::tempdir().unwrap();

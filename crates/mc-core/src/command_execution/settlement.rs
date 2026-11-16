@@ -4,18 +4,32 @@
 use super::*;
 
 /// Native `/settlement` execution. Create is open to any authenticated actor;
-/// every record mutation needs the owner or an operator. Reads need nothing.
+/// every record mutation needs the owner or an operator. Transit commands,
+/// including their readback, are operator-only.
 #[allow(clippy::too_many_lines)]
 pub(super) fn settlement(
     state: &mut TickState,
     connection: ConnectionId,
     executor: EntityId,
     command: &crate::settlements::commands::SettlementCommand,
+    changes: &mut ChangeSet,
 ) {
     use crate::settlements::commands::{SettlementCommand, lookup};
     let operator = state.plugin_players.is_operator(connection)
         || connection == crate::command_console::CONNECTION;
-    // Reads resolve below without an actor; every mutation arm re-checks.
+    if matches!(
+        command,
+        SettlementCommand::TransitDepart { .. } | SettlementCommand::TransitList
+    ) && !operator
+    {
+        error(
+            state,
+            connection,
+            "Only operators can use settlement transit commands.",
+        );
+        return;
+    }
+    // Other reads need no actor; ordinary mutations re-check identity below.
     let actor = actor_identity(state, connection);
     match command {
         SettlementCommand::Create { name, radius } => {
@@ -91,7 +105,7 @@ pub(super) fn settlement(
                 Some(record) => {
                     let members = crate::settlements::member_count(state, record.id);
                     let message = format!(
-                        "{}\n{} | owner={} anchor={:?} radius={} members={} revision={}",
+                        "{}\n{} | owner={} anchor={:?} radius={} members={} revision={}\n{}",
                         crate::settlements::presentation::summary(state, record),
                         record.name,
                         record.owner.as_deref().unwrap_or("autonomous"),
@@ -99,6 +113,7 @@ pub(super) fn settlement(
                         record.radius,
                         members,
                         record.revision,
+                        crate::settlements::migration::info(state, record.id),
                     );
                     error(state, connection, message);
                 }
@@ -200,6 +215,35 @@ pub(super) fn settlement(
                     ),
                 ),
                 Err(message) => error(state, connection, message),
+            }
+        }
+        SettlementCommand::TransitDepart {
+            settlement,
+            household,
+            destination,
+        } => {
+            let (Some(source), Some(target)) =
+                (lookup(state, settlement), lookup(state, destination))
+            else {
+                error(state, connection, "Settlement not found.");
+                return;
+            };
+            let (source, target) = (source.id, target.id);
+            match crate::settlements::transit::command_depart(
+                state, changes, source, household, target,
+            ) {
+                Ok(message) => error(state, connection, message),
+                Err(message) => error(state, connection, message),
+            }
+        }
+        SettlementCommand::TransitList => {
+            let lines = crate::settlements::transit::command_list(state);
+            if lines.is_empty() {
+                error(state, connection, "No households in transit.");
+            } else {
+                for line in lines {
+                    error(state, connection, line);
+                }
             }
         }
         SettlementCommand::Bind {

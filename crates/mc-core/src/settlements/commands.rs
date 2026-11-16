@@ -58,6 +58,12 @@ pub enum SettlementCommand {
         household: String,
         destination: String,
     },
+    TransitDepart {
+        settlement: String,
+        household: String,
+        destination: String,
+    },
+    TransitList,
     Economy {
         domain: EconomyDomain,
         settlement: String,
@@ -121,7 +127,7 @@ pub enum ArmyOrderKind {
 }
 
 pub fn parse(args: &[&str]) -> Result<SettlementCommand, CommandError> {
-    let usage: &'static str = "settlement <guide|create|claim|list|info|rename|remove|bind|unbind|relocate|production|commerce|payroll|caravan|building|build|layout|army>";
+    let usage: &'static str = "settlement <guide|create|claim|list|info|rename|remove|bind|unbind|relocate|transit|production|commerce|payroll|caravan|building|build|layout|army>";
     let [sub, rest @ ..] = args else {
         return Ok(SettlementCommand::Menu { page: None });
     };
@@ -204,6 +210,19 @@ pub fn parse(args: &[&str]) -> Result<SettlementCommand, CommandError> {
                 destination: (*destination).to_owned(),
             }),
             _ => Err(CommandError::Usage(usage)),
+        },
+        "transit" => match rest {
+            ["depart", settlement, household, destination] => {
+                Ok(SettlementCommand::TransitDepart {
+                    settlement: (*settlement).to_owned(),
+                    household: (*household).to_owned(),
+                    destination: (*destination).to_owned(),
+                })
+            }
+            ["list"] => Ok(SettlementCommand::TransitList),
+            _ => Err(CommandError::Usage(
+                "settlement transit <depart <settlement> <household> <destination>|list>",
+            )),
         },
         "production" | "commerce" | "payroll" | "caravan" => {
             let [settlement, _operation, ..] = rest else {

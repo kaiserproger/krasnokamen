@@ -327,6 +327,15 @@ pub enum JournalEntry {
         pitch: f32,
         ground: bool,
     },
+    /// Dimension-local migration transit custody post-image (ADR 0023) in the
+    /// transit module's own codec; `None` is the tombstone of a completed
+    /// arrival. Appended to preserve variant order; a binary without it refuses
+    /// the batch (downgrade unsupported).
+    Transit {
+        id: uuid::Uuid,
+        record: Option<Arc<String>>,
+        tick: u64,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(

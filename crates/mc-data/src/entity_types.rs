@@ -21,6 +21,7 @@ pub use crate::entity_contract_26_1_2::{
 /// Canonical entity identities that core gameplay spawns by name.
 pub const HORSE: &str = "minecraft:horse";
 pub const HUSK: &str = "minecraft:husk";
+pub const VILLAGER: &str = "minecraft:villager";
 
 const REQUIRED_REGISTRIES: &str = include_str!("../data/required_registries.json");
 

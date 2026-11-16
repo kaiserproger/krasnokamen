@@ -50,6 +50,9 @@ pub struct Replay {
     pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
     pub settlement_removed: BTreeSet<u64>,
     pub settlement_high_water: u64,
+    /// Migration transit custody post-images (`None` = tombstone), ADR 0023,
+    /// in the transit module's own codec.
+    pub transits: BTreeMap<uuid::Uuid, Option<Arc<String>>>,
     pub battle: Option<Arc<String>>,
     pub(crate) battle_fault: Option<String>,
     /// Block-log checkpoint table rows.
@@ -1092,6 +1095,9 @@ pub(crate) fn apply_batch_images(
                             replay.settlement_removed.insert(image.id.0);
                         }
                     }
+                }
+                JournalEntry::Transit { id, record, .. } => {
+                    replay.transits.insert(*id, record.clone());
                 }
                 JournalEntry::Battle { value } => {
                     replay.battle = Some(Arc::clone(value));
