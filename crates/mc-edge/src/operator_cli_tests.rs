@@ -54,6 +54,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
             WorldCommand::ImportAnvil(paths) | WorldCommand::ExportAnvil(paths) => paths,
             WorldCommand::Census(_)
             | WorldCommand::CrashCensus(_)
+            | WorldCommand::CustodyCensus(_)
             | WorldCommand::Probe(_)
             | WorldCommand::UpgradeWorldgen
             | WorldCommand::Pregenerate { .. }

@@ -92,6 +92,11 @@ pub enum WorldCommand {
     /// Project checkpoint plus WAL; may repair the store, so use only a disposable copy.
     #[command(hide = true)]
     CrashCensus(CrashCensusPaths),
+    /// Where every entity UUID and migration transit member is at the durable
+    /// boundary (checkpoint plus WAL, before any entity is restored); may
+    /// repair the store, so use only a disposable copy. FAIL exits non-zero.
+    #[command(hide = true)]
+    CustodyCensus(CrashCensusPaths),
     /// Read exact blocks, typed container contents, stored player inventories and
     /// stored item entities of a stopped native world, read-only and without
     /// starting it. The receipt must lie outside the source.
@@ -330,6 +335,16 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     config.world_dir = paths.copy.clone();
                     let census = mc_world_conversion::crash_census(&config)?;
                     serde_json::to_writer_pretty(output, &census)?;
+                }
+                WorldCommand::CustodyCensus(paths) => {
+                    let output = crash_census_output::create(&paths.copy, &paths.receipt)?;
+                    let mut config = config.clone();
+                    config.world_dir = paths.copy.clone();
+                    let receipt = mc_world_conversion::custody_census(&config);
+                    serde_json::to_writer_pretty(output, &receipt)?;
+                    if let Some(error) = receipt.error {
+                        anyhow::bail!("custody census FAIL: {error}");
+                    }
                 }
                 WorldCommand::Probe(paths) => {
                     mc_world_conversion::probe_native(

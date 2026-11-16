@@ -8,7 +8,10 @@ use mc_nbt::Tag;
 use mc_world::native::NativeCheckpoint;
 use std::sync::Arc;
 
-fn entity_entry(id: i32, entity: mc_core::journal::ReplayEntity) -> mc_core::journal::JournalEntry {
+pub(crate) fn entity_entry(
+    id: i32,
+    entity: mc_core::journal::ReplayEntity,
+) -> mc_core::journal::JournalEntry {
     mc_core::journal::JournalEntry::Entity {
         id,
         uuid: entity.uuid,
