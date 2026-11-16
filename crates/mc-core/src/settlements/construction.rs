@@ -975,7 +975,13 @@ pub(crate) fn replant_conflicts(state: &TickState, root: [i32; 3]) -> bool {
             root[2].saturating_add(crown),
         ],
     );
-    bounds.map_or(true, |bounds| executor::area_held(state, bounds))
+    bounds.map_or(true, |bounds| {
+        executor::area_held(state, bounds)
+            || state
+                .settlements
+                .records()
+                .any(|record| layout::planting_blocks_access(state, record, bounds))
+    })
 }
 
 fn candidate_kinds<'a>(

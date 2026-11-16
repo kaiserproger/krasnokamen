@@ -4,7 +4,12 @@ use crate::settlements::construction::tests::{open_plan, start};
 
 #[test]
 fn replanting_respects_the_future_crown_around_an_active_house() {
-    for (offset, planted) in [(-1, false), (-4, false), (-5, true)] {
+    for (dx, dz, planted) in [
+        (-1, 2, false),
+        (-4, 2, false),
+        (-5, 2, false),
+        (-11, -11, true),
+    ] {
         let (mut state, _, mut worker) =
             crate::villager::mining_tests::fixture(buildings::BuildingKind::LumberCamp);
         open_plan(&mut state);
@@ -20,7 +25,7 @@ fn replanting_respects_the_future_crown_around_an_active_house() {
             .origin;
         // The retained Spanish house was blocked by a replanted root one cell
         // outside its west boundary: the protected crown grew into the site.
-        let base = [origin[0] + offset, 201, origin[2] + 2];
+        let base = [origin[0] + dx, 201, origin[2] + dz];
         let dirt = block(&state, "minecraft:dirt", &[]);
         let sapling = block(&state, "minecraft:oak_sapling", &[]);
         state.world.set_block(base[0], base[1] - 1, base[2], dirt);
@@ -35,7 +40,7 @@ fn replanting_respects_the_future_crown_around_an_active_house() {
         assert_eq!(
             state.world.block_at(base[0], base[1], base[2]) == Some(sapling),
             planted,
-            "root offset {offset}"
+            "root offset {dx} {dz}"
         );
         assert_eq!(
             state
@@ -107,4 +112,61 @@ fn replanting_respects_admitted_corridors_without_reserving_the_whole_world() {
             );
         }
     }
+}
+
+/// Seed-100 trial 2 planted over its only usable street access while no
+/// construction envelope existed yet. Growing timber must leave that access.
+#[test]
+fn repeated_lumber_replants_leave_a_reachable_funded_house_lot() {
+    use crate::settlements::construction;
+    let (mut state, slot, mut worker) =
+        crate::villager::mining_tests::fixture(buildings::BuildingKind::LumberCamp);
+    open_plan(&mut state);
+    let id = worker.settlement.unwrap();
+    state.settlements.get_mut(id).unwrap().radius = 48;
+    crate::villager::mining_tests::storage(&mut state, &worker, [1, 201, 1]);
+    construction::tests::fund(&mut state, "spanish_house", 1);
+    let dirt = block(&state, "minecraft:dirt", &[]);
+    let sapling = block(&state, "minecraft:oak_sapling", &[]);
+    let mut attempts = Vec::new();
+    for coordinate in (-14..=30).step_by(2) {
+        attempts.push([8, 201, coordinate]);
+        attempts.push([coordinate, 201, 8]);
+    }
+    // Many real plantings remain possible away from the access strips.
+    for x in (-12..=0).step_by(2) {
+        for z in (-12..=0).step_by(2) {
+            attempts.push([x, 201, z]);
+        }
+    }
+    for base in &attempts {
+        state.world.set_block(base[0], base[1] - 1, base[2], dirt);
+        worker.lumber_progress.base = *base;
+        worker.lumber_progress.sapling = sapling;
+        worker.lumber_progress.has_target = true;
+        replant(&mut state, &mut ChangeSet::default(), &mut worker);
+        assert!(!worker.lumber_progress.has_target);
+    }
+    state.world.fold_overlay();
+    state.entities.row_mut(slot).villager = Some(worker);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert_eq!(
+        construction::request_build(&mut state, id, "spanish_house")
+            .expect("many lumber plantings must leave a reachable fully funded house lot"),
+        construction::OrderOutcome::Started,
+    );
+    let town = state.settlements.get(id).unwrap();
+    assert_eq!(town.project.as_ref().unwrap().blueprint, "spanish_house");
+    assert!(town.planted_trees.len() >= 10, "not a blanket planting ban");
+    assert!(
+        town.planted_trees.len() < attempts.len(),
+        "access plantings were refused"
+    );
+    for root in &town.planted_trees {
+        assert_eq!(
+            state.world.block_at(root[0], root[1], root[2]),
+            Some(sapling)
+        );
+    }
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }

@@ -197,6 +197,9 @@ fn lumberjack_restarts_nearby_search_after_harvest() {
 #[test]
 fn lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    // Harvest/replant fixture: the tree is outside the planned access strips.
+    let town = state.settlements.get_mut(v.settlement.unwrap()).unwrap();
+    town.anchor = [1, 201, 3];
     tree(&mut state, 10, 10, 5);
     let mut changes = ChangeSet::default();
     // Incremental scan over the simulated columns only: the planted column is
@@ -466,6 +469,8 @@ fn lumberjack_delivers_substack_that_funds_next_building_after_storage() {
 #[test]
 fn lumberjack_completes_trunk_and_replants_across_stack_haul() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    let town = state.settlements.get_mut(v.settlement.unwrap()).unwrap();
+    town.anchor = [1, 201, 3];
     tree(&mut state, 10, 10, 5);
     let oak = mining::item_id(&state, "oak_log").unwrap();
     v.inventory[0] = Some(ItemStack::new(oak, 60));
@@ -559,6 +564,8 @@ fn lumberjack_delivers_a_stack_sized_mixed_wood_load_during_work() {
 #[test]
 fn lumberjack_deposits_at_day_end_and_resumes_trunk_cursor() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    let town = state.settlements.get_mut(v.settlement.unwrap()).unwrap();
+    town.anchor = [1, 201, 3];
     tree(&mut state, 10, 10, 4);
     let mut changes = ChangeSet::default();
     let mut tick = 0u64;
@@ -687,6 +694,9 @@ fn lumberjack_searches_hillsides_and_finishes_tall_trunks_with_matching_replants
         ("mangrove", "mangrove_propagule", 201, 5),
     ] {
         let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+        let town = state.settlements.get_mut(v.settlement.unwrap()).unwrap();
+        town.anchor = [1, 201, 3];
+        town.radius = 16;
         let log = block(&state, &format!("{stem}_log"));
         let leaves = block(&state, &format!("{stem}_leaves"));
         state
