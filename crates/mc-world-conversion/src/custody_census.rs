@@ -141,8 +141,10 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
     }
     let settled: BTreeSet<&str> = households.values().flatten().map(String::as_str).collect();
 
-    // Transit records: checkpoint rows, then each dimension's WAL images.
-    let mut records: BTreeMap<uuid::Uuid, (Dimension, Value)> = BTreeMap::new();
+    // Transit records per (dimension, id), as recovery hydrates each dimension:
+    // its checkpoint rows, then its own WAL images and tombstones. Uniqueness
+    // across dimensions is checked afterwards, never masked by the fold.
+    let mut records: BTreeMap<(Dimension, uuid::Uuid), Value> = BTreeMap::new();
     for (key, row) in &world.checkpoint.globals {
         let Some(id) = key.strip_prefix("transit/") else {
             continue;
@@ -154,7 +156,7 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
             .map_err(|error| invalid(format!("row {key} unreadable: {error}")))?;
         let dimension: Dimension = serde_json::from_value(row["dimension"].take())
             .map_err(|error| invalid(format!("row {key} dimension: {error}")))?;
-        records.insert(id, (dimension, row["value"].take()));
+        records.insert((dimension, id), row["value"].take());
     }
     for (&dimension, replay) in &world.dimensions {
         for (id, image) in &replay.transits {
@@ -165,17 +167,17 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
                             "WAL image of transit record {id} unreadable: {error}"
                         ))
                     })?;
-                    records.insert(*id, (dimension, value));
+                    records.insert((dimension, *id), value);
                 }
                 None => {
-                    records.remove(id);
+                    records.remove(&(dimension, *id));
                 }
             }
         }
     }
-    let mut members: BTreeMap<uuid::Uuid, uuid::Uuid> = BTreeMap::new();
-    for (&id, (dimension, value)) in &records {
-        let custody = transit(*dimension, value)
+    let mut members: BTreeMap<uuid::Uuid, (Dimension, uuid::Uuid)> = BTreeMap::new();
+    for (&(dimension, id), value) in &records {
+        let custody = transit(dimension, value)
             .map_err(|reason| invalid(format!("transit record {id}: {reason}")))?;
         let uuids = custody
             .members
@@ -189,9 +191,11 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
                     "member {uuid} of transit record {id} is also a world entity"
                 )));
             }
-            if let Some(other) = members.insert(uuid, id) {
+            if let Some((other_dimension, other)) = members.insert(uuid, (dimension, id)) {
                 return Err(invalid(format!(
-                    "member {uuid} is held by transit records {other} and {id}"
+                    "member {uuid} is held by transit records {other} ({}) and {id} ({})",
+                    other_dimension.name(),
+                    dimension.name()
                 )));
             }
         }

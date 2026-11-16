@@ -203,3 +203,42 @@ fn custody_census_refuses_an_entity_uuid_stored_twice() {
         "{error}"
     );
 }
+
+/// Transit images fold per dimension, as recovery hydrates them: a Nether
+/// image of an Overworld row's id is a second record (double custody), and a
+/// Nether tombstone leaves the Overworld record in place.
+#[test]
+fn custody_census_keeps_dimensions_apart() {
+    let nether = |entry: JournalEntry| JournalEntry::Dimension {
+        dimension: Dimension::Nether,
+        entries: vec![entry],
+    };
+    let fixture = town(&[(0x40, &[0x40, 0x41], None)]);
+    let tick = fixture.tick + 1;
+    append(
+        &fixture,
+        tick,
+        &[nether(transit(0x40, Some(image(&[0x40, 0x41], None)), tick))],
+    );
+    let receipt = custody_census(&fixture.config);
+    assert_eq!(receipt.status, "FAIL");
+    let error = receipt.error.unwrap_or_default();
+    assert!(
+        error.contains(
+            "member 00000000-0000-0000-0000-000000000040 is held by transit records \
+             00000000-0000-0000-0000-000000000040 (minecraft:overworld) and \
+             00000000-0000-0000-0000-000000000040 (minecraft:the_nether)"
+        ),
+        "{error}"
+    );
+
+    let fixture = town(&[(0x40, &[0x40, 0x41], None)]);
+    let tick = fixture.tick + 1;
+    append(&fixture, tick, &[nether(transit(0x40, None, tick))]);
+    let receipt = custody_census(&fixture.config);
+    assert_eq!(receipt.status, "PASS", "{:?}", receipt.error);
+    assert_eq!(
+        receipt.transits[&uuid(0x40)].dimension,
+        "minecraft:overworld"
+    );
+}
