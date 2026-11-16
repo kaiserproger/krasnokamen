@@ -123,6 +123,28 @@ class BattleCrashTest(unittest.TestCase):
                 self.assertEqual(cut_verdict(compare_durable(expected, restored),
                                             valid=True, custody_ok=True, probe_ok=True), 'failed')
 
+    def test_projectile_stack_loss_and_changes_fail_custody_comparison(self):
+        ident = '[I; 1, 2, 3, 4]'
+        for label, kind, key in (('Trident', 'trident', 'item'), ('Arrow', 'arrow', 'item'),
+                                 ('FireworkRocket', 'firework_rocket', 'FireworksItem')):
+            with self.subTest(kind=kind):
+                stack = f'{{count: 1, id: "minecraft:{kind}"}}'
+                expected = {ident: {'kind': f'minecraft:{kind}', 'holders': {key: stack}}}
+
+                def observed(holder):
+                    return census(f'{label} has the following entity data: '
+                                  f'{{UUID: {ident}{holder}}}')
+
+                intact = observed(f', {key}: {stack}')
+                self.assertEqual(intact[ident]['holders'], expected[ident]['holders'])
+                self.assertEqual(cut_verdict(compare_durable(expected, intact),
+                                            valid=True, custody_ok=True, probe_ok=True), 'passed')
+                for holder in ('', f', {key}: {{count: 2, id: "minecraft:{kind}"}}'):
+                    comparison = compare_durable(expected, observed(holder))
+                    self.assertEqual(comparison['changed'], [ident])
+                    self.assertEqual(cut_verdict(comparison, valid=True, custody_ok=True, probe_ok=True),
+                                     'failed')
+
     def test_tombstone_requires_continuous_identity_scoped_wal(self):
         ident = '00112233-4455-6677-8899-aabbccddeeff'
         image = {'Entity': {'id': 42, 'uuid': ident, 'tick': 4}}

@@ -63,6 +63,28 @@ fn replay_custody_contains_non_soldier_item_and_equipment() {
 }
 
 #[test]
+fn projectile_stack_keys_are_custody() {
+    for (key, id) in [
+        ("item", "minecraft:trident"),
+        ("FireworksItem", "minecraft:firework_rocket"),
+    ] {
+        let fields = vec![(
+            key.into(),
+            Tag::Compound(vec![
+                ("id".into(), Tag::String(id.into())),
+                ("count".into(), Tag::Int(1)),
+            ]),
+        )];
+        let custody = holders(&fields);
+        assert_eq!(
+            custody.get(key),
+            Some(&format!("{{count: 1, id: \"{id}\"}}")),
+            "projectile holder {key} must survive the filter"
+        );
+    }
+}
+
+#[test]
 fn typed_custody_replaces_stale_opaque_fields_and_keeps_other_holders() {
     let items = mc_data::items::krasnokamen_required_items();
     let mut entity = entity();

@@ -32,6 +32,8 @@ fn holders(fields: &[(String, Tag)]) -> BTreeMap<String, String> {
                     | "HandItems"
                     | "ArmorItems"
                     | "Item"
+                    | "item"
+                    | "FireworksItem"
                     | "equipment"
             )
         })

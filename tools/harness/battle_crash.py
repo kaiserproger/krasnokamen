@@ -85,7 +85,8 @@ def census(text):
         if not ident or ident in result:
             raise ValueError(f'entity missing or duplicate UUID: {ident}')
         result[ident] = {'type': label, 'holders': {key: values[key] for key in
-                          ('Inventory', 'EnderItems', 'Items', 'HandItems', 'ArmorItems', 'Item', 'equipment')
+                          ('Inventory', 'EnderItems', 'Items', 'HandItems', 'ArmorItems',
+                           'Item', 'item', 'FireworksItem', 'equipment')
                           if key in values},
                          'age': values.get('Age'), 'life': values.get('life'), 'pos': values.get('Pos'),
                          'in_ground': values.get('inGround'), 'tags': values.get('Tags', '[]')}
@@ -177,7 +178,7 @@ def cut_verdict(comparison, *, valid, custody_ok, probe_ok):
 
 
 def durable_census(run, snapshot, wal):
-    """Project checkpoint/WAL holders on a disposable copy, before entity hydration."""
+    """Project holders before restore_entity/live hydration, sharing recovery's decoder/WAL fold."""
     command = json.loads((run / 'server-command.json').read_text())
     copied_world = (run / 'durable-census-world').resolve()
     receipt = (run / 'durable-census.json').resolve()
@@ -197,7 +198,7 @@ def durable_census(run, snapshot, wal):
 
 
 def compare_durable(expected, actual):
-    """Compare pre-hydration durable holders against the frozen recovery census."""
+    """Compare durable entity/player holders against the frozen recovery census."""
     missing = sorted(expected.keys() - actual.keys())
     new = sorted(actual.keys() - expected.keys())
     changed = []

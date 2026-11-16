@@ -90,10 +90,13 @@ A gate counts as evidence only when all of these hold:
   inspect or repair a hash-verified copy, never the primary evidence.
 - Use the [persistence authority and clocks](architecture/persistence.md#recovery-evidence-and-clocks),
   not a network reply or asynchronous pump statistic, to bound the observation.
-  Compare dimension-scoped UUIDs, entity IDs and exact holder/slot/item images;
-  reject identity reuse, history gaps or an unproved game-time/WAL mapping.
-- G3's expected custody image must precede entity hydration: project the checkpoint
-  plus fail-closed ordered WAL fold, not `encode_checkpoint` or `restore_entity`.
+  Compare dimension-scoped UUIDs, entity IDs and exact entity/player holder/slot/item
+  images; reject identity reuse, history gaps or an unproved game-time/WAL mapping.
+- G3 covers entity and player holders only, not block-entity containers such as
+  chests, furnaces, hoppers or shulkers.
+- G3's expected custody image precedes `restore_entity`/live hydration and
+  `encode_checkpoint`, but shares the replay decoder and ordered WAL fold with
+  recovery. It does not independently check those shared stages.
   A second export using the same restore path is not an independent oracle.
   Exercise a restore-only loss in a non-soldier holder on a separate pinned tree;
   the same retained copy must pass with the candidate and disagree with the control.

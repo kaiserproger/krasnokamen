@@ -193,8 +193,16 @@ client joins or client commands. It is not a universal immutable snapshot.
 The internal `world crash-census --copy` command may repair redb metadata in
 the world it opens: give it only the harness-created disposable copy, never a
 retained source or a live world. Its entity and player holder census comes
-directly from the ordered checkpoint-plus-WAL replay, before entity restore or
-checkpoint encoding; the before-crash live census is only a witness.
+directly from the ordered checkpoint-plus-WAL replay, before `restore_entity`/live
+hydration and checkpoint encoding; it shares the replay decoder and WAL fold
+with recovery, so defects in those stages can compare equal.
+The before-crash live census is only a witness.
+Both durable and console holder filters include case-sensitive projectile `item`
+and `FireworksItem` stacks, as well as the ordinary `Item` holder.
+G3 covers entity and player holders only, not block-entity containers (chests,
+furnaces, hoppers or shulkers).
+The holder projection mirrors mc-core capture encoders; drift in compared fields
+fails closed as `changed`, but a key excluded by both filters remains invisible.
 The battle kit gate retains its export-based censuses: its separate client-checked
 issued kit and cross-phase custody reconciliation reject restore-only loss even
 when both exports lose the same piece. Export agreement alone is not that proof.
