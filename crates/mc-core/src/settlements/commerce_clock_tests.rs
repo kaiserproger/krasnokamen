@@ -4,7 +4,7 @@ use super::*;
 fn command(f: &mut Fixture, line: &str) {
     crate::command_console::execute(
         &mut f.state,
-        crate::boundary::ConnectionId(1),
+        crate::command_console::CONNECTION,
         line,
         4,
         &mut crate::boundary::ChangeSet::default(),
