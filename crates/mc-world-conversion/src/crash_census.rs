@@ -148,21 +148,22 @@ fn entity_fields(
             )?,
         ));
     }
-    if let Some(vehicle) = &entity.state.entity_life.vehicle {
-        if vehicle.loot_table.is_none() && !vehicle.slots.is_empty() {
-            fields.retain(|(name, _)| name != "Items");
-            fields.push((
-                "Items".into(),
-                stack_list(
-                    items,
-                    vehicle
-                        .slots
-                        .iter()
-                        .enumerate()
-                        .map(|(slot, stack)| (Some(slot), stack)),
-                )?,
-            ));
-        }
+    if let Some(vehicle) = &entity.state.entity_life.vehicle
+        && vehicle.loot_table.is_none()
+        && !vehicle.slots.is_empty()
+    {
+        fields.retain(|(name, _)| name != "Items");
+        fields.push((
+            "Items".into(),
+            stack_list(
+                items,
+                vehicle
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .map(|(slot, stack)| (Some(slot), stack)),
+            )?,
+        ));
     }
     let mut item = entity.item.as_ref();
     if matches!(kind, "minecraft:item_frame" | "minecraft:glow_item_frame") {
