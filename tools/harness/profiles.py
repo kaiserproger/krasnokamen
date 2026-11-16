@@ -939,6 +939,24 @@ def run_battle_crash(ctx: ProfileContext) -> dict[str, Any]:
     return details
 
 
+def run_transit_crash(ctx: ProfileContext) -> dict[str, Any]:
+    """Migration transit SIGKILL cuts (tools/harness/transit_crash.py) on a pinned binary."""
+    extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
+    out = ctx.artifact_dir / "transit-crash"
+    name = "negative-control.json" if "--control" in extra else "transit-crash.json"
+    try:
+        details = _run_command(
+            [sys.executable, "-m", "tools.harness.transit_crash", "--out", str(out), *extra],
+            ctx, "transit-crash.log", env=_backend_env(ctx),
+        )
+    except BaseException:
+        if (out / name).exists():
+            ctx.failure_scenario = json.loads((out / name).read_text())
+        raise
+    details["campaign"] = json.loads((out / name).read_text())
+    return details
+
+
 def run_server_load_profile(ctx: ProfileContext) -> dict[str, Any]:
     """Always capture stacks, exact tick budgets and neighbour receipts."""
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
@@ -1409,6 +1427,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "SIGKILL under battle with a kit and give; 5 attempts per WAL/checkpoint moment",
         "run": run_battle_crash,
     },
+    "transit-crash": {
+        "scope": "harness",
+        "description": "Migration transit custody: SIGKILL at departure, in transit and arrival, then custody census",
+        "run": run_transit_crash,
+    },
     "server-load-profile": {
         "scope": "scale",
         "description": "Always-profile a real server window: call stacks, CPU ms/tick, budget and first/mid/last neighbours",
@@ -1514,6 +1537,7 @@ PROFILE_PREREQUISITES = {
     "quirk-parity": _NONE,
     "catalog-load": _NONE,
     "battle-crash": _NONE,
+    "transit-crash": _NONE,
     "server-load-profile": _NONE,
     "constantinople": _NONE,
     "seed-review": (("optional_server_binary", "seed_review_client"), (), (), ()),
