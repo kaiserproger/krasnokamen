@@ -916,21 +916,23 @@ def reconcile(phases: list[dict[str, Any]], kit: dict[str, int], roster: set[str
 
 def removal_control(phases: list[dict[str, Any]], index: int, kit: dict[str, int], roster: set[str],
                     histories: list[dict[str, Any]]) -> dict[str, Any]:
-    """Remove one observed, nonexpired kit piece from a derived copy of census `index`; the census must catch it."""
+    """Remove one observed, nonexpired kit item entity from a derived copy of census `index`; the census must catch it.
+
+    The crash-census protocol requires the control to lose an actually observed entity: a stack taken out of a
+    holder's inventory record does not test entity enumeration, so a census without one is incomplete.
+    """
     target = phases[index]
-    observed = [stack for stack in target["stacks"] if stack["key"] in kit
-                and not (stack["kind"] == "entity" and stack["holder"].rsplit("/", 1)[-1] in roster)
+    observed = [stack for stack in target["stacks"] if stack["key"] in kit and stack["kind"] == "item_entity"
                 and (stack["age"] is None or stack["age"] < ITEM_LIFETIME_TICKS)]
     if not observed:
-        raise Incomplete(f"removal control: census {target['phase']} holds no observed kit piece")
-    removed = next((stack for stack in observed if stack["kind"] == "item_entity"), observed[0])
+        raise Incomplete(f"removal control: census {target['phase']} holds no observed nonexpired kit item entity")
+    removed = observed[0]
     derived = copy.deepcopy(target)
     derived["stacks"] = [stack for stack in derived["stacks"] if stack != removed]
     if "reopen" in derived:  # the loss is in the durable image, so both exports of it lack the piece
         derived["reopen"]["stacks"] = [stack for stack in derived["reopen"]["stacks"] if not all(
             stack[k] == removed[k] for k in ("holder", "place", "key"))]
-    if removed["kind"] == "item_entity":
-        derived["entities"].pop(removed["holder"].split(":", 1)[1], None)
+    derived["entities"].pop(removed["holder"].split(":", 1)[1], None)
     derived["phase"] = target["phase"] + "-removal-control"
     result = reconcile(phases[:index] + [derived], kit, roster, histories)
     detected = result["verdict"] == "incomplete" and any(

@@ -169,9 +169,10 @@ class ReconcileTests(unittest.TestCase):
         self.assertTrue(control["detected"], control)
         self.assertEqual(control["removed"]["kind"], "item_entity")
         self.assertEqual(len(kept["stacks"]), 2, "the census itself is not altered")
-        held = br.removal_control([self.issued, census("crash", 120, self.issued["stacks"])], 1, self.kit, set(),
-                                  [self.history])
-        self.assertTrue(held["detected"], held)
+        # A census holding only inventory stacks has no entity whose loss could be detected.
+        with self.assertRaises(br.Incomplete):
+            br.removal_control([self.issued, census("crash", 120, self.issued["stacks"])], 1, self.kit, set(),
+                               [self.history])
 
     def test_offline_and_production_recovery_exports_must_agree_on_every_kit_item(self):
         soldier = "minecraft:overworld/bbbbbbbb-0000-0000-0000-000000000002"
