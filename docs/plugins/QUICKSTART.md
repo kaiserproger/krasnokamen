@@ -42,14 +42,17 @@ no subscription or capability is needed for this message.
 
 ```sh
 cargo build --manifest-path "$KRASNOKAMEN/sdk/rust/Cargo.toml" \
-  -p first-plugin --target wasm32-unknown-unknown
+  -p first-plugin --target wasm32-unknown-unknown --release
 cargo run --manifest-path "$KRASNOKAMEN/crates/mc-plugin-host/Cargo.toml" \
   --example plugin_component -- \
-  "$CARGO_TARGET_DIR/wasm32-unknown-unknown/debug/first_plugin.wasm" \
+  "$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/first_plugin.wasm" \
   "$TUTORIAL/plugins/hello/plugin.wasm"
 ```
 
-This uses debug Wasm for iteration, not a release server build. Setting the output
+Build the guest with `--release` every time, also while iterating: a debug
+component is about 22 MB, and the server refuses any plugin artifact over
+16 MiB (16,777,216 bytes) at startup. The release component is about 0.5 MB.
+`--release` here compiles only your plugin, not the server. Setting the output
 directory explicitly makes the encoder's input unambiguous, even if your shell
 already had `CARGO_TARGET_DIR` set. Deploy the **encoded component**, not the
 unencoded module. Never copy Cargo source files into a deployed package directory.
@@ -86,6 +89,8 @@ Offline mode does not authenticate players; keep this test on loopback.
 ## If it does not work
 
 - `can't find crate for std`: install the target with the rustup command above.
+- `carries a …-byte artifact, the bound is 16777216`: you deployed a debug
+  build; rebuild with `--release` and encode the release module again.
 - SDK path or WIT missing: use the complete matching checkout; the SDK generates
   bindings from `crates/mc-script/wit`.
 - Invalid component or wrong world: encode the core module and use matching SDK,
