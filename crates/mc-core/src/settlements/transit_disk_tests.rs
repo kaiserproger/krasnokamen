@@ -290,7 +290,10 @@ fn departure_cut_recovers_entirely_before_or_entirely_after() {
             assert_eq!(places(&state, uuid), 1, "published {publish}");
             assert_eq!(state.entities.slot_of_uuid(uuid).is_some(), !publish);
         }
-        assert_eq!(state.settlements.transit.records.len(), usize::from(publish));
+        assert_eq!(
+            state.settlements.transit.records.len(),
+            usize::from(publish)
+        );
         let source = state.settlements.get(source).unwrap();
         assert_eq!(source.households.contains_key(&family), !publish);
     }

@@ -466,8 +466,10 @@ fn arrival_reenters_the_same_villagers_at_the_simulated_edge_and_joins() {
         let slot = d.state.entities.slot_of_uuid(uuid).unwrap();
         let pos = d.state.entities.pos(slot);
         assert!(
-            mth::length2(pos[0] - f64::from(entry.x) - 0.5, pos[2] - f64::from(entry.z) - 0.5)
-                < 0.01
+            mth::length2(
+                pos[0] - f64::from(entry.x) - 0.5,
+                pos[2] - f64::from(entry.z) - 0.5
+            ) < 0.01
         );
         let v = d.state.entities.row(slot).villager.as_ref().unwrap();
         assert_eq!(v.settlement, Some(d.destination));
