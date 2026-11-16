@@ -22,7 +22,8 @@ From 10 residents a settlement walls itself in: its Builders lay a cobblestone w
 - Anyone can found a settlement and read lists, info, layout, certificates and dialogs.
 - Only the owner or an operator can change an owned settlement. The check repeats on every dialog click.
 - `relocate` needs the owner of both settlements, or an operator.
-- Autonomous settlements refuse every player management change until claimed.
+- `transit depart` and `transit list` are restricted to operators (level 2+) and the console, including their readbacks.
+- Autonomous settlements refuse ordinary player management until claimed; operator transit commands are a separate custody-control path.
 
 The full command table with who can run each command is in [dialogs and commands](settlements/menus.md#commands).
 

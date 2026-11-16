@@ -2909,6 +2909,132 @@ fn settlement_commands_keep_native_identity_and_enforce_owner_or_operator() {
 }
 
 #[test]
+fn settlement_transit_commands_check_operators_and_dispatch_console_with_real_changes() {
+    use crate::settlements::{households, transit};
+    for console in [false, true] {
+        let (mut state, alice, _) = fixture();
+        command(&mut state, alice, "settlement create source");
+        let source = state.settlements.find("source").unwrap().id;
+        let destination = state
+            .settlements
+            .create(
+                &mut state.settlement_sequence,
+                "destination".into(),
+                "another-owner".into(),
+                [100, 80, 0],
+                48,
+            )
+            .unwrap();
+        let villager_type = state
+            .registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
+            .unwrap();
+        let members = [1.5, 2.5].map(|x| {
+            let entity = state.spawn_mob(villager_type, [x, 80.0, 0.5], 20.0);
+            let slot = state.entities.slot_of(entity).unwrap();
+            state.entities.row_mut(slot).villager =
+                Some(Box::new(crate::villager::VillagerState::default()));
+            crate::settlements::bind(&mut state, source, entity).unwrap();
+            entity
+        });
+        let family = households::form(
+            &mut state,
+            source,
+            &members,
+            households::HouseholdOrigin::Adoption,
+        )
+        .unwrap();
+        let departure = format!("settlement transit depart source {family} destination");
+        // Even the source owner at levels zero and one cannot depart, inspect
+        // transit, or learn whether a supplied settlement exists.
+        for level in [0, 1] {
+            state
+                .plugin_players
+                .observe_permission(ConnectionId(1), level);
+            for input in [
+                departure.as_str(),
+                "settlement transit depart missing family destination",
+                "settlement transit list",
+            ] {
+                state.outbox.clear();
+                let changes = command(&mut state, alice, input);
+                assert!(chat_contains(&state, "Only operators"));
+                assert!(changes.entities_removed.is_empty());
+                assert!(transit::summary(&state, source).is_empty());
+                assert!(
+                    members
+                        .iter()
+                        .all(|&id| state.entities.slot_of(id).is_some())
+                );
+                assert!(
+                    state
+                        .settlements
+                        .get(source)
+                        .unwrap()
+                        .households
+                        .contains_key(&family)
+                );
+            }
+        }
+        state.plugin_players.observe_permission(ConnectionId(1), 2);
+        let changes = if console {
+            let mut changes = ChangeSet::default();
+            execute(
+                &mut state,
+                crate::command_console::CONNECTION,
+                crate::command_console::EXECUTOR,
+                &parse(&departure, true).unwrap(),
+                &mut changes,
+            );
+            changes
+        } else {
+            command(&mut state, alice, &departure)
+        };
+        assert_eq!(changes.entities_removed.len(), members.len());
+        for member in members {
+            assert!(changes.entities_removed.contains(&member));
+            assert!(state.entities.slot_of(member).is_none());
+        }
+        assert!(
+            !state
+                .settlements
+                .get(source)
+                .unwrap()
+                .households
+                .contains_key(&family)
+        );
+        assert_eq!(crate::settlements::member_count(&state, source), 0);
+        let records = transit::summary(&state, source);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].destination, destination);
+        assert_eq!(records[0].household.as_deref(), Some(family.as_str()));
+        assert_eq!(records[0].members, members.len());
+        assert_eq!(crate::settlements::member_count(&state, destination), 0);
+        state.outbox.clear();
+        let changes = command(&mut state, alice, "settlement transit list");
+        assert!(changes.entities_removed.is_empty());
+        assert!(chat_contains(&state, &family));
+        assert!(chat_contains(&state, &records[0].id.0.to_string()));
+        assert!(chat_contains(&state, "travelling"));
+        state.tick += records[0].arrives;
+        crate::settlements::tick(&mut state, &mut ChangeSet::default());
+        assert_eq!(
+            transit::summary(&state, source)[0].status,
+            transit::Status::AwaitingEntry,
+            "the host tick must advance a due transit even while its destination is unsimulated"
+        );
+        state.plugin_players.observe_permission(ConnectionId(1), 0);
+        state.outbox.clear();
+        command(&mut state, alice, "settlement transit list");
+        assert!(chat_contains(&state, "Only operators"));
+        assert!(!chat_contains(&state, &family));
+        assert_eq!(transit::summary(&state, source).len(), 1);
+        crate::settlements::validate_memberships(&state).unwrap();
+    }
+}
+
+#[test]
 fn settlement_nearest_binding_is_bounded_and_preserves_owner_checks() {
     let (mut state, alice, bob) = fixture();
     command(&mut state, alice, "settlement create town");

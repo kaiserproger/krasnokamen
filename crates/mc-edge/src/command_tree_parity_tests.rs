@@ -49,6 +49,47 @@ fn rc2_roots_are_advertised_and_admitted_at_level_two() {
 }
 
 #[test]
+fn settlement_transit_tree_and_help_are_operator_only() {
+    for level in [0, 1, 2, 4] {
+        let packet = tree(level, &[]);
+        let settlement = advertised(&packet, &["settlement"]);
+        let visible = settlement.children.iter().any(|&index| {
+            matches!(&packet.nodes[index as usize].kind,
+                CommandNodeKind::Literal(name) if name == "transit")
+        });
+        assert_eq!(visible, level >= 2);
+        let help = help(Some("settlement"), level, &[]).unwrap();
+        assert_eq!(
+            help.iter()
+                .any(|line| line.starts_with("/settlement transit ")),
+            level >= 2
+        );
+        if level >= 2 {
+            assert!(advertised(&packet, &["settlement", "transit"]).restricted);
+            assert!(advertised(&packet, &["settlement", "transit", "list"]).executable);
+            for (index, name) in ["settlement", "household", "destination"]
+                .into_iter()
+                .enumerate()
+            {
+                let path = [
+                    "settlement",
+                    "transit",
+                    "depart",
+                    "settlement",
+                    "household",
+                    "destination",
+                ];
+                let node = advertised(&packet, &path[..4 + index]);
+                assert!(matches!(&node.kind,
+                    CommandNodeKind::Argument { name: argument, parser: Parser::String(CommandStringKind::SingleWord), .. }
+                        if argument == name));
+                assert_eq!(node.executable, index == 2);
+            }
+        }
+    }
+}
+
+#[test]
 fn border_summon_nbt_and_distinct_time_queries_use_exact_packet_parsers() {
     let packet = tree(2, &[]);
     let mut bytes = Vec::new();

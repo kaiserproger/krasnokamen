@@ -64,6 +64,15 @@ pub(super) fn settlement_tree(t: &mut Tree, root: i32) {
             _ => {}
         }
     }
+    if t.op_level >= 2 {
+        let transit = t.literal(root, "transit", false);
+        t.nodes[transit as usize].restricted = true;
+        t.literal(transit, "list", true);
+        let depart = t.literal(transit, "depart", false);
+        let source = t.argument(depart, "settlement", word.clone(), false);
+        let household = t.argument(source, "household", word.clone(), false);
+        t.argument(household, "destination", word.clone(), true);
+    }
     let unbind = t.literal(root, "unbind", true);
     t.argument(unbind, "villager", Parser::Uuid, true);
     for domain in ["production", "commerce", "payroll", "caravan"] {

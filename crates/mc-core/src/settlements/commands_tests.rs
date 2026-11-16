@@ -240,6 +240,43 @@ fn household_relocation_requires_source_identity_and_destination() {
 }
 
 #[test]
+fn transit_commands_require_exact_departure_or_list_shapes() {
+    assert_eq!(
+        parse(&["transit", "depart", "source", "family", "destination"]).unwrap(),
+        SettlementCommand::TransitDepart {
+            settlement: "source".into(),
+            household: "family".into(),
+            destination: "destination".into(),
+        }
+    );
+    assert_eq!(
+        parse(&["transit", "list"]).unwrap(),
+        SettlementCommand::TransitList
+    );
+    for args in [
+        &["transit"][..],
+        &["transit", "depart"],
+        &["transit", "depart", "source", "family"],
+        &[
+            "transit",
+            "depart",
+            "source",
+            "family",
+            "destination",
+            "extra",
+        ],
+        &["transit", "list", "extra"],
+        &["transit", "unknown"],
+    ] {
+        assert!(parse(args).is_err(), "{args:?}");
+    }
+    assert!(matches!(
+        crate::commands::parse("settlement transit list", true).unwrap(),
+        crate::commands::Command::Settlement(SettlementCommand::TransitList)
+    ));
+}
+
+#[test]
 fn production_commerce_payroll_and_caravan_are_native_commands() {
     for domain in ["production", "commerce", "payroll", "caravan"] {
         let command = format!("settlement {domain} town status");

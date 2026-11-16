@@ -38,6 +38,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeS
     let elapsed = allocator::tick(state, changes);
     construction::tick(state);
     army::tick(state);
+    transit::tick(state, changes);
     elapsed
 }
 
