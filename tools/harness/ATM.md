@@ -85,6 +85,11 @@ items permitted by the retained table. Player inventory slots cannot satisfy
 this check. The gate captures the barrel menu and reopens it without item input
 to prove the inventory did not reroll. This is one table's admission/rolling
 proof, not whole-mod loot or RNG fidelity.
+Containers are considered in recorded distance-and-coordinate order; the gate
+tries standable cells without breaking blocks and uses Horizon's clip ray to
+require a visible barrel face within 4.5 blocks of the survival player's eyes.
+Blocked containers are skipped, not treated as loot proof. Only the private,
+short-lived control socket lives outside the durable output directory.
 The native screenshot-only backend refuses this manifest rather than silently
 skipping its required barrel-open evidence.
 

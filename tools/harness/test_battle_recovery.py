@@ -45,6 +45,58 @@ def batch(directory: Path, low: int, high: int, lines: list[dict], *, corrupt: b
     return path
 
 
+class CleanupFailureTests(unittest.TestCase):
+    def test_primary_traceback_survives_broken_control_pipe_and_cleanup_continues(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = object.__new__(br.RunnerSession)
+            session.ctx = mock.Mock(artifact_dir=Path(directory), exits=[None, None])
+            session.runner = mock.Mock(pid=11, returncode=0, poll=mock.Mock(return_value=0))
+            session.recovery = mock.Mock(pid=12, returncode=-15, poll=mock.Mock(return_value=-15))
+            session.runner_index, session.recovery_index = 0, 1
+            session.archive = None
+            session.driver_log = None
+            session.battle = mock.Mock()
+            dead_ctl = mock.Mock(pid=13, poll=mock.Mock(return_value=-9))
+            client = mock.Mock(name="client")
+            client.name = "PovRed"
+            client.process = mock.Mock(pid=14, poll=mock.Mock(return_value=-9))
+            client.driver.proc = dead_ctl
+            client.stop.side_effect = BrokenPipeError("control stdin")
+            session.clients = [client]
+
+            def failing_gate():
+                try:
+                    raise ValueError("original gate failure")
+                finally:
+                    session.close()
+
+            with self.assertRaisesRegex(ValueError, "original gate failure"):
+                failing_gate()
+            diagnostic = json.loads((Path(directory) / "battle-failure-diagnostics.json").read_text())
+            self.assertIn("ValueError: original gate failure", diagnostic["primary_traceback"])
+            self.assertIn("BrokenPipeError: control stdin", diagnostic["cleanup_errors"][0]["traceback"])
+            self.assertEqual(diagnostic["before_cleanup"]["control:PovRed"]["exit"], -9)
+            self.assertEqual(diagnostic["after_cleanup"]["recovery_server"]["exit"], -15)
+            self.assertEqual(session.battle.stop_child.call_count, 2)
+
+    def test_teardown_failure_without_primary_still_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            session = object.__new__(br.RunnerSession)
+            session.ctx = mock.Mock(artifact_dir=Path(directory))
+            session.runner = session.recovery = session.archive = session.driver_log = None
+            session.runner_index = session.recovery_index = -1
+            session.battle = mock.Mock()
+            client = mock.Mock()
+            client.name, client.process, client.driver = "PovRed", None, None
+            client.stop.side_effect = BrokenPipeError("control stdin")
+            session.clients = [client]
+            with self.assertRaises(BrokenPipeError):
+                session.close()
+            diagnostic = json.loads((Path(directory) / "battle-failure-diagnostics.json").read_text())
+            self.assertIsNone(diagnostic["primary_traceback"])
+            self.assertIn("BrokenPipeError", diagnostic["cleanup_errors"][0]["traceback"])
+
+
 class ExportReadingTests(unittest.TestCase):
     def test_every_player_custody_place_and_nested_container_is_a_stack(self):
         damaged = {**SPEAR, "components": {**SPEAR["components"], "minecraft:damage": 17}}
@@ -134,6 +186,16 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(explained["removals"][0]["tick"], 125)
         early = history(100, 200, spawns=[self.spawn], removals=[{"dimension": "minecraft:overworld", "id": 42, "tick": 105}])
         self.assertEqual(br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [early])["verdict"], "incomplete")
+
+    def test_common_restore_loss_in_both_exports_still_fails_issued_kit_reconciliation(self):
+        dropped = census("dropped", 110, [stack(f"player:{HOLDER}", "player", SHIELD)])
+        crash = census("crash", 120, dropped["stacks"])
+        result = br.reconcile([self.issued, dropped, crash], self.kit, set(), [self.history])
+        self.assertTrue(all(phase["reopen"]["agree"] for phase in result["phases"]))
+        self.assertEqual(result["verdict"], "incomplete")
+        self.assertTrue(any(row.get("key") == br.kit_key(SPEAR)
+                            and "1 unit(s) left custody with 0 ordered removal(s)" in row["reason"]
+                            for row in result["incomplete"]), result)
 
     def test_identity_reuse_gaps_and_clocks_are_incomplete(self):
         gone = census("death", 130, [stack(f"player:{HOLDER}", "player", SHIELD)])

@@ -67,6 +67,11 @@ runner scenarios `KRASNOKAMEN_CLIENT_BINARY` plus `KRASNOKAMEN_BATTLE_RECORDER_D
 (the recorder). The auth scenario deploys `krasnokamen-auth` from the plugins
 sibling. Each run is a field-1k 1500/side battle with PovRed holding a rank and
 CamSpec spectating him, and an actual SIGKILL.
+If a runner scenario fails or its cleanup fails, `battle-failure-diagnostics.json`
+records the original traceback, process statuses before and after cleanup and
+secondary cleanup errors. A broken control pipe during cleanup must not replace
+the original failure; a cleanup failure without an earlier error still fails.
+
 
 - `battle-kit-census`: PovRed drops his spear, then SIGKILL -> recovery ->
   rejoin, death -> respawn and disconnect -> reconnect. A hot `backup` at each

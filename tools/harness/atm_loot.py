@@ -2,15 +2,77 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from .atm_carry import digest
 from .quirk_parity.anvil import read_region, read_world
 
 AIR = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air"}
+PASSABLE = AIR | {"minecraft:water"}
+FACES = (("down", (0, -1, 0)), ("up", (0, 1, 0)), ("north", (0, 0, -1)),
+         ("south", (0, 0, 1)), ("west", (-1, 0, 0)), ("east", (1, 0, 0)))
 
 
-def container_candidate(site: dict, pack: Path, probe: dict) -> dict:
+def stand_positions(pos, block):
+    """Potential feet cells, checked again against the real client after teleport."""
+    x, y, z = pos
+    positions = []
+    for sx in range(x - 5, x + 6):
+        for sy in range(y - 6, y + 5):
+            for sz in range(z - 5, z + 6):
+                if (block((sx, sy, sz)) not in PASSABLE or
+                    block((sx, sy + 1, sz)) not in PASSABLE or
+                    block((sx, sy - 1, sz)) in PASSABLE | {"minecraft:lava"}):
+                    continue
+                eye = (sx + 0.5, sy + 1.62, sz + 0.5)
+                nearest = [max(p, min(e, p + 1)) for e, p in zip(eye, pos)]
+                if math.dist(eye, nearest) <= 4.5:
+                    positions.append([sx + 0.5, sy, sz + 0.5])
+    return sorted(positions, key=lambda p: (sum((a - (b + 0.5)) ** 2 for a, b in zip(p, pos)), p))
+
+
+def visible_face(client, pos):
+    """Use Horizon's actual clip ray and enforce survival eye-to-hit reach."""
+    centre = [value + 0.5 for value in pos]
+    for name, face in FACES:
+        for inset in (0.45, 0.3, 0.0):
+            client.call("look-at", *(c + d * inset for c, d in zip(centre, face)))
+            target = client.call("looking-at")
+            hit = target.get("block") or {}
+            if (target.get("kind") == "block" and hit.get("pos") == pos and hit.get("face") == name and
+                isinstance(hit.get("distance"), (int, float)) and hit["distance"] <= 4.5):
+                return hit
+    return None
+
+
+def select_reachable(client, candidates):
+    attempts = []
+    client.receipt["container_selection"] = {
+        "candidate_order": [row["position"] for row in candidates], "attempts": attempts,
+    }
+    for evidence in candidates:
+        for stand in evidence["stands"]:
+            if client.call("state").get("gamemode") != "spectator":
+                client.command("gamemode spectator @s", "game mode")
+            client.teleport(stand)
+            client.command("gamemode survival @s", "game mode")
+            client.call("wait", 10)
+            player = client.call("state").get("player") or {}
+            actual = player.get("position")
+            attempt = {"position": evidence["position"], "stand": stand, "player": player}
+            attempts.append(attempt)
+            if (not player.get("on_ground") or not isinstance(actual, list) or len(actual) != 3 or
+                any(abs(a - b) > 0.05 for a, b in zip(actual, stand))):
+                continue
+            hit = visible_face(client, evidence["position"])
+            if hit is not None:
+                attempt["hit"] = hit
+                return {**evidence, "stand": stand, "target_hit": hit, "selection_attempts": attempts}
+    raise ValueError("no reachable generated unopened container with clear survival-reach clip ray")
+
+
+def container_candidates(site: dict, pack: Path, probe: dict) -> list[dict]:
     namespace, name = probe["table"].split(":", 1)
     table = (pack / "data" / namespace / "loot_table" / (name + ".json")).resolve()
     table.relative_to(pack.resolve())
@@ -25,7 +87,7 @@ def container_candidate(site: dict, pack: Path, probe: dict) -> dict:
         raise ValueError("container proof has no allowed loot items")
     lo, hi = site["bounds"][:3], site["bounds"][3:]
     dimension = Path(site["dimension_dir"])
-    expanded = [v - 2 for v in lo] + [v + 2 for v in hi]
+    expanded = [v - 6 for v in lo] + [v + 6 for v in hi]
     blocks = read_world(dimension, [expanded])[0]["blocks"]
     def block(pos):
         return blocks.get(",".join(map(str, pos)), "minecraft:air").split("[")[0]
@@ -40,17 +102,15 @@ def container_candidate(site: dict, pack: Path, probe: dict) -> dict:
                     continue
                 if entity.get("Items") or block(pos) != probe["block"]:
                     continue
-                x, y, z = pos
-                for dx, dz in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-                    feet, head, floor = [x+dx, y, z+dz], [x+dx, y+1, z+dz], [x+dx, y-1, z+dz]
-                    if block(feet) in AIR and block(head) in AIR and block(floor) not in AIR | {"minecraft:water", "minecraft:lava"}:
-                        candidates.append({"position": pos, "stand": [feet[0]+0.5, y, feet[2]+0.5],
-                                           "saved_block_entity": entity, "table": probe["table"],
-                                           "allowed_items": sorted(allowed), "table_sha256": digest(table)})
-                        break
+                stands = stand_positions(pos, block)
+                if stands:
+                    candidates.append({"position": pos, "stands": stands,
+                                       "saved_block_entity": entity, "table": probe["table"],
+                                       "allowed_items": sorted(allowed), "table_sha256": digest(table)})
     if not candidates:
         raise ValueError(f"{site['id']}: no reachable generated unopened {probe['block']} with LootTable {probe['table']}")
-    return min(candidates, key=lambda row: sum((a-b)**2 for a, b in zip(row["position"], site["anchor"])))
+    return sorted(candidates, key=lambda row: (sum((a-b)**2 for a, b in zip(row["position"], site["anchor"])),
+                                                row["position"]))
 
 
 def rolled_slots(screen: dict, allowed: list[str]) -> list[dict]:
@@ -68,14 +128,11 @@ def rolled_slots(screen: dict, allowed: list[str]) -> list[dict]:
 
 
 def open_generated_container(client, site: dict, pack: Path, probe: dict, picture: Path) -> dict:
-    evidence = container_candidate(site, pack, probe)
-    client.teleport(evidence["stand"])
-    if client.call("state").get("gamemode") != "creative":
-        client.command("gamemode creative @s", "game mode")
+    evidence = select_reachable(client, container_candidates(site, pack, probe))
     observed = client.call("block", *evidence["position"])
     if observed.get("loaded") is not True or observed.get("block", "").split("[")[0] != probe["block"]:
         raise ValueError(f"client did not receive the generated barrel: {observed}")
-    client.call("interact", *evidence["position"])
+    client.call("interact", *evidence["position"], evidence["target_hit"]["face"])
     client.call("wait-for", "screen", "container", "--timeout", client.args.timeout)
     screen = client.call("screen")
     slots = rolled_slots(screen, evidence["allowed_items"])
@@ -84,7 +141,7 @@ def open_generated_container(client, site: dict, pack: Path, probe: dict, pictur
         raise ValueError("container screenshot did not produce a PNG")
     client.call("close")
     client.call("wait-for", "screen", "playing", "--timeout", client.args.timeout)
-    client.call("interact", *evidence["position"])
+    client.call("interact", *evidence["position"], evidence["target_hit"]["face"])
     client.call("wait-for", "screen", "container", "--timeout", client.args.timeout)
     reopened = client.call("screen")
     if rolled_slots(reopened, evidence["allowed_items"]) != slots:
