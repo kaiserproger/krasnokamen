@@ -1946,7 +1946,7 @@ repro = "manual"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP Fix patch: reversing it removes the .zip pack arm from the pack scan and the worldgen/dimension resource arm from add_file, so such packs are rejected again."
-regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::unsupported_worldgen_refuses_the_entire_pack_including_other_content", "cargo:mc-core:datapacks::tests::unsupported_worldgen_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
+regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once", "cargo:mc-core:datapacks::tests::worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:7ed25fa17b8c7d7980abac39ba0e842869b4a620643e438e46635b23c5a07c73"
 promotion = "docs/bugs/promotions/DATAPACK-WORLDGEN-ZIP.json"
 
