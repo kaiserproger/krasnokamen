@@ -110,3 +110,62 @@ fn distance_cost_and_outside_score_do_not_hide_the_threshold() {
     assert_eq!(gain(35.0, 60.0, 200.0), 15.0);
     assert!(gain(35.0, 60.0, 512.0) < MIGRATION_THRESHOLD);
 }
+
+#[test]
+fn native_router_cap_and_uncapped_home_search_share_terrain_and_budget() {
+    use super::super::allocator::{self, PoiCache, RouteCtx};
+    use crate::boundary::BlockPos;
+    use crate::tick_budget::{Consumer, Kind};
+    let mut state = allocator::tests::test_state();
+    let mut cache = PoiCache::default();
+    let mut path = Vec::new();
+    let target = BlockPos { x: 13, y: 201, z: 13 };
+    state.tick_budget.reset(state.tick);
+    let mut ctx = RouteCtx::tick(&mut state, Consumer::Brain);
+    assert!(ctx.admit());
+    let before = ctx.budget.allowance(ctx.dimension, ctx.consumer, Kind::PathNode);
+    assert!(!allocator::find_path_limited_ctx(
+        &mut ctx, &mut cache, [2.5, 201.0, 2.5], target, 0.3, 1.95,
+        &mut path, true, 48, 16, true, 3,
+    ));
+    assert_eq!(before - ctx.budget.allowance(ctx.dimension, ctx.consumer, Kind::PathNode), 3);
+    assert!(allocator::find_path_ctx(
+        &mut ctx, &mut cache, [2.5, 201.0, 2.5], target, 0.3, 1.95,
+        &mut path, true, 48, 16, true,
+    ));
+    assert_eq!(path.first(), Some(&target));
+}
+
+#[test]
+fn home_search_observation_is_allocator_completion_not_a_brain_scan() {
+    use super::super::allocator;
+    use crate::boundary::ChangeSet;
+    let mut state = allocator::tests::test_state();
+    let slot = allocator::tests::villager(&mut state, [2.5, 201.0, 2.5]);
+    let id = state.entities.body(slot).id;
+    for _ in 0..240 {
+        state.tick_budget.reset(state.tick);
+        allocator::tick(&mut state, &mut ChangeSet::default());
+        if state.villager_pois.home_search.contains_key(&id) {
+            break;
+        }
+        state.tick += 1;
+    }
+    let result = state.villager_pois.home_search.get(&id).expect("Home searched");
+    assert_eq!(result.tick, state.tick);
+    assert!(result.no_candidates);
+    allocator::tests::bed(&mut state, 8, 8);
+    state.world.fold_overlay();
+    for _ in 0..480 {
+        state.tick += 1;
+        state.tick_budget.reset(state.tick);
+        allocator::tick(&mut state, &mut ChangeSet::default());
+        if state.entities.row(slot).villager.as_ref().unwrap().home.is_some() {
+            break;
+        }
+    }
+    assert!(state.entities.row(slot).villager.as_ref().unwrap().home.is_some());
+    let result = state.villager_pois.home_search.get(&id).unwrap();
+    assert_eq!(result.tick, state.tick);
+    assert!(!result.no_candidates);
+}

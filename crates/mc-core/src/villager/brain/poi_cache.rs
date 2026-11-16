@@ -521,6 +521,7 @@ impl PoiCache {
                         self.updates.push(previous.id);
                         self.resident_threats.remove(&previous.id);
                         self.search_at.remove(&previous.id);
+                        self.home_search.remove(&previous.id);
                     }
                 }
             }

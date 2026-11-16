@@ -60,6 +60,14 @@ pub(crate) struct SearchProgress {
     candidates: [usize; 3],
 }
 
+/// Observed completion of the allocator's own Home search, never a second
+/// sensor scan in the brain. A deferred search publishes no result.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HomeSearch {
+    pub(crate) tick: u64,
+    pub(crate) no_candidates: bool,
+}
+
 /// Shared tick-owner POI, sensor and brain-admission scratch. Route/node
 /// ownership stays here; brain scheduling methods live with the brain.
 #[derive(Default)]
@@ -80,6 +88,7 @@ pub(crate) struct PoiCache {
     pub(crate) search_at: FxHashMap<EntityId, u64>,
     pub(crate) search_due: BTreeSet<(u64, EntityId)>,
     pub(crate) search_needs: FxHashMap<EntityId, (u64, usize, SearchProgress)>,
+    pub(crate) home_search: FxHashMap<EntityId, HomeSearch>,
     pub(crate) search_ready: BTreeSet<(u64, EntityId)>,
     pub(crate) search_ready_order: FxHashMap<EntityId, u64>,
     pub(crate) next_search_order: u64,
@@ -1198,6 +1207,23 @@ fn bed_allowed(state: &TickState, scope: HousingScope, poi: Poi) -> bool {
         || roofed(&state.world, &state.registry, poi.pos)
 }
 
+
+/// The allocator's Home admission facts without a reach/window or a route
+/// search. Remote fallback goals must also have an intact native bed pair.
+pub(crate) fn claimable_bed(
+    state: &TickState,
+    cache: &PoiCache,
+    owner: EntityId,
+    settlement: Option<SettlementId>,
+    poi: Poi,
+) -> bool {
+    let scope = housing_scope(state, settlement);
+    poi.kind == PoiKind::Home
+        && !cache.claimed(owner, poi)
+        && scope_allows(scope, poi.pos)
+        && bed_allowed(state, scope, poi)
+        && bed_pair(&state.world, &state.registry, poi.pos).is_some()
+}
 fn acquire(
     state: &mut TickState,
     cache: &mut PoiCache,
@@ -1533,6 +1559,15 @@ fn acquire_pois(state: &mut TickState, cache: &mut PoiCache) {
             match (first + offset) % 3 {
                 0 if v.home.is_none() => {
                     v.home = acquire(state, cache, slot, &mut v, PoiKind::Home);
+                    if !cache.search_deferred {
+                        cache.home_search.insert(
+                            id,
+                            HomeSearch {
+                                tick: state.tick,
+                                no_candidates: cache.candidates.is_empty(),
+                            },
+                        );
+                    }
                     if v.home.is_some() {
                         v.home_dimension = state.dimension.name().to_owned();
                         if let (Some(settlement), Some(household), Some(home)) =
