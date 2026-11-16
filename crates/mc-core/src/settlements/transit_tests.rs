@@ -436,16 +436,27 @@ fn arrival_reenters_the_same_villagers_at_the_simulated_edge_and_joins() {
     d.state.tick = arrives;
     // The destination is not simulated: the record waits, nobody appears.
     let mut changes = ChangeSet::default();
-    tick(&mut d.state, &mut changes);
+    assert!(tick(&mut d.state, &mut changes).is_empty());
     let record = d.state.settlements.transit.get(d.id).unwrap();
     assert_eq!(record.status, Status::AwaitingEntry);
     assert!(changes.entities_spawned.is_empty());
     assert_eq!(inbound(&d.state, d.destination), 2);
     // A player reaches the destination: it simulates, the household enters.
     player_to(&mut d.state, [1000.5, 64.0, 8.5]);
-    tick(&mut d.state, &mut changes);
+    let arrivals = tick(&mut d.state, &mut changes);
     assert_eq!(changes.entities_spawned.len(), 2);
     assert!(d.state.settlements.transit.get(d.id).is_none());
+    let mut members = d.uuids.to_vec();
+    members.sort();
+    assert_eq!(
+        arrivals,
+        [Arrival {
+            source: d.source,
+            destination: d.destination,
+            household: Some(d.family.clone()),
+            members,
+        }]
+    );
     assert_eq!(inbound(&d.state, d.destination), 0);
     let entry = edge_point(&d.state, FAR, 270.0).unwrap();
     let distance = horizontal(entry, FAR);
@@ -500,8 +511,9 @@ fn a_deleted_destination_retargets_the_record_to_its_source() {
     assert!(crate::settlements::remove(&mut d.state, d.destination));
     d.state.tick = d.state.settlements.transit.get(d.id).unwrap().arrives;
     let mut changes = ChangeSet::default();
-    tick(&mut d.state, &mut changes);
+    let [arrival] = tick(&mut d.state, &mut changes).try_into().unwrap();
     assert_eq!(changes.entities_spawned.len(), 2);
+    assert_eq!((arrival.source, arrival.destination), (d.source, d.source));
     for uuid in d.uuids {
         assert_eq!(places(&d.state, uuid), 1);
         let slot = d.state.entities.slot_of_uuid(uuid).unwrap();

@@ -92,6 +92,19 @@ pub(crate) struct Ledger {
     touched: BTreeSet<uuid::Uuid>,
 }
 
+/// One arrival that joined its destination, returned by [`tick`] for the
+/// migration policy of the same tick. Never persisted: the joined bodies and
+/// household are the durable outcome.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Arrival {
+    pub(crate) source: SettlementId,
+    pub(crate) destination: SettlementId,
+    /// The arriving household's id; `None` for a lone resident.
+    pub(crate) household: Option<String>,
+    /// Member UUIDs, ascending.
+    pub(crate) members: Vec<uuid::Uuid>,
+}
+
 impl Ledger {
     fn put(&mut self, id: uuid::Uuid, record: Record) {
         self.records.insert(id, record);
@@ -470,9 +483,11 @@ pub(crate) fn emigrate(
 /// Due records: retarget a deleted destination, mark `awaiting_entry` while
 /// the destination anchor is not simulated, otherwise re-enter at its
 /// simulated edge on the reverse bearing (at most [`MAX_ARRIVALS_PER_TICK`]).
-pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+/// Returns the arrivals that joined a destination in this call.
+pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) -> Vec<Arrival> {
+    let mut arrivals = Vec::new();
     if state.settlements.transit.records.is_empty() {
-        return;
+        return arrivals;
     }
     let now = game_time(state);
     let due: Vec<uuid::Uuid> = state
@@ -507,12 +522,16 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         };
         match arrive(state, changes, id, entry) {
-            Ok(()) => admitted += 1,
+            Ok(arrival) => {
+                admitted += 1;
+                arrivals.extend(arrival);
+            }
             Err(reason) => {
                 tracing::error!(transit = %id, reason, "settlement_transit_arrival_refused");
             }
         }
     }
+    arrivals
 }
 
 /// A deleted destination: the source, else the nearest settlement, else none
@@ -551,19 +570,22 @@ fn retarget(state: &mut TickState, id: uuid::Uuid) {
 
 /// Arrival tick: the same entities re-enter at `entry` and `join` the
 /// destination (or stay unbound when none exists), the record is deleted, all
-/// in this tick. Any refusal leaves the world and the record unchanged.
+/// in this tick; returns the [`Arrival`] when the unit joined. Any refusal
+/// leaves the world and the record unchanged.
 fn arrive(
     state: &mut TickState,
     changes: &mut ChangeSet,
     id: uuid::Uuid,
     entry: BlockPos,
-) -> Result<(), &'static str> {
+) -> Result<Option<Arrival>, &'static str> {
     let record = state.settlements.transit.records[&id].clone();
+    let mut uuids = Vec::with_capacity(record.members.len());
     for member in &record.members {
         let uuid: uuid::Uuid = member.uuid.parse().map_err(|_| "invalid member UUID")?;
         if worlds(state).any(|world| world.entities.slot_of_uuid(uuid).is_some()) {
             return Err("a member already exists in the world");
         }
+        uuids.push(uuid);
     }
     let bound = state.settlements.get(record.destination).is_some_and(|to| {
         record
@@ -615,6 +637,12 @@ fn arrive(
         return Err(reason);
     }
     state.settlements.transit.remove(id);
+    let arrival = bound.then(|| Arrival {
+        source: record.source,
+        destination: record.destination,
+        household: record.household.as_ref().map(|family| family.id.clone()),
+        members: uuids,
+    });
     tracing::info!(
         transit = %id,
         destination = record.destination.0,
@@ -626,7 +654,7 @@ fn arrive(
         "settlement_transit_arrival"
     );
     changes.entities_spawned.extend(spawned);
-    Ok(())
+    Ok(arrival)
 }
 
 /// Undo this tick's partial re-entry; nothing of it was published yet.

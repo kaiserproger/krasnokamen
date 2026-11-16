@@ -335,7 +335,7 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
         // The explicit call is the settlements tick wiring's; with it wired
         // into run_tick the record is already gone and this is a no-op.
         step(&mut state, &mut writer, true, |state, changes| {
-            tick(state, changes)
+            tick(state, changes);
         });
     }
     assert_eq!(stored_rows(&config), 1, "the WAL alone holds the arrival");
