@@ -359,6 +359,18 @@ fi
 # CPUWeight 10000 vs 50 per build scope (diagnostic isolation; quiet numbers need -x).
 [ "$perf" = 1 ] && { niceness=0; cpu_pin=(taskset -c "$perf_cpus"); preemptible=0; props=("${props[@]/CPUWeight=50/CPUWeight=10000}"); }
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
+# CPUs held by tools/dev/reserve-cpus (owner 2026-11-16, Spain trials) stay out of every
+# new scope except one started with KRASNOKAMEN_RESERVED_CPUS=use; running scopes keep
+# their placement, and the reservation ends with the command that holds it.
+reserved=$(cat "$dir/reserved-cpus" 2>/dev/null || true)
+if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
+  declare -A held=()
+  for part in ${reserved//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do held[$c]=1; done; done
+  pool=0-$((ncpu - 1)); [ "$perf" = 1 ] && pool=$perf_cpus
+  allowed=
+  for part in ${pool//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do [ -n "${held[$c]:-}" ] || allowed+=${allowed:+,}$c; done; done
+  [ -n "$allowed" ] && cpu_pin=(taskset -c "$allowed")
+fi
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
 [ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
 echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target token=$token expect=$((est_kib / 1024))MiB key='$key'" >&2
