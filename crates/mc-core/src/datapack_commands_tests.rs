@@ -1219,7 +1219,7 @@ fn base_registry() -> crate::registry::CoreRegistry {
 }
 
 #[test]
-fn a_new_pack_that_cannot_load_refuses_start_and_names_pack_and_file() {
+fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_file() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     pack(&root, "good", "\"Good\"", &GEM_RECIPES);
@@ -1236,17 +1236,30 @@ fn a_new_pack_that_cannot_load_refuses_start_and_names_pack_and_file() {
         &[("tagged/tags/item/gems.json", r#"{"values":[]}"#)],
     );
     let base = base_registry();
-    let error = PackSet::open(&root, Selection::default(), &base)
-        .err()
-        .unwrap();
+    // The same selection a world that never saw these packs has.
+    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let skipped = packs.skipped.clone();
+    assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
+    assert_eq!(skipped.len(), 2, "{skipped:?}");
+    let named = |pack: &str, file: &str| {
+        skipped
+            .iter()
+            .any(|line| line.contains(pack) && line.contains(file))
+    };
     assert!(
-        error.contains("file/tagged") && error.contains("tagged/tags/item/gems.json"),
-        "{error}"
+        named("file/truncated", "test/recipe/cut.json"),
+        "{skipped:?}"
     );
-    // A previously selected broken pack is also a hard refusal.
+    assert!(
+        named("file/tagged", "tagged/tags/item/gems.json"),
+        "{skipped:?}"
+    );
+
+    // A pack the saved selection already holds that no longer loads is not
+    // skipped: the world was saved with it enabled.
     let saved = Selection {
         enabled: vec!["vanilla".into(), "file/truncated".into()],
-        disabled: vec!["file/tagged".into()],
+        disabled: Vec::new(),
     };
     let error = PackSet::open(&root, saved, &base)
         .err()
@@ -1258,7 +1271,7 @@ fn a_new_pack_that_cannot_load_refuses_start_and_names_pack_and_file() {
 }
 
 #[test]
-fn a_pack_the_live_reload_refused_also_refuses_start_until_repaired() {
+fn a_pack_the_live_reload_refused_does_not_stop_the_next_start() {
     let dir =
         std::env::temp_dir().join(format!("mc-core-datapack-refused-{}", uuid::Uuid::new_v4()));
     let packs = dir.join("datapacks");
@@ -1275,8 +1288,13 @@ fn a_pack_the_live_reload_refused_also_refuses_start_until_repaired() {
     console(&core, "datapack enable file/broken", "file/broken");
     core.shutdown();
 
-    let error = crate::core::Core::open(config.clone()).err().unwrap();
-    assert!(error.to_string().contains("file/broken"), "{error}");
+    let core = crate::core::Core::open(config.clone()).unwrap();
+    assert!(
+        recipe_result(core.registry(), "test:new_gem").is_some(),
+        "the same selection as before the refusal"
+    );
+    assert!(recipe_result(core.registry(), "test:cut").is_none());
+    core.shutdown();
 
     // The operator repairs the named file: the next start enables the pack and saves that.
     std::fs::write(
@@ -1463,24 +1481,29 @@ fn messy_folder(root: &Path) {
 }
 
 #[test]
-fn unreadable_pack_entries_refuse_start_and_name_the_error() {
+fn unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     messy_folder(&root);
     let base = base_registry();
-    let error = PackSet::open(&root, Selection::default(), &base)
-        .err()
-        .unwrap();
-    assert!(error.contains("file/") && !error.is_empty(), "{error}");
+    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
+    let warnings = packs.warnings(None).join("\n");
+    for named in [
+        "file/nometa",
+        "file/cutmeta",
+        "file/nopackobject",
+        "file/corrupt.zip",
+        "non-pack entry 'README.txt'",
+    ] {
+        assert!(warnings.contains(named), "{named} in {warnings}");
+    }
+    assert!(warnings.contains("pack.mcmeta"), "{warnings}");
 
     // A pack the saved selection holds that became unreadable still stops the start.
     let saved = Selection {
         enabled: vec!["vanilla".into(), "file/good".into(), "file/cutmeta".into()],
-        disabled: vec![
-            "file/corrupt.zip".into(),
-            "file/nometa".into(),
-            "file/nopackobject".into(),
-        ],
+        disabled: Vec::new(),
     };
     let error = PackSet::open(&root, saved, &base)
         .err()
@@ -1492,7 +1515,7 @@ fn unreadable_pack_entries_refuse_start_and_name_the_error() {
 }
 
 #[test]
-fn a_reload_with_any_broken_pack_retains_all_old_content_and_selection() {
+fn a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     std::fs::create_dir_all(&root).unwrap();
@@ -1515,17 +1538,33 @@ fn a_reload_with_any_broken_pack_retains_all_old_content_and_selection() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        shown.contains("old packs and selection retained"),
+        shown.contains("Skipping new datapack file/broken"),
         "{shown}"
     );
-    assert!(recipe_result(&state.registry, "test:new_gem").is_none());
-    assert_eq!(state.datapacks.selection().enabled, ["vanilla"]);
-    std::fs::remove_dir_all(root.join("broken")).unwrap();
-    std::fs::remove_file(root.join("corrupt.zip")).unwrap();
-    run(&mut state, "reload");
-    settle(&mut state);
-    messages(&mut state);
-    assert!(recipe_result(&state.registry, "test:new_gem").is_some());
+    assert!(
+        shown.contains("Skipping new datapack file/corrupt.zip"),
+        "{shown}"
+    );
+    assert_eq!(
+        recipe_result(&state.registry, "minecraft:bone_meal").as_deref(),
+        Some("minecraft:diamond"),
+        "the rest of the reload applied"
+    );
+    assert!(
+        !state
+            .datapacks
+            .selection()
+            .enabled
+            .contains(&"file/broken".to_owned())
+    );
+
+    assert!(
+        state
+            .datapacks
+            .selection()
+            .enabled
+            .contains(&"file/gems".to_owned())
+    );
 
     // A saved pack that no longer loads refuses the reload and keeps the old state.
     std::fs::write(root.join("gems/data/test/recipe/new_gem.json"), BAD_RECIPE).unwrap();
@@ -1585,12 +1624,12 @@ fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other()
         &[],
     );
     let base = base_registry();
-    let error = PackSet::open(&root, Selection::default(), &base)
-        .err()
-        .unwrap();
+    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    assert_eq!(packs.selection.enabled, ["vanilla"]);
+    let warnings = packs.warnings(None).join("\n");
     assert!(
-        error.contains("file/lookbehind") && error.contains("filter"),
-        "{error}"
+        warnings.contains("file/lookbehind") && warnings.contains("filter"),
+        "{warnings}"
     );
     let saved = Selection {
         enabled: vec!["vanilla".into(), "file/lookbehind".into()],
@@ -1646,7 +1685,7 @@ fn a_pack_created_on_disk_is_enabled_by_reload_so_enable_says_already_enabled() 
 /// H2: a `/reload` states every condition it finds, so a new pack that stays broken is not
 /// silent the second time.
 #[test]
-fn a_second_reload_still_refuses_a_new_broken_pack() {
+fn a_second_reload_still_names_a_new_pack_that_stays_skipped() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     std::fs::create_dir_all(&root).unwrap();
@@ -1662,7 +1701,7 @@ fn a_second_reload_still_refuses_a_new_broken_pack() {
         settle(&mut state);
         let text = shown(&mut state);
         assert!(
-            text.contains("file/broken") && text.contains("old packs and selection retained"),
+            text.contains("Skipping new datapack file/broken"),
             "{round} reload: {text}"
         );
     }
@@ -1711,9 +1750,9 @@ fn the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke() {
     assert!(text.contains("file/gems"), "{text}");
 }
 
-/// Failed atomic reloads retain the old repository as well as the selected content.
+/// H4: vanilla `getPack`: a pack the repository has but that is not selected is "not enabled".
 #[test]
-fn a_failed_reload_does_not_publish_the_new_pack_repository() {
+fn disabling_a_skipped_pack_says_it_is_not_enabled() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     std::fs::create_dir_all(&root).unwrap();
@@ -1733,10 +1772,46 @@ fn a_failed_reload_does_not_publish_the_new_pack_repository() {
         let reply = messages(&mut state);
         assert_eq!(
             key(&reply[0]),
-            "commands.datapack.unknown",
+            "commands.datapack.disable.failed",
             "{id}: {reply:?}"
         );
     }
+    assert_eq!(run(&mut state, "datapack disable file/nosuch"), Failed);
+    assert_eq!(key(&messages(&mut state)[0]), "commands.datapack.unknown");
+}
+
+/// A reload refused by a broken selected pack keeps the old packs, yet a new pack
+/// `/datapack list` shows is never unknown to `/datapack disable` (vanilla `getPack`).
+#[test]
+fn a_refused_reload_never_leaves_a_listed_pack_unknown_to_disable() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    run(&mut state, "reload");
+    settle(&mut state);
+    messages(&mut state);
+    std::fs::write(root.join("gems/data/test/recipe/new_gem.json"), BAD_RECIPE).unwrap();
+    pack(&root, "fresh", "\"F\"", &[]);
+    run(&mut state, "reload");
+    settle(&mut state);
+    let refusal = shown(&mut state);
+    assert!(
+        refusal.contains("file/gems") && refusal.contains("old packs and selection retained"),
+        "{refusal}"
+    );
+    run(&mut state, "datapack list available");
+    settle(&mut state);
+    let listing = shown(&mut state);
+    assert!(listing.contains("file/fresh"), "{listing}");
+    assert_eq!(run(&mut state, "datapack disable file/fresh"), Failed);
+    let reply = messages(&mut state);
+    assert_eq!(
+        key(&reply[0]),
+        "commands.datapack.disable.failed",
+        "{reply:?}"
+    );
     assert_eq!(run(&mut state, "datapack disable file/nosuch"), Failed);
     assert_eq!(key(&messages(&mut state)[0]), "commands.datapack.unknown");
 }

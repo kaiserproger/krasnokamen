@@ -591,7 +591,8 @@ Supported resources (singular 26.1.2 directory names):
 - `data/<ns>/worldgen/{structure_set,structure,template_pool,processor_list}/<path>.json`,
   `data/<ns>/structure/<path>.nbt` (binary, directory or ZIP), and
   `data/<ns>/tags/worldgen/biome/<path>.json`: experimental selected jigsaw
-  inputs. Unsupported worldgen domains/types refuse startup by resource name.
+  inputs. Unsupported worldgen domains/types refuse a selected pack at startup by
+  resource name; a new pack holding one is skipped and named.
   Biome tags merge by pack priority with `replace` and required/optional nested
   references. The selected tree overlays vanilla at its actual priority.
 
@@ -617,10 +618,24 @@ with a recipe the server cannot encode, is refused whole and the old packs, sele
 and registry are kept. The enabled/disabled selection is saved with the world,
 so a restart restores the saved choice before any spawn search, generator or
 WAL replay chunk read. New packs are discovered at startup and `/reload`,
-but never as a side effect of enabling another pack. Any invalid new or selected
-pack refuses startup/reload whole, naming the pack and resource. A missing pack
-is de-selected with a warning; no partial invalid subset is reported enabled.
-Non-pack entries (README/stray files) are warned and ignored.
+but never as a side effect of enabling another pack. At startup and on `/reload` a
+new pack that cannot be read or loaded (a corrupt ZIP, a missing or truncated
+`pack.mcmeta`, a bad file, an unsupported resource, a `filter` that does not parse)
+is skipped with a warning naming the pack and the file and stays unselected, so it
+is no worldgen input; the rest applies, and a pack that a live `enable` refused
+cannot stop the next start or block a reload. This deliberately differs from
+vanilla, which enables a new pack and refuses to start when it fails to load (it
+offers `--safeMode`); Krasnokamen has no safe mode. A pack the saved selection
+already holds that no longer loads still refuses startup and `/reload` (old state
+kept), naming the pack and resource: its bytes are the world's selected generation
+inputs. A missing pack is de-selected with a warning; no partial invalid subset is
+reported enabled. Non-pack entries (README/stray files) are warned and ignored.
+Every warning goes to the server log; a pack that stays skipped is named again by
+every `/reload`, and the operator's chat shows the first three and a count of the
+rest. `/datapack list` keeps a selected pack whose files broke while it runs (its
+hover holds the error), and `/datapack disable` of a pack on disk that is not
+selected (skipped, or seen by a refused reload) answers "not enabled" as vanilla
+does for a pack the repository has.
 
 **Worldgen changes apply on restart, not hot reload.** Startup records diagnostic
 SHA-256 of effective inputs. Adding, updating or removing a worldgen pack or
@@ -630,7 +645,8 @@ generate using the newly selected inputs. Fresh worlds and pregeneration record
 the identity in their first checkpoint. Existing worlds without it adopt in
 memory and persist on the next normal positive-tick checkpoint; a crash before
 that repeats adoption. A changed identity invalidates the terrain epoch.
-Unsupported worldgen resources refuse startup by path, including Moog
+Unsupported worldgen resources refuse a selected pack at startup by path (a new
+pack holding them is skipped and named), including Moog
 `msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions` rules; enabling a
 pack never silently drops those generation constraints.
 

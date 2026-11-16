@@ -87,6 +87,8 @@ pub(crate) struct PackSet {
     failed: BTreeMap<String, String>,
     /// Entries of the folder that are no pack (a README, a stray file).
     not_packs: Vec<String>,
+    /// New packs this load left out because they cannot load, with the reason.
+    skipped: Vec<String>,
     /// The `pack.mcmeta` filters of every enabled pack: they hide the files of
     /// the packs below, the builtin `vanilla` pack included.
     filters: Vec<Filter>,
@@ -161,6 +163,7 @@ impl Default for PackSet {
             origins: BTreeMap::new(),
             failed: BTreeMap::new(),
             not_packs: Vec::new(),
+            skipped: Vec::new(),
             filters: Vec::new(),
         }
     }
@@ -209,6 +212,9 @@ pub(crate) enum Failure {
         args: Vec<String>,
     },
     Text(String),
+    /// A refused reload or activation with the pack ids its folder holds: the old
+    /// packs stay installed, but vanilla `getPack` answers from that repository.
+    Refused(Box<Failure>, BTreeSet<String>),
 }
 impl From<String> for Failure {
     fn from(message: String) -> Self {
@@ -230,12 +236,14 @@ impl Failure {
                 args.into_iter().map(text).collect(),
             ),
             Self::Text(message) => feedback(state, connection, message),
+            Self::Refused(failure, _) => failure.send(state, connection),
         }
     }
     fn into_text(self) -> String {
         match self {
             Self::Translated { key, args } => format!("{key} {}", args.join(" ")),
             Self::Text(message) => message,
+            Self::Refused(failure, _) => failure.into_text(),
         }
     }
 }
@@ -581,15 +589,60 @@ impl PackSet {
     fn load_known(root: &Path, selection: Selection) -> Result<Self, String> {
         Self::load_with(root, selection, false)
     }
-    /// Startup/reload admission is atomic and fail-closed, including new packs.
+    /// The packs a starting server or `/reload` runs. A pack newly found on disk is
+    /// enabled, but one that cannot be read, cannot load, or whose recipes and loot
+    /// cannot install onto `base` is skipped with a warning naming it and the file,
+    /// so a pack that a live `/datapack enable` refused cannot stop the next start.
+    /// A skipped pack stays unselected, so it is no worldgen input. This deliberately
+    /// differs from vanilla, which enables a new pack and refuses to start when it
+    /// fails (offering `--safeMode`); Krasnokamen has no safe mode. A pack the saved
+    /// selection holds that no longer loads still refuses, naming pack and file: its
+    /// bytes are the world's selected generation inputs.
     pub(crate) fn open(
         root: &Path,
         selection: Selection,
         base: &crate::registry::CoreRegistry,
     ) -> Result<Self, String> {
-        let packs = Self::load(root, selection)?;
-        packs.install_content(&mut base.prepare_content())?;
-        Ok(packs)
+        let usable = |packs: Self| -> Result<Self, String> {
+            packs.install_content(&mut base.prepare_content())?;
+            Ok(packs)
+        };
+        let first = match Self::load(root, selection.clone()).and_then(usable) {
+            Ok(packs) => return Ok(packs),
+            Err(error) => error,
+        };
+        let mut remaining = MAX_BYTES;
+        let found = scan(root, &mut remaining).map_err(|_| first.clone())?;
+        let failed = found.failed;
+        let new: Vec<String> = found
+            .packs
+            .into_keys()
+            .chain(failed.keys().cloned())
+            .filter(|id| !selection.enabled.contains(id) && !selection.disabled.contains(id))
+            .collect();
+        if new.is_empty() {
+            return Err(first);
+        }
+        let mut accepted = Self::load_known(root, selection).and_then(usable)?;
+        let mut skipped = Vec::new();
+        for id in new {
+            if let Some(error) = failed.get(&id) {
+                skipped.push(format!(
+                    "Skipping new datapack {id}, it is not enabled: {id}: {error}"
+                ));
+                continue;
+            }
+            let mut candidate = accepted.selection.clone();
+            candidate.enabled.push(id.clone());
+            match Self::load_known(root, candidate).and_then(usable) {
+                Ok(packs) => accepted = packs,
+                Err(error) => skipped.push(format!(
+                    "Skipping new datapack {id}, it is not enabled: {error}"
+                )),
+            }
+        }
+        accepted.skipped = skipped;
+        Ok(accepted)
     }
     fn load_with(root: &Path, mut selection: Selection, discover: bool) -> Result<Self, String> {
         selection.validate()?;
@@ -906,7 +959,9 @@ impl PackSet {
             || self.filters != current.filters
     }
 
-    /// Operator-facing warnings for non-pack folder entries.
+    /// One operator-facing warning per condition this load found that `previous`
+    /// did not already have: a selected pack gone from disk and a non-pack entry in
+    /// the folder. A new pack this load skipped is always stated.
     pub(crate) fn warnings(&self, previous: Option<&Self>) -> Vec<String> {
         let mut warnings = Vec::new();
         for id in &self.dropped {
@@ -914,6 +969,9 @@ impl PackSet {
                 warnings.push(format!("Datapack {id} is no longer on disk; saved starts are retained but inactive until its resources return"));
             }
         }
+        // A skipped new pack is stated by every start and `/reload` that finds it still
+        // broken (only those loads skip packs), so it is never silent the second time.
+        warnings.extend(self.skipped.iter().cloned());
         for name in &self.not_packs {
             if previous.is_none_or(|previous| !previous.not_packs.contains(name)) {
                 warnings.push(format!(
@@ -1057,6 +1115,9 @@ impl PackSet {
 #[derive(Default)]
 pub(crate) struct Runtime {
     packs: Arc<PackSet>,
+    /// Pack ids the folder held when the last reload or activation was refused:
+    /// the old packs stay installed, but vanilla `getPack` answers from the disk.
+    scanned: Option<BTreeSet<String>>,
     root: Option<PathBuf>,
     /// Unmodified startup content (including plugin contributions), used only
     /// to prepare replacement catalogs. TickState.registry remains authoritative.
@@ -1199,7 +1260,8 @@ fn prepare_packs(
     Ok(Completed::Packs(Box::new(packs), registry))
 }
 
-/// The worker body: all filesystem access of a job.
+/// The worker body: all filesystem access of a job. A refused reload or activation
+/// also reports the pack ids on disk, so `/datapack disable` agrees with `/datapack list`.
 fn work(
     root: &Path,
     selection: Selection,
@@ -1207,8 +1269,36 @@ fn work(
     base: Option<&crate::registry::CoreRegistry>,
     current: &PackSet,
 ) -> Result<Completed, Failure> {
+    match run_job(root, selection, job, base, current) {
+        Err(failure) if matches!(job, Job::Reload | Job::Activation { .. }) => {
+            let mut remaining = MAX_BYTES;
+            Err(match scan(root, &mut remaining) {
+                Ok(found) => Failure::Refused(
+                    Box::new(failure),
+                    found
+                        .packs
+                        .into_keys()
+                        .chain(found.failed.into_keys())
+                        .collect(),
+                ),
+                // A folder that cannot be scanned leaves the old repository standing.
+                Err(_) => failure,
+            })
+        }
+        result => result,
+    }
+}
+
+fn run_job(
+    root: &Path,
+    selection: Selection,
+    job: &Job,
+    base: Option<&crate::registry::CoreRegistry>,
+    current: &PackSet,
+) -> Result<Completed, Failure> {
     match job {
-        // Any invalid selected or newly discovered pack refuses the whole reload.
+        // Like a start: a new pack that cannot load is skipped with a named warning and the
+        // rest applies; a pack the selection holds that cannot load refuses the reload.
         Job::Reload => {
             let packs = PackSet::open(
                 root,
@@ -1280,6 +1370,12 @@ impl Runtime {
     }
     pub(crate) fn packs(&self) -> &PackSet {
         &self.packs
+    }
+    /// Whether the repository has this pack, selected or not (vanilla `getPack`).
+    pub(crate) fn has_pack(&self, id: &str) -> bool {
+        self.scanned
+            .as_ref()
+            .map_or_else(|| self.packs.has_pack(id), |ids| ids.contains(id))
     }
     /// Queue a worker-thread job for the current selection; the old packs and
     /// selection stay authoritative until it reports back. Tick-thread
@@ -1740,6 +1836,13 @@ fn finish(
         .completion
         .is_none_or(|id| crate::command_context::completion_context(state, id).is_some());
     let completed = match result {
+        Err(Failure::Refused(failure, repository)) => {
+            state.datapacks.scanned = Some(repository);
+            Err(*failure)
+        }
+        other => other,
+    };
+    let completed = match completed {
         Ok(completed) => completed,
         Err(failure) => {
             if deliver {
@@ -1776,6 +1879,7 @@ fn finish(
             state.datapacks.selection_dirty |= state.datapacks.packs.selection != packs.selection;
             let warnings = packs.warnings(Some(&state.datapacks.packs));
             state.datapacks.packs = Arc::new(*packs);
+            state.datapacks.scanned = None;
             state.datapacks.load_pending = true;
             if deliver {
                 match &reload.job {

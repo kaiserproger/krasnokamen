@@ -157,9 +157,10 @@ refused chunk still creates no unsaved custody.
 4. Restore world-global Overworld datapack selection from the folded checkpoint
    and WAL metadata before constructing any generator. Discover directory/ZIP
    packs, preserve binary NBT, apply ordered vanilla/pack layers and filters,
-   merge biome tags and prepare the bounded private image. Invalid resources
-   refuse startup; missing packs are de-selected with a warning. Shared caches
-   are never modified.
+   merge biome tags and prepare the bounded private image. Invalid selected
+   resources refuse startup; a new pack that cannot load is skipped with a named
+   warning and stays unselected; missing packs are de-selected with a warning.
+   Shared caches are never modified.
 5. Validate `level.dat/Data/KrasnokamenWorldgenInputs` from normal native
    level-metadata custody, including its WAL post-image, before adopting current
    inputs. Schema version 1 is required; unknown/missing/duplicate struct fields

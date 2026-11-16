@@ -268,7 +268,9 @@ The startup boundary folds checkpoint and contiguous WAL metadata before it
 constructs any dimension generator, searches for spawn, or materializes a replay
 chunk. The recovered Overworld datapack selection is the world-global authority.
 Fresh worlds discover directory and ZIP packs before constructing generators.
-Invalid new/selected resources refuse admission; missing packs are de-selected.
+Invalid selected resources refuse admission; a new pack that cannot load is
+skipped with a named warning and stays unselected, so it is no generation input;
+missing packs are de-selected.
 
 Pack worldgen resources are binary, not UTF-8 by default. Each selected pack
 applies its filters to lower layers, then adds its own resources; builtin vanilla
