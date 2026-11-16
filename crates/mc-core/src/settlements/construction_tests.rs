@@ -286,17 +286,38 @@ pub(crate) fn fund_at(
 
 pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    let pickup = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .and_then(|project| {
+            executor::next_material(state, id, &project.structure)
+                .ok()
+                .flatten()
+        })
+        .is_some_and(|(item, count)| {
+            v.inventory
+                .iter()
+                .flatten()
+                .filter(|stack| stack.item_id == item && stack.count > 0)
+                .map(|stack| stack.count as u32)
+                .sum::<u32>()
+                < count
+        });
     // A container is approached, never entered: stand on its free neighbour.
-    let target = building::work(state, slot, &mut v, &mut ChangeSet::default()).map(|target| {
-        if target.exact {
-            target.pos
-        } else {
-            BlockPos {
-                z: target.pos.z + 1,
-                ..target.pos
+    let target =
+        building::work(state, slot, &mut v, &mut ChangeSet::default()).and_then(|target| {
+            if pickup {
+                Some(BlockPos {
+                    z: target.pos.z + 1,
+                    ..target.pos
+                })
+            } else {
+                target.exact.then_some(target.pos)
             }
-        }
-    });
+        });
     state.entities.row_mut(slot).villager = Some(v);
     if let Some(BlockPos { x, y, z }) = target {
         state
@@ -1199,6 +1220,9 @@ fn builder_walks_to_solid_storage_then_selects_exact_site_target() {
                 0,
                 "a withdrawal does not also place a block"
             );
+            // The chest is already in placement reach: selecting a perimeter
+            // goal requires a genuinely distant, funded builder, not a HOLD.
+            state.entities.set_pos(slot, [14.5, 201.0, 14.5]);
             let mut v = state.entities.row_mut(slot).villager.take().unwrap();
             let target = building::work(&mut state, slot, &mut v, &mut changes).unwrap();
             state.entities.row_mut(slot).villager = Some(v);
@@ -1235,6 +1259,9 @@ fn builder_perimeter_goal_keeps_body_outside_footprint_at_arrival_tolerance() {
             .clone();
         // Fetch the real first stack at the chest, then take the exact goal.
         building::tick(&mut state, id);
+        // Start outside placement reach so this tests a real perimeter
+        // approach, not the already-in-reach HOLD at the fixture's chest.
+        state.entities.set_pos(slot, [14.5, 201.0, 14.5]);
         let mut v = state.entities.row_mut(slot).villager.take().unwrap();
         let target = building::work(&mut state, slot, &mut v, &mut ChangeSet::default()).unwrap();
         state.entities.row_mut(slot).villager = Some(v);

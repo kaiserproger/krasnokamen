@@ -55,7 +55,8 @@ pub struct SettlementRecord {
     /// Discovery validates the ledger record and live block, not this pointer alone.
     #[serde(default)]
     pub(crate) furnace_workstation: Option<String>,
-    /// One owner request, retried before autonomous planning.
+    /// One owner request. Fundable growth housing precedes optional orders;
+    /// otherwise the request is retried before autonomous planning.
     #[serde(default)]
     pub pending_order: Option<super::construction::OwnerOrder>,
     #[serde(default)]
