@@ -8,8 +8,9 @@ source. Vanilla clients can use server-only plugins.
 Before you start: the plugin API is pre-1.0. A change to its WIT can require
 rebuilding every plugin, so build against the checkout matching your server.
 Each plugin runs in its own sandbox with only the capabilities its manifest
-declares, and its callbacks run one at a time ([slow callbacks](#slow-callbacks)):
-plugin code needs no locks, and a plugin cannot race the world tick.
+declares, and its callbacks run one at a time ([slow callbacks](#slow-callbacks)).
+Callbacks run outside the world tick; native owners validate requested changes
+against current state when applied, so a request can become stale or be refused.
 
 ## Players and operators
 
