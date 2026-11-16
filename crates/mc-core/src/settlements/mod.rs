@@ -29,6 +29,7 @@ pub mod districts;
 pub mod households;
 pub mod persistence;
 pub mod startup;
+pub(crate) mod transit;
 pub(crate) mod ui;
 pub(crate) mod ui_text;
 pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeSet) -> u64 {
