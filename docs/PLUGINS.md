@@ -1,8 +1,15 @@
 # Plugins
 
 Krasnokamen plugins are WebAssembly components implementing `krasnokamen:plugin@0.9.0`,
-not Bukkit/Paper, Forge or Fabric JARs. The server loads components; it does
-not compile their source. Vanilla clients can use server-only plugins.
+not Bukkit/Paper, Forge or Fabric JARs: those do not run here, and there is no
+runtime compatibility layer. The server loads components; it does not compile their
+source. Vanilla clients can use server-only plugins.
+
+Before you start: the plugin API is pre-1.0. A change to its WIT can require
+rebuilding every plugin, so build against the checkout matching your server.
+Each plugin runs in its own sandbox with only the capabilities its manifest
+declares, and its callbacks run one at a time ([slow callbacks](#slow-callbacks)):
+plugin code needs no locks, and a plugin cannot race the world tick.
 
 ## Players and operators
 
