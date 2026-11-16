@@ -2,33 +2,22 @@
 # Daily HH:MM-HH:MM plus one-off START/END in YYYY-MM-DDTHH:MM.
 # Dated intervals may cross midnight; their grants expire, not repeat daily.
 # Exact owners/cells: receipts/Stage3/ANNOUNCE-PLAN.md and its single PLAN queue.
-# No quiet grant Sun15Nov21:00-Mon16Nov01:00: MainA1Night NORMAL lane.
-# Existing cells finish/cleanup normally; never stop one to change allocation.
-# Recurring baseline ends before the nightly03:00 fuzz; its timer stays parked
-# during Stage3. Dated owner-approved extensions below supersede this baseline.
-01:00-02:30
+# Owner 2026-11-16 20:48: "do the tasks, measure everything later". Until the
+# freeze no quiet window pauses builds for measurements while tasks run; all
+# measurements move to the freeze build (W14 onward). Removed: the daily
+# 01:00-02:30 baseline, W7, W8b/W8c, W9, W5 r2, W11/W11b, W12. Indicative
+# normal-lane A/B runs that do not pause builds remain allowed.
+# Kept: W10 A1 battle trial takes (acceptance, not measurement), W13 laptop
+# freeze take, W14 freeze-pin matrix.
 # W2: existing laptop owner, unchanged; no duplicate benchmark.
 2026-11-15T19:00/2026-11-15T21:00
-# W4: Mon01:00-02:30 uses the daily baseline, PerfRoam (valid candidate only).
-# W3 scaling r1 moved to old W5; W6 explore retained.
+# W4/W3/W6 (expired).
 2026-11-16T02:30/2026-11-16T05:30
 2026-11-16T05:30/2026-11-16T08:30
-# W7 fight; W8 Tue01:00-02:30 uses the daily baseline.
-2026-11-16T22:00/2026-11-17T01:00
-# W8b reference roam and W8c candidate A/B.
-2026-11-17T02:30/2026-11-17T06:30
-2026-11-17T06:30/2026-11-17T08:00
-# W10 trial take, W9 laptop remote matrix.
+# W10 trial take (Tue) and W10 Wednesday trial.
 2026-11-17T14:00/2026-11-17T16:00
-2026-11-17T19:00/2026-11-17T21:00
-# W5 scaling r2 moved here; no overlap with W9 or W11.
-2026-11-17T22:00/2026-11-18T01:00
-# W11 candidate A/B and W11b remaining reference curve.
-2026-11-18T01:00/2026-11-18T04:00
-2026-11-18T04:00/2026-11-18T06:30
-# W10 Wednesday trial, W12 independent repeats, W13 laptop freeze take.
 2026-11-18T14:00/2026-11-18T16:00
-2026-11-19T01:00/2026-11-19T04:00
+# W13 laptop freeze take.
 2026-11-19T20:00/2026-11-19T22:00
 # W14 requires every freeze-pin matrix cell; unrun cells remain blocked.
 2026-11-20T01:00/2026-11-20T05:00
