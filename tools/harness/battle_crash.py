@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 import re
 import signal
 import select
-import shutil
 import subprocess
 import struct
 import sys
@@ -16,6 +16,7 @@ import uuid
 import time
 from pathlib import Path
 
+from tools.battle.crash_snapshot import verified_copy, verify_tree
 from . import runtime
 from .backends.protocol_lifecycle import reserve_matrix_port
 from .crash_wal import classify_observation, read_published
@@ -177,12 +178,20 @@ def cut_verdict(comparison, *, valid, custody_ok, probe_ok):
     return 'incomplete' if comparison['unverified'] else 'passed'
 
 
+def verify_witnesses(run, snapshot, baseline, grant_inventory):
+    for name, expected in (('before-census.json', baseline),
+                           ('acknowledged-inventory.json', grant_inventory)):
+        witness = snapshot / 'witness' / name
+        if witness.read_bytes() != (run / name).read_bytes() or json.loads(witness.read_text()) != expected:
+            raise ValueError(f'pre-recovery witness mismatch: {name}')
+
+
 def durable_census(run, snapshot, wal):
-    """Project holders before restore_entity/live hydration, sharing recovery's decoder/WAL fold."""
+    """Project holders from the already verified inspection copy, not the primary evidence."""
+    verify_tree(snapshot, json.loads((run / 'crash-handoff.json').read_text()))
     command = json.loads((run / 'server-command.json').read_text())
-    copied_world = (run / 'durable-census-world').resolve()
+    copied_world = (snapshot / 'world').resolve()
     receipt = (run / 'durable-census.json').resolve()
-    shutil.copytree(snapshot / 'world', copied_world)
     argv = [command['binary'], '--config', command['config'], 'world', 'crash-census',
             '--copy', str(copied_world), '--receipt', str(receipt)]
     result = subprocess.run(argv, cwd=run, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -447,6 +456,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             if len(granted.get('inventory', [])) != 1 or granted.get('cursor', 'unobserved') is not None:
                 raise RuntimeError('acknowledged grant did not leave one stack and an empty cursor')
             grant_inventory = granted['inventory']
+            save_json(run / 'acknowledged-inventory.json', grant_inventory)
             item_id = next(number for number, name in actors[1].items.items() if name == 'minecraft:netherite_ingot')
             archive = run / 'wal-archive'
             if moment in ('after-publish', 'after-checkpoint'):
@@ -469,11 +479,20 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             code = process.wait(timeout=300)
             if code != 0:
                 raise RuntimeError(f'battle handoff failed {code}; see driver log')
-            save_json(run / 'acknowledged-inventory.json', grant_inventory)
             handoff = json.loads((run / 'crash-handoff.json').read_text())
+            record['pre_recovery_evidence'] = {
+                name: {'path': str(run / name),
+                       'sha256': hashlib.sha256((run / name).read_bytes()).hexdigest()}
+                for name in ('before-census.json', 'acknowledged-inventory.json')}
+            save_json(run / 'cut-evidence.json', record)
             if handoff['exit'] != -signal.SIGKILL:
                 raise RuntimeError('missing SIGKILL proof')
-            snapshot = Path(handoff['crash_copy'])
+            primary = Path(handoff['crash_copy'])
+            snapshot = run / 'crash-inspection-copy'
+            record['crash_verification'] = verified_copy(primary, snapshot, handoff)
+            record['crash_copy'] = str(primary)
+            verify_witnesses(run, snapshot, baseline, grant_inventory)
+            save_json(run / 'cut-evidence.json', record)
             cp = checkpoint(snapshot / 'server.log')
             wal = read_published(snapshot / 'wal-archive', cp)
             retained = read_published(snapshot / 'world/journal', cp)
@@ -483,8 +502,8 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                 raise ValueError('archived and retained published WAL tails differ')
             images = [image for image in grant_images(wal, offline_uuid('Proto1'), item_id)
                       if image['hi'] > baseline_checkpoint]
-            durable = durable_census(run, snapshot, wal)
             tmp = [str(p.name) for p in (snapshot / 'world/journal').glob('*.tmp') if p.stat().st_size]
+            durable = durable_census(run, snapshot, wal)
             image = images[-1] if images else None
             image_checkpointed = any(image['hi'] <= cp for image in images)
             valid = {'before-checkpoint': cp == baseline_checkpoint,
@@ -494,7 +513,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             record.update({'baseline_checkpoint': baseline_checkpoint, 'checkpoint_at_cut': cp,
                            'published_through': wal['published_through'], 'grant_images': images,
                            'unpublished_temporary_files': tmp, 'moment_observed': valid,
-                           'crash_copy': str(snapshot), 'wal_archive': str(snapshot / 'wal-archive')})
+                           'crash_copy': str(primary), 'wal_archive': str(snapshot / 'wal-archive')})
             save_json(run / 'cut-evidence.json', record)
             recovered_log = run / 'recovery.log'
             with recovered_log.open('wb') as out:
@@ -631,7 +650,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                                                   'KRASNOKAMEN_CLIENT_BINARY': str(client_binary),
                                                   'KRASNOKAMEN_BATTLE_CLIENT_ROOT': str(client_data),
                                                   'KRASNOKAMEN_BATTLE_WORLD': str(world)}},
-                        'runner_command': argv, 'moment': moment, 'crash_copy': str(snapshot),
+                        'runner_command': argv, 'moment': moment, 'crash_copy': str(primary),
                         'before_census': str(run / 'before-census.json'),
                         'after_census': str(run / 'after-census.json'),
                         'note': 'Investigate multi-tick census differences and published image before filing as a defect.',

@@ -12,6 +12,8 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
+from tools.battle.crash_snapshot import verified_copy, verify_tree
+from tools.harness.battle_crash import durable_census, verify_witnesses
 
 def load_runner():
     spec = importlib.util.spec_from_file_location('runner', Path(__file__).with_name('run-battle.py'))
@@ -817,12 +819,49 @@ class BattleRunnerTests(unittest.TestCase):
             (root / 'backups/saved').mkdir(parents=True)
             (root / 'backups/saved/manifest').write_bytes(b'backup')
             (root / 'server.log').write_text('log')
+            (root / 'wal-archive').mkdir()
+            (root / 'wal-archive/frame').write_bytes(b'frame')
+            (root / 'before-census.json').write_text('{"player": 1}')
+            (root / 'acknowledged-inventory.json').write_text('[1]')
             server = unittest.mock.Mock(pid=123, returncode=-9)
             runner.preserve_crash(root, server)
             (root / 'world/journal/batch-1.bin').write_bytes(b'changed')
             self.assertEqual((root / 'crash-copy/world/journal/batch-1.bin').read_bytes(), b'wal')
             self.assertEqual((root / 'crash-copy/backups/saved/manifest').read_bytes(), b'backup')
             self.assertEqual(json.loads((root / 'crash-handoff.json').read_text())['exit'], -9)
+            handoff = json.loads((root / 'crash-handoff.json').read_text())
+            self.assertEqual(handoff, json.loads((root / 'result.json').read_text()))
+            encoded = (root / 'crash-manifest.json').read_bytes()
+            self.assertEqual(hashlib.sha256(encoded).hexdigest(), handoff['manifest_sha256'])
+            self.assertEqual(json.loads(encoded), handoff['manifest'])
+            self.assertEqual({entry['path'] for entry in handoff['manifest']}, {
+                'world/journal/batch-1.bin', 'backups/saved/manifest', 'server.log',
+                'wal-archive/frame', 'witness/before-census.json', 'witness/acknowledged-inventory.json'})
+            inspection = root / 'inspection'
+            verification = verified_copy(root / 'crash-copy', inspection, handoff)
+            self.assertEqual(verification['status'], 'verified')
+            verify_witnesses(root, inspection, {'player': 1}, [1])
+            (root / 'before-census.json').write_text('{"player": 2}')
+            with self.assertRaisesRegex(ValueError, 'witness mismatch'):
+                verify_witnesses(root, inspection, {'player': 1}, [1])
+            (root / 'before-census.json').write_text('{"player": 1}')
+            (root / 'acknowledged-inventory.json').write_text('[2]')
+            with self.assertRaisesRegex(ValueError, 'witness mismatch'):
+                verify_witnesses(root, inspection, {'player': 1}, [1])
+            (inspection / 'world/journal/batch-1.bin').write_bytes(b'wax')
+            with unittest.mock.patch('tools.harness.battle_crash.subprocess.run') as opened:
+                with self.assertRaisesRegex(ValueError, 'does not match'):
+                    durable_census(root, inspection, {})
+                opened.assert_not_called()
+            (inspection / 'world/journal/batch-1.bin').unlink()
+            with self.assertRaisesRegex(ValueError, 'does not match'):
+                verify_tree(inspection, handoff)
+            (inspection / 'world/journal/batch-1.bin').write_bytes(b'wal')
+            (inspection / 'extra').write_bytes(b'x')
+            with self.assertRaisesRegex(ValueError, 'does not match'):
+                verify_tree(inspection, handoff)
+            with self.assertRaisesRegex(ValueError, 'primary crash copy'):
+                verify_tree(root / 'crash-copy', handoff)
             (root / 'server-command.json').write_text(json.dumps({'binary': '/pin/server', 'config': '/run/server.toml'}))
             with unittest.mock.patch.object(runner.os, 'execv') as execute, unittest.mock.patch.object(runner.os, 'chdir'):
                 runner.recover_crash(root)
