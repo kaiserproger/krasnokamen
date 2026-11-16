@@ -60,7 +60,7 @@ fn resident(state: &mut TickState, settlement: SettlementId, pos: [f64; 3]) -> E
 }
 
 fn horizontal(a: BlockPos, b: [i32; 3]) -> f64 {
-    f64::from(a.x - b[0]).hypot(f64::from(a.z - b[2]))
+    mth::length2(f64::from(a.x - b[0]), f64::from(a.z - b[2]))
 }
 
 #[test]
@@ -466,7 +466,8 @@ fn arrival_reenters_the_same_villagers_at_the_simulated_edge_and_joins() {
         let slot = d.state.entities.slot_of_uuid(uuid).unwrap();
         let pos = d.state.entities.pos(slot);
         assert!(
-            (pos[0] - f64::from(entry.x) - 0.5).hypot(pos[2] - f64::from(entry.z) - 0.5) < 0.01
+            mth::length2(pos[0] - f64::from(entry.x) - 0.5, pos[2] - f64::from(entry.z) - 0.5)
+                < 0.01
         );
         let v = d.state.entities.row(slot).villager.as_ref().unwrap();
         assert_eq!(v.settlement, Some(d.destination));
@@ -574,6 +575,7 @@ fn departure_refuses_a_member_with_wages_owed_without_mutation() {
                 wage: 1,
                 period_ticks: 5,
                 next_due: 5,
+                legacy_owed: 0,
                 budget: 10,
                 earned: 1,
                 paid: 0,
@@ -598,7 +600,7 @@ fn departure_refuses_a_member_with_wages_owed_without_mutation() {
     );
     assert!(changes.entities_removed.is_empty());
     assert_eq!(state.settlements.get(source).unwrap().revision, revision);
-    assert_eq!(state.settlements.transit.len(), 0);
+    assert!(state.settlements.transit.records.is_empty());
     assert_eq!(places(&state, worker_uuid), 1);
 }
 
@@ -665,7 +667,7 @@ fn a_member_with_construction_work_is_refused_without_mutation() {
     assert_eq!(record.revision, revision);
     assert_eq!(record.project, Some(order));
     assert!(record.households.contains_key(&family));
-    assert_eq!(state.settlements.transit.len(), 0);
+    assert!(state.settlements.transit.records.is_empty());
     for (id, before) in [builder, partner].into_iter().zip(before) {
         assert_eq!(image(&state, uuid_of(&state, id)), before);
     }

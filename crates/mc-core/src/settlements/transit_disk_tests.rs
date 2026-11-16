@@ -290,7 +290,7 @@ fn departure_cut_recovers_entirely_before_or_entirely_after() {
             assert_eq!(places(&state, uuid), 1, "published {publish}");
             assert_eq!(state.entities.slot_of_uuid(uuid).is_some(), !publish);
         }
-        assert_eq!(state.settlements.transit.len(), usize::from(publish));
+        assert_eq!(state.settlements.transit.records.len(), usize::from(publish));
         let source = state.settlements.get(source).unwrap();
         assert_eq!(source.households.contains_key(&family), !publish);
     }
@@ -310,7 +310,7 @@ fn in_transit_cut_recovers_the_record_from_its_checkpoint_row() {
     }
     let uuids = t.uuids;
     let state = reopen(t.state, t.writer, &config);
-    assert_eq!(state.settlements.transit.len(), 1);
+    assert_eq!(state.settlements.transit.records.len(), 1);
     assert_eq!(images(&state), stored, "member images round-trip exactly");
     for uuid in uuids {
         assert_eq!(places(&state, uuid), 1);
@@ -329,7 +329,7 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
     let mut state = reopen(t.state, t.writer, &config);
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     let mut ticks = 0;
-    while state.settlements.transit.len() > 0 {
+    while !state.settlements.transit.records.is_empty() {
         ticks += 1;
         assert!(ticks <= 200, "no arrival in {ticks} ticks");
         // The explicit call is the settlements tick wiring's; with it wired
@@ -340,7 +340,7 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
     }
     assert_eq!(stored_rows(&config), 1, "the WAL alone holds the arrival");
     let mut state = reopen(state, writer, &config);
-    assert_eq!(state.settlements.transit.len(), 0);
+    assert!(state.settlements.transit.records.is_empty());
     for uuid in uuids {
         assert_eq!(places(&state, uuid), 1);
         let slot = state.entities.slot_of_uuid(uuid).unwrap();
