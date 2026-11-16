@@ -51,7 +51,7 @@ impl mc_world::ChunkGenerator for ForestGenerator {
     }
 }
 
-fn forest() -> (
+pub(crate) fn forest() -> (
     TickState,
     SettlementId,
     crate::entities::EntitySlot,

@@ -259,12 +259,21 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     if claim_slot(state, id).is_err() {
         return true;
     }
+    let images = executor::source_images(state, id);
+    // Keep the order queued while a fundable house restores breeding capacity.
+    if !matches!(
+        blueprints::get(&state.registry, &order.blueprint).map(|bp| bp.kind),
+        Some(BuildingKind::House | BuildingKind::Storage)
+    ) && priority_house(state, record, &images).is_some()
+    {
+        return false;
+    }
     let Some(level) =
         blueprints::get(&state.registry, &order.blueprint).and_then(|bp| bp.level(level_number))
     else {
         return true;
     };
-    if funding_error(state, id, &level.materials).is_some() {
+    if funded_variant(state, id, &level.materials, &images).is_none() {
         return true;
     }
     let mut order = state
@@ -327,8 +336,8 @@ fn claim_slot(state: &TickState, id: SettlementId) -> Result<bool, String> {
     }
 }
 
-/// Cancel the untouched autonomous project: block stock and builder carry
-/// stay where they are, nothing is debited or placed.
+/// Cancel a project whose completed cells spent no materials. Stock and
+/// builder carry stay where they are; callers guard paid construction.
 fn preempt(state: &mut TickState, id: SettlementId) -> Result<(), String> {
     let Some((handle, borrowed)) = state
         .settlements
@@ -676,13 +685,23 @@ fn start_build(
     if let Some(error) = funding_error(state, id, &level.materials) {
         return Err(error);
     }
+    let images = executor::source_images(state, id);
+    if !matches!(blueprint.kind, BuildingKind::House | BuildingKind::Storage)
+        && priority_house(
+            state,
+            state.settlements.get(id).expect("claimed settlement"),
+            &images,
+        )
+        .is_some()
+    {
+        return Err("Busy.".into());
+    }
     // The untouched autonomous site is released first so the order may take
     // its footprint; an unplaceable order leaves the planner to replan.
     if preempting {
         preempt(state, id)?;
     }
     let record = state.settlements.get(id).expect("claimed settlement");
-    let images = executor::source_images(state, id);
     // A direct owner request searches once for immediate admission. Retried
     // pending work shares the autonomous planner's bounded, resumable scan.
     let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
@@ -867,6 +886,64 @@ pub(super) fn needed_kinds(
         .filter_map(|(kind, needed)| needed.then_some(kind))
 }
 
+/// Read the allocator's existing physical index, never certificate levels.
+/// Wait for its bounded scans rather than treating an unknown bed as absent.
+fn priority_house(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[super::inventory::Image],
+) -> Option<&'static blueprints::Blueprint> {
+    if record.project.is_some() || state.settlements.member_count(record.id) == 0 {
+        return None;
+    }
+    let cache = &state.villager_pois;
+    if !cache.poi_initialized || !cache.pending_chunks.is_empty() {
+        return None;
+    }
+    let residents = state.settlements.member_count(record.id);
+    let beds = cache
+        .chunks
+        .values()
+        .flat_map(|chunk| &chunk.pois)
+        .filter(|poi| {
+            poi.kind == super::allocator::PoiKind::Home
+                && record.contains([poi.pos.x, poi.pos.y, poi.pos.z])
+                && super::allocator::bed_pair(&state.world, &state.registry, poi.pos).is_some()
+                && super::allocator::roofed(&state.world, &state.registry, poi.pos)
+        })
+        .take(residents.saturating_add(1))
+        .count();
+    if beds > residents {
+        return None;
+    }
+    let blueprint = catalog(state, record).find(|bp| bp.kind == BuildingKind::House)?;
+    let level = blueprint.level(1)?;
+    funded_variant(state, record.id, &level.materials, images)
+        .is_some()
+        .then_some(blueprint)
+}
+
+/// Reuse the executor's reservation, including the admitted clearing corridor.
+/// Finished structures stay protected; spent road and meadow work does not.
+pub(crate) fn replant_conflicts(state: &TickState, root: [i32; 3]) -> bool {
+    let crown = super::forestry::PLANTED_CROWN_RADIUS as i32;
+    let bounds = ScriptWorldBounds::new(
+        [
+            root[0].saturating_sub(crown),
+            root[1],
+            root[2].saturating_sub(crown),
+        ],
+        [
+            root[0].saturating_add(crown),
+            root[1]
+                .saturating_add(64)
+                .min(state.world.geometry().max_y() - 1),
+            root[2].saturating_add(crown),
+        ],
+    );
+    bounds.map_or(true, |bounds| executor::area_held(state, bounds))
+}
+
 fn candidate_kinds<'a>(
     state: &'a TickState,
     record: &'a SettlementRecord,
@@ -1003,6 +1080,12 @@ fn site_free_claim(
         return false;
     }
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
+    if super::forestry::planted_crown_overlaps(
+        state,
+        ScriptWorldBounds::new(origin, max).expect("blueprint bounds"),
+    ) {
+        return false;
+    }
     let mut minimum = origin[1];
     let mut maximum = origin[1];
     if record.buildings.values().any(|building| {
@@ -1094,6 +1177,7 @@ fn planned_cells(
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
     let mut bottom = project.origin[1];
+    let mut corridor = None;
     if project.building.is_none() {
         let dirt = state
             .registry
@@ -1171,7 +1255,9 @@ fn planned_cells(
     }
     apply_species(state, &mut cells, species)?;
     if project.building.is_none() {
-        let mut preparation = super::forestry::cells(state, project, size)?;
+        let preparation = super::forestry::cells(state, project, size)?;
+        corridor = preparation.corridor;
+        let mut preparation = preparation.cells;
         if !preparation.is_empty() {
             let removed: std::collections::BTreeSet<_> =
                 preparation.iter().map(|cell| cell.at).collect();
@@ -1192,7 +1278,16 @@ fn planned_cells(
             max[axis] = max[axis].max(cell.at[axis]);
         }
     }
+    if let Some(corridor) = corridor {
+        for axis in 0..3 {
+            min[axis] = min[axis].min(corridor.min[axis]);
+            max[axis] = max[axis].max(corridor.max[axis]);
+        }
+    }
     let bounds = ScriptWorldBounds::new(min, max).ok()?;
+    if super::forestry::planted_crown_overlaps(state, bounds) {
+        return None;
+    }
     Some((bounds, cells))
 }
 
@@ -1601,19 +1696,24 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // of the entire planner: another resident can build a funded later kind.
     let gathering = gatherer_demand(state, record, &images)
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
-    let catalog = catalog(state, record);
     let mut funded = [None; AUTONOMOUS_KINDS + 1];
     let mut funded_count = 0;
-    for kind in candidate_kinds(state, record, &images) {
-        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
-            continue;
-        };
-        if blueprint
-            .level(1)
-            .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
-        {
-            funded[funded_count] = Some(blueprint);
-            funded_count += 1;
+    if let Some(house) = priority_house(state, record, &images) {
+        funded[0] = Some(house);
+        funded_count = 1;
+    } else {
+        let catalog = catalog(state, record);
+        for kind in candidate_kinds(state, record, &images) {
+            let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
+                continue;
+            };
+            if blueprint
+                .level(1)
+                .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
+            {
+                funded[funded_count] = Some(blueprint);
+                funded_count += 1;
+            }
         }
     }
     if funded_count != 0 {
@@ -1933,6 +2033,8 @@ pub(crate) struct BuilderWatch {
     seen: u64,
     /// Shift ticks without progress.
     idle: u64,
+    reported: bool,
+    refusal: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
 }
@@ -1967,6 +2069,8 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             progress: progress.clone(),
             seen: tick,
             idle: 0,
+            reported: false,
+            refusal: None,
             shunned: Vec::new(),
         });
     let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
@@ -1974,9 +2078,11 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     if watch.progress != progress {
         watch.progress = progress;
         watch.idle = 0;
+        watch.reported = false;
+        watch.refusal = None;
         return;
     }
-    if snapshot.pause_reason.is_some() || !on_shift {
+    if !on_shift {
         return;
     }
     watch.idle += elapsed;
@@ -1984,6 +2090,9 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         return;
     }
     watch.idle = 0;
+    let report = !watch.reported;
+    watch.reported = true;
+    let refusal = watch.refusal;
     let incumbent = residents(state, id).find(|&slot| {
         state.entities.body(slot).alive
             && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
@@ -1993,6 +2102,50 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
                     && v.data.profession == Profession::Builder
             })
     });
+    let next = executor::next_cell(state, id, &project.structure)
+        .ok()
+        .flatten();
+    let protected = snapshot
+        .stages
+        .get(snapshot.current_stage_index as usize)
+        .is_some_and(|stage| stage.stage == "clear")
+        && next.is_some_and(|at| {
+            state
+                .world
+                .physics_block_at(at[0], at[1], at[2])
+                .is_some_and(|block| super::forestry::tree(state, block))
+                && super::forestry::protected_tree(state, at)
+        });
+    let cause = if protected {
+        "protected_tree_in_preparation"
+    } else if let Some(reason) = snapshot.pause_reason.as_deref() {
+        reason
+    } else if let Some((slot, next)) = incumbent.zip(next) {
+        let waiting = crate::villager::building::wait_reason(state, slot, &project, next);
+        if waiting == "placement_not_advancing" {
+            refusal.unwrap_or(waiting)
+        } else {
+            waiting
+        }
+    } else if incumbent.is_some() {
+        "pending_cell_unavailable"
+    } else {
+        "no_builder"
+    };
+    let recovery =
+        (protected && snapshot.consumed.is_empty()).then(|| retry_preparation(state, id, &project));
+    if report {
+        tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
+            origin = ?project.origin, stage = snapshot.current_stage_index,
+            work = snapshot.completed_work_units, ?next, cause, ?recovery,
+            shift_ticks = BUILDER_STALL_SHIFT_TICKS, "settlement_construction_stalled");
+    }
+    if recovery.is_some_and(|result| result.is_ok()) {
+        return;
+    }
+    if snapshot.pause_reason.is_some() {
+        return;
+    }
     let Some(slot) = incumbent else {
         return;
     };
@@ -2005,6 +2158,61 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             .shunned
             .push((uuid, tick.saturating_add(BUILDER_SHUN_TICKS)));
     }
+}
+
+pub(crate) fn note_build_refusal(
+    state: &mut TickState,
+    id: SettlementId,
+    reason: mc_script::ScriptOperationFailure,
+) {
+    if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+        watch.refusal = Some(match reason {
+            mc_script::ScriptOperationFailure::Blocked => "executor_blocked",
+            mc_script::ScriptOperationFailure::Busy => "reserved_worker",
+            mc_script::ScriptOperationFailure::InsufficientItems => "insufficient_carry_or_storage",
+            mc_script::ScriptOperationFailure::Unloaded => "unloaded_worksite",
+            _ => "executor_refused",
+        });
+    }
+}
+
+fn retry_preparation(
+    state: &mut TickState,
+    id: SettlementId,
+    project: &Project,
+) -> Result<(), String> {
+    preempt(state, id)?;
+    let record = state
+        .settlements
+        .get_mut(id)
+        .expect("cancelled preparation");
+    let requeued = project.ordered && record.owner.is_some() && record.pending_order.is_none();
+    if requeued {
+        record.pending_order = Some(OwnerOrder {
+            blueprint: project.blueprint.clone(),
+            level: project.level,
+            building: project.building,
+        });
+        record.revision = record.revision.saturating_add(1);
+    }
+    if record.owner.is_some() {
+        notify_owner(
+            state,
+            id,
+            if requeued {
+                format!(
+                    "Protected tree blocked {} preparation; queued a new site.",
+                    project.blueprint
+                )
+            } else {
+                format!(
+                    "Cancelled unpaid {} preparation at a protected tree; any newer pending order is retained.",
+                    project.blueprint
+                )
+            },
+        );
+    }
+    Ok(())
 }
 
 fn resident_simulated(state: &TickState, slot: crate::entities::EntitySlot) -> bool {
@@ -2932,3 +3140,7 @@ mod site_tests;
 #[cfg(test)]
 #[path = "construction_fortification_tests.rs"]
 mod fortification_tests;
+
+#[cfg(test)]
+#[path = "construction_growth_tests.rs"]
+mod growth_tests;
