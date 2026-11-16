@@ -523,6 +523,7 @@ impl Registry {
             return Err("settlement overlaps a founding expedition claim");
         }
         self.records.insert(id, record);
+        self.economic_active.insert(id);
         self.touched.insert(id);
         self.high_water = id.0;
         *sequence = id.0;
@@ -573,6 +574,7 @@ impl Registry {
             return Err("settlement overlaps a founding expedition claim");
         }
         self.records.insert(id, record);
+        self.economic_active.insert(id);
         self.touched.insert(id);
         self.high_water = id.0;
         *sequence = id.0;

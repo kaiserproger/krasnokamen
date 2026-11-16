@@ -94,6 +94,48 @@ recovery. Archives that still need conversion must first be upgraded with this
 version; removing the shim must reject them explicitly rather than reinterpret
 their timestamps.
 
+Production and daily consumption share their respective persisted game-time
+watermarks across simulation transitions. New job periods have a deterministic
+settlement-ID phase. A station outside `is_active` accrues deferred portions,
+even when resident; it never changes carry, equipment, blocks or containers.
+The first active owner visit reconciles those portions through the ordinary
+recipe planner and fenced physical storage commit. All declared storage chunks
+must be resident; otherwise reconciliation waits. Once resident, it applies only
+affordable portions with output space and drops the rest in that visit. Navigation
+and delivery retries are runtime-only and cannot authorize a portion.
+Simulated fetch/walk/park visits keep a due opportunity until a portion is
+actually produced. A persisted `waiting_simulated` guard caps that held span at
+one opportunity at the first unsimulated visit; subsequent off-screen periods
+then accrue normally. Leaving a blocked station cannot turn its on-screen wait
+into a batch. This conservative unload boundary can forgo off-screen production
+for up to one retry window (`RETRY_TICKS`, 20 game ticks), plus any `WorkCursor`
+dispatch delay (16 jobs per tick); it never credits a period twice. For a period
+of `d` ticks, the retry-only loss is at most `ceil(RETRY_TICKS / d)` portions,
+including phase rounding. The runtime retry timestamp is not the unload time
+and is never used to reconstruct it after restart. Deferred and unavailable-storage
+retries wait 20 game ticks; new due periods are retained during that retry wait.
+Legacy production deadlines translate remaining world duration once after WAL recovery;
+an overdue legacy job retains just one opportunity, not historical catch-up.
+Missing deferred fields default to zero. Remove the production legacy converter
+only after supported stores and their retained restore backups have been upgraded.
+
+Daily food consumption is new gameplay, owned by production's consumption module
+for **all** settlements, including those with no jobs: one food point per living
+member per 24,000 game ticks (`DAILY_FOOD_POINTS`). Existing villager food values
+apply (bread four, vegetables one).
+The first daily charge waits at least one complete day before its settlement
+phase (strictly less than two days). Recovery rejects deadlines at least two days
+ahead, credit above three points, debit beyond the exact native/script counter
+limit, and legacy production deadlines more than one job duration ahead.
+The same daily watermark debits simulated settlements physically and unsimulated
+settlements abstractly. On the first
+active visit with resident storage it consumes real unreserved food, drops any
+unfunded demand, and carries only prepaid excess from the final whole item to the
+next day. This credit is less than one item's food value, never an unpaid hunger
+backlog. The anchor selects simulation for this town-wide demand. Freeze and
+downtime accrue nothing. Debit, credit, watermark and inventory post-images share
+the existing settlement/chunk tick-WAL and checkpoint boundary.
+
 ## Durability and plugin boundary
 
 Touched settlement post-images and deletions share the dimension-wrapped tick

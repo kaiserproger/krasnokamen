@@ -378,7 +378,7 @@ fn cancelling_any_step_stops_the_whole_order_and_admission_is_idempotent() {
         .economy
         .production;
     assert_eq!(policy.cancelled, 2);
-    assert!(!production::active(policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     assert_eq!(
         economy::target(&town.state, Some(town.id), town.worker),
         None
@@ -495,11 +495,26 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
     assert_eq!(describe(&steps), "open_hay x57 -> bread x171");
     let mut stored_peak = 0;
     let mut reasons = std::collections::BTreeSet::new();
+    let mut first_consumption_due = None;
     for _ in 0..20_000 {
         if town.jobs()["bake"].done >= 171 {
             break;
         }
         town.step();
+        first_consumption_due.get_or_insert_with(|| {
+            serde_json::to_value(
+                &town
+                    .state
+                    .settlements
+                    .get(town.id)
+                    .unwrap()
+                    .economy
+                    .production,
+            )
+            .unwrap()["consumption"]["next_due"]
+                .as_u64()
+                .unwrap()
+        });
         stored_peak = stored_peak.max(town.stored("minecraft:wheat"));
         reasons.extend(town.jobs().values().filter_map(|job| job.paused.clone()));
     }
@@ -520,9 +535,27 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
         !reasons.contains("no storage") && !reasons.contains("missing input"),
         "{reasons:?}"
     );
-    // Nothing dropped, nothing fabricated.
+    // Physical food paid both charged demand and the remaining prepaid excess.
+    let policy = serde_json::to_value(
+        &town
+            .state
+            .settlements
+            .get(town.id)
+            .unwrap()
+            .economy
+            .production,
+    )
+    .unwrap();
+    let charges = (policy["consumption"]["next_due"].as_u64().unwrap()
+        - first_consumption_due.unwrap())
+        / 24_000;
+    let demand = charges * town.state.settlements.member_count(town.id) as u64;
+    let credit = policy["consumption"]["credit"].as_u64().unwrap();
+    assert_eq!(policy["consumption"]["debit"].as_u64(), Some(0));
+    assert_eq!((demand + credit) % 4, 0);
+    let consumed_bread = i32::try_from((demand + credit) / 4).unwrap();
     assert_eq!(
-        town.carried("minecraft:bread") + town.stored("minecraft:bread"),
+        town.carried("minecraft:bread") + town.stored("minecraft:bread") + consumed_bread,
         171
     );
     assert_eq!(
@@ -558,7 +591,7 @@ fn cancelling_a_finished_dependency_cancels_the_unfinished_rest_of_its_order() {
         .economy
         .production;
     assert_eq!(policy.cancelled, 1);
-    assert!(!production::active(policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     assert_eq!(
         economy::target(&town.state, Some(town.id), town.worker),
         None

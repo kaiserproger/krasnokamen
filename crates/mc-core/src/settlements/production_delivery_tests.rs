@@ -22,8 +22,13 @@ fn stored(world: &TickState, chest: [i32; 3], name: &str) -> i32 {
 }
 
 fn due(world: &mut TickState, town: SettlementId, policy: &mut State, name: &str) {
-    world.tick = policy.jobs[name].next_due;
-    assert!(tick(world, town, policy));
+    let job = &policy.jobs[name];
+    world.tick = world.tick.max(if job.delivery_pending() {
+        job.retry_at
+    } else {
+        job.next_due
+    });
+    tick(world, town, policy); // A runtime-only retry need not emit a policy image.
 }
 
 fn beside(world: &mut TickState, body: EntityId, chest: [i32; 3]) {
@@ -78,7 +83,7 @@ fn terminal_preserves_three_bread_ration_and_unstorable_unrelated_cargo() {
     due(&mut world, town, &mut policy, "supply");
     assert_eq!(owed(&policy, "supply"), 0);
     assert!(policy.jobs["supply"].delivery_complete());
-    assert!(!active(&policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     assert_eq!(stock_total(&world, body, "minecraft:bread"), 3);
     assert_eq!(stock_total(&world, body, "minecraft:coal"), 64);
     assert_eq!(stored(&world, chest, "minecraft:bread"), 64);
@@ -163,7 +168,7 @@ fn partial_output_storage_preserves_tool_and_releases_without_shipping_it() {
     assert_eq!(policy.jobs["planks"].receipts, receipts);
     assert_eq!(policy.jobs["planks"].delivery.as_ref().unwrap().sequence, 2);
     assert_eq!(policy.completed, 1);
-    assert!(!active(&policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     // Preserved carry tool actually supports a subsequent ordinary job.
     let mut next_carry = carry(&world, body);
     let empty = next_carry.iter().position(ItemStack::is_empty).unwrap();
@@ -255,7 +260,7 @@ fn missing_output_invalidates_obligation_even_if_same_components_are_refilled() 
     );
     assert!(policy.jobs["supply"].cancelled);
     assert!(!policy.jobs["supply"].delivery_complete());
-    assert!(!active(&policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     assert_eq!(carry(&world, body), before);
     validate(&policy).unwrap();
 }

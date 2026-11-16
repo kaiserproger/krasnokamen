@@ -3,9 +3,9 @@
 //! Admission checks the live town owner, the live district certificate (whose
 //! generic owner may differ from the town owner), the live workstation block
 //! and the startup-native [`WorkRecipe`](mc_data::recipes::work::WorkRecipe).
-//! Progress is delayed and causal: at most one due portion per job per tick,
-//! applied atomically through the parent inventory bridge. Bodies walk via
-//! [`target`]; this module never teleports and never fabricates catch-up.
+//! Simulated and deferred portions share one game-time watermark. Physical
+//! production uses the fenced inventory bridge; off-screen periods never write
+//! inventory. Bodies walk via [`target`], without teleportation.
 
 use std::collections::BTreeMap;
 
@@ -21,8 +21,8 @@ use super::{SettlementId, inventory};
 use crate::boundary::BlockPos;
 use crate::tick::TickState;
 
-/// Manual-hold reason. Auto pauses use native reasons below; only this exact
-/// value makes [`target`] hide the job and [`active`] skip it.
+/// Manual-hold reason. Only this exact value hides job routing and skips
+/// job execution; daily settlement consumption still runs.
 const MANUAL: &str = "paused";
 /// Retry delay for paused jobs: causal, never backfills missed portions.
 const RETRY_TICKS: u64 = 20;
@@ -33,6 +33,9 @@ pub(super) const MAX_ORDER_STEPS: usize = 32;
 
 #[path = "production_delivery.rs"]
 mod delivery;
+
+#[path = "offscreen_production.rs"]
+mod offscreen;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,6 +79,15 @@ pub(crate) struct Job {
     pub dimension: String,
     pub accepted_tick: u64,
     pub next_due: u64,
+    /// Portions accrued without simulation; consumed once on reconciliation.
+    #[serde(default)]
+    pub deferred: u32,
+    /// A simulated wait holds one opportunity, never historical catch-up.
+    #[serde(default)]
+    waiting_simulated: bool,
+    /// Navigation/delivery retry only; cannot authorize a production portion.
+    #[serde(skip)]
+    retry_at: u64,
     pub paused: Option<String>,
     pub cancelled: bool,
     pub receipts: Vec<Receipt>,
@@ -131,6 +143,10 @@ pub(crate) struct State {
     pub sequence: u64,
     pub completed: u64,
     pub cancelled: u64,
+    #[serde(default = "offscreen::legacy_clock")]
+    clock: offscreen::Clock,
+    #[serde(default)]
+    consumption: offscreen::Consumption,
     #[serde(skip)]
     cursor: super::economy::WorkCursor,
 }
@@ -533,7 +549,6 @@ enum Shortage {
     Storage,
 }
 
-#[allow(clippy::too_many_lines)]
 fn plan_portion(
     world: &TickState,
     worker: Uuid,
@@ -548,18 +563,58 @@ fn plan_portion(
     .map_err(|_| Shortage::Input)?;
     let mut carry = carry_image.slots.clone();
     let mut equipment = equipment_image.slots.clone();
+    let mut available: Vec<u32> = carry
+        .iter()
+        .map(|stack| stack.count.max(0) as u32)
+        .collect();
+    let (inputs, outputs, wear) =
+        plan_contents(world, recipe, &mut carry, &mut equipment, &mut available)?;
+    Ok(PortionPlan {
+        carry_before: carry_image,
+        equipment_before: equipment_image,
+        inputs,
+        outputs,
+        wear,
+        carry_after: carry,
+        equipment_after: equipment,
+    })
+}
+
+type PortionEffects = (Vec<ItemStack>, Vec<ItemStack>, Vec<ToolWear>);
+
+/// Shared recipe semantics for carry production and resident-storage
+/// reconciliation. `available` preserves each source's reservation floor.
+#[allow(clippy::too_many_lines)]
+fn plan_contents(
+    world: &TickState,
+    recipe: &WorkRecipe,
+    carry: &mut [ItemStack],
+    equipment: &mut [ItemStack],
+    available: &mut [u32],
+) -> Result<PortionEffects, Shortage> {
     let mut inputs = Vec::new();
     for input in &recipe.inputs {
         let mut remaining = input.count;
-        for slots in [&mut carry, &mut equipment] {
-            for stack in slots.iter_mut() {
+        for (slots, limited) in [(&mut *carry, true), (&mut *equipment, false)] {
+            for (index, stack) in slots.iter_mut().enumerate() {
                 if remaining == 0 {
                     break;
                 }
                 if !accepts(world, stack, input) {
                     continue;
                 }
-                let take = remaining.min(stack.count.max(0) as u32);
+                let quantity = if limited {
+                    available[index]
+                } else {
+                    stack.count.max(0) as u32
+                };
+                let take = remaining.min(quantity);
+                if take == 0 {
+                    continue;
+                }
+                if limited {
+                    available[index] -= take;
+                }
                 let mut taken = stack.clone();
                 taken.count = take as i32;
                 inputs.push(taken);
@@ -577,9 +632,10 @@ fn plan_portion(
     let mut wear = Vec::new();
     for tool in &recipe.tools {
         let mut placed = None;
-        for (slots, equipment_side) in [(&mut equipment, true), (&mut carry, false)] {
-            if let Some(index) = slots.iter().position(|stack| {
+        for (slots, equipment_side) in [(&mut *equipment, true), (&mut *carry, false)] {
+            if let Some(index) = slots.iter().enumerate().position(|(index, stack)| {
                 !stack.is_empty()
+                    && (equipment_side || available[index] > 0)
                     && resource(world, stack) == Some(tool.item.as_str())
                     && tool
                         .components
@@ -594,9 +650,9 @@ fn plan_portion(
             return Err(Shortage::Tool);
         };
         let slots = if equipment_side {
-            &mut equipment
+            &mut *equipment
         } else {
-            &mut carry
+            &mut *carry
         };
         let name = resource(world, &slots[index]).ok_or(Shortage::Tool)?;
         let maximum = maximum_damage(world, &slots[index], name).ok_or(Shortage::Tool)?;
@@ -604,6 +660,9 @@ fn plan_portion(
         let broke = damage >= maximum;
         if broke {
             slots[index] = ItemStack::EMPTY;
+            if !equipment_side {
+                available[index] = 0;
+            }
         } else {
             slots[index].damage = Some(damage as i32);
         }
@@ -623,7 +682,7 @@ fn plan_portion(
     }
     for stack in &outputs {
         let mut rest = stack.clone();
-        for slot in &mut carry {
+        for slot in carry.iter_mut() {
             if rest.is_empty() {
                 break;
             }
@@ -643,15 +702,7 @@ fn plan_portion(
             return Err(Shortage::Storage);
         }
     }
-    Ok(PortionPlan {
-        carry_before: carry_image,
-        equipment_before: equipment_image,
-        inputs,
-        outputs,
-        wear,
-        carry_after: carry,
-        equipment_after: equipment,
-    })
+    Ok((inputs, outputs, wear))
 }
 
 fn select_available(
@@ -827,7 +878,10 @@ fn fetch_inputs(
         world,
         &inventory::Endpoint::VillagerEquipment { uuid: job.worker },
     )?;
-    let retry = world.tick.saturating_add(RETRY_TICKS);
+    let retry = world
+        .tick_control
+        .game_ticks(world.tick)
+        .saturating_add(RETRY_TICKS);
     let mut crowded = false;
     for (position, source) in inventory::town_storage(world, settlement) {
         let (source_after, carry_after) =
@@ -971,7 +1025,10 @@ fn store_surplus(
     )?;
     let kept = kept_carry(world, recipe, &carry.slots, &equipment.slots);
     let pos = worker_pos(world, job.worker).ok_or(Failure::NotFound)?;
-    let retry = world.tick.saturating_add(RETRY_TICKS);
+    let retry = world
+        .tick_control
+        .game_ticks(world.tick)
+        .saturating_add(RETRY_TICKS);
     let mut walk: Option<([i32; 3], f64)> = None;
     for (position, target) in inventory::town_storage(world, settlement) {
         let Some((target_after, carry_after)) =
@@ -1090,7 +1147,10 @@ fn admit(
             building,
             dimension: facts.dimension,
             accepted_tick: tick,
-            next_due: tick.saturating_add(duration),
+            next_due: offscreen::first_due(world, settlement, duration),
+            deferred: 0,
+            waiting_simulated: false,
+            retry_at: 0,
             paused: None,
             cancelled: false,
             receipts: Vec::new(),
@@ -1181,7 +1241,10 @@ fn admit_order(
             building: step.building,
             dimension: facts.dimension,
             accepted_tick: tick,
-            next_due: tick.saturating_add(duration),
+            next_due: offscreen::first_due(world, settlement, duration),
+            deferred: 0,
+            waiting_simulated: false,
+            retry_at: 0,
             paused: None,
             cancelled: false,
             receipts: Vec::new(),
@@ -1247,7 +1310,7 @@ pub(crate) fn execute(
             {
                 return Err(failure);
             }
-            let tick = world.tick;
+            let tick = world.tick_control.game_ticks(world.tick);
             let Some(entry) = state.jobs.get_mut(&job) else {
                 return Err(Failure::NotFound);
             };
@@ -1259,7 +1322,9 @@ pub(crate) fn execute(
             }
             entry.paused = None;
             entry.fetch_at = None;
-            entry.next_due = tick;
+            entry.next_due = offscreen::phase_after(tick, settlement, entry.duration);
+            entry.waiting_simulated = false;
+            entry.retry_at = 0;
             Ok(true)
         }
         Request::Cancel { job } => {
@@ -1283,6 +1348,9 @@ pub(crate) fn execute(
                 entry.cancelled = true;
                 entry.paused = None;
                 entry.fetch_at = None;
+                entry.deferred = 0;
+                entry.waiting_simulated = false;
+                entry.retry_at = 0;
                 cancelled += 1;
             }
             state.cancelled = state.cancelled.saturating_add(cancelled);
@@ -1312,12 +1380,12 @@ fn reached(world: &TickState, job: &Job) -> bool {
         <= 6.25
 }
 
-fn park(job: &mut Job, reason: &str, next_due: u64) -> bool {
-    let changed = job.paused.as_deref() != Some(reason) || job.next_due != next_due;
+fn park(job: &mut Job, reason: &str, retry_at: u64) -> bool {
+    let changed = job.paused.as_deref() != Some(reason);
     if job.paused.as_deref() != Some(reason) {
         job.paused = Some(reason.to_owned());
     }
-    job.next_due = next_due;
+    job.retry_at = retry_at;
     changed
 }
 
@@ -1325,6 +1393,7 @@ fn tick_job(
     world: &mut TickState,
     settlement: SettlementId,
     job: &mut Job,
+    portion_due: bool,
 ) -> Result<bool, Failure> {
     if job.delivery_pending() {
         return delivery::store(world, settlement, job);
@@ -1340,7 +1409,10 @@ fn tick_job(
         job.recipe_revision.clone_from(&recipe.revision);
     }
     job.duration = recipe.duration_ticks.max(1);
-    let retry = world.tick.saturating_add(RETRY_TICKS);
+    let retry = world
+        .tick_control
+        .game_ticks(world.tick)
+        .saturating_add(RETRY_TICKS);
     if let Err(reason) = station_live(world, recipe, &facts, job.station, job.stand_at) {
         return Ok(park(job, pause_reason(reason), retry) | metadata_changed);
     }
@@ -1354,6 +1426,10 @@ fn tick_job(
     };
     if !reached(world, job) {
         return Ok(park(job, "awaiting reach", retry) | metadata_changed);
+    }
+    if !portion_due {
+        job.retry_at = job.next_due;
+        return Ok(metadata_changed);
     }
     let delivery_after = job
         .delivery
@@ -1393,12 +1469,15 @@ fn tick_job(
     job.paused = job
         .delivery_pending()
         .then(|| "awaiting output storage".to_owned());
-    job.next_due = world.tick.saturating_add(job.duration);
     Ok(true)
 }
 
 pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut State) -> bool {
-    let tick_now = world.tick;
+    if !world.tick_control.runs_normally() {
+        return false;
+    }
+    let tick_now = world.tick_control.game_ticks(world.tick);
+    let consumed = offscreen::consume(world, settlement, &mut state.consumption);
     let mut finished = Vec::new();
     let mut gone = Vec::new();
     let changed = state.cursor.run(
@@ -1407,30 +1486,26 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
             job.unfinished()
                 && job.after.is_none()
                 && job.paused.as_deref() != Some(MANUAL)
-                && job.next_due <= tick_now
+                && offscreen::ready(job, tick_now)
         },
         |_, job| {
             if let Err(failure) = worker_slot(world, settlement, job.worker) {
                 if matches!(failure, Failure::NotFound) && !gone.contains(&job.worker) {
                     gone.push(job.worker);
                 }
-                return park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS)).into();
+                let advanced = offscreen::advance(job, tick_now) != 0;
+                let deferred = std::mem::take(&mut job.deferred) != 0;
+                return (park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS))
+                    || advanced
+                    || deferred)
+                    .into();
             }
             let produced_before = job.done;
-            match tick_job(world, settlement, job) {
-                Ok(changed) => {
-                    if produced_before < job.count && job.done >= job.count {
-                        finished.push(job.id.clone());
-                    }
-                    changed
-                }
-                Err(failure) => park(
-                    job,
-                    pause_reason(failure),
-                    tick_now.saturating_add(RETRY_TICKS),
-                ),
+            let changed = offscreen::visit(world, settlement, job, tick_now);
+            if produced_before < job.count && job.done >= job.count {
+                finished.push(job.id.clone());
             }
-            .into()
+            changed.into()
         },
     );
     // Release the next order step in the same tick (and policy image) that
@@ -1443,13 +1518,14 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
                 .is_some_and(|after| finished.contains(after))
             {
                 job.after = None;
-                job.next_due = tick_now.saturating_add(job.duration);
+                job.next_due = offscreen::phase_after(tick_now, settlement, job.duration);
+                job.waiting_simulated = false;
             }
         }
     }
     state.completed = state.completed.saturating_add(finished.len() as u64);
     let retaken = retake(world, settlement, state, &gone);
-    changed || retaken || !finished.is_empty()
+    changed || consumed || retaken || !finished.is_empty()
 }
 
 /// A worker that died or no longer exists can never finish its jobs. Every
@@ -1505,7 +1581,7 @@ fn retake(world: &TickState, settlement: SettlementId, state: &mut State, gone: 
             job.fetch_at = None;
             if job.paused.as_deref() == Some(MISSING_WORKER) {
                 job.paused = None;
-                job.next_due = world.tick;
+                job.retry_at = 0;
             }
             changed = true;
         }
@@ -1513,13 +1589,9 @@ fn retake(world: &TickState, settlement: SettlementId, state: &mut State, gone: 
     changed
 }
 
-/// Any nonterminal, noncancelled, ungated job needing tick. Auto-paused jobs
-/// that can resume are included; only the manual hold is parked.
-pub(crate) fn active(state: &State) -> bool {
-    state
-        .jobs
-        .values()
-        .any(|job| job.unfinished() && job.after.is_none() && job.paused.as_deref() != Some(MANUAL))
+/// Every settlement has daily food demand, even without a production job.
+pub(crate) fn active(_state: &State) -> bool {
+    true
 }
 
 /// Native brain routing target for one worker: its live stand post, hidden
@@ -1545,6 +1617,7 @@ pub(super) fn target_for_job(job: &Job) -> Option<BlockPos> {
 }
 
 pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
+    state.consumption.validate()?;
     if state.completed > state.sequence || state.cancelled > state.sequence {
         return Err("invalid production counters");
     }
@@ -1559,6 +1632,7 @@ pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
             || job.count == 0
             || job.done > job.count
             || job.duration == 0
+            || job.deferred > job.count - job.done
         {
             return Err("invalid production job");
         }
@@ -1610,6 +1684,10 @@ pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+pub(super) fn restore_clocks(world: &mut TickState) -> Result<(), crate::CoreError> {
+    offscreen::restore_clocks(world)
 }
 
 #[cfg(test)]

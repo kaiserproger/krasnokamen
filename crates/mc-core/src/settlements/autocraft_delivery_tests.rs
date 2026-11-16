@@ -68,6 +68,6 @@ fn multi_portion_final_pickaxes_deliver_without_distributing_chain_intermediates
         .economy
         .production;
     assert_eq!((policy.completed, policy.cancelled), (3, 0));
-    assert!(!production::active(policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     validate_record(town.state.settlements.get(town.id).unwrap()).unwrap();
 }

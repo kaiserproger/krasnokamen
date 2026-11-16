@@ -262,8 +262,8 @@ pub(crate) fn execute(
     Ok(())
 }
 
-/// The derived active ID index excludes idle towns/terminal journals. Domain
-/// state is moved, not cloned; only a genuinely changed image touches the WAL.
+/// Every settlement has daily consumption; the per-domain cursors bound jobs.
+/// State is moved, not cloned; only a genuinely changed image touches the WAL.
 pub(super) fn tick(world: &mut TickState) {
     let mut after = None;
     while let Some(id) = world.settlements.next_economy(after) {
