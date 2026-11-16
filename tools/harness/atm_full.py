@@ -191,8 +191,9 @@ def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase
     require_chunks(dimension_dir, expanded_bounds(bounds, 6))
     require_chunks(baseline_dir, baseline_bounds)
     palette = template_palette(pack, row)
-    blocks = read_world(dimension_dir, [bounds])[0]["blocks"]
-    baseline = read_world(baseline_dir, [baseline_bounds])[0]["blocks"]
+    audit = row.setdefault("palette_audit", {}).setdefault(phase, {"candidate": {}, "baseline": {}})
+    blocks = read_world(dimension_dir, [bounds], palette_audit=audit["candidate"])[0]["blocks"]
+    baseline = read_world(baseline_dir, [baseline_bounds], palette_audit=audit["baseline"])[0]["blocks"]
     natural = {state.split("[", 1)[0] for state in baseline.values()} | {"minecraft:air"}
     matches = differential_candidates(blocks, baseline, natural, palette)
     self_control = differential_candidates(baseline, baseline, natural, palette)
@@ -207,7 +208,9 @@ def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase
         raise ValueError(f"{row['id']}: only {len(matches)} non-natural differential template blocks "
                          f"(minimum {MIN_DIFFERENTIAL_BLOCKS})")
     matches.sort(key=lambda block: sum((a-b)**2 for a, b in zip(block["position"], site["anchor"])))
-    nearby = read_world(dimension_dir, [expanded_bounds(bounds, 6)])[0]["blocks"]
+    audit["candidate_approach"] = {}
+    nearby = read_world(dimension_dir, [expanded_bounds(bounds, 6)],
+                        palette_audit=audit["candidate_approach"])[0]["blocks"]
     def block(pos):
         return nearby.get(",".join(map(str, pos)), "minecraft:air").split("[")[0]
     samples = []

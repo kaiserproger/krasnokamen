@@ -134,6 +134,10 @@ but eight is a conservative threshold, not a calibration for all 130 IDs.
 Natural-only or otherwise insufficient starts remain findings, not passes. The
 pack-absent self-diff must be zero. A visible differential block is photographed
 from a grounded survival position within 4.5 blocks.
+The per-ID palette audit records chunk counts by DataVersion and encoding for
+each candidate and baseline read. The Anvil reader requires `Name`/`Properties`
+through DataVersion 4790 and `id`/`properties` or a bare identifier at 5023;
+unknown versions and mixed or mismatched encodings fail closed.
 
 After restart it checks every recorded start and sampled blocks offline and
 revisits every tenth sorted Overworld ID starting at zero plus all three Nether
