@@ -461,13 +461,29 @@ fn native_checkpoint_stores_a_member_again_only_on_release_from_transit() {
         payload: None,
         ..body(identity, tick)
     };
-    commit(&store, 1, 0, &globals(1), &[body(member, 1), body([9; 16], 1)], &[]).unwrap();
+    commit(
+        &store,
+        1,
+        0,
+        &globals(1),
+        &[body(member, 1), body([9; 16], 1)],
+        &[],
+    )
+    .unwrap();
     let travelling = |tick| {
         let mut records = globals(tick);
         records.insert(format!("transit/{TRANSIT}"), transit_row(tick, &[TRANSIT]));
         records
     };
-    commit(&store, 2, 1, &travelling(2), &[gone(member, 2), gone([9; 16], 2)], &[]).unwrap();
+    commit(
+        &store,
+        2,
+        1,
+        &travelling(2),
+        &[gone(member, 2), gone([9; 16], 2)],
+        &[],
+    )
+    .unwrap();
     // Still held by the transit row: the tombstone stands.
     assert!(commit(&store, 3, 2, &travelling(3), &[body(member, 3)], &[]).is_err());
     // The release covers only the transit row's members.
@@ -475,7 +491,10 @@ fn native_checkpoint_stores_a_member_again_only_on_release_from_transit() {
     assert!(commit(&store, 3, 2, &globals(3), &both, &[]).is_err());
     // Arrival: the row is gone and the same identity is stored again.
     commit(&store, 3, 2, &globals(3), &[body(member, 3)], &[]).unwrap();
-    assert_eq!(store.entity(member).unwrap().unwrap().payload, body(member, 3).payload);
+    assert_eq!(
+        store.entity(member).unwrap().unwrap().payload,
+        body(member, 3).payload
+    );
     assert!(store.entity([9; 16]).unwrap().unwrap().payload.is_none());
 }
 

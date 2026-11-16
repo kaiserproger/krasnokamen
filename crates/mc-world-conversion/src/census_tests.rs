@@ -232,7 +232,11 @@ fn census_counts_transit_records_and_members_once() {
         0,
         0,
         0x10,
-        member(fields(&registry, "minecraft:villager", 0x10, 10), 7, Some("7-1")),
+        member(
+            fields(&registry, "minecraft:villager", 0x10, 10),
+            7,
+            Some("7-1"),
+        ),
     );
     let fixture = world_with(
         vec![villager],
@@ -259,7 +263,11 @@ fn census_refuses_transit_custody_held_twice() {
             0,
             0,
             0x10,
-            member(fields(&registry, "minecraft:villager", 0x10, 10), 7, Some("7-1")),
+            member(
+                fields(&registry, "minecraft:villager", 0x10, 10),
+                7,
+                Some("7-1"),
+            ),
         )
     };
     let cases: [(&[(u128, &[u128], Option<&str>)], &str); 3] = [
