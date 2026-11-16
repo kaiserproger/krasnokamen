@@ -825,15 +825,23 @@ class BattleRunnerTests(unittest.TestCase):
 
     def test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid(self):
         runner = load_runner()
-        for _ in range(20):
-            server = subprocess.Popen(['sleep', '60'])
-            watcher = threading.Thread(target=server.wait, daemon=True)
-            watcher.start()
-            while server.returncode is None and not server._waitpid_lock.locked():
-                pass
-            os.kill(server.pid, 9)
-            self.assertTrue(runner.killed_by_sigkill(server))
-            watcher.join(timeout=10)
+        process = subprocess.Popen(['cat'], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
+        def reap():
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            process.stdin.close()
+        self.addCleanup(reap)
+        class Watched:
+            # CPython Popen.poll() returns None while the crash watcher thread
+            # owns waitpid; only wait() observes the exit.
+            pid = process.pid
+            def poll(self):
+                return None
+            def wait(self, timeout=None):
+                return process.wait(timeout=timeout)
+        os.kill(process.pid, 9)
+        self.assertTrue(runner.killed_by_sigkill(Watched()))
 
     def test_console_fifo_forwards_each_written_line_to_the_console(self):
         runner = load_runner()
