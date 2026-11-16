@@ -515,6 +515,21 @@ class RotationTests(SlotFixture):
         self.assertTrue((self.targets / "slot-b" / "debug" / "incremental").exists())
         self.assertIn("incremental was not enough", evictions[1].reason)
 
+    def test_incremental_only_frees_every_idle_slots_incremental_and_keeps_the_rest(self):
+        self.stamp("a", 1000)
+        self.stamp("b", 2000)
+        self.stamp("c", 3000)
+        evictions, notes, errors = sg.rotate(sorted(p.name for p in self.targets.glob("slot-*")), self.roots,
+                                             self.locks, True, 100, {}, incremental_only=True)
+        self.assertEqual(errors, [])
+        self.assertEqual([(e.slot, e.stage) for e in evictions],
+                         [("slot-a", "incremental"), ("slot-b", "incremental"), ("slot-c", "incremental")])
+        for letter in "abc":
+            slot = self.targets / f"slot-{letter}"
+            self.assertFalse((slot / "debug" / "incremental").exists())
+            self.assertTrue((slot / "debug" / "deps" / "libx.rlib").exists(), "build outputs stay")
+        self.assertTrue(any("no idle slot left" in n for n in notes))
+
     def test_busy_slots_are_never_rotated(self):
         self.stamp("a", 1000)
         self.stamp("b", 2000)

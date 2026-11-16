@@ -304,8 +304,8 @@ cwd to the agent.
 - **Keep at least 250 GiB free on the games disk** (owner, 2026-11-13; raised
   from 80-100 GB set 2026-11-07; it is a DRAM-less Samsung 980 whose fast write
   cache shrinks as it fills: at 92% full writes took over a second each). Below
-  the floor, `slot-gc` evicts idle slots in least-recently-used order (below);
-  thin finished runs before starting more work. The disk filled to 100% several times: 12 parallel
+  the floor, `slot-gc` evicts idle slots in least-recently-used order (below).
+  The disk filled to 100% several times: 12 parallel
   target slots (2026-11-07), per-run plugin `.wasm` copies in scenario runs (7
   of 11 GB on 2026-10-28), 650 MB of client content copied into every
   scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
@@ -322,6 +322,23 @@ cwd to the agent.
   bare cargo started after that scan is not protected. Rotation can
   discard live-tree caches; slots ignore the in-use registry. See
   [`tools/dev/README.md`](../../tools/dev/README.md#slot-gc---delete--v-slot).
+- **Order when space is short** (owner, 2026-11-16). Free only reproducible
+  build output, in this order, and check `df` after each step:
+  1. Incremental caches of idle slots:
+     `tools/dev/slot-gc --delete --incremental-only --min-free-gb <target GiB>`
+     (dry run without `--delete` first). Busy slots are skipped as above.
+  2. Named `targets/<Agent>` dirs of merged or finished slices with zero users
+     (rule under *Target dirs* below). A named dir that also holds inputs (a
+     tool checkout, benchmark worlds, pack jars) loses only its cargo target.
+  3. Old build outputs of idle slots: full rotation
+     (`slot-gc --delete --min-free-gb <target GiB>`).
+
+  Run data is never on this list: crash copies, WAL archives, worlds and
+  client state of a run stay unless the owner explicitly approves deleting
+  them, and a failing run or negative control stays whole even then. Hashing
+  a WAL does not replace it. A `slot-gc` pass above floor + 10 GiB runs only the
+  safe classes, which delete nothing a live tree can still use, so it reports
+  0 GiB even with hundreds of GiB of idle incremental caches: use step 1.
 
 Cleanup while agents run:
 
@@ -341,12 +358,14 @@ Cleanup while agents run:
   pooled `slot-<l>` only under its lock:
   `flock -n /tmp/solaris-mem-slots/<l> rm -rf <work>/targets/slot-<l>`. Keep
   dirs named in active tasks and dirs holding binaries other agents run.
-- **Receipts and scenarios** (owner, 2026-11-07): a finished run keeps only its
-  reports, logs and `result.json` (text reports such as `.md`, `.yaml`,
-  `.json`, `.txt`, plus `.log` files, delivered `.patch` files and screenshots);
-  everything else (worlds, `journal/`, `xdg/`, client data roots, binaries,
-  jars, `.wasm`, `perf.data`, archives) is deleted. Keep the full run only while
-  its work is active or a named next task needs it (e.g. a fixture world).
+- **Receipts and scenarios** (owner, 2026-11-07, narrowed 2026-11-16): a
+  finished run keeps its reports, logs and `result.json` (text reports such as
+  `.md`, `.yaml`, `.json`, `.txt`, plus `.log` files, delivered `.patch` files
+  and screenshots). Bulky reproducible inputs (client data roots, binaries,
+  jars, `.wasm`, `perf.data`, archives) may be deleted. Crash copies, WAL
+  archives, worlds and `journal/` are run data: keep them unless the owner
+  explicitly approves, and never delete them from a failing run. Keep the full
+  run while its work is active or a named next task needs it.
 - Don't touch the owner's main checkouts and their `target/`, sccache, or other
   projects' caches in `/tmp`.
 

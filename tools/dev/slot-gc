@@ -30,6 +30,9 @@ disk is short); everything else is kept:
   slot is never rotated while its pool lock is held or a live process has it as
   CARGO_TARGET_DIR. Evictions rename into `<slot>/.gc-trash-<pid>` first, so an
   interrupted run is finished by the next pass. `--no-rotate` skips this class.
+  `--incremental-only` never evicts more than incremental dirs and moves on to the
+  next idle slot instead; with a raised `--min-free-gb` it frees idle slots'
+  incremental caches on demand, before the disk reaches the floor.
 
 Each slot is processed under two locks: its pool lock (`<lock-dir>/<l>`, the flock
 mem-run takes for a slot it selects and pin-release takes around its build) and its
@@ -571,10 +574,11 @@ def entry_bytes(path: Path) -> int:
 
 
 def rotate(names: list[str], roots: Roots, lock_dir: Path, delete: bool, threshold: float, users: dict[str, list[int]],
-           freed_estimate: int = 0) -> tuple[list[Eviction], list[str], list[str]]:
+           freed_estimate: int = 0, incremental_only: bool = False) -> tuple[list[Eviction], list[str], list[str]]:
     """Class 2. Only if free space is still below `threshold` GiB after the safe classes:
     evict idle slots, least recently used first; per slot its incremental dirs, then
-    (if still short) everything except tmp/. Returns (evictions, notes, errors).
+    (if still short and not `incremental_only`) everything except tmp/. Returns
+    (evictions, notes, errors).
     A dry run plans with free = measured + `freed_estimate` + what it plans to evict."""
     evictions: list[Eviction] = []
     notes: list[str] = []
@@ -617,7 +621,7 @@ def rotate(names: list[str], roots: Roots, lock_dir: Path, delete: bool, thresho
                 else:
                     planned += inc_bytes / GIB
                 evictions.append(Eviction(name, "incremental", inc_bytes, why))
-            if free() >= threshold:
+            if free() >= threshold or incremental_only:
                 continue
             rest = [p for p in slot.iterdir() if p.name != "tmp" and not p.name.startswith(TRASH)]
             # A dry run left the incremental dirs in place: they are already planned.
@@ -689,6 +693,8 @@ def main() -> None:
     parser.add_argument("--delete", action="store_true", help="remove the artifacts (default: report only)")
     parser.add_argument("-v", "--verbose", action="store_true", help="list every dead unit and incremental dir")
     parser.add_argument("--no-rotate", action="store_true", help="skip class 2 (capacity rotation of idle slots)")
+    parser.add_argument("--incremental-only", action="store_true",
+                        help="class 2 evicts only incremental dirs of idle slots, never whole slots")
     parser.add_argument("--min-free-gb", type=float, default=float(os.environ.get("KRASNOKAMEN_SLOT_MIN_FREE_GB") or 250),
                         help="free-space floor; rotation runs while free space is below floor + 10 GiB (default 250, KRASNOKAMEN_SLOT_MIN_FREE_GB)")
     parser.add_argument("--work", type=Path, default=w.WORK, help=argparse.SUPPRESS)
@@ -707,7 +713,8 @@ def main() -> None:
     status = print_report(reports, args.delete, args.verbose)
     if not args.no_rotate and targets.is_dir():
         freed = sum(r.unit_bytes + r.inc_bytes + r.sess_bytes for r in reports)
-        evictions, notes, errors = rotate(names, roots, args.lock_dir, args.delete, args.min_free_gb + 10, users, freed)
+        evictions, notes, errors = rotate(names, roots, args.lock_dir, args.delete, args.min_free_gb + 10, users, freed,
+                                          args.incremental_only)
         status |= print_rotation(evictions, notes, errors, args.delete)
     sys.exit(status)
 
