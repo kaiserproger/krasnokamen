@@ -179,6 +179,7 @@ pub(crate) fn remove(state: &mut TickState, id: SettlementId) -> bool {
     if !state.settlements.remove(id) {
         return false;
     }
+    state.settlements.migration.remove(id);
     fn clear(world: &mut TickState, id: SettlementId) {
         for index in 0..world.entities.len() {
             let slot = crate::entities::EntitySlot(index as u32);
