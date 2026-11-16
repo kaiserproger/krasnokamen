@@ -291,28 +291,34 @@ historical structure ownership. Unknown/missing/duplicate struct fields or map
 keys, unsupported schema, invalid hashes/ownership and oversized metadata refuse
 adoption before any identity or epoch mutation. File pack IDs share selection's
 bounded direct-directory-entry predicate. Removed-pack ownership remains valid
-diagnostic history. The normal checkpoint/WAL level-metadata path owns it, not a
-separate startup transaction.
+diagnostic history. The normal checkpoint level-metadata path owns it (there is
+no WAL image of it), not a separate startup transaction.
 
 A valid startup change logs old/new identities and changed packs/cache, then
 continues: stored chunk baselines remain unchanged; new chunks use selected
 inputs. Changed inputs mint a terrain epoch. Fresh worlds record identity in
 their first checkpoint (including offline pregeneration). Existing worlds
 without it adopt in memory and persist it at their next normal positive-tick
-checkpoint; a crash before that repeats adoption. Vanilla-only worlds require no
-packs or staged copy. Native seed/revision identity validation is unchanged.
+checkpoint; a crash before that repeats adoption, so a WAL-only missing base
+after an input change refuses until the previous inputs return. Vanilla-only
+worlds require no packs or staged copy. Native seed/revision identity validation
+is unchanged.
 
 Every generated native admission image, including vanilla-only generation, must
 become a durable native baseline before dependent WAL can publish. The tick
-queues required-baseline jobs before its append, regardless of the ordinary
-generated-save batch threshold. The journal owner waits for the sole native
-writer's Immediate fill-generated commit; failure closes admission and withholds
-the append. The tick performs no new synchronous DB write or durability await.
-This does not strengthen gameplay publication: a queued/unflushed tail can still
-roll back consistently, and no per-tick fsync is required.
+queues every required-baseline job before its append; there is no separate
+deferred generated-chunk save. The journal owner waits for the sole native
+writer's Immediate fill-generated commit (behind any checkpoint commit already
+queued there), so a tick that generated chunks puts one native commit per batch
+in front of its append; failure closes admission and withholds the append. The
+tick performs no new synchronous DB write or durability await. This does not
+strengthen gameplay publication: a queued/unflushed tail can still roll back
+consistently, and no per-tick fsync is required.
 
 Admission refuses and records a load error if the bounded required-baseline
-buffer is full; checkpoint cannot discard that chunk's unmaterialized edits.
+buffer (1024 per dimension) is full; checkpoint cannot discard that chunk's
+unmaterialized edits. The refusal is sticky until restart, and a startup replay
+needing more baselines than that refuses on every start: a known limit.
 Fill inserts only absent, uncovered slots. A first dependent native snapshot
 installs its original base in the same transaction. Covered native state with
 no physical baseline refuses reads, fallback, fill and checkpoint instead of
@@ -334,10 +340,14 @@ before WAL can leave an unused baseline; retained WAL folds edits over the
 original base after pack addition/change/removal. SIGKILL regressions cover all
 three transitions, repeated recovery, then checkpoint/prune and another recovery.
 
-Generators do not hot-swap. Enable, disable or reload that changes effective
-worldgen inputs refuses atomically and retains the old packs, selection and
-registry. Gameplay-only changes and identical worldgen reloads remain valid.
-Unsupported worldgen domains/types fail by resource name through the one shared
+Generators do not hot-swap. Enable or disable that changes effective worldgen
+inputs, and a reload whose selected packs' worldgen changed, refuse atomically
+and retain the old packs, selection and registry; a new pack that would change
+worldgen is skipped by a reload and offered again at the next start. A new pack
+a start cannot prepare, validate or admit past the replay baseline fence is
+skipped and named. Gameplay-only changes and identical worldgen reloads remain
+valid. Unsupported worldgen domains/types refuse the whole pack, naming every
+such resource, through the one shared
 `mc-data`/`mc-worldgen` supported-type authority. This is not general modpack
 compatibility. Authored biome convention defaults are the lowest vanilla layer;
 pack filters, addition and replacement apply normally.

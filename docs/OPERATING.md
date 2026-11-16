@@ -565,11 +565,14 @@ Krasnokamen loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
 startup. Each needs `pack.mcmeta` with a `pack` object. Packs are ordered by
 directory name and the lexically later resource wins. Symlinks, ZIP entries
 that escape the archive and unimplemented resource kinds fail startup with an
-explicit error rather than falling back to built-in content. Worldgen,
-`dimension` and `dimension_type` resources (and `tags/worldgen`) cannot be
-applied, because the generators are native code: the rest of the pack loads and
-the server logs one warning per pack naming the ignored resource paths (an
-operator who enables such a pack also sees it in chat). A pack the saved
+explicit error rather than falling back to built-in content. Worldgen the native
+generators cannot apply (`dimension` and `dimension_type` resources, worldgen
+domains, structure types and `tags/worldgen` kinds outside the experimental list
+below, Moog piece-count rules) refuses the whole pack, other content included: the error
+names the pack and every unsupported entry (the first eight and a count of the
+rest). A selected pack holding any refuses startup and `/reload`; a new one is
+skipped and named. A pack whose worldgen is all supported loads with its other
+content. A pack the saved
 selection names that is gone from disk at startup is dropped from the selection
 with a warning, like vanilla; a corrupt or unknown saved selection refuses to open
 the world rather than guessing.
@@ -591,8 +594,7 @@ Supported resources (singular 26.1.2 directory names):
 - `data/<ns>/worldgen/{structure_set,structure,template_pool,processor_list}/<path>.json`,
   `data/<ns>/structure/<path>.nbt` (binary, directory or ZIP), and
   `data/<ns>/tags/worldgen/biome/<path>.json`: experimental selected jigsaw
-  inputs. Unsupported worldgen domains/types refuse a selected pack at startup by
-  resource name; a new pack holding one is skipped and named.
+  inputs. Any other worldgen refuses the pack as described above.
   Biome tags merge by pack priority with `replace` and required/optional nested
   references. The selected tree overlays vanilla at its actual priority.
 
@@ -622,8 +624,13 @@ but never as a side effect of enabling another pack. At startup and on `/reload`
 new pack that cannot be read or loaded (a corrupt ZIP, a missing or truncated
 `pack.mcmeta`, a bad file, an unsupported resource, a `filter` that does not parse)
 is skipped with a warning naming the pack and the file and stays unselected, so it
-is no worldgen input; the rest applies, and a pack that a live `enable` refused
-cannot stop the next start or block a reload. This deliberately differs from
+is no worldgen input. At startup the same holds for a new pack whose worldgen inputs
+cannot be prepared or validated (for example worldgen without the vanilla content
+cache) or whose identity the replay baseline fence refuses. On `/reload` a new pack
+that would change worldgen is skipped with "restart the server to apply the
+selected inputs"; it stays new, so the next start offers it again. The rest
+applies, and a new pack, including one that a live `enable` refused, can stop
+neither a start nor a reload. This deliberately differs from
 vanilla, which enables a new pack and refuses to start when it fails to load (it
 offers `--safeMode`); Krasnokamen has no safe mode. A pack the saved selection
 already holds that no longer loads still refuses startup and `/reload` (old state
@@ -645,19 +652,19 @@ generate using the newly selected inputs. Fresh worlds and pregeneration record
 the identity in their first checkpoint. Existing worlds without it adopt in
 memory and persist on the next normal positive-tick checkpoint; a crash before
 that repeats adoption. A changed identity invalidates the terrain epoch.
-Unsupported worldgen resources refuse a selected pack at startup by path (a new
-pack holding them is skipped and named), including Moog
-`msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions` rules; enabling a
-pack never silently drops those generation constraints.
+Unsupported worldgen resources refuse the whole pack, naming every such path,
+including Moog `msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions`
+rules; enabling a pack never silently drops those generation constraints.
 
 If a pack is removed, its saved structure starts are retained unchanged and are
 inactive for generation/locate. Loading such a chunk logs one warning per missing
 structure ID, naming its likely pack; restoring the pack reactivates its starts.
 No world scan or deletion is performed.
 
-`/reload`, enable or disable that would change worldgen refuses atomically while
-running, retaining old packs/selection/catalogs; immutable generators are not
-advertised as updated. Gameplay-only changes and identical worldgen reloads are
+`/datapack enable` or `disable` that would change worldgen, and a `/reload` whose
+selected packs' worldgen changed, refuse atomically while running, retaining old
+packs/selection/catalogs; immutable generators are not advertised as updated. A new
+worldgen pack found by `/reload` is skipped instead (above). Gameplay-only changes and identical worldgen reloads are
 supported. Vanilla-only worlds need no packs or staged copy. Private staging is
 bounded and deleted after eager compilation; the shared cache is never modified. A pack's
 `pack.mcmeta` `filter` (`block` entries with optional `namespace` and `path`
@@ -686,9 +693,8 @@ source is sent, not text that commands deliver to players (`/tellraw`, `/say`,
 sees nothing. A pack carrying any other condition, or a field these do not
 read, is refused at load. ZIP packs
 (`<pack>.zip` with `pack.mcmeta` at its root, at most 16 MiB and 16384 entries) load like
-directory packs. Datapack
-worldgen overrides are not applied (see above; tracked as
-`DATAPACK-WORLDGEN-OVERRIDES`).
+directory packs. Datapack worldgen overrides beyond the experimental jigsaw inputs
+refuse the pack (see above; tracked as `DATAPACK-WORLDGEN-OVERRIDES`).
 
 Execution is bounded: each root command or function invocation gets its own
 `minecraft:max_command_sequence_length` budget shared by nested functions and
@@ -905,6 +911,29 @@ before deploying: an old unclean WAL tail containing `rider` is refused at
 startup. A checkpoint containing the old `krasnokamen:Rider` key is also
 refused, even after a clean stop. Back up the world and test opening a copy with
 the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md).
+
+**Stop cleanly before upgrading and before changing worldgen packs or the content
+cache.** A WAL edit on a chunk whose immutable baseline is not in the native
+database replays only when the saved worldgen identity proves the inputs that would
+regenerate it; otherwise startup and `world export-anvil` refuse with "missing
+immutable baseline … restore the baseline or original inputs". Two operator paths
+lead there:
+
+- A world saved by a build that did not record `KrasnokamenWorldgenInputs`, with an
+  unclean WAL and the vanilla content cache configured: start the previous binary
+  once and stop it cleanly (its final checkpoint stores the chunks), then upgrade.
+- The identity is written only by a checkpoint. A crash after changing packs or the
+  cache, before the next checkpoint, can refuse the next start even with the same
+  packs: put the previous packs and cache back, start, stop cleanly, then change
+  them again.
+
+Known limit: each dimension holds at most 1024 generated baselines waiting for the
+native writer. A startup replay that must regenerate more than 1024 chunks with WAL
+edits and no stored baseline (practically only a legacy builtin-generator world
+with a long unclean WAL) refuses with "required generated baseline capacity
+exhausted" on every start, because the queue lives in memory. While running, the
+same refusal leaves that chunk failed until restart and checkpoints are refused.
+Recover as above: start the previous binary and stop it cleanly.
 
 Convert only stopped worlds; the destination must not exist, the source is left
 unchanged and a receipt is written:

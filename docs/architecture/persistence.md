@@ -38,11 +38,16 @@ selected inputs. Before enqueueing a tick's WAL append, the tick owner drains
 immutable pre-edit admission images from every dimension into required-baseline
 jobs. In FIFO order, the journal owner sends each to the sole native writer and
 waits for its Immediate fill-generated commit before appending dependent WAL.
-The tick does not await that commit or perform DB I/O. Failure or a lost
-acknowledgement withholds that append and closes journal admission. These jobs
-ignore the ordinary 64-chunk save threshold. Exhausting the bounded admission
-buffer refuses the chunk and records a load error; checkpointing cannot silently
-lose its baseline or prune its unmaterialized edits.
+The tick does not await that commit or perform DB I/O, but on a tick that
+generated chunks every later append waits behind one native commit per baseline
+batch (and behind a checkpoint commit already on the native writer). Failure or a
+lost acknowledgement withholds that append and closes journal admission. There is
+no separate deferred generated-chunk save. Exhausting the bounded admission buffer
+(1024 baselines per dimension) refuses the chunk and records a load error;
+checkpointing cannot silently lose its baseline or prune its unmaterialized edits.
+Known limit: the refusal is sticky until restart, and a startup replay that must
+regenerate more than 1024 WAL-edited chunks without a stored baseline refuses on
+every start (the queue lives in memory).
 
 Baseline fill inserts only absent, uncovered slots, never overwriting imported
 or checkpointed chunks. The first dependent native snapshot also installs its
@@ -158,11 +163,12 @@ refused chunk still creates no unsaved custody.
    and WAL metadata before constructing any generator. Discover directory/ZIP
    packs, preserve binary NBT, apply ordered vanilla/pack layers and filters,
    merge biome tags and prepare the bounded private image. Invalid selected
-   resources refuse startup; a new pack that cannot load is skipped with a named
-   warning and stays unselected; missing packs are de-selected with a warning.
-   Shared caches are never modified.
-5. Validate `level.dat/Data/KrasnokamenWorldgenInputs` from normal native
-   level-metadata custody, including its WAL post-image, before adopting current
+   resources refuse startup; a new pack that cannot load, or whose worldgen
+   inputs cannot be prepared, validated or admitted by the replay baseline fence
+   (steps 5-6), is skipped with a named warning and stays unselected; missing
+   packs are de-selected with a warning. Shared caches are never modified.
+5. Validate `level.dat/Data/KrasnokamenWorldgenInputs` from the folded native
+   checkpoint's level metadata (only checkpoints write it) before adopting current
    inputs. Schema version 1 is required; unknown/missing/duplicate struct fields
    or source/owner map keys, unsupported schema, malformed canonical lowercase
    SHA-256 digests, invalid source/structure ownership or an oversized record
@@ -179,12 +185,17 @@ refused chunk still creates no unsaved custody.
    Fresh worlds persist identity in their
    first checkpoint, including offline pregeneration. Existing worlds without
    identity adopt in memory and persist it at the next normal positive-tick
-   checkpoint; a crash before that repeats adoption. No extra startup
-   transaction or invented simulation tick publishes this metadata. The
-   required-baseline-before-WAL fence is independent of identity adoption.
-   Hot enable/disable/reload changing worldgen refuses atomically; gameplay-only
-   or effectively identical reloads remain valid. No Anvil files or old JSON
-   manifests are a serving recovery source.
+   checkpoint; a crash before that repeats adoption. Because only checkpoints
+   write the identity, a crash after an input change and before that checkpoint,
+   with a WAL edit on a chunk that has no stored baseline, refuses the next start
+   even with the new inputs unchanged; restoring the previous inputs (or the
+   baseline) opens it. No extra startup transaction or invented simulation tick
+   publishes this metadata. The required-baseline-before-WAL fence is independent
+   of identity adoption. Hot enable/disable changing worldgen, and a reload whose
+   selected packs' worldgen changed, refuse atomically; a new worldgen pack found
+   by a reload is skipped until restart; gameplay-only or effectively identical
+   reloads remain valid. No Anvil files or old JSON manifests are a serving
+   recovery source.
 
 Gamerule images retain canonical names and exact accepted values across checkpoint
 and WAL replay. In particular, `random_tick_speed` keeps the vanilla nonnegative
