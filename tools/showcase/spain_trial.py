@@ -157,8 +157,9 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
-ACCEL_KEYS = ('gathering_yield', 'construction_speed', 'birth_chance')
-ACCEL_LINE = re.compile(r'test_acceleration gathering_yield=(\S+) construction_speed=(\S+) birth_chance=(\S+)')
+ACCEL_KEYS = ('gathering_yield', 'construction_speed', 'birth_chance', 'immigration_rate')
+ACCEL_LINE = re.compile(r'test_acceleration gathering_yield=(\S+) construction_speed=(\S+) birth_chance=(\S+)'
+                        r' immigration_rate=(\S+)')
 
 
 def effective_acceleration(log: str) -> dict[str, float] | None:
@@ -310,6 +311,7 @@ def main() -> None:
     parser.add_argument('--gathering-yield', type=float, default=1.0, help='[test_acceleration] gathering_yield')
     parser.add_argument('--construction-speed', type=float, default=1.0, help='[test_acceleration] construction_speed')
     parser.add_argument('--birth-chance', type=float, default=1.0, help='[test_acceleration] birth_chance')
+    parser.add_argument('--immigration-rate', type=float, default=1.0, help='[test_acceleration] immigration_rate')
     args = parser.parse_args()
     if args.days < 1 or args.days * 24000 % 60:
         parser.error('days must yield 60 integral simulation intervals')
@@ -339,7 +341,8 @@ def main() -> None:
            'cpus': {'server': args.server_cpus, 'client': args.client_cpus},
            'client_render_threads': args.client_render_threads,
            'fixture_disclosure': 'Bounded gifted supplies in real storage; no structure paste, no population grant, no time add.'}
-    requested = dict(zip(ACCEL_KEYS, (args.gathering_yield, args.construction_speed, args.birth_chance)))
+    requested = dict(zip(ACCEL_KEYS, (args.gathering_yield, args.construction_speed, args.birth_chance,
+                                      args.immigration_rate)))
     run['test_acceleration'] = {'requested': requested, 'effective': None}
     run['accelerated'] = any(value != 1.0 for value in requested.values())
     driver = Path(__file__).resolve()
