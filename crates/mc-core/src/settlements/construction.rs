@@ -1306,6 +1306,12 @@ fn planned_cells(
     // interference fencing; certification uses the narrower authored bounds.
     let mut min = [project.origin[0], bottom, project.origin[2]];
     let mut max = std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1);
+    // A winding access walk can enclose unrelated managed trees. Protect
+    // the actual lot here and the walk's columns in forestry::cells, not
+    // the empty space inside their combined executor envelope.
+    if super::forestry::planted_crown_overlaps(state, ScriptWorldBounds::new(min, max).ok()?) {
+        return None;
+    }
     for cell in &cells {
         for axis in 0..3 {
             min[axis] = min[axis].min(cell.at[axis]);
@@ -1319,9 +1325,6 @@ fn planned_cells(
         }
     }
     let bounds = ScriptWorldBounds::new(min, max).ok()?;
-    if super::forestry::planted_crown_overlaps(state, bounds) {
-        return None;
-    }
     Some((bounds, cells))
 }
 

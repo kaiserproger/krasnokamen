@@ -359,6 +359,14 @@ fn sample(
     let Some(y) = construction::surface_y(state, anchor_y, x, z) else {
         return Column::Blocked;
     };
+    if prepare_forest
+        && super::forestry::planted_crown_overlaps(
+            state,
+            ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).expect("street headroom"),
+        )
+    {
+        return Column::Occupied;
+    }
     if state.block_entities.contains_key(&(x, y, z))
         || state.block_entities.contains_key(&(x, y + 1, z))
     {
