@@ -207,8 +207,20 @@ fn offscreen_deferred_settlement_tick_cost() {
     let mut f = fixture(state());
     let template = job(&f).clone();
     for index in 1..1000 {
+        // Admission performs real path queries; give each town a normal tick budget.
+        f.world.tick += 1;
+        f.world.tick_budget.reset(f.world.tick);
+        let (survey, revision) = survey_bounds(&mut f.world, template.stand_at, template.station);
         let id = town(&mut f.world, &format!("deferred-{index}"), [8, 201, 8], 32);
-        certify(&mut f.world, id, &template.building.id);
+        let site = shop(
+            &mut f.world,
+            &survey,
+            revision,
+            &format!("deferred-site-{index}"),
+            template.stand_at,
+            template.station,
+        );
+        certify(&mut f.world, id, &site);
         let body = resident(&mut f.world, id, [7.5, 201.0, 8.5]);
         let worker = uuid_of(&f.world, body);
         crate::settlements::economy::execute(
@@ -221,12 +233,13 @@ fn offscreen_deferred_settlement_tick_cost() {
                 count: 20,
                 station: template.station,
                 stand_at: template.stand_at,
-                building: template.building.clone(),
+                building: worksite_ref(&site),
             }),
         )
-        .unwrap();
+        .unwrap_or_else(|error| panic!("town {index} admission: {error:?}"));
     }
-    visit(&mut f, 2 * template.duration, false);
+    let now = f.world.tick + 2 * template.duration;
+    visit(&mut f, now, false);
     assert!(
         f.world
             .settlements
