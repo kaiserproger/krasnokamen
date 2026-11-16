@@ -67,7 +67,6 @@ from ..profiles import ProfileContext, _run_command
 from ..quirk_parity import anvil
 from ..runtime import REPO_ROOT
 
-SCENARIOS = ("battle-kit-census", "battle-crash-handoff", "battle-auth-hydration")
 HOLDER, VIEWER, RECORDER = "PovRed", "CamSpec", "BattleRecorder"
 BATTLE_SEED, BATTLE_SCENARIO, PER_SIDE = 42, "field-1k", 1500
 VIEW_DISTANCE = 18
@@ -1713,7 +1712,7 @@ VERDICTS: dict[str, Callable[..., None]] = {
 def run(ctx: ProfileContext) -> dict[str, Any]:
     scenario = ctx.scenario_id
     if scenario not in VERDICTS or ctx.extra_args:
-        raise ValueError(f"battle-crash-recovery runs only its named scenarios ({', '.join(SCENARIOS)}) without extra arguments")
+        raise ValueError(f"battle-crash-recovery runs only its named scenarios ({', '.join(VERDICTS)}) without extra arguments")
     inputs = resolve_inputs(ctx, scenario)
     report: dict[str, Any] = {"scenario": scenario, "assertions": {}}
     ctx.failure_scenario = report
