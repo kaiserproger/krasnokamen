@@ -1132,9 +1132,9 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/atm_full.py", "tools/harness/atm_horizon.py"),
         seed="20261115",
-        fixture="fresh native world; full hash-pinned locally converted MVS pack; dimension teleport",
-        proves="each located exact-ID start and template block is persisted, visited by Horizon, and rechecked after restart; deterministic client revisit sample",
-        limits="not NeoForge compatibility or full template fidelity; screenshots require visual inspection; individual non-generating definitions remain findings",
+        fixture="same-seed pack-present and pack-absent worlds; full hash-pinned MVS pack; dimension teleport",
+        proves="each located exact-ID start has persistent non-natural template-palette differences, Horizon visits and restart evidence",
+        limits="not exact piece attribution, NeoForge compatibility or full template fidelity; screenshots require visual inspection; non-generating definitions remain findings",
     ),
     "native-datapack-reload": _entry(
         id="native-datapack-reload",

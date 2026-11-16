@@ -142,8 +142,9 @@ removed successes; infrastructure failures leave unrun rows. For a separate
 placement-disabled negative-control pin, `KRASNOKAMEN_ATM_CONTROL_SUBSET=1`
 limits execution to that same deterministic subset. A subset never accepts the
 full target; inspect every selected ID's differential count before calling the
-control successful. Screenshots still require visual review; this differential
-is not complete template fidelity or mod compatibility.
+control successful. Screenshots still require visual review; start metadata does
+not identify individual piece poses, so this differential does not prove exact
+piece attribution, complete template fidelity or mod compatibility.
 
 ## Fresh world, real client, generated starts
 
