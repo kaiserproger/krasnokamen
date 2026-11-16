@@ -184,6 +184,8 @@ retry cadence. The reviewed design's 200-tick initial retries were dropped:
 because Hold is not persisted, restored homeless bodies cannot be distinguished
 from new returners. Successful legs still continue immediately. No return
 intent or retry bookkeeping enters native entity rows or WAL images.
+Outbound walk timeouts and return retry/watchdog deadlines use simulated game
+time: `/tick freeze` neither expires a walk nor rejects a returner's bed.
 Removing a settlement clears its runtime observations and return episodes,
 and cancels outbound walks both from it and toward it, including their
 per-resident targets. These derived maps have no checkpoint image.

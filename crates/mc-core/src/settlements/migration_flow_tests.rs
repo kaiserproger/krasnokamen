@@ -758,3 +758,42 @@ fn remove_command_clears_source_destination_and_return_runtime_references() {
     // Migration State/Memory have no persistence image: reopening derives them
     // from the surviving native memberships, not from these cancelled intents.
 }
+#[test]
+fn outbound_walk_uses_game_time_before_and_after_a_day_long_freeze() {
+    let mut state = fixture();
+    let source = town(&mut state, "source", 8, 200);
+    let resident = resident(&mut state, source, 10.5);
+    observe(&mut state, source);
+    super::return_tests::freeze_ticks(&mut state, 3);
+    state.tick_budget.reset(state.tick);
+    depart_decision(&mut state, source, &mut Rng(123));
+    let deadline = state.settlements.migration.walking[&source].deadline;
+    assert_eq!(deadline, state.tick_control.game_ticks(state.tick) + 24_000);
+    let slot = state.entities.slot_of(resident).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    let target = target(&state, uuid).unwrap();
+    super::return_tests::freeze_ticks(&mut state, 24_001);
+    let mut changes = ChangeSet::default();
+    advance_walks(&mut state, &mut changes);
+    assert_eq!(
+        state.settlements.migration.walking[&source].deadline,
+        deadline
+    );
+    assert_eq!(self::target(&state, uuid), Some(target));
+    assert!(changes.entities_removed.is_empty());
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .settlement,
+        Some(source)
+    );
+    state.tick += deadline - state.tick_control.game_ticks(state.tick);
+    advance_walks(&mut state, &mut changes);
+    assert!(!state.settlements.migration.walking.contains_key(&source));
+    assert!(self::target(&state, uuid).is_none());
+    assert!(info(&state, source).contains("timed out"));
+}

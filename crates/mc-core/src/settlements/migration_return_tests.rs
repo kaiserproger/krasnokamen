@@ -99,6 +99,34 @@ pub(crate) fn step(state: &mut TickState) {
     state.day_time = 2000;
 }
 
+pub(crate) fn freeze_ticks(state: &mut TickState, ticks: u64) {
+    let game_time = state.tick_control.game_ticks(state.tick);
+    crate::command_console::execute(
+        state,
+        crate::command_console::CONNECTION,
+        "tick freeze",
+        4,
+        &mut ChangeSet::default(),
+    );
+    assert!(state.tick_control.frozen());
+    for _ in 0..ticks {
+        state.tick += 1;
+        crate::tick_control::begin_tick(state);
+        assert!(!state.tick_control.runs_normally());
+    }
+    assert_eq!(state.tick_control.game_ticks(state.tick), game_time);
+    crate::command_console::execute(
+        state,
+        crate::command_console::CONNECTION,
+        "tick unfreeze",
+        4,
+        &mut ChangeSet::default(),
+    );
+    state.tick += 1;
+    crate::tick_control::begin_tick(state);
+    assert!(state.tick_control.runs_normally());
+}
+
 #[test]
 fn relocated_family_walks_two_hundred_blocks_to_native_roofed_beds_in_daylight() {
     let mut state = fixture();

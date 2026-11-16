@@ -192,7 +192,8 @@ fn failed(
     }
     let stagger = state.entities.body(slot).id.0.unsigned_abs() as u64 % STAGGER_TICKS;
     memory.next = state
-        .tick
+        .tick_control
+        .game_ticks(state.tick)
         .saturating_add(RETRY_TICKS)
         .saturating_add(stagger);
 }
@@ -206,6 +207,7 @@ pub(crate) fn step(
     v: &mut VillagerState,
     useful: bool,
 ) -> bool {
+    let now = state.tick_control.game_ticks(state.tick);
     let uuid = state.entities.row(slot).uuid;
     let Some(id) = v.settlement.filter(|_| v.home.is_none()) else {
         crate::settlements::migration::return_memory(state).remove(&uuid);
@@ -239,7 +241,7 @@ pub(crate) fn step(
                 goal: None,
                 segment: None,
                 waiting: None,
-                next: state.tick + owner.0.unsigned_abs() as u64 % STAGGER_TICKS,
+                next: now + owner.0.unsigned_abs() as u64 % STAGGER_TICKS,
                 failures: 0,
                 rejected: [None; MAX_FAILURES],
                 hold: false,
@@ -259,7 +261,7 @@ pub(crate) fn step(
             goal: None,
             segment: None,
             waiting: None,
-            next: state.tick + owner.0.unsigned_abs() as u64 % STAGGER_TICKS,
+            next: now + owner.0.unsigned_abs() as u64 % STAGGER_TICKS,
             failures: 0,
             rejected: [None; MAX_FAILURES],
             hold: false,
@@ -270,7 +272,7 @@ pub(crate) fn step(
         memory.goal = select_goal(state, cache, slot, &memory);
         if memory.goal.is_none() {
             memory.normal = true;
-            memory.next = state.tick + RETRY_TICKS;
+            memory.next = now + RETRY_TICKS;
         } else {
             clear(v);
         }
@@ -279,9 +281,9 @@ pub(crate) fn step(
     if memory.hold && inside(state, id, pos) {
         memory.hold = false;
         memory.normal = true;
-        memory.next = memory.next.max(state.tick + RETRY_TICKS);
+        memory.next = memory.next.max(now + RETRY_TICKS);
         owns = false;
-    } else if state.tick < memory.next {
+    } else if now < memory.next {
         owns = !memory.normal;
     } else {
         if memory.normal {
@@ -330,14 +332,14 @@ pub(crate) fn step(
                     memory.goal = nearest_bed(state, cache, slot, &memory)
                         .map(|bed| (bed, true))
                         .or(memory.goal.filter(|(_, bed)| !bed));
-                } else if state.tick >= deadline
+                } else if now >= deadline
                     || v.navigation_target != Some(target)
                     || allocator::route_changed(state, v)
                 {
                     failed(state, slot, &mut memory, v, "segment_stalled_or_changed");
                 }
             }
-            if state.tick >= memory.next && memory.segment.is_none() {
+            if now >= memory.next && memory.segment.is_none() {
                 if memory.goal.is_none() {
                     memory.goal = select_goal(state, cache, slot, &memory);
                 }
@@ -357,7 +359,7 @@ pub(crate) fn step(
                     {
                         clear(v);
                         memory.goal = None;
-                        memory.next = state.tick + RETRY_TICKS;
+                        memory.next = now + RETRY_TICKS;
                         memory.normal = true;
                         owns = false;
                     } else if cache.spend_path(state, Consumer::Brain) {
@@ -389,12 +391,10 @@ pub(crate) fn step(
                                     / WALK_BLOCKS_PER_SECOND;
                                 memory.segment = Some((
                                     target,
-                                    state.tick
-                                        + (WATCHDOG_MULTIPLIER
-                                            * seconds.max(1.0)
-                                            * TICKS_PER_SECOND)
-                                            .ceil()
-                                            as u64,
+                                    now + (WATCHDOG_MULTIPLIER
+                                        * seconds.max(1.0)
+                                        * TICKS_PER_SECOND)
+                                        .ceil() as u64,
                                 ));
                             } else {
                                 failed(state, slot, &mut memory, v, "route_truncated_or_blocked");
@@ -405,7 +405,7 @@ pub(crate) fn step(
                     }
                 } else {
                     clear(v);
-                    memory.next = state.tick + RETRY_TICKS;
+                    memory.next = now + RETRY_TICKS;
                     memory.normal = true;
                     owns = false;
                 }

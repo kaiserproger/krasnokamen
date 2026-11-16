@@ -731,3 +731,56 @@ fn spain_seed_one_hundred_native_return_segment_node_distribution() {
     );
     eprintln!("Spain seed100 origin116,71,5 return segments (x,z,nodes,reached): {distribution:?}");
 }
+#[test]
+fn a_day_long_freeze_keeps_the_native_return_segment_and_its_bed() {
+    let mut state = fixture();
+    let town = town(&mut state, "return", 8, 200);
+    house(&mut state, town, 8);
+    let id = resident(&mut state, town, 120.5);
+    let slot = state.entities.slot_of(id).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    home_search(&mut state, id);
+    state.tick = 80;
+    state.tick_budget.reset(state.tick);
+    assert!(run(&mut state, id, false));
+    let memory = &crate::settlements::migration::return_memory(&mut state)[&uuid];
+    let segment = memory.segment.expect("native route to the remote house");
+    let goal = memory.goal.expect("native certified bed");
+    assert!(goal.1);
+    crate::settlements::migration::return_tests::freeze_ticks(&mut state, 24_001);
+    state.tick_budget.reset(state.tick);
+    let before = state
+        .tick_budget
+        .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
+    assert!(run(&mut state, id, false));
+    assert_eq!(
+        state
+            .tick_budget
+            .allowance(state.dimension, Consumer::Brain, Kind::PathNode),
+        before
+    );
+    let memory = &crate::settlements::migration::return_memory(&mut state)[&uuid];
+    assert_eq!(memory.segment, Some(segment));
+    assert_eq!(memory.goal, Some(goal));
+    assert_eq!(memory.failures, 0);
+    assert_eq!(memory.rejected, [None; 3]);
+    // A genuine simulated watchdog expiry still rejects this bed and backs off.
+    state.tick += segment.1 - state.tick_control.game_ticks(state.tick);
+    state.tick_budget.reset(state.tick);
+    assert!(run(&mut state, id, false));
+    let game_time = state.tick_control.game_ticks(state.tick);
+    let memory = &crate::settlements::migration::return_memory(&mut state)[&uuid];
+    assert_eq!(memory.failures, 1);
+    assert_eq!(memory.rejected[0], Some(goal.0));
+    assert_eq!(
+        memory.next,
+        game_time + 1200 + id.0.unsigned_abs() as u64 % 40
+    );
+    let retry = memory.next;
+    crate::settlements::migration::return_tests::freeze_ticks(&mut state, 24_001);
+    state.tick_budget.reset(state.tick);
+    assert!(run(&mut state, id, false));
+    let memory = &crate::settlements::migration::return_memory(&mut state)[&uuid];
+    assert_eq!(memory.failures, 1);
+    assert_eq!(memory.next, retry);
+}

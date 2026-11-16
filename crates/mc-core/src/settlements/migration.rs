@@ -818,7 +818,7 @@ fn depart_decision(state: &mut TickState, source: SettlementId, rng: &mut Rng) {
                 destination: best.1,
                 exit,
                 bearing,
-                deadline: state.tick + WALK_TIMEOUT,
+                deadline: state.tick_control.game_ticks(state.tick) + WALK_TIMEOUT,
             },
         );
         state.settlements.migration.decisions.insert(
@@ -894,6 +894,7 @@ fn outside_arrivals(
 }
 
 fn advance_walks(state: &mut TickState, changes: &mut ChangeSet) {
+    let now = state.tick_control.game_ticks(state.tick);
     let mut sources = std::mem::take(&mut state.settlements.migration.walking_sources);
     sources.clear();
     sources.extend(state.settlements.migration.walking.keys().copied());
@@ -920,7 +921,7 @@ fn advance_walks(state: &mut TickState, changes: &mut ChangeSet) {
                         .is_none_or(|v| v.settlement != Some(source))
             })
         });
-        if !all_near && !missing && state.tick < walk.deadline {
+        if !all_near && !missing && now < walk.deadline {
             state.settlements.migration.walking.insert(source, walk);
             continue;
         }
