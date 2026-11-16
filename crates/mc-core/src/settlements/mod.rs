@@ -38,7 +38,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeS
     let elapsed = allocator::tick(state, changes);
     construction::tick(state);
     army::tick(state);
-    transit::tick(state, changes);
+    let arrivals = transit::tick(state, changes);
+    migration::tick(state, changes, &arrivals);
     elapsed
 }
 
@@ -50,6 +51,25 @@ pub(crate) fn bind(
     state: &mut TickState,
     id: SettlementId,
     entity: EntityId,
+) -> Result<(), &'static str> {
+    bind_validated(state, id, entity, true)
+}
+
+/// Only route-proven outside entrants use this admission; manual bind still
+/// requires the body to be physically present inside the civil radius.
+pub(crate) fn admit_arrival(
+    state: &mut TickState,
+    id: SettlementId,
+    entity: EntityId,
+) -> Result<(), &'static str> {
+    bind_validated(state, id, entity, false)
+}
+
+fn bind_validated(
+    state: &mut TickState,
+    id: SettlementId,
+    entity: EntityId,
+    require_presence: bool,
 ) -> Result<(), &'static str> {
     let record = state.settlements.get(id).ok_or("settlement not found")?;
     let slot = state.entities.slot_of(entity).ok_or("villager not found")?;
@@ -69,7 +89,7 @@ pub(crate) fn bind(
         .zip(record.anchor)
         .map(|(coordinate, anchor)| (coordinate - f64::from(anchor)).powi(2))
         .sum();
-    if distance > f64::from(record.radius).powi(2) {
+    if require_presence && distance > f64::from(record.radius).powi(2) {
         return Err("villager is outside the settlement");
     }
     if villager.settlement == Some(id) {
