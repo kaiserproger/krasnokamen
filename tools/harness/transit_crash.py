@@ -60,7 +60,9 @@ BIRTH = re.compile(r"settlement_birth child=(\S+) settlement=(\d+) household=(\S
 DEPARTED = re.compile(
     r"Household (\S+) left in transit ([0-9a-f-]{36}) with (\d+) members; "
     r"earliest arrival at game time (\d+)\.")
-FILLED = re.compile(r"Successfully filled|commands\.fill\.success")
+FILLED = re.compile(r"Successfully filled")
+# Loaded and already air (an unloaded region replies "Position is not loaded").
+CLEARED = re.compile(r"Successfully filled|No blocks were changed")
 SOURCE, DEST = "TransitSource", "TransitDest"
 # Force-loaded platform areas (x1 z1 x2 z2), three by three chunks each.
 SOURCE_AREA, DEST_AREA = (-16, -16, 31, 31), (80, -16, 127, 31)
@@ -253,7 +255,7 @@ class Run:
         self.cmd(f"forceload add {x1} {z1} {x2} {z2}")
         self.until(f"fill {x1} 200 {z1} {x2} 200 {z2} minecraft:stone", FILLED)
         for low, high in ((201, 208), (209, 215)):
-            self.until(f"fill {x1} {low} {z1} {x2} {high} {z2} minecraft:air", FILLED)
+            self.until(f"fill {x1} {low} {z1} {x2} {high} {z2} minecraft:air", CLEARED)
 
     def build(self) -> None:
         for rule in ("gamerule advance_time false", "gamerule spawn_mobs false",
@@ -287,6 +289,11 @@ class Run:
         self.facts["members"] = sorted(self.facts["parents"] + [birth[1]])
 
     def depart(self) -> None:
+        # A fresh world logs no checkpoint: commit one so every later WAL batch
+        # has a known base (the departure must follow it).
+        offset = self.log_offset()
+        self.server.save_all()
+        self.facts["base_checkpoint"] = int(self.log_event(CHECKPOINT, offset)[1])
         offset = self.log_offset()
         for _ in range(20):
             for member in self.facts["members"]:
@@ -322,18 +329,22 @@ class Run:
             return through >= tick, through
         return runtime.wait_for_path_condition(journal / ".event", WAIT, published)
 
-    def wait_awaiting(self) -> int:
-        """Tick of the published `awaiting_entry` image of the record."""
+    def wait_image(self, wanted, refusal: re.Pattern[str] | None = None) -> int:
+        """Tick of the first published `Transit` image of the record that `wanted` accepts
+        (its decoded record, `None` for the arrival tombstone)."""
         journal = self.server.world_dir / "journal"
         checkpoint = last_checkpoint(self.server.log_path)
         process = self.server._process
-
+        offset = self.log_offset()
         seen: set[str] = set()
         found: list[int] = []
 
-        def awaiting():
+        def published():
             if process is None or process.poll() is not None:
-                raise RuntimeError("server exited before the record awaited entry")
+                raise RuntimeError("server exited before the transit image was published")
+            if refusal and (line := refusal.search(
+                    clean(self.server.log_path.read_text(errors="replace"))[offset:])):
+                raise RuntimeError(f"transit refused: {line[0]}")
             # Published batch files are immutable: decode each new one once.
             for name in sorted(os.listdir(journal)):
                 match = BATCH.fullmatch(name)
@@ -345,31 +356,30 @@ class Run:
                     continue
                 entries = [json.loads(line) for line in data[32:].splitlines() if line]
                 found.extend(image["tick"] for image in _transits(entries, self.facts["record"])
-                             if image["record"] and json.loads(image["record"])["status"] == "awaiting_entry")
+                             if wanted(json.loads(image["record"]) if image["record"] else None))
             return bool(found), found[:1]
-        return runtime.wait_for_path_condition(journal / ".event", WAIT, awaiting)[0]
+        return runtime.wait_for_path_condition(journal / ".event", WAIT, published)[0]
 
     def cut(self, cut: str) -> None:
         if cut == "departure":
+            # The server's departure tick, not the image: a custody-breaking
+            # binary may publish that tick without any record.
             self.facts["cut_tick"] = self.facts["departure_tick"]
             self.facts["published_before_kill"] = self.wait_published(self.facts["departure_tick"])
         elif cut == "in-transit":
-            self.facts["cut_tick"] = self.wait_awaiting()
+            self.facts["cut_tick"] = self.wait_image(
+                lambda record: record is not None and record["status"] == "awaiting_entry")
+            offset = self.log_offset()
             self.server.save_all()
-            self.facts["checkpoint_before_kill"] = last_checkpoint(self.server.log_path)
-            if self.facts["checkpoint_before_kill"] < self.facts["cut_tick"]:
+            committed = int(self.log_event(CHECKPOINT, offset)[1])
+            self.facts["checkpoint_before_kill"] = committed
+            if committed < self.facts["cut_tick"]:
                 raise RuntimeError("save-all checkpoint precedes the awaiting_entry image")
         else:
-            offset = self.log_offset()
             self.cmd(f"forceload add {DEST_AREA[0]} {DEST_AREA[1]} {DEST_AREA[2]} {DEST_AREA[3]}")
-            refused = re.compile(rf"settlement_transit_arrival_refused transit={self.facts['record']}")
-            line = self.log_event(re.compile(
-                rf"settlement_transit_arrival(?:_refused)? transit={self.facts['record']}.*?\btick=(\d+)"
-                rf"|settlement_transit_arrival_refused transit={self.facts['record']}"), offset)
-            if refused.search(line[0]):
-                raise RuntimeError(f"arrival refused: {line[0]}")
-            self.facts["cut_tick"] = int(line[1])
-            self.facts["published_before_kill"] = self.wait_published(self.facts["cut_tick"])
+            self.facts["cut_tick"] = self.wait_image(
+                lambda record: record is None,
+                re.compile(rf"settlement_transit_arrival_refused transit={self.facts['record']}.*"))
         self.kill()
 
     def kill(self) -> None:
@@ -420,18 +430,18 @@ def recover_frozen(run: Path, binary: Path, crash: Path) -> dict[str, Any]:
                                        cwd=ROOT, stdin=subprocess.PIPE, stdout=log,
                                        stderr=subprocess.STDOUT, start_new_session=True)
             try:
-                def started():
-                    text = clean(log_path.read_text(errors="replace"))
-                    if match := frozen.search(text):
-                        return True, int(match[1])
-                    if process.poll() is not None:
-                        return True, None
-                    return False, None
-                tick = runtime.wait_for_path_condition(log_path, WAIT, started)
-                if tick is None:
+                # Readiness or exit (pidfd), never a log-only wait: a refusing
+                # recovery exits after its last log line.
+                try:
+                    runtime.wait_port(server.port, WAIT, process, log_path=log_path)
+                except runtime.ChildExited:
+                    process.wait()
                     return {"refused": True, "exit": process.returncode, "config": str(config),
                             "log": str(log_path), "world": str(server.world_dir)}
-                runtime.wait_port(server.port, WAIT, process, log_path=log_path)
+                match = frozen.search(clean(log_path.read_text(errors="replace")))
+                if match is None:
+                    raise RuntimeError(f"recovery listens without its freeze barrier: {log_path}")
+                tick = int(match[1])
                 process.stdin.write(b"stop\n")
                 process.stdin.flush()
                 code = process.wait(timeout=WAIT)
