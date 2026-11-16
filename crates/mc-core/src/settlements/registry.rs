@@ -83,6 +83,9 @@ pub struct Registry {
     /// Derived occupancy index: last counted settlement per entity.
     /// Hydrated by `rebuild_counts` alongside `counts`; never serialized.
     resident_settlement: BTreeMap<EntityId, SettlementId>,
+    /// Inverse of the same living occupancy projection, independent of position.
+    /// Rebuilt with counts after recovery; never serialized or journaled.
+    resident_ids: BTreeMap<SettlementId, BTreeSet<EntityId>>,
     household_counts: BTreeMap<SettlementId, BTreeMap<String, usize>>,
     resident_household: BTreeMap<EntityId, (SettlementId, String)>,
     /// Global living population for locally owned households; rebuilt from
@@ -630,6 +633,7 @@ impl Registry {
         self.counts.remove(&id);
         self.economic_active.remove(&id);
         self.resident_settlement.retain(|_, sid| *sid != id);
+        self.resident_ids.remove(&id);
         self.household_counts.remove(&id);
         self.resident_household.retain(|_, (sid, _)| *sid != id);
         self.touched.insert(id);
@@ -683,6 +687,7 @@ impl Registry {
             }
             self.counts.remove(&image.id);
             self.resident_settlement.retain(|_, sid| *sid != image.id);
+            self.resident_ids.remove(&image.id);
             self.household_counts.remove(&image.id);
             self.resident_household
                 .retain(|_, (sid, _)| *sid != image.id);
@@ -692,11 +697,16 @@ impl Registry {
         self.counts.get(&id).copied().unwrap_or(0)
     }
 
+    pub(crate) fn member_ids(&self, id: SettlementId) -> impl Iterator<Item = EntityId> + '_ {
+        self.resident_ids.get(&id).into_iter().flatten().copied()
+    }
+
     pub(super) fn clear_counts(&mut self) {
         for count in self.counts.values_mut() {
             *count = 0;
         }
         self.resident_settlement.clear();
+        self.resident_ids.clear();
         self.household_counts.clear();
         self.resident_household.clear();
     }
@@ -726,6 +736,12 @@ impl Registry {
         }
         if let Some(id) = old {
             self.resident_settlement.remove(&entity);
+            if let Some(members) = self.resident_ids.get_mut(&id) {
+                members.remove(&entity);
+                if members.is_empty() {
+                    self.resident_ids.remove(&id);
+                }
+            }
             if let Some(count) = self.counts.get_mut(&id) {
                 *count -= 1;
             }
@@ -733,6 +749,7 @@ impl Registry {
         if let Some(id) = new {
             self.count_member(id);
             self.resident_settlement.insert(entity, id);
+            self.resident_ids.entry(id).or_default().insert(entity);
         }
     }
 

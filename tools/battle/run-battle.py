@@ -22,6 +22,11 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+_snapshot_spec = importlib.util.spec_from_file_location(
+    'crash_snapshot', Path(__file__).with_name('crash_snapshot.py'))
+crash_snapshot = importlib.util.module_from_spec(_snapshot_spec)
+_snapshot_spec.loader.exec_module(crash_snapshot)
+
 TICKS_PER_SECOND = 20
 DEFAULT_CHECKPOINT_EVERY_TICKS = 1200
 DEFAULT_STATUS_EVERY_TICKS = 100
@@ -1074,6 +1079,7 @@ def preserve_crash(root, server):
     """Preserve the stopped world before any recovery can prune its WAL."""
     if server.returncode != -signal.SIGKILL:
         raise RuntimeError('crash handoff requires SIGKILL')
+    original_manifest = crash_snapshot.source_manifest(root)
     snapshot = root / 'crash-copy'
     snapshot.mkdir()
     shutil.copytree(root / 'world', snapshot / 'world')
@@ -1082,8 +1088,20 @@ def preserve_crash(root, server):
         shutil.copytree(root / 'backups', snapshot / 'backups')
     if (root / 'wal-archive').exists():
         shutil.copytree(root / 'wal-archive', snapshot / 'wal-archive')
+    for name in ('before-census.json', 'acknowledged-inventory.json'):
+        if (root / name).exists():
+            (snapshot / 'witness').mkdir(exist_ok=True)
+            shutil.copy2(root / name, snapshot / 'witness' / name)
+    manifest = crash_snapshot.file_manifest(snapshot)
+    if original_manifest != manifest:
+        raise RuntimeError('stopped original and crash copy manifest mismatch')
+    encoded = crash_snapshot.manifest_bytes(manifest)
+    manifest_path = (root / 'crash-manifest.json').resolve()
+    manifest_path.write_bytes(encoded)
     receipt = {'status': 'crashed', 'pid': server.pid, 'exit': server.returncode,
-               'world': str(root / 'world'), 'crash_copy': str(snapshot)}
+               'world': str(root / 'world'), 'crash_copy': str(snapshot),
+               'manifest': manifest, 'original_manifest': original_manifest, 'manifest_path': str(manifest_path),
+               'manifest_sha256': hashlib.sha256(encoded).hexdigest()}
     (root / 'crash-handoff.json').write_text(json.dumps(receipt, indent=2) + '\n')
     (root / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')
 

@@ -65,6 +65,8 @@ import zlib
 from pathlib import Path
 from typing import Any, Callable
 
+from tools.battle.crash_snapshot import verified_copy
+
 from .. import runtime
 from ..profiles import ProfileContext, _run_command
 from ..quirk_parity import anvil
@@ -1502,7 +1504,10 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         if report["scenario"] == "battle-rearm-recovery":
             force_windup_checkpoint(fifo, session, report)
         session.sigkill(report, "crash_handoff_preserved")
-        crash_copy = root / "crash-copy" / "world"
+        handoff = json.loads((root / "crash-handoff.json").read_text())
+        inspection = root / "crash-inspection-copy"
+        report["crash_verification"] = verified_copy(root / "crash-copy", inspection, handoff)
+        crash_copy = inspection / "world"
         evidence = crash_evidence(ctx, root, crash_copy)
         check(report, "crash_copy_equals_stopped_world", evidence["copy_equals_world"], None)
         binary, toml = inputs["server"], root / "server.toml"
@@ -1512,7 +1517,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         crash = take_census(ctx, binary, toml, census_root / "crash", phase="crash", epoch=0, stopped=crash_copy,
                             hashes=evidence["files"])
         kit = durable_issued_kit(report, early[0], items)
-        pre_crash_batches = read_batches([root / "crash-copy" / "wal-archive", crash_copy / "journal"])
+        pre_crash_batches = read_batches([inspection / "wal-archive", crash_copy / "journal"])
         pre_crash_history = wal_history(pre_crash_batches)
         original = reconcile(early + [crash], kit, roster, [pre_crash_history])
         verdict_path = root / "crash-verdict.json"
