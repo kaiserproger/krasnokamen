@@ -10,7 +10,10 @@ fn receipt_cannot_replace_or_write_inside_copied_world() {
     std::fs::write(&database, b"original database bytes").unwrap();
     assert!(create(&world, &database).is_err());
     assert!(create(&world, &world.join("new-receipt.json")).is_err());
-    assert_eq!(std::fs::read(&database).unwrap(), b"original database bytes");
+    assert_eq!(
+        std::fs::read(&database).unwrap(),
+        b"original database bytes"
+    );
 
     let external = temp.path().join("receipt.json");
     std::fs::write(&external, b"existing receipt").unwrap();

@@ -1305,6 +1305,130 @@ def _phase_census(console: Any, items: list[str], phase: str, aux: dict[str, Any
 # ----------------------------------------------------------------------------- verdict 1
 
 
+class WindupObserver:
+    """Consume published WAL images and retain horse identities and the latest battle frame."""
+
+    def __init__(self, archive: Path, horse_type: int):
+        self.archive, self.horse_type = archive, horse_type
+        self.last_tick = -1
+        self.horses: dict[int, str] = {}
+        self.image: dict[str, Any] | None = None
+
+    def update(self) -> None:
+        for path in sorted(self.archive.glob("batch-*.bin")):
+            match = re.fullmatch(r"batch-(\d+)-(\d+)\.bin", path.name)
+            if not match or int(match[2]) <= self.last_tick:
+                continue
+            data = path.read_bytes()
+            if len(data) < 32:
+                break
+            magic, version, low, high, length, crc = struct.unpack("<IIQQII", data[:32])
+            body = data[32:]
+            if (magic, version, low, high) != (0x534F4C4A, 1, int(match[1]), int(match[2])) \
+                    or len(body) != length or zlib.crc32(body) != crc:
+                break
+            for line in body.splitlines():
+                if b'"Entity"' not in line and b'"Battle"' not in line:
+                    continue
+                for dimension, entry in _visit(json.loads(line)):
+                    if dimension != "minecraft:overworld":
+                        continue
+                    entity = entry.get("Entity")
+                    if entity is not None and entity["type_id"] == self.horse_type:
+                        self.horses[entity["id"]] = entity["uuid"]
+                    if "Battle" in entry:
+                        self.image = {"tick": high, "image": json.loads(entry["Battle"]["value"])}
+            self.last_tick = high
+
+    def wait_after(self, elapsed: int, timeout: float = 600) -> dict[str, Any]:
+        def ready():
+            self.update()
+            found = self.image is not None and self.image["image"]["battle"]["elapsed_ticks"] > elapsed
+            return found, self.image
+        return runtime.wait_for_path_condition(self.archive / "published", timeout, ready)
+
+    def wait_through(self, tick: int, timeout: float = 600) -> None:
+        def ready():
+            self.update()
+            return self.last_tick >= tick, None
+        runtime.wait_for_path_condition(self.archive / "published", timeout, ready)
+
+
+def windup_horse(image: dict[str, Any], horses: dict[int, str]) -> dict[str, Any] | None:
+    battle = image["image"]["battle"]
+    combat, elapsed = battle["combat"], battle["elapsed_ticks"]
+    members = {member["id"] for member in battle["formation"]["members"]}
+    for actor, fighter in zip(combat["ids"], combat["fighters"], strict=True):
+        action = fighter["action"]
+        windup = action.get("Windup") if isinstance(action, dict) else None
+        if windup is None:
+            continue
+        target, start, weapon = windup["target"], windup["start"], windup["weapon"]
+        duration = {"Sword": 10, "Bow": 10, "Spear": 11, "Mace": 12}[weapon]
+        if actor in members and target in horses and target not in members and start + duration - elapsed >= 4:
+            return {"actor": actor, "target": target, "uuid": horses[target], "start": start,
+                    "weapon": weapon, "impact": start + duration, "elapsed": elapsed, "wal_tick": image["tick"]}
+    return None
+
+
+def force_windup_checkpoint(fifo: FifoConsole, session: RunnerSession, report: dict[str, Any]) -> None:
+    """Freeze at a real windup, kill its horse extra, then checkpoint before impact."""
+    registry = json.loads((session.inputs["cache"] / "reports" / "registries.json").read_text())
+    horse_type = registry["minecraft:entity_type"]["entries"]["minecraft:horse"]["protocol_id"]
+    observer = WindupObserver(session.root / "wal-archive", horse_type)
+    mark = fifo.mark()
+    fifo.send("tick freeze")
+    fifo.wait(r"The game is frozen", mark)
+    mark = fifo.mark()
+    fifo.send("save-all")
+    fifo.wait(r"Saved the game", mark, timeout=300)
+    committed = re.findall(r"checkpoint committed tick=(\d+)", fifo.text_since(mark))
+    if not committed:
+        raise Incomplete("windup event: frozen checkpoint did not report its tick")
+    observer.wait_through(int(committed[-1]))
+    if observer.image is None or not observer.horses:
+        raise Incomplete("windup event: missing published battle image or horse births")
+    elapsed = observer.image["image"]["battle"]["elapsed_ticks"]
+    # Reach the cavalry contact region before inspecting individual frozen steps.
+    advance = max(0, 4500 - elapsed)
+    if advance:
+        fifo.send(f"tick step {advance}")
+        frame = observer.wait_after(elapsed)
+        while frame["image"]["battle"]["elapsed_ticks"] < elapsed + advance:
+            frame = observer.wait_after(frame["image"]["battle"]["elapsed_ticks"])
+    for _ in range(2000):
+        frame = observer.image
+        target = windup_horse(frame, observer.horses)
+        if target is not None:
+            break
+        fifo.send("tick step 1")
+        observer.wait_after(frame["image"]["battle"]["elapsed_ticks"])
+    else:
+        raise Incomplete("windup event: no soldier wound up on a horse extra in 2000 stepped ticks")
+    mark = fifo.mark()
+    fifo.send(f"kill {target['uuid']}")
+    fifo.send("say A11WindupHorseKilled")
+    fifo.wait(r"\[Server\] A11WindupHorseKilled", mark)
+    kill_reply = fifo.text_since(mark)
+    if "Killed " not in kill_reply:
+        raise Incomplete(f"windup event: horse kill was not acknowledged: {kill_reply}")
+    fifo.send("tick step 2")
+    post = observer.wait_after(target["elapsed"] + 1)
+    current = post["image"]["battle"]
+    combat = current["combat"]
+    if (target["target"] in combat["ids"] or target["actor"] not in combat["ids"]
+            or current["elapsed_ticks"] >= target["impact"]):
+        raise Incomplete(f"windup event: horse did not depart inside the windup: {target}")
+    actor = combat["ids"].index(target["actor"])
+    event = {"before": target, "after_elapsed": current["elapsed_ticks"], "after_wal_tick": post["tick"],
+             "actor_action_after": combat["fighters"][actor]["action"], "kill_reply": kill_reply}
+    (session.root / "windup-event.json").write_text(json.dumps(event, indent=1) + "\n")
+    check(report, "horse_departed_during_windup", True, event)
+    mark = fifo.mark()
+    fifo.send("save-all")
+    fifo.wait(r"Saved the game", mark, timeout=300)
+
+
 def _rearm_twice(fifo: FifoConsole, session: RunnerSession, items: list[str],
                  aux: dict[str, Any], backups: list[dict[str, Any]], report: dict[str, Any]) -> None:
     replies = []
@@ -1345,6 +1469,8 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         session.holder.capture("after-drop")
         backups.append(_phase_census(fifo, items, "dropped", aux, session.clients))
         _rearm_twice(fifo, session, items, aux, backups, report)
+        if report["scenario"] == "battle-rearm-recovery":
+            force_windup_checkpoint(fifo, session, report)
         session.sigkill(report, "crash_handoff_preserved")
         crash_copy = root / "crash-copy" / "world"
         evidence = crash_evidence(ctx, root, crash_copy)

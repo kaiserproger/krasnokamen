@@ -9,18 +9,18 @@ records how fleets were run on the owner's machine and what went wrong.
 
 ### Announcement stabilization mode
 
-Owner-directed cutover, 2026-11-15, for the finite 21 November announcement:
-**Main plus at most two actively executing child tasks total**, including
-fixers, QA and reviewers. There is no additional reviewer pool. Owner,
-2026-11-16: **one third executing child is allowed for heavy runs** (builds,
-tests, graphical gates) while the two slots are taken by review or research;
-the builder-token, disk-floor and `mem-run` limits are unchanged. This mode
-overrides the general fleet defaults/history below, until the
+Owner-directed cutover, 2026-11-15, for the finite 21 November announcement;
+cap replaced by the owner on 2026-11-16 (23:53 host): **Main plus four to five
+actively executing child agents in total**, announcement rows and the
+off-screen settlement simulation goal together (fixers, implementers, gate and
+heavy-run owners). Reviewers and breakers do not count against this cap. At
+most 10 live agents and 3 concurrent builders; the builder-token, disk-floor
+and `mem-run` limits are unchanged. The off-screen simulation goal staffs its
+executors from the same cap through the
+[generalist roster](#generalist-roster). This mode overrides the general fleet
+defaults/history below, until the
 [finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
-is reached or the owner changes it. Owner, 2026-11-16: the off-screen
-settlement simulation goal runs in parallel with up to three executing agents
-of its own, absorbed by the [generalist roster](#generalist-roster); at most
-10 live agents in total.
+is reached or the owner changes it.
 
 Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`:
 finish/integrate/accept a returned vertical slice or its named dependency
@@ -108,6 +108,37 @@ the previous one's handoff.
   starting point: Opus for core authority and persistence, Sol for settlements
   implementation, Terra for gates, QA and harness, Sonnet for performance
   research, Mistral or Astra for review, Muse or DeepSeek for mechanical bulk.
+  Edit-heavy slices go to Terra, Sol or Astra: about 10% of their edits failed
+  against 24–27% for Sonnet and Mistral (owner, 2026-11-17).
+- **New context after each finished task.** After sending a task's result, a
+  generalist writes its remaining queue and state to its lane's handoff file
+  (`receipts/<lane>/HANDOFF.md`) and starts a new context before the next
+  task; it does not carry 150–260k tokens of a finished task into every turn.
+
+### Fleet speed rules
+
+Owner, 2026-11-17, from the transcript audit `receipts/FleetSpeedAudit/REPORT.md`
+(about 60% of active agent time was spent waiting on the agent's own gates,
+tests and builds; 55 h on Main, IRC or peers; 14% of edits failed).
+
+- **Short work root.** `/var/tmp/w` is a symlink to `<work>`; briefs and
+  commands may use it (`/var/tmp/w/solaris/tools/dev/mem-run.sh` is Main's
+  runner). If it is missing, recreate it with
+  `ln -sfn /run/media/kaiserroman/games/solaris-work /var/tmp/w`.
+- **Gates.** Main builds one pin per merged `main` commit and every gate binds
+  to it. One gate lane runs the real-client gates and their repeats; a builder
+  runs its own change's red/green proof once and hands the exact repeat
+  command to Main instead of rerunning unchanged gates.
+- **Hand-in.** A finished branch merges cleanly into current `main`: merge
+  `main` into it in the worktree, resolve conflicts there and rerun the
+  affected L0 before sending the result. Main merges returned branches in
+  batches at checkpoints.
+- **Do not block on Main.** After sending a question, continue the queue's
+  other work; the answer arrives as a message.
+- **Ledger reads.** Never read all of `docs/bugs/ledger.toml`: find the row
+  with `rg -n 'id = "<ROW>"' docs/bugs/ledger.toml` and read only its block;
+  edit only that block.
+- **Edits.** Re-read the exact range right before editing it.
 
 ## Briefs
 

@@ -39,7 +39,7 @@ Code, tests, config and runtime evidence beat every document: fix the document.
 stabilization, not an expanding `/goal`. Its
 [acceptance and stop condition](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 and [operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode)
-(two child slots plus one heavy-run slot)
+(four to five executing children in total; reviewers and breakers outside the cap)
 override the general queue and fleet defaults below.
 
 1. Deliver what was asked, end to end for the real case, as simply as possible:
