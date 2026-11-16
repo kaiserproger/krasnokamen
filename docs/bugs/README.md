@@ -4,7 +4,7 @@
 `harness`; set from the symptom at filing and not changed by fixers),
 `severity` (`blocker`, `major`, `minor`), `status` (`open`, `fixed`; `fixed`
 only via `ledger promote`),
-`source`, `repro` (`manual`, `client`, `cargo`, `source`) and
+`source`, `repro` (`manual`, `client`, `command`, `cargo`, `source`) and
 `regression`. Historical reports are not proof of the current candidate.
 
 ## Filing a bug
@@ -28,7 +28,8 @@ failing_first = "not recorded"
 - `area`: `gameplay`, `client`, or `harness`, assigned at filing and not changed by fixers.
 - `severity`: `blocker`, `major`, or `minor`; `status`: file as `open`.
 - `source`: repo-relative location or plain description, not an owner-local path.
-- `repro`: `manual`, `client`, `cargo`, or `source`, according to the original report.
+- `repro`: `manual`, `client`, `command`, `cargo`, or `source`, according to the original report
+  (`command`: an offline operator command with no client surface).
 - `regression`: a list of green `cargo:<crate>:<exact test path>`,
   `harness:<profile>:<scenario>`, or `harness:<profile>:<verdict>` checks;
   initially it may be empty. Profile verdicts run the windowed native client,
@@ -108,7 +109,11 @@ recorded ingress proof (refs to each validating write path).
 A row is fixed only when its check passes and is the same or stricter than the
 original repro. Owner/manual and real-client repros, and all client-surface
 bugs, require a real-client check; source/test findings may use a Cargo test
-through the same real tick/gameplay path or a TCP/native scenario. Tests must
+through the same real tick/gameplay path or a TCP/native scenario. A `command`
+repro (an offline operator command such as `world prune` or `world census`,
+with no client surface) needs a Cargo test that drives the same command path on
+an equivalent input, and the original command rerun on the fixed build with its
+receipt named in `source`. Tests must
 assert vanilla or owner-accepted behavior, not merely the current output.
 One row describes one symptom: split covered behavior from remaining gaps.
 The phase reviewer confirms each promotion batch matches the symptom and has

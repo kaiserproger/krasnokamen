@@ -544,7 +544,7 @@ def run(ctx):
             errors.append(f'{ident}: invalid area')
         if bug.get('severity') not in ('blocker', 'major', 'minor') or bug.get('status') not in ('open', 'fixed'):
             errors.append(f'{ident}: invalid severity or status')
-        if bug.get('repro') not in ('manual', 'client', 'cargo', 'source'):
+        if bug.get('repro') not in ('manual', 'client', 'command', 'cargo', 'source'):
             errors.append(f'{ident}: invalid repro')
         if 'repro_check' in bug:
             repro_checks = bug['repro_check'] if isinstance(bug['repro_check'], list) else [bug['repro_check']]
