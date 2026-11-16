@@ -18,11 +18,14 @@ from .backends.atm_structures import SEED, USERNAME, locate_coordinates
 from .backends.chisel import rewrite_config
 from .backends.gameplay import prepare_operator_fixture
 from .profiles import ProfileContext
-from .quirk_parity.anvil import parse_nbt, read_world
+from .quirk_parity.anvil import _chunks_of, _regions, parse_nbt, read_world
 
 OVERWORLD = "moogs_structures:moogs_structures_generic_jigsaw_structure"
 NETHER = "moogs_structures:moogs_structures_generic_nether_jigsaw_structure"
 DIMENSIONS = {OVERWORLD: "minecraft:overworld", NETHER: "minecraft:the_nether"}
+# Existing crystal fixture had 437 eligible cells; eight is conservative,
+# not a calibration of the other 129 definitions.
+MIN_DIFFERENTIAL_BLOCKS = 8
 
 
 def resource(pack: Path, identifier: str, kind: str, suffix: str) -> Path:
@@ -145,27 +148,66 @@ def template_palette(pack: Path, row: dict) -> set[str]:
     return blocks
 
 
-def site_proof(export: Path, pack: Path, row: dict) -> dict:
+def find_site(export: Path, row: dict) -> dict:
     candidate = row["xz"]
     starts = [site for site in generated_starts(export, row["id"])
               if abs(site["anchor"][0] - candidate[0]) <= 32 and abs(site["anchor"][2] - candidate[1]) <= 32]
-    expected_suffix = ("dimensions/minecraft/the_nether" if row["dimension"] == "minecraft:the_nether" else None)
-    if expected_suffix:
-        starts = [site for site in starts if site["dimension_dir"].endswith(expected_suffix)]
-    else:
-        starts = [site for site in starts if not site["dimension_dir"].endswith("dimensions/minecraft/the_nether")]
+    expected_suffix = ("dimensions/minecraft/the_nether" if row["dimension"] == "minecraft:the_nether"
+                       else "dimensions/minecraft/overworld")
+    starts = [site for site in starts if site["dimension_dir"].endswith(expected_suffix)]
     if not starts:
         raise ValueError(f"{row['id']}: no persisted generated start near locate coordinates in {row['dimension']}")
-    site = min(starts, key=lambda s: abs(s["anchor"][0]-candidate[0]) + abs(s["anchor"][2]-candidate[1]))
+    return min(starts, key=lambda s: abs(s["anchor"][0]-candidate[0]) + abs(s["anchor"][2]-candidate[1]))
+
+
+def expanded_bounds(bounds: list[int], margin: int) -> list[int]:
+    return [value - margin for value in bounds[:3]] + [value + margin for value in bounds[3:]]
+
+
+def require_chunks(dimension_dir: Path, bounds: list[int]) -> None:
+    wanted = _chunks_of([bounds])
+    present = {chunk for chunk, _ in _regions(dimension_dir / "region", wanted)}
+    if missing := wanted - present:
+        raise ValueError(f"missing exported chunks in {dimension_dir}: {sorted(missing)}")
+
+
+def differential_candidates(blocks: dict, baseline: dict, natural: set[str], palette: set[str]) -> list[dict]:
+    """Only count different palette types absent from the local pack-free vocabulary."""
+    matches = []
+    for xyz, state in sorted(blocks.items()):
+        kind = state.split("[", 1)[0]
+        prior = baseline.get(xyz, "minecraft:air").split("[", 1)[0]
+        if kind in palette and kind not in natural and kind != prior:
+            matches.append({"position": [int(v) for v in xyz.split(",")], "state": state})
+    return matches
+
+
+def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase: str) -> dict:
+    site = find_site(export, row)
+    dimension_dir = Path(site["dimension_dir"])
+    baseline_dir = baseline_export / dimension_dir.relative_to(export)
+    bounds = site["bounds"]
+    baseline_bounds = expanded_bounds(bounds, 16)
+    require_chunks(dimension_dir, expanded_bounds(bounds, 6))
+    require_chunks(baseline_dir, baseline_bounds)
     palette = template_palette(pack, row)
-    blocks = read_world(Path(site["dimension_dir"]), [site["bounds"]])[0]["blocks"]
-    matches = [{"position": [int(v) for v in xyz.split(",")], "state": state}
-               for xyz, state in sorted(blocks.items()) if state.split("[")[0] in palette]
-    if not matches:
-        raise ValueError(f"{row['id']}: no start-template palette block in persisted bounds")
+    blocks = read_world(dimension_dir, [bounds])[0]["blocks"]
+    baseline = read_world(baseline_dir, [baseline_bounds])[0]["blocks"]
+    natural = {state.split("[", 1)[0] for state in baseline.values()} | {"minecraft:air"}
+    matches = differential_candidates(blocks, baseline, natural, palette)
+    self_control = differential_candidates(baseline, baseline, natural, palette)
+    row.setdefault("differential", {})[phase] = {
+        "eligible_blocks": len(matches), "minimum": MIN_DIFFERENTIAL_BLOCKS,
+        "natural_types": len(natural), "baseline_self_control_blocks": len(self_control),
+        "baseline_dimension": str(baseline_dir),
+    }
+    if self_control:
+        raise ValueError(f"{row['id']}: pack-absent self-control unexpectedly matched")
+    if len(matches) < MIN_DIFFERENTIAL_BLOCKS:
+        raise ValueError(f"{row['id']}: only {len(matches)} non-natural differential template blocks "
+                         f"(minimum {MIN_DIFFERENTIAL_BLOCKS})")
     matches.sort(key=lambda block: sum((a-b)**2 for a, b in zip(block["position"], site["anchor"])))
-    expanded = [value - 6 for value in site["bounds"][:3]] + [value + 6 for value in site["bounds"][3:]]
-    nearby = read_world(Path(site["dimension_dir"]), [expanded])[0]["blocks"]
+    nearby = read_world(dimension_dir, [expanded_bounds(bounds, 6)])[0]["blocks"]
     def block(pos):
         return nearby.get(",".join(map(str, pos)), "minecraft:air").split("[")[0]
     samples = []
@@ -176,7 +218,7 @@ def site_proof(export: Path, pack: Path, row: dict) -> dict:
         if len(samples) == 16:
             break
     if not samples:
-        raise ValueError(f"{row['id']}: no standable survival approach to a template block")
+        raise ValueError(f"{row['id']}: no standable survival approach to a differential block")
     site["samples"] = samples
     return site
 
@@ -230,6 +272,21 @@ def photograph(client, row: dict, site: dict, directory: Path) -> dict:
             "screenshot_sha256": digest(picture), "capture": capture}
 
 
+def visit_coverage(client, rows: list[dict]) -> None:
+    """Generate a grid covering each expanded start; exports verify actual coverage."""
+    visited = set()
+    for row in rows:
+        if row["status"] != "located":
+            continue
+        bounds = expanded_bounds(row["initial_site"]["bounds"], 16)
+        for x in range(bounds[0] >> 4, (bounds[3] >> 4) + 1, 4):
+            for z in range(bounds[2] >> 4, (bounds[5] >> 4) + 1, 4):
+                key = (row["dimension"], x, z)
+                if key not in visited:
+                    dimension_teleport(client, row["dimension"], [x * 16 + 8.5, 100, z * 16 + 8.5])
+                    visited.add(key)
+
+
 def run(ctx: ProfileContext) -> dict:
     def env_path(name):
         value = os.environ.get(name)
@@ -247,6 +304,14 @@ def run(ctx: ProfileContext) -> dict:
         raise ValueError("converted MVS pack changed")
     rows = selected_definitions(pack)
     chosen = restart_selection(rows)
+    subset = os.environ.get("KRASNOKAMEN_ATM_CONTROL_SUBSET", "")
+    if subset not in ("", "1"):
+        raise ValueError("KRASNOKAMEN_ATM_CONTROL_SUBSET must be absent or 1")
+    active = [row for row in rows if not subset or row["id"] in chosen]
+    if subset:
+        for row in rows:
+            if row["id"] not in chosen:
+                row.update(status="control_not_selected", reason="outside placement-control subset")
     output = ctx.artifact_dir / "full-atm"
     output.mkdir()
     args = SimpleNamespace(output=output, server=env_path("KRASNOKAMEN_SERVER_BINARY"),
@@ -258,6 +323,8 @@ def run(ctx: ProfileContext) -> dict:
               "restart_rule": "every tenth sorted Overworld ID starting at index 0 and all Nether IDs",
               "dimension_travel": "execute in <dimension> run tp @s", "manifest_sha256": digest(manifest_path),
               "server_sha256": digest(args.server), "client_sha256": digest(args.client), "ctl_sha256": digest(args.ctl)}
+    report["control_subset"] = bool(subset)
+    report["differential_minimum"] = MIN_DIFFERENTIAL_BLOCKS
     ctx.failure_scenario = report
     write_json(output / "definitions.json", rows)
     write_json(output / "result.json", report)
@@ -274,7 +341,7 @@ def run(ctx: ProfileContext) -> dict:
     config.write_text(rewrite_config(source, port=port, world=str(world), plugins=str(plugins), seed=SEED))
     prepare_operator_fixture(ProfileContext(output), [USERNAME])
     with session(args, config, port, "discovery", report) as client:
-        for row in rows:
+        for row in active:
             dimension_teleport(client, row["dimension"], [-255.5, 100, -255.5])
             messages = client.command(f"locate structure {row['id']}", row["id"])
             row["locate_messages"] = messages
@@ -290,17 +357,35 @@ def run(ctx: ProfileContext) -> dict:
             dimension_teleport(client, row["dimension"], [row["xz"][0], 100, row["xz"][1]])
             row.update(status="located", reason=None)
             write_json(output / "result.json", report)
-    export = export_world(args, config, world, "before-export", report)
-    for row in rows:
+    discovery_export = export_world(args, config, world, "discovery-export", report)
+    for row in active:
         if row["status"] == "located":
             try:
-                row["before"] = site_proof(export, pack, row)
+                row["initial_site"] = find_site(discovery_export, row)
+            except ValueError as error:
+                row.update(status="verification_failed", reason=str(error))
+            write_json(output / "result.json", report)
+    with session(args, config, port, "coverage", report) as client:
+        visit_coverage(client, active)
+    export = export_world(args, config, world, "before-export", report)
+    baseline_world = output / "without-pack-world"
+    baseline_world.mkdir()
+    baseline_config = output / "without-pack-server.toml"
+    baseline_config.write_text(rewrite_config(source, port=port, world=str(baseline_world),
+                                               plugins=str(plugins), seed=SEED))
+    with session(args, baseline_config, port, "without-pack-coverage", report) as client:
+        visit_coverage(client, active)
+    baseline_export = export_world(args, baseline_config, baseline_world, "without-pack-export", report)
+    for row in active:
+        if row["status"] == "located":
+            try:
+                row["before"] = site_proof(export, baseline_export, pack, row, "before")
             except ValueError as error:
                 row.update(status="verification_failed", reason=str(error))
             write_json(output / "result.json", report)
     (output / "photographs").mkdir()
     with session(args, config, port, "photographs", report) as client:
-        for row in rows:
+        for row in active:
             if row["status"] == "located":
                 try:
                     row["visit"] = photograph(client, row, row["before"], output / "photographs")
@@ -311,10 +396,10 @@ def run(ctx: ProfileContext) -> dict:
                     row.update(status="verification_failed", reason=str(error))
                 write_json(output / "result.json", report)
     after = export_world(args, config, world, "after-export", report)
-    for row in rows:
+    for row in active:
         if row["status"] == "visited":
             try:
-                proof = site_proof(after, pack, row)
+                proof = site_proof(after, baseline_export, pack, row, "after")
                 if (proof["anchor"], proof["bounds"], proof["chunk"]) != (row["before"]["anchor"], row["before"]["bounds"], row["before"]["chunk"]):
                     raise ValueError(f"{row['id']}: start changed across restart")
                 blocks = read_world(Path(proof["dimension_dir"]), [proof["bounds"]])[0]["blocks"]
@@ -328,7 +413,7 @@ def run(ctx: ProfileContext) -> dict:
             write_json(output / "result.json", report)
     (output / "restart-photographs").mkdir()
     with session(args, config, port, "restart", report) as client:
-        for row in rows:
+        for row in active:
             if row["status"] == "verified" and row["id"] in chosen:
                 try:
                     row["restart_visit"] = photograph(client, row, row["after"], output / "restart-photographs")
@@ -337,7 +422,7 @@ def run(ctx: ProfileContext) -> dict:
                         raise
                     row.update(status="verification_failed", reason=str(error))
                 write_json(output / "result.json", report)
-    report["status"] = "passed" if all(row["status"] == "verified" for row in rows) else "findings"
+    report["status"] = "passed" if not subset and all(row["status"] == "verified" for row in rows) else "findings"
     report["full_target_accepted"] = report["status"] == "passed"
     write_json(output / "result.json", report)
     if not report["full_target_accepted"]:

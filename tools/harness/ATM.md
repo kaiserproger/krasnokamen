@@ -125,14 +125,25 @@ converted MVS manifest in `KRASNOKAMEN_ATM_MANIFEST`, vanilla cache in
 Overworld and three Nether structure definitions and records their start pools
 and templates. The fresh-world seed is 20261115; the client uses normal
 `execute in <dimension> run tp` commands, not a portal or placement commands.
-It locates each ID, preserves generated-start and template-block evidence, and
-photographs a visible template block from a grounded survival position within
-4.5 blocks. After restart it checks every recorded start and sampled blocks
-offline and revisits every tenth sorted Overworld ID starting at zero plus all
-three Nether IDs with the client. Missing locate results remain per-ID findings,
-not silently removed successes; infrastructure failures leave unrun rows.
-Screenshots still require visual review, and palette samples do not prove whole
-template fidelity or mod compatibility.
+It locates each ID, then generates both pack-present and same-seed pack-absent
+worlds across the expanded start bounds and verifies exported chunk coverage.
+Only a start-template palette type that differs at the same position and is
+absent from the pack-free vocabulary within 16 blocks of the bounds counts.
+Each ID needs at least eight such blocks; a seven-file crystal fixture had 437,
+but eight is a conservative threshold, not a calibration for all 130 IDs.
+Natural-only or otherwise insufficient starts remain findings, not passes. The
+pack-absent self-diff must be zero. A visible differential block is photographed
+from a grounded survival position within 4.5 blocks.
+
+After restart it checks every recorded start and sampled blocks offline and
+revisits every tenth sorted Overworld ID starting at zero plus all three Nether
+IDs with the client. Missing locate results remain per-ID findings, not silently
+removed successes; infrastructure failures leave unrun rows. For a separate
+placement-disabled negative-control pin, `KRASNOKAMEN_ATM_CONTROL_SUBSET=1`
+limits execution to that same deterministic subset. A subset never accepts the
+full target; inspect every selected ID's differential count before calling the
+control successful. Screenshots still require visual review; this differential
+is not complete template fidelity or mod compatibility.
 
 ## Fresh world, real client, generated starts
 

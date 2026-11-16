@@ -55,6 +55,49 @@ class FullSelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unsafe resource"):
                 atm_full.resource(Path(directory), "mvs:../../../../outside", "structure", ".nbt")
 
+    def test_differential_rejects_natural_and_beard_only_changes(self):
+        baseline = {"0,0,0": "minecraft:stone", "1,0,0": "minecraft:dirt"}
+        natural = {"minecraft:air", "minecraft:stone", "minecraft:dirt"}
+        palette = {"minecraft:stone", "minecraft:dirt", "minecraft:stone_bricks"}
+        self.assertEqual(atm_full.differential_candidates(baseline, baseline, natural, palette), [])
+        beard = {"0,0,0": "minecraft:dirt", "1,0,0": "minecraft:stone"}
+        self.assertEqual(atm_full.differential_candidates(beard, baseline, natural, palette), [])
+        placed = {**beard, "2,0,0": "minecraft:stone_bricks[axis=x]"}
+        matches = atm_full.differential_candidates(placed, baseline, natural, palette)
+        self.assertEqual(matches, [{"position": [2, 0, 0], "state": "minecraft:stone_bricks[axis=x]"}])
+
+    def test_site_proof_records_count_and_fails_below_minimum(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            export, baseline = root / "positive", root / "baseline"
+            dimension = export / "dimensions/minecraft/overworld"
+            site = {"anchor": [0, 0, 0], "bounds": [0, 0, 0, 7, 0, 0],
+                    "chunk": [0, 0], "dimension_dir": str(dimension)}
+            row = {"id": "mvs:test", "xz": [0, 0], "dimension": "minecraft:overworld"}
+            natural = {"0,0,0": "minecraft:stone"}
+            blocks = {f"{i},0,0": "minecraft:stone_bricks" for i in range(8)}
+            with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
+                    mock.patch.object(atm_full, "require_chunks"), \
+                    mock.patch.object(atm_full, "template_palette", return_value={"minecraft:stone", "minecraft:stone_bricks"}), \
+                    mock.patch.object(atm_full, "stand_positions", return_value=[[0, 1, 0]]), \
+                    mock.patch.object(atm_full, "read_world", side_effect=[
+                        [{"blocks": blocks}], [{"blocks": natural}], [{"blocks": blocks}]]):
+                result = atm_full.site_proof(export, baseline, root, row, "before")
+            self.assertEqual(row["differential"]["before"]["eligible_blocks"], 8)
+            self.assertEqual(row["differential"]["before"]["baseline_self_control_blocks"], 0)
+            self.assertEqual(len(result["samples"]), 8)
+            with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
+                    mock.patch.object(atm_full, "require_chunks"), \
+                    mock.patch.object(atm_full, "template_palette", return_value={"minecraft:stone"}), \
+                    mock.patch.object(atm_full, "read_world", side_effect=[
+                        [{"blocks": natural}], [{"blocks": natural}]]):
+                with self.assertRaisesRegex(ValueError, "only 0 non-natural"):
+                    atm_full.site_proof(export, baseline, root, row, "control")
+            self.assertEqual(row["differential"]["control"]["eligible_blocks"], 0)
+            with self.assertRaisesRegex(ValueError, "missing exported chunks"):
+                atm_full.require_chunks(root, [0, 0, 0, 0, 0, 0])
+
+
     def test_one_finding_fails_profile_after_collecting_every_definition(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -76,7 +119,7 @@ class FullSelectionTests(unittest.TestCase):
                     for i in range(130)]
             client = mock.Mock()
             client.command.return_value = {}
-            proof = {"anchor": [0, 0, 0], "bounds": [], "chunk": [0, 0],
+            proof = {"anchor": [0, 0, 0], "bounds": [0, 0, 0, 0, 0, 0], "chunk": [0, 0],
                      "dimension_dir": str(root), "samples": []}
             with mock.patch.dict(atm_full.os.environ, env), \
                     mock.patch.object(cli, "ARTIFACT_ROOT", root / "receipts"), \
@@ -90,6 +133,7 @@ class FullSelectionTests(unittest.TestCase):
                     mock.patch.object(atm_full, "locate_coordinates", side_effect=[ValueError("missing")] + [[0, 0]] * 129), \
                     mock.patch.object(atm_full, "locate_failure", return_value="not found"), \
                     mock.patch.object(atm_full, "export_world", return_value=root), \
+                    mock.patch.object(atm_full, "find_site", return_value=proof), \
                     mock.patch.object(atm_full, "site_proof", return_value=proof), \
                     mock.patch.object(atm_full, "read_world", return_value=[{"blocks": {}}]), \
                     mock.patch.object(atm_full, "photograph", return_value={}):
