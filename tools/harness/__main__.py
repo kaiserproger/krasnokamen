@@ -657,8 +657,9 @@ DEFAULT_MEMORY_MAX = "4G"
 DEFAULT_TEST_MEMORY_MAX = "12G"
 DEFAULT_MEMORY_SWAP_MAX = "1G"
 # A real Java client, its Xvfb and the release server do not fit 4G: java-battle-functional was
-# killed by the scope on 2/2 runs of receipts/JavaGateBreaker, so these get the test-wide cap.
-MEMORY_HEAVY_PROFILES = {"java-battle-functional", "java", "loader-live", "scene-shot"}
+# killed by the scope on 2/2 runs of receipts/JavaGateBreaker, so these get the test-wide cap. The
+# battle recovery gate runs a 3,000-soldier release server, two Horizon clients and the recorder.
+MEMORY_HEAVY_PROFILES = {"java-battle-functional", "java", "loader-live", "scene-shot", "battle-crash-recovery"}
 _OFF = {"", "off", "none", "0", "max"}
 
 _MEMORY_UNITS = {"K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
@@ -803,7 +804,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "explain":
         return cmd_explain(args.rest)
     if args.command in {"run", "client"}:
-        scoped = _exec_in_scope(args.rest[0] if args.command == "run" and args.rest else None)
+        profile = args.rest[0] if args.command == "run" and args.rest else None
+        if profile == "scenario" and len(args.rest) > 1:
+            # A named scenario runs its catalog profile, so it gets that profile's bound.
+            from . import scenarios as scenario_catalog
+
+            entry = scenario_catalog.SCENARIOS.get(args.rest[1])
+            profile = entry.profile if entry is not None else profile
+        scoped = _exec_in_scope(profile)
         if scoped is not None:
             return scoped
     if args.command == "run":

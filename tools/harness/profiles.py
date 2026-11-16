@@ -1053,6 +1053,13 @@ def run_java_battle(ctx: ProfileContext) -> dict[str, Any]:
     return result
 
 
+def run_battle_crash_recovery(ctx: ProfileContext) -> dict[str, Any]:
+    """SIGKILL battle recovery with real Horizon clients: kit census, runner handoff, auth-locked roles."""
+    from .backends import battle_recovery
+
+    return battle_recovery.run(ctx)
+
+
 Profile = Callable[[ProfileContext], dict[str, Any]]
 
 PROFILES: dict[str, dict[str, Any]] = {
@@ -1329,6 +1336,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "MC 26.1.2 Fabric/NeoForge live battle functional checks; screenshots require separate visual review",
         "run": run_java_battle,
     },
+    "battle-crash-recovery": {
+        "scope": "real-client",
+        "description": "SIGKILL battle recovery with real Horizon clients: full kit crash census, runner crash handoff, auth-locked role hydration (named scenarios only)",
+        "run": run_battle_crash_recovery,
+    },
     "regression": {
         "scope": "real-client",
         "description": "real-client regression backend (--run unless a mode is given)",
@@ -1459,6 +1471,7 @@ PROFILE_PREREQUISITES = {
     "loader-live": (("server_binary", "loader", "xvfb", "plugins_dir"), (), (), ()),
     "dh-gate": (("server_binary", "loader", "xvfb"), (), (), ()),
     "java-battle-functional": (("server_binary", "loader", "xvfb"), (), (), ()),
+    "battle-crash-recovery": (("server_binary", "xvfb"), (), (), ()),
     "regression": ((), (), ("regression_client",), ()),
     "playable": ((), (), ("regression_client",), ()),
     "replay": ((), (), ("regression_client",), ()),

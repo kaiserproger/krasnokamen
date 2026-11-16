@@ -219,11 +219,20 @@ class RunTestPolicyTests(unittest.TestCase):
                     self.assertEqual(cli.main(["run", profile]), 0)
                 scope.assert_called_once_with(profile)
 
+    def test_named_scenario_reaches_scope_as_its_profile(self) -> None:
+        for argv, expected in [(["run", "scenario", "battle-kit-census"], "battle-crash-recovery"),
+                               (["run", "scenario", "java-battle-end-camera"], "java-battle-functional"),
+                               (["run", "scenario", "no-such-scenario"], "scenario")]:
+            with self.subTest(argv=argv), mock.patch.object(cli, "_exec_in_scope", return_value=0) as scope:
+                self.assertEqual(cli.main(argv), 0)
+                scope.assert_called_once_with(expected)
+
     def test_profile_memory_defaults_match_admission_and_scope(self) -> None:
         env = {key: value for key, value in os.environ.items()
                if key not in {cli.CPU_SCOPE_ENV, cli.MEMORY_MAX_ENV}}
         for profile, expected in [("test", "12G"), ("correctness", "12G"), ("check", "4G"),
                                   ("java-battle-functional", "12G"), ("scene-shot", "12G"),
+                                  ("battle-crash-recovery", "12G"),
                                   ("regressions", "4G"), (None, "4G")]:
             with self.subTest(profile=profile), mock.patch.dict(os.environ, env, clear=True):
                 with mock.patch.object(cli, "_default_cpu_quota", return_value="600%"):

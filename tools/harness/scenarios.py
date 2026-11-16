@@ -711,6 +711,43 @@ SCENARIOS: dict[str, Scenario] = {
         proves="completion.ready precedes the real camera screenshot and completion.done; the runner stays alive until release",
         limits="NeoForge 26.1.2 seed 46 battle; requires battle world, pack and recorder inputs",
     ),
+    "battle-kit-census": _entry(
+        id="battle-kit-census", summary="A dropped battle kit piece is never issued twice across SIGKILL, death and reconnect",
+        owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
+        scenario_id="battle-kit-census", requires=("xvfb",),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
+        fixture="field-1k 1500/side on KRASNOKAMEN_BATTLE_WORLD, real Horizon PovRed holder and CamSpec spectator, "
+                "battle runner with --crash-handoff, actual SIGKILL",
+        proves="full crash census at issue, drop, the stopped SIGKILL image (verdict recorded before reopen), "
+               "rejoin, respawn, reconnect and the stopped world: kit units in every durable custody "
+               "(players incl. offline, item entities of every dimension, containers, non-soldier entities) "
+               "never exceed the issued kit; every lost piece has an ordered WAL removal; a removal control "
+               "on a derived census copy is caught",
+        limits="one kit and one dropped spear; Horizon clients only; wear is reported, not asserted; "
+               "live clear and radius-64 counts are auxiliary",
+    ),
+    "battle-crash-handoff": _entry(
+        id="battle-crash-handoff", summary="The battle runner keeps the crash handoff for pre-stage and staged SIGKILLs",
+        owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
+        scenario_id="battle-crash-handoff", requires=("xvfb",),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
+        fixture="two runner sessions (SIGKILL before battle setup; SIGKILL staged before start), real Horizon clients",
+        proves="the runner exits 0 with crash-handoff.json, the crash copy and a clean WAL archive; recovery starts "
+               "from them, the clients rejoin, the staged battle resumes with both roles and strikes",
+        limits="the runner race is timing-dependent: one green run does not prove every interleaving",
+    ),
+    "battle-auth-hydration": _entry(
+        id="battle-auth-hydration", summary="Auth-locked battle roles hydrate only after /login, once",
+        owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
+        scenario_id="battle-auth-hydration", requires=("xvfb", "sibling:solaris-default-plugins"),
+        sources=("tools/harness/backends/battle_recovery.py",),
+        fixture="krasnokamen-auth deployed via [plugins].directory, generated passwords, field-1k 1500/side, "
+                "real Horizon holder and spectator, actual SIGKILL mid-battle",
+        proves="after recovery both rejoin locked: no kit, camera unbound, the durable battle image keeps the "
+               "hold and saved camera; the real client's /login re-arms the holder exactly once and binds the "
+               "camera; a re-entry issues nothing twice; full crash census; passwords never in any artifact",
+        limits="one holder and one spectator; no wrong-password or timeout-kick coverage",
+    ),
     "native-player-head": _entry(
         id="native-player-head", summary="The player head (third- and first-person) renders with correct skin and hat layers",
         owner="core:harness", evidence="graphical", profile="scene-shot",

@@ -50,6 +50,56 @@ to the pinned recorder, and `KRASNOKAMEN_BATTLE_RECORDER_DATA`,
 the server remains live, then releases `completion.done`. A regular battle
 pass without this assertion is not proof of the late-capture regression.
 
+## Battle crash recovery with real Horizon clients
+
+`python3 -m tools.harness run scenario <id>` for `battle-kit-census`,
+`battle-crash-handoff` and `battle-auth-hydration` (profile
+`battle-crash-recovery`; ledger refs `harness:battle-crash-recovery:<id>`). The
+server comes only from `KRASNOKAMEN_SERVER_BINARY` (a pin directory with its
+`manifest.json`); the other inputs fail closed: `KRASNOKAMEN_BATTLE_WORLD` and
+`KRASNOKAMEN_BATTLE_WORLD_SEED` (a stopped native battle world and its seed),
+`KRASNOKAMEN_BATTLE_HORIZON_CLIENT`, `KRASNOKAMEN_BATTLE_HORIZON_CTL`,
+`KRASNOKAMEN_BATTLE_HORIZON_RESOURCES` (the Horizon client pin), and for the two
+runner scenarios `KRASNOKAMEN_CLIENT_BINARY` plus `KRASNOKAMEN_BATTLE_RECORDER_DATA`
+(the recorder). The auth scenario deploys `krasnokamen-auth` from the plugins
+sibling. Each run is a field-1k 1500/side battle with PovRed holding a rank and
+CamSpec spectating him, and an actual SIGKILL.
+
+- `battle-kit-census`: PovRed drops his spear, then SIGKILL -> recovery ->
+  rejoin, death -> respawn and disconnect -> reconnect. A hot `backup` at each
+  phase and the stopped SIGKILL image (hashed, census and verdict recorded before
+  recovery reopens the world) are read through derived copies (`restore` or
+  hash-checked copy, `world compact` for the redb repair, `world export-anvil`):
+  every player record, every entity of every dimension and every block entity.
+  Compact may change only `native/state.redb` of the copy (both hashes
+  recorded). A second hash-checked copy of each image goes through production
+  recovery instead (server opened on fresh ports, stopped before any player can
+  join, exported clean); both exports must agree on every kit item's holder,
+  UUID, dimension, slot, id, count and components, an item entity only aging,
+  never past the ticks since its durable WAL birth record (the reopen may repay
+  simulation debt), or the census is incomplete. The crash
+  export's checkpoint/replay ticks must match the real recovery's own WAL (it
+  reopens with exactly that tail and journals first at `replay_tick + 1`).
+  Kit units in custody never exceed the issued kit; a piece that leaves custody
+  needs a `RemoveEntity` in the archived WAL; WAL gaps, identity reuse or a clock
+  running backwards make the census incomplete, which is never a pass. A removal
+  control on a derived census copy must be caught. Live `clear @a` and radius-64
+  counts are auxiliary only.
+- `battle-crash-handoff`: SIGKILL before `battle setup`, then SIGKILL staged
+  before start: the runner keeps `crash-handoff.json`, the crash copy and its WAL
+  archive; recovery starts from them; the clients rejoin; the staged battle
+  resumes with both roles and strikes. The runner race is timing-dependent.
+- `battle-auth-hydration`: no recorder (it cannot log in). Holder and spectator
+  `/register` through the real client; after the SIGKILL both rejoin locked: no
+  kit on the holder, no camera, while the durable battle image keeps the hold and
+  the saved camera. `/login` through Horizon's `command` tool re-arms the holder
+  exactly once and binds the camera; a re-entry issues nothing twice; the same
+  crash census runs; no generated password appears in any artifact.
+
+Limits: one kit, one holder and one spectator; Horizon clients only; wear is
+reported, not asserted. `ledger promote` needs a receipt from the promoted tree's
+own server (`tools/harness/ledger.py`), not a development pin.
+
 ## Prerequisites
 
 Everything below is reproducible from public sources, except where a line says

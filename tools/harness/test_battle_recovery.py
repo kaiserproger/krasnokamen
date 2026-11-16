@@ -1,0 +1,375 @@
+"""Offline parts of the battle-crash-recovery gate: export reading, WAL history and the census verdict."""
+from __future__ import annotations
+
+import json
+import os
+import struct
+import tempfile
+import unittest
+import zlib
+from pathlib import Path
+from unittest import mock
+
+from tools.harness import profiles
+from tools.harness.backends import battle_recovery as br
+
+SPEAR = {"id": "minecraft:iron_spear", "count": 1, "components": {"minecraft:item_model": "krasnokamen_battle:iron_spear"}}
+SHIELD = {"id": "minecraft:shield", "count": 1, "components": {"minecraft:item_model": "krasnokamen_battle:red_heater_shield"}}
+HOLDER = br.offline_uuid("PovRed")
+DROPPED = "minecraft:overworld/aaaaaaaa-0000-0000-0000-000000000001"
+
+
+def stack(holder, kind, item, place="", age=None):
+    return br._stack_record(holder, kind, "minecraft:overworld", place, item, age)
+
+
+def census(phase, tick, stacks, epoch=0, entities=None):
+    found = {s["holder"].split(":", 1)[1]: {"type": "minecraft:item", "age": s["age"]}
+             for s in stacks if s["kind"] == "item_entity"}
+    found.update(entities or {})
+    # The production-recovery export of the same image, by default identical (same list object).
+    return {"phase": phase, "replay_tick": tick, "epoch": epoch, "stacks": stacks, "entities": found,
+            "reopen": {"replay_tick": tick, "stacks": stacks}}
+
+
+def history(first, last, spawns=(), removals=()):
+    return {"spans": [(tick, tick) for tick in range(first, last + 1)], "spawns": list(spawns),
+            "removals": list(removals), "motions": {}}
+
+
+def batch(directory: Path, low: int, high: int, lines: list[dict], *, corrupt: bool = False) -> Path:
+    body = b"".join(json.dumps(line).encode() + b"\n" for line in lines)
+    crc = zlib.crc32(body) ^ (1 if corrupt else 0)
+    path = directory / f"batch-{low:020d}-{high:020d}.bin"
+    path.write_bytes(struct.pack("<IIQQII", 0x534F4C4A, 1, low, high, len(body), crc) + body)
+    return path
+
+
+class ExportReadingTests(unittest.TestCase):
+    def test_every_player_custody_place_and_nested_container_is_a_stack(self):
+        damaged = {**SPEAR, "components": {**SPEAR["components"], "minecraft:damage": 17}}
+        shulker = {"id": "minecraft:shulker_box", "count": 1,
+                   "components": {"minecraft:container": [{"slot": 0, "item": SHIELD}]}}
+        player = {"Inventory": [{**damaged, "Slot": 0}, {**shulker, "Slot": 9}],
+                  "equipment": {"offhand": SHIELD, "head": {"id": "minecraft:iron_helmet"}},
+                  "krasnokamen:Carried": {"id": "minecraft:iron_spear"},
+                  "krasnokamen:CraftingGrid": [{}, SPEAR, {}, {}],
+                  "EnderItems": [{**SPEAR, "Slot": 3}], "Pos": [0.0, 1.0, 2.0], "id": "not-an-item"}
+        found = {(path, item["id"]) for path, item in br.stacks_in(player)}
+        self.assertEqual(found, {
+            ("/Inventory/0", "minecraft:iron_spear"), ("/Inventory/9", "minecraft:shulker_box"),
+            ("/Inventory/9/components/minecraft:container/0/item", "minecraft:shield"),
+            ("/equipment/offhand", "minecraft:shield"), ("/equipment/head", "minecraft:iron_helmet"),
+            ("/krasnokamen:Carried", "minecraft:iron_spear"), ("/krasnokamen:CraftingGrid/1", "minecraft:iron_spear"),
+            ("/EnderItems/3", "minecraft:iron_spear")})
+        record = br._stack_record("player:x", "player", None, "/Inventory/0", damaged)
+        self.assertEqual(record["damage"], 17)
+        self.assertEqual(record["key"], br.kit_key(SPEAR), "wear is not identity")
+        self.assertNotEqual(br.kit_key({"id": "minecraft:iron_spear", "count": 1}), br.kit_key(SPEAR))
+
+    def test_nbt_uuid_matches_vanilla_int_array(self):
+        self.assertEqual(br.nbt_uuid([0, 0, 0, 1]), "00000000-0000-0000-0000-000000000001")
+        self.assertEqual(br.nbt_uuid([-1, -1, -1, -1]), "ffffffff-ffff-ffff-ffff-ffffffffffff")
+
+
+class WalHistoryTests(unittest.TestCase):
+    def test_complete_batches_only_and_conflicts_refuse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first, second = Path(directory, "a"), Path(directory, "b")
+            first.mkdir()
+            second.mkdir()
+            spawn = {"Entity": {"id": 7, "uuid": "u-1", "tick": 10, "item": {"item_id": 1}, "alive": True, "age": 0}}
+            wrapped = {"Dimension": {"dimension": "minecraft:the_nether", "entries": [{"RemoveEntity": {"id": 9, "tick": 11}}]}}
+            batch(first, 10, 10, [spawn, {"EntityMotion": {"id": 1}}])
+            batch(first, 11, 11, [wrapped, {"ItemMotion": {"id": 7, "tick": 11, "age": 5}}])
+            batch(first, 12, 12, [{"RemoveEntity": {"id": 7, "tick": 12}}], corrupt=True)
+            batch(second, 10, 10, [spawn, {"EntityMotion": {"id": 1}}])
+            batches = br.read_batches([first, second])
+            self.assertEqual(sorted(batches), [(10, 10), (11, 11)])
+            result = br.wal_history(batches)
+            self.assertEqual(result["spawns"][0]["uuid"], "u-1")
+            self.assertEqual(result["removals"], [{"dimension": "minecraft:the_nether", "id": 9, "tick": 11}])
+            self.assertEqual(result["motions"], {"minecraft:overworld/7": [(11, 5)]})
+            batch(second, 11, 11, [{"RemoveEntity": {"id": 8, "tick": 11}}])
+            with self.assertRaises(br.Incomplete):
+                br.read_batches([first, second])
+
+    def test_coverage_gaps(self):
+        self.assertEqual(br.coverage_gaps([(1, 5), (6, 6), (9, 12)], 0, 12), [[7, 8]])
+        self.assertEqual(br.coverage_gaps([(1, 5)], 2, 4), [])
+        self.assertEqual(br.coverage_gaps([(1, 5)], 2, 7), [[6, 7]])
+
+
+class ReconcileTests(unittest.TestCase):
+    def setUp(self):
+        self.issued = census("issued", 100, [stack(f"player:{HOLDER}", "player", SPEAR, "/Inventory/0"),
+                                             stack(f"player:{HOLDER}", "player", SHIELD, "/equipment/offhand")])
+        self.kit = br.issued_kit(self.issued, HOLDER)
+        self.dropped = census("dropped", 110, [stack(f"player:{HOLDER}", "player", SHIELD),
+                                               stack(f"entity:{DROPPED}", "item_entity", SPEAR, "/Item", age=8)])
+        self.spawn = {"dimension": "minecraft:overworld", "id": 42, "uuid": DROPPED.split("/")[1], "tick": 102, "age": 0}
+        self.history = history(100, 200, spawns=[self.spawn])
+
+    def test_kept_drop_passes_and_soldier_equipment_is_not_custody(self):
+        soldier = "minecraft:overworld/bbbbbbbb-0000-0000-0000-000000000002"
+        later = census("crash", 120, self.dropped["stacks"] + [stack(f"entity:{soldier}", "entity", SPEAR)])
+        later["stacks"][1] = {**later["stacks"][1], "age": 18}
+        result = br.reconcile([self.issued, self.dropped, later], self.kit, {soldier.split("/")[1]}, [self.history])
+        self.assertEqual(result["verdict"], "pass", result)
+        self.assertEqual(result["phases"][-1]["soldier_equipment"][br.kit_key(SPEAR)], 1)
+
+    def test_rearm_with_the_dropped_piece_on_the_ground_fails(self):
+        rearmed = census("crash-rejoin", 130, self.dropped["stacks"] + [stack(f"player:{HOLDER}", "player", SPEAR)])
+        result = br.reconcile([self.issued, self.dropped, rearmed], self.kit, set(), [self.history])
+        self.assertEqual(result["verdict"], "fail")
+        self.assertEqual(result["violations"][0]["units"], 2)
+
+    def test_lost_piece_needs_an_ordered_durable_removal(self):
+        gone = census("death", 130, [stack(f"player:{HOLDER}", "player", SHIELD)])
+        unexplained = br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [self.history])
+        self.assertEqual(unexplained["verdict"], "incomplete")
+        removed = history(100, 200, spawns=[self.spawn], removals=[{"dimension": "minecraft:overworld", "id": 42, "tick": 125}])
+        explained = br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [removed])
+        self.assertEqual(explained["verdict"], "pass", explained)
+        self.assertEqual(explained["removals"][0]["tick"], 125)
+        early = history(100, 200, spawns=[self.spawn], removals=[{"dimension": "minecraft:overworld", "id": 42, "tick": 105}])
+        self.assertEqual(br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [early])["verdict"], "incomplete")
+
+    def test_identity_reuse_gaps_and_clocks_are_incomplete(self):
+        gone = census("death", 130, [stack(f"player:{HOLDER}", "player", SHIELD)])
+        reused = history(100, 200, spawns=[self.spawn, {**self.spawn, "uuid": "other", "tick": 120}],
+                         removals=[{"dimension": "minecraft:overworld", "id": 42, "tick": 125}])
+        self.assertEqual(br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [reused])["verdict"], "incomplete")
+        gap = {**self.history, "spans": [s for s in self.history["spans"] if s != (115, 115)]}
+        kept = census("crash", 120, self.dropped["stacks"])
+        self.assertIn("gaps", json.dumps(br.reconcile([self.issued, self.dropped, kept], self.kit, set(), [gap])["incomplete"]))
+        younger = census("crash", 120, [self.dropped["stacks"][0], {**self.dropped["stacks"][1], "age": 2}])
+        self.assertEqual(br.reconcile([self.issued, self.dropped, younger], self.kit, set(), [self.history])["verdict"], "incomplete")
+        backwards = census("crash", 105, self.dropped["stacks"])
+        self.assertEqual(br.reconcile([self.issued, self.dropped, backwards], self.kit, set(), [self.history])["verdict"], "incomplete")
+        retyped = census("crash", 120, [self.dropped["stacks"][0]], entities={DROPPED: {"type": "minecraft:arrow", "age": None}})
+        self.assertIn("identity reuse", json.dumps(br.reconcile([self.issued, self.dropped, retyped], self.kit, set(),
+                                                                [self.history])["incomplete"]))
+
+    def test_new_epoch_reads_its_own_history_from_the_recovered_tick(self):
+        kept = census("crash", 120, self.dropped["stacks"])
+        rejoin = census("crash-rejoin", 140, self.dropped["stacks"], epoch=1)
+        rejoin["epoch_start"] = 120
+        recovered = history(121, 140)
+        self.assertEqual(br.reconcile([self.issued, self.dropped, kept, rejoin], self.kit, set(),
+                                      [self.history, recovered])["verdict"], "pass")
+        late = history(125, 140)
+        self.assertEqual(br.reconcile([self.issued, self.dropped, kept, rejoin], self.kit, set(),
+                                      [self.history, late])["verdict"], "incomplete")
+
+    def test_removal_control_on_a_derived_copy_is_detected(self):
+        kept = census("crash", 120, self.dropped["stacks"])
+        phases = [self.issued, self.dropped, kept]
+        control = br.removal_control(phases, 2, self.kit, set(), [self.history])
+        self.assertTrue(control["detected"], control)
+        self.assertEqual(control["removed"]["kind"], "item_entity")
+        self.assertEqual(len(kept["stacks"]), 2, "the census itself is not altered")
+        held = br.removal_control([self.issued, census("crash", 120, self.issued["stacks"])], 1, self.kit, set(),
+                                  [self.history])
+        self.assertTrue(held["detected"], held)
+
+    def test_offline_and_production_recovery_exports_must_agree_on_every_kit_item(self):
+        soldier = "minecraft:overworld/bbbbbbbb-0000-0000-0000-000000000002"
+        player, ground = self.dropped["stacks"]
+
+        def verdict(reopened, tick=130, offline=None):
+            kept = census("crash", 120, offline or [player, ground])
+            kept["reopen"] = {"replay_tick": tick, "stacks": reopened}
+            return br.reconcile([self.issued, self.dropped, kept], self.kit, {soldier.split("/")[1]}, [self.history])
+
+        aged = {**ground, "age": ground["age"] + 10}
+        agreed = verdict([player, aged, stack(f"entity:{soldier}", "entity", SPEAR)])
+        self.assertEqual(agreed["verdict"], "pass", agreed)
+        self.assertEqual(agreed["phases"][-1]["reopen"]["bound_ticks"], 10)
+        # The image carries 10 ticks of unrepaid simulation debt (age 8 at tick 120, born at 102); the
+        # reopened server may repay it, up to the birth bound 130 - 102 = 28.
+        self.assertEqual(verdict([player, {**ground, "age": 28}])["verdict"], "pass")
+        damaged = {**SHIELD, "components": {**SHIELD["components"], "minecraft:damage": 3}}
+        for label, reopened in (
+                ("older than its birth allows", [player, {**ground, "age": 29}]),
+                ("younger", [player, {**ground, "age": ground["age"] - 1}]),
+                ("other slot", [{**player, "place": "/Inventory/1"}, aged]),
+                ("other wear", [stack(f"player:{HOLDER}", "player", damaged), aged]),
+                ("other dimension", [player, {**aged, "dimension": "minecraft:the_nether"}]),
+                ("missing piece", [player]),
+                ("extra piece", [player, aged, stack(f"player:{HOLDER}", "player", SPEAR, "/Inventory/4")])):
+            result = verdict(reopened)
+            self.assertEqual(result["verdict"], "incomplete", label)
+            self.assertEqual(result["incomplete"][0]["reason"], br.DISAGREE, label)
+        self.assertEqual(verdict([player, ground], tick=119)["verdict"], "incomplete", "reopen ran backwards")
+        self.assertEqual(verdict([player, ground], offline=[player, {**ground, "age": 19}])["verdict"], "incomplete",
+                         "the offline image itself older than its birth allows")
+        unborn = census("crash", 120, [player, ground])
+        self.assertEqual(br.reconcile([self.issued, self.dropped, unborn], self.kit, set(),
+                                      [history(100, 200, spawns=[{**self.spawn, "age": None}])])["verdict"],
+                         "incomplete", "no durable birth record bounds the age")
+        duplicated = [player, ground, stack(f"player:{HOLDER}", "player", SPEAR, "/Inventory/4")]
+        self.assertEqual(verdict(duplicated, offline=duplicated)["verdict"], "fail", "both exports hold two")
+        self.assertEqual(verdict([player, ground], offline=duplicated)["verdict"], "incomplete",
+                         "a duplicate only one export shows is not a verified red")
+        missing = census("crash", 120, [player, ground])
+        del missing["reopen"]
+        self.assertEqual(br.reconcile([self.issued, self.dropped, missing], self.kit, set(), [self.history])["verdict"],
+                         "incomplete")
+
+    def test_recovery_tick_evidence_needs_the_crash_tail_and_the_next_tick(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive, crash, recovery = (Path(directory, name) for name in ("archive", "crash", "recovery"))
+            for path in (archive, crash, recovery):
+                path.mkdir()
+            for tick in range(1, 11):
+                batch(archive if tick <= 5 else crash, tick, tick, [{"Tick": tick}])
+            for tick in range(6, 13):
+                batch(recovery, tick, tick, [{"Tick": tick}])
+            pre, rec = br.read_batches([archive, crash]), br.read_batches([recovery])
+            image = {"checkpoint_tick": 5, "replay_tick": 10}
+            evidence = br.recovery_tick_evidence(pre, rec, image)
+            self.assertTrue(evidence["match"], evidence)
+            self.assertEqual((evidence["reopened_tail"], evidence["recovered_tick"]), ([6, 10], 10))
+            self.assertFalse(br.recovery_tick_evidence(pre, rec, {**image, "replay_tick": 9})["match"])
+            self.assertFalse(br.recovery_tick_evidence(pre, rec, {**image, "checkpoint_tick": 4})["match"])
+            (recovery / "batch-00000000000000000011-00000000000000000011.bin").unlink()
+            self.assertFalse(br.recovery_tick_evidence(pre, br.read_batches([recovery]), image)["match"], "first new tick 12")
+            batch(recovery, 10, 10, [{"Tick": "rewritten"}])
+            self.assertEqual(br.recovery_tick_evidence(pre, br.read_batches([recovery]), image)["differing"], [[10, 10]])
+
+
+class InputsAndOutputsTests(unittest.TestCase):
+    def test_census_config_points_at_the_derived_world(self):
+        text = '[data]\nworld_dir = "/run/world"\nvanilla_data_dir = "/c"\nbackup_dir = "/run/backups"\n'
+        out = br.census_config(text, Path("/tmp/derived world"))
+        self.assertIn('world_dir = "/tmp/derived world"', out)
+        self.assertNotIn("backup_dir", out)
+        with self.assertRaises(ValueError):
+            br.census_config("[data]\n", Path("/x"))
+
+    def test_reopen_config_uses_fresh_ports_and_a_private_plugin_copy(self):
+        text = ('[network]\nport = 1\n[dashboard]\nport = 2\n[plugins]\ndirectory = "/run/plugins"\n'
+                '[data]\nworld_dir = "/run/world"\nbackup_dir = "/run/backups"\n')
+        out, source = br.reopen_config(text, Path("/tmp/reopen/world"), Path("/tmp/reopen/plugins"))
+        self.assertEqual(source, Path("/run/plugins"))
+        self.assertIn('directory = "/tmp/reopen/plugins"', out)
+        self.assertIn('world_dir = "/tmp/reopen/world"', out)
+        self.assertNotIn("backup_dir", out)
+        ports = [line for line in out.splitlines() if line.startswith("port =")]
+        self.assertEqual(len(ports), 2)
+        self.assertNotIn("port = 1", ports)
+        self.assertNotIn("port = 2", ports)
+
+    def test_census_refuses_a_compact_that_changes_more_than_the_redb_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stopped = root / "stopped"
+            (stopped / "native").mkdir(parents=True)
+            (stopped / "journal").mkdir()
+            (stopped / "native" / "state.redb").write_bytes(b"redb")
+            (stopped / "journal" / "batch-1-1.bin").write_bytes(b"wal")
+            toml = root / "server.toml"
+            toml.write_text(f'[data]\nworld_dir = "{stopped}"\n')
+            ctx = profiles.ProfileContext(root)
+
+            def compact(argv, ctx, log):
+                world = Path(argv[argv.index("--config") + 1]).parent / "world"
+                (world / "native" / "state.redb").write_bytes(b"repaired")
+                (world / "journal" / "batch-1-1.bin").write_bytes(b"rewritten")
+
+            with mock.patch.object(br, "reopen_image", return_value={}), \
+                    mock.patch.object(br, "_run_command", side_effect=compact):
+                with self.assertRaisesRegex(br.Incomplete, "journal/batch-1-1.bin"):
+                    br.take_census(ctx, Path("/bin/true"), toml, root / "census" / "crash", phase="crash", epoch=0,
+                                   stopped=stopped, hashes=br.file_hashes(stopped))
+            recorded = json.loads((root / "census" / "crash" / "compact.json").read_text())
+            self.assertEqual(recorded["changed"], ["journal/batch-1-1.bin", "native/state.redb"])
+            self.assertEqual(recorded["state_redb_before"], br.file_hashes(stopped)["native/state.redb"])
+
+    def test_inputs_fail_closed_and_are_hashed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pin = root / "pin"
+            pin.mkdir()
+            (pin / "manifest.json").write_text("{}")
+            server = pin / "krasnokamen"
+            for executable in (server, root / "client", root / "ctl", root / "recorder"):
+                executable.write_bytes(b"#!/bin/true\n")
+                executable.chmod(0o755)
+            for name in ("resources", "data", "world/native"):
+                (root / name).mkdir(parents=True)
+            (root / "world/native/state.redb").write_bytes(b"x")
+            env = {"KRASNOKAMEN_SERVER_BINARY": str(server), "KRASNOKAMEN_BATTLE_WORLD": str(root / "world"),
+                   "KRASNOKAMEN_BATTLE_WORLD_SEED": "935", "KRASNOKAMEN_BATTLE_HORIZON_CLIENT": str(root / "client"),
+                   "KRASNOKAMEN_BATTLE_HORIZON_CTL": str(root / "ctl"),
+                   "KRASNOKAMEN_BATTLE_HORIZON_RESOURCES": str(root / "resources"),
+                   "KRASNOKAMEN_CLIENT_BINARY": str(root / "recorder"),
+                   "KRASNOKAMEN_BATTLE_RECORDER_DATA": str(root / "data")}
+            ctx = profiles.ProfileContext(root)
+            inputs = br.resolve_inputs(ctx, "battle-kit-census", env)
+            self.assertEqual(inputs["server"], server.resolve())
+            self.assertEqual(ctx.client_evidence["battle_inputs"]["KRASNOKAMEN_BATTLE_WORLD_SEED"], 935)
+            self.assertIn("sha256", ctx.client_evidence["battle_inputs"]["KRASNOKAMEN_BATTLE_HORIZON_CLIENT"])
+            for missing in ("KRASNOKAMEN_SERVER_BINARY", "KRASNOKAMEN_BATTLE_HORIZON_CTL", "KRASNOKAMEN_CLIENT_BINARY"):
+                with self.subTest(missing=missing), self.assertRaises(ValueError):
+                    br.resolve_inputs(profiles.ProfileContext(root), "battle-kit-census",
+                                      {k: v for k, v in env.items() if k != missing})
+            auth_env = {k: v for k, v in env.items() if k not in br.RUNNER_INPUTS.values()}
+            with mock.patch.object(br.runtime, "sibling_root", return_value=root / "plugins"):
+                with self.assertRaisesRegex(ValueError, "krasnokamen-auth"):
+                    br.resolve_inputs(profiles.ProfileContext(root), "battle-auth-hydration", auth_env)
+                (root / "plugins/krasnokamen-auth").mkdir(parents=True)
+                for name in ("plugin.toml", "plugin.wasm"):
+                    (root / "plugins/krasnokamen-auth" / name).write_bytes(b"p")
+                self.assertIn("auth_package", br.resolve_inputs(profiles.ProfileContext(root), "battle-auth-hydration", auth_env))
+            os.unlink(pin / "manifest.json")
+            with self.assertRaisesRegex(ValueError, "manifest"):
+                br.resolve_inputs(profiles.ProfileContext(root), "battle-kit-census", env)
+
+    def test_password_scan_reports_paths_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "clean.log").write_text("login [redacted]\n")
+            (root / "sub").mkdir()
+            (root / "sub/leak.bin").write_bytes(b"\x00secret-pw\x00")
+            leaks = br.password_leaks(root, ["secret-pw"])
+            self.assertEqual(leaks, [str(root / "sub/leak.bin")])
+            self.assertNotIn("secret-pw", json.dumps(leaks))
+
+    def test_online_census_groups_replies_by_marker(self):
+        class Fake:
+            def __init__(self):
+                self.out = []
+
+            def mark(self):
+                return 0
+
+            def send(self, command):
+                if command.startswith("clear @a minecraft:iron_spear"):
+                    self.out += ["Found 1 matching item(s) on player PovRed", "No items were found on player CamSpec"]
+                elif command.startswith("clear"):
+                    self.out += ["No items were found on player PovRed"]
+                else:
+                    self.out.append("[Server] " + command.split(" ", 1)[1])
+
+            def wait(self, pattern, mark=0, timeout=0, fail=None):
+                return None
+
+            def text_since(self, mark):
+                return "\n".join(self.out)
+
+        counts = br.online_census(Fake(), ["minecraft:iron_spear", "minecraft:shield"], "p")
+        self.assertEqual(counts, {"minecraft:iron_spear": {"PovRed": 1, "CamSpec": 0},
+                                  "minecraft:shield": {"PovRed": 0}})
+
+    def test_named_scenarios_only(self):
+        ctx = profiles.ProfileContext(Path("/nonexistent"), scenario_id=None)
+        with self.assertRaises(ValueError):
+            br.run(ctx)
+        with self.assertRaises(ValueError):
+            br.run(profiles.ProfileContext(Path("/nonexistent"), scenario_id="battle-kit-census", extra_args=["--x"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

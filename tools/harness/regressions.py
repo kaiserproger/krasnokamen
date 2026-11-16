@@ -81,6 +81,9 @@ def _client_command(profile, scenario):
     if profile == 'dh-gate':
         raise ValueError(f'unknown runnable scenario {profile}:{scenario}')
     argv = [sys.executable, '-m', 'tools.harness', 'run', 'scenario', scenario]
+    if profile == 'battle-crash-recovery':
+        # Its own Horizon clients and inputs (KRASNOKAMEN_BATTLE_*); no Java/native client selection.
+        return argv
     if scenario.startswith('native-'):
         argv.extend(['--client', 'native', '--windowed'])
     else:

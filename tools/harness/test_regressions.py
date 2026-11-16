@@ -368,6 +368,14 @@ regression = []
         self.assertEqual(argv[6:], ['--platform', 'fabric', '--server-bin', '{server_bin}',
                                     '--plugins-dir', '{plugins_dir}', '--timeout-seconds', '420'])
 
+    def test_battle_recovery_refs_are_graphical_and_take_only_the_env_server(self):
+        for scenario in ('battle-kit-census', 'battle-crash-handoff', 'battle-auth-hydration'):
+            ref = f'harness:battle-crash-recovery:{scenario}'
+            with self.subTest(ref=ref):
+                self.assertTrue(regressions.is_graphical_ref(ref))
+                argv = regressions._client_command('battle-crash-recovery', scenario)
+                self.assertEqual(argv[1:], ['-m', 'tools.harness', 'run', 'scenario', scenario])
+
     def test_loader_live_ref_fails_closed(self):
         for bad in ('harness:loader-live:', 'harness:loader-live:no-such-scenario',
                     'harness:loader-live:native-low-roof-house', 'harness:dh-gate:all',
