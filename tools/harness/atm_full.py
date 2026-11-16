@@ -384,7 +384,7 @@ def run(ctx: ProfileContext) -> dict:
                 row.update(status="verification_failed", reason=str(error))
             write_json(output / "result.json", report)
     (output / "photographs").mkdir()
-    with session(args, config, port, "photographs", report) as client:
+    with session(args, config, port, "photograph-session", report) as client:
         for row in active:
             if row["status"] == "located":
                 try:

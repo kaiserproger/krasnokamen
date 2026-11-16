@@ -121,6 +121,10 @@ class FullSelectionTests(unittest.TestCase):
             client.command.return_value = {}
             proof = {"anchor": [0, 0, 0], "bounds": [0, 0, 0, 0, 0, 0], "chunk": [0, 0],
                      "dimension_dir": str(root), "samples": []}
+            def fake_session(args, config, port, label, report):
+                (args.output / label).mkdir()
+                return contextlib.nullcontext(client)
+
             with mock.patch.dict(atm_full.os.environ, env), \
                     mock.patch.object(cli, "ARTIFACT_ROOT", root / "receipts"), \
                     mock.patch.object(preflight, "check", return_value=()), \
@@ -128,7 +132,7 @@ class FullSelectionTests(unittest.TestCase):
                     mock.patch.object(atm_full, "tree_hash", return_value="fixture"), \
                     mock.patch.object(atm_full, "selected_definitions", return_value=rows), \
                     mock.patch.object(atm_full, "prepare_operator_fixture"), \
-                    mock.patch.object(atm_full, "session", side_effect=lambda *a: contextlib.nullcontext(client)), \
+                    mock.patch.object(atm_full, "session", side_effect=fake_session), \
                     mock.patch.object(atm_full, "dimension_teleport"), \
                     mock.patch.object(atm_full, "locate_coordinates", side_effect=[ValueError("missing")] + [[0, 0]] * 129), \
                     mock.patch.object(atm_full, "locate_failure", return_value="not found"), \
