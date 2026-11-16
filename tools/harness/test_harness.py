@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -841,6 +842,25 @@ class ReadinessCleanupTests(unittest.TestCase):
                     self.assertEqual(process.wait(timeout=10), 3)
                 finally:
                     runtime.stop_process(process)
+
+    def test_path_condition_wait_ends_at_a_silent_exit(self) -> None:
+        """A child that exits without touching the watched directory ends the
+        wait through its pidfd, long before the timeout."""
+        with tempfile.TemporaryDirectory() as tmp:
+            watched = Path(tmp) / "journal" / ".event"
+            process = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(0.3); raise SystemExit(4)"],
+                start_new_session=True,
+            )
+            try:
+                started = time.monotonic()
+                with self.assertRaises(runtime.ChildExited) as caught:
+                    runtime.wait_for_path_condition(
+                        watched, 20.0, lambda: (False, None), process)
+                self.assertLess(time.monotonic() - started, 10.0)
+                self.assertEqual(caught.exception.returncode, 4)
+            finally:
+                runtime.stop_process(process)
 
     def test_wait_port_does_not_accept_a_foreign_listener(self) -> None:
         # Regression: a concurrent/stale server holding the port made wait_port

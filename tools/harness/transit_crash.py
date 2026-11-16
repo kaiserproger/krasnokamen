@@ -257,7 +257,7 @@ class Run:
             if process is None or process.poll() is not None:
                 raise RuntimeError(f"server exited while waiting for {pattern.pattern!r}")
             return (match := pattern.search(clean(self.server.log_path.read_text(errors="replace"))[offset:])) is not None, match
-        return runtime.wait_for_path_condition(self.server.log_path, WAIT, seen)
+        return runtime.wait_for_path_condition(self.server.log_path, WAIT, seen, process)
 
     def log_offset(self) -> int:
         return len(clean(self.server.log_path.read_text(errors="replace")))
@@ -356,7 +356,7 @@ class Run:
                 raise RuntimeError("server exited before the cut")
             through = published_through(journal, checkpoint)
             return through >= tick, through
-        return runtime.wait_for_path_condition(journal / ".event", WAIT, published)
+        return runtime.wait_for_path_condition(journal / ".event", WAIT, published, process)
 
     def wait_image(self, wanted, refusal: re.Pattern[str] | None = None) -> int:
         """Tick of the first published `Transit` image of the record that `wanted` accepts
@@ -387,7 +387,7 @@ class Run:
                 found.extend(image["tick"] for image in _transits(entries, self.facts["record"])
                              if wanted(json.loads(image["record"]) if image["record"] else None))
             return bool(found), found[:1]
-        return runtime.wait_for_path_condition(journal / ".event", WAIT, published)[0]
+        return runtime.wait_for_path_condition(journal / ".event", WAIT, published, process)[0]
 
     def cut(self, cut: str) -> None:
         if cut == "departure":
