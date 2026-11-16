@@ -638,8 +638,12 @@ fn blows_that_can_lead_nowhere_are_not_remembered() {
     );
 }
 
+/// Capture keeps a pending blow only by an attacker the image carries: a held
+/// player and a living native unit. An ordinary player and an attacker without
+/// a row are blows the next pass discards; replay still refuses an image that
+/// names an unknown identity.
 #[test]
-fn battle_resume_capture_keeps_role_native_and_unknown_attackers() {
+fn battle_resume_capture_keeps_only_attackers_the_image_carries() {
     let (mut state, holder, blue, at) = facing_blue();
     run_tick(
         &mut state,
@@ -654,19 +658,15 @@ fn battle_resume_capture_keeps_role_native_and_unknown_attackers() {
     assert!(opponent(&state.entities, &state.hostile.battle.live, 2, at, visitor).is_none());
     let native = state.hostile.battle.formation.members[0].id;
     let unknown = EntityId(i32::MAX - 1);
-    let pending = [(blue, holder), (blue, native), (blue, unknown)];
-    state.hostile.battle.retaliation.pending = pending.to_vec();
-    state
-        .hostile
-        .battle
-        .retaliation
-        .pending
-        .push((blue, visitor));
+    let carried = [(blue, holder), (blue, native)];
+    state.hostile.battle.retaliation.pending =
+        [carried[0], (blue, unknown), carried[1], (blue, visitor)].to_vec();
     let battle = &mut state.hostile.battle;
     battle
         .retaliation
         .reconcile_capture(&state.entities, &battle.live, &state.connections);
-    assert_eq!(battle.retaliation.pending, pending);
+    assert_eq!(battle.retaliation.pending, carried);
+    battle.retaliation.pending.push((blue, unknown));
     assert!(
         battle
             .retaliation
