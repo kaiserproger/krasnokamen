@@ -354,9 +354,201 @@ fn reconcile(world: &mut TickState, owner: SettlementId, household: &str, size: 
     }
 }
 
-/// Move the same people and household identity. The allocator releases the old
-/// memories; its normal budgeted path admission takes reachable destination POIs.
-/// No entity is spawned, teleported, or placed under plugin custody.
+/// One migrating unit: a whole household, or a lone resident without one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unit<'a> {
+    Household(&'a str),
+    Resident(EntityId),
+}
+
+/// What [`leave`] removed from its source: the household record with its
+/// identity (none for a lone resident) and the living members. Members keep
+/// their household key but belong to no settlement until [`join`] or their
+/// removal later in the same tick.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Departed {
+    pub(crate) household: Option<Household>,
+    pub(crate) members: Vec<EntityId>,
+}
+
+/// Living members of `unit` in `source` in this dimension, after the same
+/// admission checks `relocate` always made.
+pub(crate) fn unit_members(
+    state: &TickState,
+    source: SettlementId,
+    unit: Unit<'_>,
+) -> Result<Vec<EntityId>, &'static str> {
+    let from = state
+        .settlements
+        .get(source)
+        .ok_or("settlement not found")?;
+    match unit {
+        Unit::Household(household) => {
+            let family = from
+                .households
+                .get(household)
+                .ok_or("household not found")?;
+            from.revision
+                .checked_add(1)
+                .ok_or("settlement revision exhausted")?;
+            family
+                .revision
+                .checked_add(1)
+                .ok_or("household revision exhausted")?;
+            let members = members(state, source, household);
+            if members.is_empty() {
+                return Err("household has no living members");
+            }
+            if std::iter::once(state)
+                .chain(state.other_dimensions.values().map(|world| &**world))
+                .any(|world| {
+                    world.entities.slots().any(|slot| {
+                        world.entities.body(slot).alive
+                            && world.entities.row(slot).villager.as_ref().is_some_and(|v| {
+                                v.settlement == Some(source)
+                                    && v.household.as_deref() == Some(household)
+                                    && v.soldier.is_some()
+                            })
+                    })
+                })
+            {
+                return Err("Dismiss soldiers before relocating their household");
+            }
+            Ok(members)
+        }
+        Unit::Resident(entity) => {
+            from.revision
+                .checked_add(1)
+                .ok_or("settlement revision exhausted")?;
+            let slot = state.entities.slot_of(entity).ok_or("villager not found")?;
+            let v = state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .filter(|v| state.entities.body(slot).alive && v.settlement == Some(source))
+                .ok_or("a living resident of the settlement is required")?;
+            if v.household.is_some() {
+                return Err("resident belongs to a household; move the household");
+            }
+            if v.soldier.is_some() {
+                return Err("Dismiss soldier before relocating");
+            }
+            Ok(vec![entity])
+        }
+    }
+}
+
+/// First half of a move: take the unit out of `source`. The household record
+/// leaves with its identity; members lose construction work and every POI claim
+/// and belong to no settlement. Callers finish the move in the same tick, by
+/// [`join`] or by removing the bodies into custody.
+pub(crate) fn leave(
+    state: &mut TickState,
+    source: SettlementId,
+    unit: Unit<'_>,
+) -> Result<Departed, &'static str> {
+    let members = unit_members(state, source, unit)?;
+    let household = match unit {
+        Unit::Household(household) => {
+            if state
+                .settlements
+                .get(source)
+                .and_then(|record| record.founding.as_ref())
+                .is_some_and(|founding| founding.household == household)
+            {
+                super::construction::founding::cancel(state, source);
+            }
+            let record = state.settlements.get_mut(source).expect("validated source");
+            let mut family = record
+                .households
+                .remove(household)
+                .expect("validated household");
+            family.revision += 1;
+            family.home = None;
+            Some(family)
+        }
+        Unit::Resident(_) => None,
+    };
+    let record = state.settlements.get_mut(source).expect("validated source");
+    record.revision += 1;
+    for &entity in &members {
+        let slot = state.entities.slot_of(entity).expect("validated member");
+        let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        let profession = v.data.profession;
+        super::construction::detach(v);
+        v.settlement = None;
+        if v.data.profession != profession {
+            crate::villager::sync_appearance(state, slot);
+        }
+    }
+    super::allocator::release_members(state, &members);
+    super::refresh_counts(state, members.iter().copied());
+    Ok(Departed { household, members })
+}
+
+/// Second half of a move: the departed unit becomes `destination`'s. Members
+/// must be living villagers of no settlement carrying the departed household
+/// key (none for a lone resident).
+pub(crate) fn join(
+    state: &mut TickState,
+    destination: SettlementId,
+    departed: Departed,
+) -> Result<(), &'static str> {
+    let to = state
+        .settlements
+        .get(destination)
+        .ok_or("destination settlement not found")?;
+    let key = departed.household.as_ref().map(|family| family.id.as_str());
+    if key.is_some_and(|key| to.households.contains_key(key)) {
+        return Err("destination household identity conflict");
+    }
+    let revision = to
+        .revision
+        .checked_add(1)
+        .ok_or("settlement revision exhausted")?;
+    if departed.members.is_empty() {
+        return Err("nobody to join");
+    }
+    for &entity in &departed.members {
+        let slot = state.entities.slot_of(entity).ok_or("villager not found")?;
+        let v = state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .filter(|_| state.entities.body(slot).alive)
+            .ok_or("a living villager is required")?;
+        if v.settlement.is_some() || v.household.as_deref() != key {
+            return Err("villager is not part of the departed unit");
+        }
+    }
+    let to = state.settlements.get_mut(destination).unwrap();
+    to.revision = revision;
+    if let Some(family) = departed.household {
+        let key = family.id.clone();
+        to.households.insert(key.clone(), family);
+        state.settlements.queue_household_change(key);
+    }
+    for &entity in &departed.members {
+        let slot = state.entities.slot_of(entity).unwrap();
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .settlement = Some(destination);
+    }
+    super::allocator::release_members(state, &departed.members);
+    super::refresh_counts(state, departed.members);
+    Ok(())
+}
+
+/// Move the same people and household identity: [`leave`] then [`join`] in one
+/// tick. The allocator releases the old memories; its normal budgeted path
+/// admission takes reachable destination POIs. No entity is spawned,
+/// teleported, or placed under plugin custody.
 pub(crate) fn relocate(
     state: &mut TickState,
     source: SettlementId,
@@ -366,11 +558,10 @@ pub(crate) fn relocate(
     if source == destination {
         return Err("relocation needs another settlement");
     }
-    let from = state
+    state
         .settlements
         .get(source)
-        .ok_or("settlement not found")?;
-    let family = from
+        .ok_or("settlement not found")?
         .households
         .get(household)
         .ok_or("household not found")?;
@@ -381,73 +572,11 @@ pub(crate) fn relocate(
     if to.households.contains_key(household) {
         return Err("destination household identity conflict");
     }
-    let from_revision = from
-        .revision
+    to.revision
         .checked_add(1)
         .ok_or("settlement revision exhausted")?;
-    let to_revision = to
-        .revision
-        .checked_add(1)
-        .ok_or("settlement revision exhausted")?;
-    let revision = family
-        .revision
-        .checked_add(1)
-        .ok_or("household revision exhausted")?;
-    let members = members(state, source, household);
-    if members.is_empty() {
-        return Err("household has no living members");
-    }
-    if std::iter::once(&*state)
-        .chain(state.other_dimensions.values().map(|world| &**world))
-        .any(|world| {
-            world.entities.slots().any(|slot| {
-                world.entities.body(slot).alive
-                    && world.entities.row(slot).villager.as_ref().is_some_and(|v| {
-                        v.settlement == Some(source)
-                            && v.household.as_deref() == Some(household)
-                            && v.soldier.is_some()
-                    })
-            })
-        })
-    {
-        return Err("Dismiss soldiers before relocating their household");
-    }
-    if from
-        .founding
-        .as_ref()
-        .is_some_and(|founding| founding.household == household)
-    {
-        super::construction::founding::cancel(state, source);
-    }
-    let mut family = state
-        .settlements
-        .get_mut(source)
-        .unwrap()
-        .households
-        .remove(household)
-        .unwrap();
-    state.settlements.get_mut(source).unwrap().revision = from_revision;
-    family.revision = revision;
-    family.home = None;
-    let to = state.settlements.get_mut(destination).unwrap();
-    to.revision = to_revision;
-    to.households.insert(household.to_owned(), family);
-    for &entity in &members {
-        let slot = state.entities.slot_of(entity).unwrap();
-        let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
-        let profession = v.data.profession;
-        super::construction::detach(v);
-        v.settlement = Some(destination);
-        if v.data.profession != profession {
-            crate::villager::sync_appearance(state, slot);
-        }
-    }
-    state
-        .settlements
-        .queue_household_change(household.to_owned());
-    super::allocator::release_members(state, &members);
-    super::refresh_counts(state, members);
-    Ok(())
+    let departed = leave(state, source, Unit::Household(household))?;
+    join(state, destination, departed)
 }
 
 /// Identity compatibility only. The native courtship branch must secure an
