@@ -1940,24 +1940,24 @@ repro_check = "candidate: 7875d3193's datapacks.rs reverse conflicts in four blo
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-ZIP"
-title = "ZIP datapacks and worldgen/dimension resources are rejected, preventing valid archive/world-generation packs from loading. They remain explicit gaps rather than hidden under functions/tags-only enable/disable support."
+title = "ZIP datapacks are rejected, so valid archive packs do not load. Worldgen/dimension resource handling is tracked in DATAPACK-WORLDGEN-OVERRIDES."
 area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP Fix patch: reversing it removes the .zip pack arm from the pack scan and the worldgen/dimension resource arm from add_file, so such packs are rejected again."
-regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once", "cargo:mc-core:datapacks::tests::worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
+regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:7ed25fa17b8c7d7980abac39ba0e842869b4a620643e438e46635b23c5a07c73"
 promotion = "docs/bugs/promotions/DATAPACK-WORLDGEN-ZIP.json"
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-OVERRIDES"
-title = "A datapack's worldgen and dimension resources (biomes, dimension types, noise settings, structures, features) are ignored with a warning instead of changing world generation, so a pack that customizes terrain does nothing. Split from DATAPACK-WORLDGEN-ZIP, whose ZIP loading is implemented."
+title = "General datapack terrain customization is unsupported. Only the experimental jigsaw inputs (worldgen structure_set, structure with a supported type, template_pool, processor_list, tags/worldgen/biome, structure .nbt) change generation; any other worldgen or dimension resource (biomes, dimension types, noise settings, features, unsupported structure types) refuses a selected pack with an error naming every such entry, and a new pack holding one is skipped and named, instead of being ignored. Split from DATAPACK-WORLDGEN-ZIP, whose ZIP loading is implemented."
 area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "Split from DATAPACK-WORLDGEN-ZIP: ZIP packs load; worldgen/dimension overrides stay an explicit gap (docs/OPERATING.md, docs/COMPATIBILITY.md)."
+source = "Split from DATAPACK-WORLDGEN-ZIP. Since the A10 baseline-custody work the experimental jigsaw inputs apply on restart and every other worldgen/dimension resource fails closed by name (docs/OPERATING.md Datapacks and command blocks, docs/COMPATIBILITY.md); general custom terrain remains the open gap."
 regression = []
 
 [[bug]]
