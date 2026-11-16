@@ -116,7 +116,9 @@ pub enum WorldCommand {
         /// Prune only chunks inhabited for at most this many ticks.
         #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(i64).range(0..))]
         max_inhabited_ticks: i64,
-        /// Report what would be pruned and write nothing.
+        /// Report what would be pruned and prune nothing. Like starting the
+        /// server, it first recovers an uncleanly stopped world, folding the
+        /// crash journal tail into the store.
         #[arg(long)]
         dry_run: bool,
     },
@@ -378,15 +380,20 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     max_inhabited_ticks,
                     dry_run,
                 } => {
-                    let report = mc_world_tools::world_maintenance::prune_world(
-                        &config,
-                        &mc_world_tools::world_maintenance::PruneRequest {
-                            keep_radius: *keep_radius,
-                            center: *center,
-                            max_inhabited_ticks: *max_inhabited_ticks,
-                            dry_run: *dry_run,
-                        },
-                    )?;
+                    let request = mc_world_tools::world_maintenance::PruneRequest {
+                        keep_radius: *keep_radius,
+                        center: *center,
+                        max_inhabited_ticks: *max_inhabited_ticks,
+                        dry_run: *dry_run,
+                    };
+                    // Opening the world recovers a crash journal tail, and that
+                    // replay blocks on the chunk loader, which panics on an
+                    // async worker; run it on the blocking pool like pregenerate.
+                    let report = tokio::task::spawn_blocking(move || {
+                        mc_world_tools::world_maintenance::prune_world(&config, &request)
+                    })
+                    .await
+                    .map_err(|error| anyhow::anyhow!("prune task failed: {error}"))??;
                     let chunks = report.chunks;
                     println!(
                         "prune{}: kept chunks [{},{}]..[{},{}] around block ({},{}); \

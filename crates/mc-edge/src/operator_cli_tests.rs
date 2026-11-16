@@ -424,3 +424,56 @@ fn path_only_offline_commands_do_not_require_a_serving_config() {
     .unwrap();
     assert!(load_config(&cli).is_err());
 }
+
+/// A world whose journal tail holds a block write past its durable checkpoint,
+/// as left by a SIGKILL. Recovering it replays the write through the chunk
+/// loader, which blocks and so must not run on an async worker.
+fn world_with_unrecovered_block_write(world_dir: &std::path::Path) -> crate::config::EdgeConfig {
+    let mut cfg = crate::config::EdgeConfig::default();
+    cfg.data.world_dir = world_dir.to_path_buf();
+    cfg.data.seed = 42;
+    cfg.data.checkpoint_every_ticks = u64::MAX;
+    cfg.data.vanilla_data_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let config = crate::server::core_config(&cfg);
+    mc_core::Core::open(config.clone())
+        .expect("create world")
+        .shutdown();
+    let durable = mc_core::native_checkpoint::recover_offline(&config)
+        .expect("recover clean world")
+        .manifest
+        .tick;
+    let mut journal = mc_core::journal::JournalWriter::open(world_dir, 1).unwrap();
+    journal
+        .append(
+            durable + 1,
+            durable + 1,
+            &[mc_core::journal::JournalEntry::Block {
+                pos: [0, 64, 0],
+                state: 1,
+            }],
+        )
+        .expect("append journal tail");
+    drop(journal);
+    cfg
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn world_prune_dry_run_recovers_a_crash_journal_tail_off_the_async_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let world_dir = dir.path().join("world");
+    let mut cfg =
+        tokio::task::spawn_blocking(move || world_with_unrecovered_block_write(&world_dir))
+            .await
+            .unwrap();
+    let cli = Cli::try_parse_from([
+        "krasnokamen",
+        "world",
+        "prune",
+        "--keep-radius",
+        "16",
+        "--dry-run",
+    ])
+    .unwrap();
+    assert!(run_offline(&cli, &mut cfg).await.expect("prune dry run"));
+}
