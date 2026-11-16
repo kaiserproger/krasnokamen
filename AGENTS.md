@@ -283,11 +283,16 @@ python3 -m tools.harness list
   substantial tests go in focused sibling `*_tests.rs` modules.
 - New features are modular (owner, 2026-11-16): each lives in its own module,
   or its own crate when it needs no `mc-core` internals, with its state,
-  systems and sibling `*_tests.rs` inside; it reaches the rest only through a
-  narrow explicit interface, adds no edge to `mc-core`'s module cycle (the
-  code-health cycle ratchet must not rise), and is wired in at one registration
-  point owned by its host module. Existing code is not moved now; extracting it
-  is a later goal along [ADR 0021](docs/decisions/0021-build-time-and-crate-split.md)
+  systems and sibling `*_tests.rs` inside, and a narrow explicit interface. It
+  may use existing core types one way (`TickState`, entities, settlement
+  records) but must not join or grow `mc-core`'s large module cycle: nothing in
+  the cycle may call back into it except through its host module's single
+  registration point or the declared tick-system graph
+  ([ADR 0017](docs/decisions/0017-tick-system-graph.md)). The code-health cycle
+  ratchet (module count of the largest cycle) is the mechanical floor; review
+  checks the interface and the registration point. Existing code is not moved
+  now; extracting it is a later goal along
+  [ADR 0021](docs/decisions/0021-build-time-and-crate-split.md)
   ([how-to](docs/development/adding-a-feature.md#new-features-are-modules)).
 - Krasnokamen has no released compatibility surface of its own: migrate callers and
   delete superseded APIs, schemas, authorities, adapters, flags and fallbacks.

@@ -59,20 +59,28 @@ code stay where the code is.
   the host's existing persistence path; the codec for the feature's rows lives
   in the feature module.
 - **Narrow interface.** Other code calls a few named functions or a small trait
-  the module exports. The module itself reads the rest of the core only through
-  existing interfaces; it adds no ad-hoc `pub(crate)` reach-ins into unrelated
-  modules.
-- **No new cycle edges.** The module adds no edge to `mc-core`'s big module
-  cycle; the code-health cycle ratchet
-  ([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07))
-  stays equal or goes down for the change.
+  the module exports. The module may use existing core types one way
+  (`TickState`, entities, settlement records) but adds no ad-hoc `pub(crate)`
+  reach-ins into unrelated modules.
+- **Do not join the big cycle.** Most top-level `mc-core` modules form one
+  strongly connected component. The feature must not join or grow it: nothing
+  inside the cycle may come to depend back on the feature through a direct
+  call. The cycle reaches it only through the host's registration point (below)
+  or the declared tick-system graph
+  ([ADR 0017](../decisions/0017-tick-system-graph.md)).
 - **One registration point.** The host module wires it in at one place (its
   module declaration plus one tick/system call or one state field), owned by the
   host. No scattered edits through `tick.rs`, `registry.rs` or other shared files.
 
-Checklist for the change and its review: module path and host named; state,
-systems and tests inside; exported interface listed; `python3 -m tools.harness
-run code-health` shows no cycle growth; exactly one registration point.
+The code-health cycle ratchet
+([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07),
+`crates/xtask/src/code_health/ratchet.rs`) counts the top-level modules in the
+largest cycle; it checks neither single edges nor cycles among submodules. It is
+the mechanical floor ("the cycle does not grow"), not proof of a narrow
+interface. Checklist for the change and its review: module path and host named;
+state, systems and tests inside; exported interface listed; no call from inside
+the cycle into the feature except the one registration point;
+`python3 -m tools.harness run code-health` cycle module count not higher.
 
 ## New dependencies and components
 
