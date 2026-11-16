@@ -297,3 +297,162 @@ fn an_in_reach_builder_holds_position_instead_of_recentering_out_of_reach() {
             > before
     );
 }
+
+fn final_approach_fixture() -> (TickState, SettlementId, EntitySlot, construction::Project) {
+    let (mut state, town, builder) = fixture();
+    crate::settlements::construction::tests::open_plan(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, town, "spanish_house", 1, None);
+    let project = state
+        .settlements
+        .get(town)
+        .unwrap()
+        .project
+        .clone()
+        .unwrap();
+    // Setup uses the shared paid executor fixture; the final approach below
+    // runs only native allocator/brain motion, without navigation assistance.
+    for _ in 0..32 {
+        if executor::next_cell(&state, town, &project.structure).unwrap() == Some([5, 200, 3]) {
+            break;
+        }
+        attempt(&mut state, town, builder);
+    }
+    assert_eq!(
+        executor::next_cell(&state, town, &project.structure).unwrap(),
+        Some([5, 200, 3])
+    );
+    // A lower supported perimeter puts the next floor cell at the same
+    // elevation. Its legal centre is sqrt(10² + 6²) blocks from that cell;
+    // .35 farther along that radius is just outside placement reach.
+    for x in 14..=18 {
+        for z in 3..=11 {
+            state
+                .world
+                .set_block(x, 199, z, state.registry.states.stone);
+            state.world.set_block(x, 200, z, state.registry.states.air);
+        }
+    }
+    state.world.fold_overlay();
+    state.tickets.insert(
+        "arrival-stand".into(),
+        (crate::boundary::ChunkPos { x: 1, z: 0 }, 1),
+    );
+    state.refresh_active_chunks(state.tick);
+    let (item, count) = executor::next_material(&state, town, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert!(carried(
+        state.entities.row(builder).villager.as_ref().unwrap(),
+        item,
+        count
+    ));
+    (state, town, builder, project)
+}
+
+fn builder_final_approach(offset: f64) {
+    let (mut state, town, builder, project) = final_approach_fixture();
+    let radius = 136.0_f64.sqrt();
+    let initial = [
+        15.5 + offset * 10.0 / radius,
+        200.0,
+        9.5 + offset * 6.0 / radius,
+    ];
+    let before = executor::status(&state, town, &project.structure)
+        .unwrap()
+        .completed_work_units;
+    state.entities.set_pos(builder, initial);
+    state.entities.set_vel(builder, [0.0; 3]);
+    let mut v = state.entities.row_mut(builder).villager.take().unwrap();
+    let target = work(&mut state, builder, &mut v, &mut ChangeSet::default()).unwrap();
+    state.entities.row_mut(builder).villager = Some(v);
+    assert_eq!(
+        target.exact,
+        offset > crate::villager::brain::WAYPOINT_REACH
+    );
+    assert_eq!(
+        target.pos,
+        BlockPos {
+            x: 15,
+            y: 200,
+            z: 9
+        }
+    );
+    for _ in 0..40 {
+        state.day_time = 4000;
+        state.tick_budget.reset(state.tick);
+        let mut changes = ChangeSet::default();
+        crate::settlements::allocator::tick(&mut state, &mut changes);
+        crate::villager::brain::tick(&mut state, &mut changes);
+        state.tick += 1;
+        let pos = state.entities.pos(builder);
+        if offset > crate::villager::brain::WAYPOINT_REACH {
+            if (pos[0] - 15.5).powi(2) + (pos[2] - 9.5).powi(2)
+                < crate::villager::brain::WAYPOINT_REACH.powi(2)
+            {
+                break;
+            }
+        } else {
+            assert_eq!(
+                pos, initial,
+                "an already arrived builder must not take another step"
+            );
+        }
+    }
+    let pos = state.entities.pos(builder);
+    assert!(
+        (pos[0] - 15.5).powi(2) + (pos[2] - 9.5).powi(2)
+            < crate::villager::brain::WAYPOINT_REACH.powi(2),
+        "exact zero-waypoint route must finish the approach: pos={pos:?}, target={:?}",
+        target.pos
+    );
+    tick(&mut state, town);
+    assert!(
+        executor::status(&state, town, &project.structure)
+            .unwrap()
+            .completed_work_units
+            > before,
+        "the arrived builder must advance the paid canonical project"
+    );
+}
+
+#[test]
+fn builder_finishes_an_exact_zero_waypoint_approach_from_outside_arrival_tolerance() {
+    builder_final_approach(0.35);
+}
+
+#[test]
+fn builder_already_inside_arrival_tolerance_takes_no_extra_step() {
+    builder_final_approach(0.2);
+}
+
+#[test]
+fn an_in_reach_builder_holds_position_instead_of_recentering_out_of_reach() {
+    let (mut state, town, builder, project) = final_approach_fixture();
+    let initial = [17.05, 200.0, 6.5];
+    state.entities.set_pos(builder, initial);
+    state.entities.set_vel(builder, [0.0; 3]);
+    let before = executor::status(&state, town, &project.structure)
+        .unwrap()
+        .completed_work_units;
+    for _ in 0..40 {
+        state.day_time = 4000;
+        state.tick_budget.reset(state.tick);
+        let mut changes = ChangeSet::default();
+        crate::settlements::allocator::tick(&mut state, &mut changes);
+        crate::villager::brain::tick(&mut state, &mut changes);
+        state.tick += 1;
+        assert_eq!(
+            state.entities.pos(builder),
+            initial,
+            "working feet must not be recentered"
+        );
+    }
+    tick(&mut state, town);
+    assert!(
+        executor::status(&state, town, &project.structure)
+            .unwrap()
+            .completed_work_units
+            > before
+    );
+}
