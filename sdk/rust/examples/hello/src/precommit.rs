@@ -82,8 +82,8 @@ use std::collections::VecDeque;
 
 use krasnokamen_plugin_sdk::events::CommandInvoked;
 use krasnokamen_plugin_sdk::{
-    log, message_player, BuildContext, BuildDecision, Command, Config, DamageContext,
-    DamageDecision, DamageTarget, Event, Failure, HookActor, InitContext, LogLevel,
+    BuildContext, BuildDecision, Command, Config, DamageContext, DamageDecision, DamageTarget,
+    Event, Failure, HookActor, InitContext, LogLevel, log, message_player,
 };
 
 /// The command root this fixture answers when `root` is absent.
@@ -377,10 +377,10 @@ impl Hooks {
     pub fn on_events(&mut self, events: &[Event]) -> Result<Vec<Command>, Failure> {
         let mut commands = Vec::new();
         for event in events {
-            if let Event::CommandInvoked(invoked) = event {
-                if invoked.name == self.root {
-                    commands.extend(self.control(invoked));
-                }
+            if let Event::CommandInvoked(invoked) = event
+                && invoked.name == self.root
+            {
+                commands.extend(self.control(invoked));
             }
         }
         Ok(commands)

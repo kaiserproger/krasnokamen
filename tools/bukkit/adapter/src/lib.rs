@@ -1,13 +1,13 @@
 //! Offline-linked Java bytecode uses the ordinary Krasnokamen component ABI.
 
 use krasnokamen_plugin_sdk::{
-    export_plugin, log, message_session, BuildContext, BuildDecision, BuildResult, Command, Config,
-    Event, EventContext, Failure, HookActor, InitContext, LogLevel, Plugin,
+    BuildContext, BuildDecision, BuildResult, Command, Config, Event, EventContext, Failure,
+    HookActor, InitContext, LogLevel, Plugin, export_plugin, log, message_session,
 };
 use std::cell::{Cell, RefCell};
 
 #[link(wasm_import_module = "bukkit")]
-extern "C" {
+unsafe extern "C" {
     fn enable();
     fn disable();
     fn deliver(kind: i32, session: u64, argc: i32);
@@ -24,7 +24,7 @@ thread_local! {
 }
 
 /// Java transfers bytes, never pointers into its independent linear memory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn output_byte(value: i32) {
     OUTPUT.with_borrow_mut(|buffer| {
         assert!(
@@ -35,7 +35,7 @@ pub extern "C" fn output_byte(value: i32) {
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn finish_output(kind: i32, session: u64) {
     assert!(
         !IN_HOOK.get(),
@@ -55,12 +55,12 @@ pub extern "C" fn finish_output(kind: i32, session: u64) {
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn input_length(field: usize) -> usize {
     INPUT.with_borrow(|fields| fields[field].len())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn input_byte(field: usize, offset: usize) -> u32 {
     INPUT.with_borrow(|fields| u32::from(fields[field].as_bytes()[offset]))
 }

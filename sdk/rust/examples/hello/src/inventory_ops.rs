@@ -53,8 +53,8 @@ use krasnokamen_plugin_sdk::inventories::{
 };
 use krasnokamen_plugin_sdk::operation_types::OperationFailure;
 use krasnokamen_plugin_sdk::{
-    log, message_session, query_owned_inventory, reserve_inventory_items, transfer_owned_items,
-    Command, Config, Failure, LogLevel,
+    Command, Config, Failure, LogLevel, log, message_session, query_owned_inventory,
+    reserve_inventory_items, transfer_owned_items,
 };
 
 /// The command root the package's manifest declares for this fixture.
@@ -640,7 +640,7 @@ impl Fixture {
                     return Err(self.unexpected("status returned a different committed revision"));
                 }
                 Ok(vec![
-                    self.report(&format!("status committed revision={revision}"))
+                    self.report(&format!("status committed revision={revision}")),
                 ])
             }
             Action::Reserve => {

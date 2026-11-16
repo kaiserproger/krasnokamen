@@ -24,10 +24,10 @@ use krasnokamen_plugin_sdk::npcs::{
 };
 use krasnokamen_plugin_sdk::types::{BlockPosition, Position};
 use krasnokamen_plugin_sdk::{
-    ack_npc_work_receipts, adopt_npc, assign_npc_work, cancel_npc_order, cancel_npc_work,
-    issue_npc_order, log, message_player, query_npc_controls, query_npcs, query_owned_inventory,
-    release_npc, resume_npc_work, spawn_npc, suspend_npc_work, transfer_owned_items, Command,
-    Config, Failure, LogLevel,
+    Command, Config, Failure, LogLevel, ack_npc_work_receipts, adopt_npc, assign_npc_work,
+    cancel_npc_order, cancel_npc_work, issue_npc_order, log, message_player, query_npc_controls,
+    query_npcs, query_owned_inventory, release_npc, resume_npc_work, spawn_npc, suspend_npc_work,
+    transfer_owned_items,
 };
 
 pub(crate) const ROOT: &str = "npc";
@@ -88,20 +88,13 @@ impl Fixture {
                         let (_, player) = self.pending.take().expect("matched pending request");
                         self.track_work(&answer.outcome, &player);
                         commands.push(message_player(&player, report(&answer.outcome, "NPC_API")));
-                    } else if let OperationOutcome::Committed(committed) = &answer.outcome {
-                        if let OperationPayload::NpcOrder(NpcOrderResult::Work(work)) =
+                    } else if let OperationOutcome::Committed(committed) = &answer.outcome
+                        && let OperationPayload::NpcOrder(NpcOrderResult::Work(work)) =
                             &committed.payload
-                        {
-                            if let Some((admitted, player)) = self.work_consumers.get(&work.handle)
-                            {
-                                if work.operation_id.as_deref() == Some(admitted.as_str()) {
-                                    commands.push(message_player(
-                                        player,
-                                        report(&answer.outcome, "NPC_WORK"),
-                                    ));
-                                }
-                            }
-                        }
+                        && let Some((admitted, player)) = self.work_consumers.get(&work.handle)
+                        && work.operation_id.as_deref() == Some(admitted.as_str())
+                    {
+                        commands.push(message_player(player, report(&answer.outcome, "NPC_WORK")));
                     }
                 }
                 Event::CommandInvoked(invoked) if invoked.name == self.root => {

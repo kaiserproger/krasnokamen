@@ -53,7 +53,7 @@ use krasnokamen_plugin_sdk::events::{
     ClientViewOpened, ClientViewOutcome, CommandInvoked, EventContext, LoaderItemGrantFailure,
     LoaderItemGrantOutcome, LoaderItemGrantResult, LoaderViewAction, ViewFailure,
 };
-use krasnokamen_plugin_sdk::{log, types, Command, Event, Failure, LogLevel};
+use krasnokamen_plugin_sdk::{Command, Event, Failure, LogLevel, log, types};
 
 /// What one refused view open is logged with, so an operator reading the server
 /// log sees which request the owner rejected and why rather than a bare silence.
@@ -586,10 +586,10 @@ impl Fixture {
         // that the owner refused from leaving its own revision permanently stale.
         let (count, armed) = {
             let state = self.sessions.entry(session).or_default();
-            if let Some(instance) = state.input.as_mut() {
-                if instance.id == action.view_instance_id {
-                    instance.revision = action.view_revision;
-                }
+            if let Some(instance) = state.input.as_mut()
+                && instance.id == action.view_instance_id
+            {
+                instance.revision = action.view_revision;
             }
             let count = state.edges.entry(edge).or_default().advance(phase);
             (count, state.modal && phase == Phase::Press)
