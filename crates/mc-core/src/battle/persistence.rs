@@ -45,7 +45,10 @@ pub(crate) fn row_key(dimension: Dimension) -> String {
 
 /// The battle pass precedes native damage merge. Reconcile only decisions the
 /// next ordinary pass discards, using actual native identity/death evidence.
-/// An absent body is not proof of death: unknown IDs must still fail replay.
+/// For staging references an absent body is not proof of death: an unknown
+/// staged ID must still fail replay. Pending retaliation is the exception: a
+/// blow whose attacker the image does not carry (no row and no held player's
+/// identity) is one the next pass discards (`Retaliation::reconcile_capture`).
 fn reconcile_native_capture(state: &mut TickState) {
     let entities = &state.entities;
     let battle = &mut state.hostile.battle;
