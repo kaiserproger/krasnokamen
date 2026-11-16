@@ -388,6 +388,30 @@ class InputsAndOutputsTests(unittest.TestCase):
 
 
 class RearmScenarioTests(unittest.TestCase):
+    def test_windup_observer_selects_only_fresh_horse_extra(self):
+        image = {"battle": {"elapsed_ticks": 100,
+                            "formation": {"members": [{"id": 1}, {"id": 2}]},
+                            "combat": {"ids": [1, 2, 3], "fighters": [
+                                {"action": {"Windup": {"target": 3, "start": 98, "weapon": "Sword"}}},
+                                {"action": {"Windup": {"target": 2, "start": 99, "weapon": "Sword"}}},
+                                {"action": "Wounded"}]}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch(root, 1, 1, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}},
+                               {"Battle": {"value": json.dumps(image)}}])
+            observer = br.WindupObserver(root, 67)
+            observer.update()
+            target = br.windup_horse(observer.image, observer.horses)
+            self.assertEqual((target["actor"], target["target"], target["uuid"], target["impact"]),
+                             (1, 3, "horse-id", 108))
+            image["battle"]["elapsed_ticks"] = 105
+            self.assertIsNone(br.windup_horse({"tick": 2, "image": image}, observer.horses),
+                              "three ticks before impact is too late for the kill")
+            image["battle"]["elapsed_ticks"] = 100
+            image["battle"]["formation"]["members"].append({"id": 3})
+            self.assertIsNone(br.windup_horse({"tick": 2, "image": image}, observer.horses),
+                              "a roster member is not a horse extra")
+
     def test_rearm_scenario_runs_two_acknowledged_commands_before_census(self):
         fifo = mock.Mock()
         fifo.mark.side_effect = [11, 22]
