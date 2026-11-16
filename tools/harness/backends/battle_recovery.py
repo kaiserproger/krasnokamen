@@ -396,11 +396,13 @@ class HorizonCtl:
             raise RuntimeError(f"horizon-ctl {method}: {reply['error']}")
         return reply["result"]
 
-    def __call__(self, tool: str, *, secret: bool = False, timeout: float = 120, **args: Any) -> dict[str, Any]:
+    def __call__(self, tool: str, *, secret: bool = False, **args: Any) -> dict[str, Any]:
+        """Call one tool. Its own `timeout` (wait_for) or `seconds` (wait_ready) argument reaches the tool;
+        the reply is awaited that long plus a minute, else two minutes."""
         if tool not in self.tools:
             raise RuntimeError(f"horizon-ctl has no tool {tool}")
-        if "timeout" in args:
-            timeout = max(timeout, float(args["timeout"]) + 60)
+        limit = args.get("timeout", args.get("seconds"))
+        timeout = 120.0 if limit is None else max(120.0, float(limit) + 60)
         result = self._rpc("tools/call", {"name": tool, "arguments": args}, timeout)
         texts = [part for part in result.get("content", []) if part.get("type") == "text"]
         reply = json.loads(texts[-1]["text"]) if texts else {}

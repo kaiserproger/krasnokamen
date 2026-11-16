@@ -431,6 +431,18 @@ class ClientKitTests(unittest.TestCase):
         self.assertNotIn("s3cret-pw", str(caught.exception))
         self.assertEqual(client.calls, ["command", "wait_for", "messages"])
 
+    def test_tool_timeouts_reach_horizon_ctl(self):
+        sent = []
+        ctl = object.__new__(br.HorizonCtl)
+        ctl.tools = {"wait_for", "wait_ready", "events"}
+        ctl.log = mock.Mock()
+        ctl._rpc = lambda method, params, timeout: sent.append((params["arguments"], timeout)) or {"content": []}
+        ctl("wait_for", condition="chat", value="x", timeout=60)
+        ctl("wait_ready", seconds=400)
+        ctl("events")
+        self.assertEqual(sent, [({"condition": "chat", "value": "x", "timeout": 60}, 120.0),
+                                ({"seconds": 400}, 460.0), ({}, 120.0)])
+
 
 if __name__ == "__main__":
     unittest.main()
