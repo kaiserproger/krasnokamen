@@ -290,6 +290,37 @@ fn outside_arrivals_are_singleton_free_and_rate_is_capped_by_physical_beds() {
             state.entities.row(slot).villager
         );
     }
+    // Home claims can precede physical arrival by 48 blocks. Ordinary Rest
+    // brings both immigrant parents to their neighbouring beds before the
+    // ordinary first-birth courtship is started.
+    for _ in 0..4000 {
+        state.day_time = 18_000;
+        step(&mut state);
+        if parents.iter().all(|id| {
+            state
+                .entities
+                .row(state.entities.slot_of(*id).unwrap())
+                .villager
+                .as_ref()
+                .unwrap()
+                .sleeping
+        }) {
+            break;
+        }
+    }
+    for id in parents {
+        assert!(
+            state
+                .entities
+                .row(state.entities.slot_of(id).unwrap())
+                .villager
+                .as_ref()
+                .unwrap()
+                .sleeping,
+            "the immigrant physically sleeps at its claimed home before courtship"
+        );
+    }
+    state.day_time = 2000;
     let started = state.tick;
     for (index, id) in parents.into_iter().enumerate() {
         let slot = state.entities.slot_of(id).unwrap();

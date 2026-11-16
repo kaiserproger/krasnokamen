@@ -380,6 +380,16 @@ fn row_images(entries: &[crate::journal::JournalEntry], id: EntityId) -> usize {
 #[test]
 fn hold_retries_do_not_emit_native_entity_row_postimages() {
     let (mut state, id, uuid) = blocked();
+    // Full ticks load the entire ticket, unlike the narrow direct-brain
+    // fixture. Keep the obstacle across the whole return search window so a
+    // later retry cannot legitimately find a newly loaded way around it.
+    state.world.ensure_blocking(&state.desired_chunks());
+    for z in -128..144 {
+        for y in 64..84 {
+            state.world.set_block(50, y, z, state.registry.states.stone);
+        }
+    }
+    state.world.fold_overlay();
     for _ in 0..3 {
         state.tick_budget.reset(state.tick);
         run(&mut state, id, false);
@@ -404,9 +414,15 @@ fn hold_retries_do_not_emit_native_entity_row_postimages() {
             "Hold memory must not generate native row images: {entries:?}"
         );
     }
+    let memory = crate::settlements::migration::return_memory(&mut state)[&uuid].next;
+    let slot = state.entities.slot_of(id).unwrap();
     assert!(
-        crate::settlements::migration::return_memory(&mut state)[&uuid].next > retry,
-        "the quiet native tick sequence includes an actual capped Hold retry"
+        memory > retry,
+        "the quiet native tick sequence includes an actual capped Hold retry: tick={} next={memory} old={retry} active={} pos={:?} outbound={:?}",
+        state.tick,
+        state.world.is_active(5, 0),
+        state.entities.pos(slot),
+        crate::settlements::migration::target(&state, uuid)
     );
 }
 
@@ -494,7 +510,7 @@ fn restored_homeless_body_has_one_capped_search_per_twelve_hundred_ticks() {
     let start = state.tick;
     let mut searches = 0;
     let mut nodes = 0;
-    for offset in 0..RETRY_TICKS {
+    for offset in 0..1200 {
         state.tick = start + offset;
         state.tick_budget.reset(state.tick);
         let before = state
@@ -510,4 +526,108 @@ fn restored_homeless_body_has_one_capped_search_per_twelve_hundred_ticks() {
     }
     assert_eq!(searches, 1);
     assert_eq!(nodes, NODE_LIMIT);
+}
+
+#[test]
+fn actual_soldier_guard_goal_preempts_a_homeless_outside_return() {
+    use crate::boundary::ChunkPos;
+    use crate::settlements::army::{self, Order};
+    let (mut state, settlement, slot) = army::tests::fixture();
+    state.settlements.get_mut(settlement).unwrap().radius = 64;
+    state
+        .tickets
+        .insert("return-soldier".into(), (ChunkPos { x: 3, z: 0 }, 5));
+    state.world.ensure_blocking(&state.desired_chunks());
+    for x in -16..112 {
+        for z in -16..32 {
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
+            for y in 201..206 {
+                // Preserve the army's paid equipment chest.
+                if [x, y, z] != [6, 201, 6] {
+                    state.world.set_block(x, y, z, state.registry.states.air);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    state.refresh_active_chunks(state.tick);
+    let soldier = army::recruit(&mut state, settlement).unwrap();
+    army::order(
+        &mut state,
+        settlement,
+        Some(soldier),
+        Order::Guard([35, 201, 8]),
+    )
+    .unwrap();
+    let id = state.entities.body(slot).id;
+    state.entities.set_pos(slot, [100.5, 201.0, 8.5]);
+    let mut observed_trigger = false;
+    for _ in 0..1800 {
+        state.day_time = 4000;
+        crate::settlements::migration::return_tests::step(&mut state);
+        observed_trigger |= state
+            .villager_pois
+            .home_search
+            .get(&id)
+            .is_some_and(|r| r.no_candidates);
+    }
+    assert!(
+        observed_trigger,
+        "the soldier really has the homeless return admission result"
+    );
+    assert!(
+        allocator::distance(state.entities.pos(slot), [35.5, 201.0, 8.5]) < 4.0,
+        "native Guard must own the body, not the settlement anchor: {:?}",
+        state.entities.pos(slot)
+    );
+}
+
+#[test]
+fn newly_claimed_home_outside_shrunk_radius_keeps_the_native_rest_target() {
+    let mut state = fixture();
+    let settlement = town(&mut state, "rest", 8, 64);
+    house(&mut state, settlement, 28);
+    let id = resident(&mut state, settlement, 8.5);
+    let slot = state.entities.slot_of(id).unwrap();
+    state.entities.set_pos(slot, [100.5, 64.0, 8.5]);
+    let mut claimed = false;
+    for _ in 0..3000 {
+        state.tick_budget.reset(state.tick);
+        allocator::tick(&mut state, &mut ChangeSet::default());
+        if state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .home
+            .is_some()
+        {
+            claimed = true;
+            break; // the native allocator claimed, before the brain sees it
+        }
+        crate::villager::brain::tick(&mut state, &mut ChangeSet::default());
+        state.tick += 1;
+    }
+    assert!(claimed);
+    let uuid = state.entities.row(slot).uuid;
+    assert!(crate::settlements::migration::return_memory(&mut state).contains_key(&uuid));
+    state.settlements.get_mut(settlement).unwrap().radius = 8;
+    for _ in 0..3000 {
+        state.day_time = 18_000;
+        crate::settlements::migration::return_tests::step(&mut state);
+        if state.entities.row(slot).villager.as_ref().unwrap().sleeping {
+            break;
+        }
+    }
+    let v = state.entities.row(slot).villager.as_ref().unwrap();
+    assert!(
+        v.sleeping,
+        "a claimed out-of-radius home must remain Rest's goal: {:?}",
+        state.entities.pos(slot)
+    );
+    assert!(v.home.is_some_and(|p| p.x == 28));
+    assert!(!crate::settlements::migration::return_memory(&mut state).contains_key(&uuid));
 }
