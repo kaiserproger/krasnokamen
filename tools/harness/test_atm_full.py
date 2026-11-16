@@ -1,5 +1,6 @@
 """Full ATM manifest and restart sampling contracts."""
 import json
+import gzip
 import contextlib
 from pathlib import Path
 import tempfile
@@ -8,6 +9,7 @@ from unittest import mock
 
 from . import atm_full
 from . import __main__ as cli, preflight
+from .backends import anvil_corrupt as nbt
 
 
 class FullSelectionTests(unittest.TestCase):
@@ -66,6 +68,62 @@ class FullSelectionTests(unittest.TestCase):
         matches = atm_full.differential_candidates(placed, baseline, natural, palette)
         self.assertEqual(matches, [{"position": [2, 0, 0], "state": "minecraft:stone_bricks[axis=x]"}])
 
+    def test_template_size_controls_differential_threshold(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "data/mvs/structure/start.nbt"
+            path.parent.mkdir(parents=True)
+            def template(count):
+                palette = [[("Name", (nbt.STRING, "minecraft:stone_bricks"))]]
+                blocks = [[("state", (nbt.INT, 0))] for _ in range(count)]
+                raw = nbt.serialize("", (nbt.COMPOUND, [
+                    ("palette", (nbt.LIST, (nbt.COMPOUND, palette))),
+                    ("blocks", (nbt.LIST, (nbt.COMPOUND, blocks))),
+                ]))
+                path.write_bytes(gzip.compress(raw))
+            row = {"id": "mvs:test", "templates": ["mvs:start"], "xz": [0, 0],
+                   "dimension": "minecraft:overworld"}
+            export, baseline = root / "positive", root / "baseline"
+            site = {"anchor": [0, 0, 0], "bounds": [0, 0, 0, 7, 0, 0],
+                    "chunk": [0, 0], "dimension_dir": str(export / "dimensions/minecraft/overworld")}
+            for count, placed, expected in ((6, 6, True), (6, 5, False), (0, 0, False), (12, 8, True)):
+                with self.subTest(count=count, placed=placed):
+                    template(count)
+                    palette, size = atm_full.template_metadata(root, row)
+                    row.update(template_palette=sorted(palette), start_template_blocks=size,
+                               differential_minimum=min(8, size))
+                    blocks = {f"{i},0,0": "minecraft:stone_bricks" for i in range(placed)}
+                    with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
+                            mock.patch.object(atm_full, "require_chunks"), \
+                            mock.patch.object(atm_full, "stand_positions", return_value=[[0, 1, 0]]), \
+                            mock.patch.object(atm_full, "read_world", side_effect=[
+                                [{"blocks": blocks}], [{"blocks": {}}], [{"blocks": blocks}]]):
+                        if expected:
+                            atm_full.site_proof(export, baseline, root, row, "before")
+                            self.assertEqual(row["differential"]["before"]["minimum"], min(8, count))
+                        else:
+                            with self.assertRaisesRegex(ValueError, "unprovable" if count == 0 else "only 5"):
+                                atm_full.site_proof(export, baseline, root, row, "before")
+
+    def test_template_metadata_uses_smallest_and_excludes_nonproof_blocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "data/mvs/structure"
+            path.mkdir(parents=True)
+            palette = [[("Name", (nbt.STRING, name))] for name in
+                       ("minecraft:stone", "minecraft:air", "minecraft:jigsaw", "minecraft:structure_void")]
+            for name, indices in (("small", [0, 0, 1, 2, 3]), ("large", [0] * 10)):
+                blocks = [[("state", (nbt.INT, index))] for index in indices]
+                raw = nbt.serialize("", (nbt.COMPOUND, [
+                    ("palette", (nbt.LIST, (nbt.COMPOUND, palette))),
+                    ("blocks", (nbt.LIST, (nbt.COMPOUND, blocks))),
+                ]))
+                (path / f"{name}.nbt").write_bytes(gzip.compress(raw))
+            palette_types, count = atm_full.template_metadata(
+                root, {"id": "mvs:test", "templates": ["mvs:large", "mvs:small"]})
+            self.assertEqual(count, 2)
+            self.assertEqual(palette_types, {"minecraft:stone"})
+
     def test_site_proof_records_count_and_fails_below_minimum(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -73,12 +131,13 @@ class FullSelectionTests(unittest.TestCase):
             dimension = export / "dimensions/minecraft/overworld"
             site = {"anchor": [0, 0, 0], "bounds": [0, 0, 0, 7, 0, 0],
                     "chunk": [0, 0], "dimension_dir": str(dimension)}
-            row = {"id": "mvs:test", "xz": [0, 0], "dimension": "minecraft:overworld"}
+            row = {"id": "mvs:test", "xz": [0, 0], "dimension": "minecraft:overworld",
+                   "template_palette": ["minecraft:stone", "minecraft:stone_bricks"],
+                   "start_template_blocks": 8, "differential_minimum": 8}
             natural = {"0,0,0": "minecraft:stone"}
             blocks = {f"{i},0,0": "minecraft:stone_bricks" for i in range(8)}
             with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
                     mock.patch.object(atm_full, "require_chunks"), \
-                    mock.patch.object(atm_full, "template_palette", return_value={"minecraft:stone", "minecraft:stone_bricks"}), \
                     mock.patch.object(atm_full, "stand_positions", return_value=[[0, 1, 0]]), \
                     mock.patch.object(atm_full, "read_world", side_effect=[
                         [{"blocks": blocks}], [{"blocks": natural}], [{"blocks": blocks}]]):
@@ -88,7 +147,6 @@ class FullSelectionTests(unittest.TestCase):
             self.assertEqual(len(result["samples"]), 8)
             with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
                     mock.patch.object(atm_full, "require_chunks"), \
-                    mock.patch.object(atm_full, "template_palette", return_value={"minecraft:stone"}), \
                     mock.patch.object(atm_full, "read_world", side_effect=[
                         [{"blocks": natural}], [{"blocks": natural}]]):
                 with self.assertRaisesRegex(ValueError, "only 0 non-natural"):
@@ -131,6 +189,7 @@ class FullSelectionTests(unittest.TestCase):
                     mock.patch.object(atm_full, "inventory", return_value=[]), \
                     mock.patch.object(atm_full, "tree_hash", return_value="fixture"), \
                     mock.patch.object(atm_full, "selected_definitions", return_value=rows), \
+                    mock.patch.object(atm_full, "template_metadata", return_value=({"minecraft:stone"}, 8)), \
                     mock.patch.object(atm_full, "prepare_operator_fixture"), \
                     mock.patch.object(atm_full, "session", side_effect=fake_session), \
                     mock.patch.object(atm_full, "dimension_teleport"), \

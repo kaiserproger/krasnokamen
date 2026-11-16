@@ -23,9 +23,10 @@ from .quirk_parity.anvil import _chunks_of, _regions, parse_nbt, read_world
 OVERWORLD = "moogs_structures:moogs_structures_generic_jigsaw_structure"
 NETHER = "moogs_structures:moogs_structures_generic_nether_jigsaw_structure"
 DIMENSIONS = {OVERWORLD: "minecraft:overworld", NETHER: "minecraft:the_nether"}
-# Existing crystal fixture had 437 eligible cells; eight is conservative,
-# not a calibration of the other 129 definitions.
-MIN_DIFFERENTIAL_BLOCKS = 8
+# Cap the size-aware threshold at eight; smaller start templates use their size.
+MAX_DIFFERENTIAL_BLOCKS = 8
+NON_PROOF_BLOCKS = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air",
+                    "minecraft:structure_void", "minecraft:jigsaw"}
 
 
 def resource(pack: Path, identifier: str, kind: str, suffix: str) -> Path:
@@ -134,18 +135,27 @@ def dimension_teleport(client, dimension: str, xyz: list[float]):
     return state
 
 
-def template_palette(pack: Path, row: dict) -> set[str]:
+def template_metadata(pack: Path, row: dict) -> tuple[set[str], int]:
     blocks = set()
+    counts = []
     for identifier in row["templates"]:
         nbt = parse_nbt(gzip.decompress(resource(pack, identifier, "structure", ".nbt").read_bytes()))
-        for palette in nbt.get("palettes", [nbt.get("palette", [])]):
-            for block in palette:
-                name = block["Name"]
-                if name not in {"minecraft:air", "minecraft:cave_air", "minecraft:void_air", "minecraft:structure_void"}:
-                    blocks.add(name)
-    if not blocks:
-        raise ValueError(f"{row['id']}: start templates contain no block palette")
-    return blocks
+        palettes = nbt.get("palettes", [nbt.get("palette", [])])
+        if not palettes or any(not palette for palette in palettes):
+            raise ValueError(f"{row['id']}: start template {identifier} has no block palette")
+        for palette in palettes:
+            names = [entry["Name"] for entry in palette]
+            blocks.update(name for name in names if name not in NON_PROOF_BLOCKS)
+            count = 0
+            for block in nbt["blocks"]:
+                index = block["state"]
+                if not isinstance(index, int) or not 0 <= index < len(names):
+                    raise ValueError(f"{row['id']}: start template {identifier} has invalid state index {index!r}")
+                count += names[index] not in NON_PROOF_BLOCKS
+            counts.append(count)
+    if not counts:
+        raise ValueError(f"{row['id']}: no start templates")
+    return blocks, min(counts)
 
 
 def find_site(export: Path, row: dict) -> dict:
@@ -190,7 +200,10 @@ def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase
     baseline_bounds = expanded_bounds(bounds, 16)
     require_chunks(dimension_dir, expanded_bounds(bounds, 6))
     require_chunks(baseline_dir, baseline_bounds)
-    palette = template_palette(pack, row)
+    palette = set(row["template_palette"])
+    minimum = row["differential_minimum"]
+    if minimum == 0:
+        raise ValueError(f"{row['id']}: start template has zero proof blocks; unprovable")
     audit = row.setdefault("palette_audit", {}).setdefault(phase, {"candidate": {}, "baseline": {}})
     blocks = read_world(dimension_dir, [bounds], palette_audit=audit["candidate"])[0]["blocks"]
     baseline = read_world(baseline_dir, [baseline_bounds], palette_audit=audit["baseline"])[0]["blocks"]
@@ -198,15 +211,15 @@ def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase
     matches = differential_candidates(blocks, baseline, natural, palette)
     self_control = differential_candidates(baseline, baseline, natural, palette)
     row.setdefault("differential", {})[phase] = {
-        "eligible_blocks": len(matches), "minimum": MIN_DIFFERENTIAL_BLOCKS,
+        "eligible_blocks": len(matches), "minimum": minimum,
         "natural_types": len(natural), "baseline_self_control_blocks": len(self_control),
         "baseline_dimension": str(baseline_dir),
     }
     if self_control:
         raise ValueError(f"{row['id']}: pack-absent self-control unexpectedly matched")
-    if len(matches) < MIN_DIFFERENTIAL_BLOCKS:
+    if len(matches) < minimum:
         raise ValueError(f"{row['id']}: only {len(matches)} non-natural differential template blocks "
-                         f"(minimum {MIN_DIFFERENTIAL_BLOCKS})")
+                         f"(minimum {minimum})")
     matches.sort(key=lambda block: sum((a-b)**2 for a, b in zip(block["position"], site["anchor"])))
     audit["candidate_approach"] = {}
     nearby = read_world(dimension_dir, [expanded_bounds(bounds, 6)],
@@ -306,6 +319,13 @@ def run(ctx: ProfileContext) -> dict:
     if inventory(pack) != packs[0]["server_files"] or tree_hash(packs[0]["server_files"]) != packs[0]["server_sha256"]:
         raise ValueError("converted MVS pack changed")
     rows = selected_definitions(pack)
+    for row in rows:
+        palette, count = template_metadata(pack, row)
+        row.update(template_palette=sorted(palette), start_template_blocks=count,
+                   differential_minimum=min(MAX_DIFFERENTIAL_BLOCKS, count))
+        if count == 0:
+            row.update(status="verification_failed",
+                       reason=f"{row['id']}: start template has zero proof blocks; unprovable")
     chosen = restart_selection(rows)
     subset = os.environ.get("KRASNOKAMEN_ATM_CONTROL_SUBSET", "")
     if subset not in ("", "1"):
@@ -327,7 +347,7 @@ def run(ctx: ProfileContext) -> dict:
               "dimension_travel": "execute in <dimension> run tp @s", "manifest_sha256": digest(manifest_path),
               "server_sha256": digest(args.server), "client_sha256": digest(args.client), "ctl_sha256": digest(args.ctl)}
     report["control_subset"] = bool(subset)
-    report["differential_minimum"] = MIN_DIFFERENTIAL_BLOCKS
+    report["differential_maximum"] = MAX_DIFFERENTIAL_BLOCKS
     ctx.failure_scenario = report
     write_json(output / "definitions.json", rows)
     write_json(output / "result.json", report)
@@ -345,6 +365,8 @@ def run(ctx: ProfileContext) -> dict:
     prepare_operator_fixture(ProfileContext(output), [USERNAME])
     with session(args, config, port, "discovery", report) as client:
         for row in active:
+            if row.get("status") == "verification_failed":
+                continue
             dimension_teleport(client, row["dimension"], [-255.5, 100, -255.5])
             messages = client.command(f"locate structure {row['id']}", row["id"])
             row["locate_messages"] = messages

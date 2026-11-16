@@ -129,11 +129,12 @@ It locates each ID, then generates both pack-present and same-seed pack-absent
 worlds across the expanded start bounds and verifies exported chunk coverage.
 Only a start-template palette type that differs at the same position and is
 absent from the pack-free vocabulary within 16 blocks of the bounds counts.
-Each ID needs at least eight such blocks; a seven-file crystal fixture had 437,
-but eight is a conservative threshold, not a calibration for all 130 IDs.
-Natural-only or otherwise insufficient starts remain findings, not passes. The
-pack-absent self-diff must be zero. A visible differential block is photographed
-from a grounded survival position within 4.5 blocks.
+Each ID needs `min(8, K)` such blocks, where K is the smallest selected start
+template's non-air, non-structure-void, non-jigsaw block count. K and the
+threshold are recorded per ID; K=0 is unprovable. Natural-only or otherwise
+insufficient starts remain findings, not passes. The pack-absent self-diff
+must be zero. A visible differential block is photographed from a grounded
+survival position within 4.5 blocks.
 The per-ID palette audit records chunk counts by DataVersion and encoding for
 each candidate and baseline read. The Anvil reader requires `Name`/`Properties`
 through DataVersion 4790 and `id`/`properties` or a bare identifier at 5023;
