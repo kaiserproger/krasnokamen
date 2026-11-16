@@ -258,7 +258,8 @@ Behavior worth knowing:
 For explicitly accelerated diagnostics only, `[test_acceleration]` accepts
 `gathering_yield`, `construction_speed`, `birth_chance` and `migration_rate`.
 Each defaults to `1.0` and must be finite and greater than zero. Every core
-startup logs all four values, even when the section is absent:
+startup prints all four values on stderr, even when the section is absent and
+whatever `RUST_LOG` filters:
 
 ```text
 test_acceleration gathering_yield=1 construction_speed=1 birth_chance=1 migration_rate=1

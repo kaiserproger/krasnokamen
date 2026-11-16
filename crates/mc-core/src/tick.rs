@@ -392,7 +392,7 @@ pub struct TickState {
     pub(crate) command_blocks_due: Vec<BlockPos>,
     /// Per-mob switches layered under the `mob_griefing` gamerule.
     pub(crate) mob_griefing: crate::config::MobGriefingRules,
-    pub(crate) test_acceleration: crate::test_acceleration::TestAcceleration,
+    pub(crate) test_acceleration: crate::config::test_acceleration::TestAcceleration,
     /// Player state per player entity (inventory, menus, vitals, mode).
     pub players: HashMap<EntityId, crate::player::PlayerState>,
     /// Session-only camera authority; absence means the viewer's own entity.
@@ -702,7 +702,7 @@ impl TickState {
             brushing: Default::default(),
             command_blocks_due: Vec::new(),
             mob_griefing: crate::config::MobGriefingRules::default(),
-            test_acceleration: crate::test_acceleration::TestAcceleration::default(),
+            test_acceleration: crate::config::test_acceleration::TestAcceleration::default(),
             players: HashMap::default(),
             cameras: Arc::default(),
             camera_releases: Vec::new(),

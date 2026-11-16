@@ -48,14 +48,13 @@ impl TestAcceleration {
         Ok(())
     }
 
+    /// Validates, then prints all four values on stderr. Not a `tracing` event,
+    /// so no log filter (`RUST_LOG=warn`) can hide the disclosure.
     pub(crate) fn startup(&self) -> Result<(), String> {
         self.validate()?;
-        tracing::info!(
+        eprintln!(
             "test_acceleration gathering_yield={} construction_speed={} birth_chance={} migration_rate={}",
-            self.gathering_yield,
-            self.construction_speed,
-            self.birth_chance,
-            self.migration_rate,
+            self.gathering_yield, self.construction_speed, self.birth_chance, self.migration_rate,
         );
         Ok(())
     }

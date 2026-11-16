@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::test_acceleration::TestAcceleration;
+pub mod test_acceleration;
+
+use test_acceleration::TestAcceleration;
 
 /// Configuration for [`crate::Core`].
 #[derive(Debug, Clone)]

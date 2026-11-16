@@ -215,7 +215,6 @@ pub mod survival;
 pub mod taming;
 mod target_grid;
 pub mod terrain;
-pub mod test_acceleration;
 pub mod tick;
 pub(crate) mod tick_budget;
 pub(crate) mod tick_control;

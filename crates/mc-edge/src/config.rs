@@ -47,7 +47,7 @@ pub struct EdgeConfig {
     pub block_log: BlockLogSection,
     /// Explicit test-only native settlement acceleration.
     #[serde(default)]
-    pub test_acceleration: mc_core::test_acceleration::TestAcceleration,
+    pub test_acceleration: mc_core::config::test_acceleration::TestAcceleration,
     /// Access lists live beside the explicit config, otherwise in the cwd.
     #[serde(skip, default = "default_server_dir")]
     pub(crate) server_dir: PathBuf,
@@ -803,7 +803,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
         ("plugins", &["directory"]),
         (
             "test_acceleration",
-            mc_core::test_acceleration::TestAcceleration::KEYS,
+            mc_core::config::test_acceleration::TestAcceleration::KEYS,
         ),
         ("anti_xray", &["overworld", "nether"]),
         (
@@ -918,7 +918,7 @@ mod tests {
         let default = EdgeConfig::from_toml("", None).unwrap();
         assert_eq!(
             default.test_acceleration,
-            mc_core::test_acceleration::TestAcceleration::default()
+            mc_core::config::test_acceleration::TestAcceleration::default()
         );
         let text = concat!(
             "[test_acceleration]\n",
@@ -930,7 +930,7 @@ mod tests {
         let cfg = EdgeConfig::from_toml(text, None).unwrap();
         assert_eq!(
             cfg.test_acceleration,
-            mc_core::test_acceleration::TestAcceleration {
+            mc_core::config::test_acceleration::TestAcceleration {
                 gathering_yield: 4.0,
                 construction_speed: 3.0,
                 birth_chance: 2.0,
