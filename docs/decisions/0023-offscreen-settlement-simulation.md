@@ -3,7 +3,8 @@
 **Date:** 2026-11-16  
 **Status:** Proposed (draft until Main accepts it after independent review).
 Slice 1, migration transit custody, is implemented on `wt/MigrationTransit`;
-nothing else in this ADR is implemented.  
+slice 2, game-time economy clocks, is merged on main (`1360be18a`); nothing
+else in this ADR is implemented.  
 **Related:** [0013](0013-core-model-v2.md) (native authority, one tick WAL),
 [0020](0020-entity-checkpoints-at-one-million.md) (entity tombstones),
 [0021](0021-build-time-and-crate-split.md) (module cycle),
@@ -38,9 +39,10 @@ establish today's behaviour. Terms: *simulated* is `ChunkWorld::is_active`;
 - Caravan deadlines expire off-screen although the carrier never moves.
 - Construction, recruitment, births and every villager brain branch wait for
   simulated chunks. Nothing creates population, buildings or recruits off-screen.
-- Every economy clock uses `world.tick`, which advances under `/tick freeze`
+- Every economy clock used `world.tick`, which advances under `/tick freeze`
   while game time and the settlement phase stop; downtime is safe because the
-  tick restores from the checkpoint.
+  tick restores from the checkpoint. Slice 2 moved wages and caravan deadlines
+  to game time.
 
 No row of [open transitions](../STATUS.md#open-transitions) covers settlements
 or residency.
@@ -68,8 +70,8 @@ subtract. The owners:
 
 | Accrual | Owner | Off-screen rule |
 |---|---|---|
-| Wages | `commerce` (today) | unchanged authority; its clocks move to game time (slice 2) |
-| Caravan deadline | `caravan` (today) | moves to game time (slice 2) |
+| Wages | `commerce` (today) | unchanged authority; its clocks use game time (slice 2, merged) |
+| Caravan deadline | `caravan` (today) | `game_deadline` in game time (slice 2, merged) |
 | Production portions | `production` | stays its only writer; off-screen periods become deferred portions in the job (slice 3) |
 | Consumption | `production`'s consumption owner (new, slice 3) | food demand per member per game day as a deferred debit |
 | Construction labour | `construction` | labour credit in the project (slice 4) |
@@ -78,6 +80,32 @@ subtract. The owners:
 
 The off-screen pass never writes a counter owned by another module and never
 re-derives a period from wall time.
+
+Slice 2 (merged) keeps this rule through the legacy conversion. Recovery
+converts a store's world-tick clocks once, after the WAL fold and the
+restoration of the global game clock, at the durable tick `R` and game time
+`G`; the converted values and the record's clock marker travel in one record
+image, so a crash before the next batch repeats the same conversion.
+
+- Wages: a future `next_due` becomes `G + (next_due - R)`. An overdue one keeps
+  its complete owed periods, `(elapsed / period + 1) * wage` for an active
+  contract, in `legacy_owed`, and the next due keeps its phase:
+  `G + period - elapsed % period`. `legacy_owed` is a one-time conversion debit
+  owned by `commerce`, the only accrual owner, not a second counter: it is
+  added to `earned` at the contract's first payroll-cursor visit and zeroed,
+  then paid like any accrued wage when budget and treasury allow; `next_due`
+  stays the only watermark. Recovery never pays money.
+- Caravans: `game_deadline` is the first expired game tick (a shipment expires
+  when game time `>= game_deadline`), so a new shipment gets
+  `admit + max_ticks + 1`, the first tick the old `world.tick > epoch +
+  max_ticks` rejected. A legacy deadline not yet passed (`epoch + max_ticks >=
+  R`) becomes `G + (epoch + max_ticks - R) + 1`; one already passed becomes `G`
+  and expires on the first simulation tick. `epoch` stays the world-tick
+  receipt identity.
+- Startup refuses only inconsistent data (a future wage due more than one
+  period ahead, a shipment epoch after `R`) or arithmetic overflow; valid
+  legacy debt is never forgiven. The removal condition of this shim is in
+  [settlements](../architecture/settlements.md).
 
 ### 3. Block and item placement: deferred materialisation on load
 
@@ -218,7 +246,7 @@ Write sets are disjoint; each slice owns its tests and docs paragraph.
 | Slice | Writes | Delivers |
 |---|---|---|
 | 1 Migration transit (done on branch) | `settlements/transit.rs`, `transit_tests.rs`, `transit_disk_tests.rs`, `households.rs` leave/join, `registry.rs` field, `settlements/persistence.rs` hookups, `journal.rs`/`journal/replay.rs` `Transit` entry, `mc-world` native checkpoint rows, `mc-world-conversion` census | this ADR's section 6 |
-| 2 Game-time economy clocks | `settlements/commerce.rs`, `settlements/caravan.rs` (+ tests) | wages and caravan deadlines stop under `/tick freeze`; double-count test across freeze |
+| 2 Game-time economy clocks (merged, `1360be18a`) | `settlements/commerce.rs`, `settlements/caravan.rs` (+ tests) | wages and caravan deadlines stop under `/tick freeze`; double-count test across freeze; one-time legacy conversion (section 2) |
 | 3 Production and consumption | `settlements/production.rs`, new `settlements/offscreen_production.rs` (+ tests) | deferred portions and food debit with load reconciliation |
 | 4 Construction labour | new `settlements/offscreen_construction.rs`, one call in `construction.rs` | labour credit and accelerated application on load |
 | 5 Births | new `settlements/offscreen_births.rs`, one call in the birth path | birth credit realised through the existing path |
@@ -234,4 +262,4 @@ watermark is game time.
   (serde defaults for old stores, no downgrade).
 - Today's residency-gated off-screen behaviour (payroll paid and portions
   completed while resident but not simulated) stays until slice 3 replaces the
-  production predicate; slice 2 removes the freeze accrual.
+  production predicate; slice 2 removed the freeze accrual.
