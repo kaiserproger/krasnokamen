@@ -140,6 +140,9 @@ This restates the binding design (`receipts/SpainCulture/IMMIGRATION-DESIGN.md`,
   Destination deleted: retarget to the source, else the nearest settlement,
   else enter unbound at the old destination's edge (accepted deviation: the
   fallback does not check free beds; the destination policy owns admission).
+  `transit::tick` returns each arrival that joined (`Arrival`: source,
+  destination, household, member UUIDs) to the migration policy in the same
+  tick; it is never persisted.
 - **Record.** Source, destination and its anchor, departure and arrival game
   time, bearing, exit, status, the household record `leave` removed, and each
   member's image in the WAL entity codec. Member images name no settlement or
@@ -161,7 +164,10 @@ This restates the binding design (`receipts/SpainCulture/IMMIGRATION-DESIGN.md`,
   exactly one place: a world entity or one record. Recovery refuses a UUID that
   is an entity and a member, a member of two records, or a record household
   that is also a settlement's, before membership validation. The offline census
-  reports `transit_records` and `transit_members` and refuses the same cases.
+  reports `transit_records` and `transit_members` and refuses the same cases;
+  `world custody-census` checks them on a crash copy at the durable boundary
+  (checkpoint plus published WAL through recovery's replay records, before any
+  entity is restored, transit rows read as raw JSON).
 - **Operator commands** (Main option A): `settlement transit depart <settlement>
   <household> <destination>` (exit = the household's current position, full
   validation) and `settlement transit list`. Handlers live in `transit.rs`; the
@@ -182,8 +188,15 @@ Each slice lands with native tests on real terrain and a negative control:
 Slice 1 has the disk tests (`transit_disk_tests.rs`: departure published and
 unpublished, in transit from the checkpoint row, arrival and its later
 checkpoint, and the body-plus-record negative control) and the census and
-native-store negative controls. Its SIGKILL cuts run through the operator
-command once the command registration lands.
+native-store negative controls. Its SIGKILL cuts are the `transit-crash` harness
+profile: a pinned release server, a household formed by a native birth and the
+operator departure command; SIGKILL once the WAL batch covering the departure
+or arrival tick is published, or after the `awaiting_entry` image and a
+committed checkpoint; then the custody census of the crash copy, a frozen
+recovery at the durable tick and the clean-stop census. Its controls: a forged
+published batch that re-adds a member body beside its record (census FAIL,
+recovery refuses) and a binary whose departure leaves the record out of the
+departure tick's WAL (the departure cut turns red).
 
 ### 8. Module boundaries
 
