@@ -271,16 +271,35 @@ fn raids_idle_ticks_skip_wal_and_restore_exact_elapsed_counters() {
 }
 
 #[test]
-fn persisted_unsafe_random_tick_speed_is_clamped_on_recovery() {
+fn high_random_tick_speed_survives_checkpoint_and_wal_recovery() {
     let root = tempfile::tempdir().unwrap();
     let (mut state, _, _) = crate::raids::tests::fixture(Some(root.path()));
     state
         .gamerules
-        .insert("random_tick_speed".into(), i32::MAX.to_string());
+        .insert("random_tick_speed".into(), "30000".into());
     state.gamerules_dirty = true;
-    checkpoint(root.path(), &mut state);
+    let manifest = checkpoint(root.path(), &mut state);
     let config = CoreConfig::new(root.path().to_owned(), 42);
-    let recovered = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
-    assert_eq!(recovered.gamerules["random_tick_speed"], "4096");
-    assert!(recovered.gamerules_dirty);
+    let mut recovered =
+        crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    assert_eq!(recovered.gamerules["random_tick_speed"], "30000");
+
+    recovered
+        .gamerules
+        .insert("random_tick_speed".into(), i32::MAX.to_string());
+    recovered.gamerules_dirty = true;
+    recovered.tick = manifest.tick + 1;
+    recovered.world.refresh_active_clock(recovered.tick);
+    let out = output(&recovered, ChangeSet::default());
+    let entries = journal_entries_for_tick(&mut recovered, &out).unwrap();
+    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    writer
+        .append(recovered.tick, recovered.tick, &entries)
+        .unwrap();
+    writer.flush().unwrap();
+    let replayed = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    assert_eq!(
+        replayed.gamerules["random_tick_speed"],
+        i32::MAX.to_string()
+    );
 }

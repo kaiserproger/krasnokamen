@@ -2311,8 +2311,37 @@ fn named_and_uuid_entity_targets_preserve_player_only_command_filtering() {
 }
 
 #[test]
-fn gamerule_random_tick_speed_rejects_unsafe_values() {
-    assert!(parse("gamerule randomTickSpeed 2147483647", true).is_err());
+fn high_random_tick_speed_command_performs_more_work_than_the_old_cap() {
+    let hydrate = |speed: i32| {
+        let (mut state, farmer) = crate::farming_tests::setup();
+        let dry = crate::farming_tests::block(&state, "farmland", &[("moisture", "0")]);
+        let wet = crate::farming_tests::block(&state, "farmland", &[("moisture", "7")]);
+        for x in 1..=4 {
+            for z in 1..=4 {
+                crate::farming_tests::put(&mut state, x, crate::farming_tests::Y, z, dry);
+            }
+        }
+        command(
+            &mut state,
+            farmer,
+            &format!("gamerule randomTickSpeed {speed}"),
+        );
+        crate::tick::run_tick(&mut state, &[]);
+        (1..=4)
+            .flat_map(|x| (1..=4).map(move |z| (x, z)))
+            .filter(|&(x, z)| state.world.block_at(x, crate::farming_tests::Y, z) == Some(wet))
+            .count()
+    };
+    let capped = hydrate(4096);
+    let high = hydrate(30000);
+    assert_eq!(
+        high, 16,
+        "the requested rate hydrates the whole fixed field"
+    );
+    assert!(
+        high > capped,
+        "accepting the command must not silently cap its work"
+    );
 }
 
 #[test]

@@ -121,6 +121,10 @@ refused chunk still creates no unsaved custody.
 4. Only then start native serving. No Anvil files or old JSON manifests are a
    serving recovery source.
 
+Gamerule images retain canonical names and exact accepted values across checkpoint
+and WAL replay. In particular, `random_tick_speed` keeps the vanilla nonnegative
+`i32` range; recovery does not impose a lower operational cap or rewrite the value.
+
 Scoreboard `Tags` retain the NBT string-list format but normalize duplicate
 members on checkpoint/WAL recovery, preserving first-occurrence order. The
 shared recovery boundary validates both entity and player retained fields

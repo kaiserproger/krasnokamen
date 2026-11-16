@@ -43,6 +43,11 @@ entity intent: each path still has to preserve its complete custody boundary.
 Within a block-update chain, preserve vanilla order. Independent-zone parallel
 execution is a model constraint, not a claim that a general scheduler exists.
 
+`random_tick_speed` uses the vanilla nonnegative `i32` bounds. The native random
+tick owner draws the requested count per eligible active section; checkpoints
+and WAL retain the exact value without an independent recovery cap. Runtime cost
+scales with that count and the eligible sections, not a fixed per-tick budget.
+
 Client game age follows simulated ticks, not journal frame identifiers.
 [State ownership](../architecture/state-ownership.md#tick-and-wire-clocks) defines the
 freeze/step projection and how recovery restores that age; daylight time remains

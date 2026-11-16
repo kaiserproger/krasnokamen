@@ -245,8 +245,11 @@ Behavior worth knowing:
 - `[mob_griefing]` switches narrow the vanilla `mobGriefing` gamerule, which
   stays the master gate: a disabled blast still hurts entities and emits its
   client event, it only stops removing blocks. They are config, not gamerules.
-- `/gamerule randomTickSpeed` is capped at 4096; saved larger values are
-  clamped on load with a warning.
+- `/gamerule randomTickSpeed` (canonical `random_tick_speed`) accepts the vanilla
+  range `0..2147483647`. Checkpoints and WAL recovery preserve the requested
+  value without clamping. Each eligible active section draws that many cells
+  per simulated tick: high rates can stall ticks, and support is not a TPS
+  guarantee. Use `0` to stop random ticks.
 - `worldgen_gpu = true` needs a build with `--features gpu` and a hardware
   adapter; otherwise startup logs why and the CPU generates.
 
