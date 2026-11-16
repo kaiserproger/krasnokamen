@@ -1762,7 +1762,7 @@ repro = "manual"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE Fix patch: reversing it removes the enable/disable arms (and the in-progress guard) from datapack_management::dispatch, back to list-only dispatch."
-regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_a_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_while_the_server_is_down_opens_the_world_without_it", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named", "cargo:mc-core:datapacks::command_tests::a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it", "cargo:mc-core:datapacks::command_tests::list_and_activation_work_beside_unreadable_entries", "cargo:mc-core:datapacks::command_tests::a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other"]
+regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_an_inactive_start_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_without_saved_starts_does_not_block_reopen", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named", "cargo:mc-core:datapacks::command_tests::a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it", "cargo:mc-core:datapacks::command_tests::list_and_activation_work_beside_unreadable_entries", "cargo:mc-core:datapacks::command_tests::a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other"]
 fix_commit = "patch:c3f274721984ac395f776c096188b4dbdbe453f0ad4d35b4be1d8a8011689116"
 promotion = "docs/bugs/promotions/DATAPACK-ENABLE.json"
 
@@ -1946,7 +1946,7 @@ repro = "manual"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-WORLDGEN-ZIP Fix patch: reversing it removes the .zip pack arm from the pack scan and the worldgen/dimension resource arm from add_file, so such packs are rejected again."
-regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once", "cargo:mc-core:datapacks::tests::worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
+regression = ["cargo:mc-core:datapacks::command_tests::zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries", "cargo:mc-core:datapacks::command_tests::an_archive_with_more_entries_than_the_resource_limit_is_refused", "cargo:mc-core:datapacks::command_tests::unsupported_worldgen_refuses_the_entire_pack_including_other_content", "cargo:mc-core:datapacks::tests::unsupported_worldgen_and_unknown_resources_fail_with_explicit_error", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:7ed25fa17b8c7d7980abac39ba0e842869b4a620643e438e46635b23c5a07c73"
 promotion = "docs/bugs/promotions/DATAPACK-WORLDGEN-ZIP.json"
 
@@ -5606,7 +5606,7 @@ repro = "manual"
 severity = "minor"
 status = "fixed"
 source = "BreakB10Commands round 3 H4 (REBREAK3.md); vanilla 26.1.2 DataPackCommand.getPack javap (getPack null -> unknown; selected.contains(pack) == enabling -> failed)."
-regression = ["cargo:mc-core:datapacks::command_tests::disabling_a_skipped_pack_says_it_is_not_enabled", "harness:datapack-reload:native-datapack-reload"]
+regression = ["cargo:mc-core:datapacks::command_tests::disabling_a_skipped_pack_says_it_is_not_enabled", "cargo:mc-core:datapacks::command_tests::a_refused_reload_never_leaves_a_listed_pack_unknown_to_disable", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:66e66c89e001d20f24ede3fb3e32e719cb587286bf4cee7cb95fb72fbf90bf5b"
 promotion = "docs/bugs/promotions/DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN.json"
 
