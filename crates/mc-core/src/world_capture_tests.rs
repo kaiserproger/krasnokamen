@@ -41,7 +41,7 @@ fn healthy_container_capture_visits_keys_once_not_once_per_dirty_chunk() {
             .map(|x| (ChunkPos { x, z: 0 }, 0))
             .collect();
         world.ensure_blocking(&positions);
-        world.take_generated(0).unwrap().fill_generated().unwrap();
+        world.take_generated().unwrap().fill_generated().unwrap();
     }
     let written = world.capture_dirty(&Default::default()).written();
     world.mark_flushed(&written);
@@ -454,7 +454,7 @@ fn required_generated_capacity_refuses_admission_without_losing_the_next_baselin
     );
     assert!(world.chunk(overflow).is_none());
     assert_eq!(
-        world.take_generated(0).unwrap().chunks.len(),
+        world.take_generated().unwrap().chunks.len(),
         GENERATED_PENDING_MAX
     );
 }

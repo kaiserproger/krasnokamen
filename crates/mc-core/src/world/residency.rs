@@ -405,11 +405,11 @@ impl ChunkWorld {
         true
     }
 
-    /// Generated immutable bases to save once at least `min` are queued.
-    /// Native fill-generated checks coverage atomically, so a delayed batch
-    /// never overwrites imported data or checkpointed gameplay.
-    pub fn take_generated(&mut self, min: usize) -> Option<ChunkCapture> {
-        if self.generated.is_empty() || self.generated.len() < min {
+    /// Generated immutable bases queued since the last take. Native
+    /// fill-generated checks coverage atomically, so a delayed batch never
+    /// overwrites imported data or checkpointed gameplay.
+    pub fn take_generated(&mut self) -> Option<ChunkCapture> {
+        if self.generated.is_empty() {
             return None;
         }
         Some(ChunkCapture {

@@ -639,8 +639,8 @@ pub(crate) fn journal_entries_for_tick(
     Ok(entries)
 }
 
-/// Work for the native writer thread, the single redb writer. FIFO, so saves
-/// of generated chunks stay ordered with checkpoints.
+/// Work for the native writer thread, the single redb writer. FIFO, so
+/// generated baselines stay ordered with checkpoints.
 pub(super) enum NativeWork {
     /// Commit a checkpoint whose WAL coverage the journal thread already gated
     /// (`Err`: the gate failed, so nothing is written and the job reports failure).
@@ -649,16 +649,14 @@ pub(super) enum NativeWork {
         job: Box<CheckpointJob>,
         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
     },
-    SaveGenerated(Box<crate::world::ChunkCapture>),
+    /// Commit generated baselines (Immediate); `done` reports durability to
+    /// the journal owner, which withholds later `Append`s until it arrives.
     RequireGenerated {
         chunks: Box<crate::world::ChunkCapture>,
         done: std::sync::mpsc::Sender<Result<(), CoreError>>,
     },
     /// Copy the last committed checkpoint and the WAL after it (hot backup).
-    Backup {
-        job: BackupJob,
-        through: u64,
-    },
+    Backup { job: BackupJob, through: u64 },
     /// Explicit orderly termination, queued after the final journal flush.
     Shutdown,
 }
@@ -667,16 +665,16 @@ pub(super) enum NativeWork {
 /// checkpoint's WAL coverage. Checkpoint jobs arrive FIFO behind the appends of
 /// every tick they cover, so the gate only has to confirm coverage (see
 /// [`write_checkpoint`]). The multi-second redb commit runs on a second thread
-/// ([`native_writer_loop`]) so a later tick's `Append` is never parked behind
-/// it. The function returns only after that thread has drained, so a shutdown
-/// still completes the final checkpoint.
-#[allow(clippy::too_many_arguments)]
+/// ([`native_writer_loop`]), so `Append`s are not parked behind it unless a
+/// generated baseline queued ahead of them is: the journal owner waits for each
+/// `RequireGenerated` commit, which the FIFO native writer runs after any
+/// earlier checkpoint. The function returns only after that thread has
+/// drained, so a shutdown still completes the final checkpoint.
 pub(super) fn journal_loop(
     world_dir: &std::path::Path,
     store: Arc<mc_world::native::NativeStore>,
     work_rx: std::sync::mpsc::Receiver<JournalWork>,
     mut writer: JournalWriter,
-    generated_busy: &std::sync::atomic::AtomicBool,
     budget: &JournalBudget,
     initial_manifest: CheckpointManifest,
     mut plugins: crate::plugin::PluginState,
@@ -707,7 +705,6 @@ pub(super) fn journal_loop(
                     world_dir,
                     store,
                     native_rx,
-                    generated_busy,
                     &committed_tick,
                     &native_failed,
                     initial_manifest,
@@ -823,15 +820,6 @@ pub(super) fn journal_loop(
                         }
                     }
                 }
-                JournalWork::SaveGenerated(chunks) => {
-                    if native_tx.send(NativeWork::SaveGenerated(chunks)).is_err() {
-                        tracing::error!(
-                            cause = "native writer channel closed",
-                            "journal generated-chunk handoff failed; world halting"
-                        );
-                        return;
-                    }
-                }
                 JournalWork::Shutdown => {
                     if let Err(error) = writer.flush() {
                         tracing::error!(error = %stop::Chain(&error), "journal final flush failed");
@@ -857,11 +845,12 @@ pub(super) fn journal_loop(
 }
 
 /// Native writer thread: the single redb writer for checkpoints and generated
-/// saves. In normal running at most one checkpoint and one generated save are
-/// outstanding (`checkpoint_in_flight`, `generated_busy`); shutdown may add a
-/// final checkpoint and more generated saves, which this FIFO drains before the
-/// journal scope exits. Only a successful Immediate commit permits pruning
-/// batches wholly covered by that newly durable checkpoint.
+/// baselines. In normal running at most one checkpoint is outstanding
+/// (`checkpoint_in_flight`) and at most one baseline batch, because the journal
+/// owner waits for each; shutdown may add a final checkpoint and more baselines,
+/// which this FIFO drains before the journal scope exits. Only a successful
+/// Immediate commit permits pruning batches wholly covered by that newly
+/// durable checkpoint.
 ///
 /// A panic in one job fails closed: the job reports failure on `done`/`reply`,
 /// `native_failed` makes the journal side halt, and this thread stops.
@@ -869,7 +858,6 @@ pub(super) fn native_writer_loop(
     world_dir: &std::path::Path,
     store: Arc<mc_world::native::NativeStore>,
     work_rx: std::sync::mpsc::Receiver<NativeWork>,
-    generated_busy: &std::sync::atomic::AtomicBool,
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     initial_manifest: CheckpointManifest,
@@ -880,8 +868,7 @@ pub(super) fn native_writer_loop(
     while let Ok(work) = work_rx.recv() {
         let notify = match &work {
             NativeWork::Checkpoint { job, .. } => Some((job.done.clone(), job.reply.clone())),
-            NativeWork::SaveGenerated(_)
-            | NativeWork::RequireGenerated { .. }
+            NativeWork::RequireGenerated { .. }
             | NativeWork::Backup { .. }
             | NativeWork::Shutdown => None,
         };
@@ -890,7 +877,6 @@ pub(super) fn native_writer_loop(
                 work,
                 world_dir,
                 &store,
-                generated_busy,
                 committed_tick,
                 &mut prev_manifest,
                 &mut block_log,
@@ -928,7 +914,6 @@ pub(super) fn run_native_work(
     work: NativeWork,
     world_dir: &std::path::Path,
     store: &mc_world::native::NativeStore,
-    generated_busy: &std::sync::atomic::AtomicBool,
     committed_tick: &std::sync::atomic::AtomicU64,
     prev_manifest: &mut CheckpointManifest,
     block_log: &mut crate::block_log::Backlog,
@@ -1031,13 +1016,6 @@ pub(super) fn run_native_work(
             // The same sole native writer performs an Immediate baseline
             // commit before the journal owner can append its dependent edits.
             let _ = done.send(chunks.fill_generated());
-        }
-        NativeWork::SaveGenerated(chunks) => {
-            // Best effort: a failed save only means generating again.
-            if let Err(error) = chunks.fill_generated() {
-                tracing::warn!(%error, "generated chunks not saved");
-            }
-            generated_busy.store(false, std::sync::atomic::Ordering::Release);
         }
         NativeWork::Backup { job, through } => {
             let started = std::time::Instant::now();

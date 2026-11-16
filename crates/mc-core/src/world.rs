@@ -236,8 +236,9 @@ const RECENT_CHUNKS: usize = 2048;
 /// floor even when its measured cost exceeds this budget.
 pub(crate) const ADMISSION_BUDGET_US: u128 = 8_000;
 
-/// Generated chunks held for saving while the journal thread is busy (a
-/// slow disk); bounds that memory.
+/// Generated baselines admitted since the tick last queued them for their
+/// required native commit; bounds that memory. Admission beyond it refuses the
+/// chunk with a load error.
 const GENERATED_PENDING_MAX: usize = 1024;
 
 impl RecentChunks {

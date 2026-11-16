@@ -164,7 +164,6 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
             },
             directory.path(),
             &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
-            &std::sync::atomic::AtomicBool::new(false),
             &std::sync::atomic::AtomicU64::new(manifest.tick),
             &mut manifest,
             &mut Default::default(),
@@ -233,8 +232,6 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
     let (second_tx, second_rx) = std::sync::mpsc::channel();
     checkpoint_tx.send(first_tx).unwrap();
     checkpoint_tx.send(second_tx).unwrap();
-    let generated_busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let journal_busy = Arc::clone(&generated_busy);
     let journal_plugins = state.plugins.clone();
     let journal_budget = Arc::new(crate::journal_budget::JournalBudget::new(
         crate::journal_budget::JOURNAL_QUEUE_BYTES,
@@ -283,7 +280,6 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
                 pause_state: tokio::sync::watch::channel(None).0,
                 work_tx,
                 journal_budget: tick_budget,
-                generated_busy,
                 unlocked_sessions: Arc::new(parking_lot::RwLock::new(Default::default())),
                 shutdown_rx,
                 checkpoint_rx,
@@ -347,7 +343,6 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
             journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
-            &journal_busy,
             &journal_budget,
             manifest,
             journal_plugins,
@@ -452,7 +447,6 @@ fn plugin_checkpoint_serialization_uses_fifo_mirror_not_later_tick_state() {
             journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
-            &std::sync::atomic::AtomicBool::new(false),
             &crate::journal_budget::JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
             manifest,
             mirror,
@@ -528,7 +522,6 @@ fn slow_native_commit_does_not_block_wal_appends() {
             journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
-            &std::sync::atomic::AtomicBool::new(false),
             &crate::journal_budget::JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
             manifest,
             mirror,
@@ -610,7 +603,6 @@ fn live_journal_with_checkpoint(config: &CoreConfig) -> LiveJournal {
             journal_store,
             journal_rx,
             JournalWriter::open(&root, 1).unwrap(),
-            &std::sync::atomic::AtomicBool::new(false),
             &crate::journal_budget::JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
             manifest,
             mirror,

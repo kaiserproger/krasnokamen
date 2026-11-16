@@ -248,14 +248,16 @@ enum JournalWork {
     /// `tick` (fsync), then forwards the job to the native writer thread, which
     /// commits every domain in one transaction, reports on the job's `done`
     /// channel and prunes. The tick thread never waits for the native write —
-    /// queue admission is blocking backpressure while full, and a commit
-    /// never occupies the thread that drains `Append` — and the ACK on `done`
-    /// still only reports disk durability, never queue admission.
+    /// queue admission is blocking backpressure while full — and the journal
+    /// thread does not wait for the checkpoint commit either, but a later
+    /// `RequireGenerated` does: the single native writer runs it after the
+    /// commit, so `Append`s queued behind that baseline wait for both. The ACK
+    /// on `done` still only reports disk durability, never queue admission.
     Checkpoint(Box<CheckpointJob>),
-    /// Save generated chunks into their still-empty slots. Forwarded to the
-    /// native writer so the native DB has one writer, ordered with checkpoints.
-    SaveGenerated(Box<crate::world::ChunkCapture>),
-    /// Freeze changed-datapack generation before any dependent WAL can publish.
+    /// Freeze this tick's generated baselines before its dependent WAL: the
+    /// journal thread waits for the native writer's Immediate commit of every
+    /// such batch before it handles the next item, so on a tick that generated
+    /// chunks each later `Append` waits behind one native commit per batch.
     RequireGenerated(Box<crate::world::ChunkCapture>),
     /// Stop the thread.
     Shutdown,
@@ -923,11 +925,6 @@ impl Core {
         let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel::<()>();
         let (checkpoint_tx, checkpoint_rx) = std::sync::mpsc::channel();
         let (backup_tx, backup_rx) = std::sync::mpsc::channel();
-        // At most one generated-chunk save queued or running: a slow disk
-        // holds generated chunks in the world's bounded buffer, and the
-        // bounded journal queue applies backpressure, instead of parking
-        // work ahead of the journal's appends.
-        let generated_busy = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         // Journal thread owns appends, fsyncs, checkpoints.
         let journal_world_dir = world_dir.clone();
@@ -938,7 +935,6 @@ impl Core {
             tick_state.tick,
         )?;
         let checkpoint_every = config.checkpoint_every_ticks.max(1);
-        let journal_busy = std::sync::Arc::clone(&generated_busy);
         let journal_budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
         let journal_loop_budget = Arc::clone(&journal_budget);
         // Seed the serialization mirror before the tick thread starts. Thereafter
@@ -953,7 +949,6 @@ impl Core {
                     journal_store,
                     work_rx,
                     journal_writer,
-                    &journal_busy,
                     &journal_loop_budget,
                     root_manifest,
                     journal_plugins,
@@ -998,7 +993,6 @@ impl Core {
             outbox: outbox_tx,
             work_tx,
             journal_budget,
-            generated_busy,
             unlocked_sessions: Arc::clone(&unlocked_sessions),
             shutdown_rx,
             checkpoint_rx,

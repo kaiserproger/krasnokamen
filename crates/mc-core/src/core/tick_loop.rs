@@ -26,8 +26,6 @@ pub(super) struct TickChannels {
     pub(super) work_tx: std::sync::mpsc::SyncSender<JournalWork>,
     /// Byte bound on queued `Append` payload (see `journal_budget`).
     pub(super) journal_budget: Arc<JournalBudget>,
-    /// A generated-chunk save is queued or running on the journal thread.
-    pub(super) generated_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Edge-visible projection of tick-observed unlocked sessions.
     pub(super) unlocked_sessions: Arc<parking_lot::RwLock<BTreeSet<ConnectionId>>>,
     pub(super) shutdown_rx: std::sync::mpsc::Receiver<()>,
@@ -284,57 +282,21 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
                 break;
             }
         };
-        // Even vanilla inputs may change before restart. Queue each immutable
-        // admission image before dependent WAL; only the journal owner waits
-        // for native durability. Publication still permits an unflushed tail.
-        while let Some(batch) = crate::dimensions::checkpoint::take_generated(&mut state, 0) {
-            if channels
-                .work_tx
-                .send(JournalWork::RequireGenerated(Box::new(batch)))
-                .is_err()
-            {
-                halt_authority(
-                    &mut state,
-                    &channels,
-                    "generated baseline failed: world halted (fail closed)",
-                );
-                break 'ticks;
-            }
-        }
-        let journal_dead = send_append(
+        let generated_time = match send_tick_journal(
+            &mut state,
             &channels.work_tx,
             &channels.journal_budget,
             tick,
             entries,
             plugin_effects.then(|| plugin_ack_tx.clone()),
-        )
-        .is_err();
-        if journal_dead {
-            halt_authority(
-                &mut state,
-                &channels,
-                "journal failed: world halted (fail closed)",
-            );
-            break;
-        }
+        ) {
+            Ok(generated_time) => generated_time,
+            Err(reason) => {
+                halt_authority(&mut state, &channels, reason);
+                break;
+            }
+        };
         let journal_queue_time = journal_queue_start.elapsed();
-        let generated_start = std::time::Instant::now();
-        // Generated chunks to their empty region slots, a batch at a time
-        // (each batch rewrites the regions it touches). A dead journal shows
-        // on the next Append.
-        if !channels
-            .generated_busy
-            .load(std::sync::atomic::Ordering::Acquire)
-            && let Some(batch) =
-                crate::dimensions::checkpoint::take_generated(&mut state, GENERATED_SAVE_BATCH)
-        {
-            channels
-                .generated_busy
-                .store(true, std::sync::atomic::Ordering::Release);
-            let _ = channels
-                .work_tx
-                .send(JournalWork::SaveGenerated(Box::new(batch)));
-        }
         // Timings ride in the output they describe (never a shared
         // last-tick slot a reader could pair with the wrong tick).
         output.times = TickTimes {
@@ -342,7 +304,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             owner_pre_us: tick_start.duration_since(wall_start).as_micros() as u64,
             journal_build_us: (journal_time - run_time).as_micros() as u64,
             journal_queue_us: journal_queue_time.as_micros() as u64,
-            generated_us: generated_start.elapsed().as_micros() as u64,
+            generated_us: generated_time.as_micros() as u64,
             total_us: tick_start.elapsed().as_micros().min(u64::MAX as u128) as u64,
             ..times
         };
@@ -643,10 +605,34 @@ pub(super) fn acknowledge_checkpoint(state: &mut TickState, ack: CheckpointAck) 
     }
 }
 
-/// Generated chunks queued per region-writer job.
-pub(super) const GENERATED_SAVE_BATCH: usize = 64;
+/// Queue a tick's immutable generated baselines, then its dependent WAL batch.
+/// The journal owner commits each baseline on the native writer and waits for
+/// it before it appends anything queued later, so no published WAL edit can
+/// depend on a base that a crash or input change could regenerate. Even vanilla
+/// inputs may change before restart. Only the journal owner waits; publication
+/// still permits an unflushed tail. Returns the baseline handoff time, or the
+/// halt reason when the journal thread is gone.
+pub(super) fn send_tick_journal(
+    state: &mut TickState,
+    work_tx: &std::sync::mpsc::SyncSender<JournalWork>,
+    budget: &JournalBudget,
+    tick: u64,
+    entries: Vec<JournalEntry>,
+    plugin_ack: Option<std::sync::mpsc::Sender<u64>>,
+) -> Result<std::time::Duration, &'static str> {
+    let generated_start = std::time::Instant::now();
+    while let Some(batch) = crate::dimensions::checkpoint::take_generated(state) {
+        work_tx
+            .send(JournalWork::RequireGenerated(Box::new(batch)))
+            .map_err(|_| "generated baseline failed: world halted (fail closed)")?;
+    }
+    let generated_time = generated_start.elapsed();
+    send_append(work_tx, budget, tick, entries, plugin_ack)
+        .map_err(|_| "journal failed: world halted (fail closed)")?;
+    Ok(generated_time)
+}
 
-/// Hand the remaining generated chunks to the journal thread, then stop it.
+/// Hand the remaining generated baselines to the journal thread, then stop it.
 pub(super) fn send_shutdown(
     state: &mut TickState,
     work_tx: &std::sync::mpsc::SyncSender<JournalWork>,
@@ -656,9 +642,9 @@ pub(super) fn send_shutdown(
         cause = "shutdown requested",
         "core tick owner stopping"
     );
-    while let Some(batch) = crate::dimensions::checkpoint::take_generated(state, 0) {
+    while let Some(batch) = crate::dimensions::checkpoint::take_generated(state) {
         if work_tx
-            .send(JournalWork::SaveGenerated(Box::new(batch)))
+            .send(JournalWork::RequireGenerated(Box::new(batch)))
             .is_err()
         {
             tracing::error!(

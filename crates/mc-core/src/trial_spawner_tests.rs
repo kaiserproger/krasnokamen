@@ -596,7 +596,7 @@ fn trial_spawner_corrupt_native_chunk_is_unavailable_and_never_overwritten() {
             crate::world::world_tests::write_capture(&world.capture_dirty(&BTreeMap::new()),)
                 .is_err()
         );
-        assert!(world.take_generated(0).is_none());
+        assert!(world.take_generated().is_none());
         let after = store.read_checkpoint().unwrap();
         assert_eq!(after.tick, saved.tick);
         assert_eq!(after.globals, saved.globals);

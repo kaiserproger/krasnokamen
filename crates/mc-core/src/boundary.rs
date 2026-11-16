@@ -602,7 +602,8 @@ pub struct TickTimes {
     pub journal_build_us: u64,
     /// Seal plugin events and enqueue WAL, including bounded writer backpressure.
     pub journal_queue_us: u64,
-    /// Capture/enqueue generated chunk saves; writer I/O remains off-tick.
+    /// Capture/enqueue generated baselines ahead of the tick's WAL (a part of
+    /// `journal_queue_us`); their native commit stays off the tick thread.
     pub generated_us: u64,
     /// Acknowledgements/input drains before `total_us` begins.
     pub owner_pre_us: u64,

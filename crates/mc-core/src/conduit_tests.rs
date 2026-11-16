@@ -407,7 +407,7 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
     );
     unavailable.mark_block_entity_dirty(POS);
     assert!(unavailable.capture_dirty(&BTreeMap::new()).write().is_err());
-    assert!(unavailable.take_generated(0).is_none());
+    assert!(unavailable.take_generated().is_none());
     let after = native.read_checkpoint().unwrap();
     assert_eq!(after.tick, saved.tick);
     assert_eq!(after.globals, saved.globals);
