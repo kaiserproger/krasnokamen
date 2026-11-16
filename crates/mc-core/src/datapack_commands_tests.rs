@@ -463,14 +463,16 @@ fn create_writes_an_empty_directory_pack_with_a_description() {
     assert!(!root.join("made").exists());
     messages(&mut state);
 
-    // The create job answers on a later tick; the tick itself writes nothing.
+    // The create job runs on the datapack worker and answers on a later tick.
+    // The worker starts at once, so whether the directory exists right after
+    // the command is a race; the answer, however, is only routed by a tick.
     assert!(matches!(
         run(&mut state, "datapack create made \"Made here\""),
         CommandResult::Deferred(_)
     ));
     assert!(
-        !root.join("made").exists(),
-        "the worker writes, not the tick"
+        messages(&mut state).is_empty(),
+        "the create job answers on a later tick, not inside the command"
     );
     settle(&mut state);
     let shown = messages(&mut state);
