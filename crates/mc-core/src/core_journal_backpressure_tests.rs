@@ -63,7 +63,7 @@ fn stalled_journal_receiver_applies_backpressure_and_drains_fifo() {
                     assert_eq!((tick_lo, tick_hi), (index as u64, index as u64));
                 }
                 JournalWork::Checkpoint(_)
-                | JournalWork::SaveGenerated(_)
+                | JournalWork::RequireGenerated(_)
                 | JournalWork::Backup(_)
                 | JournalWork::Shutdown => panic!("journal FIFO order broken"),
             }
@@ -343,4 +343,137 @@ fn cloud_hit_history_grows_the_estimate() {
             >= empty + HITS * (std::mem::size_of::<uuid::Uuid>() + std::mem::size_of::<u64>())
     );
     assert_reserves_heap_and_blocks(full, HITS * 24);
+}
+
+#[test]
+fn refused_required_generated_baseline_withholds_dependent_wal_and_closes_admission() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut registry = CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut registry,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let registry = Arc::new(registry);
+    let (mut state, manifest, _) =
+        recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    // A regular dirty capture cannot be accepted as an immutable generated
+    // baseline. Exercise a real native-worker refusal, not a fake writer.
+    let invalid = state.world.capture_dirty(&Default::default());
+    let (work_tx, work_rx) = journal_work_channel();
+    work_tx
+        .send(JournalWork::RequireGenerated(Box::new(invalid)))
+        .unwrap();
+    let budget = JournalBudget::new(1 << 20);
+    send_append(
+        &work_tx,
+        &budget,
+        manifest.tick + 1,
+        vec![JournalEntry::Block {
+            pos: [0, 200, 0],
+            state: registry.states.dirt,
+        }],
+        None,
+    )
+    .unwrap();
+    work_tx.send(JournalWork::Shutdown).unwrap();
+    journal::journal_loop(
+        directory.path(),
+        Arc::clone(&store),
+        work_rx,
+        JournalWriter::open(directory.path(), 1).unwrap(),
+        &budget,
+        manifest,
+        crate::plugin::PluginState::default(),
+    );
+    assert!(matches!(
+        work_tx.try_send(JournalWork::Shutdown),
+        Err(std::sync::mpsc::TrySendError::Disconnected(_))
+    ));
+    assert!(
+        std::fs::read_dir(directory.path().join("journal"))
+            .unwrap()
+            .all(|entry| entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_none_or(|ext| ext != "bin"))
+    );
+    assert_eq!(store.read_checkpoint().unwrap().tick, 0);
+}
+
+/// A tick that generates a chunk and edits it in the same tick: the tick owner
+/// queues the immutable baseline ahead of the dependent WAL, and the real
+/// journal owner appends that WAL only once the baseline is durable in the
+/// native store. A crash right after the append therefore never leaves a
+/// published edit over a base that restart would have to regenerate.
+#[test]
+fn same_tick_generated_baseline_is_durable_before_its_dependent_wal_append() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut registry = CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut registry,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let registry = Arc::new(registry);
+    let (mut state, manifest, _) =
+        recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    let pos = crate::boundary::ChunkPos { x: 3, z: -2 };
+    let source = state.world.chunk_source();
+    assert!(source.load_native(pos).unwrap().is_none());
+    assert_eq!(
+        state
+            .world
+            .ensure_blocking(&[(pos, 0)].into_iter().collect()),
+        vec![pos]
+    );
+    let tick = manifest.tick + 1;
+    let (work_tx, work_rx) = journal_work_channel();
+    let budget = JournalBudget::new(1 << 20);
+    send_tick_journal(
+        &mut state,
+        &work_tx,
+        &budget,
+        tick,
+        vec![JournalEntry::Block {
+            pos: [pos.x * 16, 200, pos.z * 16],
+            state: registry.states.dirt,
+        }],
+        None,
+    )
+    .unwrap();
+    work_tx.send(JournalWork::Shutdown).unwrap();
+    let (appended, observed) = std::sync::mpsc::channel();
+    *crate::core::JOURNAL_APPEND_OBSERVER.lock().unwrap() = Some((
+        directory.path().to_owned(),
+        Box::new(move |tick, _| {
+            appended
+                .send((tick, source.load_native(pos).unwrap().is_some()))
+                .unwrap();
+        }),
+    ));
+    journal::journal_loop(
+        directory.path(),
+        Arc::clone(&store),
+        work_rx,
+        JournalWriter::open(directory.path(), 1).unwrap(),
+        &budget,
+        manifest,
+        crate::plugin::PluginState::default(),
+    );
+    *crate::core::JOURNAL_APPEND_OBSERVER.lock().unwrap() = None;
+    assert_eq!(
+        observed.try_iter().collect::<Vec<_>>(),
+        vec![(tick, true)],
+        "the dependent WAL batch was appended before its generated baseline was durable"
+    );
 }

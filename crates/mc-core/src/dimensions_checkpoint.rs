@@ -127,14 +127,11 @@ pub(crate) fn acknowledge(state: &mut TickState, tick: u64, acks: BTreeMap<Dimen
     }
 }
 
-pub(crate) fn take_generated(
-    state: &mut TickState,
-    limit: usize,
-) -> Option<crate::world::ChunkCapture> {
-    state.world.take_generated(limit).or_else(|| {
+pub(crate) fn take_generated(state: &mut TickState) -> Option<crate::world::ChunkCapture> {
+    state.world.take_generated().or_else(|| {
         state
             .other_dimensions
             .values_mut()
-            .find_map(|world| world.world.take_generated(limit))
+            .find_map(|world| world.world.take_generated())
     })
 }

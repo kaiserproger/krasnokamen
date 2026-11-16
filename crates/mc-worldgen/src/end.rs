@@ -198,6 +198,20 @@ fn splitmix64(mut value: u64) -> u64 {
 }
 
 impl ChunkGenerator for EndGenerator {
+    fn structure_candidates_in_ring(
+        &self,
+        targets: &[Identifier],
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<ChunkPos> {
+        if self.cities.is_none() || !targets.iter().any(|id| id.as_str() == "minecraft:end_city") {
+            return Vec::new();
+        }
+        self.outer
+            .placement
+            .candidate_chunks_in_ring(self.seed, centre_chunk, ring)
+    }
+
     fn structure_sites_in_region(
         &self,
         min_chunk: (i32, i32),

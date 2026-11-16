@@ -11,7 +11,7 @@ use super::{ConversionStats, fail, write_nbt};
 use mc_core::config::{CoreConfig, CoreError};
 use mc_core::dimensions::Dimension;
 use mc_core::journal::{CheckpointManifest, ReplayBlockEntity};
-use mc_core::native_checkpoint::{decode_tag, encode_checkpoint, generator, recover_offline};
+use mc_core::native_checkpoint::{decode_tag, encode_checkpoint, recover_offline};
 
 type Cell = (i32, i32, i32);
 type Column = (i32, i32);
@@ -24,6 +24,13 @@ pub(super) fn convert(
     let mut config = config.clone();
     config.world_dir = source.to_path_buf();
     let world = recover_offline(&config)?;
+    // Reuse live identity/admission and dimension routing before any absent
+    // native chunk can fall back to procedural generation. Stage only under
+    // the unpublished destination; the source remains read-only.
+    let scratch = stage.join(".worldgen-inputs");
+    std::fs::create_dir(&scratch).map_err(fail)?;
+    let generators = world.selected_generators(&scratch)?;
+    std::fs::remove_dir_all(&scratch).map_err(fail)?;
     let mut checkpoint = encode_checkpoint(&world)?;
     let manifest: CheckpointManifest =
         serde_json::from_slice(&checkpoint.globals["checkpoint"].payload).map_err(fail)?;
@@ -80,7 +87,7 @@ pub(super) fn convert(
     for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
         let dimension_id = mc_core::native_checkpoint::dimension_id(dimension);
         let replay = &world.dimensions[&dimension];
-        let generator = generator(&config, &world.registry, dimension)?;
+        let generator = &generators[&dimension];
         let mut columns = stored.remove(&dimension_id).unwrap_or_default();
         let mut blocks = BTreeMap::<Column, Vec<(Cell, u32)>>::new();
         let mut opaque = BTreeMap::<Column, Vec<(Cell, &Option<Vec<u8>>)>>::new();
@@ -144,7 +151,6 @@ pub(super) fn convert(
                         &world.registry.blocks,
                         &world.registry.items,
                         &world.registry.chest_loot,
-                        generator.as_ref(),
                     )
                     .map_err(fail)?
                     .unwrap_or_else(|| generator.generate(pos));

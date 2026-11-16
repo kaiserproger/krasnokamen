@@ -909,6 +909,28 @@ fn world_block_coordinate(chunk: i32, local: u8) -> i32 {
     i32::try_from(coordinate).expect("chunk lies outside the supported i32 block-coordinate range")
 }
 
+/// Plan-free columns used when admitting and projecting jigsaw starts.
+struct JigsawHeightQuery<'a>(&'a TerrainGenerator);
+
+impl crate::village::height_query::HeightQuery for JigsawHeightQuery<'_> {
+    fn world_surface(&self, x: i32, z: i32) -> i32 {
+        self.0.first_free_height(x, z)
+    }
+
+    fn ocean_floor(&self, x: i32, z: i32) -> Option<i32> {
+        Some(self.0.base_surface_y(x, z).saturating_add(1))
+    }
+
+    fn top_is_liquid(&self, x: i32, z: i32) -> Option<bool> {
+        let ground = self.0.base_surface_y(x, z);
+        Some(self.0.world_surface_y(ground) > ground)
+    }
+
+    fn sea_level(&self) -> Option<i32> {
+        Some(SEA_LEVEL)
+    }
+}
+
 impl TerrainGenerator {
     /// Build a generator from a seed plus a block registry.
     ///
@@ -2174,10 +2196,11 @@ impl TerrainGenerator {
 
     fn apply_jigsaw_structures(&self, chunk: &mut Chunk) {
         let surface = |x, z| self.first_free_height(x, z);
+        let query = JigsawHeightQuery(self);
         let biome = |x, y, z| self.noise_biome(x, y, z);
         let mut touched = [false; 256];
         for source in &self.jigsaw_sources {
-            let Some(plans) = source.plans_for_chunk(chunk.pos.x, chunk.pos.z, &surface, &biome)
+            let Some(plans) = source.plans_for_chunk(chunk.pos.x, chunk.pos.z, &query, &biome)
             else {
                 continue;
             };
@@ -2828,10 +2851,53 @@ impl ChunkGenerator for TerrainGenerator {
                     |x, y, z| self.noise_biome(x, y, z),
                 )
             });
-        let surface = |x, z| self.first_free_height(x, z);
+        let surface = JigsawHeightQuery(self);
         let biome = |x, y, z| self.noise_biome(x, y, z);
         for source in &self.jigsaw_sources {
             sites.extend(source.structure_sites_in_region(min, max, &surface, &biome));
+        }
+        sites
+    }
+
+    fn structure_candidates_in_ring(
+        &self,
+        targets: &[Identifier],
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<ChunkPos> {
+        let mut candidates = self
+            .overworld_structures
+            .as_ref()
+            .map_or_else(Vec::new, |structures| {
+                structures.structure_candidates_in_ring(targets, centre_chunk, ring)
+            });
+        for source in self.village_plans.iter().chain(self.jigsaw_sources.iter()) {
+            candidates.extend(source.structure_candidates_in_ring(targets, centre_chunk, ring));
+        }
+        candidates
+    }
+
+    fn structure_sites_at(
+        &self,
+        targets: &[Identifier],
+        start_chunk: ChunkPos,
+    ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
+        let mut sites = self
+            .overworld_structures
+            .as_ref()
+            .map_or_else(Vec::new, |structures| {
+                structures.structure_sites_at(
+                    targets,
+                    start_chunk,
+                    |x, z| self.world_surface_y(self.surface_height(x, z)),
+                    |x, z| self.surface_height(x, z),
+                    |x, y, z| self.noise_biome(x, y, z),
+                )
+            });
+        let surface = JigsawHeightQuery(self);
+        let biome = |x, y, z| self.noise_biome(x, y, z);
+        for source in self.village_plans.iter().chain(self.jigsaw_sources.iter()) {
+            sites.extend(source.structure_sites_at(targets, start_chunk, &surface, &biome));
         }
         sites
     }

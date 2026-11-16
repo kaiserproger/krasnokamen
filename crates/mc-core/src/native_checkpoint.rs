@@ -441,6 +441,48 @@ pub struct RecoveredWorld {
     pub reader: NativeCheckpointReader,
 }
 
+impl RecoveredWorld {
+    /// Validate historical WAL ancestry and build the selected serving generators.
+    /// Scratch belongs to the converter's unpublished destination, never the source.
+    pub fn selected_generators(
+        &self,
+        scratch: &std::path::Path,
+    ) -> Result<BTreeMap<Dimension, Arc<dyn mc_world::ChunkGenerator>>, CoreError> {
+        // The normal native level-metadata image owns the saved identity.
+        // Adoption here is in memory only; offline export never rewrites it.
+        let mut globals = self.checkpoint.globals.clone();
+        let opened = crate::datapacks::worldgen::open(
+            &self.config.world_dir.join("datapacks"),
+            scratch,
+            self.config.vanilla_data_dir.as_deref(),
+            &self.dimensions,
+            &mut globals,
+            &self.reader,
+            &self.registry,
+        )?;
+        let (inputs, registry) = (opened.inputs, opened.registry);
+        let mut config = self.config.clone();
+        config.vanilla_data_dir = inputs.root().map(std::path::Path::to_path_buf);
+        let overworld = crate::core::overworld_terrain_from(&config, &registry, Some(&inputs))?;
+        let nether = crate::core::nether_terrain(&config, &registry, Some(&inputs))?;
+        let end = crate::core::end_terrain(&config, &registry)?;
+        Ok(BTreeMap::from([
+            (
+                Dimension::Overworld,
+                Arc::new(overworld) as Arc<dyn mc_world::ChunkGenerator>,
+            ),
+            (
+                Dimension::Nether,
+                Arc::new(nether) as Arc<dyn mc_world::ChunkGenerator>,
+            ),
+            (
+                Dimension::End,
+                Arc::new(end) as Arc<dyn mc_world::ChunkGenerator>,
+            ),
+        ]))
+    }
+}
+
 pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
     let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // Offline recovery resolves the same pinned native types as live startup.
@@ -1020,7 +1062,7 @@ pub fn generator(
             }
             Arc::new(terrain)
         }
-        Dimension::Nether => Arc::new(crate::core::nether_terrain(config, registry)?),
+        Dimension::Nether => Arc::new(crate::core::nether_terrain(config, registry, None)?),
         Dimension::End => Arc::new(crate::core::end_terrain(config, registry)?),
     })
 }

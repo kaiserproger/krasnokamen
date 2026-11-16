@@ -566,7 +566,7 @@ fn generated_chunks_persist_without_overwriting_edits() {
         .dirt;
     let mut world = test_world(Some(dir.clone()));
     world.ensure_blocking(&wants(&[pos]));
-    let generated = world.take_generated(0).expect("generated chunk queued");
+    let generated = world.take_generated().expect("generated chunk queued");
     // Edit and checkpoint the chunk BEFORE the generated batch is written.
     world.set_block(4, 100, 4, dirt);
     world.fold_overlay();
@@ -594,7 +594,7 @@ fn regenerated_chunk_batch_saves_unique_bases_and_preserves_checkpointed_edit() 
     // pending generated batch is saved, then revisit it through normal loading.
     drop(world.recent.take(repeated));
     world.ensure_blocking(&wants(&[repeated, untouched, edited]));
-    let generated = world.take_generated(0).expect("generated chunks queued");
+    let generated = world.take_generated().expect("generated chunks queued");
 
     let dirt = crate::registry::CoreRegistry::load(Some(&world_root()))
         .expect("registry")
@@ -634,7 +634,7 @@ fn generated_chunk_fills_its_empty_slot() {
     let mut world = test_world(Some(dir.clone()));
     world.ensure_blocking(&wants(&[pos]));
     world
-        .take_generated(0)
+        .take_generated()
         .expect("queued")
         .fill_generated()
         .expect("fill");

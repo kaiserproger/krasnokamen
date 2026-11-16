@@ -165,7 +165,8 @@ pub(crate) fn synthetic_source_with_template(
         pool_aliases: Vec::new(),
         id: structure_id.clone(),
         structure_type: identifier("minecraft:jigsaw"),
-        biomes: BiomeSet::Biomes(vec![identifier("minecraft:plains")]),
+        moog_start_checks: None,
+        biomes: BiomeSet::Tag(identifier("test:all_biomes")),
         spawn_overrides: Vec::new(),
         step: StructureStep::SurfaceStructures,
         terrain_adaptation: TerrainAdaptation::BeardThin,
@@ -200,6 +201,7 @@ pub(crate) fn synthetic_source_with_template(
         dimension_bounds: (-64, 320),
         structure_set: identifier("test:villages"),
         placement,
+        min_distance_from_world_origin: None,
         structures: vec![ClosureStructure {
             id: structure_id,
             weight: 1,

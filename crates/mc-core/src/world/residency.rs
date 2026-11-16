@@ -351,14 +351,22 @@ impl ChunkWorld {
         self.failed.get(&pos)
     }
 
-    /// Make a loaded or generated chunk resident; queue its immutable
-    /// generated base while the bounded save buffer has room.
+    /// Admit generated chunks only while their immutable base can enter custody.
     pub(super) fn insert_produced(&mut self, pos: ChunkPos, chunk: Chunk, generated: bool) -> bool {
-        let mut chunk = Arc::new(chunk);
-        let generated_base = (generated
+        if generated
             && self.source.native.is_some()
-            && self.generated.len() < GENERATED_PENDING_MAX)
-            .then(|| Arc::clone(&chunk));
+            && self.generated.len() >= GENERATED_PENDING_MAX
+        {
+            self.record_load_error(ChunkLoadError {
+                dimension: self.source.dimension,
+                pos,
+                reason: "required generated baseline capacity exhausted".into(),
+            });
+            return false;
+        }
+        let mut chunk = Arc::new(chunk);
+        let generated_base =
+            (generated && self.source.native.is_some()).then(|| Arc::clone(&chunk));
         if !self.apply_inhabited_image(pos, &mut chunk) {
             return false;
         }
@@ -397,11 +405,11 @@ impl ChunkWorld {
         true
     }
 
-    /// Generated immutable bases to save once at least `min` are queued.
-    /// Native fill-generated checks coverage atomically, so a delayed batch
-    /// never overwrites imported data or checkpointed gameplay.
-    pub fn take_generated(&mut self, min: usize) -> Option<ChunkCapture> {
-        if self.generated.is_empty() || self.generated.len() < min {
+    /// Generated immutable bases queued since the last take. Native
+    /// fill-generated checks coverage atomically, so a delayed batch never
+    /// overwrites imported data or checkpointed gameplay.
+    pub fn take_generated(&mut self) -> Option<ChunkCapture> {
+        if self.generated.is_empty() {
             return None;
         }
         Some(ChunkCapture {

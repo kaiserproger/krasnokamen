@@ -696,6 +696,7 @@ struct RecordingWriter {
     world: HashMap<BlockPos, BlockStateId>,
     blocks: Vec<(BlockPos, BlockStateId)>,
     chests: Vec<(BlockPos, u64)>,
+    block_entities: Vec<(BlockPos, crate::structures::TemplateBlockEntity)>,
     entities: Vec<RecordedEntity>,
 }
 
@@ -706,6 +707,7 @@ impl RecordingWriter {
             world: HashMap::new(),
             blocks: Vec::new(),
             chests: Vec::new(),
+            block_entities: Vec::new(),
             entities: Vec::new(),
         }
     }
@@ -741,6 +743,10 @@ impl PieceWriter for RecordingWriter {
 
     fn set_chest(&mut self, pos: BlockPos, _chest: &TemplateChest, loot_seed: u64) {
         self.chests.push((pos, loot_seed));
+    }
+
+    fn set_block_entity(&mut self, pos: BlockPos, entity: &crate::structures::TemplateBlockEntity) {
+        self.block_entities.push((pos, entity.clone()));
     }
 
     fn set_entity(&mut self, placed: &PlacedEntity<'_>) {
@@ -1099,6 +1105,67 @@ fn rotate_and_mirror_state_match_the_vanilla_reference() {
             Some(state)
         );
     }
+}
+
+#[test]
+fn moog_spawner_processor_writes_selected_entity_and_timing_nbt() {
+    use crate::structures::TemplateBlock;
+    use mc_data::village_data::MoogSpawnerSpec;
+    use mc_nbt::Tag;
+
+    let fixture = Fixture::new();
+    let spawner = state_of(&fixture.blocks, "minecraft:spawner", &[]);
+    let stone = state_of(&fixture.blocks, "minecraft:stone", &[]);
+    let template = StructureTemplate::new(
+        [2, 1, 1],
+        vec![
+            TemplateBlock {
+                pos: [0, 0, 0],
+                state: spawner,
+            },
+            TemplateBlock {
+                pos: [1, 0, 0],
+                state: stone,
+            },
+        ],
+    );
+    let processors = vec![StructureProcessorSpec::MoogSpawner(MoogSpawnerSpec {
+        mobs: vec![(identifier("minecraft:skeleton"), 1.0)],
+        fields: [20, 200, 800, 4, 6, 16, 4],
+    })];
+    let owner = identifier("mvs:cathedral");
+    let mut writer = fixture.writer();
+    place_piece(
+        &fixture.semantics(),
+        &template,
+        &piece_settings(
+            ORIGIN,
+            Rotation::None,
+            PieceElement::Single,
+            &processors,
+            &owner,
+        ),
+        &mut writer,
+        None,
+    )
+    .unwrap();
+    assert_eq!(writer.block_entities.len(), 1);
+    let nbt = &writer.block_entities[0].1.nbt;
+    assert!(nbt.contains(&("SpawnCount".into(), Tag::Short(4))));
+    assert!(nbt.contains(&(
+        "SpawnData".into(),
+        Tag::Compound(vec![(
+            "entity".into(),
+            Tag::Compound(vec![(
+                "id".into(),
+                Tag::String("minecraft:skeleton".into())
+            )])
+        )])
+    )));
+    assert!(
+        nbt.iter()
+            .any(|(name, tag)| name == "SpawnPotentials" && matches!(tag, Tag::List(_)))
+    );
 }
 
 #[test]

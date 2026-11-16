@@ -262,6 +262,105 @@ restore a pre-upgrade native checkpoint and its matching WAL with the old binary
 or continue with the compatible binary. Do not strip the field or rewrite the
 save to make an older reader accept it.
 
+### Immutable datapack worldgen inputs
+
+The startup boundary folds checkpoint and contiguous WAL metadata before it
+constructs any dimension generator, searches for spawn, or materializes a replay
+chunk. The recovered Overworld datapack selection is the world-global authority.
+Fresh worlds discover directory and ZIP packs before constructing generators.
+Invalid selected resources refuse admission; a new pack that cannot load is
+skipped with a named warning and stays unselected, so it is no generation input;
+missing packs are de-selected.
+
+Pack worldgen resources are binary, not UTF-8 by default. Each selected pack
+applies its filters to lower layers, then adds its own resources; builtin vanilla
+occupies its actual selected position. Biome tags merge in order, honor `replace`,
+and resolve required/optional references across namespaces. Worldgen JSON/NBT
+and cache reports are staged as a private bounded copy; neither shared vanilla
+files nor hard links are modified. Generators eagerly compile owned immutable
+values. The staging directory is removed after construction, including refusal;
+the reserved world-owned `.krasnokamen-worldgen` directory is disposable after a
+crash only with its fsynced sibling `.krasnokamen-worldgen.owner` marker (or when
+empty). The sibling marker is never deleted with the disposable tree, so a crash
+during cleanup cannot erase ownership proof. Unowned nonempty paths, unexpected
+top-level entries and symlinks refuse startup.
+
+`level.dat/Data/KrasnokamenWorldgenInputs` records schema version 1, the canonical
+lowercase SHA-256 of effective worldgen inputs/reports, source hashes and
+historical structure ownership. Unknown/missing/duplicate struct fields or map
+keys, unsupported schema, invalid hashes/ownership and oversized metadata refuse
+adoption before any identity or epoch mutation. File pack IDs share selection's
+bounded direct-directory-entry predicate. Removed-pack ownership remains valid
+diagnostic history. The normal checkpoint level-metadata path owns it (there is
+no WAL image of it), not a separate startup transaction.
+
+A valid startup change logs old/new identities and changed packs/cache, then
+continues: stored chunk baselines remain unchanged; new chunks use selected
+inputs. Changed inputs mint a terrain epoch. Fresh worlds record identity in
+their first checkpoint (including offline pregeneration). Existing worlds
+without it adopt in memory and persist it at their next normal positive-tick
+checkpoint; a crash before that repeats adoption, so a WAL-only missing base
+after an input change refuses until the previous inputs return. Vanilla-only
+worlds require no packs or staged copy. Native seed/revision identity validation
+is unchanged.
+
+Every generated native admission image, including vanilla-only generation, must
+become a durable native baseline before dependent WAL can publish. The tick
+queues every required-baseline job before its append; there is no separate
+deferred generated-chunk save. The journal owner waits for the sole native
+writer's Immediate fill-generated commit (behind any checkpoint commit already
+queued there), so a tick that generated chunks puts one native commit per batch
+in front of its append; failure closes admission and withholds the append. The
+tick performs no new synchronous DB write or durability await. This does not
+strengthen gameplay publication: a queued/unflushed tail can still roll back
+consistently, and no per-tick fsync is required.
+
+Admission refuses and records a load error if the bounded required-baseline
+buffer (1024 per dimension) is full; checkpoint cannot discard that chunk's
+unmaterialized edits. The refusal is sticky until restart, and a startup replay
+needing more baselines than that refuses on every start: a known limit.
+Fill inserts only absent, uncovered slots. A first dependent native snapshot
+installs its original base in the same transaction. Covered native state with
+no physical baseline refuses reads, fallback, fill and checkpoint instead of
+blessing current generation as historical ancestry. WAL-only missing bases may
+be reproduced only from matching validated saved inputs, or the fixed builtin
+legacy generator with no external inputs. Unknown/changed inputs refuse before
+replay materialization or persistent mutation with chunk and source context.
+
+The offline export consumer uses that same identity authority and ancestry fence
+before reconstructing a WAL-only chunk, then builds the serving generators from
+the admitted effective inputs for each dimension. In particular, selected Nether
+sets must not disappear through a config-only fallback. Input staging belongs to
+the unpublished destination; neither identity adoption nor temporary input files
+modify the native source. This keeps genuine matching-input WAL reconstruction,
+not a blanket prohibition on export.
+
+Baseline jobs commit no gameplay changes and advance no checkpoint tick. A crash
+before WAL can leave an unused baseline; retained WAL folds edits over the
+original base after pack addition/change/removal. SIGKILL regressions cover all
+three transitions, repeated recovery, then checkpoint/prune and another recovery.
+
+Generators do not hot-swap. Enable or disable that changes effective worldgen
+inputs, and a reload whose selected packs' worldgen changed, refuse atomically
+and retain the old packs, selection and registry; a new pack that would change
+worldgen is skipped by a reload and offered again at the next start. A new pack
+a start cannot prepare, validate or admit past the replay baseline fence is
+skipped and named. Gameplay-only changes and identical worldgen reloads remain
+valid. Unsupported worldgen domains/types refuse the whole pack, naming every
+such resource, through the one shared
+`mc-data`/`mc-worldgen` supported-type authority. This is not general modpack
+compatibility. Authored biome convention defaults are the lowest vanilla layer;
+pack filters, addition and replacement apply normally.
+Custom Moog `msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions`
+resources refuse admission until the generator implements their required-piece
+and count-cap semantics; they are never ignored as unrelated datapack content.
+
+When a stored chunk is loaded after removing a pack, unavailable structure starts
+remain untouched in its native data, including through WAL edits and checkpoints.
+They are inactive for generation/locate. Chunk loading warns once per missing ID,
+using persisted pack ownership where known; re-adding the pack reactivates them.
+There is no startup world scan or special native metadata transaction.
+
 Retained player and entity NBT is validated and tag-set-normalized at the shared
 recovery boundary before dimension copies, live hydration or offline
 export. A valid root followed by trailing bytes and repeated `Tags` keys refuse

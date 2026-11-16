@@ -319,44 +319,81 @@ impl NetherStructures {
         starts
     }
 
+    pub fn candidates_in_ring(
+        &self,
+        generator: &NetherGenerator,
+        targets: &[Identifier],
+        centre: (i32, i32),
+        ring: u32,
+    ) -> Vec<ChunkPos> {
+        let requested = |paths: &[&str]| {
+            targets
+                .iter()
+                .any(|id| id.namespace() == "minecraft" && paths.contains(&id.path()))
+        };
+        let mut candidates = Vec::new();
+        for (placement, paths) in [
+            (self.complexes, &["fortress", "bastion_remnant"][..]),
+            (self.fossils, &["nether_fossil"][..]),
+            (self.portals, &["ruined_portal_nether"][..]),
+        ] {
+            if requested(paths) {
+                candidates.extend(placement.candidate_chunks_in_ring(generator.seed, centre, ring));
+            }
+        }
+        candidates
+    }
+
     pub fn sites(
         &self,
         generator: &NetherGenerator,
         min: (i32, i32),
         max: (i32, i32),
+        targets: Option<&[Identifier]>,
     ) -> Vec<GeneratedStructureSite> {
         let mut out = Vec::new();
-        for (cx, cz) in self.starts(generator, self.complexes, min, max) {
-            if self.fortress(generator, cx, cz)
-                && self.allowed(generator, 0, cx * 16 + 8, cz * 16 + 8)
-            {
-                out.push(GeneratedStructureSite {
-                    structure: id("minecraft:fortress"),
-                    position: BlockPos {
-                        x: cx * 16 + 8,
-                        y: 65,
-                        z: cz * 16 + 8,
-                    },
-                    start_chunk: (cx, cz),
-                });
-            } else if let Some(plan) =
-                self.bastions
-                    .plan_for_start_chunk(cx, cz, &|_, _| 33, &|x, _, z| {
-                        generator.biomes[generator.biome_index(x, z)].clone()
-                    })
-            {
-                let pos = plan.assembly().origin;
-                out.push(GeneratedStructureSite {
-                    structure: id("minecraft:bastion_remnant"),
-                    position: pos,
-                    start_chunk: (cx, cz),
-                });
+        let requested =
+            |name: &str| targets.is_none_or(|ids| ids.iter().any(|id| id.as_str() == name));
+        let fortress_id = "minecraft:fortress";
+        let bastion_id = "minecraft:bastion_remnant";
+        if requested(fortress_id) || requested(bastion_id) {
+            for (cx, cz) in self.starts(generator, self.complexes, min, max) {
+                if self.fortress(generator, cx, cz)
+                    && self.allowed(generator, 0, cx * 16 + 8, cz * 16 + 8)
+                {
+                    if requested(fortress_id) {
+                        out.push(GeneratedStructureSite {
+                            structure: id(fortress_id),
+                            position: BlockPos {
+                                x: cx * 16 + 8,
+                                y: 65,
+                                z: cz * 16 + 8,
+                            },
+                            start_chunk: (cx, cz),
+                        });
+                    }
+                } else if requested(bastion_id)
+                    && let Some(plan) =
+                        self.bastions
+                            .plan_for_start_chunk(cx, cz, &|_, _| 33, &|x, _, z| {
+                                generator.biomes[generator.biome_index(x, z)].clone()
+                            })
+                {
+                    out.push(GeneratedStructureSite {
+                        structure: id(bastion_id),
+                        position: plan.assembly().origin,
+                        start_chunk: (cx, cz),
+                    });
+                }
             }
         }
         for (placement, name) in [
             (self.fossils, "minecraft:nether_fossil"),
             (self.portals, "minecraft:ruined_portal_nether"),
         ] {
+            if !requested(name) {
+                continue;
+            }
             for (cx, cz) in self.starts(generator, placement, min, max) {
                 let (x, z) = (cx * 16 + 8, cz * 16 + 8);
                 if !self.allowed(
@@ -376,7 +413,6 @@ impl NetherStructures {
                 }
             }
         }
-        out.sort_by_key(|s| (s.start_chunk, s.structure.clone()));
         out
     }
 

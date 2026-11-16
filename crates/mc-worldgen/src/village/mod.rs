@@ -34,6 +34,9 @@
 pub mod beard;
 pub mod closure;
 pub mod decor;
+pub mod height_query;
+mod moog_nether;
+mod moog_start_checks;
 pub mod piece;
 pub mod placement;
 pub mod plan_source;
@@ -47,6 +50,7 @@ pub use closure::{
     load_village_closure,
 };
 pub use decor::{DecorError, VillageDecor};
+pub use mc_data::worldgen_structure_types::supports_structure_type;
 pub use placement::{
     RandomSpreadPlacement, set_large_feature_seed, set_large_feature_with_salt, start_origin,
 };

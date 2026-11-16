@@ -1,7 +1,6 @@
 use super::*;
 use crate::bees::tests::{POS, item, joined, place, state};
 use crate::boundary::ChunkPos;
-use std::sync::Arc;
 
 #[test]
 fn record_insert_eject_emits_exact_song_events_and_comparator() {
@@ -61,8 +60,6 @@ fn song_end_retains_record_and_checkpoint_preserves_remaining_clock() {
         let capture = original.world.capture_dirty(&BTreeMap::new());
         assert!(!capture.write().unwrap().is_empty());
         let reader = capture.store().unwrap().checkpoint_reader().unwrap();
-        let generator =
-            mc_worldgen::TerrainGenerator::new(42, Arc::clone(&original.registry.blocks));
         let chunk = reader
             .read_chunk(
                 0,
@@ -70,7 +67,6 @@ fn song_end_retains_record_and_checkpoint_preserves_remaining_clock() {
                 &original.registry.blocks,
                 &original.registry.items,
                 &original.registry.chest_loot,
-                &generator,
             )
             .unwrap()
             .unwrap();
@@ -151,8 +147,6 @@ fn playing_clock_skips_idle_wal_and_checkpoint_resumes_elapsed_time() {
         let capture = original.world.capture_dirty(&BTreeMap::new());
         assert!(!capture.write().unwrap().is_empty());
         let reader = capture.store().unwrap().checkpoint_reader().unwrap();
-        let generator =
-            mc_worldgen::TerrainGenerator::new(42, Arc::clone(&original.registry.blocks));
         let chunk = reader
             .read_chunk(
                 0,
@@ -160,7 +154,6 @@ fn playing_clock_skips_idle_wal_and_checkpoint_resumes_elapsed_time() {
                 &original.registry.blocks,
                 &original.registry.items,
                 &original.registry.chest_loot,
-                &generator,
             )
             .unwrap()
             .unwrap();

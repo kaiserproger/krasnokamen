@@ -347,7 +347,7 @@ fn prepared_site_consumer_reports_only_villages_written_into_exact_base() {
     assert!(facts[0].protected);
     assert_eq!(facts[0].water_surface_y, None);
     let raw_plan = seasonal_base
-        .with_village_facts(|height, biome| villages.plan_for_start_chunk(0, 0, height, biome))
+        .with_village_facts(|height, biome| villages.plan_for_start_chunk(0, 0, &height, biome))
         .unwrap();
     assert!(
         raw_plan.is_some(),

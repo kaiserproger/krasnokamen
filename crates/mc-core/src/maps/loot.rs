@@ -54,7 +54,7 @@ fn current(state: &TickState, key: Key, pending: &Pending) -> bool {
                 && bytes.is_none_or(|bytes| bytes == pending.bytes)
         })
 }
-/// Returns true when opening must wait (or the saved table is unsupported).
+/// Returns true when opening must wait or loot planning failed.
 pub(crate) fn before_open(
     state: &mut TickState,
     connection: ConnectionId,
@@ -72,10 +72,6 @@ pub(crate) fn before_open(
             continue;
         }
         let Some((table, seed, bytes)) = source(state, key) else {
-            continue;
-        };
-        let Some(compiled) = state.registry.chest_loot.get(&table) else {
-            waiting = true;
             continue;
         };
         let bytes = match bytes {
@@ -98,16 +94,21 @@ pub(crate) fn before_open(
             revision: state
                 .world
                 .chunk_revision(x.div_euclid(16), z.div_euclid(16)),
-            table,
             seed,
             bytes,
-            specs: compiled.exploration_maps().to_vec(),
+            specs: state
+                .registry
+                .chest_loot
+                .get(&table)
+                .map_or_else(Vec::new, |compiled| compiled.exploration_maps().to_vec()),
+            table,
             hits: Vec::new(),
             openers: vec![(connection, input.clone())],
         };
         if pending.specs.is_empty() {
             pending.openers.clear();
-            if resolve(state, key, pending).is_err() {
+            if let Err(error) = resolve(state, key, pending) {
+                tracing::warn!(%error, x, y, z, "Container loot roll refused; unresolved table retained");
                 waiting = true;
             }
         } else {
@@ -136,7 +137,7 @@ fn submit(state: &mut TickState, key: Key) -> bool {
             connection: pending.openers[0].0,
             origin: (key.1[0], key.1[1], key.1[2]),
             destination: spec.destination.clone(),
-            search_radius: spec.search_radius,
+            search_radius_rings: spec.search_radius_rings,
             skip_existing_chunks: spec.skip_existing_chunks,
             referenced,
             reply: Box::new(move |state, hit| completed(state, key, hit)),
@@ -180,10 +181,6 @@ fn resolve(state: &mut TickState, key: Key, pending: Pending) -> Result<(), Stri
         return Err("stale unopened container".into());
     }
     let registry = Arc::clone(&state.registry);
-    let table = registry
-        .chest_loot
-        .get(&pending.table)
-        .ok_or("missing loot table")?;
     let mut maps = Vec::new();
     let base = state.maps.next_id;
     let mut resolver = |spec: &ExplorationMap| -> Result<Option<ItemStack>, String> {
@@ -208,16 +205,24 @@ fn resolve(state: &mut TickState, key: Key, pending: Pending) -> Result<(), Stri
         Ok(Some(stack))
     };
     let mut rng = ChestRng::new(pending.seed as u64);
-    let stacks = table
-        .roll_with_context(
-            &mut rng,
-            &registry.items,
-            &mut ChestLootContext {
-                luck: 0.0,
-                exploration_map: Some(&mut resolver),
-            },
-        )
-        .map_err(|e| e.to_string())?;
+    let stacks = match registry.chest_loot.get(&pending.table) {
+        Some(table) => table
+            .roll_with_context(
+                &mut rng,
+                &registry.items,
+                &mut ChestLootContext {
+                    luck: 0.0,
+                    exploration_map: Some(&mut resolver),
+                },
+            )
+            .map_err(|e| e.to_string())?,
+        None => {
+            // Vanilla's reloadable lookup returns LootTable.EMPTY; unpacking
+            // still consumes the saved reference, including after pack removal.
+            tracing::warn!(table = %pending.table, "Missing container loot table; resolving as empty");
+            Vec::new()
+        }
+    };
     let mut slots = vec![ItemStack::EMPTY; 27];
     let mut available: Vec<usize> = (0..27).collect();
     for stack in stacks {

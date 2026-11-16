@@ -104,6 +104,7 @@ use crate::village::beard::{
 };
 use crate::village::closure::{ClosureElement, VillageClosure};
 use crate::village::decor::VillageDecor;
+use crate::village::height_query::HeightQuery;
 use crate::village::piece::{
     BlockClip, Mirror, PieceError, PieceSettings, PieceWriter, PlacedEntity, place_piece,
 };
@@ -623,7 +624,7 @@ impl VillagePlanSource {
         &self,
         chunk_x: i32,
         chunk_z: i32,
-        free_height: &dyn Fn(i32, i32) -> i32,
+        free_height: &dyn HeightQuery,
         biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
     ) -> Option<VillagePlanSet> {
         let mut plans = Vec::new();
@@ -692,7 +693,7 @@ impl VillagePlanSource {
         &self,
         min_chunk: (i32, i32),
         max_chunk: (i32, i32),
-        free_height: &dyn Fn(i32, i32) -> i32,
+        free_height: &dyn HeightQuery,
         biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
     ) -> Vec<GeneratedVillageSite> {
         if min_chunk.0 > max_chunk.0 || min_chunk.1 > max_chunk.1 {
@@ -716,7 +717,7 @@ impl VillagePlanSource {
         &self,
         min_chunk: (i32, i32),
         max_chunk: (i32, i32),
-        free_height: &dyn Fn(i32, i32) -> i32,
+        free_height: &dyn HeightQuery,
         biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
     ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
         let mut sites = Vec::new();
@@ -750,6 +751,62 @@ impl VillagePlanSource {
         sites
     }
 
+    /// Candidate cells for a selected member of this weighted structure set.
+    pub fn structure_candidates_in_ring(
+        &self,
+        targets: &[Identifier],
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<mc_world::ChunkPos> {
+        if !self
+            .closure
+            .structures
+            .iter()
+            .any(|entry| targets.contains(&entry.id))
+        {
+            return Vec::new();
+        }
+        self.closure
+            .placement
+            .candidate_chunks_in_ring(self.seed, centre_chunk, ring)
+    }
+
+    /// Resolve only this selected set, retaining its normal weighted selection
+    /// and all biome, terrain and assembly gates.
+    pub fn structure_sites_at(
+        &self,
+        targets: &[Identifier],
+        start_chunk: mc_world::ChunkPos,
+        free_height: &dyn HeightQuery,
+        biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
+    ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
+        if !self
+            .closure
+            .structures
+            .iter()
+            .any(|entry| targets.contains(&entry.id))
+        {
+            return Vec::new();
+        }
+        let Some(assembly) = self.assembly_for(
+            start_chunk.x,
+            start_chunk.z,
+            free_height,
+            biome_at,
+            |tag, biome| self.biome_tags.biome_in_tag(tag, biome),
+        ) else {
+            return Vec::new();
+        };
+        if !targets.contains(&assembly.structure) {
+            return Vec::new();
+        }
+        vec![mc_world::chunk::GeneratedStructureSite {
+            structure: assembly.structure.clone(),
+            start_chunk: assembly.chunk,
+            position: assembly.origin,
+        }]
+    }
+
     /// The plans whose affected boxes cover `(world_x, world_z)`, for callers
     /// that hold a column rather than a chunk (the generator's
     /// [`crate::terrain::TerrainGenerator::surface_height`]). The set is the
@@ -759,7 +816,7 @@ impl VillagePlanSource {
         &self,
         world_x: i32,
         world_z: i32,
-        free_height: &dyn Fn(i32, i32) -> i32,
+        free_height: &dyn HeightQuery,
         biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
     ) -> Option<VillagePlanSet> {
         let set = self.plans_for_chunk(
@@ -780,7 +837,7 @@ impl VillagePlanSource {
         &self,
         chunk_x: i32,
         chunk_z: i32,
-        free_height: &dyn Fn(i32, i32) -> i32,
+        free_height: &dyn HeightQuery,
         biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
     ) -> Option<VillagePlan> {
         let biome_matches =
@@ -800,7 +857,7 @@ impl VillagePlanSource {
         &self,
         chunk_x: i32,
         chunk_z: i32,
-        free_height: &dyn Fn(i32, i32) -> i32,
+        free_height: &dyn HeightQuery,
         biome_at: &dyn Fn(i32, i32, i32) -> Identifier,
         biome_matches: impl Fn(&Identifier, &Identifier) -> bool,
     ) -> Option<Arc<VillageAssembly>> {

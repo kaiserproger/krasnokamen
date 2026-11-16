@@ -79,6 +79,9 @@ pub struct VillageClosure {
     /// Dimension minimum Y and exclusive maximum Y for height anchors/padding.
     pub dimension_bounds: (i32, i32),
     pub placement: crate::village::placement::RandomSpreadPlacement,
+    /// Minimum horizontal block distance from the origin, if the placement
+    /// declares one.
+    pub min_distance_from_world_origin: Option<i32>,
     pub structures: Vec<ClosureStructure>,
     pub pools: BTreeMap<Identifier, ClosurePool>,
     pub processor_lists: BTreeMap<Identifier, Vec<StructureProcessorSpec>>,
@@ -111,6 +114,11 @@ pub enum ClosureError {
     Template(#[from] crate::structures::StructureError),
     #[error(transparent)]
     ResourcePath(#[from] mc_data::ResourcePathError),
+    #[error("structure set {set} uses unsupported placement field {field}")]
+    UnsupportedPlacement {
+        set: Identifier,
+        field: &'static str,
+    },
 }
 
 /// Load and walk the closure from a vanilla content cache root (the directory
@@ -132,6 +140,22 @@ pub fn load_jigsaw_closure(
     set: mc_data::village_data::StructureSetSpec,
     registry: &BlockRegistry,
 ) -> Result<VillageClosure, ClosureError> {
+    let PlacementSpec::RandomSpread(placement) = &set.placement;
+    let unsupported = if placement.frequency != 1.0 {
+        Some("frequency")
+    } else if placement.exclusion_zone.is_some() {
+        Some("exclusion_zone")
+    } else if placement.locate_offset != [0; 3] {
+        Some("locate_offset")
+    } else {
+        None
+    };
+    if let Some(field) = unsupported {
+        return Err(ClosureError::UnsupportedPlacement {
+            set: structure_set.clone(),
+            field,
+        });
+    }
     let loader = VillageDataLoader::new(cache_root.join("data").join("minecraft").join("worldgen"));
     let mut structures = Vec::with_capacity(set.structures.len());
     for entry in &set.structures {
@@ -201,6 +225,7 @@ pub fn load_jigsaw_closure(
         separation,
         salt,
         spread_type,
+        min_distance_from_world_origin,
         ..
     } = match &set.placement {
         PlacementSpec::RandomSpread(placement) => placement.clone(),
@@ -209,6 +234,7 @@ pub fn load_jigsaw_closure(
     Ok(VillageClosure {
         structure_set: structure_set.clone(),
         dimension_bounds: (-64, 320),
+        min_distance_from_world_origin,
         placement: crate::village::placement::RandomSpreadPlacement {
             spacing,
             separation,
@@ -421,7 +447,10 @@ fn load_piece(
     referrer: &Identifier,
     registry: &BlockRegistry,
 ) -> Result<StructureTemplate, ClosureError> {
-    let root = cache_root.join("data").join("minecraft").join("structure");
+    let root = cache_root
+        .join("data")
+        .join(piece.namespace())
+        .join("structure");
     let mut resource = ResourcePath::from_identifier_path(piece)?;
     resource.set_extension("nbt")?;
     let path = resource.lexical_under(&root);

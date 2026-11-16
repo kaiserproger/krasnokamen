@@ -36,7 +36,7 @@
 //! owns the template (palette, blocks, jigsaw blocks) and the jigsaw walk. This
 //! module stops at the ids the JSON names, and the engine follows them.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use thiserror::Error;
@@ -178,6 +178,9 @@ pub struct RandomSpreadPlacement {
     pub frequency: f32,
     /// `exclusion_zone`, absent by default.
     pub exclusion_zone: Option<ExclusionZone>,
+    /// Minimum horizontal block distance from the world origin, for Moog's
+    /// advanced spread. Vanilla random spread has no such restriction.
+    pub min_distance_from_world_origin: Option<i32>,
 }
 
 /// How a structure set scatters its structures. `minecraft:concentric_rings`
@@ -346,12 +349,26 @@ pub struct DimensionPadding {
     pub top: i32,
 }
 
-/// A `minecraft:jigsaw` structure, with the settings a village needs.
+/// Extra start rules shared by Moog overworld and Nether layouts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MoogStartChecks {
+    pub cannot_spawn_in_liquid: bool,
+    /// Chunk radius and maximum first-free-height difference.
+    pub terrain_check: Option<(i32, i32)>,
+    pub biome_radius: Option<i32>,
+    pub min_y: Option<i32>,
+    pub max_y: Option<i32>,
+    pub average_land: bool,
+}
+
+/// A jigsaw structure and the settings needed to plan it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructureSpec {
     pub id: Identifier,
-    /// The `type` id, always `minecraft:jigsaw` for a loaded spec.
+    /// The namespaced structure codec ID.
     pub structure_type: Identifier,
+    /// Custom start checks; absent for vanilla jigsaws.
+    pub moog_start_checks: Option<MoogStartChecks>,
     pub biomes: BiomeSet,
     /// `spawn_overrides`, keyed by mob category; required by the codec.
     pub spawn_overrides: Vec<SpawnOverrideEntry>,
@@ -518,9 +535,18 @@ pub struct ProcessorRuleSpec {
     pub append_loot: Option<Identifier>,
 }
 
+/// Mob choice and base-spawner settings for a Moog spawner processor.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MoogSpawnerSpec {
+    pub mobs: Vec<(Identifier, f64)>,
+    /// Delay, minimum/maximum delay, count, nearby limit, player range, range.
+    pub fields: [i16; 7],
+}
+
 /// Processor types supported by the shared jigsaw template pipeline.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StructureProcessorSpec {
+    MoogSpawner(MoogSpawnerSpec),
     BlockRot {
         integrity: f32,
         rottable_blocks: Option<Identifier>,
@@ -575,15 +601,7 @@ impl VillageDataLoader {
     ) -> Result<StructureSetSpec, VillageDataError> {
         let value = self.read_entry(STRUCTURE_SET, "structure_set", id, id)?;
         let placement = parse_placement(id, field_of(&value, "placement", STRUCTURE_SET, id)?)?;
-        let entries = field_array(&value, "structures", STRUCTURE_SET, id)?;
-        let mut structures = Vec::with_capacity(entries.len());
-        for entry in entries {
-            structures.push(StructureSetEntry {
-                structure: parse_id(id, field_str(entry, "structure", STRUCTURE_SET, id)?)?,
-                // `ExtraCodecs.POSITIVE_INT`
-                weight: ranged_i32_field(entry, "weight", STRUCTURE_SET, id, 1, i32::MAX)?,
-            });
-        }
+        let structures = parse_structure_set_entries(id, &value)?;
         Ok(StructureSetSpec {
             id: id.clone(),
             placement,
@@ -641,9 +659,7 @@ impl VillageDataLoader {
         &self,
         step: StructureStep,
     ) -> Result<Vec<Identifier>, VillageDataError> {
-        let root = self.worldgen_dir.join("structure");
-        let mut ids = Vec::new();
-        collect_structure_files(&root, "", &mut ids)?;
+        let ids = self.registry_entries("structure")?;
         let mut in_step = Vec::new();
         for id in ids {
             let value = self.read_entry(STRUCTURE, "structure", &id, &id)?;
@@ -663,6 +679,86 @@ impl VillageDataLoader {
         Ok(in_step)
     }
 
+    /// List the available structure-set identifiers in deterministic registry order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a registry directory cannot be read or a resource
+    /// path is not a valid identifier.
+    pub fn structure_sets(&self) -> Result<Vec<Identifier>, VillageDataError> {
+        self.registry_entries("structure_set")
+    }
+
+    /// Discover sets containing a codec without parsing unrelated placement codecs.
+    /// The returned sets remain intact, so mixed unsupported entries fail closure loading.
+    pub fn structure_sets_of_type(
+        &self,
+        structure_type: &Identifier,
+    ) -> Result<Vec<StructureSetSpec>, VillageDataError> {
+        let mut sets = Vec::new();
+        for id in self.structure_sets()? {
+            let value = self.read_entry(STRUCTURE_SET, "structure_set", &id, &id)?;
+            let structures = parse_structure_set_entries(&id, &value)?;
+            let mut matches = false;
+            for entry in &structures {
+                let spec = self.read_entry(STRUCTURE, "structure", &entry.structure, &id)?;
+                if field_str(&spec, "type", STRUCTURE, &entry.structure)? == structure_type.as_str()
+                {
+                    matches = true;
+                    break;
+                }
+            }
+            if matches {
+                sets.push(StructureSetSpec {
+                    placement: parse_placement(
+                        &id,
+                        field_of(&value, "placement", STRUCTURE_SET, &id)?,
+                    )?,
+                    id,
+                    structures,
+                });
+            }
+        }
+        Ok(sets)
+    }
+
+    fn registry_entries(&self, registry: &str) -> Result<Vec<Identifier>, VillageDataError> {
+        let root = self.worldgen_dir.join(registry);
+        let mut ids = Vec::new();
+        collect_structure_files(&root, "minecraft", "", &mut ids)?;
+        if let Some(data) = self.worldgen_dir.parent().and_then(Path::parent) {
+            let entries = std::fs::read_dir(data).map_err(|source| VillageDataError::Io {
+                path: data.to_path_buf(),
+                source,
+            })?;
+            for entry in entries {
+                let entry = entry.map_err(|source| VillageDataError::Io {
+                    path: data.to_path_buf(),
+                    source,
+                })?;
+                let path = entry.path();
+                let Some(namespace) = entry.file_name().to_str().map(str::to_owned) else {
+                    return Err(VillageDataError::InvalidStructureFile { path });
+                };
+                let file_type = entry.file_type().map_err(|source| VillageDataError::Io {
+                    path: path.clone(),
+                    source,
+                })?;
+                if namespace == "minecraft" || !file_type.is_dir() {
+                    continue;
+                }
+                let directory = path.join("worldgen").join(registry);
+                if directory.is_dir() {
+                    collect_structure_files(&directory, &namespace, "", &mut ids)?;
+                }
+            }
+        }
+        ids.sort_by(|first, second| {
+            (first.path(), first.namespace()).cmp(&(second.path(), second.namespace()))
+        });
+        Ok(ids)
+    }
+
     fn read_entry(
         &self,
         kind: EntryKind,
@@ -670,16 +766,40 @@ impl VillageDataLoader {
         id: &Identifier,
         referrer: &Identifier,
     ) -> Result<Value, VillageDataError> {
+        let namespace_dir;
+        let worldgen_dir = if id.namespace() == "minecraft" {
+            &self.worldgen_dir
+        } else {
+            let data = self
+                .worldgen_dir
+                .parent()
+                .and_then(Path::parent)
+                .ok_or_else(|| VillageDataError::UnsupportedNamespace {
+                    kind,
+                    id: id.clone(),
+                    referrer: referrer.clone(),
+                })?;
+            namespace_dir = data.join(id.namespace()).join("worldgen");
+            &namespace_dir
+        };
         if id.namespace() != "minecraft" {
-            return Err(VillageDataError::UnsupportedNamespace {
-                kind,
-                id: id.clone(),
-                referrer: referrer.clone(),
-            });
+            let root = worldgen_dir.join(dir);
+            match std::fs::metadata(&root) {
+                Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(VillageDataError::MissingEntry {
+                        kind,
+                        id: id.clone(),
+                        referrer: referrer.clone(),
+                        path: root.join(format!("{}.json", id.path())),
+                    });
+                }
+                Err(source) => return Err(VillageDataError::Io { path: root, source }),
+                Ok(_) => {}
+            }
         }
         let io_error = |path, source| VillageDataError::Io { path, source };
         let parse_error = |path, source| VillageDataError::Parse { path, source };
-        match crate::open_worldgen_entry(&self.worldgen_dir, dir, id)? {
+        match crate::open_worldgen_entry(worldgen_dir, dir, id)? {
             crate::WorldgenEntry::Present(opened) => {
                 read_json_resource(opened, &io_error, &parse_error)
             }
@@ -693,11 +813,27 @@ impl VillageDataLoader {
     }
 }
 
-/// Collect the `minecraft:<relative path>` ids of every `*.json` under a
+fn parse_structure_set_entries(
+    id: &Identifier,
+    value: &Value,
+) -> Result<Vec<StructureSetEntry>, VillageDataError> {
+    field_array(value, "structures", STRUCTURE_SET, id)?
+        .iter()
+        .map(|entry| {
+            Ok(StructureSetEntry {
+                structure: parse_id(id, field_str(entry, "structure", STRUCTURE_SET, id)?)?,
+                weight: ranged_i32_field(entry, "weight", STRUCTURE_SET, id, 1, i32::MAX)?,
+            })
+        })
+        .collect()
+}
+
+/// Collect `<namespace>:<relative path>` ids of every `*.json` under a
 /// registry directory, recursing into subdirectories (vanilla's registry
 /// resource listing is recursive).
 fn collect_structure_files(
     root: &std::path::Path,
+    namespace: &str,
     prefix: &str,
     ids: &mut Vec<Identifier>,
 ) -> Result<(), VillageDataError> {
@@ -715,13 +851,13 @@ fn collect_structure_files(
             return Err(VillageDataError::InvalidStructureFile { path });
         };
         if path.is_dir() {
-            collect_structure_files(&path, &format!("{prefix}{name}/"), ids)?;
+            collect_structure_files(&path, namespace, &format!("{prefix}{name}/"), ids)?;
             continue;
         }
         let Some(stem) = name.strip_suffix(".json") else {
             continue;
         };
-        let id = Identifier::parse(format!("minecraft:{prefix}{stem}"))
+        let id = Identifier::parse(format!("{namespace}:{prefix}{stem}"))
             .map_err(|_| VillageDataError::InvalidStructureFile { path: path.clone() })?;
         ids.push(id);
     }
@@ -736,14 +872,31 @@ fn parse_placement(
         referrer,
         field_str(value, "type", STRUCTURE_PLACEMENT, referrer)?,
     )?;
-    if type_id.path() != "random_spread" {
+    let moog = type_id.as_str() == "moogs_structures:advanced_random_spread";
+    if type_id.as_str() != "minecraft:random_spread" && !moog {
         return Err(VillageDataError::UnsupportedType {
             kind: STRUCTURE_PLACEMENT,
             type_id,
             referrer: referrer.clone(),
         });
     }
-    let placement = RandomSpreadPlacement {
+    if moog {
+        for field in [
+            "super_exclusion_zone",
+            "enhanced_exclusion_zone",
+            "when_replacing",
+        ] {
+            if let Some(unsupported) = value.get(field) {
+                return Err(VillageDataError::UnsupportedField {
+                    kind: STRUCTURE_PLACEMENT,
+                    entry: referrer.clone(),
+                    field,
+                    value: unsupported.to_string(),
+                });
+            }
+        }
+    }
+    let mut placement = RandomSpreadPlacement {
         spacing: ranged_i32_field(value, "spacing", STRUCTURE_PLACEMENT, referrer, 0, 4096)?,
         separation: ranged_i32_field(value, "separation", STRUCTURE_PLACEMENT, referrer, 0, 4096)?,
         salt: ranged_i32_field(value, "salt", STRUCTURE_PLACEMENT, referrer, 0, i32::MAX)?,
@@ -774,6 +927,19 @@ fn parse_placement(
             1.0,
         )?,
         exclusion_zone: parse_exclusion_zone(referrer, value.get("exclusion_zone"))?,
+        min_distance_from_world_origin: if moog {
+            Some(optional_ranged_i32_field(
+                value,
+                "min_distance_from_world_origin",
+                STRUCTURE_PLACEMENT,
+                referrer,
+                0,
+                i32::MAX,
+                0,
+            )?)
+        } else {
+            None
+        },
     };
     // `RandomSpreadStructurePlacement.validate`
     if placement.spacing <= placement.separation {
@@ -786,6 +952,13 @@ fn parse_placement(
                 placement.spacing, placement.separation
             ),
         });
+    }
+    if moog {
+        // Moog's default configuration scales both grid dimensions by 1.65,
+        // rounds to the nearest chunk and keeps separation below spacing.
+        let scale = |value: i32| (value * 165 + 50) / 100;
+        placement.spacing = scale(placement.spacing).max(1);
+        placement.separation = scale(placement.separation).min(placement.spacing - 1);
     }
     Ok(PlacementSpec::RandomSpread(placement))
 }
@@ -846,15 +1019,166 @@ fn parse_exclusion_zone(
     }))
 }
 
+fn parse_moog_start_checks(
+    id: &Identifier,
+    value: &Value,
+) -> Result<MoogStartChecks, VillageDataError> {
+    let cannot_spawn_in_liquid = value
+        .get("cannot_spawn_in_liquid")
+        .map(|_| bool_field(value, "cannot_spawn_in_liquid", STRUCTURE, id))
+        .transpose()?
+        .unwrap_or(false);
+    let terrain_check = match (
+        value.get("terrain_height_radius_check"),
+        value.get("allowed_terrain_height_range"),
+    ) {
+        (None, None) => None,
+        (Some(_), Some(_)) => Some((
+            ranged_i32_field(value, "terrain_height_radius_check", STRUCTURE, id, 1, 100)?,
+            ranged_i32_field(
+                value,
+                "allowed_terrain_height_range",
+                STRUCTURE,
+                id,
+                1,
+                1000,
+            )?,
+        )),
+        _ => {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "terrain_height_radius_check",
+                value: "terrain radius and allowed range must be specified together".to_owned(),
+            });
+        }
+    };
+    let biome_radius = value
+        .get("valid_biome_radius_check")
+        .map(|_| ranged_i32_field(value, "valid_biome_radius_check", STRUCTURE, id, 1, 100))
+        .transpose()?;
+    let (min_y, max_y) = if let Some(allowance) = value.get("y_allowance") {
+        if !allowance.is_object() {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "y_allowance",
+                value: allowance.to_string(),
+            });
+        }
+        if allowance.as_object().is_some_and(|object| {
+            object
+                .keys()
+                .any(|key| key != "min_y_allowed" && key != "max_y_allowed")
+        }) {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "y_allowance",
+                value: "unsupported y_allowance field".to_owned(),
+            });
+        }
+        let min = allowance
+            .get("min_y_allowed")
+            .map(|_| i32_field(allowance, "min_y_allowed", STRUCTURE, id))
+            .transpose()?;
+        let max = allowance
+            .get("max_y_allowed")
+            .map(|_| i32_field(allowance, "max_y_allowed", STRUCTURE, id))
+            .transpose()?;
+        if matches!((min, max), (Some(min), Some(max)) if min > max) {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "y_allowance",
+                value: "minimum exceeds maximum".to_owned(),
+            });
+        }
+        (min, max)
+    } else {
+        (None, None)
+    };
+    let average_land = match value.get("burying_type") {
+        None => false,
+        Some(Value::String(burying)) if burying == "AVERAGE_LAND" => true,
+        Some(unsupported) => {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "burying_type",
+                value: format!("unsupported Moog burial: {unsupported}"),
+            });
+        }
+    };
+    Ok(MoogStartChecks {
+        cannot_spawn_in_liquid,
+        terrain_check,
+        biome_radius,
+        min_y,
+        max_y,
+        average_land,
+    })
+}
+
 fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, VillageDataError> {
     let structure_type = parse_id(id, field_str(value, "type", STRUCTURE, id)?)?;
-    if structure_type.path() != "jigsaw" {
+    let is_nether = crate::worldgen_structure_types::is_moog_nether(&structure_type);
+    let is_moog = is_nether
+        || structure_type.as_str() == "moogs_structures:moogs_structures_generic_jigsaw_structure";
+    if !crate::worldgen_structure_types::supports_structure_type(&structure_type) {
         return Err(VillageDataError::UnsupportedType {
             kind: STRUCTURE,
             type_id: structure_type,
             referrer: id.clone(),
         });
     }
+    let moog_start_checks = if is_moog {
+        const FIELDS: &[&str] = &[
+            "type",
+            "start_pool",
+            "size",
+            "project_start_to_heightmap",
+            "cannot_spawn_in_liquid",
+            "terrain_height_radius_check",
+            "allowed_terrain_height_range",
+            "valid_biome_radius_check",
+            "y_allowance",
+            "burying_type",
+            "biomes",
+            "step",
+            "terrain_adaptation",
+            "start_height",
+            "use_bounding_box_hack",
+            "spawn_overrides",
+            "max_distance_from_center",
+            "liquid_settings",
+        ];
+        if let Some(object) = value.as_object() {
+            for key in object.keys() {
+                if !FIELDS.contains(&key.as_str()) && !(is_nether && key == "land_search_direction")
+                {
+                    return Err(VillageDataError::InvalidField {
+                        kind: STRUCTURE,
+                        entry: id.clone(),
+                        field: "type",
+                        value: format!("unsupported Moog field {key}"),
+                    });
+                }
+            }
+        }
+        if is_nether && field_str(value, "land_search_direction", STRUCTURE, id)? != "HIGHEST_LAND"
+        {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "land_search_direction",
+                value: "only HIGHEST_LAND is supported".to_owned(),
+            });
+        }
+        Some(parse_moog_start_checks(id, value)?)
+    } else {
+        None
+    };
     let terrain_adaptation = optional_enum_field(
         value,
         "terrain_adaptation",
@@ -863,10 +1187,38 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         TERRAIN_ADAPTATIONS,
         TerrainAdaptation::None,
     )?;
-    let max_distance_from_center = parse_max_distance(
-        id,
-        field_of(value, "max_distance_from_center", STRUCTURE, id)?,
-    )?;
+    if is_moog
+        && !matches!(
+            terrain_adaptation,
+            TerrainAdaptation::None | TerrainAdaptation::BeardThin
+        )
+    {
+        return Err(VillageDataError::InvalidField {
+            kind: STRUCTURE,
+            entry: id.clone(),
+            field: "terrain_adaptation",
+            value: "unsupported Moog terrain adaptation".to_owned(),
+        });
+    }
+    let start_height = parse_height_provider(id, field_of(value, "start_height", STRUCTURE, id)?)?;
+    if is_moog && !matches!(start_height, HeightProviderSpec::Constant(_)) {
+        return Err(VillageDataError::InvalidField {
+            kind: STRUCTURE,
+            entry: id.clone(),
+            field: "start_height",
+            value: "Moog layout currently requires a constant start height".to_owned(),
+        });
+    }
+    let max_distance_from_center = match value.get("max_distance_from_center") {
+        None if is_moog => MaxDistance {
+            horizontal: 80,
+            vertical: 80,
+        },
+        _ => parse_max_distance(
+            id,
+            field_of(value, "max_distance_from_center", STRUCTURE, id)?,
+        )?,
+    };
     // `JigsawStructure.verifyRange`
     let edge = match terrain_adaptation {
         TerrainAdaptation::None => 0,
@@ -889,6 +1241,7 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
     Ok(StructureSpec {
         id: id.clone(),
         structure_type,
+        moog_start_checks,
         pool_aliases: value
             .get("pool_aliases")
             .map(|aliases| {
@@ -916,9 +1269,24 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         start_pool: parse_id(id, field_str(value, "start_pool", STRUCTURE, id)?)?,
         start_jigsaw_name: parse_optional_id(value, "start_jigsaw_name", STRUCTURE, id)?,
         // `Codec.intRange(0, 20)`
-        size: ranged_i32_field(value, "size", STRUCTURE, id, 0, 20)?,
-        start_height: parse_height_provider(id, field_of(value, "start_height", STRUCTURE, id)?)?,
-        use_expansion_hack: bool_field(value, "use_expansion_hack", STRUCTURE, id)?,
+        size: ranged_i32_field(
+            value,
+            "size",
+            STRUCTURE,
+            id,
+            0,
+            if is_moog { 30 } else { 20 },
+        )?,
+        start_height,
+        use_expansion_hack: if is_moog {
+            value
+                .get("use_bounding_box_hack")
+                .map(|_| bool_field(value, "use_bounding_box_hack", STRUCTURE, id))
+                .transpose()?
+                .unwrap_or(false)
+        } else {
+            bool_field(value, "use_expansion_hack", STRUCTURE, id)?
+        },
         project_start_to_heightmap: parse_optional_enum_field(
             value,
             "project_start_to_heightmap",
@@ -934,7 +1302,11 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
             STRUCTURE,
             id,
             LIQUID_SETTINGS,
-            LiquidSettings::ApplyWaterlogging,
+            if is_moog {
+                LiquidSettings::IgnoreWaterlogging
+            } else {
+                LiquidSettings::ApplyWaterlogging
+            },
         )?,
     })
 }
@@ -1253,6 +1625,26 @@ fn parse_pool_element(
         referrer,
         field_str(value, "element_type", POOL_ELEMENT, referrer)?,
     )?;
+    if type_id.as_str() == "moogs_structures:versioned_single_pool_element" {
+        let mut single = parse_single_element(referrer, value)?;
+        let fallback = field_str(value, "location", POOL_ELEMENT, referrer)?;
+        let release = crate::protocol_versions::SUPPORTED
+            .last()
+            .expect("supported protocol window is nonempty")
+            .release;
+        let location =
+            crate::versioned_structure_pool::select(value.get("locations"), fallback, release)
+                .map_err(|()| VillageDataError::InvalidField {
+                    kind: POOL_ELEMENT,
+                    entry: referrer.clone(),
+                    field: "locations",
+                    value: value
+                        .get("locations")
+                        .map_or_else(String::new, Value::to_string),
+                })?;
+        single.location = parse_id(referrer, location)?;
+        return Ok(PoolElementSpec::Single(single));
+    }
     Ok(match type_id.path() {
         // A unit codec: the element carries no fields of its own.
         "empty_pool_element" => PoolElementSpec::Empty,
@@ -1383,6 +1775,86 @@ fn parse_processor_list(
     })
 }
 
+fn parse_moog_spawner(
+    referrer: &Identifier,
+    value: &Value,
+) -> Result<MoogSpawnerSpec, VillageDataError> {
+    let invalid = |field, detail: String| VillageDataError::InvalidField {
+        kind: PROCESSOR,
+        entry: referrer.clone(),
+        field,
+        value: detail,
+    };
+    let allowed = [
+        "processor_type",
+        "weighted_entities",
+        "delay",
+        "min_spawn_delay",
+        "max_spawn_delay",
+        "spawn_count",
+        "max_nearby_entities",
+        "required_player_range",
+        "spawn_range",
+    ];
+    if let Some(object) = value.as_object() {
+        for key in object.keys() {
+            if !allowed.contains(&key.as_str()) {
+                return Err(invalid(
+                    "processor_type",
+                    format!("unsupported Moog spawner field {key}"),
+                ));
+            }
+        }
+    }
+    let entries = field_array(value, "weighted_entities", PROCESSOR, referrer)?;
+    let mut mobs = Vec::with_capacity(entries.len());
+    let mut total = 0.0;
+    for entry in entries {
+        let object = entry
+            .as_object()
+            .ok_or_else(|| invalid("weighted_entities", "expected an entity object".to_owned()))?;
+        if object.keys().any(|key| key != "entity" && key != "weight") {
+            return Err(invalid(
+                "weighted_entities",
+                "unsupported entity fields".to_owned(),
+            ));
+        }
+        let entity = parse_id(referrer, field_str(entry, "entity", PROCESSOR, referrer)?)?;
+        let weight = entry
+            .get("weight")
+            .and_then(Value::as_f64)
+            .filter(|weight| weight.is_finite() && *weight > 0.0)
+            .ok_or_else(|| {
+                invalid(
+                    "weighted_entities",
+                    "weight must be positive and finite".to_owned(),
+                )
+            })?;
+        total += weight;
+        mobs.push((entity, weight));
+    }
+    if mobs.is_empty() || !total.is_finite() {
+        return Err(invalid(
+            "weighted_entities",
+            "empty or overflowing mob weights".to_owned(),
+        ));
+    }
+    let mut fields = [0; 7];
+    for (slot, (key, default)) in fields.iter_mut().zip([
+        ("delay", 20),
+        ("min_spawn_delay", 200),
+        ("max_spawn_delay", 800),
+        ("spawn_count", 4),
+        ("max_nearby_entities", 6),
+        ("required_player_range", 16),
+        ("spawn_range", 4),
+    ]) {
+        let raw = optional_i32_field(value, key, PROCESSOR, referrer, default)?;
+        *slot = i16::try_from(raw).map_err(|_| invalid(key, raw.to_string()))?;
+    }
+    Ok(MoogSpawnerSpec { mobs, fields })
+}
+
 fn parse_processor(
     referrer: &Identifier,
     value: &Value,
@@ -1391,6 +1863,9 @@ fn parse_processor(
         referrer,
         field_str(value, "processor_type", PROCESSOR, referrer)?,
     )?;
+    if type_id.as_str() == "moogs_structures:spawner_randomizing_processor" {
+        return parse_moog_spawner(referrer, value).map(StructureProcessorSpec::MoogSpawner);
+    }
     Ok(match type_id.path() {
         "block_rot" => StructureProcessorSpec::BlockRot {
             integrity: optional_ranged_f32_field(
@@ -1407,13 +1882,22 @@ fn parse_processor(
                 .map(|tag| parse_hashed_tag(referrer, tag))
                 .transpose()?,
         },
-        "capped" => StructureProcessorSpec::Capped {
-            delegate: Box::new(parse_processor(
-                referrer,
-                field_of(value, "delegate", PROCESSOR, referrer)?,
-            )?),
-            limit: ranged_i32_field(value, "limit", PROCESSOR, referrer, 0, i32::MAX)?,
-        },
+        "capped" => {
+            let delegate =
+                parse_processor(referrer, field_of(value, "delegate", PROCESSOR, referrer)?)?;
+            if matches!(delegate, StructureProcessorSpec::MoogSpawner(_)) {
+                return Err(VillageDataError::InvalidField {
+                    kind: PROCESSOR,
+                    entry: referrer.clone(),
+                    field: "delegate",
+                    value: "capped Moog spawner processors are unsupported".to_owned(),
+                });
+            }
+            StructureProcessorSpec::Capped {
+                delegate: Box::new(delegate),
+                limit: ranged_i32_field(value, "limit", PROCESSOR, referrer, 0, i32::MAX)?,
+            }
+        }
         "rule" => {
             let entries = field_array(value, "rules", PROCESSOR, referrer)?;
             let mut rules = Vec::with_capacity(entries.len());

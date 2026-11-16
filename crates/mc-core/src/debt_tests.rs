@@ -624,8 +624,6 @@ fn persisted_malformed_native_debt_refuses_core_open_without_rewriting_it() {
         assert!(error.to_string().contains("simulation debt"), "{error}");
         let reopened = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
         assert_eq!(reopened.read_checkpoint().unwrap().tick, checkpoint.tick);
-        let generator =
-            mc_worldgen::TerrainGenerator::new(42, std::sync::Arc::clone(&registry.blocks));
         let stored = reopened
             .read_chunk(
                 0,
@@ -633,7 +631,6 @@ fn persisted_malformed_native_debt_refuses_core_open_without_rewriting_it() {
                 &registry.blocks,
                 &registry.items,
                 &registry.chest_loot,
-                &generator,
             )
             .unwrap()
             .unwrap();

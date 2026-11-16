@@ -43,6 +43,7 @@ fn source(
         light: Arc::clone(&registry.light),
         population: (dimension == 0).then(|| Population::new(42, registry)),
         geometry,
+        structure_catalog: registry.structure_catalog.clone(),
     })
 }
 
@@ -168,7 +169,7 @@ fn corrupt_native_block_entity_never_generates_or_overwrites_at_checkpoint() {
     assert_eq!(world.block_at(block.x, block.y, block.z), None);
     world.set_opaque_block_entity(block, None);
     assert_eq!(world.flush_dirty(&Default::default()).unwrap(), 0);
-    assert!(world.take_generated(0).is_none());
+    assert!(world.take_generated().is_none());
 
     let mut scheduled = world.capture_dirty(&Default::default());
     world.capture_scheduled_block_ticks(
@@ -359,7 +360,7 @@ fn memory_constructor_has_no_persistence_source_or_generated_saves() {
     );
     assert_eq!(generated.load(Ordering::Relaxed), 1);
     assert!(
-        world.take_generated(0).is_none(),
+        world.take_generated().is_none(),
         "memory worlds never enqueue durable generated bases"
     );
 }
@@ -392,7 +393,7 @@ fn checkpoint_bases_are_immutable_and_persisted_bases_are_not_regenerated() {
         mc_world::OVERWORLD_GEOMETRY,
     );
     world.ensure_blocking(&[(pos, 0)].into_iter().collect());
-    let immutable_generated = world.take_generated(0).unwrap();
+    let immutable_generated = world.take_generated().unwrap();
     world.set_block(4, 100, 4, registry.states.dirt);
     world.fold_overlay();
     let capture = world.capture_dirty(&Default::default());

@@ -33,6 +33,7 @@ fn fresh_v2_sites_describe_generated_villagers_from_the_same_plans() {
         Replay::default(),
         store,
         &std::collections::BTreeMap::new(),
+        None,
     )
     .unwrap();
     eprintln!("seed81 registry/dimension startup: {:?}", startup.elapsed());

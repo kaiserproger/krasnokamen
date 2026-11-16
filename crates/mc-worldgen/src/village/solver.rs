@@ -49,11 +49,12 @@ use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 
 use mc_data::Identifier;
-use mc_data::village_data::{ProcessorRef, Projection, StructureSpec};
+use mc_data::village_data::{HeightmapType, ProcessorRef, Projection, StructureSpec};
 use mc_world::BlockPos;
 
 use super::beard::BeardContribution;
 use super::closure::{ClosureElement, ClosurePool, ClosureStructure, VillageClosure};
+use super::height_query::HeightQuery;
 use super::placement::{
     RandomSpreadPlacement, set_large_feature_seed, set_large_feature_with_salt, start_origin,
 };
@@ -285,12 +286,19 @@ struct BiomeGate<'a> {
     matches: &'a dyn Fn(&Identifier, &Identifier) -> bool,
 }
 
+fn accepts_biome(spec: &StructureSpec, biome: &Identifier, gate: &BiomeGate<'_>) -> bool {
+    match &spec.biomes {
+        mc_data::village_data::BiomeSet::Tag(tag) => (gate.matches)(tag, biome),
+        mc_data::village_data::BiomeSet::Biomes(biomes) => biomes.contains(biome),
+    }
+}
+
 /// `ChunkGenerator.createStructures`'s selection plus
 /// `JigsawStructure.findGenerationPoint`: the structure a candidate chunk
 /// generates, or `None` when the chunk is not a candidate or no entry of the
 /// set passes its biome gate.
 ///
-/// `free_height(x, z)` is the `WORLD_SURFACE_WG` first-free-height query,
+/// `free_height` supplies plan-free heightmaps and optional liquid facts;
 /// `biome_at(x, y, z)` is the terrain's plan-free noise biome at the stub's
 /// block coordinates (the caller converts all three axes to quart coordinates),
 /// and `biome_matches(tag, biome)` is membership in the structure's biome tag.
@@ -301,9 +309,15 @@ pub fn assemble_village(
     chunk_z: i32,
     biome_at: impl Fn(i32, i32, i32) -> Identifier,
     biome_matches: impl Fn(&Identifier, &Identifier) -> bool,
-    free_height: impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
 ) -> Option<VillageAssembly> {
-    if !closure.placement.is_placement_chunk(seed, chunk_x, chunk_z) {
+    if !closure.placement.is_placement_chunk(seed, chunk_x, chunk_z)
+        || !super::placement::meets_minimum_origin_distance(
+            chunk_x,
+            chunk_z,
+            closure.min_distance_from_world_origin,
+        )
+    {
         return None;
     }
     // The selection random: a fresh legacy source, seeded the way
@@ -337,7 +351,7 @@ pub fn assemble_village(
             chunk_x,
             chunk_z,
             &gate,
-            &free_height,
+            free_height,
         ) {
             return Some(assembly);
         }
@@ -359,6 +373,21 @@ pub fn assemble_village(
 /// costs a start piece instead of five grown villages. The per-column plan
 /// lookup makes that the difference between usable and pathological chunk
 /// generation.
+fn projected_height(
+    query: &dyn HeightQuery,
+    heightmap: HeightmapType,
+    x: i32,
+    z: i32,
+) -> Option<i32> {
+    match heightmap {
+        HeightmapType::OceanFloor | HeightmapType::OceanFloorWg => query.ocean_floor(x, z),
+        HeightmapType::WorldSurface
+        | HeightmapType::WorldSurfaceWg
+        | HeightmapType::MotionBlocking
+        | HeightmapType::MotionBlockingNoLeaves => Some(query.world_surface(x, z)),
+    }
+}
+
 fn assemble_structure(
     closure: &VillageClosure,
     structure: &ClosureStructure,
@@ -366,13 +395,58 @@ fn assemble_structure(
     chunk_x: i32,
     chunk_z: i32,
     gate: &BiomeGate<'_>,
-    free_height: &impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
 ) -> Option<VillageAssembly> {
+    let is_nether =
+        mc_data::worldgen_structure_types::is_moog_nether(&structure.spec.structure_type);
+    if let Some(checks) = structure.spec.moog_start_checks {
+        let heightmap = structure
+            .spec
+            .project_start_to_heightmap
+            .unwrap_or(HeightmapType::WorldSurfaceWg);
+        if !super::moog_start_checks::passes(
+            chunk_x,
+            chunk_z,
+            checks.cannot_spawn_in_liquid,
+            checks.terrain_check,
+            if is_nether {
+                (None, None)
+            } else {
+                (checks.min_y, checks.max_y)
+            },
+            &|x, z| projected_height(free_height, heightmap, x, z),
+            &|x, z| free_height.top_is_liquid(x, z),
+        ) {
+            return None;
+        }
+        if let Some(radius) = checks.biome_radius {
+            let mut random = LegacyRandom::new(set_large_feature_seed(seed, chunk_x, chunk_z));
+            let mut y = sample_start_height(
+                structure.spec.start_height,
+                closure.dimension_bounds.0,
+                closure.dimension_bounds.1,
+                &mut random,
+            );
+            if !is_nether && structure.spec.project_start_to_heightmap.is_some() {
+                let x = chunk_x.checked_mul(16)?.checked_add(7)?;
+                let z = chunk_z.checked_mul(16)?.checked_add(7)?;
+                y = y.checked_add(projected_height(free_height, heightmap, x, z)? - 1)?;
+            }
+            for x in chunk_x.checked_sub(radius)?..=chunk_x.checked_add(radius)? {
+                for z in chunk_z.checked_sub(radius)?..=chunk_z.checked_add(radius)? {
+                    let biome = (gate.biome_at)(x.checked_mul(16)?, y, z.checked_mul(16)?);
+                    if !accepts_biome(&structure.spec, &biome, gate) {
+                        return None;
+                    }
+                }
+            }
+        }
+    }
     let aliases = sample_aliases(
         &structure.spec.pool_aliases,
         &mut LegacyRandom::new(set_large_feature_seed(seed, chunk_x, chunk_z)),
     );
-    let (mut assembly, mut random) = plan_start(
+    let (mut assembly, mut random, start_height) = plan_start(
         closure,
         structure,
         seed,
@@ -382,7 +456,7 @@ fn assemble_structure(
         &aliases,
     )?;
     let biome = (gate.biome_at)(assembly.origin.x, assembly.origin.y, assembly.origin.z);
-    if !(gate.matches)(&assembly.biome_tag, &biome) {
+    if !accepts_biome(&structure.spec, &biome, gate) {
         return None;
     }
     grow_start(
@@ -393,7 +467,122 @@ fn assemble_structure(
         free_height,
         &aliases,
     );
+    if let Some(checks) = structure.spec.moog_start_checks {
+        center_moog_layout(&mut assembly, chunk_x, chunk_z);
+        if is_nether {
+            super::moog_nether::place_on_land(
+                &mut assembly,
+                &structure.spec,
+                checks,
+                start_height,
+                closure.dimension_bounds,
+                free_height,
+            )?;
+        } else if checks.average_land {
+            bury_moog_average(
+                &mut assembly,
+                &structure.spec,
+                checks,
+                start_height,
+                free_height,
+            )?;
+        }
+    }
     Some(assembly)
+}
+
+/// Moog centres the first piece's bounding-box centre on the chunk corner
+/// after growth. Junctions retain their authored coordinates.
+fn center_moog_layout(assembly: &mut VillageAssembly, chunk_x: i32, chunk_z: i32) {
+    let first = &assembly.pieces[0];
+    let center_x = first.bounds_min.x + (first.bounds_max.x - first.bounds_min.x + 1) / 2;
+    let center_z = first.bounds_min.z + (first.bounds_max.z - first.bounds_min.z + 1) / 2;
+    let dx = chunk_x * 16 - center_x;
+    let dz = chunk_z * 16 - center_z;
+    for piece in &mut assembly.pieces {
+        piece.position.x += dx;
+        piece.position.z += dz;
+        piece.bounds_min.x += dx;
+        piece.bounds_min.z += dz;
+        piece.bounds_max.x += dx;
+        piece.bounds_max.z += dz;
+    }
+    for beard in &mut assembly.beard_pieces {
+        beard.min.x += dx;
+        beard.min.z += dz;
+        beard.max.x += dx;
+        beard.max.z += dz;
+    }
+}
+
+/// Moog's average-land post-layout adjustment samples the first piece's
+/// footprint, averaging eligible first-occupied heights before moving all pieces.
+fn bury_moog_average(
+    assembly: &mut VillageAssembly,
+    spec: &StructureSpec,
+    checks: mc_data::village_data::MoogStartChecks,
+    start_height: i32,
+    query: &dyn HeightQuery,
+) -> Option<()> {
+    let first = &assembly.pieces[0];
+    let center_x = first.bounds_min.x + (first.bounds_max.x - first.bounds_min.x + 1) / 2;
+    let center_z = first.bounds_min.z + (first.bounds_max.z - first.bounds_min.z + 1) / 2;
+    let width = f64::from(first.bounds_max.x) - f64::from(first.bounds_min.x);
+    let depth = f64::from(first.bounds_max.z) - f64::from(first.bounds_min.z);
+    let radius = (width.hypot(depth) as i32) / 2;
+    let step = (radius / 2).max(1) as usize;
+    let heightmap = spec
+        .project_start_to_heightmap
+        .unwrap_or(HeightmapType::WorldSurfaceWg);
+    let (min, max) = (
+        checks.min_y.unwrap_or(i32::MIN),
+        checks.max_y.unwrap_or(i32::MAX),
+    );
+    let (mut sum, mut count) = (0_i64, 0_i64);
+    for x in (-radius..=radius).step_by(step) {
+        for z in (-radius..=radius).step_by(step) {
+            let height = projected_height(
+                query,
+                heightmap,
+                center_x.checked_add(x)?,
+                center_z.checked_add(z)?,
+            )?
+            .checked_sub(1)?;
+            if height > min && height < max {
+                sum += i64::from(height);
+                count += 1;
+            }
+        }
+    }
+    let mut average = if count > 0 {
+        sum as f64 / count as f64
+    } else {
+        f64::from(checks.max_y.or(checks.min_y)?)
+    };
+    if checks.cannot_spawn_in_liquid
+        && !matches!(
+            heightmap,
+            HeightmapType::OceanFloor | HeightmapType::OceanFloorWg
+        )
+    {
+        average = average.max(f64::from(query.sea_level()?));
+        if let Some(max) = checks.max_y {
+            average = average.max(f64::from(max));
+        }
+    }
+    let dy = (average as i32)
+        .checked_sub(first.bounds_min.y)?
+        .checked_add(start_height)?;
+    for piece in &mut assembly.pieces {
+        piece.position.y = piece.position.y.checked_add(dy)?;
+        piece.bounds_min.y = piece.bounds_min.y.checked_add(dy)?;
+        piece.bounds_max.y = piece.bounds_max.y.checked_add(dy)?;
+    }
+    for beard in &mut assembly.beard_pieces {
+        beard.min.y = beard.min.y.checked_add(dy)?;
+        beard.max.y = beard.max.y.checked_add(dy)?;
+    }
+    Some(())
 }
 
 /// `JigsawPlacement.addPieces` up to the growth: the start piece is drawn and
@@ -405,10 +594,11 @@ fn plan_start(
     seed: i64,
     chunk_x: i32,
     chunk_z: i32,
-    free_height: &impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
     aliases: &BTreeMap<Identifier, Identifier>,
-) -> Option<(VillageAssembly, LegacyRandom)> {
+) -> Option<(VillageAssembly, LegacyRandom, i32)> {
     let spec = &structure.spec;
+    let is_nether = mc_data::worldgen_structure_types::is_moog_nether(&spec.structure_type);
     let mut random = LegacyRandom::new(set_large_feature_seed(seed, chunk_x, chunk_z));
     let height = sample_start_height(
         spec.start_height,
@@ -422,7 +612,8 @@ fn plan_start(
     if matches!(center_element, PlacedElement::Empty) {
         return None;
     }
-    let origin = start_origin(chunk_x, chunk_z, height, 0);
+    // Nether samples occupied land only after the complete layout is grown.
+    let origin = start_origin(chunk_x, chunk_z, if is_nether { 0 } else { height }, 0);
     let anchored = anchor_origin(
         closure,
         &center_element,
@@ -437,13 +628,23 @@ fn plan_start(
     // `StructurePoolElement.getGroundLevelDelta` is 1 for every element kind the
     // village closure reaches.
     let ground_level_delta = 1;
-    let bottom_y = if spec.project_start_to_heightmap.is_some() {
+    let bottom_y = if is_nether {
+        anchored.y.checked_add(ground_level_delta)?
+    } else if let Some(heightmap) = spec.project_start_to_heightmap {
         let center_x = (center_max.x + center_min.x) / 2;
         let center_z = (center_max.z + center_min.z) / 2;
-        origin.y + free_height(center_x, center_z)
+        origin.y + projected_height(free_height, heightmap, center_x, center_z)?
     } else {
         anchored.y
     };
+    if !is_nether
+        && spec.project_start_to_heightmap.is_some()
+        && let Some(checks) = spec.moog_start_checks
+        && (checks.min_y.is_some_and(|min| bottom_y < min)
+            || checks.max_y.is_some_and(|max| bottom_y > max))
+    {
+        return None;
+    }
     let shift = bottom_y - (center_min.y + ground_level_delta);
     center_min.y += shift;
     center_max.y += shift;
@@ -500,7 +701,7 @@ fn plan_start(
             ground_level_delta: center_piece.ground_level_delta,
         });
     }
-    Some((assembly, random))
+    Some((assembly, random, height))
 }
 
 /// `JigsawPlacement.addPieces`' growth: the free-space limit, the start piece's
@@ -510,7 +711,7 @@ fn grow_start(
     structure: &ClosureStructure,
     assembly: &mut VillageAssembly,
     random: &mut LegacyRandom,
-    free_height: &impl Fn(i32, i32) -> i32,
+    free_height: &dyn HeightQuery,
     aliases: &BTreeMap<Identifier, Identifier>,
 ) {
     let spec = &structure.spec;
@@ -522,18 +723,22 @@ fn grow_start(
     let center_z = (center_piece.bounds_max.z + center_piece.bounds_min.z) / 2;
     let horizontal = spec.max_distance_from_center.horizontal;
     let vertical = spec.max_distance_from_center.vertical;
-    let limit = Aabb::new(
-        f64::from(center_x - horizontal),
-        f64::from(
+    let (min_y, max_y) = if spec.moog_start_checks.is_some() {
+        (assembly.origin.y - 120, assembly.origin.y + 181)
+    } else {
+        (
             (assembly.origin.y - vertical)
                 .max(closure.dimension_bounds.0 + spec.dimension_padding.bottom),
-        ),
-        f64::from(center_z - horizontal),
-        f64::from(center_x + horizontal + 1),
-        f64::from(
             (assembly.origin.y + vertical + 1)
                 .min(closure.dimension_bounds.1 - spec.dimension_padding.top),
-        ),
+        )
+    };
+    let limit = Aabb::new(
+        f64::from(center_x - horizontal),
+        f64::from(min_y),
+        f64::from(center_z - horizontal),
+        f64::from(center_x + horizontal + 1),
+        f64::from(max_y),
         f64::from(center_z + horizontal + 1),
     );
     let root = VoxelShape::create(limit).join(
@@ -627,7 +832,7 @@ struct Placer<'a> {
     spec: &'a StructureSpec,
     aliases: &'a BTreeMap<Identifier, Identifier>,
     random: &'a mut LegacyRandom,
-    free_height: &'a dyn Fn(i32, i32) -> i32,
+    free_height: &'a dyn HeightQuery,
     pieces: &'a mut Vec<PlacedPiece>,
     junctions: &'a mut Vec<Junction>,
     beard_pieces: &'a mut Vec<BeardContribution>,
@@ -667,6 +872,12 @@ impl Placer<'_> {
             let Some(target_pool) = self.closure.pool(pool_id) else {
                 continue;
             };
+            if self.spec.moog_start_checks.is_some()
+                && target_pool.elements.is_empty()
+                && pool_id.as_str() != "minecraft:empty"
+            {
+                continue;
+            }
             let fallback = self.closure.pool(&target_pool.fallback);
             let attach_inside = inside(source, target_jigsaw_pos);
             let children_free: FreeShape = if attach_inside {
@@ -686,15 +897,23 @@ impl Placer<'_> {
                 context_free.clone()
             };
 
-            let mut target_elements: Vec<PlacedElement> = Vec::new();
-            if depth != self.spec.size {
-                target_elements.extend(shuffled_templates(target_pool, self.random));
-            }
-            if let Some(fallback) = fallback {
-                target_elements.extend(shuffled_templates(fallback, self.random));
-            }
-
-            for target_element in target_elements {
+            let mut target_elements = if self.spec.moog_start_checks.is_some() {
+                CandidateStream::Moog {
+                    primary: (depth != self.spec.size)
+                        .then(|| WeightedCandidates::new(target_pool)),
+                    fallback: fallback.map(WeightedCandidates::new),
+                }
+            } else {
+                let mut elements = Vec::new();
+                if depth != self.spec.size {
+                    elements.extend(shuffled_templates(target_pool, self.random));
+                }
+                if let Some(fallback) = fallback {
+                    elements.extend(shuffled_templates(fallback, self.random));
+                }
+                CandidateStream::Vanilla(elements.into_iter())
+            };
+            while let Some(target_element) = target_elements.next(self.random) {
                 if matches!(target_element, PlacedElement::Empty) {
                     break;
                 }
@@ -743,8 +962,9 @@ impl Placer<'_> {
                             source_box_y + delta_y
                         } else {
                             if source_jigsaw_base_height == i32::MIN {
-                                source_jigsaw_base_height =
-                                    (self.free_height)(source_jigsaw_pos.x, source_jigsaw_pos.z);
+                                source_jigsaw_base_height = self
+                                    .free_height
+                                    .world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
                             }
                             source_jigsaw_base_height - target_jigsaw.pos.y
                         };
@@ -770,6 +990,13 @@ impl Placer<'_> {
                             // `maxY() - minY()`, not `getYSpan()`.
                             let new_size = (expand_to + 1).max(target_max.y - target_min.y);
                             target_max.y = target_max.y.max(target_min.y + new_size);
+                        }
+                        if let Some(checks) = self.spec.moog_start_checks
+                            && !checks.average_land
+                            && (checks.min_y.is_some_and(|min| target_min.y < min)
+                                || checks.max_y.is_some_and(|max| target_max.y > max))
+                        {
+                            continue;
                         }
                         let target_box = Aabb::of(
                             target_min.x,
@@ -803,8 +1030,9 @@ impl Placer<'_> {
                             target_box_y + target_jigsaw.pos.y
                         } else {
                             if source_jigsaw_base_height == i32::MIN {
-                                source_jigsaw_base_height =
-                                    (self.free_height)(source_jigsaw_pos.x, source_jigsaw_pos.z);
+                                source_jigsaw_base_height = self
+                                    .free_height
+                                    .world_surface(source_jigsaw_pos.x, source_jigsaw_pos.z);
                             }
                             source_jigsaw_base_height + delta_y / 2
                         };
@@ -846,7 +1074,11 @@ impl Placer<'_> {
                                     free: children_free.clone(),
                                     depth: depth + 1,
                                 },
-                                source_jigsaw.placement_priority,
+                                if self.spec.moog_start_checks.is_some() {
+                                    0
+                                } else {
+                                    source_jigsaw.placement_priority
+                                },
                             );
                         }
                         // `continue label129`: the remaining candidates for this
@@ -927,6 +1159,80 @@ fn shuffled_templates(pool: &ClosurePool, random: &mut impl RandomSource) -> Vec
     let mut flat = pool_elements(pool);
     shuffle(&mut flat, random);
     flat
+}
+
+/// Moog draws weighted raw entries without replacement, interleaving each draw
+/// with the attempted piece's rotation and connector randomness.
+struct WeightedCandidates<'a> {
+    pool: &'a ClosurePool,
+    remaining: Vec<usize>,
+    total: i64,
+}
+
+impl<'a> WeightedCandidates<'a> {
+    fn new(pool: &'a ClosurePool) -> Self {
+        let remaining = (0..pool.elements.len()).collect();
+        let total = pool
+            .elements
+            .iter()
+            .map(|(weight, _)| i64::from(*weight))
+            .sum();
+        Self {
+            pool,
+            remaining,
+            total,
+        }
+    }
+
+    fn next(&mut self, random: &mut LegacyRandom) -> Option<PlacedElement> {
+        if self.remaining.is_empty() || self.total <= 0 {
+            return None;
+        }
+        let bound = i32::try_from(self.total).ok()?;
+        let mut choice = i64::from(random.next_int_bounded(bound)) + 1;
+        let mut selected = self.remaining.len() - 1;
+        for (slot, &index) in self.remaining.iter().enumerate() {
+            choice -= i64::from(self.pool.elements[index].0);
+            if choice <= 0 {
+                selected = slot;
+                break;
+            }
+        }
+        let index = self.remaining.remove(selected);
+        let (weight, element) = &self.pool.elements[index];
+        self.total -= i64::from(*weight);
+        Some(placed_element(element, &self.pool.id))
+    }
+}
+
+enum CandidateStream<'a> {
+    Vanilla(std::vec::IntoIter<PlacedElement>),
+    Moog {
+        primary: Option<WeightedCandidates<'a>>,
+        fallback: Option<WeightedCandidates<'a>>,
+    },
+}
+
+impl CandidateStream<'_> {
+    fn next(&mut self, random: &mut LegacyRandom) -> Option<PlacedElement> {
+        match self {
+            Self::Vanilla(elements) => elements.next(),
+            Self::Moog { primary, fallback } => {
+                if let Some(candidates) = primary {
+                    if let Some(element) = candidates.next(random)
+                        && !matches!(element, PlacedElement::Empty)
+                    {
+                        return Some(element);
+                    }
+                    *primary = None;
+                }
+                fallback
+                    .as_mut()?
+                    .next(random)
+                    .filter(|element| !matches!(element, PlacedElement::Empty))
+            }
+        }
+    }
 }
 
 /// The pool's elements, each repeated `weight` times, in vanilla's order.
@@ -1263,3 +1569,7 @@ pub fn placement_seed(seed: i64, chunk_x: i32, chunk_z: i32, salt: i64) -> i64 {
 #[cfg(test)]
 #[path = "solver_modern_tests.rs"]
 mod modern_tests;
+
+#[cfg(test)]
+#[path = "solver_moog_tests.rs"]
+mod moog_tests;

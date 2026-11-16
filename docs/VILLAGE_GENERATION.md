@@ -17,6 +17,48 @@ village capability; do not infer it from the old profile or warning names.
 
 ## Modern jigsaw structures
 
+The jigsaw registry and template readers resolve resource identifiers within
+their own `data/<namespace>/worldgen` and `data/<namespace>/structure`
+directories. Structure-set discovery and structure-step ordering include the
+namespaces present in the supplied resource root. This library capability alone
+does not enable datapack worldgen in the running server; see the current
+[datapack limits](OPERATING.md#datapacks-and-command-blocks).
+
+The shared loader and solver admit the supported subset of Moog's generic
+overworld and Nether jigsaw types, including advanced random-spread placement,
+start liquid/terrain/biome checks, versioned pools, piece-limited weighted growth,
+centering and overworld average-land burial. Nether `HIGHEST_LAND` uses the
+generator's unmodified noise column, below the bedrock roof and above the lava
+sea. It returns occupied ground, not a heightmap's first-free Y; no suitable land
+rejects the start instead of substituting sea level. The complete layout moves
+onto that land after growth and recentering, within the generated Y 0..127 band.
+Selected structure sets route to the Overworld or Nether from their effective
+biomes; mixed-dimension sets, End consumers and codec/dimension mismatches fail
+closed. Nether sources share plan lookup, template placement and native start
+metadata with the overworld, rather than maintaining a second persistence path.
+
+Moog spawner processors with weighted entity IDs and timing fields write the
+selected mob and spawner NBT. Custom piece-count resources, ignored-boundary
+pools, unsupported burial modes, custom mob NBT, replacement blocks, capped
+spawner processors and other Nether land-search directions are refused.
+Moog layout parity and a complete Nether density beardifier are unproven;
+template-authored air is retained. Library generation/native-reload coverage is
+not a claim that a modpack loads, generates or plays correctly, nor live footage
+or inventory acceptance for the ATM caption.
+
+Nether regression coverage includes fixed-seed placement and native close/reopen
+for the three selected MVS starts (`nether_well`, `crimson_enchanting_table`,
+`nether_devil`). Starts are persisted in their raw placement chunk; all chunks
+reached by the pieces are also compared after reopening, including block entities
+and opaque metadata with the native codec's canonical root defaults. Removing
+the Nether occupied-land override makes all three starts fail admission.
+The local-input tests `licensed_mvs_nether_templates_place_and_reload_from_native_store`
+and `selected_mvs_nether_sets_route_to_the_serving_nether_generator` are ignored
+by default: they require `MVS_NETHER_INPUT_ROOT` and the canonical content cache.
+They exercise real templates and the serving dimension router, without tracking
+licensed input bytes or establishing crash-custody or live-client acceptance.
+
+
 Missing template resources follow vanilla's `StructureTemplateManager.getOrCreate`:
 the closure caches a zero-sized empty template and logs its identifier once during
 loading. This is required by the shipped ancient-city `walls/no_corners` pool,
@@ -573,9 +615,9 @@ they are deliberate:
   it was placed, never claiming the bed, workstation or bell next to it. Vanilla's
   POI acquisition, breeding, trading, raids and patrols are outside this page
   entirely.
-- **Non-jigsaw structure algorithms.** This shared implementation accepts
-  `minecraft:jigsaw` structures driven by `minecraft:random_spread`; other
-  structure algorithms belong to their own generation paths.
+- **Non-jigsaw structure algorithms.** The shared implementation supports
+  vanilla jigsaws and the Moog overworld subset above; other structure
+  algorithms belong to their own generation paths.
 - **Other terrain adaptations.** Only `beard_thin` has a version of the
   analogue. `none` needs no behaviour, and `bury`, `beard_box` and
   `encapsulate` have no engine-side analogue; no structure in the villages set

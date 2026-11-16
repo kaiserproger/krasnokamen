@@ -296,7 +296,6 @@ fn conduit_be_wal_checkpoint_restart_preserves_last_target_once() {
             &original.registry.blocks,
             &original.registry.items,
             &original.registry.chest_loot,
-            &Empty(original.registry.states.air),
         )
         .unwrap()
         .unwrap();
@@ -371,7 +370,6 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
             &state.registry.blocks,
             &state.registry.items,
             &state.registry.chest_loot,
-            &Empty(state.registry.states.air),
         )
         .unwrap_err();
     assert!(matches!(
@@ -409,7 +407,7 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
     );
     unavailable.mark_block_entity_dirty(POS);
     assert!(unavailable.capture_dirty(&BTreeMap::new()).write().is_err());
-    assert!(unavailable.take_generated(0).is_none());
+    assert!(unavailable.take_generated().is_none());
     let after = native.read_checkpoint().unwrap();
     assert_eq!(after.tick, saved.tick);
     assert_eq!(after.globals, saved.globals);
@@ -423,7 +421,6 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
             &state.registry.blocks,
             &state.registry.items,
             &state.registry.chest_loot,
-            &Empty(state.registry.states.air),
         )
         .unwrap_err();
     assert_eq!(durable_error.to_string(), stored_error.to_string());

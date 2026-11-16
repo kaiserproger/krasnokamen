@@ -53,6 +53,22 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
     let config = crate::test_support::config(source.clone(), 42);
     let registry = std::sync::Arc::new(crate::test_support::registry().unwrap());
     let store = fixture_store(&config).unwrap();
+    // Baseline custody commits the generated base before dependent WAL. A
+    // pre-identity WAL-only chunk with external inputs refuses export instead
+    // (`export_worldgen_tests`).
+    store
+        .fill_generated(
+            mc_core::native_checkpoint::dimension_id(Dimension::Nether),
+            &[Chunk::empty_with_geometry(
+                ChunkPos { x: 0, z: 0 },
+                BlockStateId(registry.states.air),
+                Identifier::parse("minecraft:plains").unwrap(),
+                Dimension::Nether.geometry(),
+            )],
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
     let mut writer = JournalWriter::open(&source, 1).unwrap();
     writer
         .append(
@@ -126,17 +142,20 @@ fn export_replays_wal_without_mutating_native_or_journal_and_enumerates_all_dime
     let registry = crate::test_support::registry().unwrap();
     let store = fixture_store(&config).unwrap();
     let stored_pos = ChunkPos { x: 2, z: 2 };
+    // The edited chunk's base precedes its WAL, as baseline custody commits it.
     for dimension in Dimension::ALL {
-        let chunk = Chunk::empty_with_geometry(
-            stored_pos,
-            BlockStateId(registry.states.air),
-            Identifier::parse("minecraft:plains").unwrap(),
-            dimension.geometry(),
-        );
+        let chunks = [ChunkPos { x: 0, z: 0 }, stored_pos].map(|pos| {
+            Chunk::empty_with_geometry(
+                pos,
+                BlockStateId(registry.states.air),
+                Identifier::parse("minecraft:plains").unwrap(),
+                dimension.geometry(),
+            )
+        });
         store
             .fill_generated(
                 mc_core::native_checkpoint::dimension_id(dimension),
-                &[chunk],
+                &chunks,
                 &registry.blocks,
                 &registry.items,
             )
@@ -494,7 +513,21 @@ fn export_hopper_deadlines_become_bounded_portable_remaining_cooldowns() {
     let destination = temporary.path().join("anvil-world");
     let config = crate::test_support::config(source.clone(), 42);
     let registry = crate::test_support::registry().unwrap();
-    drop(fixture_store(&config).unwrap());
+    let store = fixture_store(&config).unwrap();
+    // The hopper chunk's base precedes its WAL, as baseline custody commits it.
+    store
+        .fill_generated(
+            0,
+            &[Chunk::empty(
+                ChunkPos { x: 0, z: 0 },
+                BlockStateId(registry.states.air),
+                Identifier::parse("minecraft:plains").unwrap(),
+            )],
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    drop(store);
     let hopper = registry
         .blocks
         .by_name_and_props(

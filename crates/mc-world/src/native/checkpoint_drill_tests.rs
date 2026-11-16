@@ -9,13 +9,6 @@ use std::sync::{
     atomic::{AtomicI64, Ordering},
 };
 
-struct NoGeneration;
-impl crate::ChunkGenerator for NoGeneration {
-    fn generate(&self, _: ChunkPos) -> Chunk {
-        panic!("checkpoint baseline must win")
-    }
-}
-
 thread_local! {
     static STOP_AT: Cell<Option<&'static str>> = const { Cell::new(None) };
 }
@@ -120,7 +113,6 @@ fn assert_image(store: &NativeStore, tick: u64) {
             &blocks,
             &items,
             &ChestLootCatalog::new(),
-            &NoGeneration,
         )
         .unwrap()
         .unwrap();

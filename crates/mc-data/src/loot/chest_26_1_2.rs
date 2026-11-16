@@ -213,6 +213,18 @@ impl ChestLootTable {
     pub fn compile_advancement_reward(id: Identifier, raw: &str) -> Result<Self, ChestLootError> {
         Compiler::default().compile(id, raw, "minecraft:advancement_reward", 0)
     }
+    fn validate_items(&self, items: &ItemRegistry) -> Result<(), ChestLootError> {
+        for entry in self.pools.iter().flat_map(|pool| &pool.entries) {
+            match entry {
+                ChestLootEntry::Item { item, .. } if items.id_of(item).is_none() => {
+                    return Err(unsupported(&self.id, format!("unknown item {item}")));
+                }
+                ChestLootEntry::Table { table, .. } => table.validate_items(items)?,
+                _ => {}
+            }
+        }
+        Ok(())
+    }
     /// Same seed and context produce identical canonical stacks.
     pub fn roll(
         &self,
@@ -360,7 +372,7 @@ impl ChestLootTable {
 struct Compiler {
     sources: BTreeMap<Identifier, String>,
     compiled: BTreeMap<Identifier, Arc<ChestLootTable>>,
-    resources: enchantments::Resources,
+    resources: Arc<enchantments::Resources>,
     data_root: Option<PathBuf>,
 }
 impl Compiler {
@@ -391,14 +403,26 @@ impl Compiler {
         let root = value
             .as_object()
             .ok_or_else(|| fail("root must be an object".into()))?;
-        if root.get("type").and_then(Value::as_str) != Some(expected_type) {
+        let actual_type = match root.get("type") {
+            None => "minecraft:empty",
+            Some(Value::String(kind)) => kind.as_str(),
+            Some(_) => return Err(fail("$.type must be an identifier string".into())),
+        };
+        if actual_type != expected_type
+            && !(expected_type == "minecraft:chest" && actual_type == "minecraft:empty")
+        {
             return Err(fail(format!(
                 "expected $.type {expected_type}, found {:?}",
                 root.get("type")
             )));
         }
-        let functions = functions::compile(root.get("functions"), None, &self.resources)
-            .map_err(|e| fail(format!("$.functions: {e}")))?;
+        if root.contains_key("conditions") {
+            return Err(fail(
+                "$.conditions: table-level conditions are unsupported".into(),
+            ));
+        }
+        let functions = functions::from_owner(&value, None, &self.resources)
+            .map_err(|e| fail(format!("$.functions/modifier: {e}")))?;
         let pools = root
             .get("pools")
             .and_then(Value::as_array)
@@ -454,7 +478,7 @@ impl Compiler {
             f64::from(MAX_CHEST_ROLLS),
         )?;
         let conditions = functions::conditions(pool.get("conditions"))?;
-        let functions = functions::compile(pool.get("functions"), None, &self.resources)?;
+        let functions = functions::from_owner(pool, None, &self.resources)?;
         let entries = pool["entries"]
             .as_array()
             .ok_or("entries must be an array")?;
@@ -501,7 +525,7 @@ impl Compiler {
         } else {
             None
         };
-        let functions = functions::compile(entry.get("functions"), item.as_ref(), &self.resources)?;
+        let functions = functions::from_owner(entry, item.as_ref(), &self.resources)?;
         match entry["type"].as_str() {
             Some("minecraft:empty") => Ok(ChestLootEntry::Empty {
                 weight,
@@ -528,7 +552,9 @@ impl Compiler {
                             .data_root
                             .as_ref()
                             .ok_or_else(|| format!("loot_table unresolved reference {id}"))?;
-                        read_table_source(root, &id).map_err(|e| e.to_string())?
+                        let source = read_table_source(root, &id).map_err(|e| e.to_string())?;
+                        self.sources.insert(id.clone(), source.clone());
+                        source
                     };
                     let table = Arc::new(
                         self.compile(id.clone(), &source, "minecraft:chest", depth + 1)
@@ -559,6 +585,10 @@ fn parse_id(value: &Value) -> Result<Identifier, String> {
 #[derive(Debug, Clone, Default)]
 pub struct ChestLootCatalog {
     tables: BTreeMap<Identifier, ChestLootTable>,
+    // Retain compiler inputs so reloads recompile references against the selected
+    // layer, not stale inlined tables. Never read or parse these during a roll.
+    sources: BTreeMap<Identifier, String>,
+    resources: Arc<enchantments::Resources>,
 }
 
 /// Recursively load every chest table, plus archaeology and village hero gifts.
@@ -624,6 +654,53 @@ impl ChestLootCatalog {
     pub fn insert(&mut self, table: ChestLootTable) {
         self.tables.insert(table.id.clone(), table);
     }
+    /// Apply selected chest/generic tables after filters, recompiling references
+    /// atomically. Filtered references cannot fall back to files on disk.
+    pub fn with_datapacks(
+        &self,
+        overrides: BTreeMap<Identifier, String>,
+        mut hidden: impl FnMut(&Identifier) -> bool,
+        items: &ItemRegistry,
+    ) -> Result<Self, ChestLootError> {
+        for (id, source) in &overrides {
+            let value: Value = serde_json::from_str(source)
+                .map_err(|e| unsupported(id, format!("invalid JSON: {e}")))?;
+            if !matches!(
+                value.get("type").and_then(Value::as_str),
+                None | Some("minecraft:empty" | "minecraft:chest")
+            ) {
+                return Err(unsupported(
+                    id,
+                    "expected container loot (minecraft:chest or generic minecraft:empty)",
+                ));
+            }
+        }
+        let mut sources = self.sources.clone();
+        sources.retain(|id, _| !hidden(id));
+        sources.extend(overrides);
+        let mut compiler = Compiler {
+            sources,
+            resources: Arc::clone(&self.resources),
+            ..Compiler::default()
+        };
+        let mut catalog = Self::new();
+        for id in compiler.sources.keys().cloned().collect::<Vec<_>>() {
+            let source = compiler.sources[&id].clone();
+            let value: Value = serde_json::from_str(&source)
+                .map_err(|e| unsupported(&id, format!("invalid JSON: {e}")))?;
+            let kind = value
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or("minecraft:empty");
+            let table = compiler.compile(id, &source, kind, 0)?;
+            table.validate_items(items)?;
+            catalog.insert(table);
+        }
+        catalog.sources = compiler.sources;
+        catalog.resources = compiler.resources;
+        Ok(catalog)
+    }
+
     pub fn load_vanilla_tables(
         data_root: impl AsRef<Path>,
         ids: &[Identifier],
@@ -639,8 +716,9 @@ impl ChestLootCatalog {
                 .insert(id.clone(), read_table_source(data_root, id)?);
         }
         if !ids.is_empty() {
-            compiler.resources =
-                enchantments::Resources::load(data_root).map_err(|e| unsupported(&ids[0], e))?;
+            compiler.resources = Arc::new(
+                enchantments::Resources::load(data_root).map_err(|e| unsupported(&ids[0], e))?,
+            );
         }
         let mut catalog = Self::new();
         for id in ids {
@@ -659,6 +737,8 @@ impl ChestLootCatalog {
             };
             catalog.insert(compiler.compile(id.clone(), &source, expected, 0)?);
         }
+        catalog.sources = compiler.sources;
+        catalog.resources = compiler.resources;
         Ok(catalog)
     }
 }

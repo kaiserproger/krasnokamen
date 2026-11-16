@@ -358,7 +358,6 @@ fn vault_truncated_resident_record_returns_error_without_tick_panic() {
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     let checkpoint = store.read_checkpoint().unwrap();
     let counts = store.record_counts().unwrap();
-    let generator = mc_worldgen::TerrainGenerator::new(42, Arc::clone(&state.registry.blocks));
     let original = store
         .read_chunk(
             0,
@@ -366,7 +365,6 @@ fn vault_truncated_resident_record_returns_error_without_tick_panic() {
             &state.registry.blocks,
             &state.registry.items,
             &state.registry.chest_loot,
-            &generator,
         )
         .unwrap()
         .unwrap();
@@ -403,7 +401,6 @@ fn vault_truncated_resident_record_returns_error_without_tick_panic() {
             &state.registry.blocks,
             &state.registry.items,
             &state.registry.chest_loot,
-            &generator,
         )
         .unwrap()
         .unwrap();

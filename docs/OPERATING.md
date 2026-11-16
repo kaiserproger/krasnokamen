@@ -550,10 +550,14 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
   the age it was frozen at.
 - `/locate structure|biome|poi` (level 2) runs on a worker thread and never
   blocks the tick; a request is refused while two are pending or eight queued.
-  Structure searches read saved native or imported start metadata and plan
-  uncovered chunks without generating them (villages within 100 chunks, other
-  structures within 256); biomes are searched out to 6400 blocks and POIs within
-  256 blocks of loaded chunks. Corrupt or unsupported start metadata fails closed.
+  Structure searches walk up to 100 placement-grid rings, scaling each grid by
+  its own spacing rather than treating rings as chunks. Fixed stronghold
+  candidates are searched independently of that radius. At each candidate,
+  saved native or imported start metadata overrides generation, including
+  covered empty chunks; uncovered candidates are planned without generating
+  chunks. Exploration-map `search_radius` also counts placement rings.
+  Biomes are searched out to 6400 blocks and POIs within 256 blocks of loaded
+  chunks. Corrupt or unsupported start metadata fails closed.
 
 ### Datapacks and command blocks
 
@@ -561,11 +565,14 @@ Krasnokamen loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
 startup. Each needs `pack.mcmeta` with a `pack` object. Packs are ordered by
 directory name and the lexically later resource wins. Symlinks, ZIP entries
 that escape the archive and unimplemented resource kinds fail startup with an
-explicit error rather than falling back to built-in content. Worldgen,
-`dimension` and `dimension_type` resources (and `tags/worldgen`) cannot be
-applied, because the generators are native code: the rest of the pack loads and
-the server logs one warning per pack naming the ignored resource paths (an
-operator who enables such a pack also sees it in chat). A pack the saved
+explicit error rather than falling back to built-in content. Worldgen the native
+generators cannot apply (`dimension` and `dimension_type` resources, worldgen
+domains, structure types and `tags/worldgen` kinds outside the experimental list
+below, Moog piece-count rules) refuses the whole pack, other content included: the error
+names the pack and every unsupported entry (the first eight and a count of the
+rest). A selected pack holding any refuses startup and `/reload`; a new one is
+skipped and named. A pack whose worldgen is all supported loads with its other
+content. A pack the saved
 selection names that is gone from disk at startup is dropped from the selection
 with a warning, like vanilla; a corrupt or unknown saved selection refuses to open
 the world rather than guessing.
@@ -584,6 +591,12 @@ Supported resources (singular 26.1.2 directory names):
   one `minecraft:item` entry per pool, supported roll counts and
   `minecraft:set_count`; an empty table suppresses drops. Other conditions,
   entry types and loot domains are refused.
+- `data/<ns>/worldgen/{structure_set,structure,template_pool,processor_list}/<path>.json`,
+  `data/<ns>/structure/<path>.nbt` (binary, directory or ZIP), and
+  `data/<ns>/tags/worldgen/biome/<path>.json`: experimental selected jigsaw
+  inputs. Any other worldgen refuses the pack as described above.
+  Biome tags merge by pack priority with `replace` and required/optional nested
+  references. The selected tree overlays vanilla at its actual priority.
 
 Level-2 commands: `/function <id|#tag>`, `/schedule function <id|#tag> <time>
 [append|replace]`, `/schedule clear <id|#tag>`, `/reload` and
@@ -605,25 +618,57 @@ recomputed from the new catalog without changing their inputs or cursor.
 A candidate with load errors, or
 with a recipe the server cannot encode, is refused whole and the old packs, selection
 and registry are kept. The enabled/disabled selection is saved with the world,
-so a restart loads the same packs, recipes and loot. A pack that appears on disk is
-enabled by `/reload` and at startup but never as a side effect of enabling another
-pack. At startup and on `/reload` a new pack that cannot be read or loaded (a corrupt ZIP,
-a missing or truncated `pack.mcmeta`, a bad file, an unsupported resource, a `filter`
-that does not parse) is skipped with a warning naming the pack and the file, and the
-rest applies, so a pack that a live `enable` refused cannot stop the next start or
-block a reload. This deliberately differs from vanilla, which enables a new pack and
-refuses to start when it fails to load (it offers `--safeMode`); Krasnokamen has no safe
-mode. A pack the saved selection already holds that no longer loads still stops the
-start and refuses the reload (old state kept), with the same pack and file in the
-error: fix or remove the named pack and start again. A non-pack entry in the folder
-(a README, a stray file) is ignored with a warning. Every warning goes to the server log;
-a pack that stays skipped is named again by every `/reload`, and the operator's chat shows the first three and a count of the rest, as vanilla
-keeps such lines in the console. `/datapack list` keeps a selected pack whose files
-broke while it runs (its hover holds the error), and `/datapack disable` of a skipped
-pack answers "not enabled" as vanilla does for a pack the repository has. A pack's `pack.mcmeta` `filter` (`block` entries with
-optional `namespace` and `path` patterns) hides the matching functions, tags,
-recipes, block loot and predicates of every pack below it, the builtin recipes and
-block loot included. A `/datapack enable`, `disable` or
+so a restart restores the saved choice before any spawn search, generator or
+WAL replay chunk read. New packs are discovered at startup and `/reload`,
+but never as a side effect of enabling another pack. At startup and on `/reload` a
+new pack that cannot be read or loaded (a corrupt ZIP, a missing or truncated
+`pack.mcmeta`, a bad file, an unsupported resource, a `filter` that does not parse)
+is skipped with a warning naming the pack and the file and stays unselected, so it
+is no worldgen input. At startup the same holds for a new pack whose worldgen inputs
+cannot be prepared or validated (for example worldgen without the vanilla content
+cache) or whose identity the replay baseline fence refuses. On `/reload` a new pack
+that would change worldgen is skipped with "restart the server to apply the
+selected inputs"; it stays new, so the next start offers it again. The rest
+applies, and a new pack, including one that a live `enable` refused, can stop
+neither a start nor a reload. This deliberately differs from
+vanilla, which enables a new pack and refuses to start when it fails to load (it
+offers `--safeMode`); Krasnokamen has no safe mode. A pack the saved selection
+already holds that no longer loads still refuses startup and `/reload` (old state
+kept), naming the pack and resource: its bytes are the world's selected generation
+inputs. A missing pack is de-selected with a warning; no partial invalid subset is
+reported enabled. Non-pack entries (README/stray files) are warned and ignored.
+Every warning goes to the server log; a pack that stays skipped is named again by
+every `/reload`, and the operator's chat shows the first three and a count of the
+rest. `/datapack list` keeps a selected pack whose files broke while it runs (its
+hover holds the error), and `/datapack disable` of a pack on disk that is not
+selected (skipped, or seen by a refused reload) answers "not enabled" as vanilla
+does for a pack the repository has.
+
+**Worldgen changes apply on restart, not hot reload.** Startup records diagnostic
+SHA-256 of effective inputs. Adding, updating or removing a worldgen pack or
+changing effective priority/cache logs old/new identities and changed source
+names, then continues: saved chunks retain their existing terrain, new chunks
+generate using the newly selected inputs. Fresh worlds and pregeneration record
+the identity in their first checkpoint. Existing worlds without it adopt in
+memory and persist on the next normal positive-tick checkpoint; a crash before
+that repeats adoption. A changed identity invalidates the terrain epoch.
+Unsupported worldgen resources refuse the whole pack, naming every such path,
+including Moog `msl_pieces_spawn_counts` and `msl_pieces_spawn_counts_additions`
+rules; enabling a pack never silently drops those generation constraints.
+
+If a pack is removed, its saved structure starts are retained unchanged and are
+inactive for generation/locate. Loading such a chunk logs one warning per missing
+structure ID, naming its likely pack; restoring the pack reactivates its starts.
+No world scan or deletion is performed.
+
+`/datapack enable` or `disable` that would change worldgen, and a `/reload` whose
+selected packs' worldgen changed, refuse atomically while running, retaining old
+packs/selection/catalogs; immutable generators are not advertised as updated. A new
+worldgen pack found by `/reload` is skipped instead (above). Gameplay-only changes and identical worldgen reloads are
+supported. Vanilla-only worlds need no packs or staged copy. Private staging is
+bounded and deleted after eager compilation; the shared cache is never modified. A pack's
+`pack.mcmeta` `filter` (`block` entries with optional `namespace` and `path`
+patterns) hides matching lower resources, including builtin vanilla. A `/datapack enable`, `disable` or
 `reload` issued while another pack job is still compiling is refused with
 "Datapack reload already in progress" (vanilla would apply it at once; the
 selection changes only when the compile finishes, and a rare back-to-back
@@ -648,9 +693,8 @@ source is sent, not text that commands deliver to players (`/tellraw`, `/say`,
 sees nothing. A pack carrying any other condition, or a field these do not
 read, is refused at load. ZIP packs
 (`<pack>.zip` with `pack.mcmeta` at its root, at most 16 MiB and 16384 entries) load like
-directory packs. Datapack
-worldgen overrides are not applied (see above; tracked as
-`DATAPACK-WORLDGEN-OVERRIDES`).
+directory packs. Datapack worldgen overrides beyond the experimental jigsaw inputs
+refuse the pack (see above; tracked as `DATAPACK-WORLDGEN-OVERRIDES`).
 
 Execution is bounded: each root command or function invocation gets its own
 `minecraft:max_command_sequence_length` budget shared by nested functions and
@@ -867,6 +911,29 @@ before deploying: an old unclean WAL tail containing `rider` is refused at
 startup. A checkpoint containing the old `krasnokamen:Rider` key is also
 refused, even after a clean stop. Back up the world and test opening a copy with
 the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md).
+
+**Stop cleanly before upgrading and before changing worldgen packs or the content
+cache.** A WAL edit on a chunk whose immutable baseline is not in the native
+database replays only when the saved worldgen identity proves the inputs that would
+regenerate it; otherwise startup and `world export-anvil` refuse with "missing
+immutable baseline … restore the baseline or original inputs". Two operator paths
+lead there:
+
+- A world saved by a build that did not record `KrasnokamenWorldgenInputs`, with an
+  unclean WAL and the vanilla content cache configured: start the previous binary
+  once and stop it cleanly (its final checkpoint stores the chunks), then upgrade.
+- The identity is written only by a checkpoint. A crash after changing packs or the
+  cache, before the next checkpoint, can refuse the next start even with the same
+  packs: put the previous packs and cache back, start, stop cleanly, then change
+  them again.
+
+Known limit: each dimension holds at most 1024 generated baselines waiting for the
+native writer. A startup replay that must regenerate more than 1024 chunks with WAL
+edits and no stored baseline (practically only a legacy builtin-generator world
+with a long unclean WAL) refuses with "required generated baseline capacity
+exhausted" on every start, because the queue lives in memory. While running, the
+same refusal leaves that chunk failed until restart and checkpoints are refused.
+Recover as above: start the previous binary and stop it cleanly.
 
 Convert only stopped worlds; the destination must not exist, the source is left
 unchanged and a receipt is written:

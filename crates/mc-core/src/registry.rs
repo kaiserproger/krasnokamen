@@ -81,8 +81,13 @@ pub struct CoreRegistry {
     pub(crate) construction_crafting: Arc<crate::settlements::construction_crafting::Index>,
     /// Reloadable datapack selector predicates.
     pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Selected, startup-validated datapack structure IDs; no tick filesystem scan.
+    pub(crate) datapack_structures: Arc<[Identifier]>,
+    pub(crate) structure_catalog: Option<Arc<crate::datapacks::worldgen::StructureCatalog>>,
     /// Block loot tables used by native block breaks.
     pub loot: mc_data::loot::LootTables,
+    /// Reloadable container loot, including selected datapack namespaces.
+    pub chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
 }
 
 /// Startup-only tables shared by successive native content snapshots.
@@ -140,7 +145,6 @@ pub struct RegistryTables {
     /// Immutable catalogs loaded from the same selected vanilla directory.
     pub entity_loot: Arc<mc_data::loot::entity_26_1_2::EntityLootCatalog>,
     pub entity_loot_lookups: Arc<mc_data::loot::entity_26_1_2::VanillaEntityLootLookups>,
-    pub chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
     pub fishing_loot: Arc<mc_data::loot::fishing_26_1_2::FishingLootTables>,
     pub trial_loot: Arc<mc_data::trial_loot::TrialLootTables>,
     /// Vanilla block-mining table (correct-tool-for-drops gate).
@@ -212,8 +216,11 @@ impl Clone for CoreRegistry {
             recipes: self.recipes.clone(),
             iron_smelting: self.iron_smelting,
             loot: self.loot.clone(),
+            chest_loot: Arc::clone(&self.chest_loot),
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
+            datapack_structures: Arc::clone(&self.datapack_structures),
+            structure_catalog: self.structure_catalog.clone(),
         }
     }
 }
@@ -227,6 +234,11 @@ impl std::fmt::Debug for CoreRegistry {
 }
 
 impl CoreRegistry {
+    /// Enabled datapack structures, including those with no resident starts yet.
+    pub fn datapack_structures(&self) -> &[Identifier] {
+        &self.datapack_structures
+    }
+
     /// Copy only reloadable catalogs; immutable startup tables stay shared.
     pub(crate) fn prepare_content(&self) -> Self {
         Self {
@@ -235,7 +247,10 @@ impl CoreRegistry {
             iron_smelting: self.iron_smelting,
             construction_crafting: Arc::clone(&self.construction_crafting),
             predicates: self.predicates.clone(),
+            datapack_structures: Arc::clone(&self.datapack_structures),
+            structure_catalog: self.structure_catalog.clone(),
             loot: self.loot.clone(),
+            chest_loot: Arc::clone(&self.chest_loot),
         }
     }
 
@@ -596,7 +611,10 @@ impl CoreRegistry {
             construction_crafting,
             iron_smelting,
             loot,
+            chest_loot,
             predicates: std::collections::BTreeMap::new(),
+            datapack_structures: Arc::from([]),
+            structure_catalog: None,
             stable: Arc::new(RegistryTables {
                 blocks,
                 shears_item,
@@ -604,7 +622,6 @@ impl CoreRegistry {
                 items: Arc::new(items),
                 entity_loot,
                 entity_loot_lookups,
-                chest_loot,
                 fishing_loot,
                 trial_loot,
                 mining,

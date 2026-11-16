@@ -292,7 +292,7 @@ impl<'a> EarthBaseSource<'a> {
             return Ok(None);
         };
         let plans = self.with_village_facts(|height, biome| {
-            source.plans_for_chunk(position.x, position.z, height, biome)
+            source.plans_for_chunk(position.x, position.z, &height, biome)
         })?;
         let Some(plans) = plans else {
             return Ok(None);
@@ -330,7 +330,7 @@ impl<'a> EarthBaseSource<'a> {
         for z in min.1..=max.1 {
             for x in min.0..=max.0 {
                 if let Some(plan) = self.with_village_facts(|height, biome| {
-                    source.plan_for_start_chunk(x, z, height, biome)
+                    source.plan_for_start_chunk(x, z, &height, biome)
                 })? && self.dry_village(&plan)?
                 {
                     sites.push(plan.site());

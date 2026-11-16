@@ -19,9 +19,25 @@ fn pack(root: &Path, name: &str, description: &str, resources: &[(&str, &str)]) 
     }
 }
 
+/// The start's new-pack trial for fixtures without worldgen inputs: a new pack
+/// joins when its content installs onto `base`.
+fn open(
+    root: &Path,
+    selection: Selection,
+    base: &crate::registry::CoreRegistry,
+) -> Result<PackSet, String> {
+    let (mut packs, skipped) = PackSet::open(root, selection, |loaded| {
+        let packs = loaded?;
+        packs.install_content(&mut base.prepare_content())?;
+        Ok::<_, String>(packs)
+    })?;
+    packs.skipped = skipped;
+    Ok(packs)
+}
+
 fn fixture(root: &Path) -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
-    let packs = PackSet::open(root, Selection::default(), &state.registry).unwrap();
+    let packs = open(root, Selection::default(), &state.registry).unwrap();
     state.datapacks = Runtime::new(
         packs,
         root.to_path_buf(),
@@ -633,11 +649,10 @@ fn zip_packs_load_functions_tags_recipes_and_refuse_unsafe_entries() {
             ("data/test/worldgen/biome/x.json", "{}"),
         ],
     );
-    let loaded = PackSet::load(&root, Selection::default()).unwrap();
-    assert_eq!(
-        loaded.ignored["file/bundle.zip"],
-        ["test/worldgen/biome/x.json"],
-        "a ZIP pack's worldgen resources are ignored like a directory pack's"
+    let error = PackSet::load(&root, Selection::default()).err().unwrap();
+    assert!(
+        error.contains("data") || error.contains("worldgen/biome/x.json"),
+        "{error}"
     );
 }
 
@@ -978,6 +993,7 @@ fn datapack_reload_install_microbench() {
 fn a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
+    let mut state = fixture(&root);
     pack(
         &root,
         "broken",
@@ -987,7 +1003,6 @@ fn a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection() {
             r#"{"type":"minecraft:crafting_shapeless","ingredients":["minecraft:bone"],"result":{"id":"minecraft:no_such_item","count":1}}"#,
         )],
     );
-    let mut state = fixture(&root);
     state.datapacks = Runtime::new(
         PackSet::load(
             &root,
@@ -1104,97 +1119,25 @@ fn the_saved_pack_selection_decides_which_recipes_load_after_a_restart() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-const WORLDGEN_PACK: [(&str, &str); 5] = [
+const WORLDGEN_PACK: [(&str, &str); 2] = [
     ("test/function/hello.mcfunction", "say hello"),
-    ("test/worldgen/biome/odd.json", "{}"),
     ("minecraft/dimension/the_nether.json", "{}"),
-    ("minecraft/dimension_type/overworld.json", "{}"),
-    ("minecraft/tags/worldgen/biome/odd.json", r#"{"values":[]}"#),
 ];
 
 #[test]
-fn a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once() {
+fn unsupported_worldgen_refuses_the_entire_pack_including_other_content() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     pack(&root, "wg", "\"WG\"", &WORLDGEN_PACK);
-    let loaded = PackSet::load(&root, Selection::default()).unwrap();
+    let error = PackSet::load(&root, Selection::default()).err().unwrap();
     assert!(
-        loaded.functions.contains_key("test:hello"),
-        "the pack's other content loads"
-    );
-    assert_eq!(
-        loaded.ignored["file/wg"],
-        [
-            "minecraft/dimension/the_nether.json",
-            "minecraft/dimension_type/overworld.json",
-            "minecraft/tags/worldgen/biome/odd.json",
-            "test/worldgen/biome/odd.json",
-        ],
-        "every ignored resource path is named"
-    );
-    let warnings = loaded.warnings(None);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(
-        warnings[0].contains("file/wg")
-            && warnings[0].contains("test/worldgen/biome/odd.json")
-            && warnings[0].contains("ignored"),
-        "{warnings:?}"
-    );
-    assert!(
-        loaded.warnings(Some(&loaded)).is_empty(),
-        "an unchanged pack is not warned about again"
-    );
-
-    // Enabling it from the console tells the operator once, then reloads stay quiet.
-    let mut state = fixture(&root);
-    state.datapacks = Runtime::new(
-        PackSet::load(
-            &root,
-            Selection {
-                enabled: vec!["vanilla".into()],
-                disabled: vec!["file/wg".into()],
-            },
-        )
-        .unwrap(),
-        root.clone(),
-        std::sync::Arc::clone(&state.registry),
-    );
-    messages(&mut state);
-    run(&mut state, "datapack enable file/wg");
-    settle(&mut state);
-    let shown: Vec<String> = messages(&mut state)
-        .iter()
-        .map(crate::command_debug::plain)
-        .collect();
-    assert!(
-        shown
-            .iter()
-            .any(|line| line.contains("commands.datapack.modify.enable")),
-        "the enable still succeeds: {shown:?}"
-    );
-    assert_eq!(
-        shown
-            .iter()
-            .filter(|line| line.contains("test/worldgen/biome/odd.json"))
-            .count(),
-        1,
-        "{shown:?}"
-    );
-    assert!(state.datapacks.packs().functions.contains_key("test:hello"));
-    run(&mut state, "reload");
-    settle(&mut state);
-    let shown: Vec<String> = messages(&mut state)
-        .iter()
-        .map(crate::command_debug::plain)
-        .collect();
-    assert!(
-        !shown.iter().any(|line| line.contains("worldgen")),
-        "a reload of the same pack does not warn again: {shown:?}"
+        error.contains("file/wg") && error.contains("dimension/the_nether.json"),
+        "{error}"
     );
 }
 
 #[test]
-fn a_selected_pack_gone_from_disk_is_dropped_with_a_warning() {
+fn a_selected_pack_gone_from_disk_is_dropped_with_an_inactive_start_warning() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     pack(&root, "kept", "\"K\"", &[]);
@@ -1207,15 +1150,11 @@ fn a_selected_pack_gone_from_disk_is_dropped_with_a_warning() {
     )
     .unwrap();
     assert_eq!(loaded.selection.enabled, ["vanilla", "file/kept"]);
-    assert_eq!(loaded.dropped, ["file/gone"]);
-    let warnings = loaded.warnings(None);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("file/gone") && warnings[0].contains("dropped"));
-    assert!(loaded.warnings(Some(&loaded)).is_empty());
+    assert!(loaded.warnings(None).join(" ").contains("file/gone"));
 }
 
 #[test]
-fn a_pack_removed_while_the_server_is_down_opens_the_world_without_it() {
+fn a_pack_removed_without_saved_starts_does_not_block_reopen() {
     let dir = std::env::temp_dir().join(format!("mc-core-datapack-gone-{}", uuid::Uuid::new_v4()));
     pack(&dir.join("datapacks"), "p", "\"P\"", &GEM_RECIPES);
     let config = crate::config::CoreConfig::new(dir.clone(), 42);
@@ -1225,10 +1164,7 @@ fn a_pack_removed_while_the_server_is_down_opens_the_world_without_it() {
 
     std::fs::remove_dir_all(dir.join("datapacks").join("p")).unwrap();
     let core = crate::core::Core::open(config.clone()).unwrap();
-    assert!(
-        recipe_result(core.registry(), "test:new_gem").is_none(),
-        "the missing pack's content is gone, and the world still opens"
-    );
+    assert!(recipe_result(core.registry(), "test:new_gem").is_none());
     core.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -1317,7 +1253,7 @@ fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_
     );
     let base = base_registry();
     // The same selection a world that never saw these packs has.
-    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = open(&root, Selection::default(), &base).unwrap();
     let skipped = packs.skipped.clone();
     assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
     assert_eq!(skipped.len(), 2, "{skipped:?}");
@@ -1341,9 +1277,7 @@ fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_
         enabled: vec!["vanilla".into(), "file/truncated".into()],
         disabled: Vec::new(),
     };
-    let error = PackSet::open(&root, saved, &base)
-        .err()
-        .expect("fails closed");
+    let error = open(&root, saved, &base).err().expect("fails closed");
     assert!(
         error.contains("file/truncated") && error.contains("test/recipe/cut.json"),
         "{error}"
@@ -1399,13 +1333,13 @@ fn a_pack_the_live_reload_refused_does_not_stop_the_next_start() {
 fn the_live_refusal_of_a_pack_names_the_pack_and_the_file() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
+    let mut state = fixture(&root);
     pack(
         &root,
         "broken",
         "\"B\"",
         &[("test/recipe/cut.json", BAD_RECIPE)],
     );
-    let mut state = fixture(&root);
     state.datapacks = Runtime::new(
         PackSet::load(
             &root,
@@ -1566,7 +1500,7 @@ fn unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named() {
     let root = world.path().join("datapacks");
     messy_folder(&root);
     let base = base_registry();
-    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = open(&root, Selection::default(), &base).unwrap();
     assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
     let warnings = packs.warnings(None).join("\n");
     for named in [
@@ -1585,9 +1519,7 @@ fn unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named() {
         enabled: vec!["vanilla".into(), "file/good".into(), "file/cutmeta".into()],
         disabled: Vec::new(),
     };
-    let error = PackSet::open(&root, saved, &base)
-        .err()
-        .expect("fails closed");
+    let error = open(&root, saved, &base).err().expect("fails closed");
     assert!(
         error.contains("file/cutmeta") && error.contains("pack.mcmeta"),
         "{error}"
@@ -1669,8 +1601,8 @@ fn a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack
 fn list_and_activation_work_beside_unreadable_entries() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
-    messy_folder(&root);
     let mut state = fixture(&root);
+    messy_folder(&root);
     run(&mut state, "datapack list");
     settle(&mut state);
     let shown = messages(&mut state)
@@ -1704,7 +1636,7 @@ fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other()
         &[],
     );
     let base = base_registry();
-    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = open(&root, Selection::default(), &base).unwrap();
     assert_eq!(packs.selection.enabled, ["vanilla"]);
     let warnings = packs.warnings(None).join("\n");
     assert!(
@@ -1715,9 +1647,7 @@ fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other()
         enabled: vec!["vanilla".into(), "file/lookbehind".into()],
         disabled: Vec::new(),
     };
-    let error = PackSet::open(&root, saved, &base)
-        .err()
-        .expect("fails closed");
+    let error = open(&root, saved, &base).err().expect("fails closed");
     assert!(
         error.contains("file/lookbehind") && error.contains("filter"),
         "{error}"
@@ -1856,6 +1786,42 @@ fn disabling_a_skipped_pack_says_it_is_not_enabled() {
             "{id}: {reply:?}"
         );
     }
+    assert_eq!(run(&mut state, "datapack disable file/nosuch"), Failed);
+    assert_eq!(key(&messages(&mut state)[0]), "commands.datapack.unknown");
+}
+
+/// A reload refused by a broken selected pack keeps the old packs, yet a new pack
+/// `/datapack list` shows is never unknown to `/datapack disable` (vanilla `getPack`).
+#[test]
+fn a_refused_reload_never_leaves_a_listed_pack_unknown_to_disable() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    run(&mut state, "reload");
+    settle(&mut state);
+    messages(&mut state);
+    std::fs::write(root.join("gems/data/test/recipe/new_gem.json"), BAD_RECIPE).unwrap();
+    pack(&root, "fresh", "\"F\"", &[]);
+    run(&mut state, "reload");
+    settle(&mut state);
+    let refusal = shown(&mut state);
+    assert!(
+        refusal.contains("file/gems") && refusal.contains("old packs and selection retained"),
+        "{refusal}"
+    );
+    run(&mut state, "datapack list available");
+    settle(&mut state);
+    let listing = shown(&mut state);
+    assert!(listing.contains("file/fresh"), "{listing}");
+    assert_eq!(run(&mut state, "datapack disable file/fresh"), Failed);
+    let reply = messages(&mut state);
+    assert_eq!(
+        key(&reply[0]),
+        "commands.datapack.disable.failed",
+        "{reply:?}"
+    );
     assert_eq!(run(&mut state, "datapack disable file/nosuch"), Failed);
     assert_eq!(key(&messages(&mut state)[0]), "commands.datapack.unknown");
 }

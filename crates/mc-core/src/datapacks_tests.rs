@@ -59,6 +59,41 @@ fn disabled_feature_pack_cannot_load_or_execute_its_function() {
     assert!(PackSet::load(directory.path(), Selection::default()).is_ok());
 }
 
+/// A disabled pack that leaves the datapacks folder is forgotten: when it comes
+/// back under the same name it is discovered as new and enabled again.
+#[test]
+fn a_disabled_pack_removed_from_disk_is_forgotten_and_enabled_when_it_returns() {
+    let directory = tempfile::tempdir().unwrap();
+    let away = tempfile::tempdir().unwrap();
+    pack(
+        directory.path(),
+        "custom",
+        &[("test/function/run.mcfunction", "time add 10")],
+    );
+    let id = String::from("file/custom");
+    let selection = Selection {
+        disabled: vec![id.clone()],
+        ..Default::default()
+    };
+    let packs = PackSet::load(directory.path(), selection).unwrap();
+    assert!(!packs.selection.enabled.contains(&id));
+    assert!(packs.selection.disabled.contains(&id));
+    std::fs::rename(directory.path().join("custom"), away.path().join("custom")).unwrap();
+    let packs = PackSet::load(directory.path(), packs.selection.clone()).unwrap();
+    assert!(
+        !packs.selection.disabled.contains(&id),
+        "a pack gone from disk leaves the disabled list"
+    );
+    std::fs::rename(away.path().join("custom"), directory.path().join("custom")).unwrap();
+    let packs = PackSet::load(directory.path(), packs.selection.clone()).unwrap();
+    assert!(
+        packs.selection.enabled.contains(&id),
+        "{:?}",
+        packs.selection
+    );
+    assert!(!packs.selection.disabled.contains(&id));
+}
+
 #[test]
 fn command_parity_configured_sequence_budget_is_per_invocation() {
     let directory = tempfile::tempdir().unwrap();
@@ -312,15 +347,17 @@ fn custom_recipe_and_block_loot_override_builtins() {
 }
 
 #[test]
-fn worldgen_resources_are_ignored_and_unknown_resources_fail_with_explicit_error() {
+fn unsupported_worldgen_and_unknown_resources_fail_with_explicit_error() {
     let directory = tempfile::tempdir().unwrap();
     pack(
         directory.path(),
         "a",
         &[("test/worldgen/biome/a.json", "{}")],
     );
-    let loaded = PackSet::load(directory.path(), Selection::default()).unwrap();
-    assert_eq!(loaded.ignored["file/a"], ["test/worldgen/biome/a.json"]);
+    let error = PackSet::load(directory.path(), Selection::default())
+        .err()
+        .unwrap();
+    assert!(error.contains("test/worldgen/biome/a.json"), "{error}");
     let unknown = tempfile::tempdir().unwrap();
     pack(unknown.path(), "b", &[("test/advancement/a.json", "{}")]);
     assert!(

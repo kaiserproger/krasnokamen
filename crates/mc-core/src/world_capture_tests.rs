@@ -36,8 +36,13 @@ fn fixture() -> (tempfile::TempDir, Arc<CoreRegistry>, ChunkWorld) {
 #[test]
 fn healthy_container_capture_visits_keys_once_not_once_per_dirty_chunk() {
     let (_directory, registry, mut world) = fixture();
-    let positions = (0..2000).map(|x| (ChunkPos { x, z: 0 }, 0)).collect();
-    world.ensure_blocking(&positions);
+    for start in (0..2000).step_by(GENERATED_PENDING_MAX) {
+        let positions = (start..(start + GENERATED_PENDING_MAX as i32).min(2000))
+            .map(|x| (ChunkPos { x, z: 0 }, 0))
+            .collect();
+        world.ensure_blocking(&positions);
+        world.take_generated().unwrap().fill_generated().unwrap();
+    }
     let written = world.capture_dirty(&Default::default()).written();
     world.mark_flushed(&written);
     for x in 0..2000 {
@@ -427,5 +432,69 @@ fn container_buckets_preserve_full_native_images_at_signed_chunk_boundaries() {
         chunk_at(isolated_brewing)
             .brewing_stands
             .contains_key(&isolated_brewing)
+    );
+}
+
+#[test]
+fn required_generated_capacity_refuses_admission_without_losing_the_next_baseline() {
+    let (_directory, _, mut world) = fixture();
+    for x in 0..GENERATED_PENDING_MAX as i32 {
+        let pos = ChunkPos { x, z: 0 };
+        let chunk = world.source.generator.generate(pos);
+        assert!(world.insert_produced(pos, chunk, true));
+    }
+    let overflow = ChunkPos {
+        x: GENERATED_PENDING_MAX as i32,
+        z: 0,
+    };
+    let chunk = world.source.generator.generate(overflow);
+    assert!(
+        !world.insert_produced(overflow, chunk, true),
+        "generated admission must refuse rather than silently drop its required baseline"
+    );
+    assert!(world.chunk(overflow).is_none());
+    assert_eq!(
+        world.take_generated().unwrap().chunks.len(),
+        GENERATED_PENDING_MAX
+    );
+}
+
+#[test]
+fn required_generated_capacity_holds_checkpoint_and_unmaterialized_wal_edits() {
+    let (_directory, registry, mut world) = fixture();
+    for x in 0..GENERATED_PENDING_MAX as i32 {
+        let pos = ChunkPos { x, z: 0 };
+        let chunk = world.source.generator.generate(pos);
+        assert!(world.insert_produced(pos, chunk, true));
+    }
+    let x = GENERATED_PENDING_MAX as i32 * 16;
+    world.set_block_catch_up(x, 100, 0, registry.states.stone);
+    let before = world
+        .source
+        .native
+        .as_ref()
+        .unwrap()
+        .read_checkpoint()
+        .unwrap()
+        .tick;
+    let capture = world.capture_dirty(&Default::default());
+    assert!(
+        capture.write().is_err(),
+        "checkpoint must not commit/prune edits whose generated baseline could not enter custody"
+    );
+    assert_eq!(
+        world
+            .source
+            .native
+            .as_ref()
+            .unwrap()
+            .read_checkpoint()
+            .unwrap()
+            .tick,
+        before
+    );
+    assert!(
+        world.overlay.contains_key(&(x, 100, 0)),
+        "retain unmaterialized replay edits"
     );
 }

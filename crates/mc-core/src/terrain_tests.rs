@@ -595,6 +595,7 @@ fn probe_source(
         light: Arc::clone(&registry.light),
         population: (dimension == 0).then(|| crate::chunk_loader::Population::new(42, registry)),
         geometry: mc_world::OVERWORLD_GEOMETRY,
+        structure_catalog: registry.structure_catalog.clone(),
     })
 }
 

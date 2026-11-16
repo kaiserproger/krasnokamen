@@ -448,6 +448,18 @@ impl mc_world::ChunkGenerator for ExplorerWorld {
         }
         chunk
     }
+    fn structure_candidates_in_ring(
+        &self,
+        _: &[mc_data::Identifier],
+        _: (i32, i32),
+        ring: u32,
+    ) -> Vec<ChunkPos> {
+        if ring == 0 {
+            vec![ChunkPos { x: 20, z: 0 }]
+        } else {
+            Vec::new()
+        }
+    }
     fn structure_sites_in_region(
         &self,
         _: (i32, i32),

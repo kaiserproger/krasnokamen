@@ -432,9 +432,9 @@ fn disable(
     let mut selection = state.datapacks.selection().clone();
     if !selection.enabled.iter().any(|entry| entry == &name) {
         // Vanilla `DataPackCommand.getPack`: a pack the repository has but that is not
-        // selected is "not enabled", whether it was disabled, skipped for failing to load, or
-        // never selected; only a pack nobody has is unknown.
-        let known = state.datapacks.packs().has_pack(&name);
+        // selected is "not enabled", whether it was disabled, skipped for failing to load,
+        // never selected or found by a refused reload; only a pack nobody has is unknown.
+        let known = state.datapacks.has_pack(&name);
         return Err(
             if known || selection.disabled.iter().any(|entry| entry == &name) {
                 translated_failure("commands.datapack.disable.failed", &name)

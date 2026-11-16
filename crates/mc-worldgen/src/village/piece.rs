@@ -83,7 +83,7 @@ use thiserror::Error;
 use crate::structures::{StructureTemplate, TemplateChest, TemplateEntity};
 use crate::vanilla_features::{BlockSemantics, CompileError, RandomSource};
 use crate::village::processors::{
-    PieceBlock, PieceElement, ProcessLevel, apply_processors_with_loot, piece_processors,
+    PieceBlock, PieceElement, ProcessLevel, apply_processors_with_metadata, piece_processors,
 };
 use crate::village::solver::Rotation;
 
@@ -604,7 +604,7 @@ pub fn place_piece(
         });
     }
 
-    let (processed, processor_loot) = apply_processors_with_loot(
+    let (processed, processor_loot, processor_spawners) = apply_processors_with_metadata(
         semantics,
         writer,
         &blocks,
@@ -693,6 +693,53 @@ pub fn place_piece(
             entity.state == block.state && world_position(entity.pos, settings) == block.pos
         }) {
             writer.set_block_entity(block.pos, entity);
+        }
+        if let Some((_, mob, fields)) = processor_spawners
+            .iter()
+            .find(|(pos, _, _)| *pos == block.pos)
+        {
+            let data = mc_nbt::Tag::Compound(vec![(
+                "entity".into(),
+                mc_nbt::Tag::Compound(vec![("id".into(), mc_nbt::Tag::String(mob.to_string()))]),
+            )]);
+            let mut nbt = Vec::with_capacity(10);
+            nbt.push((
+                "id".into(),
+                mc_nbt::Tag::String("minecraft:mob_spawner".into()),
+            ));
+            for (name, value) in [
+                "Delay",
+                "MinSpawnDelay",
+                "MaxSpawnDelay",
+                "SpawnCount",
+                "MaxNearbyEntities",
+                "RequiredPlayerRange",
+                "SpawnRange",
+            ]
+            .into_iter()
+            .zip(fields.iter())
+            {
+                nbt.push((name.into(), mc_nbt::Tag::Short(*value)));
+            }
+            nbt.push(("SpawnData".into(), data.clone()));
+            nbt.push((
+                "SpawnPotentials".into(),
+                mc_nbt::Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: vec![mc_nbt::Tag::Compound(vec![
+                        ("data".into(), data),
+                        ("weight".into(), mc_nbt::Tag::Int(1)),
+                    ])],
+                }),
+            ));
+            writer.set_block_entity(
+                block.pos,
+                &crate::structures::TemplateBlockEntity {
+                    pos: [0, 0, 0],
+                    state,
+                    nbt,
+                },
+            );
         }
         if let Some((_, table)) = processor_loot.iter().find(|(pos, _)| *pos == block.pos) {
             let entity = crate::structures::TemplateBlockEntity {

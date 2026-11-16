@@ -151,6 +151,13 @@ impl TerrainSource {
         }
     }
 
+    pub(crate) fn generator(&self) -> Result<Arc<dyn mc_world::ChunkGenerator>, CoreError> {
+        self.source
+            .upgrade()
+            .map(|source| Arc::clone(&source.generator))
+            .ok_or_else(|| CoreError::Worldgen("world generator is no longer available".into()))
+    }
+
     /// Cheap global fence for this dimension's cache invalidation (atomic
     /// load, no locks). Advanced by the tick owner only when a publication
     /// carries terrain changes (new/resident-changed chunks or block edits);

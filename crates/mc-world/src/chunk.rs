@@ -841,6 +841,31 @@ pub trait ChunkGenerator: Send + Sync {
         Vec::new()
     }
 
+    /// Potential start chunks in one placement-grid ring, before biome and
+    /// assembly admission. The radius is in placement cells, not chunks.
+    /// Fixed concentric-ring placements supply their candidates at ring zero.
+    fn structure_candidates_in_ring(
+        &self,
+        _targets: &[Identifier],
+        _centre_chunk: (i32, i32),
+        _ring: u32,
+    ) -> Vec<ChunkPos> {
+        Vec::new()
+    }
+
+    /// Resolve selected structures at a potential start, without generating a
+    /// chunk. Callers must consult authoritative saved coverage first.
+    fn structure_sites_at(
+        &self,
+        targets: &[Identifier],
+        start_chunk: ChunkPos,
+    ) -> Vec<GeneratedStructureSite> {
+        let pos = (start_chunk.x, start_chunk.z);
+        let mut sites = self.structure_sites_in_region(pos, pos);
+        sites.retain(|site| targets.contains(&site.structure));
+        sites
+    }
+
     /// The generator's 3D noise biome at a block position, before any edit:
     /// the same field chunk palettes and structure gates read. Generators
     /// without a noise biome return `None`, and `/locate biome` then reports
