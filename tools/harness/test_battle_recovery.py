@@ -405,6 +405,32 @@ class ClientKitTests(unittest.TestCase):
             with self.subTest(counts=counts), self.assertRaises(AssertionError):
                 br.roles(report, "after", holder(counts), viewer, 7, kit=held)
 
+    def test_a_missing_auth_acknowledgement_reports_the_chat_without_the_password(self):
+        class Client:
+            name = "PovRed"
+
+            def __init__(self):
+                self.calls = []
+
+            def last_event(self):
+                return 3
+
+            def driver(self, tool, **args):
+                self.calls.append(tool)
+                if tool == "wait_for":
+                    raise RuntimeError("horizon-ctl wait_for failed: timeout")
+                if tool == "messages":
+                    return {"chat": ["Matching passwords required", "echo s3cret-pw"]}
+                return {}
+
+        client = Client()
+        with self.assertRaises(RuntimeError) as caught:
+            br._authenticate(client, "s3cret-pw", register=True)
+        self.assertIn("Matching passwords required", str(caught.exception))
+        self.assertIn("/register not acknowledged", str(caught.exception))
+        self.assertNotIn("s3cret-pw", str(caught.exception))
+        self.assertEqual(client.calls, ["command", "wait_for", "messages"])
+
 
 if __name__ == "__main__":
     unittest.main()

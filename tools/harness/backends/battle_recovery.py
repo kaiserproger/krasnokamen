@@ -1473,11 +1473,18 @@ def auth_config(inputs: dict[str, Any], root: Path, port: int, dashboard: int) -
 
 def _authenticate(client: Horizon, password: str, register: bool) -> None:
     seq = client.last_event()
+    verb = "register" if register else "login"
     command = f"register {password} {password}" if register else f"login {password}"
     client.driver("command", secret=True, command=command)
-    if register:
-        client.driver("wait_for", condition="chat", value="Successfully registered", since=seq, timeout=60)
-    client.driver("wait_for", condition="chat", value="Successfully logged in", since=seq, timeout=60)
+    try:
+        if register:
+            client.driver("wait_for", condition="chat", value="Successfully registered", since=seq, timeout=60)
+        client.driver("wait_for", condition="chat", value="Successfully logged in", since=seq, timeout=60)
+    except RuntimeError as error:
+        # The plugin's answer (a refusal hint, a usage line) is the evidence; it never echoes the password,
+        # which is scrubbed anyway before the chat enters the error.
+        chat = json.dumps(client.driver("messages")).replace(password, "[redacted]")
+        raise RuntimeError(f"{client.name} /{verb} not acknowledged ({error}); recent chat: {chat[:3000]}") from None
 
 
 def battle_image(history_batches: dict[tuple[int, int], Path], until: int) -> dict[str, Any] | None:
