@@ -1286,7 +1286,18 @@ fn block_state_upgrade_applies_only_fixes_registered_after_its_version() {
     let properties = nbt::get(&test_block, "Properties").unwrap();
     assert_eq!(nbt::get(properties, "mode"), Some(&s("fail")));
     assert!(nbt::get(properties, "test_block_mode").is_none());
-    for from in [MIN_DATA_VERSION - 1, TARGET_DATA_VERSION + 1] {
+    // The native 26.3 spelling (`id`/`properties`, or a bare identifier) reads back as
+    // `Name`/`Properties`.
+    let mut native = c(vec![
+        ("id", s("minecraft:chain")),
+        ("properties", c(vec![])),
+    ]);
+    upgrade_block_state(&mut native, NATIVE_26_3_DATA_VERSION).unwrap();
+    assert_eq!(nbt::get(&native, "Name"), Some(&s("minecraft:chain")));
+    let mut shorthand = s("minecraft:stone");
+    upgrade_block_state(&mut shorthand, NATIVE_26_3_DATA_VERSION).unwrap();
+    assert_eq!(nbt::get(&shorthand, "Name"), Some(&s("minecraft:stone")));
+    for from in [MIN_DATA_VERSION - 1, NATIVE_26_3_DATA_VERSION + 1] {
         assert_eq!(
             upgrade_block_state(&mut chain(), from),
             Err(UpgradeError::UnsupportedVersion(from))

@@ -986,7 +986,7 @@ fn parse_locate_offset(referrer: &Identifier, value: &Value) -> Result<[i32; 3],
     };
     let mut parsed = [0; 3];
     for (slot, raw) in parsed.iter_mut().zip([x, y, z]) {
-        let coordinate = raw.as_i64().and_then(|raw| i32::try_from(raw).ok());
+        let coordinate = codec_int(raw);
         // `offsetCodec(16)` accepts strictly less than 16 per axis.
         match coordinate {
             Some(coordinate) if (-15..=15).contains(&coordinate) => *slot = coordinate,
@@ -1426,26 +1426,21 @@ fn parse_spawn_overrides(
     Ok(overrides)
 }
 
+/// `WeightedList.codec(SpawnerData.CODEC)` of the 26.3 jar: a list of flat
+/// `{type, count, weight}` entries (`Weighted.codec(MapCodec)` adds `weight`;
+/// `SpawnerData.CODEC` is `{type, count: IntProvider}`). The pre-26.3 `minCount` and
+/// `maxCount` fields and a nested `data` object are not read by that codec.
 fn parse_weighted_spawns(
     id: &Identifier,
     entries: &[Value],
 ) -> Result<Vec<WeightedSpawn>, VillageDataError> {
     let mut spawns = Vec::with_capacity(entries.len());
     for entry in entries {
-        let data = field_of(entry, "data", SPAWN_OVERRIDE, id)?;
-        let min_count = ranged_i32_field(data, "minCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
-        let max_count = ranged_i32_field(data, "maxCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
-        if min_count > max_count {
-            return Err(VillageDataError::InvalidField {
-                kind: SPAWN_OVERRIDE,
-                entry: id.clone(),
-                field: "minCount",
-                value: format!("{min_count} is larger than maxCount {max_count}"),
-            });
-        }
+        let (min_count, max_count) =
+            parse_spawn_count(id, field_of(entry, "count", SPAWN_OVERRIDE, id)?)?;
         spawns.push(WeightedSpawn {
             weight: ranged_i32_field(entry, "weight", SPAWN_OVERRIDE, id, 0, i32::MAX)?,
-            entity_type: parse_id(id, field_str(data, "type", SPAWN_OVERRIDE, id)?)?,
+            entity_type: parse_id(id, field_str(entry, "type", SPAWN_OVERRIDE, id)?)?,
             min_count,
             max_count,
         });
@@ -1453,9 +1448,47 @@ fn parse_weighted_spawns(
     Ok(spawns)
 }
 
+/// `IntProviders.CODEC` for a spawn count: a bare integer is `ConstantInt`, an
+/// object dispatches on `type`. The constant and uniform providers are modelled; any
+/// other provider type refuses by name instead of being read as a range it is not.
+fn parse_spawn_count(id: &Identifier, value: &Value) -> Result<(i32, i32), VillageDataError> {
+    if value.is_number() {
+        let count = codec_int(value).expect("a JSON number reads as an int");
+        return Ok((count, count));
+    }
+    let invalid = |field: &'static str, reason: String| VillageDataError::InvalidField {
+        kind: SPAWN_OVERRIDE,
+        entry: id.clone(),
+        field,
+        value: reason,
+    };
+    let provider = field_str(value, "type", SPAWN_OVERRIDE, id)?;
+    match Identifier::parse(provider.to_owned()) {
+        Ok(provider) if provider.namespace() == "minecraft" && provider.path() == "constant" => {
+            let count = i32_field(value, "value", SPAWN_OVERRIDE, id)?;
+            Ok((count, count))
+        }
+        Ok(provider) if provider.namespace() == "minecraft" && provider.path() == "uniform" => {
+            let min = i32_field(value, "min_inclusive", SPAWN_OVERRIDE, id)?;
+            let max = i32_field(value, "max_inclusive", SPAWN_OVERRIDE, id)?;
+            if min > max {
+                return Err(invalid(
+                    "count",
+                    format!("max_inclusive {max} is smaller than min_inclusive {min}"),
+                ));
+            }
+            Ok((min, max))
+        }
+        _ => Err(invalid(
+            "count",
+            format!("unsupported int provider {provider}"),
+        )),
+    }
+}
+
 fn parse_max_distance(id: &Identifier, value: &Value) -> Result<MaxDistance, VillageDataError> {
     // `Codec.either(full, horizontal only)`: one integer means both axes.
-    if let Some(horizontal) = value.as_i64().and_then(|raw| i32::try_from(raw).ok()) {
+    if let Some(horizontal) = codec_int(value) {
         checked_range(
             id,
             horizontal,
@@ -1484,7 +1517,7 @@ fn parse_dimension_padding(
     let Some(value) = value else {
         return Ok(DimensionPadding { bottom: 0, top: 0 });
     };
-    if let Some(both) = value.as_i64().and_then(|raw| i32::try_from(raw).ok()) {
+    if let Some(both) = codec_int(value) {
         checked_range(id, both, "dimension_padding", 0, i32::MAX)?;
         return Ok(DimensionPadding {
             bottom: both,
@@ -1582,7 +1615,7 @@ fn parse_vertical_anchor(
     if keys.next().is_some() {
         return Err(invalid());
     }
-    let Some(offset) = raw.as_i64().and_then(|raw| i32::try_from(raw).ok()) else {
+    let Some(offset) = codec_int(raw) else {
         return Err(invalid());
     };
     if !(MIN_Y..=MAX_Y).contains(&offset) {
@@ -2304,20 +2337,30 @@ fn i32_field(
     kind: EntryKind,
     entry: &Identifier,
 ) -> Result<i32, VillageDataError> {
-    let raw = field_of(value, field, kind, entry)?
-        .as_i64()
-        .ok_or_else(|| VillageDataError::InvalidField {
-            kind,
-            entry: entry.clone(),
-            field,
-            value: "not an integer".to_owned(),
-        })?;
-    i32::try_from(raw).map_err(|_| VillageDataError::InvalidField {
+    codec_int(field_of(value, field, kind, entry)?).ok_or_else(|| VillageDataError::InvalidField {
         kind,
         entry: entry.clone(),
         field,
-        value: raw.to_string(),
+        value: "not an integer".to_owned(),
     })
+}
+
+/// A JSON number read by vanilla's `Codec.INT`: `Number.intValue` on gson's
+/// `LazilyParsedNumber` (DFU 10.0.21 `Codec.INT` and `JsonOps.getNumberValue`,
+/// gson 2.14.0, the versions in the 26.3 launcher manifest). An integer outside the
+/// `int` range keeps its low 32 bits (`(int) Long.parseLong`, or `BigDecimal.intValue`
+/// past `long`), and a fraction or exponent form truncates toward zero first. Only
+/// a non-number is `None`; range checks apply to the wrapped value.
+fn codec_int(value: &Value) -> Option<i32> {
+    let number = value.as_number()?;
+    if let Some(integer) = number.as_i64() {
+        return Some(integer as i32);
+    }
+    if let Some(integer) = number.as_u64() {
+        return Some(integer as i32);
+    }
+    let float = number.as_f64()?;
+    (float.abs() < 1.0e38).then(|| float.trunc() as i128 as i32)
 }
 
 fn f32_field(

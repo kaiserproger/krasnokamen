@@ -585,7 +585,7 @@ fn parse_palette(
             // Block renames and property renames registered after the template's
             // DataVersion (`mc_world::anvil::upgrade::upgrade_block_state`); a
             // version the upgrader cannot serve refuses instead of passing through.
-            Some(version) if version < mc_world::anvil::upgrade::TARGET_DATA_VERSION => {
+            Some(version) => {
                 let mut upgraded = entry.clone();
                 mc_world::anvil::upgrade::upgrade_block_state(&mut upgraded, version).map_err(
                     |source| match source {
@@ -604,7 +604,7 @@ fn parse_palette(
                 )?;
                 parse_palette_entry(path, &upgraded, registry)
             }
-            _ => parse_palette_entry(path, entry, registry),
+            None => parse_palette_entry(path, entry, registry),
         })
         .collect()
 }
@@ -1529,6 +1529,16 @@ mod tests {
         data_version: Option<i32>,
         name: &str,
     ) -> Result<StructureTemplate, StructureError> {
+        palette_entry_template(
+            data_version,
+            Tag::Compound(vec![("Name".into(), Tag::String(name.into()))]),
+        )
+    }
+
+    fn palette_entry_template(
+        data_version: Option<i32>,
+        entry: Tag,
+    ) -> Result<StructureTemplate, StructureError> {
         let registry = BlockRegistry::from_report(&[
             BlockReport {
                 id: Identifier::parse("minecraft:air").unwrap(),
@@ -1555,11 +1565,8 @@ mod tests {
             (
                 "palette".into(),
                 Tag::List(ListTag {
-                    element_type: mc_nbt::tag_type::COMPOUND,
-                    elements: vec![Tag::Compound(vec![(
-                        "Name".into(),
-                        Tag::String(name.into()),
-                    )])],
+                    element_type: entry.type_id(),
+                    elements: vec![entry],
                 }),
             ),
             (
@@ -1580,6 +1587,27 @@ mod tests {
         let path = tmp.path().join("template.nbt");
         std::fs::write(&path, named_nbt_bytes(&Tag::Compound(fields))).unwrap();
         StructureTemplate::from_nbt_file(&path, &registry)
+    }
+
+    #[test]
+    fn native_26_3_template_spelling_normalizes_and_future_versions_refuse() {
+        // 26.3 (DataVersion 5023, from data/vanilla/26.3/version.json) spells a palette
+        // entry `id`/`properties`, or as a bare identifier.
+        let spelled = Tag::Compound(vec![
+            ("id".into(), Tag::String("minecraft:iron_chain".into())),
+            ("properties".into(), Tag::Compound(Vec::new())),
+        ]);
+        for entry in [spelled, Tag::String("minecraft:iron_chain".into())] {
+            let template = palette_entry_template(Some(5023), entry).unwrap();
+            assert_eq!(template.blocks()[0].state, BlockStateId(1));
+        }
+        // A template past the server's own DataVersion is refused, not read as is.
+        for version in [5024, 9999] {
+            assert!(matches!(
+                palette_template(Some(version), "minecraft:air"),
+                Err(StructureError::UnsupportedDataVersion { .. })
+            ));
+        }
     }
 
     #[test]

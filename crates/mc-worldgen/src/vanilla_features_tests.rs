@@ -2313,8 +2313,8 @@ fn tree_compile_fails_closed_for_unmodelled_parts() {
     // distance pass throw (`setValue(DISTANCE, ...)` on a state without the
     // property), so it is refused at compile time.
     let dir = tree_worldgen(&OAK_TREE_CONFIG.replace(
-        "\"Name\": \"minecraft:oak_leaves\"",
-        "\"Name\": \"minecraft:melon\"",
+        "{ \"Name\": \"minecraft:oak_leaves\", \"Properties\": { \"distance\": \"7\", \"persistent\": \"false\", \"waterlogged\": \"false\" } }",
+        "{ \"Name\": \"minecraft:melon\" }",
     ));
     let spec = mc_data::vanilla_feature_closure::FeatureClosure::new(dir.path())
         .load_placed_feature(&identifier("minecraft:tree_fixture"))
@@ -2421,4 +2421,35 @@ fn nested_rule_based_provider_falls_back_to_the_existing_state() {
             .optional_state(&level, &semantics, &mut random, pos)
             .is_none()
     );
+}
+
+/// `BlockState.CODEC` on datapack JSON: omitted properties take the block's default
+/// state values; an unknown property name or value still refuses.
+#[test]
+fn json_block_state_omitted_properties_default_and_unknown_ones_refuse() {
+    let blocks = registry();
+    let tags = TestTags::default();
+    let semantics = BlockSemantics::new(&blocks, &tags);
+    let owner = identifier("minecraft:fixture");
+    let grass = identifier("minecraft:grass_block");
+    let default = blocks.block(&grass).unwrap().default;
+    assert_eq!(
+        semantics
+            .resolve_state(&owner, &block_state("minecraft:grass_block", &[]))
+            .unwrap(),
+        default
+    );
+    let snowy = semantics
+        .resolve_state(
+            &owner,
+            &block_state("minecraft:grass_block", &[("snowy", "true")]),
+        )
+        .unwrap();
+    assert_ne!(snowy, default);
+    for bad in [("sunny", "true"), ("snowy", "maybe")] {
+        assert!(matches!(
+            semantics.resolve_state(&owner, &block_state("minecraft:grass_block", &[bad])),
+            Err(CompileError::UnknownBlockState { .. })
+        ));
+    }
 }
