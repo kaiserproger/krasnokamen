@@ -161,6 +161,40 @@ def pin(process: subprocess.Popen, cpus: str) -> None:
     subprocess.run(['taskset', '-a', '-p', '-c', cpus, str(process.pid)], check=True, stdout=subprocess.DEVNULL)
 
 
+def relocate(value, old: str, new: str):
+    """Replace the scratch directory prefix in every string of a JSON value."""
+    if isinstance(value, str):
+        return value.replace(old, new)
+    if isinstance(value, list):
+        return [relocate(item, old, new) for item in value]
+    if isinstance(value, dict):
+        return {key: relocate(item, old, new) for key, item in value.items()}
+    return value
+
+
+def publish(scratch: Path, destination: Path, run: dict) -> None:
+    """Copy a scratch run to its receipt; paths in the receipt name the live copies.
+
+    run.json keeps where it actually ran under `as_run` (scratch path, server and
+    census commands as executed).
+    """
+    shutil.copytree(scratch, destination, symlinks=True)
+    old, new = str(scratch), str(destination)
+    published = relocate(run, old, new)
+    published['scratch'] = old
+    published['as_run'] = {'scratch': old, 'server_command': run['server'].get('command'),
+                           'census_command': run.get('census', {}).get('command')}
+    dump(destination / 'run.json', published)
+    for path in destination.rglob('*.json'):
+        if path == destination / 'run.json':
+            continue
+        text = path.read_text(errors='surrogateescape')
+        if old in text:
+            path.write_text(text.replace(old, new), errors='surrogateescape')
+    # The tmpfs run directory goes only after the receipt is complete.
+    shutil.rmtree(scratch)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', required=True, type=Path)
@@ -395,10 +429,7 @@ def main() -> None:
             dump(out / 'run.json', run)
         finally:
             if args.scratch is not None:
-                # The receipt is the complete copy; the tmpfs run directory is
-                # removed only after copytree returned.
-                shutil.copytree(out, destination, symlinks=True)
-                shutil.rmtree(out)
+                publish(out, destination, run)
 
 
 if __name__ == '__main__':
