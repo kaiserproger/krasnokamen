@@ -340,4 +340,6 @@ def run(ctx: ProfileContext) -> dict:
     report["status"] = "passed" if all(row["status"] == "verified" for row in rows) else "findings"
     report["full_target_accepted"] = report["status"] == "passed"
     write_json(output / "result.json", report)
+    if not report["full_target_accepted"]:
+        raise RuntimeError("full ATM campaign has unverified definitions; see full-atm/result.json")
     return {"full_atm": report}

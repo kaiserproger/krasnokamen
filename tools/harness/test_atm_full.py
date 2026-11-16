@@ -1,10 +1,13 @@
 """Full ATM manifest and restart sampling contracts."""
 import json
+import contextlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from . import atm_full
+from . import __main__ as cli, preflight
 
 
 class FullSelectionTests(unittest.TestCase):
@@ -51,6 +54,58 @@ class FullSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "unsafe resource"):
                 atm_full.resource(Path(directory), "mvs:../../../../outside", "structure", ".nbt")
+
+    def test_one_finding_fails_profile_after_collecting_every_definition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pack = root / "pack"
+            pack.mkdir()
+            binary = root / "binary"
+            binary.write_bytes(b"fixture")
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({"status": "converted-unproven", "packs": [{
+                "id": "mvs", "server_pack": str(pack), "server_files": [],
+                "server_sha256": "fixture",
+            }]}))
+            env = {name: str(binary) for name in (
+                "KRASNOKAMEN_SERVER_BINARY", "KRASNOKAMEN_BATTLE_HORIZON_CLIENT",
+                "KRASNOKAMEN_BATTLE_HORIZON_CTL", "KRASNOKAMEN_BATTLE_HORIZON_RESOURCES",
+                "KRASNOKAMEN_ATM_CACHE")}
+            env["KRASNOKAMEN_ATM_MANIFEST"] = str(manifest)
+            rows = [{"id": f"mvs:s{i:03}", "dimension": "minecraft:overworld"}
+                    for i in range(130)]
+            client = mock.Mock()
+            client.command.return_value = {}
+            proof = {"anchor": [0, 0, 0], "bounds": [], "chunk": [0, 0],
+                     "dimension_dir": str(root), "samples": []}
+            with mock.patch.dict(atm_full.os.environ, env), \
+                    mock.patch.object(cli, "ARTIFACT_ROOT", root / "receipts"), \
+                    mock.patch.object(preflight, "check", return_value=()), \
+                    mock.patch.object(atm_full, "inventory", return_value=[]), \
+                    mock.patch.object(atm_full, "tree_hash", return_value="fixture"), \
+                    mock.patch.object(atm_full, "selected_definitions", return_value=rows), \
+                    mock.patch.object(atm_full, "prepare_operator_fixture"), \
+                    mock.patch.object(atm_full, "session", side_effect=lambda *a: contextlib.nullcontext(client)), \
+                    mock.patch.object(atm_full, "dimension_teleport"), \
+                    mock.patch.object(atm_full, "locate_coordinates", side_effect=[ValueError("missing")] + [[0, 0]] * 129), \
+                    mock.patch.object(atm_full, "locate_failure", return_value="not found"), \
+                    mock.patch.object(atm_full, "export_world", return_value=root), \
+                    mock.patch.object(atm_full, "site_proof", return_value=proof), \
+                    mock.patch.object(atm_full, "read_world", return_value=[{"blocks": {}}]), \
+                    mock.patch.object(atm_full, "photograph", return_value={}):
+                code = cli.cmd_run(["atm-full"])
+            receipt_dir = next((root / "receipts").iterdir())
+            receipt = json.loads((receipt_dir / "result.json").read_text())
+            report = json.loads((receipt_dir / "full-atm/result.json").read_text())
+            self.assertNotEqual(code, 0)
+            self.assertEqual(receipt["status"], "failed")
+            self.assertEqual(receipt["details"]["scenario"], report)
+            self.assertEqual(report["status"], "findings")
+            self.assertFalse(report["full_target_accepted"])
+            self.assertEqual(len(report["definitions"]), 130)
+            self.assertEqual(report["definitions"][0]["reason"], "not found")
+            self.assertTrue(all(row["status"] == "verified" for row in report["definitions"][1:]))
+            self.assertEqual(client.command.call_count, 130)
 
 
 if __name__ == "__main__":
