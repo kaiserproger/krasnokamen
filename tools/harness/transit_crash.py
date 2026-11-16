@@ -218,9 +218,12 @@ class Run:
         self.facts: dict[str, Any] = {}
 
     # -- console --------------------------------------------------------
-    def cmd(self, text: str) -> str:
+    def cmd(self, text: str, expect: str | None = None) -> str:
+        """One fenced fixture command; `expect` must appear in its reply."""
         reply = self.server.command(text)
         self.fixture.append({"command": text, "reply": reply.strip()})
+        if expect is not None and expect not in reply:
+            raise RuntimeError(f"{text!r} replied {reply.strip()!r}, want {expect!r}")
         return reply
 
     def until(self, text: str, accepted: re.Pattern[str], attempts: int = 600) -> str:
@@ -257,21 +260,23 @@ class Run:
                      "gamerule advance_weather false", "time set 1000"):
             self.cmd(rule)
         self.platform(DEST_AREA)
-        self.cmd(f"execute positioned 104 201 8 run settlement create {DEST} 24")
+        self.cmd(f"execute positioned 104 201 8 run settlement create {DEST} 24", "Founded")
         self.cmd(f"forceload remove {DEST_AREA[0]} {DEST_AREA[1]} {DEST_AREA[2]} {DEST_AREA[3]}")
         self.platform(SOURCE_AREA)
         self.until("fill 0 201 0 8 204 8 minecraft:glass hollow", FILLED)
         for x in BEDS:
-            self.cmd(f"setblock {x} 202 3 minecraft:red_bed[facing=north,part=foot]")
-            self.cmd(f"setblock {x} 202 2 minecraft:red_bed[facing=north,part=head]")
-        self.cmd(f"execute positioned 4 202 4 run settlement create {SOURCE} 24")
+            self.cmd(f"setblock {x} 202 3 minecraft:red_bed[facing=north,part=foot]", "Changed")
+            self.cmd(f"setblock {x} 202 2 minecraft:red_bed[facing=north,part=head]", "Changed")
+        self.cmd(f"execute positioned 4 202 4 run settlement create {SOURCE} 24", "Founded")
         parents = [str(uuid.uuid4()) for _ in range(2)]
-        for index, parent in enumerate(parents):
-            self.cmd(f"summon minecraft:villager {3.5 + index} 202 5.5 {{UUID:{uuid_array(parent)},"
-                     f"Inventory:[{{id:\"minecraft:bread\",count:3}}]}}")
-            reply = self.cmd(f"settlement bind {SOURCE} {parent}")
-            if "Bound" not in reply:
-                raise RuntimeError(f"bind refused: {reply!r}")
+        for x, parent in zip((2.5, 4.5), parents):
+            # Summon NBT has no villager inventory: each parent picks up the
+            # 3 bread (12 food, courtship needs 12) dropped at its feet.
+            self.cmd(f"summon minecraft:item {x} 202 5.5 "
+                     "{Item:{id:\"minecraft:bread\",count:3},PickupDelay:0}", "Summoned")
+            self.cmd(f"summon minecraft:villager {x} 202 5.5 {{UUID:{uuid_array(parent)}}}",
+                     "Summoned")
+            self.cmd(f"settlement bind {SOURCE} {parent}", "Bound")
         self.facts["parents"] = parents
 
     def household(self) -> None:
