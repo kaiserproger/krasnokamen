@@ -53,6 +53,34 @@ fn crop(state: &mut crate::tick::TickState, x: i32, z: i32) -> u32 {
 }
 
 #[test]
+fn test_acceleration_scales_native_crop_yield() {
+    for (factor, expected) in [(1.0, 3), (4.0, 12)] {
+        let (mut state, slot, mut v) = fixture();
+        state.test_acceleration.gathering_yield = factor;
+        crop(&mut state, 12, 3);
+        state.world.fold_overlay();
+        state.entities.set_pos(slot, [12.5, 201.0, 3.5]);
+        let mut changes = ChangeSet::default();
+        for _ in 0..20 {
+            harvest::work(&mut state, slot, &mut v, &mut changes);
+            state.tick += 40;
+            if !changes.blocks.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(changes.blocks.len(), 1);
+        assert_eq!(
+            v.inventory
+                .iter()
+                .flatten()
+                .map(|stack| stack.count)
+                .sum::<i32>(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn certified_farmer_walks_to_distant_crop_and_repeats() {
     let (mut state, slot, v) = fixture();
     crop(&mut state, 12, 3);

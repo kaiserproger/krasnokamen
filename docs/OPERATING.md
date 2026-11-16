@@ -253,6 +253,34 @@ Behavior worth knowing:
 - `worldgen_gpu = true` needs a build with `--features gpu` and a hardware
   adapter; otherwise startup logs why and the CPU generates.
 
+### Test-only settlement acceleration
+
+For explicitly accelerated diagnostics only, `[test_acceleration]` accepts
+`gathering_yield`, `construction_speed`, `birth_chance` and `migration_rate`.
+Each defaults to `1.0` and must be finite and greater than zero. Every core
+startup logs all four values, even when the section is absent:
+
+```text
+test_acceleration gathering_yield=1 construction_speed=1 birth_chance=1 migration_rate=1
+```
+
+`gathering_yield` multiplies raw crop, seed, mining and lumber outputs, not
+crafting recipes. The complete output must still fit physical carry.
+`construction_speed` multiplies canonical one-cell advances per work
+admission; each cell still checks reach, materials and executor admission.
+An admission never both fetches stock and advances construction. Fractional
+output/work units use deterministic rounding (integer part plus a draw for
+the fraction), so positive values below one are supported.
+`birth_chance` divides native courtship duration and parent cooldown, rounded
+up to at least one tick; food, spare beds, household pairing and child
+maturation remain unchanged. All-one values retain normal gameplay.
+`migration_rate` configures the separately implemented migration policy; it
+does not create migrants by itself.
+
+Disclose the four values with every accelerated result. Such runs are not
+normal-rate acceptance: use all `1.0` values and extend the observation period
+for genuine culture-spread acceptance.
+
 ### Network bind and port
 
 Clients connect to `network.bind_address:port`. `127.0.0.1` is local-only;

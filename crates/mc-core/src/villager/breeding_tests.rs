@@ -129,6 +129,43 @@ fn stored_food_village_roofed(beds: usize, roofed: bool) -> (TickState, [EntityS
     (state, parents, bread)
 }
 
+#[test]
+fn test_acceleration_scales_native_courtship_and_birth_cooldown() {
+    for factor in [1.0, 4.0] {
+        let (mut state, parents, bread) = stored_food_village(3);
+        state.test_acceleration.birth_chance = factor;
+        let mut duration = None;
+        for _ in 0..6_000 {
+            step(&mut state);
+            let parent = state.entities.row(parents[0]).villager.as_ref().unwrap();
+            if let (Some(start), Some(until)) =
+                (parent.courtship_started_tick, parent.courtship_until)
+            {
+                duration = Some(until - start);
+            }
+            if population(&state) > 2 {
+                break;
+            }
+        }
+        assert_eq!(
+            population(&state),
+            3,
+            "birth still uses the native bed and ration gates"
+        );
+        let duration = duration.expect("native courtship started");
+        assert!(
+            ((275.0 / factor).ceil() as u64..=(324.0 / factor).ceil() as u64).contains(&duration)
+        );
+        let cooldown = (6_000.0 / factor).ceil() as i32;
+        for slot in parents {
+            let parent = state.entities.row(slot).villager.as_ref().unwrap();
+            assert!((cooldown - 20..=cooldown).contains(&parent.age));
+            assert_eq!(food_count(&state, slot, bread), 0);
+        }
+        assert_eq!(state.block_entities[&(8, 201, 8)].slots[0].count, 0);
+    }
+}
+
 /// Settlement policy: a resident's home is a roofed bed (it shelters instead of
 /// sleeping in the open), and rations follow the home. A settlement whose only
 /// beds stand in the open gives its residents no home, so no stored rations

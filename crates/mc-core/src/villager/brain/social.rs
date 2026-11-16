@@ -746,8 +746,11 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
             eat_for_birth(&cache.food, b, &protected_b);
             abort_courtship(b);
             if bed.is_some() {
-                a.age = 6_000;
-                b.age = 6_000;
+                a.age = state
+                    .test_acceleration
+                    .birth_ticks(6_000)
+                    .min(i32::MAX as u64) as i32;
+                b.age = a.age;
             }
             state.entities.row_mut(first).villager = Some(a);
             if let Some(home) = bed {
@@ -845,8 +848,10 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                 }
             }
             let second_id = state.entities.body(second).id;
-            let until =
-                state.tick + 275 + ((first_id.0 as u64 ^ second_id.0 as u64 ^ state.tick) % 50);
+            let duration = 275 + ((first_id.0 as u64 ^ second_id.0 as u64 ^ state.tick) % 50);
+            let until = state
+                .tick
+                .saturating_add(state.test_acceleration.birth_ticks(duration));
             let a = state.entities.row_mut(first).villager.as_mut().unwrap();
             a.partner = Some(second_id);
             a.courtship_until = Some(until);

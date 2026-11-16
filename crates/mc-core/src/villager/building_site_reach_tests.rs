@@ -2,6 +2,45 @@ use super::*;
 use crate::settlements::construction::tests::{attempt, fixture, fund, start};
 
 #[test]
+fn test_acceleration_scales_canonical_builder_steps() {
+    for factor in [1.0, 4.0] {
+        let (mut state, town, builder) = fixture();
+        state.test_acceleration.construction_speed = factor;
+        start(&mut state, town, "house", 1, None);
+        fund(&mut state, "house", 1);
+        let handle = state
+            .settlements
+            .get(town)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure
+            .clone();
+        let work = |state: &TickState| {
+            let status = executor::status(state, town, &handle).unwrap();
+            status
+                .stages
+                .iter()
+                .take(status.current_stage_index as usize)
+                .map(|stage| stage.work_units)
+                .sum::<u64>()
+                + status.completed_work_units
+        };
+        let mut maximum = 0;
+        for _ in 0..64 {
+            let before = work(&state);
+            attempt(&mut state, town, builder);
+            maximum = maximum.max(work(&state) - before);
+            if maximum == factor as u64 {
+                break;
+            }
+        }
+        assert_eq!(maximum, factor as u64, "canonical work per paid admission");
+    }
+}
+
+#[test]
 fn builder_finishes_the_last_roof_cells_beside_a_lower_perimeter() {
     let (mut state, town, builder) = fixture();
     start(&mut state, town, "spanish_church", 1, None);

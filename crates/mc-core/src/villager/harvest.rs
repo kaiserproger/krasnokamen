@@ -193,11 +193,18 @@ fn crop_deferred(
         worker,
         &ItemStack::new(item, count),
     ) || net_seed(state, v, item).is_some_and(|seed| {
+        let count = state.test_acceleration.gathered_count(
+            1,
+            state.world.seed() as u64
+                ^ state.tick.rotate_left(17)
+                ^ state.entities.body(slot).id.0 as u64
+                ^ u64::from(seed),
+        );
         crate::settlements::economy::defer_output_pickup(
             state,
             v.settlement,
             worker,
-            &ItemStack::new(seed, 1),
+            &ItemStack::new(seed, count),
         )
     })
 }
@@ -374,6 +381,10 @@ fn harvest(
     pos: BlockPos,
     (item, count, replanted): (u32, i32, u32),
 ) -> bool {
+    let seed_key = state.world.seed() as u64
+        ^ state.tick.rotate_left(17)
+        ^ state.entities.body(slot).id.0 as u64;
+    let count = state.test_acceleration.gathered_count(count, seed_key);
     if crop_deferred(state, slot, v, item, count) {
         return false;
     }
@@ -397,13 +408,22 @@ fn harvest(
     }
     // One net seed after replant is a deterministic vanilla-attainable yield.
     // Keep it real stock so the settlement can seed its own future fields.
-    let seed = net_seed(state, v, item);
+    let seed = net_seed(state, v, item)
+        .map(|item| {
+            (
+                item,
+                state
+                    .test_acceleration
+                    .gathered_count(1, seed_key ^ u64::from(item)),
+            )
+        })
+        .filter(|(_, count)| *count > 0);
     let before = seed.map(|_| v.inventory.clone());
     super::brain::add_inventory(v, &mut produce, maximum);
-    if let Some(seed) = seed {
-        let mut seed = ItemStack::new(seed, 1);
+    if let Some((item, count)) = seed {
+        let mut seed = ItemStack::new(item, count);
         let maximum = state.registry.item_rules().max_stack(&seed);
-        if super::brain::add_inventory(v, &mut seed, maximum) != 1 {
+        if super::brain::add_inventory(v, &mut seed, maximum) != count {
             v.inventory = before.expect("seed output has a transaction pre-image");
             return false;
         }

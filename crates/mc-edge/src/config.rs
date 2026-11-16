@@ -45,6 +45,9 @@ pub struct EdgeConfig {
     /// Attributed block/container history and `/co` rollback.
     #[serde(default)]
     pub block_log: BlockLogSection,
+    /// Explicit test-only native settlement acceleration.
+    #[serde(default)]
+    pub test_acceleration: mc_core::test_acceleration::TestAcceleration,
     /// Access lists live beside the explicit config, otherwise in the cwd.
     #[serde(skip, default = "default_server_dir")]
     pub(crate) server_dir: PathBuf,
@@ -670,6 +673,9 @@ impl EdgeConfig {
             log_unknown_leaves(&origin_name, &table);
         }
         let mut cfg = parsed.known;
+        cfg.test_acceleration
+            .validate()
+            .map_err(anyhow::Error::msg)?;
         cfg.server_dir = origin
             .and_then(Path::parent)
             .filter(|path| !path.as_os_str().is_empty())
@@ -749,6 +755,7 @@ const KNOWN_SECTIONS: &[&str] = &[
     "query",
     "resource_pack",
     "recorder",
+    "test_acceleration",
 ];
 
 /// Unknown leaf keys (`section.key`) under a known section, depth-first.
@@ -794,6 +801,10 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
         ("auth", &["online_mode", "require_plugin_login"]),
         ("proxy", &["mode", "secret"]),
         ("plugins", &["directory"]),
+        (
+            "test_acceleration",
+            mc_core::test_acceleration::TestAcceleration::KEYS,
+        ),
         ("anti_xray", &["overworld", "nether"]),
         (
             "computer",
@@ -901,6 +912,54 @@ fn log_unknown_leaves(origin: &str, table: &toml::Table) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_acceleration_defaults_parses_and_rejects_invalid_values() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(
+            default.test_acceleration,
+            mc_core::test_acceleration::TestAcceleration::default()
+        );
+        let text = concat!(
+            "[test_acceleration]\n",
+            "gathering_yield=4.0\n",
+            "construction_speed=3.0\n",
+            "birth_chance=2.0\n",
+            "migration_rate=5.0\n",
+        );
+        let cfg = EdgeConfig::from_toml(text, None).unwrap();
+        assert_eq!(
+            cfg.test_acceleration,
+            mc_core::test_acceleration::TestAcceleration {
+                gathering_yield: 4.0,
+                construction_speed: 3.0,
+                birth_chance: 2.0,
+                migration_rate: 5.0,
+            }
+        );
+        assert_eq!(
+            crate::server::core_config(&cfg).test_acceleration,
+            cfg.test_acceleration
+        );
+        let table = toml::from_str::<toml::Table>(text).unwrap();
+        assert!(unknown_leaves(&table).is_empty());
+        for key in [
+            "gathering_yield",
+            "construction_speed",
+            "birth_chance",
+            "migration_rate",
+        ] {
+            for value in ["0.0", "-1.0", "nan", "+inf", "-inf"] {
+                let error =
+                    EdgeConfig::from_toml(&format!("[test_acceleration]\n{key}={value}"), None)
+                        .unwrap_err();
+                assert!(error.to_string().contains(key), "{error}");
+            }
+            let cfg =
+                EdgeConfig::from_toml(&format!("[test_acceleration]\n{key}=0.5"), None).unwrap();
+            cfg.test_acceleration.validate().unwrap();
+        }
+    }
 
     #[test]
     fn empty_config_takes_defaults() {

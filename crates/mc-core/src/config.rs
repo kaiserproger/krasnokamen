@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+use crate::test_acceleration::TestAcceleration;
+
 /// Configuration for [`crate::Core`].
 #[derive(Debug, Clone)]
 pub struct CoreConfig {
@@ -54,6 +56,8 @@ pub struct CoreConfig {
     pub spawn_protection: u32,
     /// Per-mob switches layered under the `mobGriefing` gamerule.
     pub mob_griefing: MobGriefingRules,
+    /// Explicit test-only settlement acceleration; all-one is normal gameplay.
+    pub test_acceleration: TestAcceleration,
     /// `[block_log]`: attributed block/container history for `/co`.
     pub block_log: BlockLogSettings,
     /// Opt-in per-tick input log under `<world>/input-log/` (replay support;
@@ -138,6 +142,7 @@ impl CoreConfig {
             enable_command_block: false,
             spawn_protection: 16,
             mob_griefing: MobGriefingRules::default(),
+            test_acceleration: TestAcceleration::default(),
             block_log: BlockLogSettings::default(),
             input_log: false,
             worldgen_gpu: false,
@@ -149,6 +154,9 @@ impl CoreConfig {
 #[derive(Debug, Error)]
 #[cfg_attr(test, derive(Clone))]
 pub enum CoreError {
+    /// Invalid operator configuration, before opening the world.
+    #[error("config: {0}")]
+    Config(String),
     /// Component discovery, configuration or runtime startup failed closed.
     #[error("plugin: {0}")]
     Plugin(String),

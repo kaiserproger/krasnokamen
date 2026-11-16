@@ -139,6 +139,7 @@ pub(super) fn load_dimension_state(
     tick_state.enable_command_block = config.enable_command_block;
     tick_state.spawn_protection = config.spawn_protection;
     tick_state.mob_griefing = config.mob_griefing;
+    tick_state.test_acceleration = config.test_acceleration;
     tick_state.config_view_distance = i32::from(config.view_distance);
     tick_state.dimension = dimension;
     tick_state.tick = recovered_tick;

@@ -135,6 +135,41 @@ pub(super) fn storage(state: &mut TickState, v: &VillagerState, position: [i32; 
 }
 
 #[test]
+fn test_acceleration_scales_native_mining_yield() {
+    for (factor, expected) in [(1.0, 1), (4.0, 4)] {
+        let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
+        state.test_acceleration.gathering_yield = factor;
+        let mut changes = ChangeSet::default();
+        for tick in 0..40 {
+            state.tick = tick * 20;
+            let target = mining::work(&mut state, slot, &mut v, &mut changes);
+            if !changes.blocks.is_empty() {
+                break;
+            }
+            if let Some(target) = target {
+                state.entities.set_pos(
+                    slot,
+                    [
+                        f64::from(target.x) + 0.5,
+                        f64::from(target.y),
+                        f64::from(target.z) + 0.5,
+                    ],
+                );
+            }
+        }
+        assert_eq!(changes.blocks.len(), 1);
+        assert_eq!(
+            v.inventory
+                .iter()
+                .flatten()
+                .map(|stack| stack.count)
+                .sum::<i32>(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn miner_skips_cave_below_certified_surface_when_trying_alternate_lane() {
     let (mut state, slot, mut v) = fixture(BuildingKind::Mine);
     state

@@ -536,12 +536,18 @@ pub(super) fn work(
         drop_target(v);
         return None;
     };
-    if mining::room(state, v, &ItemStack::new(item, 1)) < 1 {
+    let count = state.test_acceleration.gathered_count(
+        1,
+        state.world.seed() as u64
+            ^ state.tick.rotate_left(17)
+            ^ state.entities.body(slot).id.0 as u64,
+    );
+    if mining::room(state, v, &ItemStack::new(item, count)) < count {
         v.lumber_progress.returning = true;
         return mining::deposit(state, slot, v);
     }
     let air = state.registry.states.air;
-    mining::collect(state, v, item, 1);
+    mining::collect(state, v, item, count);
     mining::replace(state, changes, pos, air);
     v.lumber_progress.layer += 1;
     if v.lumber_progress.layer >= v.lumber_progress.height {

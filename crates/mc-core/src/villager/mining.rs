@@ -1023,7 +1023,13 @@ pub(super) fn work(
     let path = block_path(state, pos)?;
     if !clear(path) {
         let item = item_id(state, drop_name(path))?;
-        if room(state, v, &ItemStack::new(item, 1)) < 1 {
+        let count = state.test_acceleration.gathered_count(
+            1,
+            state.world.seed() as u64
+                ^ state.tick.rotate_left(17)
+                ^ state.entities.body(slot).id.0 as u64,
+        );
+        if room(state, v, &ItemStack::new(item, count)) < count {
             v.mining_progress.returning = true;
             return deposit(state, slot, v);
         }
@@ -1033,7 +1039,7 @@ pub(super) fn work(
             .block(&mc_data::Identifier::parse("minecraft:air").ok()?)?
             .default
             .0;
-        collect(state, v, item, 1);
+        collect(state, v, item, count);
         replace(state, changes, pos, air);
     }
     v.mining_progress.layer += 1;

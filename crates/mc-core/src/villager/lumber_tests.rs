@@ -135,6 +135,28 @@ fn acquire(
     );
 }
 
+#[test]
+fn test_acceleration_scales_native_lumber_yield() {
+    for (factor, expected) in [(1.0, 1), (4.0, 4)] {
+        let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+        state.test_acceleration.gathering_yield = factor;
+        tree(&mut state, 10, 10, 5);
+        let mut changes = ChangeSet::default();
+        acquire(&mut state, slot, &mut v, &mut changes);
+        state.tick += 20;
+        lumber::work(&mut state, slot, &mut v, &mut changes);
+        assert_eq!(changes.blocks.len(), 1);
+        assert_eq!(
+            v.inventory
+                .iter()
+                .flatten()
+                .map(|stack| stack.count)
+                .sum::<i32>(),
+            expected
+        );
+    }
+}
+
 /// Seed 24: the radius sweep sent the worker 85 blocks away with a mature tree
 /// five blocks away, exhausting the workday on travel instead of funding a house.
 #[test]

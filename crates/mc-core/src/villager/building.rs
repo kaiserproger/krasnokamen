@@ -306,7 +306,7 @@ fn in_reach(
 }
 
 /// Called once per construction admission, before the brain detaches carry.
-/// One transfer OR one canonical one-cell advance, never both in an attempt.
+/// One transfer OR budgeted canonical cell advances, never both in an attempt.
 pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     let Some(project) = state
         .settlements
@@ -319,54 +319,65 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     if executor::recover(state, id, &project.structure) == Ok(true) {
         return;
     }
-    let next = match executor::next_cell(state, id, &project.structure) {
-        Ok(Some(next)) => next,
-        Ok(None) => {
-            construction::finish_project(state, id);
+    let steps = state
+        .test_acceleration
+        .construction_steps(state.world.seed() as u64 ^ state.tick.rotate_left(17) ^ id.0);
+    for step in 0..steps {
+        let next = match executor::next_cell(state, id, &project.structure) {
+            Ok(Some(next)) => next,
+            Ok(None) => {
+                construction::finish_project(state, id);
+                return;
+            }
+            Err(_) => return,
+        };
+        let Some(slot) = construction::residents(state, id).find(|slot| {
+            state.entities.body(*slot).alive
+                && !crate::settlements::economy::worker_reserved(
+                    state,
+                    Some(id),
+                    state.entities.row(*slot).uuid,
+                )
+                && state
+                    .entities
+                    .row(*slot)
+                    .villager
+                    .as_ref()
+                    .is_some_and(|v| v.settlement == Some(id) && working(state, v))
+        }) else {
+            return;
+        };
+        let Ok(item) = executor::next_material(state, id, &project.structure) else {
+            return;
+        };
+        if let Some((item, count)) = item
+            && !carried(
+                state.entities.row(slot).villager.as_ref().expect("builder"),
+                item,
+                count,
+            )
+        {
+            if step == 0
+                && let Some(point) = storage_target(state, slot, id, item)
+                && super::mining::near(state, slot, point, 2.5)
+            {
+                let uuid = state.entities.row(slot).uuid;
+                let _ = executor::fetch(state, uuid, [point.x, point.y, point.z], item);
+            }
             return;
         }
-        Err(_) => return,
-    };
-    let Some(slot) = construction::residents(state, id).find(|slot| {
-        state.entities.body(*slot).alive
-            && !crate::settlements::economy::worker_reserved(
-                state,
-                Some(id),
-                state.entities.row(*slot).uuid,
-            )
-            && state
-                .entities
-                .row(*slot)
-                .villager
-                .as_ref()
-                .is_some_and(|v| v.settlement == Some(id) && working(state, v))
-    }) else {
-        return;
-    };
-    let Ok(item) = executor::next_material(state, id, &project.structure) else {
-        return;
-    };
-    if let Some((item, count)) = item
-        && !carried(
-            state.entities.row(slot).villager.as_ref().expect("builder"),
-            item,
-            count,
-        )
-    {
-        if let Some(point) = storage_target(state, slot, id, item)
-            && super::mining::near(state, slot, point, 2.5)
-        {
-            let uuid = state.entities.row(slot).uuid;
-            let _ = executor::fetch(state, uuid, [point.x, point.y, point.z], item);
+        if !in_reach(state, slot, &project, next) {
+            return;
         }
-        return;
-    }
-    if !in_reach(state, slot, &project, next) {
-        return;
-    }
-    let uuid = state.entities.row(slot).uuid;
-    if executor::advance(state, id, &project.structure, uuid) == Ok(true) {
-        construction::finish_project(state, id);
+        let uuid = state.entities.row(slot).uuid;
+        match executor::advance(state, id, &project.structure, uuid) {
+            Ok(true) => {
+                construction::finish_project(state, id);
+                return;
+            }
+            Ok(false) => {}
+            Err(_) => return,
+        }
     }
 }
 

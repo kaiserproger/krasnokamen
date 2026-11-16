@@ -698,6 +698,10 @@ impl Core {
     /// and journal threads.
     pub fn open(mut config: CoreConfig) -> Result<Self, CoreError> {
         stop::install_panic_hook();
+        config
+            .test_acceleration
+            .startup()
+            .map_err(CoreError::Config)?;
         let is_stage = |path: &std::path::Path| {
             path.file_name()
                 .and_then(std::ffi::OsStr::to_str)
