@@ -106,6 +106,9 @@ pub struct Registry {
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,
+    /// Migration policy observations, owned by the migration module; runtime
+    /// only, never persisted.
+    pub(super) migration: super::migration::State,
 }
 
 impl SettlementRecord {
