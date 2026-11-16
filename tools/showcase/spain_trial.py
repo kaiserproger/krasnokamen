@@ -5,10 +5,18 @@ Run through Main's mem-run with KRASNOKAMEN_SERVER_BINARY set to Main's pin.
 Stock is an explicit, bounded operator-supplied fixture, inserted ONLY into
 client-observed empty slots. Cultural buildings are never pasted. Every frame
 is an actual-window GPU capture; the one-minute film is 60 such frames at 1 fps.
+
+Fast runs (owner, 2026-11-16): `--scratch /dev/shm` keeps the world and every
+output on tmpfs and copies the complete directory to `--out` at the end;
+`--server-cpus`/`--client-cpus` pin the server and the client with its Xvfb to
+disjoint CPUs; `--frames 12` takes fewer census frames for diagnosis while the
+simulation still advances in the same 60 sprints. Acceptance needs 60 frames.
 """
 from __future__ import annotations
 
 import argparse
+import shutil
+import tempfile
 from collections import Counter
 import hashlib
 from itertools import islice
@@ -147,17 +155,45 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
+def cpu_count(spec: str) -> int:
+    """Number of CPUs in a taskset list such as `6,7,14-15`."""
+    total = 0
+    for part in spec.split(','):
+        low, _, high = part.partition('-')
+        total += int(high or low) - int(low) + 1
+    return total
+
+
+def pin(process: subprocess.Popen, cpus: str) -> None:
+    """Restrict every thread of a started process; new threads inherit it."""
+    subprocess.run(['taskset', '-a', '-p', '-c', cpus, str(process.pid)], check=True, stdout=subprocess.DEVNULL)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--seed', type=int, choices=[100], default=100)
     parser.add_argument('--days', type=int, default=4)
     parser.add_argument('--timeout', type=float, default=3600)
+    parser.add_argument('--frames', type=int, default=60, help='census frames; must divide the 60 sprints')
+    parser.add_argument('--scratch', type=Path, help='run on this (tmpfs) directory and copy the result to --out')
+    parser.add_argument('--server-cpus', help='taskset CPU list for the server')
+    parser.add_argument('--client-cpus', help='taskset CPU list for the client and its Xvfb')
     args = parser.parse_args()
     if args.days < 1 or args.days * 24000 % 60:
         parser.error('days must yield 60 integral simulation intervals')
-    out = args.out.resolve()
-    out.mkdir(parents=True, exist_ok=False)
+    if args.frames < 1 or 60 % args.frames:
+        parser.error('frames must divide 60')
+    every = 60 // args.frames
+    final = args.out.resolve()
+    if final.exists():
+        parser.error(f'{final} already exists')
+    if args.scratch is None:
+        out = final
+        out.mkdir(parents=True)
+    else:
+        final.parent.mkdir(parents=True, exist_ok=True)
+        out = Path(tempfile.mkdtemp(prefix=f'{final.name}-', dir=args.scratch)).resolve()
     binary = Path(os.environ['KRASNOKAMEN_SERVER_BINARY']).resolve()
     if not binary.is_file():
         raise RuntimeError(f'missing Main-pinned server: {binary}')
@@ -165,6 +201,8 @@ def main() -> None:
         sha = hashlib.file_digest(executable, 'sha256').hexdigest()
     run = {'seed': args.seed, 'days_requested': args.days, 'server': {'path': str(binary), 'sha256': sha},
            'snapshots': [], 'frames': [], 'fixture_commands': [], 'status': 'running',
+           'frames_requested': args.frames, 'scratch': None if args.scratch is None else str(out),
+           'cpus': {'server': args.server_cpus, 'client': args.client_cpus},
            'fixture_disclosure': 'Bounded gifted supplies in real storage; no structure paste, no population grant, no time add.'}
     driver = Path(__file__).resolve()
     run['driver'] = {'path': str(driver), 'sha256': hashlib.sha256(driver.read_bytes()).hexdigest()}
@@ -191,12 +229,20 @@ def main() -> None:
     try:
         env = {**os.environ, 'KRASNOKAMEN_HARNESS_LOG_STDOUT': '1', 'RUST_LOG': 'info,settlement_audit=info'}
         command = [str(binary), '--config', str(config)]
+        if args.server_cpus:
+            command = ['taskset', '-c', args.server_cpus, *command]
         run['server']['command'] = command
         server = runtime.start_server(command, cwd=runtime.REPO_ROOT, env=env, stdin=subprocess.PIPE,
                                       stdout=log_handle, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, 180, server, log_path=log_path)
         xvfb, display, _ = runtime.start_xvfb(out)
+        if args.client_cpus:
+            pin(xvfb, args.client_cpus)
+            # llvmpipe/lavapipe size their render pools from this, not from affinity.
+            os.environ['LP_NUM_THREADS'] = str(cpu_count(args.client_cpus))
         client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f'127.0.0.1:{port}', USERNAME, 180, display=display)
+        if args.client_cpus:
+            pin(client, args.client_cpus)
         with ProbeSteps(mcp, out / 'probe', args.timeout, 'spain-trial') as probe:
             probe.call('minecraft_wait_for_play', {'timeout_seconds': 180})
             def console(command: str) -> None:
@@ -224,7 +270,7 @@ def main() -> None:
             supplied_children = set()
             queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
             ordered = 'spanish_plaza'
-            for frame in range(60):
+            for step in range(60):
                 run.setdefault('sprints', []).append(item_merge._sprint(server, log_path, args.days * 24000 // 60, probe.remaining(limit=None)))
                 with urlopen(run['dashboard'] + f'/telemetry.jsonl?after_tick={max(0, telemetry_tick)}', timeout=20) as response:
                     raw = response.read().decode()
@@ -234,6 +280,9 @@ def main() -> None:
                         if row['tick'] > telemetry_tick:
                             telemetry.write(json.dumps(row) + '\n')
                             telemetry_tick = row['tick']
+                if (step + 1) % every:
+                    continue
+                frame = (step + 1) // every - 1
                 snapshot = record_census(probe, console, run, log_path)
                 run['snapshots'].append(snapshot)
                 parent = next(town for town in snapshot['settlements'] if town['owner'] is not None and not town['name'].startswith('colony_'))
@@ -306,32 +355,39 @@ def main() -> None:
         run['status'], run['error'] = 'failed', f'{type(error).__name__}: {error}'
         raise
     finally:
-        if mcp is not None:
-            mcp.close()
-        runtime.stop_process(client)
-        if client_log is not None:
-            client_log.close()
-        runtime.stop_process(server, interrupt=True, timeout_seconds=120)
-        runtime.stop_process(xvfb)
-        log_handle.close()
-        run['elapsed_seconds'] = time.monotonic() - started
-        run['shutdown'] = {'server': server.returncode if server is not None else None, 'client': client.returncode if client is not None else None}
-        run['client'] = ctx.client_evidence
-        dump(out / 'run.json', run)
-        if server is not None and server.returncode == 0:
-            command = [str(binary), '--config', str(config), 'world', 'census', '--source', str(out / 'world'), '--receipt', str(out / 'census.json')]
-            with (out / 'census.log').open('wb') as log:
-                result = subprocess.run(command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, check=False, timeout=180)
-            run['census'] = {'command': command, 'exit': result.returncode, 'receipt': str(out / 'census.json')}
-        if run['snapshots'] and telemetry_path.exists():
-            chronicle = extract(run, [json.loads(line) for line in telemetry_path.read_text().splitlines() if line], log_path.read_text(errors='replace'))
-            dump(out / 'chronicle.json', chronicle)
-            (out / 'captions.txt').write_text('\n'.join(event['caption'] for event in chronicle['events']) + '\n')
-        if len(run['frames']) == 60:
-            command = ['ffmpeg', '-nostdin', '-y', '-framerate', '1', '-i', str(out / 'screenshots/frame-%03d.png'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(out / 'timelapse.mp4')]
-            with (out / 'encode.log').open('wb') as log:
-                subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
-        dump(out / 'run.json', run)
+        try:
+            if mcp is not None:
+                mcp.close()
+            runtime.stop_process(client)
+            if client_log is not None:
+                client_log.close()
+            runtime.stop_process(server, interrupt=True, timeout_seconds=120)
+            runtime.stop_process(xvfb)
+            log_handle.close()
+            run['elapsed_seconds'] = time.monotonic() - started
+            run['shutdown'] = {'server': server.returncode if server is not None else None, 'client': client.returncode if client is not None else None}
+            run['client'] = ctx.client_evidence
+            dump(out / 'run.json', run)
+            if server is not None and server.returncode == 0:
+                command = [str(binary), '--config', str(config), 'world', 'census', '--source', str(out / 'world'), '--receipt', str(out / 'census.json')]
+                with (out / 'census.log').open('wb') as log:
+                    result = subprocess.run(command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, check=False, timeout=180)
+                run['census'] = {'command': command, 'exit': result.returncode, 'receipt': str(out / 'census.json')}
+            if run['snapshots'] and telemetry_path.exists():
+                chronicle = extract(run, [json.loads(line) for line in telemetry_path.read_text().splitlines() if line], log_path.read_text(errors='replace'))
+                dump(out / 'chronicle.json', chronicle)
+                (out / 'captions.txt').write_text('\n'.join(event['caption'] for event in chronicle['events']) + '\n')
+            if len(run['frames']) == 60:
+                command = ['ffmpeg', '-nostdin', '-y', '-framerate', '1', '-i', str(out / 'screenshots/frame-%03d.png'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(out / 'timelapse.mp4')]
+                with (out / 'encode.log').open('wb') as log:
+                    subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
+            dump(out / 'run.json', run)
+        finally:
+            if args.scratch is not None:
+                # The receipt is the complete copy; the tmpfs run directory is
+                # removed only after copytree returned.
+                shutil.copytree(out, final, symlinks=True)
+                shutil.rmtree(out)
 
 
 if __name__ == '__main__':
