@@ -1091,9 +1091,16 @@ fn sigkill_child_reopen_keeps_identical_records_and_high_water() {
         assert_eq!(record.owner.as_deref(), Some("owner"));
         assert_eq!(record.anchor, [0, 64, 0]);
         assert_eq!(record.radius, 48);
+        // The first consumption-clock initialization now touches idle secondtown.
         assert_eq!(
             record.revision,
-            if record.name == "killtown" { 7 } else { 1 }
+            if record.name == "killtown" { 7 } else { 2 }
+        );
+        let production = serde_json::to_value(&record.economy.production).unwrap();
+        assert_eq!(
+            production["consumption"]["next_due"].as_u64(),
+            Some(if record.name == "killtown" { 24_001 } else { 2 }),
+            "the phase initialized at game tick one survives SIGKILL"
         );
     }
     assert_eq!(
