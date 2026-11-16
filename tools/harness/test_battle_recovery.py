@@ -377,5 +377,72 @@ class InputsAndOutputsTests(unittest.TestCase):
             br.run(profiles.ProfileContext(Path("/nonexistent"), scenario_id="battle-kit-census", extra_args=["--x"]))
 
 
+class ClientKitTests(unittest.TestCase):
+    ITEMS = ["minecraft:iron_helmet", "minecraft:iron_spear", "minecraft:shield"]
+
+    def test_a_drop_moves_exactly_one_kit_piece(self):
+        issued = {item: 1 for item in self.ITEMS}
+        dropped, held = br.kit_after_drop(self.ITEMS, issued, {"minecraft:iron_helmet": 1, "minecraft:shield": 1})
+        self.assertEqual((dropped, held), ("minecraft:iron_spear",
+                                           {"minecraft:iron_helmet": 1, "minecraft:iron_spear": 0, "minecraft:shield": 1}))
+        for after in (issued, {"minecraft:shield": 1}, {**issued, "minecraft:iron_spear": 2}):
+            with self.subTest(after=after), self.assertRaises(RuntimeError):
+                br.kit_after_drop(self.ITEMS, issued, after)
+
+    def test_roles_after_login_hold_the_kit_minus_the_dropped_piece(self):
+        held = {"minecraft:iron_helmet": 1, "minecraft:iron_spear": 0, "minecraft:shield": 1}
+        viewer = {"state": {"screen": "playing", "gamemode": "spectator", "camera": {"entity_id": 7}}}
+
+        def holder(counts):
+            return {"state": {"screen": "playing", "gamemode": "survival", "player": {"id": 7}},
+                    "inventory": {"counts": counts}}
+
+        report = {"scenario": "battle-auth-hydration", "assertions": {}}
+        br.roles(report, "after", holder({"minecraft:iron_helmet": 1, "minecraft:shield": 1}), viewer, 7, kit=held)
+        self.assertEqual(report["observations"]["after"]["expected_kit"], held)
+        for counts in ({"minecraft:iron_helmet": 1, "minecraft:iron_spear": 1, "minecraft:shield": 1},
+                       {"minecraft:iron_helmet": 1}):
+            with self.subTest(counts=counts), self.assertRaises(AssertionError):
+                br.roles(report, "after", holder(counts), viewer, 7, kit=held)
+
+    def test_a_missing_auth_acknowledgement_reports_the_chat_without_the_password(self):
+        class Client:
+            name = "PovRed"
+
+            def __init__(self):
+                self.calls = []
+
+            def last_event(self):
+                return 3
+
+            def driver(self, tool, **args):
+                self.calls.append(tool)
+                if tool == "wait_for":
+                    raise RuntimeError("horizon-ctl wait_for failed: timeout")
+                if tool == "messages":
+                    return {"chat": ["Matching passwords required", "echo s3cret-pw"]}
+                return {}
+
+        client = Client()
+        with self.assertRaises(RuntimeError) as caught:
+            br._authenticate(client, "s3cret-pw", register=True)
+        self.assertIn("Matching passwords required", str(caught.exception))
+        self.assertIn("/register not acknowledged", str(caught.exception))
+        self.assertNotIn("s3cret-pw", str(caught.exception))
+        self.assertEqual(client.calls, ["command", "wait_for", "messages"])
+
+    def test_tool_timeouts_reach_horizon_ctl(self):
+        sent = []
+        ctl = object.__new__(br.HorizonCtl)
+        ctl.tools = {"wait_for", "wait_ready", "events"}
+        ctl.log = mock.Mock()
+        ctl._rpc = lambda method, params, timeout: sent.append((params["arguments"], timeout)) or {"content": []}
+        ctl("wait_for", condition="chat", value="x", timeout=60)
+        ctl("wait_ready", seconds=400)
+        ctl("events")
+        self.assertEqual(sent, [({"condition": "chat", "value": "x", "timeout": 60}, 120.0),
+                                ({"seconds": 400}, 460.0), ({}, 120.0)])
+
+
 if __name__ == "__main__":
     unittest.main()

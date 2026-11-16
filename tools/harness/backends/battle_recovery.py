@@ -10,10 +10,12 @@ Three named scenarios share one lifecycle; each asserts its own verdict:
   battle runner keeps ``crash-handoff.json`` and the crash copy, recovery uses
   them and the real clients rejoin the recovered battle.
 * ``battle-auth-hydration`` — a server with the first-party ``krasnokamen-auth``
-  package; holder and spectator register, SIGKILL mid-battle, both rejoin locked
-  (no kit, saved camera kept), then type ``/login`` through the real client: the
-  kit returns exactly once and the camera binds again; a later re-entry issues
-  nothing twice.
+  package; holder and spectator register, PovRed drops a kit piece, SIGKILL
+  mid-battle, both rejoin locked (no kit, saved camera kept), then type ``/login``
+  through the real client: the rest of the kit returns exactly once (the dropped
+  piece is not issued again) and the camera binds again; a later re-entry issues
+  nothing twice. The same crash census runs, its removal control on the dropped
+  item entity.
 
 Census method (all on derived copies, never on the primary evidence): the stopped
 SIGKILL image is hashed and copied before any reopen; hot ``backup`` images are
@@ -394,11 +396,13 @@ class HorizonCtl:
             raise RuntimeError(f"horizon-ctl {method}: {reply['error']}")
         return reply["result"]
 
-    def __call__(self, tool: str, *, secret: bool = False, timeout: float = 120, **args: Any) -> dict[str, Any]:
+    def __call__(self, tool: str, *, secret: bool = False, **args: Any) -> dict[str, Any]:
+        """Call one tool. Its own `timeout` (wait_for) or `seconds` (wait_ready) argument reaches the tool;
+        the reply is awaited that long plus a minute, else two minutes."""
         if tool not in self.tools:
             raise RuntimeError(f"horizon-ctl has no tool {tool}")
-        if "timeout" in args:
-            timeout = max(timeout, float(args["timeout"]) + 60)
+        limit = args.get("timeout", args.get("seconds"))
+        timeout = 120.0 if limit is None else max(120.0, float(limit) + 60)
         result = self._rpc("tools/call", {"name": tool, "arguments": args}, timeout)
         texts = [part for part in result.get("content", []) if part.get("type") == "text"]
         reply = json.loads(texts[-1]["text"]) if texts else {}
@@ -470,13 +474,15 @@ class Horizon:
     def last_event(self) -> int:
         return self.driver("events")["last"]
 
-    def wait_kit(self, timeout: float = 60) -> None:
-        """Until this client shows the kit's spear and shield, or the deadline: the server logs a rearm
-        before its slot packets reach the client. The capture that follows reports what arrived."""
+    def wait_kit(self, items: tuple[str, ...] = ("minecraft:iron_spear", "minecraft:shield"),
+                 timeout: float = 60) -> None:
+        """Until this client shows each of `items` (default the kit's spear and shield), or the deadline:
+        the server logs a rearm before its slot packets reach the client. The capture that follows
+        reports what arrived."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             counts = self.driver("inventory")["counts"]
-            if counts.get("minecraft:iron_spear") and counts.get("minecraft:shield"):
+            if all(counts.get(item) for item in items):
                 return
             time.sleep(0.25)
 
@@ -517,19 +523,23 @@ class Horizon:
                 self.log = None
 
 
-def roles(report: dict[str, Any], name: str, holder: dict[str, Any], viewer: dict[str, Any], entity: int) -> None:
-    """Holder plays survival with exactly one of every kit piece; the spectator's camera is bound to him."""
+def roles(report: dict[str, Any], name: str, holder: dict[str, Any], viewer: dict[str, Any], entity: int,
+          kit: dict[str, int] | None = None) -> None:
+    """Holder plays survival with exactly one of every kit piece; the spectator's camera is bound to him.
+
+    With `kit` (item -> count, 0 for a piece he dropped) the holder holds exactly that instead."""
     state, counts = holder["state"], holder["inventory"]["counts"]
     bound = viewer["state"].get("camera")
+    holds = (counts.get("minecraft:iron_spear") == 1 and counts.get("minecraft:shield") == 1 if kit is None
+             else _kit_counts(counts, list(kit)) == kit)
     check(report, name,
           state.get("screen") == "playing" and state.get("gamemode") == "survival" and bool(state.get("player"))
           and viewer["state"].get("screen") == "playing" and viewer["state"].get("gamemode") == "spectator"
           and bound is not None and bound.get("entity_id") == entity
-          and counts.get("minecraft:iron_spear") == 1 and counts.get("minecraft:shield") == 1
-          and all(count == 1 for count in counts.values()),
+          and holds and all(count == 1 for count in counts.values()),
           {"holder_state": {k: state.get(k) for k in ("screen", "gamemode")}, "holder_counts": counts,
            "viewer_state": {k: viewer["state"].get(k) for k in ("screen", "gamemode", "camera")},
-           "holder_entity": entity})
+           "holder_entity": entity, **({"expected_kit": kit} if kit is not None else {})})
 
 
 # ----------------------------------------------------------------------------- export reading
@@ -1465,11 +1475,18 @@ def auth_config(inputs: dict[str, Any], root: Path, port: int, dashboard: int) -
 
 def _authenticate(client: Horizon, password: str, register: bool) -> None:
     seq = client.last_event()
+    verb = "register" if register else "login"
     command = f"register {password} {password}" if register else f"login {password}"
     client.driver("command", secret=True, command=command)
-    if register:
-        client.driver("wait_for", condition="chat", value="Successfully registered", since=seq, timeout=60)
-    client.driver("wait_for", condition="chat", value="Successfully logged in", since=seq, timeout=60)
+    try:
+        if register:
+            client.driver("wait_for", condition="chat", value="Successfully registered", since=seq, timeout=60)
+        client.driver("wait_for", condition="chat", value="Successfully logged in", since=seq, timeout=60)
+    except RuntimeError as error:
+        # The plugin's answer (a refusal hint, a usage line) is the evidence; it never echoes the password,
+        # which is scrubbed anyway before the chat enters the error.
+        chat = json.dumps(client.driver("messages")).replace(password, "[redacted]")
+        raise RuntimeError(f"{client.name} /{verb} not acknowledged ({error}); recent chat: {chat[:3000]}") from None
 
 
 def battle_image(history_batches: dict[tuple[int, int], Path], until: int) -> dict[str, Any] | None:
@@ -1488,6 +1505,17 @@ def battle_image(history_batches: dict[tuple[int, int], Path], until: int) -> di
 
 def _kit_counts(counts: dict[str, int], items: list[str]) -> dict[str, int]:
     return {item: counts.get(item, 0) for item in items}
+
+
+def kit_after_drop(items: list[str], before: dict[str, int], after: dict[str, int]) -> tuple[str, dict[str, int]]:
+    """The one kit piece a drop moved out of the holder's client inventory, and the kit he still holds
+    (item -> count, 0 for the dropped piece)."""
+    issued, held = _kit_counts(before, items), _kit_counts(after, items)
+    gone = [item for item in items if held[item] != issued[item]]
+    if any(count != 1 for count in issued.values()) or len(gone) != 1 or held[gone[0]] != 0:
+        raise RuntimeError(f"the drop did not move exactly one kit piece out of {HOLDER}'s inventory: "
+                           f"before {issued}, after {held}")
+    return gone[0], held
 
 
 def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, Any], display: str) -> None:
@@ -1568,6 +1596,18 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
         roles(report, "roles_before_cut", pre[0], pre[1], entity)
         items = sorted(pre[0]["inventory"]["counts"])
         backups.append(_phase_census(console, items, "issued", aux, clients))
+        # The dropped piece is the census's observed item entity: it lies in the durable world through
+        # the cut, the locked rejoin and /login, and the rearm must not issue it again.
+        seq = holder.last_event()
+        holder.driver("drop")
+        holder.driver("wait_for", condition="event", value="item", since=seq, timeout=120)
+        mark = console.mark()
+        console.send("save-all")
+        console.wait(r"Saved the game", mark)
+        dropped_item, held = kit_after_drop(items, pre[0]["inventory"]["counts"],
+                                            holder.capture("after-drop")["inventory"]["counts"])
+        report["dropped_kit_piece"] = dropped_item
+        backups.append(_phase_census(console, items, "dropped", aux, clients))
         os.kill(server.pid, signal.SIGKILL)
         server.wait(timeout=120)
         _record_exit(ctx, server_index, server)
@@ -1584,8 +1624,8 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
         evidence = crash_evidence(ctx, root, crash_copy)
         check(report, "crash_copy_equals_stopped_world", evidence["copy_equals_world"], None)
         census_root = root / "census"
-        early = [take_census(ctx, inputs["server"], config, census_root / "issued", phase="issued", epoch=0,
-                             backup=backups[0])]
+        early = [take_census(ctx, inputs["server"], config, census_root / backup["phase"], phase=backup["phase"],
+                             epoch=0, backup=backup) for backup in backups]
         crash = take_census(ctx, inputs["server"], config, census_root / "crash", phase="crash", epoch=0,
                             stopped=crash_copy, hashes=evidence["files"])
         kit = durable_issued_kit(report, early[0], items)
@@ -1629,10 +1669,10 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
         console.wait(rf"Battle live rearmed: {HOLDER} side=1", mark)
         console.wait(rf"Battle spectator placed: {VIEWER} target={HOLDER}", mark)
         entity = _holder_entity(console, mark)
-        holder.wait_kit()
+        holder.wait_kit(tuple(item for item, count in held.items() if count))
         viewer.wait_camera(entity)
         unlocked = [client.capture("after-login") for client in clients]
-        roles(report, "roles_restored_after_login", unlocked[0], unlocked[1], entity)
+        roles(report, "roles_restored_after_login", unlocked[0], unlocked[1], entity, kit=held)
         check(report, "holder_rearmed_once_after_login", console.count(rf"Battle live rearmed: {HOLDER} ") == 1,
               console.count(rf"Battle live rearmed: {HOLDER} "))
         backups.append(_phase_census(console, items, "login", aux, clients))
@@ -1642,11 +1682,11 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
         holder.start(address, "reentry")
         _authenticate(holder, passwords[HOLDER], register=False)
         console.wait(rf"Battle player online: {HOLDER} entity=", mark)
-        holder.wait_kit()
+        holder.wait_kit(tuple(item for item, count in held.items() if count))
         reentered = holder.capture("after-reentry")
         check(report, "reentry_issues_no_second_kit",
-              _kit_counts(reentered["inventory"]["counts"], items) == {item: 1 for item in items},
-              reentered["inventory"]["counts"])
+              _kit_counts(reentered["inventory"]["counts"], items) == held,
+              {"client_counts": reentered["inventory"]["counts"], "expected": held})
         backups.append(_phase_census(console, items, "reentry", aux, clients))
         for client in clients:
             client.stop()
@@ -1669,14 +1709,15 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
               {"battle_image_tick": (image or {}).get("tick"), "spectators": live.get("spectators"),
                "holds": [hold.get("name") for hold in live.get("holds", [])]})
         late = [take_census(ctx, inputs["server"], config, census_root / backup["phase"], phase=backup["phase"],
-                            epoch=1, backup=backup) for backup in backups[1:]]
+                            epoch=1, backup=backup) for backup in backups[2:]]
         final = take_census(ctx, inputs["server"], config, census_root / "stopped", phase="stopped", epoch=1,
                             stopped=root / "world", hashes=file_hashes(root / "world"))
         check(report, "crash_copy_unchanged", file_hashes(crash_copy) == evidence["files"], None)
         late[0]["epoch_start"] = crash["replay_tick"]
         recovery_history = wal_history(recovery_batches)
         finish_census(report, early + [crash] + late + [final], kit, roster, [pre_crash_history, recovery_history],
-                      root, control_index=1, exact={"crash", "locked", "login", "reentry", "stopped"})
+                      root, control_index=len(early),
+                      exact={"dropped", "crash", "locked", "login", "reentry", "stopped"})
         leaks = password_leaks(ctx.artifact_dir, list(passwords.values()))
         check(report, "password_never_logged", not leaks, leaks)
     finally:
