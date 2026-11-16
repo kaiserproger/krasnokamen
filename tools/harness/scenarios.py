@@ -749,6 +749,21 @@ SCENARIOS: dict[str, Scenario] = {
                "from them, the clients rejoin, the staged battle resumes with both roles and strikes",
         limits="the runner race is timing-dependent: one green run does not prove every interleaving",
     ),
+    "transit-crash": _entry(
+        id="transit-crash", summary="Migration transit custody survives SIGKILL at departure, in transit and arrival",
+        owner="core:settlements", evidence="persistence", profile="transit-crash",
+        sources=("tools/harness/transit_crash.py", "tools/harness/crash_wal.py",
+                 "crates/mc-core/src/settlements/transit.rs",
+                 "crates/mc-world-conversion/src/custody_census.rs"),
+        fixture="pinned release server (KRASNOKAMEN_SERVER_BINARY), fresh seed-2311 world, no players or plugins; "
+                "console-built platforms, two settlements, a native birth forms the departing household",
+        proves="at each cut the custody census of the crash copy (checkpoint rows plus published WAL, before any "
+               "entity is restored) holds every member UUID exactly once where the cut implies; the frozen "
+               "recovery starts at the durable tick and its clean-stop census agrees; with --control "
+               "forged-duplicate a body beside its record turns the census FAIL and recovery refuses",
+        limits="one household of three per cut; one run per invocation, timing-dependent interleavings need "
+               "at least three runs per cut; no player or real client is involved",
+    ),
     "battle-auth-hydration": _entry(
         id="battle-auth-hydration", summary="Auth-locked battle roles hydrate only after /login, once",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",

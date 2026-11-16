@@ -9,7 +9,7 @@ use mc_world::{BlockStateId, Chunk, ChunkPos};
 
 const SEED: i64 = 42;
 
-fn fields(
+pub(crate) fn fields(
     registry: &mc_core::registry::CoreRegistry,
     id: &str,
     n: u128,
@@ -28,7 +28,7 @@ fn fields(
     .unwrap()
 }
 
-fn member(
+pub(crate) fn member(
     mut fields: Vec<(String, Tag)>,
     settlement: i64,
     household: Option<&str>,
@@ -58,7 +58,7 @@ fn settlement_row(id: u64) -> Vec<u8> {
 
 /// One persisted transit record (ADR 0023) holding `members`, from settlement
 /// 7 to 8, with the household record `leave` removed (if any).
-fn transit_row(members: &[u128], household: Option<&str>) -> Vec<u8> {
+pub(crate) fn transit_row(members: &[u128], household: Option<&str>) -> Vec<u8> {
     let member = |n: u128| {
         serde_json::json!({
             "uuid": uuid::Uuid::from_u128(n).to_string(), "type_id": 0,
@@ -88,14 +88,16 @@ fn transit_row(members: &[u128], household: Option<&str>) -> Vec<u8> {
     .unwrap()
 }
 
-struct Fixture {
+pub(crate) struct Fixture {
     _dir: tempfile::TempDir,
-    world: PathBuf,
-    config: CoreConfig,
-    tick: u64,
+    pub(crate) world: PathBuf,
+    pub(crate) config: CoreConfig,
+    pub(crate) tick: u64,
 }
 
-type EntityFixture = (u32, i32, i32, u128, Vec<(String, Tag)>);
+pub(crate) type EntityFixture = (u32, i32, i32, u128, Vec<(String, Tag)>);
+/// One migration transit row: (record UUID, member UUIDs, household).
+pub(crate) type TransitFixture<'a> = (u128, &'a [u128], Option<&'a str>);
 
 /// Stopped native world: `entities` as (dimension, chunk x, chunk z, UUID, payload),
 /// optional persisted settlement 7, one baseline overworld chunk.
@@ -103,12 +105,11 @@ fn world(entities: Vec<EntityFixture>, settlement: bool) -> Fixture {
     world_with(entities, settlement, &[])
 }
 
-/// [`world`] plus migration transit rows as (record UUID, member UUIDs,
-/// household).
-fn world_with(
+/// [`world`] plus migration transit rows.
+pub(crate) fn world_with(
     entities: Vec<EntityFixture>,
     settlement: bool,
-    transits: &[(u128, &[u128], Option<&str>)],
+    transits: &[TransitFixture],
 ) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let world = dir.path().join("world");
@@ -270,7 +271,7 @@ fn census_refuses_transit_custody_held_twice() {
             ),
         )
     };
-    let cases: [(&[(u128, &[u128], Option<&str>)], &str); 3] = [
+    let cases: [(&[TransitFixture], &str); 3] = [
         (
             &[(0x10, &[0x10], None)],
             "UUID 00000000-0000-0000-0000-000000000010 of transit record",
