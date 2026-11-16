@@ -926,7 +926,8 @@ pub(super) fn hydrate(
 }
 
 /// Recovery check once every dimension hydrated: each member UUID is in one
-/// transit record only and is no world entity in any dimension, and no transit
+/// transit record only and is no world entity in any dimension, every member
+/// image passes the refusals of arrival's `restore_entity`, and no transit
 /// household is also a settlement's. A violating store refuses to open.
 pub(super) fn validate_custody(state: &TickState) -> Result<(), CoreError> {
     let households: BTreeSet<&str> = worlds(state)
@@ -946,6 +947,7 @@ pub(super) fn validate_custody(state: &TickState) -> Result<(), CoreError> {
                     )));
                 }
             }
+            restorable(world, *id, record)?;
             if let Some(family) = &record.household
                 && households.contains(family.id.as_str())
             {
@@ -955,6 +957,25 @@ pub(super) fn validate_custody(state: &TickState) -> Result<(), CoreError> {
                 )));
             }
         }
+    }
+    Ok(())
+}
+
+/// The refusals `restore_entity` applies to each member image on arrival
+/// (registered type, retained state, variants, finite motion, retained NBT),
+/// so every record recovery serves can re-enter.
+fn restorable(world: &TickState, id: uuid::Uuid, record: &Record) -> Result<(), CoreError> {
+    for member in &record.members {
+        crate::dimensions::recovery::validate_entity(world, 0, member)
+            .map_err(|error| storage(format!("record {id}: member image refused: {error}")))?;
+        crate::command_tag::normalize_opaque(member.state.opaque_entity_fields.clone()).map_err(
+            |error| {
+                storage(format!(
+                    "record {id}: member {} retained data refused: {error}",
+                    member.uuid
+                ))
+            },
+        )?;
     }
     Ok(())
 }

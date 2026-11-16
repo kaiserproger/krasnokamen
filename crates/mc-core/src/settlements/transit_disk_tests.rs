@@ -387,6 +387,17 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
     }
 }
 
+/// Close the world and return the error that refuses to reopen it.
+fn refusal(state: TickState, mut writer: JournalWriter, config: &CoreConfig) -> String {
+    writer.flush().unwrap();
+    drop(writer);
+    drop(state);
+    crate::core::recover_dimension_state(config, Dimension::Overworld)
+        .err()
+        .expect("recovery refuses")
+        .to_string()
+}
+
 /// Negative control: a checkpoint that kept the departed bodies besides the
 /// transit row (no entity tombstones) refuses to open.
 #[test]
@@ -396,16 +407,50 @@ fn recovery_refuses_a_member_stored_as_body_and_record() {
     let mut t = town(&config, directory.path());
     depart_in(&mut t, true);
     checkpoint(&mut t.state, &config, true);
-    let mut writer = t.writer;
-    writer.flush().unwrap();
-    drop(writer);
-    drop(t.state);
-    let error = crate::core::recover_dimension_state(&config, Dimension::Overworld)
-        .err()
-        .expect("recovery refuses")
-        .to_string();
+    let error = refusal(t.state, t.writer, &config);
     assert!(
         error.contains("both a world entity and in transit record"),
         "{error}"
     );
+}
+
+/// A member image `restore_entity` refuses on arrival: an unregistered type.
+fn unrestorable(state: &mut TickState) {
+    let record = state.settlements.transit.records.values_mut().next().unwrap();
+    record.members[0].type_id = u32::MAX;
+}
+
+/// A checkpoint row whose member image arrival could not restore refuses to
+/// open, instead of serving a record that never re-enters.
+#[test]
+fn recovery_refuses_a_checkpoint_row_with_an_unrestorable_member() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut t = town(&config, directory.path());
+    depart_in(&mut t, true);
+    unrestorable(&mut t.state);
+    checkpoint(&mut t.state, &config, false);
+    assert_eq!(stored_rows(&config), 1);
+    let error = refusal(t.state, t.writer, &config);
+    assert!(error.contains("unknown entity type-id"), "{error}");
+}
+
+/// The same corruption in the published `Transit` WAL image of the departure
+/// (no checkpoint after it) refuses to open.
+#[test]
+fn recovery_refuses_a_transit_wal_image_with_an_unrestorable_member() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut t = town(&config, directory.path());
+    let (source, destination, exit) = (t.source, t.destination, t.exit);
+    let family = t.family.clone();
+    step(&mut t.state, &mut t.writer, true, |state, changes| {
+        let toward = bearing(SOURCE, DESTINATION);
+        let unit = Unit::Household(&family);
+        depart(state, changes, source, unit, destination, exit, toward).unwrap();
+        unrestorable(state);
+    });
+    assert_eq!(stored_rows(&config), 0);
+    let error = refusal(t.state, t.writer, &config);
+    assert!(error.contains("unknown entity type-id"), "{error}");
 }
