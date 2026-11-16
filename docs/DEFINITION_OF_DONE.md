@@ -15,7 +15,7 @@ The existing operational plan is `<work>/receipts/Stage3/ANNOUNCE-PLAN.md`;
 current ownership, ranked dependencies and evidence are in
 `<work>/receipts/Stage3/PLAN.md`. Receipt paths in this table are relative to
 `<work>/receipts/`. A named owner may be parked: ownership is not permission to
-execute outside the [current two-child mode](development/agent-fleet.md#announcement-stabilization-mode).
+execute outside the [current operating mode](development/agent-fleet.md#announcement-stabilization-mode).
 Missing, old-candidate, incomplete or merely prepared evidence stays **blocked**.
 The freeze remains 19 November evening; 20 November is final QA/review; the
 target date does not turn a failed criterion into a pass.
@@ -53,7 +53,7 @@ final integrated `correctness`, scoped real-client proof, independent
 [breaker acceptance](QA_AGENT_PROTOCOL.md), **two release reviewers**, and
 honest documented limits under the existing
 [release procedure](development/release-and-tags.md). These reviews count
-inside the two-child limit, not an extra pool. Reuse clean pins only for the
+inside the two general child slots, not an extra pool. Reuse clean pins only for the
 same tree and inputs; rerun only evidence invalidated by a relevant change.
 
 Then set `release-ready`, stop/park automated development and send **one owner

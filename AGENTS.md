@@ -38,7 +38,8 @@ Code, tests, config and runtime evidence beat every document: fix the document.
 **Current mode (owner, 2026-11-15):** the 21 November announcement is a finite
 stabilization, not an expanding `/goal`. Its
 [acceptance and stop condition](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance)
-and [two-child operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode)
+and [operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode)
+(two child slots plus one heavy-run slot)
 override the general queue and fleet defaults below.
 
 1. Deliver what was asked, end to end for the real case, as simply as possible:

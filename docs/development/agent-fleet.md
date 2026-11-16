@@ -11,7 +11,10 @@ records how fleets were run on the owner's machine and what went wrong.
 
 Owner-directed cutover, 2026-11-15, for the finite 21 November announcement:
 **Main plus at most two actively executing child tasks total**, including
-fixers, QA and reviewers. There is no additional reviewer pool. This mode
+fixers, QA and reviewers. There is no additional reviewer pool. Owner,
+2026-11-16: **one third executing child is allowed for heavy runs** (builds,
+tests, graphical gates) while the two slots are taken by review or research;
+the builder-token, disk-floor and `mem-run` limits are unchanged. This mode
 overrides the general fleet defaults/history below, until the
 [finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 is reached or the owner changes it.
