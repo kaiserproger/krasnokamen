@@ -159,9 +159,8 @@ fn entity_frames(
 
 struct Pump {
     server: Arc<EdgeServer>,
-    /// The fixture's world: `TempDir` removes it when this harness drops, on a
-    /// passing test and on a panic before `finish()`.
-    dir: tempfile::TempDir,
+    /// The fixture owns core shutdown and world removal on all paths.
+    dir: AdminWorld,
     id: ConnectionId,
     viewers: HashMap<ConnectionId, crate::plan::ViewerState>,
     connections: HashMap<ConnectionId, ConnectionHandles>,

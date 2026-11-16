@@ -16,17 +16,25 @@ pub(crate) fn admin_temp_dir() -> tempfile::TempDir {
 /// directory held 229k files and pushed the shared tmpfs past half its inode
 /// budget). `tempfile::TempDir` is the pattern the admin module's own tests
 /// already use; directories that existed before this run are never touched.
-pub(crate) fn fixture_in_temp_dir() -> (EdgeServer, tempfile::TempDir) {
-    let dir = admin_temp_dir();
-    let server = server_at(dir.path());
-    (server, dir)
+pub(crate) fn fixture_in_temp_dir() -> (EdgeServer, AdminWorld) {
+    fixture()
 }
 
-/// The same fixture, shaped as a path for call sites that keep using `dir`.
-///
-/// It still owns the `TempDir`: a panic before the caller's own cleanup finds
-/// the directory already removed, never leaked.
-pub(crate) struct AdminWorld(tempfile::TempDir);
+/// Keep the core alive until its threads have stopped and the directory is safe
+/// to remove, regardless of the order in which the caller's bindings drop.
+pub(crate) struct AdminWorld(tempfile::TempDir, Arc<Core>);
+
+impl AdminWorld {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        self.0.path()
+    }
+}
+
+impl Drop for AdminWorld {
+    fn drop(&mut self) {
+        self.1.shutdown();
+    }
+}
 
 impl std::ops::Deref for AdminWorld {
     type Target = std::path::Path;
@@ -45,7 +53,8 @@ impl AsRef<std::path::Path> for AdminWorld {
 pub(crate) fn fixture() -> (EdgeServer, AdminWorld) {
     let dir = admin_temp_dir();
     let server = server_at(dir.path());
-    (server, AdminWorld(dir))
+    let core = Arc::clone(&server.hub);
+    (server, AdminWorld(dir, core))
 }
 
 fn server_at(dir: &std::path::Path) -> EdgeServer {
@@ -1098,10 +1107,12 @@ async fn moderation_selectors_filtered_ban_and_online_pardon() {
 fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
     let sentinel = admin_temp_dir();
     let mut created = None;
+    let mut core = None;
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let (_server, dir) = fixture_in_temp_dir();
+        let (server, dir) = fixture_in_temp_dir();
+        core = Some(Arc::clone(&server.hub));
         created = Some(dir.path().to_path_buf());
         assert!(
             dir.path().is_dir(),
@@ -1113,6 +1124,10 @@ fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
     assert!(outcome.is_err(), "the simulated admin test must fail");
     let created = created.expect("the fixture ran");
     assert!(
+        core.expect("the fixture ran").shutdown_requested(),
+        "the fixture must stop its core before deleting the world"
+    );
+    assert!(
         !created.exists(),
         "a failed admin test left {} behind",
         created.display()
@@ -1122,6 +1137,27 @@ fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
         "the fixture removed the test's own sentinel directory {}",
         sentinel.path().display()
     );
+}
+
+/// The directory can drop while the server and another core handle are alive.
+#[test]
+fn admin_world_stops_core_before_removing_directory_with_live_handles() {
+    let (server, dir) = fixture_in_temp_dir();
+    let path = dir.path().to_path_buf();
+    let core = Arc::clone(&server.hub);
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = std::thread::spawn(move || {
+        ready_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+        core.shutdown_requested()
+    });
+    ready_rx.recv().unwrap();
+    drop(dir);
+    assert!(server.hub.shutdown_requested());
+    assert!(!path.exists(), "world directory survived fixture teardown");
+    release_tx.send(()).unwrap();
+    assert!(holder.join().unwrap());
 }
 
 /// The passing path of the same fixture leaves nothing either.
