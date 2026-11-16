@@ -685,6 +685,24 @@ fn depart_decision(state: &mut TickState, source: SettlementId, rng: &mut Rng) {
         .observation(source)
         .expect("evaluated source");
     let source_anchor = state.settlements.get(source).unwrap().anchor;
+    // Native capacity/score cannot change until a unit is actually moved.
+    let destinations: Vec<_> = state
+        .settlements
+        .records()
+        .filter(|destination| destination.id != source)
+        .filter_map(|destination| {
+            let candidate = state.settlements.migration.observation(destination.id)?;
+            Some((
+                destination.id,
+                capacity(state, destination.id),
+                gain(
+                    observation.attractiveness.total(),
+                    candidate.attractiveness.total(),
+                    horizontal(source_anchor, destination.anchor),
+                ),
+            ))
+        })
+        .collect();
     let mut reason = "no destination exceeds the migration threshold";
     for unit in units(state, source) {
         let members = match eligible(state, source, &unit, false) {
@@ -705,20 +723,9 @@ fn depart_decision(state: &mut TickState, source: SettlementId, rng: &mut Rng) {
             },
             None,
         );
-        for destination in state.settlements.records().filter(|r| r.id != source) {
-            if capacity(state, destination.id) < members.len() {
-                continue;
-            }
-            let Some(candidate) = state.settlements.migration.observation(destination.id) else {
-                continue;
-            };
-            let score = gain(
-                observation.attractiveness.total(),
-                candidate.attractiveness.total(),
-                horizontal(source_anchor, destination.anchor),
-            );
-            if score > best.0 {
-                best = (score, Some(destination.id));
+        for &(destination, free_beds, score) in &destinations {
+            if free_beds >= members.len() && score > best.0 {
+                best = (score, Some(destination));
             }
         }
         if best.0 <= MIGRATION_THRESHOLD {
