@@ -377,5 +377,34 @@ class InputsAndOutputsTests(unittest.TestCase):
             br.run(profiles.ProfileContext(Path("/nonexistent"), scenario_id="battle-kit-census", extra_args=["--x"]))
 
 
+class ClientKitTests(unittest.TestCase):
+    ITEMS = ["minecraft:iron_helmet", "minecraft:iron_spear", "minecraft:shield"]
+
+    def test_a_drop_moves_exactly_one_kit_piece(self):
+        issued = {item: 1 for item in self.ITEMS}
+        dropped, held = br.kit_after_drop(self.ITEMS, issued, {"minecraft:iron_helmet": 1, "minecraft:shield": 1})
+        self.assertEqual((dropped, held), ("minecraft:iron_spear",
+                                           {"minecraft:iron_helmet": 1, "minecraft:iron_spear": 0, "minecraft:shield": 1}))
+        for after in (issued, {"minecraft:shield": 1}, {**issued, "minecraft:iron_spear": 2}):
+            with self.subTest(after=after), self.assertRaises(RuntimeError):
+                br.kit_after_drop(self.ITEMS, issued, after)
+
+    def test_roles_after_login_hold_the_kit_minus_the_dropped_piece(self):
+        held = {"minecraft:iron_helmet": 1, "minecraft:iron_spear": 0, "minecraft:shield": 1}
+        viewer = {"state": {"screen": "playing", "gamemode": "spectator", "camera": {"entity_id": 7}}}
+
+        def holder(counts):
+            return {"state": {"screen": "playing", "gamemode": "survival", "player": {"id": 7}},
+                    "inventory": {"counts": counts}}
+
+        report = {"scenario": "battle-auth-hydration", "assertions": {}}
+        br.roles(report, "after", holder({"minecraft:iron_helmet": 1, "minecraft:shield": 1}), viewer, 7, kit=held)
+        self.assertEqual(report["observations"]["after"]["expected_kit"], held)
+        for counts in ({"minecraft:iron_helmet": 1, "minecraft:iron_spear": 1, "minecraft:shield": 1},
+                       {"minecraft:iron_helmet": 1}):
+            with self.subTest(counts=counts), self.assertRaises(AssertionError):
+                br.roles(report, "after", holder(counts), viewer, 7, kit=held)
+
+
 if __name__ == "__main__":
     unittest.main()

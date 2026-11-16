@@ -93,11 +93,14 @@ CamSpec spectating him, and an actual SIGKILL.
   archive; recovery starts from them; the clients rejoin; the staged battle
   resumes with both roles and strikes. The runner race is timing-dependent.
 - `battle-auth-hydration`: no recorder (it cannot log in). Holder and spectator
-  `/register` through the real client; after the SIGKILL both rejoin locked: no
-  kit on the holder, no camera, while the durable battle image keeps the hold and
-  the saved camera. `/login` through Horizon's `command` tool re-arms the holder
-  exactly once and binds the camera; a re-entry issues nothing twice; the same
-  crash census runs; no generated password appears in any artifact.
+  `/register` through the real client; PovRed drops one kit piece (the census's
+  observed item entity); after the SIGKILL both rejoin locked: no kit on the
+  holder, no camera, while the durable battle image keeps the hold and the saved
+  camera. `/login` through Horizon's `command` tool re-arms the holder exactly
+  once with the rest of the kit (the dropped piece stays on the ground, held plus
+  dropped equals the issued kit in every durable image) and binds the camera; a
+  re-entry issues nothing twice; the same crash census runs, its removal control
+  on the dropped item entity; no generated password appears in any artifact.
 
 Limits: one kit, one holder and one spectator; Horizon clients only; wear is
 reported, not asserted. `ledger promote` needs a receipt from the promoted tree's
