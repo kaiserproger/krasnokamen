@@ -113,7 +113,10 @@ python3 -m tools.harness run correctness                       # L2: regressions
   strict workspace Clippy and all nextest workspace/all-target tests. Run before
   opening a code PR. It needs `cargo-nextest`, about 12 GiB of RAM, and on a
   16-thread machine about 45 minutes with a warm target directory (a cold one
-  adds the full workspace build). If your machine cannot run it, open the PR
+  adds the full workspace build). Its real-client manifest tests also need a
+  [Krasnokamen Loader](https://github.com/kaiserproger/krasnokamen-loader)
+  checkout: clone it next to this one as `../solaris-loader`, or point
+  `KRASNOKAMEN_LOADER_ROOT` at your clone. If your machine cannot run it, open the PR
   as a draft with your L1 receipts and say so: the PR's CI runs formatting,
   Clippy, code-health, the bug regressions and a shortened test suite, and the
   maintainer runs L2 on the merge candidate.

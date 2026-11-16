@@ -2,10 +2,17 @@ use super::*;
 
 #[test]
 fn chunk_batch_layouts_match_all_three_local_reports() {
+    // `content import --cache data/vanilla` layout: the canonical cache is
+    // data/vanilla, each other window release data/vanilla-<release>.
     for version in ["26.1.2", "26.2", "26.3"] {
+        let cache = if version == "26.3" {
+            "vanilla".to_owned()
+        } else {
+            format!("vanilla-{version}")
+        };
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../data/vanilla")
-            .join(version)
+            .join("../../data")
+            .join(cache)
             .join("reports/packets.json");
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
