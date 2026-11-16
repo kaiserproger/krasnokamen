@@ -823,6 +823,18 @@ class BattleRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'SIGKILL'):
                 runner.preserve_crash(Path(directory), unittest.mock.Mock(pid=1, returncode=0))
 
+    def test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid(self):
+        runner = load_runner()
+        for _ in range(20):
+            server = subprocess.Popen(['sleep', '60'])
+            watcher = threading.Thread(target=server.wait, daemon=True)
+            watcher.start()
+            while server.returncode is None and not server._waitpid_lock.locked():
+                pass
+            os.kill(server.pid, 9)
+            self.assertTrue(runner.killed_by_sigkill(server))
+            watcher.join(timeout=10)
+
     def test_console_fifo_forwards_each_written_line_to_the_console(self):
         runner = load_runner()
         with tempfile.TemporaryDirectory() as directory:

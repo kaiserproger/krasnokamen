@@ -1033,7 +1033,7 @@ def run(a):
                 print('take is not clean: ' + '; '.join(report['unclean_reasons']), file=sys.stderr)
         (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     except Exception:
-        if not (a.crash_handoff and server is not None and server.poll() == -signal.SIGKILL):
+        if not (a.crash_handoff and server is not None and killed_by_sigkill(server)):
             raise
         crashed = True
     else:
@@ -1056,6 +1056,16 @@ def run(a):
         preserve_crash(root, server)
     if wal_archive is not None and wal_archive.errors:
         raise RuntimeError(f'WAL archive lost evidence: {wal_archive.errors}')
+
+
+def killed_by_sigkill(server):
+    """A SIGKILLed server closes its sockets before waitpid reports it, and the
+    crash watcher thread holds Popen's waitpid lock (poll() then returns None):
+    wait for the exit rather than sampling it."""
+    try:
+        return server.wait(timeout=10) == -signal.SIGKILL
+    except subprocess.TimeoutExpired:
+        return False
 
 
 def preserve_crash(root, server):
