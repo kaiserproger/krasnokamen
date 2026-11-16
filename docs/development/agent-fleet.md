@@ -9,18 +9,18 @@ records how fleets were run on the owner's machine and what went wrong.
 
 ### Announcement stabilization mode
 
-Owner-directed cutover, 2026-11-15, for the finite 21 November announcement:
-**Main plus at most two actively executing child tasks total**, including
-fixers, QA and reviewers. There is no additional reviewer pool. Owner,
-2026-11-16: **one third executing child is allowed for heavy runs** (builds,
-tests, graphical gates) while the two slots are taken by review or research;
-the builder-token, disk-floor and `mem-run` limits are unchanged. This mode
-overrides the general fleet defaults/history below, until the
+Owner-directed cutover, 2026-11-15, for the finite 21 November announcement;
+cap replaced by the owner on 2026-11-16 (23:53 host): **Main plus four to five
+actively executing child agents in total**, announcement rows and the
+off-screen settlement simulation goal together (fixers, implementers, gate and
+heavy-run owners). Reviewers and breakers do not count against this cap. At
+most 10 live agents and 3 concurrent builders; the builder-token, disk-floor
+and `mem-run` limits are unchanged. The off-screen simulation goal staffs its
+executors from the same cap through the
+[generalist roster](#generalist-roster). This mode overrides the general fleet
+defaults/history below, until the
 [finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
-is reached or the owner changes it. Owner, 2026-11-16: the off-screen
-settlement simulation goal runs in parallel with up to three executing agents
-of its own, absorbed by the [generalist roster](#generalist-roster); at most
-10 live agents in total.
+is reached or the owner changes it.
 
 Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`:
 finish/integrate/accept a returned vertical slice or its named dependency
