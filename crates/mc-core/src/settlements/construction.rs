@@ -1680,7 +1680,7 @@ fn street_site(
     };
     for tile in &served {
         if let Some(work) = network.road_work(tile)
-            && !executor::area_reserved(state, work.bounds)
+            && !executor::area_held(state, work.bounds)
         {
             return Some(FundedSite {
                 project: project(layout::ROAD, work.bounds, tile.axis),
@@ -1691,7 +1691,7 @@ fn street_site(
     }
     for tile in &served {
         if let Some(mut work) = network.lamp_work(tile)
-            && !executor::area_reserved(state, work.bounds)
+            && !executor::area_held(state, work.bounds)
             && let Some(bill) = cell_bill(state, &work.cells)
             && let Some(species) = select_species(state, &bill, images, false)
             && apply_species(state, &mut work.cells, species).is_some()

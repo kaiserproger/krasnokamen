@@ -813,6 +813,27 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
         "{report}"
     );
     assert!(report.contains("Next street work: none."), "{report}");
+
+    // Seed-100 trial 2: a committed free-paving envelope still contained
+    // unpaid soil after the reachable street columns changed.
+    state.world.set_block(8, 200, 12, grass);
+    state.world.fold_overlay();
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let images = executor::source_images(&state, id);
+    let site = street_site(&state, state.settlements.get(id).unwrap(), &images)
+        .expect("spent free paving must not reserve the road against later paving");
+    assert_eq!(site.project.blueprint, layout::ROAD);
+    assert!(begin_cells(
+        &mut state,
+        site.project,
+        site.bounds,
+        site.cells
+    ));
+    state.entities.set_pos(slot, [1.5, 201.0, 2.5]);
+    assign_builder(&mut state, id);
+    complete(&mut state, id, slot);
+    assert_eq!(block_name(&state, 8, 200, 12), "dirt_path");
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }
 
 /// Seed 24's generated village obstructs the three road columns, but the
