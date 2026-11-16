@@ -8,8 +8,8 @@ import uuid
 from pathlib import Path
 
 from .crash_wal import read_published
-from .transit_crash import (body_entry, census_verdict, custody_verdict, places, publish_batch,
-                            published_through, transit_images, uuid_array)
+from .transit_crash import (body_entry, bread_count, census_verdict, custody_verdict, places,
+                            publish_batch, published_through, transit_images, uuid_array)
 
 A, B, C = (str(uuid.UUID(int=n)) for n in (0x10, 0x11, 0x12))
 RECORD = A
@@ -100,6 +100,12 @@ class WalTests(unittest.TestCase):
     def test_uuid_array_matches_vanilla_signed_words(self):
         self.assertEqual(uuid_array("ffffffff-0000-0001-8000-000000000002"),
                          "[I;-1,1,-2147483648,2]")
+
+    def test_bread_count_reads_only_bread_stacks(self):
+        reply = ('Villager has the following entity data: [{count: 2, id: "minecraft:bread"}, '
+                 '{count: 5, id: "minecraft:carrot"}, {count: 1, id: "minecraft:bread"}]')
+        self.assertEqual(bread_count(reply), 3)
+        self.assertEqual(bread_count("Found no elements matching Inventory"), 0)
 
 
 if __name__ == "__main__":

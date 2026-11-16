@@ -4,8 +4,9 @@ Each cut runs the pinned release server (`KRASNOKAMEN_SERVER_BINARY`) on a fresh
 world with no players and no plugins. Fixture (console only, recorded): two
 force-loaded platforms at y=200; settlement TransitSource around a roofed
 three-bed room, settlement TransitDest 100 blocks east; two adult villagers
-with bread, bound to the source. A native birth forms their household
-(parents + child), which then leaves with `settlement transit depart`.
+bound to the source, each fed 3 bread (read back with `data get`). A native
+birth forms their household (parents + child), which then leaves with
+`settlement transit depart`.
 
 Cuts are event-bound, never elapsed time:
 * departure: SIGKILL as soon as the WAL batch covering the departure tick
@@ -61,6 +62,12 @@ DEPARTED = re.compile(
     r"Household (\S+) left in transit ([0-9a-f-]{36}) with (\d+) members; "
     r"earliest arrival at game time (\d+)\.")
 FILLED = re.compile(r"Successfully filled")
+# One inventory stack in a `data get entity <uuid> Inventory` reply.
+STACK = re.compile(r"\{[^{}]*\}")
+BREAD = re.compile(r'id: "minecraft:bread"')
+COUNT = re.compile(r"count: (\d+)")
+FEED_ATTEMPTS = 10
+PICKUP_TICKS = 40  # fenced commands, one server tick each
 # Loaded and already air (an unloaded region replies "Position is not loaded").
 CLEARED = re.compile(r"Successfully filled|No blocks were changed")
 SOURCE, DEST = "TransitSource", "TransitDest"
@@ -84,6 +91,12 @@ def uuid_array(value: str) -> str:
     number = uuid.UUID(value).int
     words = [(number >> shift) & 0xFFFFFFFF for shift in (96, 64, 32, 0)]
     return "[I;" + ",".join(str(word - (1 << 32) if word >= 1 << 31 else word) for word in words) + "]"
+
+
+def bread_count(reply: str) -> int:
+    """Bread held, from one `data get entity <uuid> Inventory` reply."""
+    return sum(int(count[1]) for stack in STACK.findall(reply)
+               if BREAD.search(stack) and (count := COUNT.search(stack)))
 
 
 def last_checkpoint(log: Path) -> int:
@@ -271,15 +284,31 @@ class Run:
             self.cmd(f"setblock {x} 202 2 minecraft:red_bed[facing=north,part=head]", "Changed")
         self.cmd(f"execute positioned 4 202 4 run settlement create {SOURCE} 24", "Founded")
         parents = [str(uuid.uuid4()) for _ in range(2)]
-        for x, parent in zip((2.5, 4.5), parents):
-            # Summon NBT has no villager inventory: each parent picks up the
-            # 3 bread (12 food, courtship needs 12) dropped at its feet.
-            self.cmd(f"summon minecraft:item {x} 202 5.5 "
-                     "{Item:{id:\"minecraft:bread\",count:3},PickupDelay:0}", "Summoned")
+        for x, parent in zip((1.5, 6.5), parents):
             self.cmd(f"summon minecraft:villager {x} 202 5.5 {{UUID:{uuid_array(parent)}}}",
                      "Summoned")
             self.cmd(f"settlement bind {SOURCE} {parent}", "Bound")
         self.facts["parents"] = parents
+        for parent in parents:
+            self.feed(parent)
+
+    def bread(self, parent: str) -> int:
+        return bread_count(self.server.command(f"data get entity {parent} Inventory"))
+
+    def feed(self, parent: str) -> None:
+        """Drop 3 bread (12 food, courtship needs 12) at the parent's feet until it holds them.
+
+        Summon NBT has no villager inventory, and any villager in reach picks
+        bread up, so the other parent may take a drop; that one is repeated."""
+        for _ in range(FEED_ATTEMPTS):
+            self.cmd(f"execute at {parent} run summon minecraft:item ~ ~ ~ "
+                     "{Item:{id:\"minecraft:bread\",count:3},PickupDelay:0}", "Summoned")
+            for _ in range(PICKUP_TICKS):
+                if (held := self.bread(parent)) >= 3:
+                    self.fixture.append({"command": f"data get entity {parent} Inventory",
+                                         "reply": f"{held} bread"})
+                    return
+        raise RuntimeError(f"parent {parent} never held 3 bread")
 
     def household(self) -> None:
         """Wait for the native birth that forms the parents' household."""
