@@ -239,7 +239,9 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
         tick,
     };
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
-    writer.append(tick, tick, std::slice::from_ref(&entry)).unwrap();
+    writer
+        .append(tick, tick, std::slice::from_ref(&entry))
+        .unwrap();
     writer.flush().unwrap();
     drop(writer);
     let mut old: serde_json::Value = serde_json::to_value(entry).unwrap();
