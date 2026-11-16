@@ -9,8 +9,9 @@ is an actual-window GPU capture; the one-minute film is 60 such frames at 1 fps.
 Fast runs (owner, 2026-11-16): `--scratch /dev/shm` keeps the world and every
 output on tmpfs and copies the complete directory to `--out` at the end;
 `--server-cpus`/`--client-cpus` pin the server and the client with its Xvfb to
-disjoint CPUs; `--frames 12` takes fewer census frames for diagnosis while the
-simulation still advances in the same 60 sprints. Acceptance needs 60 frames.
+disjoint CPUs; `--frames 12` captures fewer frames, while the census, supply,
+building orders and observer move still follow every one of the 60 sprints.
+Acceptance needs 60 frames.
 """
 from __future__ import annotations
 
@@ -287,9 +288,10 @@ def main() -> None:
                         if row['tick'] > telemetry_tick:
                             telemetry.write(json.dumps(row) + '\n')
                             telemetry_tick = row['tick']
-                if (step + 1) % every:
-                    continue
-                frame = (step + 1) // every - 1
+                # Census, supply, orders and the observer move run after every
+                # sprint whatever --frames says (they change the simulation);
+                # only the look, HUD toggle and capture are thinned.
+                capture = (step + 1) % every == 0
                 snapshot = record_census(probe, console, run, log_path)
                 run['snapshots'].append(snapshot)
                 parent = next(town for town in snapshot['settlements'] if town['owner'] is not None and not town['name'].startswith('colony_'))
@@ -336,21 +338,22 @@ def main() -> None:
                                and abs(observed['player']['z'] - parent['anchor'][2] - 0.5) < 1, 'order_at_parent')
                     village._send(probe, f'settlement build {ordered}')
                 console(f'gamemode spectator {USERNAME}')
-                focus = children[0] if children and frame % 2 else parent
+                focus = children[0] if children and step % 2 else parent
                 anchor = focus['anchor']
                 console(f'tp {USERNAME} {anchor[0] + 30} {anchor[1] + 35} {anchor[2] + 40}')
                 probe.wait(lambda observed: abs(observed['player']['y'] - anchor[1] - 35) < 1, 'camera_position')
-                probe.call('minecraft_close_screen', {})
-                probe.call('minecraft_look', {'yaw_deg': 145, 'pitch_deg': 40})
-                hud_was_visible = hud_visible(probe.observe())
-                if hud_was_visible:
-                    probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
-                probe.wait(lambda observed: not hud_visible(observed), 'film_hud_hidden')
-                shot = native_client.capture(mcp, out, f'frame-{frame:03d}')
-                if hud_was_visible:
-                    probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
-                    probe.wait(hud_visible, 'film_hud_restored')
-                run['frames'].append({'game_time': snapshot['game_time'], 'settlement': focus['id'], 'capture': shot})
+                if capture:
+                    probe.call('minecraft_close_screen', {})
+                    probe.call('minecraft_look', {'yaw_deg': 145, 'pitch_deg': 40})
+                    hud_was_visible = hud_visible(probe.observe())
+                    if hud_was_visible:
+                        probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
+                    probe.wait(lambda observed: not hud_visible(observed), 'film_hud_hidden')
+                    shot = native_client.capture(mcp, out, f'frame-{len(run["frames"]):03d}')
+                    if hud_was_visible:
+                        probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
+                        probe.wait(hud_visible, 'film_hud_restored')
+                    run['frames'].append({'game_time': snapshot['game_time'], 'settlement': focus['id'], 'capture': shot})
                 dump(out / 'run.json', run)
             final = run['snapshots'][-1]
             native_events = log_path.read_text(errors='replace')
