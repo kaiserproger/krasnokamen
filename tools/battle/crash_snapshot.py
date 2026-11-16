@@ -9,6 +9,14 @@ def manifest_bytes(files):
     return (json.dumps(files, indent=2, sort_keys=True) + '\n').encode()
 
 
+def file_entry(path, relative):
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f'unsupported crash evidence: {path}')
+    with path.open('rb') as source:
+        digest = hashlib.file_digest(source, 'sha256').hexdigest()
+    return {'path': relative, 'size': path.stat().st_size, 'sha256': digest}
+
+
 def file_manifest(root):
     root = Path(root)
     result = []
@@ -16,18 +24,36 @@ def file_manifest(root):
         if path.is_symlink():
             raise ValueError(f'symlink in crash evidence: {path}')
         if path.is_file():
-            with path.open('rb') as source:
-                digest = hashlib.file_digest(source, 'sha256').hexdigest()
-            result.append({'path': path.relative_to(root).as_posix(), 'size': path.stat().st_size,
-                           'sha256': digest})
+            result.append(file_entry(path, path.relative_to(root).as_posix()))
         elif not path.is_dir():
             raise ValueError(f'unsupported crash evidence: {path}')
-    return result
+    return sorted(result, key=lambda entry: entry['path'])
+
+
+def source_manifest(root):
+    """Hash stopped originals using the paths they will have in crash-copy."""
+    root = Path(root)
+    files = []
+    for name in ('world', 'wal-archive', 'backups'):
+        source = root / name
+        if source.exists():
+            if source.is_symlink() or not source.is_dir():
+                raise ValueError(f'unsupported crash evidence: {source}')
+            for entry in file_manifest(source):
+                files.append({**entry, 'path': name + '/' + entry['path']})
+    for name in ('server.log', 'before-census.json', 'acknowledged-inventory.json'):
+        source = root / name
+        if source.exists():
+            relative = name if name == 'server.log' else f'witness/{name}'
+            files.append(file_entry(source, relative))
+    return sorted(files, key=lambda entry: entry['path'])
 
 
 def verify_tree(destination, handoff):
     """Verify a derived tree and its separately retained pre-recovery manifest."""
     files = handoff['manifest']
+    if handoff['original_manifest'] != files:
+        raise ValueError('stopped original and crash copy manifest mismatch')
     encoded = manifest_bytes(files)
     expected_hash = handoff['manifest_sha256']
     manifest_path = Path(handoff['manifest_path'])

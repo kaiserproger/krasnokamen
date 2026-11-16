@@ -830,6 +830,7 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertEqual((root / 'crash-copy/backups/saved/manifest').read_bytes(), b'backup')
             self.assertEqual(json.loads((root / 'crash-handoff.json').read_text())['exit'], -9)
             handoff = json.loads((root / 'crash-handoff.json').read_text())
+            self.assertEqual(handoff['original_manifest'], handoff['manifest'])
             self.assertEqual(handoff, json.loads((root / 'result.json').read_text()))
             encoded = (root / 'crash-manifest.json').read_bytes()
             self.assertEqual(hashlib.sha256(encoded).hexdigest(), handoff['manifest_sha256'])
@@ -866,6 +867,26 @@ class BattleRunnerTests(unittest.TestCase):
             with unittest.mock.patch.object(runner.os, 'execv') as execute, unittest.mock.patch.object(runner.os, 'chdir'):
                 runner.recover_crash(root)
             execute.assert_called_once_with('/pin/server', ['/pin/server', '--config', '/run/server.toml'])
+
+    def test_crash_handoff_rejects_changed_copy_against_original_hashes(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'world').mkdir()
+            (root / 'world/state').write_bytes(b'original')
+            (root / 'server.log').write_text('log')
+            copytree = runner.shutil.copytree
+
+            def corrupt_copy(source, destination, **kwargs):
+                result = copytree(source, destination, **kwargs)
+                (destination / 'state').write_bytes(b'corrupt!')
+                return result
+
+            with unittest.mock.patch.object(runner.shutil, 'copytree', side_effect=corrupt_copy):
+                with self.assertRaisesRegex(RuntimeError, 'original and crash copy manifest mismatch'):
+                    runner.preserve_crash(root, unittest.mock.Mock(pid=123, returncode=-9))
+            self.assertFalse((root / 'crash-handoff.json').exists())
+            self.assertFalse((root / 'result.json').exists())
 
     def test_crash_handoff_rejects_non_sigkill(self):
         runner = load_runner()

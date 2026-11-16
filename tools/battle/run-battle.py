@@ -1079,6 +1079,7 @@ def preserve_crash(root, server):
     """Preserve the stopped world before any recovery can prune its WAL."""
     if server.returncode != -signal.SIGKILL:
         raise RuntimeError('crash handoff requires SIGKILL')
+    original_manifest = crash_snapshot.source_manifest(root)
     snapshot = root / 'crash-copy'
     snapshot.mkdir()
     shutil.copytree(root / 'world', snapshot / 'world')
@@ -1092,12 +1093,14 @@ def preserve_crash(root, server):
             (snapshot / 'witness').mkdir(exist_ok=True)
             shutil.copy2(root / name, snapshot / 'witness' / name)
     manifest = crash_snapshot.file_manifest(snapshot)
+    if original_manifest != manifest:
+        raise RuntimeError('stopped original and crash copy manifest mismatch')
     encoded = crash_snapshot.manifest_bytes(manifest)
     manifest_path = (root / 'crash-manifest.json').resolve()
     manifest_path.write_bytes(encoded)
     receipt = {'status': 'crashed', 'pid': server.pid, 'exit': server.returncode,
                'world': str(root / 'world'), 'crash_copy': str(snapshot),
-               'manifest': manifest, 'manifest_path': str(manifest_path),
+               'manifest': manifest, 'original_manifest': original_manifest, 'manifest_path': str(manifest_path),
                'manifest_sha256': hashlib.sha256(encoded).hexdigest()}
     (root / 'crash-handoff.json').write_text(json.dumps(receipt, indent=2) + '\n')
     (root / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')

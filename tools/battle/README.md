@@ -102,11 +102,12 @@ This extends only the live capture lifecycle, not the recorded take window.
 This does not establish real-time performance or all-dirty residency.
 
 For crash drills, `--crash-handoff` writes `server-pid.json` for the direct
-server process. If it is SIGKILLed, the runner stops its recorder, copies the
-entire stopped world, backups, WAL archive and any pre-cut census/inventory
-witnesses into `crash-copy/` before any restart. `crash-handoff.json` and
-`result.json` record every relative file path, size and SHA-256, and the SHA-256
-of `crash-manifest.json`. Inspect only a derived copy verified against that
+server process. If it is SIGKILLed, the runner stops its recorder and hashes the
+stopped original world, backups, WAL archive, log and any pre-cut
+census/inventory witnesses, then copies them into `crash-copy/`. Before any
+restart, it refuses a copy that differs. `crash-handoff.json` and `result.json`
+record both file manifests (relative path, size and SHA-256) and the SHA-256 of
+`crash-manifest.json`. Inspect only a derived copy verified against that
 manifest, never the primary evidence. Other failures still fail. WAL pruning
 remains normal; an event-driven hard-link archive captures immutable published
 batches in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
