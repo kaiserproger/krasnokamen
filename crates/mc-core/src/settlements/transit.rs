@@ -23,6 +23,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use mc_physics::mth;
 use mc_world::native::NativeDomainRecord;
 use serde::{Deserialize, Serialize};
 
@@ -119,10 +120,6 @@ impl Ledger {
     pub(crate) fn get(&self, id: TransitId) -> Option<&Record> {
         self.records.get(&id.0)
     }
-
-    pub(crate) fn len(&self) -> usize {
-        self.records.len()
-    }
 }
 
 /// `settlement info` row for one record touching a settlement.
@@ -150,7 +147,7 @@ fn worlds(state: &TickState) -> impl Iterator<Item = &TickState> {
 pub(crate) fn bearing(from: [i32; 3], to: [i32; 3]) -> f32 {
     let dx = f64::from(to[0] - from[0]);
     let dz = f64::from(to[2] - from[2]);
-    dx.atan2(-dz).to_degrees().rem_euclid(360.0) as f32
+    mth::atan2(dx, -dz).to_degrees().rem_euclid(360.0) as f32
 }
 
 /// The farthest standable surface cell on `bearing_deg` from `anchor` whose
@@ -164,7 +161,7 @@ pub(crate) fn edge_point(
     bearing_deg: f32,
 ) -> Option<BlockPos> {
     let radians = f64::from(bearing_deg).to_radians();
-    let (dx, dz) = (radians.sin(), -radians.cos());
+    let (dx, dz) = (f64::from(mth::sin(radians)), -f64::from(mth::cos(radians)));
     let mut best = None;
     let mut previous = None;
     for distance in 0..=MAX_EDGE_DISTANCE {
@@ -182,7 +179,10 @@ pub(crate) fn edge_point(
         {
             break;
         }
-        let horizontal = f64::from(column.0 - anchor[0]).hypot(f64::from(column.1 - anchor[2]));
+        let horizontal = mth::length2(
+            f64::from(column.0 - anchor[0]),
+            f64::from(column.1 - anchor[2]),
+        );
         if horizontal < f64::from(MIN_EDGE_DISTANCE) {
             continue;
         }
@@ -223,7 +223,7 @@ fn surface(state: &TickState, x: i32, z: i32) -> Option<BlockPos> {
 }
 
 fn horizontal(a: [i32; 3], b: [i32; 3]) -> f64 {
-    f64::from(a[0] - b[0]).hypot(f64::from(a[2] - b[2]))
+    mth::length2(f64::from(a[0] - b[0]), f64::from(a[2] - b[2]))
 }
 
 /// Everything a departure or emigration needs before it mutates: the unit's
@@ -291,7 +291,7 @@ fn admit(
             return Err("a member holds an economic reservation");
         }
         let pos = state.entities.pos(slot);
-        if (pos[0] - centre[0]).hypot(pos[2] - centre[1]) > EXIT_REACH {
+        if mth::length2(pos[0] - centre[0], pos[2] - centre[1]) > EXIT_REACH {
             return Err("a member is not at the exit point");
         }
     }
