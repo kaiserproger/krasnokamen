@@ -19,9 +19,25 @@ fn pack(root: &Path, name: &str, description: &str, resources: &[(&str, &str)]) 
     }
 }
 
+/// The start's new-pack trial for fixtures without worldgen inputs: a new pack
+/// joins when its content installs onto `base`.
+fn open(
+    root: &Path,
+    selection: Selection,
+    base: &crate::registry::CoreRegistry,
+) -> Result<PackSet, String> {
+    let (mut packs, skipped) = PackSet::open(root, selection, |loaded| {
+        let packs = loaded?;
+        packs.install_content(&mut base.prepare_content())?;
+        Ok::<_, String>(packs)
+    })?;
+    packs.skipped = skipped;
+    Ok(packs)
+}
+
 fn fixture(root: &Path) -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
-    let packs = PackSet::open(root, Selection::default(), &state.registry).unwrap();
+    let packs = open(root, Selection::default(), &state.registry).unwrap();
     state.datapacks = Runtime::new(
         packs,
         root.to_path_buf(),
@@ -1237,7 +1253,7 @@ fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_
     );
     let base = base_registry();
     // The same selection a world that never saw these packs has.
-    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = open(&root, Selection::default(), &base).unwrap();
     let skipped = packs.skipped.clone();
     assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
     assert_eq!(skipped.len(), 2, "{skipped:?}");
@@ -1261,9 +1277,7 @@ fn a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_
         enabled: vec!["vanilla".into(), "file/truncated".into()],
         disabled: Vec::new(),
     };
-    let error = PackSet::open(&root, saved, &base)
-        .err()
-        .expect("fails closed");
+    let error = open(&root, saved, &base).err().expect("fails closed");
     assert!(
         error.contains("file/truncated") && error.contains("test/recipe/cut.json"),
         "{error}"
@@ -1486,7 +1500,7 @@ fn unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named() {
     let root = world.path().join("datapacks");
     messy_folder(&root);
     let base = base_registry();
-    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = open(&root, Selection::default(), &base).unwrap();
     assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
     let warnings = packs.warnings(None).join("\n");
     for named in [
@@ -1505,9 +1519,7 @@ fn unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named() {
         enabled: vec!["vanilla".into(), "file/good".into(), "file/cutmeta".into()],
         disabled: Vec::new(),
     };
-    let error = PackSet::open(&root, saved, &base)
-        .err()
-        .expect("fails closed");
+    let error = open(&root, saved, &base).err().expect("fails closed");
     assert!(
         error.contains("file/cutmeta") && error.contains("pack.mcmeta"),
         "{error}"
@@ -1624,7 +1636,7 @@ fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other()
         &[],
     );
     let base = base_registry();
-    let packs = PackSet::open(&root, Selection::default(), &base).unwrap();
+    let packs = open(&root, Selection::default(), &base).unwrap();
     assert_eq!(packs.selection.enabled, ["vanilla"]);
     let warnings = packs.warnings(None).join("\n");
     assert!(
@@ -1635,9 +1647,7 @@ fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other()
         enabled: vec!["vanilla".into(), "file/lookbehind".into()],
         disabled: Vec::new(),
     };
-    let error = PackSet::open(&root, saved, &base)
-        .err()
-        .expect("fails closed");
+    let error = open(&root, saved, &base).err().expect("fails closed");
     assert!(
         error.contains("file/lookbehind") && error.contains("filter"),
         "{error}"

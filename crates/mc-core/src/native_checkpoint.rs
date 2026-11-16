@@ -448,29 +448,19 @@ impl RecoveredWorld {
         &self,
         scratch: &std::path::Path,
     ) -> Result<BTreeMap<Dimension, Arc<dyn mc_world::ChunkGenerator>>, CoreError> {
-        let selected = crate::datapacks::worldgen::selection(&self.dimensions)?;
-        let mut packs = crate::datapacks::PackSet::open(
-            &self.config.world_dir.join("datapacks"),
-            selected,
-            &self.registry,
-        )
-        .map_err(CoreError::Registry)?;
-        let mut inputs = packs
-            .prepare_worldgen(scratch, self.config.vanilla_data_dir.as_deref())
-            .map_err(CoreError::Worldgen)?;
         // The normal native level-metadata image owns the saved identity.
         // Adoption here is in memory only; offline export never rewrites it.
         let mut globals = self.checkpoint.globals.clone();
-        let adoption = inputs.stage_identity(&mut globals)?;
-        adoption.validate_replay_baselines(&self.dimensions, &self.reader, &self.registry)?;
-        packs.bind_structure_catalog(adoption.catalog);
-        inputs
-            .validate(&self.registry)
-            .map_err(CoreError::Worldgen)?;
-        let mut registry = self.registry.prepare_content();
-        packs
-            .install_content(&mut registry)
-            .map_err(CoreError::Registry)?;
+        let opened = crate::datapacks::worldgen::open(
+            &self.config.world_dir.join("datapacks"),
+            scratch,
+            self.config.vanilla_data_dir.as_deref(),
+            &self.dimensions,
+            &mut globals,
+            &self.reader,
+            &self.registry,
+        )?;
+        let (inputs, registry) = (opened.inputs, opened.registry);
         let mut config = self.config.clone();
         config.vanilla_data_dir = inputs.root().map(std::path::Path::to_path_buf);
         let overworld = crate::core::overworld_terrain_from(&config, &registry, Some(&inputs))?;

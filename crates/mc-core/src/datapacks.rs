@@ -589,30 +589,34 @@ impl PackSet {
     fn load_known(root: &Path, selection: Selection) -> Result<Self, String> {
         Self::load_with(root, selection, false)
     }
-    /// The packs a starting server or `/reload` runs. A pack newly found on disk is
-    /// enabled, but one that cannot be read, cannot load, or whose recipes and loot
-    /// cannot install onto `base` is skipped with a warning naming it and the file,
-    /// so a pack that a live `/datapack enable` refused cannot stop the next start.
-    /// A skipped pack stays unselected, so it is no worldgen input. This deliberately
-    /// differs from vanilla, which enables a new pack and refuses to start when it
-    /// fails (offering `--safeMode`); Krasnokamen has no safe mode. A pack the saved
-    /// selection holds that no longer loads still refuses, naming pack and file: its
-    /// bytes are the world's selected generation inputs.
-    pub(crate) fn open(
+    /// The packs a start, an offline export or a `/reload` runs. A pack newly found
+    /// on disk is enabled, but one that cannot be read or that `admit` refuses is
+    /// skipped with a warning naming it and the reason, so a new pack can stop neither
+    /// a start nor a reload. `admit` decides what the caller can run: at a start, the
+    /// content installs and the worldgen inputs prepare, validate and pass the replay
+    /// ancestry fence; on `/reload`, the content installs and the immutable running
+    /// generators stay unchanged. A skipped pack stays unselected, so it is no worldgen
+    /// input, and a restart offers it again. This deliberately differs from vanilla,
+    /// which enables a new pack and refuses to start when it fails (offering
+    /// `--safeMode`); Krasnokamen has no safe mode. A pack the saved selection holds
+    /// that no longer loads still refuses, naming pack and file: its bytes are the
+    /// world's selected generation inputs.
+    ///
+    /// Trials run one at a time and only the last admitted state stays alive (a
+    /// world has one worldgen staging directory). Returns it with the skip warnings.
+    pub(crate) fn open<T, E: std::fmt::Display>(
         root: &Path,
         selection: Selection,
-        base: &crate::registry::CoreRegistry,
-    ) -> Result<Self, String> {
-        let usable = |packs: Self| -> Result<Self, String> {
-            packs.install_content(&mut base.prepare_content())?;
-            Ok(packs)
-        };
-        let first = match Self::load(root, selection.clone()).and_then(usable) {
-            Ok(packs) => return Ok(packs),
+        mut admit: impl FnMut(Result<Self, String>) -> Result<T, E>,
+    ) -> Result<(T, Vec<String>), E> {
+        let first = match admit(Self::load(root, selection.clone())) {
+            Ok(admitted) => return Ok((admitted, Vec::new())),
             Err(error) => error,
         };
         let mut remaining = MAX_BYTES;
-        let found = scan(root, &mut remaining).map_err(|_| first.clone())?;
+        let Ok(found) = scan(root, &mut remaining) else {
+            return Err(first);
+        };
         let failed = found.failed;
         let new: Vec<String> = found
             .packs
@@ -623,7 +627,8 @@ impl PackSet {
         if new.is_empty() {
             return Err(first);
         }
-        let mut accepted = Self::load_known(root, selection).and_then(usable)?;
+        let mut accepted = selection;
+        let mut admitted = Some(admit(Self::load_known(root, accepted.clone()))?);
         let mut skipped = Vec::new();
         for id in new {
             if let Some(error) = failed.get(&id) {
@@ -632,17 +637,24 @@ impl PackSet {
                 ));
                 continue;
             }
-            let mut candidate = accepted.selection.clone();
+            let mut candidate = accepted.clone();
             candidate.enabled.push(id.clone());
-            match Self::load_known(root, candidate).and_then(usable) {
-                Ok(packs) => accepted = packs,
+            admitted = None;
+            match admit(Self::load_known(root, candidate.clone())) {
+                Ok(state) => {
+                    accepted = candidate;
+                    admitted = Some(state);
+                }
                 Err(error) => skipped.push(format!(
                     "Skipping new datapack {id}, it is not enabled: {error}"
                 )),
             }
         }
-        accepted.skipped = skipped;
-        Ok(accepted)
+        let admitted = match admitted {
+            Some(state) => state,
+            None => admit(Self::load_known(root, accepted))?,
+        };
+        Ok((admitted, skipped))
     }
     fn load_with(root: &Path, mut selection: Selection, discover: bool) -> Result<Self, String> {
         selection.validate()?;
@@ -686,6 +698,7 @@ impl PackSet {
         selection
             .enabled
             .retain(|id| id == "vanilla" || packs.contains_key(id));
+        selection.disabled.retain(|id| packs.contains_key(id));
         for id in packs.keys() {
             if discover && !selection.enabled.contains(id) && !selection.disabled.contains(id) {
                 selection.enabled.push(id.clone());
@@ -719,11 +732,21 @@ impl PackSet {
                 .source
                 .data_files(&mut remaining, &mut visited)
                 .map_err(|e| format!("{id}: {e}"))?;
+            // Worldgen this server cannot generate refuses the whole pack, naming
+            // every such entry (a bounded list) instead of loading a partial pack.
+            let mut unsupported = Vec::new();
             for (relative, bytes) in data {
                 let add = || -> Result<(), String> {
                     worldgen::validate_path(&relative)?;
                     if worldgen::is_resource(&relative) {
-                        let expanded = worldgen::validate_resource(&relative, &bytes)?;
+                        let expanded = match worldgen::validate_resource(&relative, &bytes) {
+                            Ok(expanded) => expanded,
+                            Err(worldgen::ResourceError::Unsupported(entry)) => {
+                                unsupported.push(entry);
+                                return Ok(());
+                            }
+                            Err(worldgen::ResourceError::Invalid(error)) => return Err(error),
+                        };
                         remaining = remaining
                             .checked_sub(expanded.saturating_sub(bytes.len()))
                             .ok_or("Datapack expanded byte limit exceeded")?;
@@ -735,6 +758,16 @@ impl PackSet {
                     Ok(())
                 };
                 add().map_err(|e| format!("{id}: {relative}: {e}"))?;
+            }
+            if !unsupported.is_empty() {
+                const NAMED: usize = 8;
+                let mut named = unsupported[..unsupported.len().min(NAMED)].join(", ");
+                if unsupported.len() > NAMED {
+                    named.push_str(&format!(" and {} more", unsupported.len() - NAMED));
+                }
+                return Err(format!(
+                    "{id}: unsupported worldgen this server cannot generate: {named}"
+                ));
             }
             result.worldgen_layers.push(layer);
         }
@@ -1228,19 +1261,23 @@ fn create_pack(root: &Path, id: &str, description: &str) -> Result<(), Failure> 
     Ok(())
 }
 
+/// The identity of the immutable generators the running world serves.
+fn running_identity(current: &PackSet) -> Result<String, String> {
+    match &current.worldgen_identity {
+        Some(identity) => Ok(identity.clone()),
+        None => current.worldgen_fingerprint(),
+    }
+}
+
 fn prepare_packs(
-    packs: PackSet,
+    mut packs: PackSet,
     current: &PackSet,
+    running: &str,
     base: Option<&crate::registry::CoreRegistry>,
-) -> Result<Completed, Failure> {
-    let mut packs = packs;
+) -> Result<(PackSet, Option<Arc<crate::registry::CoreRegistry>>), String> {
     packs.worldgen_base.clone_from(&current.worldgen_base);
     let identity = packs.worldgen_fingerprint()?;
-    let previous = match &current.worldgen_identity {
-        Some(identity) => identity.clone(),
-        None => current.worldgen_fingerprint()?,
-    };
-    if identity != previous {
+    if identity != running {
         return Err("Datapack worldgen inputs changed; immutable generators cannot be reloaded; restart the server to apply the selected inputs".into());
     }
     packs.worldgen_identity = Some(identity);
@@ -1257,7 +1294,7 @@ fn prepare_packs(
     } else {
         None
     };
-    Ok(Completed::Packs(Box::new(packs), registry))
+    Ok((packs, registry))
 }
 
 /// The worker body: all filesystem access of a job. A refused reload or activation
@@ -1297,15 +1334,18 @@ fn run_job(
     current: &PackSet,
 ) -> Result<Completed, Failure> {
     match job {
-        // Like a start: a new pack that cannot load is skipped with a named warning and the
-        // rest applies; a pack the selection holds that cannot load refuses the reload.
+        // Like a start: a new pack that cannot load, or that would change the running
+        // immutable generators, is skipped with a named warning (a restart offers it
+        // again) and the rest applies; a pack the selection holds that cannot load or
+        // whose worldgen inputs changed refuses the reload.
         Job::Reload => {
-            let packs = PackSet::open(
-                root,
-                selection,
-                base.ok_or("No base registry for the reload")?,
-            )?;
-            prepare_packs(packs, current, base)
+            let base = base.ok_or("No base registry for the reload")?;
+            let running = running_identity(current)?;
+            let ((mut packs, registry), skipped) = PackSet::open(root, selection, |loaded| {
+                prepare_packs(loaded?, current, &running, Some(base))
+            })?;
+            packs.skipped = skipped;
+            Ok(Completed::Packs(Box::new(packs), registry))
         }
         Job::Activation { action, id } => {
             let packs = PackSet::load_known(root, selection)?;
@@ -1321,7 +1361,9 @@ fn run_job(
                     args: vec![id.clone()],
                 });
             }
-            prepare_packs(packs, current, base)
+            let (packs, registry) =
+                prepare_packs(packs, current, &running_identity(current)?, base)?;
+            Ok(Completed::Packs(Box::new(packs), registry))
         }
         Job::List(_) => Ok(Completed::Listing(PackSet::listing(root, &selection)?)),
         Job::Create { id, description } => {

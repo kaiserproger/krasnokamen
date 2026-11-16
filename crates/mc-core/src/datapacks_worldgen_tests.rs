@@ -361,6 +361,118 @@ fn hot_worldgen_enable_disable_and_modified_reload_refuse_without_publication() 
     assert_eq!(current.selection.enabled, ["vanilla", "file/wg"]);
 }
 
+/// An unselected new worldgen pack never blocks `/reload`: the running immutable
+/// generators keep their inputs, the pack is skipped and named (a restart offers
+/// it again), and the rest of the reload applies.
+#[test]
+fn reload_skips_a_new_worldgen_pack_and_applies_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let base = crate::registry::CoreRegistry::load(None).unwrap();
+    let current = PackSet::load(&root, Selection::default()).unwrap();
+    pack(&root, "wg", &[("mod/worldgen/structure_set/a.json", b"{}")]);
+    pack(
+        &root,
+        "fn",
+        &[("mod/function/hello.mcfunction", b"say hello")],
+    );
+    let Ok(crate::datapacks::Completed::Packs(packs, _)) = crate::datapacks::work(
+        &root,
+        current.selection.clone(),
+        &crate::datapacks::Job::Reload,
+        Some(&base),
+        &current,
+    ) else {
+        panic!("a new worldgen pack refused the whole reload");
+    };
+    assert_eq!(packs.selection.enabled, ["vanilla", "file/fn"]);
+    let warnings = packs.warnings(None).join("\n");
+    assert!(
+        warnings.contains("Skipping new datapack file/wg") && warnings.contains("restart"),
+        "{warnings}"
+    );
+}
+
+/// An unselected new worldgen pack never stops a start: here the start cannot
+/// prepare its inputs (no vanilla cache), so the pack is skipped and named, stays
+/// out of the selection, and the rest of the folder loads.
+#[test]
+fn start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(dir.path().to_owned(), 42);
+    let root = dir.path().join("datapacks");
+    pack(
+        &root,
+        "fn",
+        &[("mod/function/hello.mcfunction", b"say hello")],
+    );
+    pack(&root, "wg", &[("mod/worldgen/structure_set/a.json", b"{}")]);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut base = crate::registry::CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut base,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let (state, _, _) =
+        crate::core::recover_tick_state(&config, &Arc::new(base), &store, false, None, None)
+            .unwrap();
+    assert_eq!(state.datapacks.selection().enabled, ["vanilla", "file/fn"]);
+    let warnings = state.datapacks.packs().warnings(None).join("\n");
+    assert!(
+        warnings.contains("Skipping new datapack file/wg")
+            && warnings.contains("vanilla gameplay cache"),
+        "{warnings}"
+    );
+}
+
+/// A selected pack with worldgen this server cannot generate fails closed, and
+/// the refusal names every unsupported entry, not only the first; a pack whose
+/// worldgen is all supported loads its other content.
+#[test]
+fn unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load() {
+    let dir = tempfile::tempdir().unwrap();
+    pack(
+        dir.path(),
+        "bad",
+        &[
+            ("mod/function/hello.mcfunction", b"say hello"),
+            ("mod/dimension/a.json", b"{}"),
+            ("mod/worldgen/biome/b.json", b"{}"),
+            (
+                "mod/worldgen/structure/c.json",
+                br#"{"type":"example:jigsaw"}"#,
+            ),
+        ],
+    );
+    let error = PackSet::load(dir.path(), Selection::default())
+        .err()
+        .unwrap();
+    for entry in [
+        "file/bad",
+        "mod/dimension/a.json",
+        "mod/worldgen/biome/b.json",
+        "mod/worldgen/structure/c.json (structure type example:jigsaw)",
+    ] {
+        assert!(error.contains(entry), "{error}");
+    }
+    let good = tempfile::tempdir().unwrap();
+    pack(
+        good.path(),
+        "good",
+        &[
+            ("mod/function/hello.mcfunction", b"say hello"),
+            ("mod/worldgen/structure_set/a.json", b"{}"),
+        ],
+    );
+    let packs = PackSet::load(good.path(), Selection::default()).unwrap();
+    assert_eq!(packs.selection.enabled, ["vanilla", "file/good"]);
+    assert!(packs.functions.keys().any(|id| id.ends_with("hello")));
+}
+
 #[test]
 fn saved_disabled_selection_and_wal_selection_are_resolved_before_pack_loading() {
     let dir = tempfile::tempdir().unwrap();

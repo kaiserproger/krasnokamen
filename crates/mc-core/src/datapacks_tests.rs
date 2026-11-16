@@ -59,6 +59,41 @@ fn disabled_feature_pack_cannot_load_or_execute_its_function() {
     assert!(PackSet::load(directory.path(), Selection::default()).is_ok());
 }
 
+/// A disabled pack that leaves the datapacks folder is forgotten: when it comes
+/// back under the same name it is discovered as new and enabled again.
+#[test]
+fn a_disabled_pack_removed_from_disk_is_forgotten_and_enabled_when_it_returns() {
+    let directory = tempfile::tempdir().unwrap();
+    let away = tempfile::tempdir().unwrap();
+    pack(
+        directory.path(),
+        "custom",
+        &[("test/function/run.mcfunction", "time add 10")],
+    );
+    let id = String::from("file/custom");
+    let selection = Selection {
+        disabled: vec![id.clone()],
+        ..Default::default()
+    };
+    let packs = PackSet::load(directory.path(), selection).unwrap();
+    assert!(!packs.selection.enabled.contains(&id));
+    assert!(packs.selection.disabled.contains(&id));
+    std::fs::rename(directory.path().join("custom"), away.path().join("custom")).unwrap();
+    let packs = PackSet::load(directory.path(), packs.selection.clone()).unwrap();
+    assert!(
+        !packs.selection.disabled.contains(&id),
+        "a pack gone from disk leaves the disabled list"
+    );
+    std::fs::rename(away.path().join("custom"), directory.path().join("custom")).unwrap();
+    let packs = PackSet::load(directory.path(), packs.selection.clone()).unwrap();
+    assert!(
+        packs.selection.enabled.contains(&id),
+        "{:?}",
+        packs.selection
+    );
+    assert!(!packs.selection.disabled.contains(&id));
+}
+
 #[test]
 fn command_parity_configured_sequence_budget_is_per_invocation() {
     let directory = tempfile::tempdir().unwrap();

@@ -429,31 +429,23 @@ pub(crate) fn recover_tick_state(
         )
     };
     let root = config.world_dir.join("datapacks");
-    let selected = crate::datapacks::worldgen::selection(&replays)?;
-    let mut packs =
-        crate::datapacks::PackSet::open(&root, selected, registry).map_err(CoreError::Registry)?;
-    let mut inputs = packs
-        .prepare_worldgen(&config.world_dir, config.vanilla_data_dir.as_deref())
-        .map_err(CoreError::Worldgen)?;
-    let adoption = inputs.stage_identity(&mut globals)?;
-    adoption.validate_replay_baselines(
+    let opened = crate::datapacks::worldgen::open(
+        &root,
+        &config.world_dir,
+        config.vanilla_data_dir.as_deref(),
         &replays,
+        &mut globals,
         &store
             .checkpoint_reader()
             .map_err(|error| CoreError::Storage(error.to_string()))?,
         registry,
     )?;
-    if adoption.changed {
+    if opened.changed {
         tracing::debug!("selected worldgen identity staged for the next checkpoint");
     }
-    packs.bind_structure_catalog(adoption.catalog);
-    inputs.validate(registry).map_err(CoreError::Worldgen)?;
+    let (packs, inputs) = (opened.packs, opened.inputs);
     let base = Arc::clone(registry);
-    let mut content = registry.prepare_content();
-    packs
-        .install_content(&mut content)
-        .map_err(CoreError::Registry)?;
-    let registry = Arc::new(content);
+    let registry = Arc::new(opened.registry);
     let mut tick_state = load_dimension_state(
         config,
         Arc::clone(&registry),

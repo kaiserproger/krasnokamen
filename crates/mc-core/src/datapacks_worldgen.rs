@@ -223,7 +223,25 @@ pub(super) fn is_resource(path: &str) -> bool {
     })
 }
 
-pub(super) fn validate_resource(path: &str, bytes: &[u8]) -> Result<usize, String> {
+/// Why a worldgen resource of a pack cannot load.
+pub(super) enum ResourceError {
+    /// A kind or structure type this server cannot generate: the entry, named.
+    Unsupported(String),
+    /// Malformed bytes of a supported kind.
+    Invalid(String),
+}
+impl From<String> for ResourceError {
+    fn from(error: String) -> Self {
+        Self::Invalid(error)
+    }
+}
+impl From<&str> for ResourceError {
+    fn from(error: &str) -> Self {
+        Self::Invalid(error.to_owned())
+    }
+}
+
+pub(super) fn validate_resource(path: &str, bytes: &[u8]) -> Result<usize, ResourceError> {
     let (_, tail) = path.split_once('/').ok_or("Missing namespace")?;
     if tail.starts_with("structure/") && tail.ends_with(".nbt") {
         let decoded;
@@ -250,7 +268,7 @@ pub(super) fn validate_resource(path: &str, bytes: &[u8]) -> Result<usize, Strin
         "tags/worldgen/biome/",
     ];
     if !tail.ends_with(".json") || !supported.iter().any(|prefix| tail.starts_with(prefix)) {
-        return Err(format!("Unsupported datapack worldgen resource: {path}"));
+        return Err(ResourceError::Unsupported(path.to_owned()));
     }
     let value: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|e| format!("Invalid worldgen JSON: {e}"))?;
@@ -261,7 +279,9 @@ pub(super) fn validate_resource(path: &str, bytes: &[u8]) -> Result<usize, Strin
         let name = value["type"].as_str().ok_or("Structure requires type")?;
         let kind = mc_data::Identifier::parse(name).map_err(|e| e.to_string())?;
         if !mc_worldgen::village::supports_structure_type(&kind) {
-            return Err(format!("Unsupported datapack structure type: {kind}"));
+            return Err(ResourceError::Unsupported(format!(
+                "{path} (structure type {kind})"
+            )));
         }
     }
     if tail.starts_with("tags/") {
@@ -918,7 +938,7 @@ impl mc_worldgen::vanilla_features::BiomeTagIndex for BiomeTags {
 }
 
 /// Resolve the saved checkpoint + WAL choice before any generator is constructed.
-pub(crate) fn selection(
+fn selection(
     replays: &BTreeMap<crate::dimensions::Dimension, crate::journal::Replay>,
 ) -> Result<Selection, crate::CoreError> {
     let selected = replays
@@ -927,6 +947,60 @@ pub(crate) fn selection(
         .unwrap_or_default();
     selected.validate().map_err(crate::CoreError::Storage)?;
     Ok(selected)
+}
+
+/// The selected packs of a start or an offline export, with their validated
+/// worldgen inputs and the content registry built on `registry`.
+pub(crate) struct Opened {
+    pub(crate) packs: PackSet,
+    pub(crate) inputs: Inputs,
+    pub(crate) registry: crate::registry::CoreRegistry,
+    /// The selected identity differs from the saved one.
+    pub(crate) changed: bool,
+}
+
+/// Open the saved selection for a start or an offline export (one shared path).
+/// A new pack joins only when the whole world still opens with it: its content
+/// installs, the worldgen inputs prepare and validate, and the replay ancestry
+/// fence accepts the identity; otherwise it is skipped and named. `globals`
+/// receives the identity staging of the admitted selection only; `scratch` owns
+/// the private input image.
+pub(crate) fn open(
+    root: &Path,
+    scratch: &Path,
+    base: Option<&Path>,
+    replays: &BTreeMap<crate::dimensions::Dimension, crate::journal::Replay>,
+    globals: &mut BTreeMap<String, mc_world::native::NativeDomainRecord>,
+    reader: &mc_world::native::NativeCheckpointReader,
+    registry: &crate::registry::CoreRegistry,
+) -> Result<Opened, crate::CoreError> {
+    let ((mut opened, staged), skipped) = PackSet::open(root, selection(replays)?, |loaded| {
+        let mut packs = loaded.map_err(crate::CoreError::Registry)?;
+        let mut inputs = packs
+            .prepare_worldgen(scratch, base)
+            .map_err(crate::CoreError::Worldgen)?;
+        let mut staged = globals.clone();
+        let adoption = inputs.stage_identity(&mut staged)?;
+        adoption.validate_replay_baselines(replays, reader, registry)?;
+        packs.bind_structure_catalog(adoption.catalog);
+        inputs
+            .validate(registry)
+            .map_err(crate::CoreError::Worldgen)?;
+        let mut content = registry.prepare_content();
+        packs
+            .install_content(&mut content)
+            .map_err(crate::CoreError::Registry)?;
+        let opened = Opened {
+            packs,
+            inputs,
+            registry: content,
+            changed: adoption.changed,
+        };
+        Ok::<_, crate::CoreError>((opened, staged))
+    })?;
+    opened.packs.skipped = skipped;
+    *globals = staged;
+    Ok(opened)
 }
 
 #[cfg(test)]
