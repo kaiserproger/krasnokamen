@@ -264,7 +264,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     if !matches!(
         blueprints::get(&state.registry, &order.blueprint).map(|bp| bp.kind),
         Some(BuildingKind::House | BuildingKind::Storage)
-    ) && priority_house(state, record, &images).is_some()
+    ) && house_precedes_order(state, record, &images)
     {
         return false;
     }
@@ -687,12 +687,11 @@ fn start_build(
     }
     let images = executor::source_images(state, id);
     if !matches!(blueprint.kind, BuildingKind::House | BuildingKind::Storage)
-        && priority_house(
+        && house_precedes_order(
             state,
             state.settlements.get(id).expect("claimed settlement"),
             &images,
         )
-        .is_some()
     {
         return Err("Busy.".into());
     }
@@ -893,7 +892,7 @@ fn priority_house(
     record: &SettlementRecord,
     images: &[super::inventory::Image],
 ) -> Option<&'static blueprints::Blueprint> {
-    if record.project.is_some() || state.settlements.member_count(record.id) == 0 {
+    if state.settlements.member_count(record.id) == 0 {
         return None;
     }
     let cache = &state.villager_pois;
@@ -917,10 +916,45 @@ fn priority_house(
         return None;
     }
     let blueprint = catalog(state, record).find(|bp| bp.kind == BuildingKind::House)?;
+    // Admission already proved this house's funding. Its untouched builder
+    // may have hauled part of that stock, so do not re-prove the full bill.
+    if record
+        .project
+        .as_ref()
+        .is_some_and(|project| project.blueprint == blueprint.id)
+    {
+        return Some(blueprint);
+    }
     let level = blueprint.level(1)?;
     funded_variant(state, record.id, &level.materials, images)
         .is_some()
         .then_some(blueprint)
+}
+
+/// An existing housing project retains its slot; an unplaceable house must
+/// not hold back a funded owner order.
+fn house_precedes_order(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[super::inventory::Image],
+) -> bool {
+    let Some(house) = priority_house(state, record, images) else {
+        return false;
+    };
+    record
+        .project
+        .as_ref()
+        .is_some_and(|project| project.blueprint == house.id)
+        || site_project(
+            state,
+            record,
+            std::iter::once(house),
+            record.construction_cursor,
+            SITE_ATTEMPTS,
+            images,
+        )
+        .0
+        .is_some()
 }
 
 /// Reuse the executor's reservation, including the admitted clearing corridor.
@@ -1696,24 +1730,38 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // of the entire planner: another resident can build a funded later kind.
     let gathering = gatherer_demand(state, record, &images)
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
-    let mut funded = [None; AUTONOMOUS_KINDS + 1];
+    // Housing gets its own bounded scan. If it has no site, ordinary funded
+    // candidates still get their shared scan in this same planning pass.
+    let (house, cursor) = priority_house(state, record, &images).map_or(
+        (None, record.construction_cursor),
+        |house| {
+            site_project(
+                state,
+                record,
+                std::iter::once(house),
+                record.construction_cursor,
+                SITE_ATTEMPTS,
+                &images,
+            )
+        },
+    );
+    if let Some(site) = house {
+        begin_cells(state, site.project, site.bounds, site.cells);
+        return;
+    }
+    let mut funded = [None; AUTONOMOUS_KINDS];
     let mut funded_count = 0;
-    if let Some(house) = priority_house(state, record, &images) {
-        funded[0] = Some(house);
-        funded_count = 1;
-    } else {
-        let catalog = catalog(state, record);
-        for kind in candidate_kinds(state, record, &images) {
-            let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
-                continue;
-            };
-            if blueprint
-                .level(1)
-                .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
-            {
-                funded[funded_count] = Some(blueprint);
-                funded_count += 1;
-            }
+    let catalog = catalog(state, record);
+    for kind in candidate_kinds(state, record, &images) {
+        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
+            continue;
+        };
+        if blueprint
+            .level(1)
+            .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
+        {
+            funded[funded_count] = Some(blueprint);
+            funded_count += 1;
         }
     }
     if funded_count != 0 {
@@ -1724,7 +1772,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
                 .into_iter()
                 .take(funded_count)
                 .map(|blueprint| blueprint.expect("funded prefix")),
-            record.construction_cursor,
+            cursor,
             SITE_ATTEMPTS,
             &images,
         );
@@ -1739,6 +1787,13 @@ fn plan(state: &mut TickState, id: SettlementId) {
         && begin(state, project, &species, color)
     {
         return;
+    }
+    if funded_count == 0 {
+        let record = state.settlements.get_mut(id).expect("planned settlement");
+        if record.construction_cursor != cursor {
+            record.construction_cursor = cursor;
+            record.revision = record.revision.saturating_add(1);
+        }
     }
     // The first Farm's seeds are gathered even while a priority material
     // worker is out: `assign_builder` keeps that worker out of this project,
@@ -2181,6 +2236,7 @@ fn retry_preparation(
     id: SettlementId,
     project: &Project,
 ) -> Result<(), String> {
+    executor::return_carry(state, id);
     preempt(state, id)?;
     let record = state
         .settlements

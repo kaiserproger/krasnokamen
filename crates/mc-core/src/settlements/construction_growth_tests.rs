@@ -42,8 +42,13 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
         "the resident must actually claim its bed"
     );
     assert!(state.settlements.get(id).unwrap().project.is_none());
+    stock_buildings(&mut state, &["spanish_house", "spanish_church"]);
+    (state, id)
+}
+
+fn stock_buildings(state: &mut TickState, names: &[&str]) {
     let mut bill = std::collections::BTreeMap::<u32, u32>::new();
-    for name in ["spanish_house", "spanish_church"] {
+    for name in names {
         for &(item, count) in &blueprints::get(&state.registry, name)
             .unwrap()
             .level(1)
@@ -64,12 +69,13 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
             count -= portion;
         }
     }
-    (state, id)
 }
 
 #[test]
 fn exhausted_roofed_beds_put_another_house_before_a_queued_cultural_order() {
     let (mut state, id) = housing_fixture(false);
+    // Keep the autonomous house untouched across several owner-order passes.
+    state.day_time = 0;
     let result = request_build(&mut state, id, "spanish_church").unwrap();
     assert!(
         matches!(result, OrderOutcome::Queued { .. }),
@@ -82,6 +88,12 @@ fn exhausted_roofed_beds_put_another_house_before_a_queued_cultural_order() {
         }
     }
     let record = state.settlements.get(id).unwrap();
+    let structure = record.project.as_ref().unwrap().structure.clone();
+    for _ in 0..80 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.project.as_ref().unwrap().structure, structure);
     assert_eq!(record.project.as_ref().unwrap().blueprint, "spanish_house");
     assert_eq!(
         record.pending_order.as_ref().unwrap().blueprint,
@@ -107,6 +119,82 @@ fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
             .blueprint,
         "spanish_church"
     );
+}
+
+fn house_without_site() -> (TickState, SettlementId) {
+    let (mut state, id) = housing_fixture(false);
+    stock_buildings(&mut state, &["spanish_house", "farm"]);
+    // The Farm fits below this fluid ceiling; the taller House cannot.
+    let water = block(&state, "minecraft:water", &[("level", "0")]);
+    for x in -16..32 {
+        for z in -16..32 {
+            state.world.set_block(x, 208, z, water);
+        }
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let house = priority_house(&state, record, &images).expect("a funded housing need");
+    assert!(
+        site_project(&state, record, std::iter::once(house), 0, u32::MAX, &images)
+            .0
+            .is_none(),
+        "no loaded House site fits"
+    );
+    assert!(
+        site_project(
+            &state,
+            record,
+            std::iter::once(blueprints::get(&state.registry, "farm").unwrap()),
+            0,
+            SITE_ATTEMPTS,
+            &images,
+        )
+        .0
+        .is_some(),
+        "the funded Farm has a legal site in this planning pass"
+    );
+    (state, id)
+}
+
+#[test]
+fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
+    let (mut state, id) = house_without_site();
+    plan(&mut state, id);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .blueprint,
+        "farm"
+    );
+}
+
+#[test]
+fn a_house_without_a_site_does_not_hold_a_direct_farm_order() {
+    let (mut state, id) = house_without_site();
+    assert_eq!(
+        request_build(&mut state, id, "farm").unwrap(),
+        OrderOutcome::Started
+    );
+}
+
+#[test]
+fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
+    let (mut state, id) = house_without_site();
+    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+        blueprint: "farm".into(),
+        level: 1,
+        building: None,
+    });
+    assert!(plan_order(&mut state, id));
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.project.as_ref().unwrap().blueprint, "farm");
+    assert!(record.pending_order.is_none());
 }
 
 #[derive(Clone, Default)]
@@ -178,8 +266,13 @@ fn a_stalled_project_warns_once_after_three_work_hours_without_a_builder() {
     assert!(causes[0].contains("no_builder"));
 }
 
-#[test]
-fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() {
+fn protected_preparation() -> (
+    TickState,
+    SettlementId,
+    crate::entities::EntitySlot,
+    Project,
+    [i32; 3],
+) {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);
     let root = [5, 201, 5];
@@ -194,8 +287,6 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
         .unwrap()
         .planted_trees
         .insert(root);
-    let tree = state.world.block_at(root[0], root[1], root[2]);
-    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let next = executor::next_cell(&state, id, &project.structure)
         .unwrap()
         .unwrap();
@@ -207,16 +298,41 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
             f64::from(next[2]) + 0.5,
         ],
     );
+    (state, id, builder, project, root)
+}
+
+fn stall_preparation(state: &mut TickState, id: SettlementId) -> Warnings {
     let warnings = Warnings::default();
     tracing::subscriber::with_default(warnings.clone(), || {
-        release_stalled_builder(&mut state, id);
+        release_stalled_builder(state, id);
         for _ in 0..=150 {
-            crate::villager::building::tick(&mut state, id);
+            crate::villager::building::tick(state, id);
             state.tick += 20;
             state.day_time += 20;
-            release_stalled_builder(&mut state, id);
+            release_stalled_builder(state, id);
         }
     });
+    warnings
+}
+
+#[test]
+fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() {
+    let (mut state, id, builder, project, root) = protected_preparation();
+    let tree = state.world.block_at(root[0], root[1], root[2]);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    // A rotated builder may still carry an older load during preparation.
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    let stack = slots.iter_mut().find(|stack| !stack.is_empty()).unwrap();
+    let carried = mc_data::ItemStack::new(stack.item_id, 1);
+    stack.count -= 1;
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(carried);
+    let warnings = stall_preparation(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(
         record.project.is_none(),
@@ -231,7 +347,61 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
     );
     assert_eq!(state.world.block_at(root[0], root[1], root[2]), tree);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert_eq!(warnings.0.lock().unwrap().len(), 1);
+    assert!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .all(mc_data::ItemStack::is_empty),
+        "retry returns the builder's carry before releasing its profession"
+    );
+    assert_eq!(
+        &*warnings.0.lock().unwrap(),
+        &["\"protected_tree_in_preparation\""]
+    );
+}
+
+#[test]
+fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
+    let (mut state, id, _, project, root) = protected_preparation();
+    // Clear cells are normally free. Exercise the defensive paid-work guard
+    // using the canonical persisted ledger image, without changing its stage.
+    let mut ledger = state
+        .plugins
+        .get_domain("@native-structures", "ledger")
+        .unwrap()
+        .clone();
+    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+        serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
+    state
+        .plugins
+        .set_domain("@native-structures", "ledger", ledger);
+    let before = executor::status(&state, id, &project.structure).unwrap();
+    assert!(!before.consumed.is_empty());
+    assert!(executor::clearing(&state, id, &project.structure));
+    let tree = state.world.block_at(root[0], root[1], root[2]);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let warnings = stall_preparation(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        record.project.as_ref().unwrap().structure,
+        project.structure
+    );
+    assert!(record.pending_order.is_none());
+    let after = executor::status(&state, id, &project.structure).unwrap();
+    assert_ne!(after.state, ScriptStructureState::Cancelled);
+    assert_eq!(after.consumed, before.consumed);
+    assert_eq!(state.world.block_at(root[0], root[1], root[2]), tree);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    assert_eq!(
+        &*warnings.0.lock().unwrap(),
+        &["\"protected_tree_in_preparation\""]
+    );
 }
 
 fn planted_sapling_before_admission(corridor: bool) {
