@@ -369,6 +369,83 @@ fn unsupported_worldgen_and_unknown_resources_fail_with_explicit_error() {
 }
 
 #[test]
+fn directory_outside_vanilla_data_types_is_ignored_and_named_once() {
+    let directory = tempfile::tempdir().unwrap();
+    pack(
+        directory.path(),
+        "a",
+        &[
+            ("mvs/moogs_structures/replace_vanilla.json", "{}"),
+            ("test/function/a.mcfunction", "time set 1234"),
+        ],
+    );
+    let packs = PackSet::load(directory.path(), Selection::default()).unwrap();
+    assert!(packs.functions.contains_key("test:a"));
+    let warnings = packs.warnings(None);
+    assert_eq!(
+        warnings
+            .iter()
+            .filter(|w| w.contains("file/a: mvs/moogs_structures/replace_vanilla.json"))
+            .count(),
+        1,
+        "{warnings:?}"
+    );
+    // A later load that finds the same file does not repeat the warning.
+    assert!(packs.warnings(Some(&packs)).is_empty());
+}
+
+#[test]
+fn vanilla_data_directory_list_covers_the_local_vanilla_data() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../data/vanilla/26.3/data/minecraft");
+    for entry in std::fs::read_dir(&root).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        assert!(VANILLA_DATA_DIRECTORIES.contains(&name.as_str()), "{name}");
+    }
+}
+
+fn zeroed_structure(path: &Path, zeros: usize) {
+    use std::io::Write;
+    let mut nbt = vec![0x0a, 0, 0, 0x07, 0, 1, b'a'];
+    nbt.extend((zeros as i32).to_be_bytes());
+    nbt.resize(nbt.len() + zeros, 0);
+    nbt.push(0);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    gz.write_all(&nbt).unwrap();
+    std::fs::write(path, gz.finish().unwrap()).unwrap();
+}
+
+/// Sixteen structures of `each_zeros` bytes (the NBT reader refuses one array over 16 MiB).
+fn sixteen_structures(root: &Path, each_zeros: usize) {
+    pack(root, "a", &[]);
+    for index in 0..16 {
+        zeroed_structure(
+            &root.join(format!("a/data/test/structure/{index}.nbt")),
+            each_zeros,
+        );
+    }
+}
+
+#[test]
+fn decompressed_structure_bytes_are_bounded_by_the_load_budget() {
+    // 16 x 3,800,000 B exceeds the 48,122,266 B the full converted MVS pack expands to.
+    let under = tempfile::tempdir().unwrap();
+    sixteen_structures(under.path(), 3_800_000);
+    PackSet::load(under.path(), Selection::default()).unwrap();
+    // Total expanded bytes are counted across all files of the load.
+    let edge = tempfile::tempdir().unwrap();
+    sixteen_structures(edge.path(), (MAX_BYTES - 4096) / 16);
+    PackSet::load(edge.path(), Selection::default()).unwrap();
+    let over = tempfile::tempdir().unwrap();
+    sixteen_structures(over.path(), MAX_BYTES / 16 + 512);
+    let error = PackSet::load(over.path(), Selection::default())
+        .err()
+        .unwrap();
+    assert!(error.contains("byte limit exceeded"), "{error}");
+}
+
+#[test]
 fn nonoperator_cannot_invoke_function() {
     let directory = tempfile::tempdir().unwrap();
     pack(
