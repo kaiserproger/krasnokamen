@@ -946,6 +946,7 @@ fn state_contracts_hold_policy_and_receipts_only() {
             waypoints: vec![SRC_DOOR, DST_DOOR],
             epoch: 0,
             max_ticks: 10,
+            game_deadline: Some(10),
             paid_mandate: None,
             source_fence: fence(),
             destination_fence: fence(),

@@ -101,9 +101,26 @@ pub(crate) struct EscrowMandate {
     pub state: EscrowState,
 }
 
+/// Units of persisted economy timestamps, never an additional accrual counter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum Clock {
+    WorldTicks,
+    #[default]
+    GameTicks,
+}
+
+impl Clock {
+    pub(super) fn legacy() -> Self {
+        Self::WorldTicks
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
+    #[serde(default = "Clock::legacy")]
+    pub(super) clock: Clock,
     #[serde(default)]
     pub employments: BTreeMap<String, Employment>,
     #[serde(default)]
@@ -243,6 +260,57 @@ pub(crate) fn active(state: &State) -> bool {
             .mandates
             .values()
             .any(|m| m.state == EscrowState::Escrowed)
+}
+/// Called after WAL folding and restoration of the global game clock, before
+/// recovery exposes any dimension. Converted images use the ordinary tick WAL.
+pub(super) fn restore_economy_clocks(world: &mut TickState) -> Result<(), crate::CoreError> {
+    let held = world.tick - world.tick_control.game_ticks(world.tick);
+    restore_dimension_clocks(world, held)?;
+    for dimension in world.other_dimensions.values_mut() {
+        restore_dimension_clocks(dimension, held)?;
+    }
+    Ok(())
+}
+
+fn restore_dimension_clocks(world: &mut TickState, held: u64) -> Result<(), crate::CoreError> {
+    // Registry exposes immutable iteration and touched mutation separately.
+    let ids: Vec<_> = world
+        .settlements
+        .records()
+        .filter(|record| {
+            record.economy.commerce.clock == Clock::WorldTicks
+                || record.economy.caravan.clock == Clock::WorldTicks
+        })
+        .map(|record| record.id)
+        .collect();
+    for id in ids {
+        let record = world.settlements.get_mut(id).expect("recovered settlement");
+        let invalid = |reason| {
+            crate::CoreError::Storage(format!(
+                "native settlement {} economy clock conversion: {reason}",
+                id.0
+            ))
+        };
+        restore_clock(&mut record.economy.commerce, held).map_err(invalid)?;
+        super::caravan::restore_clock(&mut record.economy.caravan, held).map_err(invalid)?;
+    }
+    Ok(())
+}
+
+fn restore_clock(state: &mut State, held: u64) -> Result<(), String> {
+    if state.clock == Clock::GameTicks {
+        return Ok(());
+    }
+    for (id, employment) in &state.employments {
+        employment.next_due.checked_sub(held).ok_or_else(|| format!(
+            "employment {id} next_due predates the restored game-clock origin; resolve with the previous server before upgrading"
+        ))?;
+    }
+    for employment in state.employments.values_mut() {
+        employment.next_due -= held;
+    }
+    state.clock = Clock::GameTicks;
+    Ok(())
 }
 
 fn emerald_id(state: &TickState) -> Result<u32, Failure> {
@@ -420,9 +488,11 @@ fn employ(
     if wage == 0 || period == 0 || budget == 0 {
         return Err(Failure::InvalidRequest);
     }
-    if world.tick.checked_add(period).is_none() {
-        return Err(Failure::InvalidRequest);
-    }
+    let next_due = world
+        .tick_control
+        .game_ticks(world.tick)
+        .checked_add(period)
+        .ok_or(Failure::InvalidRequest)?;
     if state.employments.contains_key(&contract) || seq <= state.ended_employment {
         return Err(Failure::OperationConflict);
     }
@@ -431,7 +501,6 @@ fn employ(
     }
     authorize(world, settlement, &treasury)?;
     authorize(world, settlement, &Endpoint::VillagerCarry { uuid: worker })?;
-    let next_due = world.tick.saturating_add(period);
     state.employments.insert(
         contract,
         Employment {
@@ -528,7 +597,8 @@ fn settle_payroll(
     op: String,
     observed: Option<(ScriptInventoryFence, ScriptInventoryFence)>,
 ) -> Result<(), Failure> {
-    let (earned, due) = projected_accrual(employment, world.tick).ok_or(Failure::Capacity)?;
+    let (earned, due) = projected_accrual(employment, world.tick_control.game_ticks(world.tick))
+        .ok_or(Failure::Capacity)?;
     let unpaid = earned
         .checked_sub(employment.paid)
         .ok_or(Failure::InvalidRequest)?;
@@ -874,7 +944,9 @@ pub(crate) fn execute(
                 budget,
             },
         ),
-        Request::StopEmployment { contract } => stop_employment(state, &contract, world.tick),
+        Request::StopEmployment { contract } => {
+            stop_employment(state, &contract, world.tick_control.game_ticks(world.tick))
+        }
         Request::DismissEmployment { contract } => dismiss_employment(state, &contract),
         Request::Pay {
             contract,
@@ -953,7 +1025,7 @@ pub(crate) fn execute(
 /// may request the same physical effects, but are never required to drive them.
 /// Existing next_due is also the retry cadence for stopped, still-owed wages.
 pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut State) -> bool {
-    let now = world.tick;
+    let now = world.tick_control.game_ticks(world.tick);
     let mut changed = state.payroll_cursor.run(
         &mut state.employments,
         |employment| {

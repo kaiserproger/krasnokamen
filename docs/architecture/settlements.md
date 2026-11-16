@@ -70,6 +70,21 @@ sleeping residents are excluded, no position is chosen in unloaded space, and a
 resident whose eye cell is a suffocating block is not moved (vanilla
 suffocation applies there).
 
+Wage accrual (`commerce`) and caravan expiry (`caravan`) use simulated game
+ticks, so `/tick freeze` and server downtime add no elapsed periods. Payroll
+keeps one persisted `next_due` for both simulated and unsimulated settlements;
+caravans keep one `game_deadline`, while `epoch` remains immutable receipt
+identity. Recovery converts legacy world-tick clocks once, after WAL folding
+and restoration of the global game clock: subtract the recovered held-tick
+offset from wage `next_due` and from `epoch + max_ticks`. This preserves legacy
+remaining/overdue durations, not a reconstruction of historical freezes.
+Underflow or overflow refuses startup with the contract/shipment identity;
+resolve that legacy contract using the previous server before upgrading.
+Persisted clock discriminators and deadlines travel in the normal settlement
+WAL/checkpoint images; missing discriminators mean legacy units, and unsupported
+units or mixed caravan deadline schemas fail closed. Downgrade requires the
+pre-upgrade backup. No residency transition resets either clock.
+
 ## Durability and plugin boundary
 
 Touched settlement post-images and deletions share the dimension-wrapped tick

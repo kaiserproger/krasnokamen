@@ -48,6 +48,7 @@ fn checkpoint(f: &mut Fixture, config: &CoreConfig) {
     let mut manifest: crate::journal::CheckpointManifest =
         serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
     manifest.tick = tick;
+    manifest.climate = Some(crate::weather::ClimateImage::capture(&f.state));
     for child in manifest.dimensions.values_mut() {
         child.tick = tick;
     }
@@ -377,3 +378,6 @@ fn real_delivery_automatically_pays_escrow_exactly_once_across_disk_reopen() {
         writer.flush().unwrap();
     }
 }
+
+#[path = "commerce_clock_tests.rs"]
+mod clocks;

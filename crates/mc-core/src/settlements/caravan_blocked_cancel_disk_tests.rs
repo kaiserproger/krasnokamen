@@ -44,6 +44,7 @@ fn checkpoint(f: &mut Fixture, config: &CoreConfig) {
     let mut manifest: crate::journal::CheckpointManifest =
         serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
     manifest.tick = tick;
+    manifest.climate = Some(crate::weather::ClimateImage::capture(&f.state));
     for child in manifest.dimensions.values_mut() {
         child.tick = tick;
     }
@@ -301,3 +302,6 @@ fn blocked_loaded_cancel_releases_ownership_across_actual_wal_checkpoint_and_new
         }
     }
 }
+
+#[path = "caravan_clock_tests.rs"]
+mod clocks;
