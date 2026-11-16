@@ -122,9 +122,9 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Claim      task id and timebox; Main runs `task-claim` before launch (below)
 # Write set  owned files and dirs; everything else read-only
 # Module     a new feature only: its module or crate path, host module, the one
-#            registration point, exported interface; it must not join the big
-#            cycle (code-health cycle module count not higher) ([new features
-#            are modules](adding-a-feature.md#new-features-are-modules))
+#            registration point, exported interface; largest-cycle module count
+#            from code-health not higher ([new features are
+#            modules](adding-a-feature.md#new-features-are-modules))
 # Evidence   per row: cargo:<crate>:<test> | harness:<profile> (real client) |
 #            review-only
 # Commits    none (leave the diff and its SHA-256) | local commits on the branch

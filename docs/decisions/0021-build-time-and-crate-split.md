@@ -12,10 +12,11 @@ The cycle ratchet
 (owner-approved 2026-11-07, implemented) makes code-health fail when the module
 cycle grows.
 **Direction (owner, 2026-11-16):** no big-bang split now. Every new feature is
-built as its own module (or crate) with its state, systems and tests inside and
-a narrow interface; it may use core types one way but must not join or grow the
-large cycle, which reaches it only through one host registration point or the
-tick-system graph ([how-to](../development/adding-a-feature.md#new-features-are-modules)).
+built as its own module (or crate) with its state, systems and tests inside, a
+narrow interface and one host registration point, and does not grow the module
+count of the largest cycle (a submodule of its domain host, or a top-level
+module the cycle does not refer to;
+[how-to](../development/adding-a-feature.md#new-features-are-modules)).
 Moving existing code into modules is a separate goal after the 21 November
 announcement, along this ADR's cycle-cut plan; until then existing code stays
 where it is and only its fixes land there.

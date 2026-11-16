@@ -59,28 +59,30 @@ code stay where the code is.
   the host's existing persistence path; the codec for the feature's rows lives
   in the feature module.
 - **Narrow interface.** Other code calls a few named functions or a small trait
-  the module exports. The module may use existing core types one way
-  (`TickState`, entities, settlement records) but adds no ad-hoc `pub(crate)`
-  reach-ins into unrelated modules.
-- **Do not join the big cycle.** Most top-level `mc-core` modules form one
-  strongly connected component. The feature must not join or grow it: nothing
-  inside the cycle may come to depend back on the feature through a direct
-  call. The cycle reaches it only through the host's registration point (below)
-  or the declared tick-system graph
-  ([ADR 0017](../decisions/0017-tick-system-graph.md)).
+  the module exports. The module may use existing core types (`TickState`,
+  entities, settlement records) but adds no ad-hoc `pub(crate)` reach-ins into
+  unrelated modules.
 - **One registration point.** The host module wires it in at one place (its
-  module declaration plus one tick/system call or one state field), owned by the
-  host. No scattered edits through `tick.rs`, `registry.rs` or other shared files.
+  module declaration plus one tick call or one state field), owned by the host.
+  No scattered edits through `tick.rs`, `registry.rs` or other shared files.
+  This keeps the change reviewable and avoids merge conflicts between parallel
+  lanes; it does not break a dependency cycle: host → feature → `TickState` →
+  host is still one cycle.
+- **Cycle size.** Most top-level `mc-core` modules form one strongly connected
+  component. The code-health ratchet
+  ([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07),
+  `crates/xtask/src/code_health/ratchet.rs`) counts the top-level modules in the
+  largest one and fails when that number grows; it checks neither single edges
+  nor cycles among submodules. So a new feature is either a submodule of its
+  domain host (as `settlements::migration` above; the count stays the same), or
+  a new top-level module that nothing in the cycle refers to. A new top-level
+  module that the cycle calls and that uses `TickState` joins the cycle and fails
+  the ratchet.
 
-The code-health cycle ratchet
-([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07),
-`crates/xtask/src/code_health/ratchet.rs`) counts the top-level modules in the
-largest cycle; it checks neither single edges nor cycles among submodules. It is
-the mechanical floor ("the cycle does not grow"), not proof of a narrow
-interface. Checklist for the change and its review: module path and host named;
-state, systems and tests inside; exported interface listed; no call from inside
-the cycle into the feature except the one registration point;
-`python3 -m tools.harness run code-health` cycle module count not higher.
+Checklist for the change and its review: module path and host named; state,
+systems and tests inside; exported interface listed; exactly one registration
+point; `python3 -m tools.harness run code-health` largest-cycle module count not
+higher.
 
 ## New dependencies and components
 
