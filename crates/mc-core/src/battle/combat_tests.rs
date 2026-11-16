@@ -32,6 +32,11 @@ pub(in crate::battle) fn index(state: &TickState, battle: &BattleState, id: Enti
     battle.columns.index(slot(state, id)).unwrap()
 }
 
+/// Sets a fighter's private shield block for battle tests outside combat.
+pub(in crate::battle) fn set_block(fighter: &mut Fighter, block: Option<(EntityId, u64)>) {
+    fighter.block = block;
+}
+
 fn pair() -> (TickState, BattleState, EntityId, EntityId) {
     let (mut state, _, pos) = fixture();
     let actor = spawn(&mut state, "husk", pos);
@@ -537,6 +542,36 @@ fn dense_fighter_layout_changes_preserve_action_and_ammunition_by_identity() {
         combat.remap.is_empty(),
         "removed identity cannot retain combat custody"
     );
+}
+
+/// A column that leaves at a layout change (a horse extra that died) is gone
+/// from the next image: a Windup aimed at it ends as its no-op strike at
+/// impact leaves it and a block against it lapses. A Windup on an identity
+/// that never was a column (a live-role holder) is untouched.
+#[test]
+fn a_departed_column_ends_windups_and_blocks_aimed_at_it() {
+    let (horse, holder) = (EntityId(30), EntityId(99));
+    let mut combat = CombatRuntime::default();
+    combat.prepare(&[EntityId(10), EntityId(20), horse]);
+    let windup = |target| Action::Windup {
+        target,
+        start: 7,
+        weapon: Weapon::Spear,
+    };
+    combat.fighters[0].action = windup(horse);
+    combat.fighters[0].block = Some((horse, 12));
+    combat.fighters[1].action = windup(holder);
+    combat.fighters[1].block = Some((EntityId(10), 12));
+    combat.prepare(&[EntityId(10), EntityId(20)]);
+    assert_eq!(
+        combat.fighters[0].action,
+        Action::Recover {
+            until: 7 + u64::from(Weapon::Spear.cycle()),
+        }
+    );
+    assert_eq!(combat.fighters[0].block, None);
+    assert_eq!(combat.fighters[1].action, windup(holder));
+    assert_eq!(combat.fighters[1].block, Some((EntityId(10), 12)));
 }
 
 #[test]

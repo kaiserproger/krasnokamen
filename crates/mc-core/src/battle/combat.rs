@@ -1,6 +1,6 @@
 //! Human-speed action clocks; formation pulses, not faster swings, pace the film.
 //! Calibration: BattleVideo/research-combat-behavior.md §§4.4–4.7 (Sabin/Ilerda).
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use mc_melee_range::MeleeReach;
 
@@ -211,6 +211,10 @@ pub(crate) struct CombatRuntime {
     #[serde(skip)]
     // Used only on roster layout changes, never in per-fighter action passes.
     remap: FxHashMap<EntityId, Fighter>,
+    /// Columns the last layout change dropped (`prepare`); empty when the
+    /// last `prepare` kept the layout. Retaliation reads it the same tick.
+    #[serde(skip)]
+    departed: FxHashSet<EntityId>,
     pub(super) archery: super::archery::Runtime,
     #[serde(skip)]
     strikes: Vec<(EntityId, EntityId, Weapon, u64)>,
@@ -279,7 +283,16 @@ impl CombatRuntime {
         self.arsenal.validate_items(registry)
     }
 
+    /// Aligns fighters with the execution columns by identity. A column that
+    /// left (a dead horse extra) is gone from the next image, so a Windup
+    /// aimed at it ends as its no-op strike at impact would leave it
+    /// (`strike` needs the target's column) and a block against it lapses:
+    /// the image never names an identity it does not carry. Only this
+    /// positive evidence clears a reference; an absent body never does.
     pub(super) fn prepare(&mut self, ids: &[EntityId]) {
+        if !self.departed.is_empty() {
+            self.departed.clear();
+        }
         if self.ids == ids {
             return;
         }
@@ -290,7 +303,34 @@ impl CombatRuntime {
             ids.iter()
                 .map(|id| self.remap.remove(id).unwrap_or_default()),
         );
-        self.remap.clear();
+        self.departed.extend(self.remap.drain().map(|(id, _)| id));
+        if self.departed.is_empty() {
+            return;
+        }
+        for fighter in &mut self.fighters {
+            if let Action::Windup {
+                target,
+                start,
+                weapon,
+            } = fighter.action
+                && self.departed.contains(&target)
+            {
+                fighter.action = Action::Recover {
+                    until: start + u64::from(weapon.cycle()),
+                };
+            }
+            if fighter
+                .block
+                .is_some_and(|(attacker, _)| self.departed.contains(&attacker))
+            {
+                fighter.block = None;
+            }
+        }
+    }
+
+    /// `id` was a column the last layout change dropped.
+    pub(super) fn departed(&self, id: EntityId) -> bool {
+        self.departed.contains(&id)
     }
 }
 
