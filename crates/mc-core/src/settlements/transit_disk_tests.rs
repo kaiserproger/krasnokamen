@@ -416,7 +416,13 @@ fn recovery_refuses_a_member_stored_as_body_and_record() {
 
 /// A member image `restore_entity` refuses on arrival: an unregistered type.
 fn unrestorable(state: &mut TickState) {
-    let record = state.settlements.transit.records.values_mut().next().unwrap();
+    let record = state
+        .settlements
+        .transit
+        .records
+        .values_mut()
+        .next()
+        .unwrap();
     record.members[0].type_id = u32::MAX;
 }
 
@@ -453,4 +459,28 @@ fn recovery_refuses_a_transit_wal_image_with_an_unrestorable_member() {
     assert_eq!(stored_rows(&config), 0);
     let error = refusal(t.state, t.writer, &config);
     assert!(error.contains("unknown entity type-id"), "{error}");
+}
+
+/// One household in two transit records with disjoint members (the
+/// household split in two, each keyed by its own lowest member) refuses to
+/// open: a household identity is global.
+#[test]
+fn recovery_refuses_a_household_in_two_transit_records() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut t = town(&config, directory.path());
+    depart_in(&mut t, true);
+    let records = &mut t.state.settlements.transit.records;
+    let (&id, record) = records.iter_mut().next().unwrap();
+    let mut split = record.clone();
+    split.members = record.members.split_off(1);
+    records.insert(split.members[0].uuid.parse().unwrap(), split);
+    assert!(records[&id].members.len() == 1 && records.len() == 2);
+    checkpoint(&mut t.state, &config, false);
+    assert_eq!(stored_rows(&config), 2);
+    let error = refusal(t.state, t.writer, &config);
+    assert!(
+        error.contains(&format!("household {} is in transit records", t.family)),
+        "{error}"
+    );
 }

@@ -131,7 +131,7 @@ fn custody_census_reads_a_checkpointed_transit_row() {
 /// Negative controls: each custody violation at the durable boundary is a FAIL.
 #[test]
 fn custody_census_refuses_a_uuid_held_twice() {
-    let cases: [(Vec<(u128, &[u128], Option<&str>)>, Vec<JournalEntry>, &str); 5] = [
+    let cases: [(Vec<(u128, &[u128], Option<&str>)>, Vec<JournalEntry>, &str); 6] = [
         // Body kept while its record was published (body + record).
         (
             vec![],
@@ -161,6 +161,13 @@ fn custody_census_refuses_a_uuid_held_twice() {
             vec![(0x41, &[0x40, 0x41], None)],
             vec![],
             "is not keyed by its lowest member",
+        ),
+        // One household in two records with disjoint members.
+        (
+            vec![(0x40, &[0x40], Some("7-2")), (0x41, &[0x41], Some("7-2"))],
+            vec![],
+            "household 7-2 is in transit records 00000000-0000-0000-0000-000000000040 and \
+             00000000-0000-0000-0000-000000000041",
         ),
     ];
     for (rows, wal, detail) in cases {
@@ -218,7 +225,11 @@ fn custody_census_keeps_dimensions_apart() {
     append(
         &fixture,
         tick,
-        &[nether(transit(0x40, Some(image(&[0x40, 0x41], None)), tick))],
+        &[nether(transit(
+            0x40,
+            Some(image(&[0x40, 0x41], None)),
+            tick,
+        ))],
     );
     let receipt = custody_census(&fixture.config);
     assert_eq!(receipt.status, "FAIL");

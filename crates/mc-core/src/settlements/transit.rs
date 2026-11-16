@@ -927,14 +927,16 @@ pub(super) fn hydrate(
 
 /// Recovery check once every dimension hydrated: each member UUID is in one
 /// transit record only and is no world entity in any dimension, every member
-/// image passes the refusals of arrival's `restore_entity`, and no transit
-/// household is also a settlement's. A violating store refuses to open.
+/// image passes the refusals of arrival's `restore_entity`, and each transit
+/// household is in one record only and is no settlement's. A violating store
+/// refuses to open.
 pub(super) fn validate_custody(state: &TickState) -> Result<(), CoreError> {
     let households: BTreeSet<&str> = worlds(state)
         .flat_map(|world| world.settlements.records())
         .flat_map(|record| record.households.keys().map(String::as_str))
         .collect();
     let mut seen = BTreeSet::new();
+    let mut travelling = BTreeMap::new();
     for world in worlds(state) {
         for (id, record) in &world.settlements.transit.records {
             for uuid in validate(record, *id).map_err(storage)? {
@@ -948,13 +950,19 @@ pub(super) fn validate_custody(state: &TickState) -> Result<(), CoreError> {
                 }
             }
             restorable(world, *id, record)?;
-            if let Some(family) = &record.household
-                && households.contains(family.id.as_str())
-            {
-                return Err(storage(format!(
-                    "household {} is both in transit record {id} and a settlement's",
-                    family.id
-                )));
+            if let Some(family) = &record.household {
+                if households.contains(family.id.as_str()) {
+                    return Err(storage(format!(
+                        "household {} is both in transit record {id} and a settlement's",
+                        family.id
+                    )));
+                }
+                if let Some(other) = travelling.insert(family.id.as_str(), *id) {
+                    return Err(storage(format!(
+                        "household {} is in transit records {other} and {id}",
+                        family.id
+                    )));
+                }
             }
         }
     }

@@ -176,6 +176,7 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
         }
     }
     let mut members: BTreeMap<uuid::Uuid, (Dimension, uuid::Uuid)> = BTreeMap::new();
+    let mut travelling: BTreeMap<String, uuid::Uuid> = BTreeMap::new();
     for (&(dimension, id), value) in &records {
         let custody = transit(dimension, value)
             .map_err(|reason| invalid(format!("transit record {id}: {reason}")))?;
@@ -204,12 +205,17 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
                 "transit record {id} is not keyed by its lowest member"
             )));
         }
-        if let Some(household) = custody.household.as_deref()
-            && settled.contains(household)
-        {
-            return Err(invalid(format!(
-                "household {household} is in transit record {id} and in a settlement"
-            )));
+        if let Some(household) = custody.household.as_deref() {
+            if settled.contains(household) {
+                return Err(invalid(format!(
+                    "household {household} is in transit record {id} and in a settlement"
+                )));
+            }
+            if let Some(other) = travelling.insert(household.to_owned(), id) {
+                return Err(invalid(format!(
+                    "household {household} is in transit records {other} and {id}"
+                )));
+            }
         }
         receipt.transits.insert(id.to_string(), custody);
     }
