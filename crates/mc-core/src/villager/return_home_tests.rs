@@ -784,3 +784,75 @@ fn a_day_long_freeze_keeps_the_native_return_segment_and_its_bed() {
     assert_eq!(memory.failures, 1);
     assert_eq!(memory.next, retry);
 }
+
+#[test]
+fn flapping_useful_targets_back_off_return_searches_until_a_quiet_stagger() {
+    let mut state = fixture();
+    let town = town(&mut state, "return", 8, 32);
+    let id = resident(&mut state, town, 8.5);
+    let slot = state.entities.slot_of(id).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    state.entities.set_pos(slot, [180.5, 64.0, 8.5]);
+    home_search(&mut state, id);
+    state.tick = 80;
+    state.tick_budget.reset(state.tick);
+    assert!(run(&mut state, id, false));
+    assert!(
+        crate::settlements::migration::return_memory(&mut state)[&uuid]
+            .segment
+            .is_some()
+    );
+    for _ in 0..50 {
+        state.tick += 1;
+        state.tick_budget.reset(state.tick);
+        assert!(!run(&mut state, id, true));
+        state.tick += 1;
+        state.tick_budget.reset(state.tick);
+        let before = state
+            .tick_budget
+            .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
+        assert!(run(&mut state, id, false));
+        assert_eq!(
+            state
+                .tick_budget
+                .allowance(state.dimension, Consumer::Brain, Kind::PathNode),
+            before,
+            "a one-tick gap in useful work must not re-search the return route"
+        );
+    }
+    let memory = &crate::settlements::migration::return_memory(&mut state)[&uuid];
+    assert_eq!(memory.failures, 0);
+    let resume = memory.next;
+    assert_eq!(resume, state.tick_control.game_ticks(state.tick) + 39);
+    state.tick += resume - state.tick_control.game_ticks(state.tick);
+    state.tick_budget.reset(state.tick);
+    let before = state
+        .tick_budget
+        .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
+    assert!(run(&mut state, id, false));
+    assert!(
+        state
+            .tick_budget
+            .allowance(state.dimension, Consumer::Brain, Kind::PathNode)
+            < before
+    );
+    assert!(
+        crate::settlements::migration::return_memory(&mut state)[&uuid]
+            .segment
+            .is_some()
+    );
+}
+
+#[test]
+fn useful_preemption_never_shortens_an_existing_failure_retry() {
+    let (mut state, id, uuid) = blocked();
+    state.tick_budget.reset(state.tick);
+    assert!(run(&mut state, id, false));
+    let retry = crate::settlements::migration::return_memory(&mut state)[&uuid].next;
+    state.tick += 1;
+    assert!(!run(&mut state, id, true));
+    assert_eq!(
+        crate::settlements::migration::return_memory(&mut state)[&uuid].next,
+        retry
+    );
+}

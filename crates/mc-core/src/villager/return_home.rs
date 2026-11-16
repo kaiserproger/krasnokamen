@@ -217,6 +217,7 @@ pub(crate) fn step(
         if let Some(memory) = crate::settlements::migration::return_memory(state).get_mut(&uuid) {
             memory.segment = None;
             memory.waiting = None;
+            memory.next = memory.next.max(now.saturating_add(STAGGER_TICKS));
         }
         return false;
     }

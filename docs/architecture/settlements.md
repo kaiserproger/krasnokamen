@@ -171,6 +171,8 @@ civil sphere may it fall back to an anchor approach when no bed is known.
 Homes, panic and useful native worker, army, economy, food and partner targets
 win; explicit outbound migration travel also wins. Arrival within 32 blocks
 wakes one actual allocator search and holds position until that result.
+Useful-target preemption delays a fresh return search for at least 40 game
+ticks without shortening an existing failure retry.
 
 Return routes reuse the native router, shared Brain budget and committed
 movement: supported simulated legs of at most 64 horizontal blocks, a resident
