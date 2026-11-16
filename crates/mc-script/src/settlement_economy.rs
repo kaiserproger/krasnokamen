@@ -372,6 +372,10 @@ impl ScriptSettlementProductionSnapshot {
 
 /// One live employment observation: the treasury endpoint, wage/period,
 /// remaining budget, earned/paid counters, the active flag and next due.
+/// `period` and `next_due` use simulated game ticks, excluding frozen ticks and
+/// server downtime. `next_due` is an absolute game-clock timestamp, unlike the
+/// production snapshot's world-tick deadline. `earned` excludes legacy debt
+/// pending its first native payroll-cursor visit after recovery.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]

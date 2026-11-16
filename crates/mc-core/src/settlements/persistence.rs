@@ -317,6 +317,7 @@ fn key_marks_settlement_state(key: &str) -> bool {
 /// never reused across dimensions or reopens. Each registry keeps its own
 /// records and high water.
 pub(crate) fn finish_recovery(state: &mut TickState) -> Result<(), CoreError> {
+    super::commerce::restore_economy_clocks(state)?;
     for world in
         std::iter::once(&*state).chain(state.other_dimensions.values().map(|world| &**world))
     {
