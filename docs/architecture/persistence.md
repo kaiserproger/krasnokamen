@@ -321,11 +321,14 @@ presentation corpse can move, but no longer emits compact persisted poses;
 replay still rejects every pose referencing an absent authoritative body.
 
 Both WAL and checkpoint capture reconcile staging decisions with proven native
-tombstones: dead pending/refused bodies no longer await ground. An absent ID is
-not proof of death and remains a recovery error. Pending retaliation drops only
-a native player with a known account name and no named live hold: the ordinary
-next battle pass cannot accept that attacker. Held players, native attackers
-and unknown identities remain unchanged; replay's identity checks stay strict.
+tombstones: dead pending/refused bodies no longer await ground. An absent
+staged body is not proof of death and remains a recovery error. Pending
+retaliation blows feed only the next battle pass, which answers a living
+attacker alone, so capture keeps a blow only by a living native attacker or a
+held player (a reconnect rebinds his last identity). It drops an ordinary
+player, a dead native attacker (a horse extra that left the columns, a mob
+killed in that merge: a dying row has no record) and an attacker without a row
+(a creeper's blast removes it first). Replay's identity checks stay strict.
 
 An image-encoding failure propagates through journal capture as a typed error.
 The tick owner halts before queuing the WAL or publishing that tick, reliably

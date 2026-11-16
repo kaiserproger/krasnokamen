@@ -143,9 +143,15 @@ impl Retaliation {
         Ok(())
     }
 
-    /// `opponent` cannot accept an ordinary player: players are not native
-    /// battle units and only a named hold can populate `holder_side`.
-    /// Keep held players, native attackers and unproven identities unchanged.
+    /// A pending blow only feeds the next pass, which answers a living
+    /// attacker alone (`opponent`). So that the image never names an identity
+    /// it does not carry, capture drops each blow that pass would discard and
+    /// the image could not carry: an attacker without a row (a creeper's
+    /// blast removed it before the merge), a dead native attacker (a horse
+    /// extra that left the columns, a mob killed in this merge: a dying row
+    /// gets no checkpoint record) and an ordinary player (not a native battle
+    /// unit; only a named hold populates `holder_side`). A held player stays:
+    /// the image carries his last identity and a reconnect rebinds it.
     pub(super) fn reconcile_capture(
         &mut self,
         entities: &EntityStore,
@@ -154,13 +160,11 @@ impl Retaliation {
     ) {
         self.pending.retain(|&(_, attacker)| {
             let Some(slot) = entities.slot_of_any(attacker) else {
-                return true;
+                return false;
             };
-            if !matches!(
-                entities.body(slot).kind,
-                crate::entities::EntityKind::Player { .. }
-            ) {
-                return true;
+            let body = entities.body(slot);
+            if !matches!(body.kind, crate::entities::EntityKind::Player { .. }) {
+                return body.alive;
             }
             let Some(name) = connections.name_of(attacker) else {
                 return true;
