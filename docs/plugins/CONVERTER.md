@@ -181,7 +181,7 @@ Run the opt-in in-process host test against its output:
 
 ```sh
 KRASNOKAMEN_BUKKIT_PACKAGE=/tmp/bukkit-receipt/package \
-KRASNOKAMEN_BUKKIT_BLOCKS=data/vanilla/reports/blocks.json \
+KRASNOKAMEN_BUKKIT_BLOCKS="$PWD/data/vanilla/reports/blocks.json" \
   cargo test -p mc-plugin-host --test bukkit_component -- --ignored
 python3 -m unittest discover -s tools/bukkit -p 'test_*.py'
 ```
