@@ -247,10 +247,12 @@ fn offline_export_same_inputs_preserve_selected_nether_geometry_and_reopen() {
         .block(&mc_data::Identifier::parse("minecraft:diamond_block").unwrap())
         .unwrap()
         .default;
+    // Like vanilla's jigsaw GenerationStub, the start site sits one ground-level
+    // delta above the rigid 1×1×1 piece, whose only block is the marker.
     assert_eq!(
         expected.get_block(
             site.position.x.rem_euclid(16) as u8,
-            site.position.y,
+            site.position.y - 1,
             site.position.z.rem_euclid(16) as u8
         ),
         Some(diamond)
