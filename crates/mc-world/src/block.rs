@@ -212,6 +212,40 @@ impl BlockRegistry {
         self.by_key.get(&(name.clone(), canonical)).copied()
     }
 
+    /// Resolve a state written in datapack JSON, as vanilla's `BlockState.CODEC`
+    /// reads it: a property the spec omits takes the value of the block's default
+    /// state, while an unknown property name or value refuses.
+    #[must_use]
+    pub fn by_name_and_props_or_default(
+        &self,
+        name: &Identifier,
+        props: &[(String, String)],
+    ) -> Option<BlockStateId> {
+        let block = self.by_name.get(name)?;
+        let default = self.by_id(block.default)?;
+        let known = |key: &String, value: &String| {
+            block
+                .properties
+                .iter()
+                .any(|(name, values)| name == key && values.contains(value))
+        };
+        if props.iter().any(|(key, value)| !known(key, value)) {
+            return None;
+        }
+        let canonical: Vec<(String, String)> = default
+            .properties
+            .iter()
+            .map(|(key, default_value)| {
+                let value = props
+                    .iter()
+                    .find(|(prop, _)| prop == key)
+                    .map_or_else(|| default_value.clone(), |(_, value)| value.clone());
+                (key.clone(), value)
+            })
+            .collect();
+        self.by_key.get(&(name.clone(), canonical)).copied()
+    }
+
     #[must_use]
     pub fn len(&self) -> usize {
         self.by_id.len()

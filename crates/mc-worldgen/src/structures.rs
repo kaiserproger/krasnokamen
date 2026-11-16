@@ -42,6 +42,17 @@ pub enum StructureError {
     MissingField { path: String, field: &'static str },
     #[error("structure template {path} has invalid {field}")]
     InvalidField { path: String, field: &'static str },
+    #[error("structure template {path} has unsupported DataVersion {version}")]
+    UnsupportedDataVersion { path: String, version: i32 },
+    #[error(
+        "structure template {path} palette cannot be upgraded from DataVersion {version}: {source}"
+    )]
+    PaletteUpgrade {
+        path: String,
+        version: i32,
+        #[source]
+        source: mc_world::anvil::upgrade::UpgradeError,
+    },
     #[error("structure template {path} references unknown block {block}")]
     UnknownBlock { path: String, block: Identifier },
     #[error("structure template {path} references unresolved block state {block}")]
@@ -533,7 +544,13 @@ impl StructureTemplate {
                     field: "palettes",
                 })?
         };
-        let palette = parse_palette(path, palette_tag, registry)?;
+        // Vanilla upgrades a template through its DataFixers from the template's own
+        // `DataVersion`; a template without one is read as authored for this server.
+        let data_version = match compound.iter().find(|(key, _)| key == "DataVersion") {
+            Some((_, tag)) => Some(expect_int(path, tag, "DataVersion")?),
+            None => None,
+        };
+        let palette = parse_palette(path, palette_tag, data_version, registry)?;
         let parsed = parse_blocks(path, require(compound, path, "blocks")?, &palette, registry)?;
         let mut template = Self::new(size, parsed.blocks);
         template.villager_markers = parsed.villager_markers;
@@ -558,12 +575,37 @@ enum TemplatePaletteEntry {
 fn parse_palette(
     path: &str,
     tag: &Tag,
+    data_version: Option<i32>,
     registry: &BlockRegistry,
 ) -> Result<Vec<TemplatePaletteEntry>, StructureError> {
     let list = expect_list(path, tag, "palette")?;
     list.elements
         .iter()
-        .map(|entry| parse_palette_entry(path, entry, registry))
+        .map(|entry| match data_version {
+            // Block renames and property renames registered after the template's
+            // DataVersion (`mc_world::anvil::upgrade::upgrade_block_state`); a
+            // version the upgrader cannot serve refuses instead of passing through.
+            Some(version) => {
+                let mut upgraded = entry.clone();
+                mc_world::anvil::upgrade::upgrade_block_state(&mut upgraded, version).map_err(
+                    |source| match source {
+                        mc_world::anvil::upgrade::UpgradeError::UnsupportedVersion(_) => {
+                            StructureError::UnsupportedDataVersion {
+                                path: path.to_owned(),
+                                version,
+                            }
+                        }
+                        source => StructureError::PaletteUpgrade {
+                            path: path.to_owned(),
+                            version,
+                            source,
+                        },
+                    },
+                )?;
+                parse_palette_entry(path, &upgraded, registry)
+            }
+            None => parse_palette_entry(path, entry, registry),
+        })
         .collect()
 }
 
@@ -1481,6 +1523,114 @@ mod tests {
             }],
             "exactly the template-declared chest lifts, with its loot table"
         );
+    }
+
+    fn palette_template(
+        data_version: Option<i32>,
+        name: &str,
+    ) -> Result<StructureTemplate, StructureError> {
+        palette_entry_template(
+            data_version,
+            Tag::Compound(vec![("Name".into(), Tag::String(name.into()))]),
+        )
+    }
+
+    fn palette_entry_template(
+        data_version: Option<i32>,
+        entry: Tag,
+    ) -> Result<StructureTemplate, StructureError> {
+        let registry = BlockRegistry::from_report(&[
+            BlockReport {
+                id: Identifier::parse("minecraft:air").unwrap(),
+                properties: BTreeMap::new(),
+                states: vec![BlockStateReport {
+                    id: 0,
+                    default: true,
+                    properties: BTreeMap::new(),
+                }],
+            },
+            BlockReport {
+                id: Identifier::parse("minecraft:iron_chain").unwrap(),
+                properties: BTreeMap::new(),
+                states: vec![BlockStateReport {
+                    id: 1,
+                    default: true,
+                    properties: BTreeMap::new(),
+                }],
+            },
+        ])
+        .unwrap();
+        let mut fields = vec![
+            ("size".into(), Tag::List(int_triplet([1, 1, 1]))),
+            (
+                "palette".into(),
+                Tag::List(ListTag {
+                    element_type: entry.type_id(),
+                    elements: vec![entry],
+                }),
+            ),
+            (
+                "blocks".into(),
+                Tag::List(ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: vec![Tag::Compound(vec![
+                        ("pos".into(), Tag::List(int_triplet([0, 0, 0]))),
+                        ("state".into(), Tag::Int(0)),
+                    ])],
+                }),
+            ),
+        ];
+        if let Some(version) = data_version {
+            fields.push(("DataVersion".into(), Tag::Int(version)));
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("template.nbt");
+        std::fs::write(&path, named_nbt_bytes(&Tag::Compound(fields))).unwrap();
+        StructureTemplate::from_nbt_file(&path, &registry)
+    }
+
+    #[test]
+    fn native_26_3_template_spelling_normalizes_and_future_versions_refuse() {
+        // 26.3 (DataVersion 5023, from data/vanilla/26.3/version.json) spells a palette
+        // entry `id`/`properties`, or as a bare identifier.
+        let spelled = Tag::Compound(vec![
+            ("id".into(), Tag::String("minecraft:iron_chain".into())),
+            ("properties".into(), Tag::Compound(Vec::new())),
+        ]);
+        for entry in [spelled, Tag::String("minecraft:iron_chain".into())] {
+            let template = palette_entry_template(Some(5023), entry).unwrap();
+            assert_eq!(template.blocks()[0].state, BlockStateId(1));
+        }
+        // A template past the server's own DataVersion is refused, not read as is.
+        for version in [5024, 9999] {
+            assert!(matches!(
+                palette_template(Some(version), "minecraft:air"),
+                Err(StructureError::UnsupportedDataVersion { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn old_data_version_template_loads_renamed_block_and_unknown_block_still_refuses() {
+        // `minecraft:chain` became `minecraft:iron_chain` at DataVersion 4541.
+        let template = palette_template(Some(4325), "minecraft:chain").unwrap();
+        assert_eq!(template.blocks().len(), 1);
+        assert_eq!(template.blocks()[0].state, BlockStateId(1));
+        assert!(matches!(
+            palette_template(Some(4325), "minecraft:not_a_block"),
+            Err(StructureError::UnknownBlock { .. })
+        ));
+        // At or past the rename (or with no DataVersion) the old name is not rewritten.
+        for version in [Some(4790), None] {
+            assert!(matches!(
+                palette_template(version, "minecraft:chain"),
+                Err(StructureError::UnknownBlock { .. })
+            ));
+        }
+        assert!(matches!(
+            palette_template(Some(100), "minecraft:air"),
+            Err(StructureError::UnsupportedDataVersion { version: 100, .. })
+        ));
     }
 
     fn int_triplet(values: [i32; 3]) -> ListTag {
