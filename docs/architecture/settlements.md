@@ -77,15 +77,22 @@ caravans keep one `game_deadline`, while `epoch` remains immutable receipt
 identity. Recovery converts legacy world-tick clocks once, after WAL folding
 and restoration of the global game clock. Future deadlines preserve their
 remaining duration; overdue wages preserve the old clock's complete-period
-debt in a one-time `legacy_owed` amount consumed by ordinary accrual on the next
-simulation tick, with the next due phase translated to game time. Recovery
-never pays money. Already-expired caravans expire on the first simulation tick.
+debt in a one-time `legacy_owed` amount accrued at the first payroll-cursor visit
+(at most 16 contracts per settlement per tick), paid when budget and treasury
+allow. The next due phase is translated to game time; recovery never pays money.
+Already-expired caravans expire on the first simulation tick.
 Historical freeze periods cannot be reconstructed, so valid legacy debt is not
 forgiven. Only inconsistent future clocks or arithmetic overflow refuse startup.
 Persisted clock discriminators and deadlines travel in the normal settlement
 WAL/checkpoint images; missing discriminators mean legacy units, and unsupported
 units or mixed caravan deadline schemas fail closed. Downgrade requires the
 pre-upgrade backup. No residency transition resets either clock.
+Remove `Clock::WorldTicks`, the recovery converters and `legacy_owed` only after
+every supported live store has a game-clock checkpoint with no pending
+`legacy_owed`, and its retained WAL/restore backups no longer require legacy
+recovery. Archives that still need conversion must first be upgraded with this
+version; removing the shim must reject them explicitly rather than reinterpret
+their timestamps.
 
 ## Durability and plugin boundary
 

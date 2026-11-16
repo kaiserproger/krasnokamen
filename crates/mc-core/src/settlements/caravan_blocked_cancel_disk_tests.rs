@@ -117,7 +117,7 @@ fn step(f: &mut Fixture, writer: &mut JournalWriter) {
     writer.append(output.tick, output.tick, &entries).unwrap();
 }
 
-fn reopen(f: Fixture, config: &CoreConfig, mut writer: JournalWriter) -> (Fixture, JournalWriter) {
+fn recover(f: Fixture, config: &CoreConfig, mut writer: JournalWriter) -> Fixture {
     writer.flush().unwrap();
     drop(writer);
     let Fixture {
@@ -137,7 +137,7 @@ fn reopen(f: Fixture, config: &CoreConfig, mut writer: JournalWriter) -> (Fixtur
         state.entities.slot_of_uuid(carrier_uuid),
         state.entities.slot_of(carrier)
     );
-    let mut f = Fixture {
+    Fixture {
         state,
         settlement,
         source,
@@ -145,7 +145,11 @@ fn reopen(f: Fixture, config: &CoreConfig, mut writer: JournalWriter) -> (Fixtur
         carrier,
         carrier_uuid,
         bread,
-    };
+    }
+}
+
+fn reopen(f: Fixture, config: &CoreConfig, writer: JournalWriter) -> (Fixture, JournalWriter) {
+    let mut f = recover(f, config, writer);
     let mut writer = JournalWriter::open(&config.world_dir, 1).unwrap();
     // Blocked/cancelled shipments are not runnable. A newly admitted production
     // portion has its ordinary 200-tick deadline, so this one hydration tick
