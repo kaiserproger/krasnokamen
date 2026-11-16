@@ -1099,8 +1099,12 @@ fn sigkill_child_reopen_keeps_identical_records_and_high_water() {
         let production = serde_json::to_value(&record.economy.production).unwrap();
         assert_eq!(
             production["consumption"]["next_due"].as_u64(),
-            Some(if record.name == "killtown" { 24_001 } else { 2 }),
-            "the phase initialized at game tick one survives SIGKILL"
+            Some(if record.name == "killtown" {
+                24_001
+            } else {
+                24_002
+            }),
+            "first consumption waits a full day before its phase, including after SIGKILL"
         );
     }
     assert_eq!(

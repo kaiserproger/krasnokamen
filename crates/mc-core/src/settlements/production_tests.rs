@@ -486,7 +486,7 @@ fn cake_inputs_become_cake_after_reach_and_deadline() {
     assert_eq!(stock_total(&world, body, "minecraft:milk_bucket"), 3);
     // At the stand post: one causal portion completes.
     at(&mut world, body, [7.5, 201.0, 8.5]);
-    world.tick = policy.jobs["bake-one"].next_due;
+    world.tick = next_attempt(&policy, "bake-one");
     assert!(tick(&mut world, id, &mut policy));
     let job = &policy.jobs["bake-one"];
     assert_eq!(job.done, 1);
@@ -542,7 +542,7 @@ fn missing_inputs_station_and_capacity_pause_without_loss() {
         .world
         .set_block(table[0], table[1], table[2], world.registry.states.air);
     world.world.fold_overlay();
-    world.tick = policy.jobs["hungry"].next_due;
+    world.tick = next_attempt(&policy, "hungry");
     assert!(tick(&mut world, id, &mut policy));
     assert_eq!(
         policy.jobs["hungry"].paused.as_deref(),
@@ -749,7 +749,7 @@ fn component_tool_and_remainder_paths_use_native_identity() {
         &mut world,
         body,
     );
-    world.tick = policy.jobs["planks"].next_due;
+    world.tick = next_attempt(&policy, "planks");
     assert!(tick(&mut world, id, &mut policy));
     assert_eq!(stock_total(&world, body, "minecraft:oak_planks"), 4);
     assert_eq!(policy.jobs["planks"].receipts[0].tool_wear.len(), 1);
@@ -860,9 +860,10 @@ fn retry_timer_changes_are_reported_but_early_ticks_leave_policy_untouched() {
         serde_json::to_value(&parked).unwrap(),
         "runtime retries cannot advance the persisted period watermark"
     );
-    world.tick = policy.jobs["retry"].next_due;
-    assert!(tick(&mut world, id, &mut policy));
-    assert!(policy.jobs["retry"].next_due > world.tick);
+    world.tick += policy.jobs["retry"].duration;
+    assert!(!tick(&mut world, id, &mut policy));
+    assert_eq!(policy.jobs["retry"].next_due, parked.jobs["retry"].next_due);
+    assert!(policy.jobs["retry"].waiting_simulated);
     assert_eq!(policy.jobs["retry"].done, 0);
     assert!(policy.jobs["retry"].receipts.is_empty());
 }
@@ -996,7 +997,7 @@ fn production_fetches_only_next_portion_deficit_at_real_storage_reach() {
             f64::from(destination.z) + 0.5,
         ],
     );
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     assert_eq!(
         world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
@@ -1024,7 +1025,7 @@ fn production_fetches_only_next_portion_deficit_at_real_storage_reach() {
     assert_eq!(protected.into_iter().sum::<u32>(), 3);
 
     at(&mut world, body, [7.5, 201.0, 8.5]);
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     assert_eq!(stock_total(&world, body, "minecraft:wheat"), 0);
     assert_eq!(stock_total(&world, body, "minecraft:bread"), 1);
@@ -1059,7 +1060,7 @@ fn production_revalidates_storage_membership_before_withdrawal() {
             f64::from(destination.z) + 0.5,
         ],
     );
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     assert_eq!(
         world.block_entities[&(chest[0], chest[1], chest[2])].slots[0].count,
@@ -1102,7 +1103,7 @@ fn production_full_carry_puts_surplus_away_before_debiting_storage() {
     assert_eq!(policy.jobs["supply"].done, 0);
 
     // Then the ordinary next-portion fetch and craft.
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     assert_eq!(stored(&world, "minecraft:wheat"), 0);
     assert_eq!(stock_total(&world, body, "minecraft:wheat"), 3);
@@ -1115,7 +1116,7 @@ fn production_full_carry_puts_surplus_away_before_debiting_storage() {
             f64::from(stand_at[2]) + 0.5,
         ],
     );
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     assert_eq!(policy.jobs["supply"].done, 1);
     assert_eq!(stock_total(&world, body, "minecraft:bread"), 1);
@@ -1238,7 +1239,7 @@ fn production_supply_skips_reserved_stock_and_uses_free_stock_across_sources() {
         world.block_entities[&(first[0], first[1], first[2])].slots[0].count,
         3
     );
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     let destination = target(&policy, worker).unwrap();
     assert!((destination.x - second[0]).abs() <= 1);
@@ -1251,7 +1252,7 @@ fn production_supply_skips_reserved_stock_and_uses_free_stock_across_sources() {
             f64::from(destination.z) + 0.5,
         ],
     );
-    world.tick = policy.jobs["supply"].next_due;
+    world.tick = next_attempt(&policy, "supply");
     assert!(tick(&mut world, town, &mut policy));
     assert_eq!(stock_total(&world, body, "minecraft:wheat"), 3);
     assert!(world.block_entities[&(second[0], second[1], second[2])].slots[0].is_empty());
@@ -1266,3 +1267,9 @@ mod delivery_tests;
 
 #[path = "offscreen_production_tests.rs"]
 mod offscreen_tests;
+
+/// A held production opportunity and its runtime retry are separate clocks.
+fn next_attempt(policy: &State, name: &str) -> u64 {
+    let job = &policy.jobs[name];
+    job.next_due.max(job.retry_at)
+}

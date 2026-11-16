@@ -352,3 +352,111 @@ fn consumption(f: &Fixture) -> &offscreen::Consumption {
         .production
         .consumption
 }
+
+#[test]
+fn fresh_consumption_near_two_day_bound_survives_native_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut f = disk_fixture(&config);
+    let id = town(&mut f.world, "late-phase", [8, 201, 8], 32);
+    assert_eq!(id.0, 2);
+    f.world.tick = 3;
+    crate::settlements::economy::tick(&mut f.world);
+    let due = f
+        .world
+        .settlements
+        .get(id)
+        .unwrap()
+        .economy
+        .production
+        .consumption
+        .next_due;
+    assert_eq!(due, Some(48_002));
+    checkpoint(&mut f, &config, false);
+    let f = reopen(f, &config, None, true);
+    assert_eq!(
+        f.world
+            .settlements
+            .get(id)
+            .unwrap()
+            .economy
+            .production
+            .consumption
+            .next_due,
+        due
+    );
+}
+
+#[test]
+fn paused_retry_zero_after_reopen_cannot_authorize_a_portion() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut f = disk_fixture(&config);
+    let body = f
+        .world
+        .entities
+        .body(f.world.entities.slot_of_uuid(f.worker).unwrap())
+        .id;
+    give(
+        vec![item(&f.world, "minecraft:wheat", 3)],
+        &mut f.world,
+        body,
+    );
+    let due = job(&f).next_due;
+    park(
+        f.world
+            .settlements
+            .get_mut(f.town)
+            .unwrap()
+            .economy
+            .production
+            .jobs
+            .get_mut("supply")
+            .unwrap(),
+        "missing input",
+        due,
+    );
+    checkpoint(&mut f, &config, false);
+    let mut f = reopen(f, &config, None, true);
+    assert_eq!(job(&f).retry_at, 0);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    step(&mut f, Some(&mut writer));
+    assert_eq!(job(&f).done, 0);
+    assert_eq!(job(&f).next_due, due);
+    assert_eq!(total(&f, "minecraft:bread"), 0);
+}
+
+#[test]
+fn simulated_wait_then_reopen_unload_keeps_only_one_waited_opportunity() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut f = disk_fixture(&config);
+    fill(&mut f, vec![ItemStack::EMPTY; 27]);
+    let due = job(&f).next_due;
+    let period = job(&f).duration;
+    checkpoint(&mut f, &config, false);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    step_to(&mut f, &mut writer, due + 4 * period);
+    assert_eq!(job(&f).next_due, due);
+    assert!(job(&f).waiting_simulated);
+    checkpoint(&mut f, &config, false);
+    let mut f = reopen(f, &config, Some(writer), false);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    step(&mut f, Some(&mut writer));
+    assert_eq!(
+        job(&f).deferred,
+        1,
+        "simulated waiting never becomes five offscreen portions"
+    );
+    let next = job(&f).next_due;
+    step_to(&mut f, &mut writer, next + RETRY_TICKS - 1);
+    assert_eq!(job(&f).deferred, 2, "normal offscreen accrual resumes");
+    ensure(&mut f.world);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = item(&f.world, "minecraft:wheat", 60);
+    fill(&mut f, slots);
+    let retry = job(&f).retry_at;
+    step_to(&mut f, &mut writer, retry);
+    assert_eq!((job(&f).done, job(&f).deferred), (2, 0));
+    assert_eq!(total(&f, "minecraft:bread"), 2);
+}

@@ -82,6 +82,9 @@ pub(crate) struct Job {
     /// Portions accrued without simulation; consumed once on reconciliation.
     #[serde(default)]
     pub deferred: u32,
+    /// A simulated wait holds one opportunity, never historical catch-up.
+    #[serde(default)]
+    waiting_simulated: bool,
     /// Navigation/delivery retry only; cannot authorize a production portion.
     #[serde(skip)]
     retry_at: u64,
@@ -1146,6 +1149,7 @@ fn admit(
             accepted_tick: tick,
             next_due: offscreen::first_due(world, settlement, duration),
             deferred: 0,
+            waiting_simulated: false,
             retry_at: 0,
             paused: None,
             cancelled: false,
@@ -1239,6 +1243,7 @@ fn admit_order(
             accepted_tick: tick,
             next_due: offscreen::first_due(world, settlement, duration),
             deferred: 0,
+            waiting_simulated: false,
             retry_at: 0,
             paused: None,
             cancelled: false,
@@ -1318,6 +1323,7 @@ pub(crate) fn execute(
             entry.paused = None;
             entry.fetch_at = None;
             entry.next_due = offscreen::phase_after(tick, settlement, entry.duration);
+            entry.waiting_simulated = false;
             entry.retry_at = 0;
             Ok(true)
         }
@@ -1343,6 +1349,7 @@ pub(crate) fn execute(
                 entry.paused = None;
                 entry.fetch_at = None;
                 entry.deferred = 0;
+                entry.waiting_simulated = false;
                 entry.retry_at = 0;
                 cancelled += 1;
             }
@@ -1512,6 +1519,7 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
             {
                 job.after = None;
                 job.next_due = offscreen::phase_after(tick_now, settlement, job.duration);
+                job.waiting_simulated = false;
             }
         }
     }
@@ -1609,6 +1617,7 @@ pub(super) fn target_for_job(job: &Job) -> Option<BlockPos> {
 }
 
 pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
+    state.consumption.validate()?;
     if state.completed > state.sequence || state.cancelled > state.sequence {
         return Err("invalid production counters");
     }

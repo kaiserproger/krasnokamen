@@ -95,7 +95,7 @@ fn offscreen_resident_station_never_writes_storage_or_carry() {
         f.world.block_entities[&(f.chest[0], f.chest[1], f.chest[2])].slots,
         before
     );
-    let now = f.world.tick;
+    let now = f.world.tick + RETRY_TICKS;
     visit(&mut f, now, true);
     assert_eq!((job(&f).done, job(&f).deferred), (3, 0));
     assert_eq!(total(&f, "minecraft:bread"), 3);
@@ -126,6 +126,7 @@ fn offscreen_reconciliation_applies_affordable_portions_and_drops_rest() {
         let now = job(&f).next_due + 3 * job(&f).duration;
         visit(&mut f, now, false);
         assert_eq!(job(&f).deferred, 4);
+        let now = now + RETRY_TICKS;
         visit(&mut f, now, true);
         assert_eq!(job(&f).deferred, 0);
         assert_eq!(job(&f).done, if full_output { 1 } else { 2 });
@@ -229,7 +230,7 @@ fn offscreen_consumption_bread_credit_matches_daily_online_totals() {
                     assert_eq!(total(&f, "minecraft:bread"), 10);
                 }
             }
-            visit(&mut f, first + 3 * 24_000, true);
+            visit(&mut f, first + 3 * 24_000 + RETRY_TICKS, true);
             let consumption = &f
                 .world
                 .settlements
@@ -281,7 +282,7 @@ fn offscreen_empty_larder_debit_is_dropped_not_repaid_after_refill() {
             .debit,
         1
     );
-    visit(&mut f, due, true);
+    visit(&mut f, due + RETRY_TICKS, true);
     assert_eq!(
         f.world
             .settlements
@@ -296,7 +297,7 @@ fn offscreen_empty_larder_debit_is_dropped_not_repaid_after_refill() {
     let mut slots = vec![ItemStack::EMPTY; 27];
     slots[0] = item(&f.world, "minecraft:bread", 10);
     fill(&mut f, slots);
-    visit(&mut f, due, true);
+    visit(&mut f, due + RETRY_TICKS, true);
     assert_eq!(total(&f, "minecraft:bread"), 10);
     visit(&mut f, due + 24_000, true);
     assert_eq!(total(&f, "minecraft:bread"), 9);
@@ -324,7 +325,7 @@ fn offscreen_reconciliation_waits_for_declared_storage_residency() {
         .unwrap()
         .bootstrap_storage = Some([1600, 201, 8]);
     assert!(!f.world.world.has_chunk(100, 0));
-    visit(&mut f, now, true);
+    visit(&mut f, now + RETRY_TICKS, true);
     assert_eq!((job(&f).done, job(&f).deferred), (0, 1));
     assert_eq!(total(&f, "minecraft:wheat"), 60);
     f.world
@@ -332,7 +333,9 @@ fn offscreen_reconciliation_waits_for_declared_storage_residency() {
         .get_mut(f.town)
         .unwrap()
         .bootstrap_storage = Some(f.chest);
-    visit(&mut f, now, true);
+    visit(&mut f, now + RETRY_TICKS + 1, true);
+    assert_eq!((job(&f).done, job(&f).deferred), (0, 1));
+    visit(&mut f, now + 2 * RETRY_TICKS, true);
     assert_eq!((job(&f).done, job(&f).deferred), (1, 0));
     assert_eq!(total(&f, "minecraft:bread"), 1);
 }
@@ -418,3 +421,6 @@ fn offscreen_new_zero_job_town_consumes_without_command_or_restart() {
         assert_eq!(total(&f, "minecraft:bread"), 9, "generated={generated}");
     }
 }
+
+#[path = "offscreen_production_review_tests.rs"]
+mod review;

@@ -24,6 +24,18 @@ pub(super) struct Consumption {
     /// Only already-paid food; never an unpaid demand carried to another day.
     #[serde(default)]
     pub(super) credit: u8,
+    #[serde(skip)]
+    retry_at: u64,
+}
+
+impl Consumption {
+    pub(super) fn validate(&self) -> Result<(), &'static str> {
+        // Demand is an exact native/script counter, never a saturating sentinel.
+        if self.credit > 3 || self.debit > mc_script::MAX_SCRIPT_WORLD_TIME {
+            return Err("invalid production consumption");
+        }
+        Ok(())
+    }
 }
 
 pub(super) fn phase_after(now: u64, settlement: SettlementId, period: u64) -> u64 {
@@ -49,7 +61,7 @@ pub(super) fn first_due(world: &TickState, settlement: SettlementId, period: u64
 }
 
 pub(super) fn advance(job: &mut Job, now: u64) -> u64 {
-    if now < job.next_due || job.done >= job.count {
+    if now < job.next_due {
         return 0;
     }
     let periods = (now - job.next_due) / job.duration + 1;
@@ -61,7 +73,7 @@ pub(super) fn ready(job: &Job, now: u64) -> bool {
     if job.done >= job.count {
         return job.delivery_pending() && job.retry_at <= now;
     }
-    job.next_due <= now || job.deferred != 0 || (job.paused.is_some() && job.retry_at <= now)
+    (job.next_due <= now || job.deferred != 0 || job.paused.is_some()) && job.retry_at <= now
 }
 
 fn simulated(world: &TickState, at: [i32; 3]) -> bool {
@@ -88,22 +100,34 @@ pub(super) fn visit(
     job: &mut Job,
     now: u64,
 ) -> bool {
-    let periods = advance(job, now);
     if !simulated(world, job.station) {
+        let waited = std::mem::take(&mut job.waiting_simulated);
+        let periods = if job.done < job.count {
+            advance(job, now)
+        } else {
+            0
+        };
+        let owed = if waited { periods.min(1) } else { periods };
         let before = job.deferred;
         job.deferred = job
             .deferred
-            .saturating_add(periods.min(u64::from(u32::MAX)) as u32)
+            .saturating_add(owed.min(u64::from(u32::MAX)) as u32)
             .min(job.count - job.done);
-        return periods != 0 || before != job.deferred;
+        job.retry_at = now.saturating_add(RETRY_TICKS);
+        return periods != 0 || before != job.deferred || waited;
     }
-    let mut changed = periods != 0;
+    let mut changed = false;
+    if now < job.retry_at {
+        return false;
+    }
     if job.deferred != 0 && !storage_resident(world, settlement) {
+        let periods = advance(job, now);
         job.deferred = job
             .deferred
             .saturating_add(periods.min(u64::from(u32::MAX)) as u32)
             .min(job.count - job.done);
-        return changed;
+        job.retry_at = now.saturating_add(RETRY_TICKS);
+        return periods != 0;
     }
     if job.deferred != 0 {
         let portions = std::mem::take(&mut job.deferred);
@@ -117,10 +141,19 @@ pub(super) fn visit(
         }
     }
     if job.done < job.count || job.delivery_pending() {
-        changed |= match tick_job(world, settlement, job, periods != 0) {
+        let portion_due = job.done < job.count && job.next_due <= now;
+        let before = job.done;
+        changed |= match tick_job(world, settlement, job, portion_due) {
             Ok(changed) => changed,
             Err(reason) => park(job, pause_reason(reason), now.saturating_add(RETRY_TICKS)),
         };
+        if job.done > before {
+            advance(job, now);
+            job.waiting_simulated = false;
+        } else if portion_due && !job.waiting_simulated {
+            job.waiting_simulated = true;
+            changed = true;
+        }
     }
     changed
 }
@@ -186,7 +219,7 @@ pub(super) fn consume(
 ) -> bool {
     let now = world.tick_control.game_ticks(world.tick);
     let Some(due) = consumption.next_due else {
-        consumption.next_due = Some(phase_after(now, settlement, DAY));
+        consumption.next_due = Some(first_due(world, settlement, DAY));
         return true;
     };
     let mut changed = false;
@@ -201,12 +234,14 @@ pub(super) fn consume(
     let Some(record) = world.settlements.get(settlement) else {
         return changed;
     };
-    if consumption.debit == 0
-        || !simulated(world, record.anchor)
-        || !storage_resident(world, settlement)
-    {
+    if consumption.debit == 0 || now < consumption.retry_at {
         return changed;
     }
+    if !simulated(world, record.anchor) || !storage_resident(world, settlement) {
+        consumption.retry_at = now.saturating_add(RETRY_TICKS);
+        return changed;
+    }
+    consumption.retry_at = 0;
     let mut demand = std::mem::take(&mut consumption.debit);
     let prepaid = demand.min(u64::from(consumption.credit));
     consumption.credit -= prepaid as u8;
@@ -269,6 +304,19 @@ pub(super) fn restore_clocks(world: &mut TickState) -> Result<(), crate::CoreErr
 }
 
 fn restore_dimension(world: &mut TickState, now: u64, game: u64) -> Result<(), crate::CoreError> {
+    for record in world.settlements.records() {
+        let consumption = &record.economy.production.consumption;
+        if consumption.validate().is_err()
+            || consumption
+                .next_due
+                .is_some_and(|due| due.saturating_sub(game) >= 2 * DAY)
+        {
+            return Err(crate::CoreError::Storage(format!(
+                "native settlement {}: invalid production consumption clock",
+                record.id.0
+            )));
+        }
+    }
     let ids: Vec<_> = world
         .settlements
         .records()
@@ -283,7 +331,10 @@ fn restore_dimension(world: &mut TickState, now: u64, game: u64) -> Result<(), c
             .economy
             .production;
         for job in state.jobs.values_mut() {
-            if job.deferred != 0 || job.duration == 0 {
+            if job.deferred != 0
+                || job.duration == 0
+                || job.next_due.saturating_sub(now) > job.duration
+            {
                 return Err(crate::CoreError::Storage(format!(
                     "native settlement {} production {}: inconsistent legacy clock",
                     id.0, job.id

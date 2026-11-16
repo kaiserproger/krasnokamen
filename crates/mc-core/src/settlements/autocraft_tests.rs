@@ -495,11 +495,26 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
     assert_eq!(describe(&steps), "open_hay x57 -> bread x171");
     let mut stored_peak = 0;
     let mut reasons = std::collections::BTreeSet::new();
+    let mut first_consumption_due = None;
     for _ in 0..20_000 {
         if town.jobs()["bake"].done >= 171 {
             break;
         }
         town.step();
+        first_consumption_due.get_or_insert_with(|| {
+            serde_json::to_value(
+                &town
+                    .state
+                    .settlements
+                    .get(town.id)
+                    .unwrap()
+                    .economy
+                    .production,
+            )
+            .unwrap()["consumption"]["next_due"]
+                .as_u64()
+                .unwrap()
+        });
         stored_peak = stored_peak.max(town.stored("minecraft:wheat"));
         reasons.extend(town.jobs().values().filter_map(|job| job.paused.clone()));
     }
@@ -520,7 +535,7 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
         !reasons.contains("no storage") && !reasons.contains("missing input"),
         "{reasons:?}"
     );
-    // Daily consumption pays one bread from storage and retains its excess.
+    // Physical food paid both charged demand and the remaining prepaid excess.
     let policy = serde_json::to_value(
         &town
             .state
@@ -531,14 +546,14 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
             .production,
     )
     .unwrap();
-    let days = town.state.tick_control.game_ticks(town.state.tick) / 24_000;
+    let charges = (policy["consumption"]["next_due"].as_u64().unwrap()
+        - first_consumption_due.unwrap())
+        / 24_000;
+    let demand = charges * town.state.settlements.member_count(town.id) as u64;
     let credit = policy["consumption"]["credit"].as_u64().unwrap();
-    assert_eq!(
-        days + credit,
-        4,
-        "one paid bread covers demand plus prepaid credit"
-    );
-    let consumed_bread = 1;
+    assert_eq!(policy["consumption"]["debit"].as_u64(), Some(0));
+    assert_eq!((demand + credit) % 4, 0);
+    let consumed_bread = i32::try_from((demand + credit) / 4).unwrap();
     assert_eq!(
         town.carried("minecraft:bread") + town.stored("minecraft:bread") + consumed_bread,
         171
