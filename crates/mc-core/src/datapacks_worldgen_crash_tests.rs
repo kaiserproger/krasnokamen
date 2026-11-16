@@ -365,11 +365,23 @@ fn sigkill_real_wal_then_added_pack_preserves_original_vanilla_baseline() {
     );
 }
 
+/// A WAL-only missing baseline never uses changed inputs. A new pack that would
+/// change them is outside the selection and the identity, so it is skipped and
+/// named and the world opens with the saved inputs; changing a selected pack
+/// refuses without writing, naming that pack.
 #[test]
 #[ignore = "requires the local vanilla gameplay cache; run with --include-ignored"]
 fn wal_only_missing_baseline_refuses_changed_inputs_without_writing() {
     let directory = tempfile::tempdir().unwrap();
     let config = config(directory.path());
+    let packs = directory.path().join("datapacks");
+    let tag = "minecraft/tags/worldgen/biome/has_structure/village_plains.json";
+    let changed: &[u8] = br#"{"replace":true,"values":["minecraft:plains"]}"#;
+    pack(
+        &packs,
+        "selected",
+        &[(tag, br#"{"replace":true,"values":[]}"#)],
+    );
     let core = crate::Core::open(config.clone()).unwrap();
     let registry = Arc::clone(core.registry());
     core.shutdown();
@@ -396,22 +408,27 @@ fn wal_only_missing_baseline_refuses_changed_inputs_without_writing() {
             (path, bytes)
         })
         .collect();
-    pack(
-        &directory.path().join("datapacks"),
-        "added-after-wal",
-        &[(
-            "minecraft/tags/worldgen/biome/has_structure/village_plains.json",
-            br#"{"replace":true,"values":[]}"#,
-        )],
+    pack(&packs, "added-after-wal", &[(tag, changed)]);
+    let (state, _, _) =
+        crate::core::recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    assert_eq!(
+        state.datapacks.selection().enabled,
+        ["vanilla", "file/selected"]
     );
+    let warnings = state.datapacks.packs().warnings(None).join("\n");
+    assert!(
+        warnings.contains("Skipping new datapack file/added-after-wal")
+            && warnings.contains("baseline"),
+        "{warnings}"
+    );
+    drop(state);
+    std::fs::remove_dir_all(packs.join("added-after-wal")).unwrap();
+    write(&packs.join("selected/data"), tag, changed);
     let error = crate::core::recover_tick_state(&config, &registry, &store, false, None, None)
         .err()
         .expect("WAL-only missing baseline cannot use changed inputs");
     assert!(error.to_string().contains("baseline"), "{error}");
-    assert!(
-        error.to_string().contains("file/added-after-wal"),
-        "{error}"
-    );
+    assert!(error.to_string().contains("file/selected"), "{error}");
     assert_eq!(store.read_checkpoint().unwrap().tick, before.tick);
     assert_eq!(store.read_checkpoint().unwrap().globals, before.globals);
     assert_eq!(store.record_counts().unwrap(), counts);
