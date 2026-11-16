@@ -82,6 +82,23 @@ recovery boundary. Recovery validates settlement references instead of silently
 clearing them; unsupported old plugin settlement state does not become a
 second native authority. Building state lives in its settlement record.
 
+Migration transit (`settlements/transit.rs`, [ADR 0023](../decisions/0023-offscreen-settlement-simulation.md))
+holds a departing household or lone resident between two settlements of one
+dimension. Departure removes the bodies and inserts one `transit/<uuid>` record
+(keyed by the lowest member UUID) in the same tick; arrival restores the same
+entities at the destination's simulated edge, joins them and deletes the record
+in the same tick. The record keeps each member's complete WAL entity image and
+the household record `leave` removed; member images name no settlement or
+household of their own. Records ride the tick WAL as `Transit` entries and the
+checkpoint as `transit/<uuid>` global rows; a checkpoint deletes the rows the WAL
+deleted in the same transaction as the entity tombstones. Recovery refuses a
+store in which a member UUID is both a world entity and in a record, in two
+records, or whose record household also belongs to a settlement; the offline
+census applies the same exactly-once check. A unit is refused before any
+mutation while a member has construction work, wages owed or another custody,
+so the stored image is exactly the body that left. Older binaries refuse a store
+with transit rows (unknown global domain); downgrade is unsupported.
+
 `crates/mc-script/wit/plugin.wit` defines `query-settlement` and
 `request-settlement-action`; `plugin_settlements.rs` routes the requests to the
 native owner. Guests receive handles and outcomes rather than direct access to

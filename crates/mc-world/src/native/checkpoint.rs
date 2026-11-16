@@ -89,6 +89,28 @@ fn json(domain: &str, record: &NativeDomainRecord) -> Result<Value, NativeError>
     }
     Ok(value)
 }
+/// Member identities of one `transit/` row, `value.members[*].uuid` as
+/// canonical UUIDs (ADR 0023): the store releases their entity tombstones
+/// when a checkpoint drops them from every transit row.
+fn transit_members(key: &str, record: &NativeDomainRecord) -> Result<Vec<[u8; 16]>, NativeError> {
+    let row = json(key, record)?;
+    let members = row["value"]["members"]
+        .as_array()
+        .filter(|members| !members.is_empty())
+        .ok_or_else(|| failure(key, "missing members"))?;
+    members
+        .iter()
+        .map(|member| {
+            let text = member["uuid"]
+                .as_str()
+                .ok_or_else(|| failure(key, "member without UUID"))?;
+            match text.parse::<uuid::Uuid>() {
+                Ok(uuid) if uuid.to_string() == text => Ok(uuid.into_bytes()),
+                _ => Err(failure(key, "non-canonical member UUID")),
+            }
+        })
+        .collect()
+}
 fn validate_envelope(record: &NativeDomainRecord) -> Result<(), NativeError> {
     if record.version != 1 {
         return Err(failure(
@@ -339,6 +361,28 @@ fn validate_globals(
         json(key, record)?;
         battle_rows += 1;
     }
+    // Migration transit custody rows (ADR 0023): `transit/<canonical UUID>`.
+    let mut transit_rows = 0;
+    for (key, record) in globals {
+        let Some(id) = key.strip_prefix("transit/") else {
+            continue;
+        };
+        if id
+            .parse::<uuid::Uuid>()
+            .map(|uuid| uuid.to_string())
+            .ok()
+            .as_deref()
+            != Some(id)
+        {
+            return Err(failure("global", "non-canonical transit row key"));
+        }
+        validate_envelope(record)?;
+        if record.captured_tick != tick {
+            return Err(failure(key, "capture tick mismatch"));
+        }
+        transit_members(key, record)?;
+        transit_rows += 1;
+    }
     let sequence_rows = usize::from(globals.contains_key("settlement_sequence"));
     let map_sequence_rows = usize::from(globals.contains_key("map_sequence"));
     let command_storage_rows = usize::from(globals.contains_key("command_storage"));
@@ -351,6 +395,7 @@ fn validate_globals(
             + map_sequence_rows
             + command_storage_rows
             + battle_rows
+            + transit_rows
     {
         return Err(NativeError::GlobalDomains);
     }
@@ -513,11 +558,14 @@ fn entities_equal_ignoring_lsn(
 
 /// Apply one checkpoint's entity changes: upserts (a payload) and explicit
 /// tombstones (no payload). Rows the owner did not present stay as stored; the
-/// owner presents every row whose image may have changed (ADR 0020).
+/// owner presents every row whose image may have changed (ADR 0020). A
+/// tombstone is final except for `released` identities, which this checkpoint
+/// takes out of transit custody (ADR 0023).
 fn write_entities<E: std::borrow::Borrow<NativeEntitySnapshot>>(
     tx: &redb::WriteTransaction,
     snapshots: impl IntoIterator<Item = Result<E, NativeError>>,
     tick: u64,
+    released: &BTreeSet<[u8; 16]>,
     io: &mut NativeCheckpointIo,
 ) -> Result<(), NativeError> {
     let mut entities = db(tx.open_table(state::ENTITIES))?;
@@ -550,7 +598,9 @@ fn write_entities<E: std::borrow::Borrow<NativeEntitySnapshot>>(
             let previous = state::decode(entity.identity, previous.value())?;
             if previous.journal_lsn > tick
                 || previous.generated_slot != entity.generated_slot
-                || (previous.payload.is_none() && entity.payload.is_some())
+                || (previous.payload.is_none()
+                    && entity.payload.is_some()
+                    && !released.contains(&entity.identity))
             {
                 return Err(failure(
                     "entities",
@@ -852,6 +902,7 @@ impl NativeStore {
         let mut manifest = validate_globals(image.globals, image.tick, &self.identity)?;
         let mut tx = db(self.database.begin_write())?;
         db(tx.set_durability(redb::Durability::Immediate))?;
+        let mut released = BTreeSet::new();
         {
             let mut global = db(tx.open_table(GLOBAL))?;
             let previous = db(global.get("checkpoint"))?
@@ -893,15 +944,30 @@ impl NativeStore {
                     return Err(failure(immutable, "immutable descriptor changed"));
                 }
             }
-            // Settlement rows are one row per record and complete per image: a
-            // stored row the image omits was deleted by its owner. Leaving it
-            // would keep an older capture tick that the next read refuses.
+            // Settlement and transit rows are one row per record and complete per
+            // image: a stored row the image omits was deleted by its owner.
+            // Leaving it would keep an older capture tick that the next read
+            // refuses. Members of a stored transit row that no incoming row
+            // holds leave transit custody.
             let mut omitted = Vec::new();
             for row in db(global.iter())? {
-                let (key, _) = db(row)?;
+                let (key, bytes) = db(row)?;
                 let key = key.value();
-                if key.starts_with("settlement/") && !image.globals.contains_key(key) {
+                if key.starts_with("transit/") {
+                    released.extend(transit_members(key, &decode(bytes.value())?)?);
+                }
+                if (key.starts_with("settlement/") || key.starts_with("transit/"))
+                    && !image.globals.contains_key(key)
+                {
                     omitted.push(key.to_owned());
+                }
+            }
+            for (key, record) in image
+                .globals
+                .range("transit/".to_owned().."transit0".to_owned())
+            {
+                for member in transit_members(key, record)? {
+                    released.remove(&member);
                 }
             }
             for key in &omitted {
@@ -971,7 +1037,7 @@ impl NativeStore {
         #[cfg(test)]
         drill_tests::checkpoint_stage("chunks");
         let entities_started = std::time::Instant::now();
-        write_entities(&tx, entities, image.tick, &mut io)?;
+        write_entities(&tx, entities, image.tick, &released, &mut io)?;
         io.entity_micros = micros(entities_started);
         #[cfg(test)]
         drill_tests::checkpoint_stage("entities");

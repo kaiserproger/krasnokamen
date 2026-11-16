@@ -56,6 +56,38 @@ fn settlement_row(id: u64) -> Vec<u8> {
     .unwrap()
 }
 
+/// One persisted transit record (ADR 0023) holding `members`, from settlement
+/// 7 to 8, with the household record `leave` removed (if any).
+fn transit_row(members: &[u128], household: Option<&str>) -> Vec<u8> {
+    let member = |n: u128| {
+        serde_json::json!({
+            "uuid": uuid::Uuid::from_u128(n).to_string(), "type_id": 0,
+            "pos": [16.5, 80.0, 0.5], "vel": [0.0, 0.0, 0.0], "yaw": 0.0, "pitch": 0.0,
+            "ground": true, "health": 20.0, "alive": true, "age": 0, "breed_cooldown": 0,
+            "pickup_delay": 0, "item": null, "villager": {},
+            "appearance": {
+                "item": null, "equipment": [], "baby": false, "pose": 0, "shared_flags": 0,
+                "health": 20.0, "custom_name": null, "extra": []
+            },
+            "tick": 1
+        })
+    };
+    serde_json::to_vec(&serde_json::json!({
+        "dimension": Dimension::Overworld,
+        "value": {
+            "source": 7, "destination": 8, "destination_anchor": [400, 80, 0],
+            "departed": 1, "arrives": 3_841, "bearing": 90.0, "exit": [16, 80, 0],
+            "status": "travelling",
+            "household": household.map(|id| serde_json::json!({
+                "id": id, "revision": 2, "origin": "adoption",
+                "home": null, "needs": null, "policy": null
+            })),
+            "members": members.iter().map(|&n| member(n)).collect::<Vec<_>>()
+        }
+    }))
+    .unwrap()
+}
+
 struct Fixture {
     _dir: tempfile::TempDir,
     world: PathBuf,
@@ -68,6 +100,16 @@ type EntityFixture = (u32, i32, i32, u128, Vec<(String, Tag)>);
 /// Stopped native world: `entities` as (dimension, chunk x, chunk z, UUID, payload),
 /// optional persisted settlement 7, one baseline overworld chunk.
 fn world(entities: Vec<EntityFixture>, settlement: bool) -> Fixture {
+    world_with(entities, settlement, &[])
+}
+
+/// [`world`] plus migration transit rows as (record UUID, member UUIDs,
+/// household).
+fn world_with(
+    entities: Vec<EntityFixture>,
+    settlement: bool,
+    transits: &[(u128, &[u128], Option<&str>)],
+) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let world = dir.path().join("world");
     let config = crate::test_support::config(world.clone(), SEED);
@@ -91,6 +133,12 @@ fn world(entities: Vec<EntityFixture>, settlement: bool) -> Fixture {
         image.globals.insert(
             "settlement_sequence".into(),
             record(tick, serde_json::to_vec(&7u64).unwrap()),
+        );
+    }
+    for &(id, members, household) in transits {
+        image.globals.insert(
+            format!("transit/{}", uuid::Uuid::from_u128(id)),
+            record(tick, transit_row(members, household)),
         );
     }
     let snapshots: Vec<_> = entities
@@ -174,6 +222,70 @@ fn populated() -> Fixture {
 
 fn read(path: &Path) -> CensusReceipt {
     serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
+}
+
+#[test]
+fn census_counts_transit_records_and_members_once() {
+    let registry = crate::test_support::registry().unwrap();
+    let villager = (
+        0,
+        0,
+        0,
+        0x10,
+        member(fields(&registry, "minecraft:villager", 0x10, 10), 7, Some("7-1")),
+    );
+    let fixture = world_with(
+        vec![villager],
+        true,
+        &[(0x40, &[0x40, 0x41], Some("7-2")), (0x50, &[0x50], None)],
+    );
+    let out = tempfile::tempdir().unwrap();
+    let receipt =
+        census_native(&fixture.config, &fixture.world, &out.path().join("c.json")).unwrap();
+    assert_eq!(receipt.status, "PASS");
+    assert_eq!(receipt.counts["transit_records"], 2);
+    assert_eq!(receipt.counts["transit_members"], 3);
+    assert_eq!(receipt.counts["villagers"], 1);
+}
+
+/// Negative controls of the exactly-once custody invariant: a member that is
+/// also a stored entity, a member of two records, a household held twice.
+#[test]
+fn census_refuses_transit_custody_held_twice() {
+    let registry = crate::test_support::registry().unwrap();
+    let villager = || {
+        (
+            0,
+            0,
+            0,
+            0x10,
+            member(fields(&registry, "minecraft:villager", 0x10, 10), 7, Some("7-1")),
+        )
+    };
+    let cases: [(&[(u128, &[u128], Option<&str>)], &str); 3] = [
+        (
+            &[(0x10, &[0x10], None)],
+            "UUID 00000000-0000-0000-0000-000000000010 of transit record",
+        ),
+        (
+            &[(0x40, &[0x40, 0x41], None), (0x41, &[0x41], None)],
+            "UUID 00000000-0000-0000-0000-000000000041 of transit record",
+        ),
+        (
+            &[(0x40, &[0x40], Some("7-1"))],
+            "household 7-1 is both in transit record",
+        ),
+    ];
+    for (transits, detail) in cases {
+        let fixture = world_with(vec![villager()], true, transits);
+        let out = tempfile::tempdir().unwrap();
+        let path = out.path().join("c.json");
+        let error = census_native(&fixture.config, &fixture.world, &path)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(detail), "missing {detail:?} in {error}");
+        assert_eq!(read(&path).status, "FAIL");
+    }
 }
 
 #[test]

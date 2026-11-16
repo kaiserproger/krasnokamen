@@ -103,6 +103,9 @@ pub struct Registry {
     /// The active project's work counter per settlement, for replacing a
     /// builder that cannot advance it; runtime only, never persisted.
     pub(super) builder_watch: BTreeMap<SettlementId, super::construction::BuilderWatch>,
+    /// Migration transit custody (ADR 0023), owned and encoded by the transit
+    /// module: `transit/<uuid>` rows and Transit WAL images.
+    pub(super) transit: super::transit::Ledger,
 }
 
 impl SettlementRecord {

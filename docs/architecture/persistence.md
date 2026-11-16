@@ -357,6 +357,21 @@ blow and staged-body death before settlement, after real terrain refusal, and
 after waiting settlement. Each compares recovered history/native poses and a
 subsequent checkpoint/restart; running battles also land further native damage.
 
+### Migration transit custody
+
+`transit/<uuid>` native global rows (version 1, canonical lowercase hyphenated
+UUID, the record's lowest member) and dimension-enveloped `Transit` tick-WAL
+post-images (a `None` image deletes) own households and lone residents between
+settlements ([ADR 0023](../decisions/0023-offscreen-settlement-simulation.md)).
+A member is never both a world entity and a transit member: the departure tick
+removes the bodies (WAL `RemoveEntity`, checkpoint entity tombstones) and
+inserts the record; the arrival tick restores the same UUIDs and deletes the
+record. The checkpoint drops `transit/` rows the WAL deleted in the same native
+transaction. Recovery fails closed when a UUID is both an entity and a member,
+a member of two records, or a record household is also a settlement's; the
+offline census reports `transit_records` / `transit_members` and refuses the
+same duplicates. Binaries without this domain refuse such a store.
+
 ## Quarantined chunks
 
 A chunk whose stored record cannot be loaded (decode error, invalid block

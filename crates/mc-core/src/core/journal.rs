@@ -287,9 +287,9 @@ pub(super) fn start_checkpoint_with_reply(
     work_tx.send(JournalWork::Checkpoint(Box::new(job))).is_ok()
 }
 
-/// Settlement rows the WAL deleted since the previous checkpoint: present in
-/// the durable globals image but absent from this capture. Removing them here
-/// keeps the tombstone and the row deletion in one atomic transaction.
+/// Settlement and transit rows the WAL deleted since the previous checkpoint:
+/// present in the durable globals image but absent from this capture. Removing
+/// them here keeps the tombstone and the row deletion in one atomic transaction.
 pub(super) fn list_stale_settlement_rows(
     globals: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
     captured: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
@@ -297,8 +297,7 @@ pub(super) fn list_stale_settlement_rows(
     globals
         .keys()
         .filter(|key| {
-            key.starts_with("settlement/")
-                && !key.starts_with("settlement_sequence")
+            (key.starts_with("settlement/") || key.starts_with("transit/"))
                 && !captured.contains_key(key.as_str())
         })
         .cloned()
