@@ -51,6 +51,28 @@ fn checkpoint(f: &mut Fixture, config: &CoreConfig) {
     image
         .globals
         .extend(persistence::checkpoint_rows(&f.state, tick).unwrap());
+    if f.state
+        .settlements
+        .get(f.settlement)
+        .unwrap()
+        .economy
+        .caravan
+        .clock
+        == crate::settlements::commerce::Clock::WorldTicks
+    {
+        // Exercise the exact old store shape: neither units nor a game deadline.
+        let row = image
+            .globals
+            .get_mut(&persistence::row_key(f.settlement))
+            .unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&row.payload).unwrap();
+        let caravan = &mut value["value"]["economy"]["caravan"];
+        caravan.as_object_mut().unwrap().remove("clock");
+        for shipment in caravan["shipments"].as_object_mut().unwrap().values_mut() {
+            shipment.as_object_mut().unwrap().remove("game_deadline");
+        }
+        row.payload = serde_json::to_vec(&value).unwrap();
+    }
     image.globals.insert(
         "plugins".into(),
         record(tick, serde_json::to_vec(&f.state.plugins).unwrap()),

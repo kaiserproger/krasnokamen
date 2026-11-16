@@ -71,7 +71,7 @@ fn game_time_caravan_deadline_survives_freeze_activity_and_disk_reopen() {
         "reopen/activity cannot restart or spend a second deadline"
     );
     assert!(f.state.world.is_active(0, 0));
-    while f.state.tick_control.game_ticks(f.state.tick) <= deadline {
+    while f.state.tick_control.game_ticks(f.state.tick) < deadline {
         step(&mut f, &mut writer);
         assert_eq!(shipment(&f).status, Status::Loading);
     }
@@ -118,7 +118,7 @@ fn game_time_caravan_old_store_converts_at_recovery_not_first_unfrozen_tick() {
     checkpoint(&mut f, &config);
     let (mut f, mut writer) = reopen(f, &config, writer);
     let converted = shipment(&f).game_deadline.unwrap();
-    assert_eq!(converted, epoch + 10 - 20);
+    assert_eq!(converted, epoch + 11 - 20);
     assert_eq!(shipment(&f).epoch, epoch, "receipt identities never rebase");
     command(&mut f, "tick freeze");
     for _ in 0..4 {
@@ -136,7 +136,7 @@ fn game_time_caravan_old_store_converts_at_recovery_not_first_unfrozen_tick() {
 }
 
 #[test]
-fn game_time_caravan_conversion_refuses_underflow_overflow_and_mixed_units() {
+fn game_time_caravan_conversion_refuses_overflow_and_mixed_units() {
     let mut f = fixture();
     admit(&mut f);
     let mut policy = f
@@ -153,18 +153,73 @@ fn game_time_caravan_conversion_refuses_underflow_overflow_and_mixed_units() {
         "legacy units cannot contain a game deadline"
     );
     policy.shipments.get_mut("clock").unwrap().game_deadline = None;
-    let before = policy.clone();
+    policy.shipments.get_mut("clock").unwrap().epoch = u64::MAX;
     assert!(
-        restore_clock(&mut policy, 100)
+        restore_clock(&mut policy, u64::MAX, 0)
             .unwrap_err()
             .contains("shipment clock")
     );
-    assert_eq!(policy, before);
-    policy.shipments.get_mut("clock").unwrap().epoch = u64::MAX;
-    assert!(restore_clock(&mut policy, 0).is_err());
     policy.clock = crate::settlements::commerce::Clock::GameTicks;
     assert!(
         validate(&policy).is_err(),
         "game-time deadline is mandatory after migration"
     );
+}
+
+#[test]
+fn game_time_caravan_pre_freeze_legacy_deadline_expires_on_first_tick() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut f = disk_fixture(&config);
+    admit(&mut f);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    command(&mut f, "tick freeze");
+    for _ in 0..20 {
+        step(&mut f, &mut writer);
+    }
+    let game = f.state.tick_control.game_ticks(f.state.tick);
+    let policy = &mut f
+        .state
+        .settlements
+        .get_mut(f.settlement)
+        .unwrap()
+        .economy
+        .caravan;
+    policy.clock = crate::settlements::commerce::Clock::WorldTicks;
+    policy.shipments.get_mut("clock").unwrap().game_deadline = None;
+    checkpoint(&mut f, &config);
+    let (f, mut writer) = reopen(f, &config, writer);
+    assert_eq!(shipment(&f).game_deadline, Some(game));
+    assert_eq!(shipment(&f).status, Status::Blocked);
+    assert_eq!(chest_total(&f.state, SRC_CHEST, f.bread), 3);
+    writer.flush().unwrap();
+}
+
+#[test]
+fn game_time_caravan_expired_at_zero_blocks_before_pickup() {
+    let mut f = fixture();
+    admit(&mut f);
+    teleport(&mut f.state, f.carrier, SRC_DOOR);
+    f.state.tick = 20;
+    f.state
+        .tick_control
+        .restore_clock(crate::weather::GameClockImage::Held { game_ticks: 0 }, 20)
+        .unwrap();
+    let mut policy = f
+        .state
+        .settlements
+        .get(f.settlement)
+        .unwrap()
+        .economy
+        .caravan
+        .clone();
+    policy.clock = crate::settlements::commerce::Clock::WorldTicks;
+    policy.shipments.get_mut("clock").unwrap().game_deadline = None;
+    restore_clock(&mut policy, 20, 0).unwrap();
+    assert_eq!(policy.shipments["clock"].game_deadline, Some(0));
+    assert!(tick(&mut f.state, f.settlement, &mut policy));
+    assert_eq!(policy.shipments["clock"].status, Status::Blocked);
+    assert!(!policy.shipments["clock"].loaded);
+    assert_eq!(chest_total(&f.state, SRC_CHEST, f.bread), 3);
+    assert_eq!(carry_total(&f.state, f.carrier), 0);
 }

@@ -75,11 +75,13 @@ ticks, so `/tick freeze` and server downtime add no elapsed periods. Payroll
 keeps one persisted `next_due` for both simulated and unsimulated settlements;
 caravans keep one `game_deadline`, while `epoch` remains immutable receipt
 identity. Recovery converts legacy world-tick clocks once, after WAL folding
-and restoration of the global game clock: subtract the recovered held-tick
-offset from wage `next_due` and from `epoch + max_ticks`. This preserves legacy
-remaining/overdue durations, not a reconstruction of historical freezes.
-Underflow or overflow refuses startup with the contract/shipment identity;
-resolve that legacy contract using the previous server before upgrading.
+and restoration of the global game clock. Future deadlines preserve their
+remaining duration; overdue wages preserve the old clock's complete-period
+debt in a one-time `legacy_owed` amount consumed by ordinary accrual on the next
+simulation tick, with the next due phase translated to game time. Recovery
+never pays money. Already-expired caravans expire on the first simulation tick.
+Historical freeze periods cannot be reconstructed, so valid legacy debt is not
+forgiven. Only inconsistent future clocks or arithmetic overflow refuse startup.
 Persisted clock discriminators and deadlines travel in the normal settlement
 WAL/checkpoint images; missing discriminators mean legacy units, and unsupported
 units or mixed caravan deadline schemas fail closed. Downgrade requires the

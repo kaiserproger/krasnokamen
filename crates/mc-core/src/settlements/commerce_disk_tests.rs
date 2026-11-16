@@ -55,6 +55,32 @@ fn checkpoint(f: &mut Fixture, config: &CoreConfig) {
     image
         .globals
         .extend(persistence::checkpoint_rows(&f.state, tick).unwrap());
+    if f.state
+        .settlements
+        .get(f.settlement)
+        .unwrap()
+        .economy
+        .commerce
+        .clock
+        == Clock::WorldTicks
+    {
+        // Write the actual pre-upgrade row schema, not a new-format legacy tag.
+        let row = image
+            .globals
+            .get_mut(&persistence::row_key(f.settlement))
+            .unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(&row.payload).unwrap();
+        let commerce = &mut value["value"]["economy"]["commerce"];
+        commerce.as_object_mut().unwrap().remove("clock");
+        for employment in commerce["employments"]
+            .as_object_mut()
+            .unwrap()
+            .values_mut()
+        {
+            employment.as_object_mut().unwrap().remove("legacy_owed");
+        }
+        row.payload = serde_json::to_vec(&value).unwrap();
+    }
     image.globals.insert(
         "plugins".into(),
         record(tick, serde_json::to_vec(&f.state.plugins).unwrap()),

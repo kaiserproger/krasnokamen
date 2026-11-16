@@ -156,14 +156,15 @@ fn game_time_wage_old_store_converts_before_start_frozen_ticks_and_only_once() {
 }
 
 #[test]
-fn game_time_wage_conversion_refuses_underflow_without_partial_conversion() {
+fn game_time_wage_conversion_refuses_inconsistent_future_clock() {
     let mut f = fixture();
     let mut policy = State::default();
     hire(&mut f, &mut policy, "1", 2, 40);
     policy.clock = Clock::WorldTicks;
+    policy.employments.get_mut("1").unwrap().next_due = 100;
     let before = policy.clone();
     assert!(
-        restore_clock(&mut policy, 100)
+        restore_clock(&mut policy, 0, 0)
             .unwrap_err()
             .contains("employment 1")
     );
@@ -213,4 +214,55 @@ fn game_time_explicit_pay_stop_and_hire_use_the_same_clock() {
         "admission uses game time too"
     );
     assert_eq!(emerald_total(&f.state, TREASURY_CHEST), 20);
+}
+
+#[test]
+fn game_time_wage_pre_freeze_legacy_debt_is_not_forgiven_or_counted_twice() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let mut f = disk_fixture(&config);
+    stock(&mut f.state, TREASURY_CHEST, f.emerald, 40);
+    let request = employ(&f, "1", 2, 100, 40);
+    native(&mut f, request);
+    let first_due = contract(&f).next_due;
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    through(&mut f, &mut writer, first_due - 51);
+    command(&mut f, "tick freeze");
+    for _ in 0..1000 {
+        step(&mut f, &mut writer);
+    }
+    let game = f.state.tick_control.game_ticks(f.state.tick);
+    let now = f.state.tick;
+    let periods = (now - first_due) / 100 + 1;
+    let next_due = game + 100 - (now - first_due) % 100;
+    f.state
+        .settlements
+        .get_mut(f.settlement)
+        .unwrap()
+        .economy
+        .commerce
+        .clock = Clock::WorldTicks;
+    checkpoint(&mut f, &config);
+    let mut f = reopen(f, &config, writer);
+    assert_eq!(contract(&f).earned, 0, "recovery does not accrue or pay");
+    assert_eq!(contract(&f).legacy_owed, periods * 2);
+    assert_eq!(contract(&f).next_due, next_due);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    command(&mut f, "tick freeze");
+    step(&mut f, &mut writer);
+    assert_eq!(contract(&f).legacy_owed, periods * 2);
+    checkpoint(&mut f, &config);
+    let mut f = reopen(f, &config, writer);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    step(&mut f, &mut writer);
+    assert_eq!(contract(&f).legacy_owed, 0);
+    assert_eq!(contract(&f).earned, periods * 2);
+    assert_eq!(contract(&f).paid, periods * 2);
+    checkpoint(&mut f, &config);
+    let mut f = reopen(f, &config, writer);
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    step(&mut f, &mut writer);
+    assert_eq!(contract(&f).earned, periods * 2);
+    assert_eq!(contract(&f).paid, periods * 2);
+    writer.flush().unwrap();
 }

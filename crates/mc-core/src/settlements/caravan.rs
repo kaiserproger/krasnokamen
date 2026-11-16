@@ -99,7 +99,7 @@ pub(crate) struct Shipment {
     /// Admission tick: the immutable route epoch in every receipt op id.
     pub epoch: u64,
     pub max_ticks: u64,
-    /// Sole deadline authority after conversion; epoch remains receipt identity.
+    /// First expired game tick; epoch remains immutable receipt identity.
     #[serde(default)]
     pub game_deadline: Option<u64>,
     pub paid_mandate: Option<String>,
@@ -413,17 +413,27 @@ pub(crate) fn validate(state: &State) -> Result<(), &'static str> {
     Ok(())
 }
 
-pub(super) fn restore_clock(state: &mut State, held: u64) -> Result<(), String> {
+pub(super) fn restore_clock(state: &mut State, now: u64, game: u64) -> Result<(), String> {
     if state.clock == super::commerce::Clock::GameTicks {
         return Ok(());
     }
-    for (id, shipment) in &state.shipments {
-        shipment.epoch.checked_add(shipment.max_ticks)
-            .and_then(|deadline| deadline.checked_sub(held))
-            .ok_or_else(|| format!("shipment {id} deadline cannot convert to game time; resolve with the previous server before upgrading"))?;
-    }
-    for shipment in state.shipments.values_mut() {
-        shipment.game_deadline = Some(shipment.epoch + shipment.max_ticks - held);
+    for (id, shipment) in &mut state.shipments {
+        let invalid = || format!("shipment {id} has inconsistent or overflowing legacy clock");
+        if shipment.epoch > now {
+            return Err(invalid());
+        }
+        let deadline = shipment
+            .epoch
+            .checked_add(shipment.max_ticks)
+            .ok_or_else(invalid)?;
+        let deadline = if deadline < now {
+            game
+        } else {
+            game.checked_add(deadline - now)
+                .and_then(|due| due.checked_add(1))
+                .ok_or_else(invalid)?
+        };
+        shipment.game_deadline = Some(deadline);
     }
     state.clock = super::commerce::Clock::GameTicks;
     Ok(())
@@ -841,7 +851,7 @@ fn step(world: &mut TickState, settlement: SettlementId, shipment: &mut Shipment
     }
     // The receipt epoch is identity, not a second deadline clock.
     if world.tick_control.game_ticks(world.tick)
-        > shipment
+        >= shipment
             .game_deadline
             .expect("recovered caravan game clock")
     {
@@ -980,6 +990,7 @@ pub(crate) fn execute(
                 .tick_control
                 .game_ticks(world.tick)
                 .checked_add(max_ticks)
+                .and_then(|due| due.checked_add(1))
                 .ok_or(Failure::InvalidRequest)?;
             if state.clock != super::commerce::Clock::GameTicks {
                 return Err(Failure::InvalidRequest);
