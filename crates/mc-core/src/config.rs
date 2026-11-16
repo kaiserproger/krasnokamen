@@ -52,6 +52,8 @@ pub struct CoreConfig {
     /// The minimal config keeps it disabled for embedded/test cores; the edge
     /// server sets the vanilla default (60) from `[server]`.
     pub pause_when_empty_seconds: u32,
+    /// Start the recovered world with autonomous simulation frozen.
+    pub start_frozen: bool,
     /// Vanilla command-block execution gate; disabled by default.
     pub enable_command_block: bool,
     /// Vanilla Overworld spawn-protection radius; zero disables protection.
@@ -141,6 +143,7 @@ impl CoreConfig {
             require_plugin_login: false,
             max_airtime_ticks: 80,
             pause_when_empty_seconds: 0,
+            start_frozen: false,
             enable_command_block: false,
             spawn_protection: 16,
             mob_griefing: MobGriefingRules::default(),

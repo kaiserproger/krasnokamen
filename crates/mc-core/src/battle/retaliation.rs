@@ -330,7 +330,10 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
         ..
     } = state;
     grudges.retain(|&victim, grudge| {
-        if !grudge.fresh(tick) {
+        // A column that just left (a dead horse extra) is gone from the next
+        // image: forget it here. Only this positive evidence drops an
+        // identity; an unknown one stays for recovery to refuse.
+        if !grudge.fresh(tick) || combat.departed(grudge.attacker) {
             return false;
         }
         let Some(bi) = entities
@@ -340,10 +343,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
             return false;
         };
         let slot = columns.slots[bi].expect("indexed column");
-        if grudge
-            .other
-            .is_some_and(|(_, at)| tick.saturating_sub(at) > GRUDGE_TICKS)
-        {
+        if grudge.other.is_some_and(|(other, at)| {
+            tick.saturating_sub(at) > GRUDGE_TICKS || combat.departed(other)
+        }) {
             grudge.other = None;
         }
         let (faction, pos) = (columns.factions[bi], columns.positions[bi]);

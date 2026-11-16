@@ -1305,6 +1305,18 @@ def _phase_census(console: Any, items: list[str], phase: str, aux: dict[str, Any
 # ----------------------------------------------------------------------------- verdict 1
 
 
+def _rearm_twice(fifo: FifoConsole, session: RunnerSession, items: list[str],
+                 aux: dict[str, Any], backups: list[dict[str, Any]], report: dict[str, Any]) -> None:
+    replies = []
+    for _ in range(2):
+        mark = fifo.mark()
+        fifo.send(f"battle live {HOLDER} red")
+        replies.append(fifo.wait(rf"Battle live rearmed: {HOLDER} side=1", mark).group(0))
+    check(report, "rearmed_twice_before_crash", len(replies) == 2, replies)
+    session.holder.capture("precut-repeated-rearm")
+    backups.append(_phase_census(fifo, items, "precut-repeated-rearm", aux, session.clients))
+
+
 def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, Any], display: str) -> None:
     root = ctx.artifact_dir / "battle"
     session = RunnerSession(ctx, inputs, root, display, console_fifo=True)
@@ -1332,6 +1344,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         fifo.wait(r"Saved the game", mark)
         session.holder.capture("after-drop")
         backups.append(_phase_census(fifo, items, "dropped", aux, session.clients))
+        _rearm_twice(fifo, session, items, aux, backups, report)
         session.sigkill(report, "crash_handoff_preserved")
         crash_copy = root / "crash-copy" / "world"
         evidence = crash_evidence(ctx, root, crash_copy)
@@ -1384,7 +1397,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
             client.stop()
         session.stop_recovery(report, "recovery_stopped_cleanly")
         late = [take_census(ctx, binary, toml, census_root / backup["phase"], phase=backup["phase"], epoch=1,
-                            backup=backup) for backup in backups[2:]]
+                            backup=backup) for backup in backups[len(early):]]
         stopped_hashes = file_hashes(root / "world")
         final = take_census(ctx, binary, toml, census_root / "stopped", phase="stopped", epoch=1,
                             stopped=root / "world", hashes=stopped_hashes)
@@ -1747,6 +1760,7 @@ def password_leaks(root: Path, passwords: list[str]) -> list[str]:
 
 VERDICTS: dict[str, Callable[..., None]] = {
     "battle-kit-census": kit_census,
+    "battle-rearm-recovery": kit_census,
     "battle-crash-handoff": crash_handoff,
     "battle-auth-hydration": auth_hydration,
 }

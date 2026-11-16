@@ -675,3 +675,80 @@ fn battle_resume_capture_keeps_role_native_and_unknown_attackers() {
         "unknown attacker identity must still refuse replay"
     );
 }
+
+/// A grudge forgets its attacker, or the enemy who hurt him before, only when
+/// that identity just left the execution columns (a horse extra that died):
+/// the next image could not name it. An identity that never was a column
+/// stays, and recovery still refuses it.
+#[test]
+fn a_grudge_forgets_only_an_attacker_who_left_the_columns() {
+    let mut state = crate::battle::tests::staged_flat_fixture(100);
+    crate::battle::staging::execute(
+        &mut state,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &crate::battle::staging::BattleCommand::Start,
+    )
+    .unwrap();
+    run_tick(&mut state, &[]);
+    let horse = state
+        .entities
+        .rider_slots()
+        .next()
+        .expect("a cavalry horse");
+    let horse_id = state.entities.body(horse).id;
+    let unknown = EntityId(i32::MAX - 1);
+    let battle = &mut state.hostile.battle;
+    assert!(battle.columns.ids.contains(&horse_id));
+    let members = &battle.formation.members;
+    let (a, b, c) = (members[0].id, members[1].id, members[2].id);
+    let soldier = members.last().unwrap().id;
+    let at = battle.elapsed_ticks;
+    let grudge = |attacker, other| Grudge {
+        attacker,
+        at,
+        since: at,
+        other,
+        helping: false,
+        answering: false,
+    };
+    battle.retaliation.grudges.extend([
+        (a, grudge(horse_id, None)),
+        (b, grudge(unknown, Some((horse_id, at)))),
+        (c, grudge(soldier, Some((unknown, at)))),
+    ]);
+    state.merge_damage.push((
+        horse,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    run_tick(&mut state, &[]);
+    let grudges = &state.hostile.battle.retaliation.grudges;
+    assert!(
+        !state.hostile.battle.columns.ids.contains(&horse_id),
+        "the horse left"
+    );
+    assert!(!grudges.contains_key(&a), "a grudge on the departed horse");
+    assert_eq!(grudges[&b].attacker, unknown);
+    assert_eq!(grudges[&b].other, None, "the departed horse as other");
+    assert_eq!(grudges[&c].attacker, soldier);
+    assert_eq!(grudges[&c].other.map(|(id, _)| id), Some(unknown));
+    // Recovery knows the roster and the execution columns (no holders here).
+    let replay = |state: &TickState| {
+        let battle = &state.hostile.battle;
+        battle.retaliation.validate_references(&|id| {
+            battle.formation.has_member(id) || battle.columns.ids.contains(&id)
+        })
+    };
+    assert!(replay(&state).is_err(), "an unknown attacker must refuse");
+    state.hostile.battle.retaliation.grudges.remove(&b);
+    assert!(replay(&state).is_err(), "an unknown other must refuse");
+    state.hostile.battle.retaliation.grudges.remove(&c);
+    replay(&state).expect("the departed horse left no reference");
+}

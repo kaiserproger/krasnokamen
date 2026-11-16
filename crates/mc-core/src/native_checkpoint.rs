@@ -9,6 +9,11 @@ use mc_world::native::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+/// Format projected NBT exactly as the native `/data` command does.
+pub fn format_census_tag(tag: &Tag) -> String {
+    crate::command_nbt_path::snbt(tag)
+}
+
 /// Anvil import keeps vanilla tolerance for `variant`: the game ignores a
 /// malformed or unknown value and keeps the species default, so the importer
 /// drops such a field and never stores it. (The native hydrate also tolerates

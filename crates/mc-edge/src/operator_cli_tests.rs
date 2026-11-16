@@ -53,6 +53,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
         let paths = match command {
             WorldCommand::ImportAnvil(paths) | WorldCommand::ExportAnvil(paths) => paths,
             WorldCommand::Census(_)
+            | WorldCommand::CrashCensus(_)
             | WorldCommand::Probe(_)
             | WorldCommand::UpgradeWorldgen
             | WorldCommand::Pregenerate { .. }
@@ -94,6 +95,32 @@ fn offline_commands_require_exact_paths_and_global_config() {
             .is_ok()
         );
     }
+}
+
+#[tokio::test]
+async fn crash_census_refuses_receipt_inside_world_before_database_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = dir.path().join("world");
+    let native = world.join("native");
+    std::fs::create_dir_all(&native).unwrap();
+    let database = native.join("state.redb");
+    std::fs::write(&database, b"not a redb, must remain untouched").unwrap();
+    let cli = Cli::try_parse_from([
+        "krasnokamen",
+        "world",
+        "crash-census",
+        "--copy",
+        world.to_str().unwrap(),
+        "--receipt",
+        database.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg = crate::config::EdgeConfig::default();
+    cfg.data.vanilla_data_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let error = format!("{:#}", run_offline(&cli, &mut cfg).await.unwrap_err());
+    assert!(error.contains("receipt must be outside"), "{error}");
+    assert_eq!(std::fs::read(database).unwrap(), b"not a redb, must remain untouched");
 }
 
 #[test]

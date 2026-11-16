@@ -726,6 +726,18 @@ SCENARIOS: dict[str, Scenario] = {
         limits="one kit and one dropped spear; Horizon clients only; wear is reported, not asserted; "
                "live clear and radius-64 counts are auxiliary",
     ),
+    "battle-rearm-recovery": _entry(
+        id="battle-rearm-recovery",
+        summary="Repeated battle rearm survives SIGKILL, clean checkpoint, restart and export",
+        owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
+        scenario_id="battle-rearm-recovery", requires=("xvfb",),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
+        fixture="field-1k 1500/side, real Horizon holder and spectator; drop spear, rearm twice, SIGKILL",
+        proves="both rearm acknowledgements precede the SIGKILL; full issued, dropped, rearm, crash, "
+               "rejoin, respawn, reconnect and clean-stop custody censuses reconcile; production recovery "
+               "cleanly checkpoints and independent world export/reopen succeeds",
+        limits="one kit and one dropped spear; timing-dependent battle state, not exhaustive target coverage",
+    ),
     "battle-crash-handoff": _entry(
         id="battle-crash-handoff", summary="The battle runner keeps the crash handoff for pre-stage and staged SIGKILLs",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",

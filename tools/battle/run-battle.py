@@ -281,6 +281,7 @@ def server_config_text(a, server_name, world, cache):
     config = f'''[server]\nname = {quote(server_name)}\nview_distance = {a.view_distance}\nsimulation_distance = 12\npause_when_empty_seconds = 0\n[network]\nbind_address = "127.0.0.1"\nport = {a.port}\n[auth]\nonline_mode = false\n[dashboard]\nenabled = true\nbind_address = "127.0.0.1"\nport = {a.dashboard_port}\n[recorder]\nplayers = ["BattleRecorder"]\nworld_queue_bytes = 16777216\n[data]\nworld_dir = {quote(world)}\nvanilla_data_dir = {quote(cache)}\nseed = {a.world_seed}\ncheckpoint_every_ticks = {a.checkpoint_every_ticks}\n'''
     if a.crash_handoff:
         config += f'backup_dir = {quote(a.run_dir / "backups")}\n'
+        config += f'\n[plugins]\ndirectory = {quote(a.run_dir.resolve() / "empty-plugins")}\n'
     if a.resource_pack_url:
         config += f'\n[resource_pack]\nurl = {quote(a.resource_pack_url)}\nsha1 = {quote(a.resource_pack_sha1)}\nrequired = false\n'
     return config
@@ -828,6 +829,7 @@ def run(a):
     a.created_dir = root
     if a.crash_handoff:
         (root / 'backups').mkdir()
+        (root / 'empty-plugins').mkdir()
     world = root / 'world'
     arena_info = None
     if a.arena:
@@ -1086,7 +1088,7 @@ def preserve_crash(root, server):
     (root / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')
 
 
-def recover_crash(root):
+def recover_crash(root, start_frozen=False):
     """Exec the original server/config on the original world after preserving it."""
     root = root.resolve(strict=True)
     receipt = json.loads((root / 'crash-handoff.json').read_text())
@@ -1094,12 +1096,17 @@ def recover_crash(root):
         raise RuntimeError('missing preserved SIGKILL crash copy')
     command = json.loads((root / 'server-command.json').read_text())
     os.chdir(root)
-    os.execv(command['binary'], [command['binary'], '--config', command['config']])
+    args = [command['binary'], '--config', command['config']]
+    if start_frozen:
+        args.append('--start-frozen')
+    os.execv(command['binary'], args)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 3 and sys.argv[1] == '--recover-from-crash':
-        recover_crash(Path(sys.argv[2]))
+    if len(sys.argv) in (3, 4) and sys.argv[1] == '--recover-from-crash':
+        if len(sys.argv) == 4 and sys.argv[3] != '--start-frozen':
+            raise ValueError(f'unknown recovery option: {sys.argv[3]}')
+        recover_crash(Path(sys.argv[2]), len(sys.argv) == 4)
     args = arguments()
     # A stop request (a long trial ended by `kill`) unwinds through run()'s finally: the recorder and
     # server are stopped and the live-player receipt is written.

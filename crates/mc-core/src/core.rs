@@ -364,6 +364,8 @@ type KnockbackPublication =
 
 #[derive(Debug)]
 struct CoreInner {
+    #[cfg(test)]
+    recovered_tick: u64,
     input_tx: Sender<PlayerInput>,
     spawn_tx: Sender<SpawnRequest>,
     ticket_tx: Sender<RemoteTicket>,
@@ -834,6 +836,12 @@ impl Core {
             plugin_runtime,
             build_queries,
         )?;
+        #[cfg(test)]
+        let recovered_tick = tick_state.tick;
+        if config.start_frozen {
+            tick_state.tick_control.set_frozen(true);
+            tracing::info!(tick = tick_state.tick, "recovery simulation frozen before first tick");
+        }
         // Selection, registry content and immutable generators were installed
         // together by recovery, before spawn discovery or replay chunk reads.
         let registry = Arc::clone(&tick_state.registry);
@@ -1021,6 +1029,8 @@ impl Core {
         let worker_count = crate::tick::worker_threads();
         Ok(Self {
             inner: Arc::new(CoreInner {
+                #[cfg(test)]
+                recovered_tick,
                 input_tx,
                 spawn_tx,
                 ticket_tx,
@@ -1652,3 +1662,7 @@ mod journal_backpressure_tests;
 #[cfg(test)]
 #[path = "core/village_generation_tests.rs"]
 mod village_generation_tests;
+
+#[cfg(test)]
+#[path = "core/startup_freeze_tests.rs"]
+mod startup_freeze_tests;

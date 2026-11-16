@@ -1,0 +1,30 @@
+{
+  "id": "SETTLEMENT-REMOVAL-STALE-ROW-BLOCKS-STARTUP",
+  "verdict": "promoted",
+  "fix_commit": "patch:04348809d8ab8bd455a4e1807c75114cfc40ac4a275a27cd5b3a1751c6a5fdd6",
+  "fix_commit_full": "patch:04348809d8ab8bd455a4e1807c75114cfc40ac4a275a27cd5b3a1751c6a5fdd6",
+  "promoted_at": "2026-11-16T15:31:26+00:00",
+  "tree_head": "0794f3da96706a730fb672390406ce77909e311b",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "04348809d8ab8bd455a4e1807c75114cfc40ac4a275a27cd5b3a1751c6a5fdd6",
+  "reversed_files": [
+    "crates/mc-world/src/native/checkpoint.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::settlement_removal_persistence_tests::removed_settlement_row_is_deleted_by_the_next_checkpoint_and_the_world_reopens": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::settlement_removal_persistence_tests::removed_settlement_row_is_deleted_by_the_next_checkpoint_and_the_world_reopens": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/SettlementRowPromote/.analysis/validation/20261116T152434-ledger-promote-qbpur72t"
+}
