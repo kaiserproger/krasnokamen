@@ -13,6 +13,8 @@ const CACHE_CHUNKS: usize = 1_156;
 const CACHE_BYTES: usize = 64 * 1024 * 1024;
 const QUEUED_CHUNKS: usize = 32;
 
+pub(super) const PLANTED_CROWN_RADIUS: u32 = 4;
+
 type Generated = (ChunkPos, Option<Evidence>, u128);
 
 fn tree_name(name: &str) -> bool {
@@ -265,7 +267,11 @@ fn planted(state: &TickState, at: [i32; 3]) -> bool {
         record.planted_trees.iter().any(|root| {
             let dx = at[0].abs_diff(root[0]);
             let dz = at[2].abs_diff(root[2]);
-            if dx > 4 || dz > 4 || at[1] < root[1] || at[1] - root[1] > 64 {
+            if dx > PLANTED_CROWN_RADIUS
+                || dz > PLANTED_CROWN_RADIUS
+                || at[1] < root[1]
+                || at[1] - root[1] > 64
+            {
                 return false;
             }
             let low = root[1].max(at[1] - 8);
@@ -289,6 +295,25 @@ fn planted(state: &TickState, at: [i32; 3]) -> bool {
                 }
             }
             false
+        })
+    })
+}
+
+/// A registered planting reserves the same possible crown before it grows.
+/// Root retirement remains the sole authority for removing vanished plantings.
+pub(super) fn planted_crown_overlaps(
+    state: &TickState,
+    bounds: mc_script::ScriptWorldBounds,
+) -> bool {
+    let crown = i64::from(PLANTED_CROWN_RADIUS);
+    state.settlements.records().any(|record| {
+        record.planted_trees.iter().any(|root| {
+            [0, 2].into_iter().all(|axis| {
+                let coordinate = i64::from(root[axis]);
+                coordinate + crown >= i64::from(bounds.min[axis])
+                    && coordinate - crown <= i64::from(bounds.max[axis])
+            }) && i64::from(root[1]) <= i64::from(bounds.max[1])
+                && i64::from(root[1]) + 64 >= i64::from(bounds.min[1])
         })
     })
 }
@@ -334,11 +359,15 @@ pub(super) fn retire_missing(state: &mut TickState) {
     }
 }
 
+pub(super) fn protected_tree(state: &TickState, at: [i32; 3]) -> bool {
+    state.block_log.player_touched(at) || planted(state, at)
+}
+
 pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
     let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
         return false;
     };
-    if !tree(state, block) || state.block_log.player_touched(at) || planted(state, at) {
+    if !tree(state, block) || protected_tree(state, at) {
         return false;
     }
     // With capture disabled, a nearby live player is an additional veto. The
@@ -434,13 +463,18 @@ pub(crate) fn roll(
     .map_err(|_| mc_script::ScriptOperationFailure::Blocked)
 }
 
+pub(crate) struct Preparation {
+    pub(crate) cells: Vec<crate::plugin_structures::settlement_builds::PlannedCell>,
+    pub(crate) corridor: Option<mc_script::ScriptWorldBounds>,
+}
+
 /// Clear the lot and its walking corridor in physical work order. Only tree
 /// blocks are added here; unrelated terrain keeps the planner's old refusals.
 pub(crate) fn cells(
     state: &TickState,
     project: &super::construction::Project,
     size: [u8; 3],
-) -> Option<Vec<crate::plugin_structures::settlement_builds::PlannedCell>> {
+) -> Option<Preparation> {
     use crate::plugin_structures::settlement_builds::PlannedCell;
     let record = state.settlements.get(project.settlement)?;
     let mut lot = Vec::new();
@@ -461,8 +495,26 @@ pub(crate) fn cells(
         super::layout::Network::for_construction(state, record).construction_access(project);
     let mut columns = match route {
         Some(route) => route,
-        None if !lot_has_tree => return Some(Vec::new()),
+        None if !lot_has_tree => {
+            return Some(Preparation {
+                cells: Vec::new(),
+                corridor: None,
+            });
+        }
         None => return None,
+    };
+    let corridor = if let Some(&first) = columns.first() {
+        let mut min = first;
+        let mut max = [first[0], first[1] + 2, first[2]];
+        for at in &columns[1..] {
+            for axis in 0..3 {
+                min[axis] = min[axis].min(at[axis]);
+                max[axis] = max[axis].max(at[axis] + if axis == 1 { 2 } else { 0 });
+            }
+        }
+        Some(mc_script::ScriptWorldBounds::new(min, max).ok()?)
+    } else {
+        None
     };
     columns.extend(lot);
     let mut seen = HashSet::default();
@@ -496,7 +548,7 @@ pub(crate) fn cells(
             });
         }
     }
-    Some(cells)
+    Some(Preparation { cells, corridor })
 }
 
 pub(crate) fn footing(
