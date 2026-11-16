@@ -18,27 +18,36 @@ from typing import Any
 
 
 def audit_events(log: str) -> list[dict[str, Any]]:
-    """Read native construction/founding audit messages, ignoring unrelated logs."""
+    """Read native civil audit messages, ignoring unrelated or unknown kinds."""
     events = []
     for line in log.splitlines():
-        match = re.search(r"\bsettlement_(building_completed|daughter_founded|founded)\b", line)
+        match = re.search(r"\bsettlement_(building_completed|daughter_founded|founded|migration)\b", line)
         if not match:
             continue
         fields = {
             key: quoted or bare for key, quoted, bare in
             re.findall(r'\b(\w+)=(?:"([^"\n]*)"|([^\s]+))', line)
         }
+        kind = match[1]
+        if kind == "migration":
+            if "event" not in fields:
+                raise ValueError("incomplete settlement_migration audit: ['event']")
+            if fields["event"] not in ("departure", "arrival", "cancel"):
+                continue
+            kind = f"migration_{fields['event']}"
         required = ["settlement", "tick", "game_time"]
         if match[1] == "building_completed":
             required += ["building", "blueprint", "level"]
         elif match[1] == "daughter_founded":
             required += ["parent"]
+        elif match[1] == "migration":
+            required += ["unit", "reason"]
         missing = [key for key in required if key not in fields]
         if missing:
             raise ValueError(f"incomplete {match[0]} audit: {missing}")
-        row: dict[str, Any] = {"kind": match[1], "evidence": line}
+        row: dict[str, Any] = {"kind": kind, "evidence": line}
         for key in required:
-            row[key] = fields[key] if key == "blueprint" else int(fields[key])
+            row[key] = fields[key] if key in ("blueprint", "unit", "reason") else int(fields[key])
         events.append(row)
     return events
 
@@ -118,15 +127,19 @@ def extract(run: dict[str, Any], telemetry: list[dict[str, Any]], log: str = "",
         or (e["kind"] == "founded" and e["settlement"] in exact_foundings))]
     unique = {}
     for event in events:
-        key = (event["kind"], event["settlement"], event.get("building"), event.get("level"), event.get("population"), event["tick"])
+        key = (event["kind"], event["settlement"], event.get("building"), event.get("level"), event.get("population"), event["tick"], event.get("unit"))
         unique[key] = event
     events = sorted(unique.values(), key=lambda e: (e["tick"], e["settlement"], e["kind"]))
     for event in events:
         event["day"] = event["game_time"] // 24000
         town = names[event["settlement"]]
-        text = {"founded": f"{town}: settlement founded", "daughter_founded": f"{town}: daughter of {names.get(event.get('parent'), '?')} founded",
-                "building_completed": f"{town}: {event.get('blueprint')} L{event.get('level')} completed",
-                "population_milestone": f"{town}: population reached {event.get('population')}"}[event["kind"]]
+        if event["kind"].startswith("migration_"):
+            action = event["kind"].removeprefix("migration_")
+            text = f"{town}: migration {action}: {event['reason']}"
+        else:
+            text = {"founded": f"{town}: settlement founded", "daughter_founded": f"{town}: daughter of {names.get(event.get('parent'), '?')} founded",
+                    "building_completed": f"{town}: {event.get('blueprint')} L{event.get('level')} completed",
+                    "population_milestone": f"{town}: population reached {event.get('population')}"}[event["kind"]]
         suffix = " (observed by this time)" if event["precision"] == "observed_interval" else ""
         event["caption"] = f"Day {event['day']} · {text}{suffix}"
     samples = [row for row in telemetry if start <= row["tick"] <= end]
