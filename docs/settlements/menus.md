@@ -76,7 +76,7 @@ Names contain 1–64 ASCII letters, digits, `_` or `-`. For management commands 
 | `/settlement create <name> [radius]` | Found at your position; radius 1–256 blocks, default 48. | Any authenticated player |
 | `/settlement claim` | Claim the autonomous settlement containing you. | Any player standing inside it |
 | `/settlement list` | List settlement names. | Anyone |
-| `/settlement info [name]` | Show settlement details; without a name, selects the first record. | Anyone |
+| `/settlement info [name]` | Settlement details, migration attractiveness/components, last decision and inbound/outbound transit; without a name, selects the first record. | Anyone |
 | `/settlement layout` | Show the street plan of the settlement containing you. | Anyone |
 | `/settlement rename <name> <new-name>` | Rename. | Owner/operator |
 | `/settlement remove <name>` | Dissolve and release membership. | Owner/operator |

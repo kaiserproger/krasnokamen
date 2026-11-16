@@ -17,6 +17,25 @@ Settlements are native to the core (`mc-core`), not a plugin, and tick with the 
 
 From 10 residents a settlement walls itself in: its Builders lay a cobblestone wall 25 blocks from the bell on every side, a gatehouse with an oak door where each of the four main roads crosses it, and a well on a plaza corner. Stock cobblestone (about 630) and four oak doors in storage; nothing needs ordering. See [perimeter, gates and well](settlements/construction.md#perimeter-gates-and-well).
 
+## Population and migration
+
+Free roofed beds, food in storage, vacant jobs and safe, developed towns attract
+residents. Once per game day, a simulated settlement can receive adults from the
+outside world or exchange a whole household with a more attractive settlement.
+Newcomers join without a household; ordinary breeding can form their first family.
+
+Residents walk in physically. Nearby reachable moves change membership first;
+longer moves walk to the simulated edge, travel offscreen with their identities
+and possessions preserved, and re-enter when the destination is simulated.
+The simulated edge may be inside a large settlement radius. A resident who leaves
+for the outside world must carry no items or equipment.
+
+Homeless arrivals approach a free certified house using normal routes and bed
+claims, without teleporting or interrupting useful work. Blocked routes back off
+rather than searching every tick. `/settlement info [name]` shows attractiveness,
+its inputs, the last migration decision and households in transit. Online owners
+receive one chat line per arrival, departure or cancellation.
+
 ## Permissions
 
 - Anyone can found a settlement and read lists, info, layout, certificates and dialogs.
