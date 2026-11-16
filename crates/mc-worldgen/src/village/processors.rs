@@ -1120,8 +1120,7 @@ fn facing_stairs(
     let mut states = [[BlockStateId(0); 2]; 4];
     for (facing_index, facing) in FACINGS.into_iter().enumerate() {
         for (half_index, half) in HALVES.into_iter().enumerate() {
-            states[facing_index][half_index] = resolve_defaulted(
-                semantics,
+            states[facing_index][half_index] = semantics.resolve_state(
                 owner,
                 &BlockStateSpec {
                     block: block.clone(),
@@ -1134,48 +1133,4 @@ fn facing_stairs(
         }
     }
     Ok(states)
-}
-
-/// Resolve a state spec whose omitted properties take the block's default
-/// values, as `BlockState.CODEC` reads them. The village closure always writes
-/// complete property lists, so this agrees with [`BlockSemantics::resolve_state`]
-/// on every state the closure reaches; being default-aware keeps a partial spec
-/// usable instead of refusing a state vanilla would happily parse.
-fn resolve_defaulted(
-    semantics: &BlockSemantics<'_>,
-    owner: &Identifier,
-    spec: &BlockStateSpec,
-) -> Result<BlockStateId, CompileError> {
-    let Some(block) = semantics.blocks().block(&spec.block) else {
-        return Err(CompileError::UnknownBlockState {
-            owner: owner.clone(),
-            block: spec.block.clone(),
-        });
-    };
-    let Some(default_state) = semantics.blocks().by_id(block.default) else {
-        return Err(CompileError::UnknownBlockState {
-            owner: owner.clone(),
-            block: spec.block.clone(),
-        });
-    };
-    let properties: Vec<(String, String)> = default_state
-        .properties
-        .iter()
-        .map(|(key, default_value)| {
-            let value = spec
-                .properties
-                .iter()
-                .find(|(spec_key, _)| spec_key == key)
-                .map(|(_, value)| value.clone())
-                .unwrap_or_else(|| default_value.clone());
-            (key.clone(), value)
-        })
-        .collect();
-    semantics
-        .blocks()
-        .by_name_and_props(&spec.block, &properties)
-        .ok_or_else(|| CompileError::UnknownBlockState {
-            owner: owner.clone(),
-            block: spec.block.clone(),
-        })
 }

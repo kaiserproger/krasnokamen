@@ -288,6 +288,43 @@ pub fn upgrade_record(
     Ok(report)
 }
 
+/// Upgrade one block-state (a chunk or structure template palette entry) written at
+/// DataVersion `from` to the `Name`/`Properties` spelling of [`TARGET_DATA_VERSION`],
+/// through the same block-state fixes chunks use.
+///
+/// Vanilla runs a structure template through every DataFixer registered after its
+/// `DataVersion`. Of the 3953..=5023 range of the packs this serves, the fixes that
+/// act on a palette entry (`References.BLOCK_STATE`, read from the local 26.3 jar's
+/// `DataFixers`) are `CreakingHeartBlockStateFix` (4294), "rename test block mode"
+/// (4305) and `LegacyBlockRenameFix` "Rename chain to iron_chain" (4541), all in this
+/// module's table, and `BlockStateFieldNamesFix` (5006: `Name`/`Properties` become
+/// `id`/`properties`, plus the 26.3 bare-identifier shorthand), which the final native
+/// normalization pass reverses. `from` outside `MIN_DATA_VERSION..=5023` is refused,
+/// never passed through unchanged.
+pub fn upgrade_block_state(tag: &mut Tag, from: i32) -> Result<UpgradeReport, UpgradeError> {
+    if !(MIN_DATA_VERSION..=NATIVE_26_3_DATA_VERSION).contains(&from) {
+        return Err(UpgradeError::UnsupportedVersion(from));
+    }
+    let mut report = UpgradeReport {
+        from,
+        to: TARGET_DATA_VERSION,
+        ..UpgradeReport::default()
+    };
+    for &version in OLD_VERSIONS
+        .iter()
+        .chain(VERSIONS)
+        .filter(|&&version| version > from)
+    {
+        walk::visit(tag, NodeKind::BlockState, version, &mut report)?;
+    }
+    walk::visit(
+        tag,
+        NodeKind::BlockState,
+        NATIVE_26_3_DATA_VERSION,
+        &mut report,
+    )?;
+    Ok(report)
+}
 pub fn upgrade_chunk(tag: &mut Tag, from: i32) -> Result<UpgradeReport, UpgradeError> {
     upgrade_record(tag, RecordKind::Chunk, from)
 }

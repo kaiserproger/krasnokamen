@@ -421,15 +421,15 @@ impl<'a> BlockSemantics<'a> {
         VEGETATION_BLOCKS.contains(&path) || path == "cactus"
     }
 
-    /// Resolve a block state written in JSON. Property values are matched
-    /// exactly, as `BlockState.CODEC` does.
+    /// Resolve a block state written in JSON, as `BlockState.CODEC` does: omitted
+    /// properties take the block's default values; an unknown property or value refuses.
     pub fn resolve_state(
         &self,
         owner: &Identifier,
         spec: &BlockStateSpec,
     ) -> Result<BlockStateId, CompileError> {
         self.blocks
-            .by_name_and_props(&spec.block, &spec.properties)
+            .by_name_and_props_or_default(&spec.block, &spec.properties)
             .ok_or_else(|| CompileError::UnknownBlockState {
                 owner: owner.clone(),
                 block: spec.block.clone(),

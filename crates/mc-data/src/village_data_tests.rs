@@ -408,7 +408,7 @@ fn structure_round_trips() {
                     "bounding_box": "piece",
                     "spawns": [
                         {
-                            "data": { "type": "minecraft:zombie", "minCount": 1, "maxCount": 2 },
+                            "type": "minecraft:zombie", "count": { "type": "minecraft:uniform", "min_inclusive": 1, "max_inclusive": 2 },
                             "weight": 1
                         }
                     ]
@@ -1523,4 +1523,143 @@ fn real_cache_villages_closure_loads() {
     }
     assert_eq!(rules, 56);
     println!("village start-pool closure: rule processors={rules}");
+}
+
+fn structure_with_spawns(spawns: &str) -> Result<StructureSpec, VillageDataError> {
+    let dir = tempfile::TempDir::new().unwrap();
+    write(
+        dir.path(),
+        "data/minecraft/worldgen/structure/outpost.json",
+        &format!(
+            r##"{{
+            "type": "minecraft:jigsaw",
+            "biomes": "#minecraft:has_structure/village_plains",
+            "max_distance_from_center": 80,
+            "project_start_to_heightmap": "WORLD_SURFACE_WG",
+            "size": 6,
+            "spawn_overrides": {{ "monster": {{ "bounding_box": "full", "spawns": {spawns} }} }},
+            "start_height": {{ "absolute": 0 }},
+            "start_pool": "minecraft:village/plains/town_centers",
+            "step": "surface_structures",
+            "terrain_adaptation": "beard_thin",
+            "use_expansion_hack": false
+        }}"##
+        ),
+    );
+    loader(dir.path()).load_structure(&identifier("minecraft:outpost"))
+}
+
+/// `Codec.INT` reads an out-of-range integer by wrapping it (gson
+/// `LazilyParsedNumber.intValue`); range checks then apply to the wrapped value.
+#[test]
+fn codec_int_fields_wrap_like_vanilla() {
+    let set = |salt: &str| {
+        let dir = tempfile::TempDir::new().unwrap();
+        write(
+            dir.path(),
+            "data/minecraft/worldgen/structure_set/s.json",
+            &format!(
+                r#"{{ "placement": {{ "type": "minecraft:random_spread", "spacing": 34, "separation": 8, "salt": {salt} }}, "structures": [] }}"#
+            ),
+        );
+        loader(dir.path())
+            .load_structure_set(&identifier("minecraft:s"))
+            .map(|set| {
+                let PlacementSpec::RandomSpread(placement) = set.placement;
+                placement.salt
+            })
+    };
+    // The converted MVS `dead_tree_dark_oak` salt, wrapped to its low 32 bits.
+    assert_eq!(set("22201927364").unwrap(), 727_090_884);
+    assert_eq!(set("5.9").unwrap(), 5);
+    assert_eq!(set("1e3").unwrap(), 1000);
+    // 4294967295 wraps to -1, which the non-negative range then refuses.
+    assert!(set("4294967295").is_err());
+    assert!(set("\"7\"").is_err());
+}
+
+/// Both `SpawnerData` shapes are read: the 26.1.2 `{type, minCount, maxCount}` of the
+/// content cache and converted packs, and the 26.3 jar's `{type, count}`. A mix and the
+/// nested `data` object belong to neither codec.
+#[test]
+fn spawn_overrides_read_the_26_1_2_and_26_3_spawner_codecs() {
+    let spawn = |spec: &StructureSpec| {
+        let spawn = &spec.spawn_overrides[0].spawns[0];
+        (spawn.weight, spawn.min_count, spawn.max_count)
+    };
+    let constant =
+        structure_with_spawns(r#"[{ "type": "minecraft:pillager", "count": 1, "weight": 1 }]"#)
+            .unwrap();
+    assert_eq!(spawn(&constant), (1, 1, 1));
+    let uniform = structure_with_spawns(
+        r#"[{ "type": "minecraft:zombie", "weight": 2, "count": { "type": "minecraft:uniform", "min_inclusive": 2, "max_inclusive": 5 } }]"#,
+    )
+    .unwrap();
+    assert_eq!(spawn(&uniform), (2, 2, 5));
+    let flat = structure_with_spawns(
+        r#"[{ "type": "minecraft:zombie", "weight": 2, "minCount": 2, "maxCount": 5 }]"#,
+    )
+    .unwrap();
+    assert_eq!(spawn(&flat), (2, 2, 5));
+    for refused in [
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "minCount": 3, "maxCount": 2 }]"#,
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "minCount": 0, "maxCount": 2 }]"#,
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "count": 1, "maxCount": 2 }]"#,
+        r#"[{ "data": { "type": "minecraft:zombie", "minCount": 1, "maxCount": 2 }, "weight": 1 }]"#,
+    ] {
+        let error = structure_with_spawns(refused).expect_err("not a SpawnerData codec shape");
+        assert!(!error.to_string().is_empty(), "{refused}");
+    }
+    let error = structure_with_spawns(
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "count": { "type": "minecraft:clamped" } }]"#,
+    )
+    .expect_err("unmodelled provider");
+    assert!(error.to_string().contains("minecraft:clamped"), "{error}");
+    // Modelled by the feature closure but not a uniform range: refused, not flattened.
+    let error = structure_with_spawns(
+        r#"[{ "type": "minecraft:zombie", "weight": 1, "count": { "type": "minecraft:biased_to_bottom", "min_inclusive": 1, "max_inclusive": 4 } }]"#,
+    )
+    .expect_err("distribution is not representable");
+    assert!(error.to_string().contains("BiasedToBottom"), "{error}");
+}
+
+/// The local content cache's real `swamp_hut.json` (26.1.2 grammar, from the
+/// `GAMEPLAY_DATAPACK_RELEASE` bundle) reads through the spawn-override parser.
+/// Mojang files stay out of Git: the 26.3 `count` shape is covered by the
+/// synthetic cases above. Skips loudly when no cache is present.
+#[test]
+fn real_cache_swamp_hut_spawn_overrides_read() {
+    let Some(worldgen) = real_cache_worldgen() else {
+        eprintln!(
+            "SKIP real_cache_swamp_hut_spawn_overrides_read: no vanilla content cache \
+             (set KRASNOKAMEN_CONTENT_CACHE, or place one at /tmp/jdk-cold2)"
+        );
+        return;
+    };
+    let text = std::fs::read_to_string(worldgen.join("structure/swamp_hut.json")).unwrap();
+    let json: Value = serde_json::from_str(&text).unwrap();
+    let overrides = parse_spawn_overrides(
+        &identifier("minecraft:swamp_hut"),
+        json.get("spawn_overrides").unwrap(),
+    )
+    .unwrap();
+    let spawns: Vec<_> = overrides
+        .iter()
+        .map(|entry| {
+            let spawn = &entry.spawns[0];
+            (
+                spawn.entity_type.to_string(),
+                spawn.weight,
+                spawn.min_count,
+                spawn.max_count,
+            )
+        })
+        .collect();
+    assert_eq!(
+        spawns,
+        [
+            ("minecraft:cat".to_owned(), 1, 1, 1),
+            ("minecraft:witch".to_owned(), 1, 1, 1)
+        ]
+    );
 }

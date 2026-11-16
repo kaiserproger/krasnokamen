@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::vanilla_feature_closure::BlockStateSpec;
+use crate::vanilla_feature_closure::{BlockStateSpec, FeatureClosure, IntProviderSpec};
 use crate::{Identifier, ResourcePathError, read_json_resource};
 
 /// How a reference is named in error messages, e.g. "template pool".
@@ -986,7 +986,7 @@ fn parse_locate_offset(referrer: &Identifier, value: &Value) -> Result<[i32; 3],
     };
     let mut parsed = [0; 3];
     for (slot, raw) in parsed.iter_mut().zip([x, y, z]) {
-        let coordinate = raw.as_i64().and_then(|raw| i32::try_from(raw).ok());
+        let coordinate = codec_int(raw);
         // `offsetCodec(16)` accepts strictly less than 16 per axis.
         match coordinate {
             Some(coordinate) if (-15..=15).contains(&coordinate) => *slot = coordinate,
@@ -1426,26 +1426,48 @@ fn parse_spawn_overrides(
     Ok(overrides)
 }
 
+/// `WeightedList.codec(SpawnerData.CODEC)`: a list of flat entries, `Weighted.codec`
+/// adding `weight` to a `MapCodec`. Two `SpawnerData` shapes exist in the releases this
+/// server reads, with disjoint fields, so both are accepted and a mix is refused:
+/// - 26.1.2 (the grammar of the content cache's gameplay data pack and of the converted
+///   packs): `{type, minCount, maxCount}`, each count positive and `minCount <= maxCount`
+///   (`ExtraCodecs.POSITIVE_INT`, a `validate`);
+/// - 26.3 (the jar's own data, e.g. `pillager_outpost.json`): `{type, count}` where
+///   `count` is an `IntProvider`.
+///
+/// A nested `data` object belongs to neither codec.
 fn parse_weighted_spawns(
     id: &Identifier,
     entries: &[Value],
 ) -> Result<Vec<WeightedSpawn>, VillageDataError> {
     let mut spawns = Vec::with_capacity(entries.len());
     for entry in entries {
-        let data = field_of(entry, "data", SPAWN_OVERRIDE, id)?;
-        let min_count = ranged_i32_field(data, "minCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
-        let max_count = ranged_i32_field(data, "maxCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
-        if min_count > max_count {
-            return Err(VillageDataError::InvalidField {
-                kind: SPAWN_OVERRIDE,
-                entry: id.clone(),
-                field: "minCount",
-                value: format!("{min_count} is larger than maxCount {max_count}"),
-            });
-        }
+        let (min_count, max_count) = if entry.get("count").is_some() {
+            if entry.get("minCount").is_some() || entry.get("maxCount").is_some() {
+                return Err(VillageDataError::InvalidField {
+                    kind: SPAWN_OVERRIDE,
+                    entry: id.clone(),
+                    field: "count",
+                    value: "26.3 count mixed with 26.1.2 minCount/maxCount".to_owned(),
+                });
+            }
+            parse_spawn_count(id, field_of(entry, "count", SPAWN_OVERRIDE, id)?)?
+        } else {
+            let min = ranged_i32_field(entry, "minCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
+            let max = ranged_i32_field(entry, "maxCount", SPAWN_OVERRIDE, id, 1, i32::MAX)?;
+            if min > max {
+                return Err(VillageDataError::InvalidField {
+                    kind: SPAWN_OVERRIDE,
+                    entry: id.clone(),
+                    field: "minCount",
+                    value: format!("{min} is larger than maxCount {max}"),
+                });
+            }
+            (min, max)
+        };
         spawns.push(WeightedSpawn {
             weight: ranged_i32_field(entry, "weight", SPAWN_OVERRIDE, id, 0, i32::MAX)?,
-            entity_type: parse_id(id, field_str(data, "type", SPAWN_OVERRIDE, id)?)?,
+            entity_type: parse_id(id, field_str(entry, "type", SPAWN_OVERRIDE, id)?)?,
             min_count,
             max_count,
         });
@@ -1453,9 +1475,37 @@ fn parse_weighted_spawns(
     Ok(spawns)
 }
 
+/// `IntProviders.CODEC` for a spawn count, read by the feature closure's
+/// `parse_int_provider` (one `IntProvider` convention; it models constant, uniform,
+/// trapezoid, biased_to_bottom and weighted_list, and refuses the other vanilla
+/// providers by name). A [`WeightedSpawn`] holds only a `[min, max]` range drawn
+/// uniformly, so only the constant and uniform providers are exact; the others refuse
+/// instead of being flattened into a range with a different distribution.
+fn parse_spawn_count(id: &Identifier, value: &Value) -> Result<(i32, i32), VillageDataError> {
+    let invalid = |reason: String| VillageDataError::InvalidField {
+        kind: SPAWN_OVERRIDE,
+        entry: id.clone(),
+        field: "count",
+        value: reason,
+    };
+    let provider = FeatureClosure::new(PathBuf::new())
+        .parse_int_provider(id, value)
+        .map_err(|error| invalid(error.to_string()))?;
+    match provider {
+        IntProviderSpec::Constant(count) => Ok((count, count)),
+        IntProviderSpec::Uniform {
+            min_inclusive,
+            max_inclusive,
+        } => Ok((min_inclusive, max_inclusive)),
+        other => Err(invalid(format!(
+            "int provider {other:?} is not a uniform range"
+        ))),
+    }
+}
+
 fn parse_max_distance(id: &Identifier, value: &Value) -> Result<MaxDistance, VillageDataError> {
     // `Codec.either(full, horizontal only)`: one integer means both axes.
-    if let Some(horizontal) = value.as_i64().and_then(|raw| i32::try_from(raw).ok()) {
+    if let Some(horizontal) = codec_int(value) {
         checked_range(
             id,
             horizontal,
@@ -1484,7 +1534,7 @@ fn parse_dimension_padding(
     let Some(value) = value else {
         return Ok(DimensionPadding { bottom: 0, top: 0 });
     };
-    if let Some(both) = value.as_i64().and_then(|raw| i32::try_from(raw).ok()) {
+    if let Some(both) = codec_int(value) {
         checked_range(id, both, "dimension_padding", 0, i32::MAX)?;
         return Ok(DimensionPadding {
             bottom: both,
@@ -1582,7 +1632,7 @@ fn parse_vertical_anchor(
     if keys.next().is_some() {
         return Err(invalid());
     }
-    let Some(offset) = raw.as_i64().and_then(|raw| i32::try_from(raw).ok()) else {
+    let Some(offset) = codec_int(raw) else {
         return Err(invalid());
     };
     if !(MIN_Y..=MAX_Y).contains(&offset) {
@@ -2304,20 +2354,30 @@ fn i32_field(
     kind: EntryKind,
     entry: &Identifier,
 ) -> Result<i32, VillageDataError> {
-    let raw = field_of(value, field, kind, entry)?
-        .as_i64()
-        .ok_or_else(|| VillageDataError::InvalidField {
-            kind,
-            entry: entry.clone(),
-            field,
-            value: "not an integer".to_owned(),
-        })?;
-    i32::try_from(raw).map_err(|_| VillageDataError::InvalidField {
+    codec_int(field_of(value, field, kind, entry)?).ok_or_else(|| VillageDataError::InvalidField {
         kind,
         entry: entry.clone(),
         field,
-        value: raw.to_string(),
+        value: "not an integer".to_owned(),
     })
+}
+
+/// A JSON number read by vanilla's `Codec.INT`: `Number.intValue` on gson's
+/// `LazilyParsedNumber` (DFU 10.0.21 `Codec.INT` and `JsonOps.getNumberValue`,
+/// gson 2.14.0, the versions in the 26.3 launcher manifest). An integer outside the
+/// `int` range keeps its low 32 bits (`(int) Long.parseLong`, or `BigDecimal.intValue`
+/// past `long`), and a fraction or exponent form truncates toward zero first. Only
+/// a non-number is `None`; range checks apply to the wrapped value.
+fn codec_int(value: &Value) -> Option<i32> {
+    let number = value.as_number()?;
+    if let Some(integer) = number.as_i64() {
+        return Some(integer as i32);
+    }
+    if let Some(integer) = number.as_u64() {
+        return Some(integer as i32);
+    }
+    let float = number.as_f64()?;
+    (float.abs() < 1.0e38).then(|| float.trunc() as i128 as i32)
 }
 
 fn f32_field(
