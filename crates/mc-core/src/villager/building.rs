@@ -249,7 +249,7 @@ pub(crate) fn work(
         let here = crate::settlements::allocator::at(state.entities.pos(slot));
         return Some(WorkTarget {
             pos: here,
-            exact: true,
+            exact: false,
         });
     }
     Some(WorkTarget {
