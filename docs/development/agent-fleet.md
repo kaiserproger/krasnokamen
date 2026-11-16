@@ -131,8 +131,8 @@ tests and builds; 55 h on Main, IRC or peers; 14% of edits failed).
   command to Main instead of rerunning unchanged gates.
 - **Hand-in.** A finished branch merges cleanly into current `main`: merge
   `main` into it in the worktree, resolve conflicts there and rerun the
-  affected L0 before sending the result. Two parallel branches stop being
-  conflict-free once the first lands, so Main applies a batch in order on a
+  affected L0 before sending the result. Independent parallel branches cannot
+  both fast-forward `main` after the first lands, so Main applies a batch in order on a
   separate integration branch, rechecking each before applying it, runs the
   merged-tree checks there and then moves `main` with one `--ff-only`.
 - **Do not block on Main.** After sending a question, continue the queue's
