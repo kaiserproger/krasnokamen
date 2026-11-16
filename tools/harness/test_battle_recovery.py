@@ -377,6 +377,27 @@ class InputsAndOutputsTests(unittest.TestCase):
             br.run(profiles.ProfileContext(Path("/nonexistent"), scenario_id="battle-kit-census", extra_args=["--x"]))
 
 
+class RearmScenarioTests(unittest.TestCase):
+    def test_rearm_scenario_runs_two_acknowledged_commands_before_census(self):
+        fifo = mock.Mock()
+        fifo.mark.side_effect = [11, 22]
+        fifo.wait.return_value.group.return_value = "Battle live rearmed: PovRed side=1"
+        session = mock.Mock()
+        session.clients = [session.holder, session.viewer]
+        backups = []
+        report = {"scenario": "battle-rearm-recovery", "assertions": {}}
+        with mock.patch.object(br, "_phase_census", return_value={"phase": "precut-repeated-rearm"}) as census:
+            br._rearm_twice(fifo, session, ["minecraft:iron_spear"], {}, backups, report)
+        self.assertEqual(fifo.send.call_args_list,
+                         [mock.call("battle live PovRed red"), mock.call("battle live PovRed red")])
+        self.assertEqual([call.args[1] for call in fifo.wait.call_args_list], [11, 22])
+        self.assertEqual(backups, [{"phase": "precut-repeated-rearm"}])
+        census.assert_called_once()
+        session.holder.capture.assert_called_once_with("precut-repeated-rearm")
+        self.assertTrue(report["assertions"]["rearmed_twice_before_crash"])
+        self.assertIs(br.VERDICTS["battle-rearm-recovery"], br.kit_census)
+
+
 class ClientKitTests(unittest.TestCase):
     ITEMS = ["minecraft:iron_helmet", "minecraft:iron_spear", "minecraft:shield"]
 
