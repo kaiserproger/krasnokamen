@@ -812,10 +812,9 @@ fn write_snapshots(
             blocks,
             items,
             || chunk_covered(&key, &applied, &metadata, &overlays),
-        )? {
-            if let Some(io) = io.as_deref_mut() {
-                io.chunk_payload_bytes += bytes as u64;
-            }
+        )? && let Some(io) = io.as_deref_mut()
+        {
+            io.chunk_payload_bytes += bytes as u64;
         }
         // The mask narrows only world checkpoints: replay probes every stored
         // section record to decide `changed`, so it keeps examining all of them.

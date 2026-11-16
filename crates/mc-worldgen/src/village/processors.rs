@@ -663,6 +663,16 @@ pub fn apply_processors(
     apply_processors_with_metadata(semantics, level, blocks, processors, reference_pos).0
 }
 
+/// A generated spawner: block position, chosen mob and its spawner fields.
+pub type ProcessorSpawner<'a> = (BlockPos, &'a Identifier, &'a [i16; 7]);
+
+/// Loot table and spawner choice a processor chain attached to one block.
+#[derive(Clone, Copy, Default)]
+struct BlockMetadata<'a> {
+    loot: Option<&'a Identifier>,
+    spawner: Option<(&'a Identifier, &'a [i16; 7])>,
+}
+
 /// Processed blocks, generated loot references, and generated spawner metadata.
 pub fn apply_processors_with_metadata<'a>(
     semantics: &BlockSemantics<'_>,
@@ -673,7 +683,7 @@ pub fn apply_processors_with_metadata<'a>(
 ) -> (
     Vec<PieceBlock>,
     Vec<(BlockPos, &'a Identifier)>,
-    Vec<(BlockPos, &'a Identifier, &'a [i16; 7])>,
+    Vec<ProcessorSpawner<'a>>,
 ) {
     if !processors
         .iter()
@@ -684,8 +694,7 @@ pub fn apply_processors_with_metadata<'a>(
         let mut spawners = Vec::new();
         for original in blocks {
             let mut current = Some(*original);
-            let mut loot = None;
-            let mut spawner = None;
+            let mut metadata = BlockMetadata::default();
             for processor in processors {
                 let Some(block) = current else {
                     break;
@@ -697,15 +706,14 @@ pub fn apply_processors_with_metadata<'a>(
                     original,
                     block,
                     reference_pos,
-                    &mut loot,
-                    &mut spawner,
+                    &mut metadata,
                 );
             }
             if let Some(block) = current {
-                if let Some(table) = loot {
+                if let Some(table) = metadata.loot {
                     tables.push((block.pos, table));
                 }
-                if let Some((mob, fields)) = spawner {
+                if let Some((mob, fields)) = metadata.spawner {
                     spawners.push((block.pos, mob, fields));
                 }
                 output.push(block);
@@ -716,8 +724,7 @@ pub fn apply_processors_with_metadata<'a>(
     let mut processed = Vec::with_capacity(blocks.len());
     for original in blocks {
         let mut current = Some(*original);
-        let mut loot = None;
-        let mut spawner = None;
+        let mut metadata = BlockMetadata::default();
         for processor in processors {
             let Some(block) = current else {
                 break;
@@ -729,12 +736,11 @@ pub fn apply_processors_with_metadata<'a>(
                 original,
                 block,
                 reference_pos,
-                &mut loot,
-                &mut spawner,
+                &mut metadata,
             );
         }
         if let Some(block) = current {
-            processed.push((*original, block, loot, spawner));
+            processed.push((*original, block, metadata));
         }
     }
     for processor in processors {
@@ -749,7 +755,7 @@ pub fn apply_processors_with_metadata<'a>(
             if changed >= *limit {
                 break;
             }
-            let (original, block, loot, spawner) = &mut processed[index];
+            let (original, block, metadata) = &mut processed[index];
             let before = *block;
             if let Some(after) = process_with_metadata(
                 semantics,
@@ -758,8 +764,7 @@ pub fn apply_processors_with_metadata<'a>(
                 original,
                 before,
                 reference_pos,
-                loot,
-                spawner,
+                metadata,
             ) {
                 if after != before {
                     changed += 1;
@@ -771,11 +776,11 @@ pub fn apply_processors_with_metadata<'a>(
     let mut output = Vec::with_capacity(processed.len());
     let mut loot = Vec::new();
     let mut spawners = Vec::new();
-    for (_, block, table, spawner) in processed {
-        if let Some(table) = table {
+    for (_, block, metadata) in processed {
+        if let Some(table) = metadata.loot {
             loot.push((block.pos, table));
         }
-        if let Some((mob, fields)) = spawner {
+        if let Some((mob, fields)) = metadata.spawner {
             spawners.push((block.pos, mob, fields));
         }
         output.push(block);
@@ -790,23 +795,22 @@ fn process_with_metadata<'a>(
     original: &PieceBlock,
     processed: PieceBlock,
     reference: BlockPos,
-    loot: &mut Option<&'a Identifier>,
-    spawner: &mut Option<(&'a Identifier, &'a [i16; 7])>,
+    metadata: &mut BlockMetadata<'a>,
 ) -> Option<PieceBlock> {
     if let Processor::MoogSpawner { spec, total_weight } = processor {
         if is_named_block(semantics, processed.state, "spawner") {
-            *spawner = None;
+            metadata.spawner = None;
             let mut random = LegacyRandom::new(get_seed(processed.pos));
             let mut choice = f64::from(random.next_float()) * total_weight;
             for (mob, weight) in &spec.mobs {
                 choice -= weight;
                 if choice <= 0.0 {
-                    *spawner = Some((mob, &spec.fields));
+                    metadata.spawner = Some((mob, &spec.fields));
                     break;
                 }
             }
-            if spawner.is_none() {
-                *spawner = spec.mobs.last().map(|(mob, _)| (mob, &spec.fields));
+            if metadata.spawner.is_none() {
+                metadata.spawner = spec.mobs.last().map(|(mob, _)| (mob, &spec.fields));
             }
         }
         return Some(processed);
@@ -823,9 +827,9 @@ fn process_with_metadata<'a>(
                 reference,
                 &mut random,
             ) {
-                *spawner = None;
+                metadata.spawner = None;
                 if let Some(table) = &rule.append_loot {
-                    *loot = Some(table);
+                    metadata.loot = Some(table);
                 }
                 return Some(PieceBlock {
                     state: rule.output_state,
@@ -837,7 +841,7 @@ fn process_with_metadata<'a>(
     }
     let result = process_block(semantics, level, processor, original, processed, reference);
     if result.is_some_and(|next| next.state != processed.state) {
-        *spawner = None;
+        metadata.spawner = None;
     }
     result
 }
