@@ -916,6 +916,30 @@ pub(crate) fn find_path_ctx(
     vertical: u32,
     can_open_doors: bool,
 ) -> bool {
+    find_path_limited_ctx(
+        ctx, cache, start, target, width, height, path, exact, horizontal, vertical,
+        can_open_doors, usize::MAX,
+    )
+}
+
+/// The ordinary native router with an additional caller-owned expansion cap.
+/// Admission still belongs to RouteCtx and every expanded node charges the
+/// same global budget. A false result includes truncation.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn find_path_limited_ctx(
+    ctx: &mut RouteCtx<'_>,
+    cache: &mut PoiCache,
+    start: [f64; 3],
+    target: BlockPos,
+    width: f64,
+    height: f64,
+    path: &mut Vec<BlockPos>,
+    exact: bool,
+    horizontal: u32,
+    vertical: u32,
+    can_open_doors: bool,
+    node_limit: usize,
+) -> bool {
     path.clear();
     cache.nodes.clear();
     cache.visited.clear();
@@ -933,6 +957,7 @@ pub(crate) fn find_path_ctx(
     let (score, remaining) = search_priority(0, start, target);
     cache.open.push(Reverse((score, remaining, 0, 0)));
     let mut closest = 0;
+    let mut expanded = 0;
     while let Some(Reverse((_, _, queued_cost, index))) = cache.open.pop() {
         let node = cache.nodes[index];
         // A cheaper predecessor may have superseded this queued entry. Do not
@@ -947,6 +972,10 @@ pub(crate) fn find_path_ctx(
             continue;
         }
         cache.nodes[index].expanded = true;
+        if expanded == node_limit {
+            break;
+        }
+        expanded += 1;
         if !ctx
             .budget
             .try_charge(ctx.dimension, ctx.consumer, Kind::PathNode, 1)
