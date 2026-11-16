@@ -395,6 +395,37 @@ fn directory_outside_vanilla_data_types_is_ignored_and_named_once() {
 }
 
 #[test]
+fn binary_file_in_a_non_vanilla_directory_is_ignored_without_decoding() {
+    let directory = tempfile::tempdir().unwrap();
+    pack(
+        directory.path(),
+        "a",
+        &[("test/function/a.mcfunction", "time set 1234")],
+    );
+    let path = directory.path().join("a/data/mod/custom/foo.bin");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, [0xff, 0xfe, 0x00, 0x80]).unwrap();
+    let packs = PackSet::load(directory.path(), Selection::default()).unwrap();
+    assert!(packs.functions.contains_key("test:a"));
+    assert_eq!(
+        packs
+            .warnings(None)
+            .iter()
+            .filter(|w| w.contains("mod/custom/foo.bin"))
+            .count(),
+        1
+    );
+    // A vanilla directory still decodes and refuses.
+    let vanilla = directory.path().join("a/data/mod/advancement/b.json");
+    std::fs::create_dir_all(vanilla.parent().unwrap()).unwrap();
+    std::fs::write(vanilla, "{}").unwrap();
+    let error = PackSet::load(directory.path(), Selection::default())
+        .err()
+        .unwrap();
+    assert!(error.contains("Unsupported datapack resource"), "{error}");
+}
+
+#[test]
 fn vanilla_data_directory_list_covers_the_local_vanilla_data() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../data/vanilla/26.3/data/minecraft");

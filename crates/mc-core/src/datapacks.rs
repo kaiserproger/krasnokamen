@@ -16,6 +16,15 @@ pub(crate) mod worldgen;
 
 const COMMAND_BUDGET: usize = crate::command_context::LIMIT;
 const MAX_RESOURCES: usize = 16384;
+/// Whether `relative` (below `data/`) is `<namespace>/<directory>/...` with a
+/// directory vanilla does not load.
+fn is_ignored_directory(relative: &str) -> bool {
+    let mut parts = relative.splitn(3, '/');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(_), Some(kind), Some(_)) if !VANILLA_DATA_DIRECTORIES.contains(&kind)
+    )
+}
 /// Bytes one load may read and expand across every selected pack: raw files plus
 /// the decompressed size of gzip structure NBT. The full converted MVS structure
 /// pack is 4,110,276 B on disk and 48,122,266 B decompressed (measured 2026-11-17),
@@ -818,6 +827,9 @@ impl PackSet {
                             .checked_sub(expanded.saturating_sub(bytes.len()))
                             .ok_or("Datapack expanded byte limit exceeded")?;
                         layer.resources.insert(relative.clone(), bytes.into());
+                    } else if is_ignored_directory(&relative) {
+                        // Not decoded: vanilla never reads such a file, whatever its bytes.
+                        result.ignored.push(format!("{id}: {relative}"));
                     } else {
                         let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
                         result.add_file(&mut raw_tags, id, &relative, text)?;
@@ -1000,10 +1012,8 @@ impl PackSet {
                 ));
             }
             self.predicates.insert(id, predicate);
-        } else if VANILLA_DATA_DIRECTORIES.contains(&kind) {
-            return Err("Unsupported datapack resource".into());
         } else {
-            self.ignored.push(format!("{pack}: {relative}"));
+            return Err("Unsupported datapack resource".into());
         }
         Ok(())
     }
