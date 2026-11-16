@@ -840,7 +840,10 @@ impl Core {
         let recovered_tick = tick_state.tick;
         if config.start_frozen {
             tick_state.tick_control.set_frozen(true);
-            tracing::info!(tick = tick_state.tick, "recovery simulation frozen before first tick");
+            tracing::info!(
+                tick = tick_state.tick,
+                "recovery simulation frozen before first tick"
+            );
         }
         // Selection, registry content and immutable generators were installed
         // together by recovery, before spawn discovery or replay chunk reads.

@@ -120,7 +120,10 @@ async fn crash_census_refuses_receipt_inside_world_before_database_open() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let error = format!("{:#}", run_offline(&cli, &mut cfg).await.unwrap_err());
     assert!(error.contains("receipt must be outside"), "{error}");
-    assert_eq!(std::fs::read(database).unwrap(), b"not a redb, must remain untouched");
+    assert_eq!(
+        std::fs::read(database).unwrap(),
+        b"not a redb, must remain untouched"
+    );
 }
 
 #[test]
