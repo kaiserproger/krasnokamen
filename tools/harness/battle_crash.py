@@ -515,15 +515,19 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                                    recovered_log.read_text(errors='replace'))
                 if marker is None or int(marker[1]) != wal['published_through']:
                     raise RuntimeError('recovery freeze barrier missing or at the wrong durable tick')
+                recovery_text = recovered_log.read_text(errors='replace')
+                if (any((run / 'empty-plugins').iterdir()) or
+                        'plugin.runtime_ready:' in recovery_text):
+                    raise RuntimeError('recovery fixture must have zero deployed plugins')
                 def send_recovery(text):
                     recovery_input.write(text.encode())
                 recovered_console = Console(recovered_log, recovery, send_recovery)
+                # First input is the read-only census, before any client joins.
+                early = census(recovered_console.command('execute as @e run data get entity @s'))
+                recovery_tick_lo = simulation_tick(recovered_console)
                 freeze_reply = recovered_console.command('tick query')
                 if 'frozen' not in freeze_reply.lower():
                     raise RuntimeError(f'recovery did not report frozen ticks: {freeze_reply[-1000:]}')
-                # Capture transient entities before waiting for three player reconnects.
-                recovery_tick_lo = simulation_tick(recovered_console)
-                early = census(recovered_console.command('execute as @e run data get entity @s'))
                 recovery_tick_hi = simulation_tick(recovered_console)
                 if recovery_tick_lo != recovery_tick_hi:
                     raise RuntimeError('recovery census was not frozen')

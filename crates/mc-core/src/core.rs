@@ -364,6 +364,8 @@ type KnockbackPublication =
 
 #[derive(Debug)]
 struct CoreInner {
+    #[cfg(test)]
+    recovered_tick: u64,
     input_tx: Sender<PlayerInput>,
     spawn_tx: Sender<SpawnRequest>,
     ticket_tx: Sender<RemoteTicket>,
@@ -834,6 +836,8 @@ impl Core {
             plugin_runtime,
             build_queries,
         )?;
+        #[cfg(test)]
+        let recovered_tick = tick_state.tick;
         if config.start_frozen {
             tick_state.tick_control.set_frozen(true);
             tracing::info!(tick = tick_state.tick, "recovery simulation frozen before first tick");
@@ -1025,6 +1029,8 @@ impl Core {
         let worker_count = crate::tick::worker_threads();
         Ok(Self {
             inner: Arc::new(CoreInner {
+                #[cfg(test)]
+                recovered_tick,
                 input_tx,
                 spawn_tx,
                 ticket_tx,

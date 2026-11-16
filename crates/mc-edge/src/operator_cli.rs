@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
+mod crash_census_output;
+
 #[derive(Debug, Parser)]
 #[command(name = "krasnokamen")]
 pub struct Cli {
@@ -12,7 +14,9 @@ pub struct Cli {
     /// Disable stdin server commands (useful for services and harnesses).
     #[arg(long)]
     pub no_console: bool,
-    /// Freeze autonomous simulation before the first tick (recovery inspection).
+    /// Diagnostic recovery barrier: freeze autonomous simulation before the first tick.
+    /// Joins, commands, plugins, chunk generation, generated-entity admission,
+    /// WAL and checkpoints continue; use `tick unfreeze` to resume simulation.
     #[arg(long)]
     pub start_frozen: bool,
     /// Bench only: seed cows before accepting connections.
@@ -85,7 +89,7 @@ pub enum WorldCommand {
     /// Count stored entities, villagers, chunks and settlements of a stopped
     /// native world from its checkpoint, read-only and without starting it.
     Census(CensusPaths),
-    /// Project checkpoint plus WAL from a disposable crashed-world copy.
+    /// Project checkpoint plus WAL; may repair the store, so use only a disposable copy.
     #[command(hide = true)]
     CrashCensus(CrashCensusPaths),
     /// Read exact blocks, typed container contents, stored player inventories and
@@ -218,7 +222,7 @@ pub struct CrashCensusPaths {
     /// Disposable stopped world copy; redb may repair its metadata in place.
     #[arg(long)]
     copy: PathBuf,
-    /// JSON receipt outside the copied world.
+    /// New JSON receipt outside the copied world; existing files are never replaced.
     #[arg(long)]
     receipt: PathBuf,
 }
@@ -321,10 +325,11 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     mc_world_conversion::census_native(&config, &paths.source, &paths.receipt)?;
                 }
                 WorldCommand::CrashCensus(paths) => {
+                    let output = crash_census_output::create(&paths.copy, &paths.receipt)?;
                     let mut config = config.clone();
                     config.world_dir = paths.copy.clone();
-                    let census = mc_core::native_checkpoint::crash_census(&config)?;
-                    std::fs::write(&paths.receipt, serde_json::to_vec_pretty(&census)?)?;
+                    let census = mc_world_conversion::crash_census(&config)?;
+                    serde_json::to_writer_pretty(output, &census)?;
                 }
                 WorldCommand::Probe(paths) => {
                     mc_world_conversion::probe_native(

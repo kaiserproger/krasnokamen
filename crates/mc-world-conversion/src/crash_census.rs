@@ -1,6 +1,7 @@
 //! Durable crash-census projection for a disposable copy of a stopped world.
 use std::collections::BTreeMap;
 
+use mc_core::native_checkpoint as native;
 use mc_nbt::Tag;
 use serde::Serialize;
 
@@ -28,7 +29,7 @@ fn holders(fields: &[(String, Tag)]) -> BTreeMap<String, String> {
                 "Inventory" | "EnderItems" | "Items" | "HandItems" | "ArmorItems" | "Item" | "equipment"
             )
         })
-        .map(|(name, tag)| (name.clone(), crate::command_nbt_path::snbt(tag)))
+        .map(|(name, tag)| (name.clone(), native::format_census_tag(tag)))
         .collect()
 }
 
@@ -37,14 +38,14 @@ fn holders(fields: &[(String, Tag)]) -> BTreeMap<String, String> {
 /// must be a copy: redb can write its crash-recovery metadata while opening.
 pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
     let path = config.world_dir.join("native/state.redb");
-    let identity = super::native_identity(config);
+    let identity = native::native_identity(config);
     drop(
         mc_world::native::NativeStore::open(&path, identity)
-            .map_err(|error| super::open_refusal(config, &path, error))?,
+            .map_err(|error| native::open_refusal(config, &path, error))?,
     );
-    let world = super::recover_offline(config)?;
+    let world = native::recover_offline(config)?;
     let checkpoint_tick = world.manifest.tick;
-    let image = super::encode_checkpoint(&world)?;
+    let image = native::encode_checkpoint(&world)?;
     let mut entities = BTreeMap::new();
     for entity in image.entities {
         let Some(Tag::Compound(fields)) = entity.payload else {
@@ -66,7 +67,7 @@ pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
         }
     }
     for player in image.players {
-        let Tag::Compound(fields) = super::decode_tag(&player.record, "player")? else {
+        let Tag::Compound(fields) = native::decode_tag(&player.record, "player")? else {
             return Err(CoreError::Storage(
                 "crash census: player is not a compound".into(),
             ));

@@ -8,6 +8,8 @@ mod census;
 #[cfg(test)]
 mod census_tests;
 pub use census::{CensusReceipt, DimensionCensus, SettlementCensus, census_native};
+mod crash_census;
+pub use crash_census::crash_census;
 mod probe;
 #[cfg(test)]
 mod probe_tests;
