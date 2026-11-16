@@ -128,6 +128,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
                 .plugins
                 .set_domain("@native-structures", "ledger", ledger);
             restored.entities.row_mut(restored_slot).villager = carry;
+            crate::settlements::rebuild_counts(&mut restored);
             restored.block_entities.get_mut(&(1, 201, 1)).unwrap().slots =
                 state.block_entities[&(1, 201, 1)].slots.clone();
             for (position, block) in &state.plugin_block_writes {

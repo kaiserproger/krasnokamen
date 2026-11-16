@@ -926,6 +926,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     );
     restored.entities.row_mut(restored_slot).villager =
         Some(serde_json::from_slice(&carry).unwrap());
+    crate::settlements::rebuild_counts(&mut restored);
     restored.block_entities.get_mut(&(1, 201, 1)).unwrap().slots =
         state.block_entities[&(1, 201, 1)].slots.clone();
     for (position, block) in &state.plugin_block_writes {

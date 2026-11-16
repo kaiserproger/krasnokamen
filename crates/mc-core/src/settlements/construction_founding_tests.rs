@@ -132,6 +132,108 @@ fn civil_image(state: &TickState) -> serde_json::Value {
         "sequence": state.settlement_sequence, "members": members(state), "plugins": state.plugins})
 }
 
+fn assert_member_index(state: &TickState) {
+    for record in state.settlements.records() {
+        let native: std::collections::BTreeSet<_> = state
+            .entities
+            .slots()
+            .filter_map(|slot| {
+                let body = state.entities.body(slot);
+                (body.alive
+                    && state
+                        .entities
+                        .row(slot)
+                        .villager
+                        .as_ref()
+                        .is_some_and(|v| v.settlement == Some(record.id)))
+                .then_some(body.id)
+            })
+            .collect();
+        assert_eq!(
+            state
+                .settlements
+                .member_ids(record.id)
+                .collect::<std::collections::BTreeSet<_>>(),
+            native
+        );
+        assert_eq!(state.settlements.member_count(record.id), native.len());
+    }
+}
+#[test]
+fn an_outpost_builder_outside_the_civil_radius_still_places_paid_cells() {
+    let (mut state, parent, _) = prepared_at(0, [200, 200, 0]);
+    // The shared fixture creates the original builder before the migrants.
+    let builder = state.entities.slots().next().unwrap();
+    state.entities.row_mut(builder).controls.no_ai = false;
+    let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
+    v.data.profession = Profession::Builder;
+    v.activity = crate::villager::Activity::Work;
+    fund(&mut state, "spanish_house", 1);
+    assert!(plan(&mut state, parent));
+    let project = state
+        .settlements
+        .get(parent)
+        .unwrap()
+        .project
+        .clone()
+        .unwrap();
+    let (item, _) = executor::next_material(&state, parent, &project.structure)
+        .unwrap()
+        .unwrap();
+    let uuid = state.entities.row(builder).uuid;
+    executor::fetch(&mut state, uuid, [1, 201, 1], item).unwrap();
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(
+            crate::boundary::ChunkPos { x: 11, z: 0 },
+            0,
+        )]));
+    for x in 188..=189 {
+        state
+            .world
+            .set_block(x, 200, 2, state.registry.states.stone);
+        for y in 201..=203 {
+            state.world.set_block(x, y, 2, state.registry.states.air);
+        }
+    }
+    state.world.fold_overlay();
+    let position = [188.85, 201.0, 2.5];
+    state.entities.set_pos(builder, position);
+    assert!(
+        !state
+            .settlements
+            .get(parent)
+            .unwrap()
+            .contains([188, 201, 2])
+    );
+    let next = executor::next_cell(&state, parent, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        crate::villager::building::wait_reason(&state, builder, &project, next),
+        "placement_not_advancing"
+    );
+    assert_eq!(
+        executor::status(&state, parent, &project.structure)
+            .unwrap()
+            .completed_work_units,
+        0
+    );
+    // A real construction admission, not a direct executor call or navigation aid.
+    state.tick = 4;
+    super::super::tick(&mut state);
+    let status = executor::status(&state, parent, &project.structure).unwrap();
+    assert_eq!(
+        status.completed_work_units, 1,
+        "civil bounds cannot hide an in-reach member builder"
+    );
+    assert!(
+        !status.consumed.is_empty(),
+        "the placed cell was paid from native carry"
+    );
+    assert_eq!(state.entities.pos(builder), position);
+}
+
 #[test]
 fn admission_requires_fed_household_and_loaded_buildable_outpost() {
     let (mut state, parent, mut expedition) = prepared(0);
@@ -225,6 +327,7 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
     assert!(restored.settlements.get(parent).unwrap().founding.is_none());
     assert_eq!(members(&restored), members(&state));
+    assert_member_index(&restored);
 
     let tick = image.tick + 1;
     let mut record = state.settlements.get(parent).unwrap().clone();
@@ -271,6 +374,7 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
         "production recovery consumed the old WAL row"
     );
     assert_eq!(members(&restored), members(&state));
+    assert_member_index(&restored);
 }
 
 #[test]
