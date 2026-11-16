@@ -12,6 +12,9 @@ output on tmpfs and copies the complete directory to `--out` at the end;
 disjoint CPUs; `--frames 12` captures fewer frames, while the census, supply,
 building orders and observer move still follow every one of the 60 sprints.
 Acceptance needs 60 frames.
+Every building order must receive a native Started/Queued reply before the
+driver advances its queue; a refusal or missing acknowledgement fails the run
+immediately, with that command and the received chat retained in run.json.
 """
 from __future__ import annotations
 
@@ -166,6 +169,19 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
     """The server's startup line with its effective test multipliers; None when this pin logs none."""
     found = ACCEL_LINE.findall(log)
     return dict(zip(ACCEL_KEYS, map(float, found[-1]))) if found else None
+
+
+def order_build(probe: ProbeSteps, blueprint: str, run: dict) -> None:
+    command = f'settlement build {blueprint}'
+    lines = village._recent_chat(village._send(probe, command), 20)
+    admitted = any(line.startswith((f'Started {blueprint} construction.',
+                                    f'Queued {blueprint}:')) for line in lines)
+    run.setdefault('building_orders', []).append({
+        'command': command, 'recent_chat': lines, 'admitted': admitted,
+    })
+    if not admitted:
+        raise RuntimeError(f'/{command} was not admitted; received server chat: {lines}')
+    probe.check(f'{blueprint}_order_admitted', True)
 
 
 @contextlib.contextmanager
@@ -415,8 +431,7 @@ def main() -> None:
             chest = village._founding_storage(probe, (120, 70, 7))
             run['bootstrap_storage'] = list(chest)
             supply(probe, console, [chest], bill('spanish_plaza'), run)
-            order = village._recent_chat(village._send(probe, 'settlement build spanish_plaza'), 20)
-            probe.check('plaza_order_admitted', any('spanish_plaza' in line and ('Started' in line or 'Queued' in line) for line in order))
+            order_build(probe, 'spanish_plaza', run)
             run['snapshots'].append(record_census(probe, console, run, log_path))
             telemetry_tick = -1
             funded = False
@@ -478,11 +493,11 @@ def main() -> None:
                     supply(probe, console, positions, stock, run)
                     supplied_children.add(child['id'])
                 if ordered in completed and queue:
-                    ordered = queue.pop(0)
                     console(f"tp {USERNAME} {parent['anchor'][0] + 0.5} {parent['anchor'][1] + 2} {parent['anchor'][2] + 0.5}")
                     probe.wait(lambda observed: abs(observed['player']['x'] - parent['anchor'][0] - 0.5) < 1
                                and abs(observed['player']['z'] - parent['anchor'][2] - 0.5) < 1, 'order_at_parent')
-                    village._send(probe, f'settlement build {ordered}')
+                    order_build(probe, queue[0], run)
+                    ordered = queue.pop(0)
                 console(f'gamemode spectator {USERNAME}')
                 focus = children[0] if children and step % 2 else parent
                 anchor = focus['anchor']
