@@ -111,6 +111,12 @@ record both file manifests (relative path, size and SHA-256) and the SHA-256 of
 manifest, never the primary evidence. Other failures still fail. WAL pruning
 remains normal; an event-driven hard-link archive captures immutable published
 batches in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
+The crash census records each persisted non-player's dimension, UUID and wire
+ID; players use dimension, UUID and holder images because reconnect may assign a
+new runtime ID. A clean checkpoint alone does not prove a restored live ID:
+the frozen recovery gate observes actual spawn packets through a protocol client.
+Missing spawn evidence is incomplete, never a match; an observed ID or
+dimension mismatch fails the cut.
 Restart the original world and server with
 `python3 tools/battle/run-battle.py --recover-from-crash /absolute/run-dir`.
 This replaces the runner process with the server, using the original config;

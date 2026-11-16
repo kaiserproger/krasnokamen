@@ -1,5 +1,5 @@
 //! Durable crash-census projection for a disposable copy of a stopped world.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use mc_core::native_checkpoint as native;
 use mc_nbt::Tag;
@@ -11,13 +11,33 @@ use crate::{CoreConfig, CoreError};
 pub struct CrashCensus {
     pub checkpoint_tick: u64,
     pub durable_tick: u64,
-    pub entities: BTreeMap<String, CrashEntity>,
+    pub entities: BTreeMap<String, BTreeMap<String, CrashEntity>>,
 }
 
 #[derive(Serialize)]
 pub struct CrashEntity {
     pub kind: String,
+    pub wire_id: Option<i32>,
     pub holders: BTreeMap<String, String>,
+}
+
+fn insert_entity(
+    entities: &mut BTreeMap<String, BTreeMap<String, CrashEntity>>,
+    seen: &mut BTreeSet<String>,
+    dimension: mc_core::dimensions::Dimension,
+    uuid: String,
+    entity: CrashEntity,
+) -> Result<(), CoreError> {
+    if !seen.insert(uuid.clone()) {
+        return Err(CoreError::Storage(format!(
+            "crash census: duplicate entity {uuid}"
+        )));
+    }
+    entities
+        .entry(dimension.name().into())
+        .or_default()
+        .insert(uuid, entity);
+    Ok(())
 }
 
 fn holders(fields: &[(String, Tag)]) -> BTreeMap<String, String> {
@@ -212,8 +232,9 @@ pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
     let world = native::recover_offline(config)?;
     let checkpoint_tick = world.manifest.tick;
     let mut entities = BTreeMap::new();
-    for replay in world.dimensions.values() {
-        for entity in replay.entities.values() {
+    let mut seen = BTreeSet::new();
+    for (dimension, replay) in &world.dimensions {
+        for (wire_id, entity) in &replay.entities {
             let kind = world
                 .registry
                 .entity_type_name(entity.type_id)
@@ -230,14 +251,17 @@ pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
                 .uuid
                 .parse::<uuid::Uuid>()
                 .map_err(|error| CoreError::Storage(error.to_string()))?;
-            if entities
-                .insert(uuid.to_string(), CrashEntity { kind, holders })
-                .is_some()
-            {
-                return Err(CoreError::Storage(format!(
-                    "crash census: duplicate entity {uuid}"
-                )));
-            }
+            insert_entity(
+                &mut entities,
+                &mut seen,
+                *dimension,
+                uuid.to_string(),
+                CrashEntity {
+                    kind,
+                    wire_id: Some(*wire_id),
+                    holders,
+                },
+            )?;
         }
     }
     let root = &world.dimensions[&mc_core::dimensions::Dimension::Overworld];
@@ -256,20 +280,17 @@ pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
         holders
             .entry("EnderItems".into())
             .or_insert_with(|| "[]".into());
-        if entities
-            .insert(
-                uuid.to_string(),
-                CrashEntity {
-                    kind: "player".into(),
-                    holders,
-                },
-            )
-            .is_some()
-        {
-            return Err(CoreError::Storage(format!(
-                "crash census: duplicate player {uuid}"
-            )));
-        }
+        insert_entity(
+            &mut entities,
+            &mut seen,
+            player.dimension,
+            uuid.to_string(),
+            CrashEntity {
+                kind: "player".into(),
+                wire_id: None,
+                holders,
+            },
+        )?;
     }
     Ok(CrashCensus {
         checkpoint_tick,
