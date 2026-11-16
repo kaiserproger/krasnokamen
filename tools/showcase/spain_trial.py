@@ -161,6 +161,70 @@ def pin(process: subprocess.Popen, cpus: str) -> None:
     subprocess.run(['taskset', '-a', '-p', '-c', cpus, str(process.pid)], check=True, stdout=subprocess.DEVNULL)
 
 
+def cpu_list(text: str) -> set[int]:
+    cpus = set()
+    for part in text.split(','):
+        low, _, high = part.partition('-')
+        cpus.update(range(int(low), int(high or low) + 1))
+    return cpus
+
+
+def busy_ticks(cpus: set[int]) -> int:
+    """Non-idle ticks of `cpus` from /proc/stat: user, nice, system, irq, softirq, steal."""
+    total = 0
+    for line in Path('/proc/stat').read_text().splitlines():
+        name, *fields = line.split()
+        if name.startswith('cpu') and name[3:].isdigit() and int(name[3:]) in cpus:
+            user, nice, system, _idle, _iowait, irq, softirq, steal = map(int, fields[:8])
+            total += user + nice + system + irq + softirq + steal
+    return total
+
+
+def process_ticks(process: subprocess.Popen | None) -> int:
+    """utime + stime of a live process's thread group; 0 once it is gone."""
+    if process is None:
+        return 0
+    try:
+        fields = Path(f'/proc/{process.pid}/stat').read_text().rsplit(')', 1)[1].split()
+    except OSError:
+        return 0
+    return int(fields[11]) + int(fields[12])
+
+
+def affinity_overlap(cpus: set[int]) -> list[dict]:
+    """User processes other than this driver allowed on any of `cpus`, grouped by name and mask.
+
+    Pinning a trial process does not move processes started before it (mem-run
+    scopes keep their placement), so the receipt names who could share its CPUs.
+    """
+    groups = Counter()
+    for status in Path('/proc').glob('[0-9]*/status'):
+        try:
+            fields = dict(line.split(':', 1) for line in status.read_text().splitlines())
+            pid, ppid = int(fields['Pid']), int(fields['PPid'])
+            allowed = fields['Cpus_allowed_list'].strip()
+        except (OSError, KeyError, ValueError):
+            continue
+        if pid == 2 or ppid == 2 or pid == os.getpid() or not cpu_list(allowed) & cpus:
+            continue
+        groups[(fields['Name'].strip(), allowed)] += 1
+    return [{'name': name, 'cpus_allowed': allowed, 'processes': count}
+            for (name, allowed), count in groups.most_common()]
+
+
+def record_cpu_share(run: dict, roles: dict[str, set[int]], start: dict[str, int], owners: dict[str, list]) -> None:
+    """Busy time of each role's CPUs during the run, split into the role's own and foreign time.
+
+    Foreign time is every other process, kernel thread and interrupt on those CPUs.
+    """
+    tick = os.sysconf('SC_CLK_TCK')
+    for role, cpus in roles.items():
+        busy = busy_ticks(cpus) - start[role]
+        own = sum(process_ticks(process) for process in owners[role])
+        run['cpu_overlap'][role].update(busy_seconds=busy / tick, own_seconds=own / tick,
+                                        foreign_seconds=(busy - own) / tick)
+
+
 def relocate(value, old: str, new: str):
     """Replace the scratch directory prefix in every string of a JSON value."""
     if isinstance(value, str):
@@ -259,6 +323,11 @@ def main() -> None:
     log_path = out / 'server.log'
     log_handle = log_path.open('wb')
     telemetry_path = out / 'telemetry.jsonl'
+    cpu_args = {'server': args.server_cpus, 'client': args.client_cpus}
+    roles = {role: cpu_list(text) for role, text in cpu_args.items() if text}
+    run['cpu_overlap'] = {role: {'cpus': cpu_args[role], 'allowed_at_start': affinity_overlap(cpus)}
+                          for role, cpus in roles.items()}
+    cpu_start = {role: busy_ticks(cpus) for role, cpus in roles.items()}
     started = time.monotonic()
     try:
         env = {**os.environ, 'KRASNOKAMEN_HARNESS_LOG_STDOUT': '1', 'RUST_LOG': 'info,settlement_audit=info'}
@@ -401,6 +470,7 @@ def main() -> None:
         raise
     finally:
         try:
+            record_cpu_share(run, roles, cpu_start, {'server': [server], 'client': [client, xvfb]})
             if mcp is not None:
                 mcp.close()
             runtime.stop_process(client)
