@@ -115,6 +115,25 @@ evidence. `--without-packs --candidates /absolute/positive/candidates.json`
 selects the same pack-absent negative control. Wrap graphical commands in Main's
 absolute `scene-slot.sh` followed by `mem-run.sh -m 6G` on the owner host.
 
+### Full selected MVS campaign
+
+`python3 -m tools.harness run scenario horizon-atm-full` consumes the full
+converted MVS manifest in `KRASNOKAMEN_ATM_MANIFEST`, vanilla cache in
+`KRASNOKAMEN_ATM_CACHE`, and `KRASNOKAMEN_SERVER_BINARY`,
+`KRASNOKAMEN_BATTLE_HORIZON_CLIENT`, `KRASNOKAMEN_BATTLE_HORIZON_CTL` and
+`KRASNOKAMEN_BATTLE_HORIZON_RESOURCES`. It refuses anything other than 127
+Overworld and three Nether structure definitions and records their start pools
+and templates. The fresh-world seed is 20261115; the client uses normal
+`execute in <dimension> run tp` commands, not a portal or placement commands.
+It locates each ID, preserves generated-start and template-block evidence, and
+photographs a visible template block from a grounded survival position within
+4.5 blocks. After restart it checks every recorded start and sampled blocks
+offline and revisits every tenth sorted Overworld ID starting at zero plus all
+three Nether IDs with the client. Missing locate results remain per-ID findings,
+not silently removed successes; infrastructure failures leave unrun rows.
+Screenshots still require visual review, and palette samples do not prove whole
+template fidelity or mod compatibility.
+
 ## Fresh world, real client, generated starts
 
 Set the normal native graphical environment documented in

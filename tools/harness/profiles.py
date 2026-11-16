@@ -567,6 +567,12 @@ def run_atm_structures(ctx: ProfileContext) -> dict[str, Any]:
 
     return atm_structures.run(ctx)
 
+def run_atm_full(ctx: ProfileContext) -> dict[str, Any]:
+    from . import atm_full
+
+    return atm_full.run(ctx)
+
+
 
 def run_block_log(ctx: ProfileContext) -> dict[str, Any]:
     """Block-log gate: grief, /co rollback, restart and /co restore on the native client."""
@@ -1271,6 +1277,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Local ATM data: fresh-world exact-ID generated starts, exported template blocks and real-client screenshots",
         "run": run_atm_structures,
     },
+    "atm-full": {
+        "scope": "real-client",
+        "description": "Full selected MVS Overworld and Nether generated starts with real Horizon visits and restart evidence",
+        "run": run_atm_full,
+    },
     "block-log": {
         "scope": "real-client",
         "description": "Block-log gate: grief (break/place/steal/break chest), /co lookup + rollback restores blocks and chest contents exactly, restart keeps history, /co restore re-applies (native --client, windowed for screenshots)",
@@ -1487,6 +1498,7 @@ PROFILE_PREREQUISITES = {
     "screen-share": _NATIVE,
     "datapack-reload": _NATIVE,
     "atm-structures": _NATIVE,
+    "atm-full": (("server_binary", "xvfb"), (), (), ()),
     "block-log": _NATIVE,
     "chisel": _SHARED,
     "core-client": _SHARED_BUILD,
