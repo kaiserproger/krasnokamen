@@ -1,0 +1,33 @@
+{
+  "id": "WORLD-PRUNE-PANICS-ON-CRASH-IMAGE",
+  "verdict": "promoted",
+  "fix_commit": "e3babeb88",
+  "fix_commit_full": "e3babeb88a074b718e629a3f888b5fc5e2bd13cd",
+  "promoted_at": "2026-11-16T12:48:33+00:00",
+  "tree_head": "9822bc306a0310129d7c91c7235468e0c9af251e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-edge/src/operator_cli.rs",
+    "crates/mc-world-tools/src/world_maintenance.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-edge/src/operator_cli_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-edge:operator_cli::tests::world_prune_dry_run_recovers_a_crash_journal_tail_off_the_async_worker": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:operator_cli::tests::world_prune_dry_run_recovers_a_crash_journal_tail_off_the_async_worker": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PrunePromote/.analysis/validation/20261116T124533-ledger-promote-g7ym1ikz"
+}
