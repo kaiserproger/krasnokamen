@@ -96,6 +96,11 @@ decides it):
   Krasnokamen tables; the singleplayer content bundle would retire. Waits on the
   owner's four questions in the ADR; the Java import and the content bundle
   are the current path, not an old side.
+- Off-screen settlement simulation ([ADR 0023](decisions/0023-offscreen-settlement-simulation.md)):
+  proposed; slice 1 (migration transit custody) implemented on a branch,
+  slices 2–5 (game-time economy clocks, deferred production and consumption,
+  construction labour, births) designed, not started. Today's residency-gated
+  economy is the current path, not an old side.
 
 Supported surfaces (standing contracts, not transitions; only an
 owner-declared sunset would make one):

@@ -29,6 +29,7 @@ Later explicit supersession takes priority over historical descriptions. See als
 | [0020](0020-entity-checkpoints-at-one-million.md) | Accepted; steps 1–2 implemented; strict latency criterion unmet | changing entity checkpoints or replay recovery |
 | [0021](0021-build-time-and-crate-split.md) | Step 1 accepted and implemented; split pilot designed, not started | changing build profiles or proposing a core crate split |
 | [0022](0022-content-without-java.md) | Proposed; native RegistryData encoder implemented, not wired | removing Java from content import, changing the facts bundle or RegistryData payloads |
+| [0023](0023-offscreen-settlement-simulation.md) | Proposed; migration transit slice implemented on branch | changing off-screen settlement progress, migration transit custody or settlement/transit checkpoint rows |
 
 Update the owning live ADR when authority, threading, persistence ordering or
 module policy changes. Superseded ADR tombstones are not current recipes.
