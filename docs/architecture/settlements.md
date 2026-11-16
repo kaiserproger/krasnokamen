@@ -105,10 +105,15 @@ affordable portions with output space and drops the rest in that visit. Navigati
 and delivery retries are runtime-only and cannot authorize a portion.
 Simulated fetch/walk/park visits keep a due opportunity until a portion is
 actually produced. A persisted `waiting_simulated` guard caps that held span at
-one opportunity when the station becomes unsimulated; later off-screen periods
+one opportunity at the first unsimulated visit; subsequent off-screen periods
 then accrue normally. Leaving a blocked station cannot turn its on-screen wait
-into a batch. Deferred and unavailable-storage retries wait 20 game ticks;
-new due periods are retained during that retry wait.
+into a batch. This conservative unload boundary can forgo off-screen production
+for up to one retry window (`RETRY_TICKS`, 20 game ticks), plus any `WorkCursor`
+dispatch delay (16 jobs per tick); it never credits a period twice. For a period
+of `d` ticks, the retry-only loss is at most `ceil(RETRY_TICKS / d)` portions,
+including phase rounding. The runtime retry timestamp is not the unload time
+and is never used to reconstruct it after restart. Deferred and unavailable-storage
+retries wait 20 game ticks; new due periods are retained during that retry wait.
 Legacy production deadlines translate remaining world duration once after WAL recovery;
 an overdue legacy job retains just one opportunity, not historical catch-up.
 Missing deferred fields default to zero. Remove the production legacy converter

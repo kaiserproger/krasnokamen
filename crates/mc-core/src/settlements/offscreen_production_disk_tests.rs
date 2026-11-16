@@ -441,6 +441,11 @@ fn simulated_wait_then_reopen_unload_keeps_only_one_waited_opportunity() {
     assert!(job(&f).waiting_simulated);
     checkpoint(&mut f, &config, false);
     let mut f = reopen(f, &config, Some(writer), false);
+    assert!(
+        job(&f).waiting_simulated,
+        "the boundary guard survives restart"
+    );
+    assert_eq!(job(&f).retry_at, 0, "retry time is not persisted authority");
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     step(&mut f, Some(&mut writer));
     assert_eq!(

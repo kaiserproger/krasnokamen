@@ -264,3 +264,86 @@ fn offscreen_deferred_settlement_tick_cost() {
     );
     assert_eq!(total(&f, "minecraft:wheat"), 60);
 }
+
+fn unload_retry_accounting(duration: u64, phase_offset: u64, unload_offset: u64) {
+    let mut world = state();
+    let registry = Arc::get_mut(&mut world.registry).unwrap();
+    let name = "test:unload-bread";
+    let mut recipe = registry
+        .item_facts
+        .work_recipe(&Identifier::parse("krasnokamen-settlements:bread").unwrap())
+        .unwrap()
+        .clone();
+    recipe.id = Identifier::parse(name).unwrap();
+    recipe.duration_ticks = duration;
+    registry.item_facts = std::mem::take(&mut registry.item_facts)
+        .with_work_recipes([recipe], &registry.items)
+        .unwrap();
+    let (mut world, town, _, worker, station, stand_at, site) = setup_in(world);
+    let chest = supply_chest(&mut world, town, 0);
+    crate::settlements::economy::execute(
+        &mut world,
+        town,
+        crate::settlements::economy::Request::Production(Request::Start {
+            job: "supply".into(),
+            worker,
+            recipe: name.into(),
+            count: 100,
+            station,
+            stand_at,
+            building: worksite_ref(&site),
+        }),
+    )
+    .unwrap();
+    let mut f = Fixture {
+        world,
+        town,
+        worker,
+        chest,
+    };
+    let due = job(&f).next_due;
+    visit(&mut f, due, true);
+    let last_simulated = due + 40 * duration + phase_offset;
+    visit(&mut f, last_simulated, true);
+    assert!(job(&f).paused.is_some());
+    assert_eq!(job(&f).next_due, due);
+    assert_eq!(job(&f).duration, duration);
+    let retry = job(&f).retry_at;
+    assert_eq!(retry, last_simulated + RETRY_TICKS);
+    let unload = last_simulated + unload_offset;
+    for now in last_simulated + 1..retry {
+        visit(&mut f, now, now < unload);
+        assert_eq!(job(&f).deferred, 0, "no visit before runtime retry");
+    }
+    visit(&mut f, retry, false);
+    let before_unload = (unload - 1 - due) / duration + 1;
+    let through_retry = (retry - due) / duration + 1;
+    let possible = 1 + through_retry - before_unload;
+    let accrued = u64::from(job(&f).deferred);
+    assert!(
+        accrued <= possible,
+        "no on-screen periods minted by unloading"
+    );
+    assert!(possible - accrued <= RETRY_TICKS.div_ceil(duration));
+    assert_eq!(
+        accrued, 1,
+        "the boundary conservatively keeps one opportunity"
+    );
+    assert_eq!(job(&f).done, 0);
+    assert!(job(&f).next_due > retry);
+}
+
+#[test]
+fn unload_retry_late_one_tick_recipe_never_mints() {
+    unload_retry_accounting(1, 0, RETRY_TICKS - 1);
+}
+
+#[test]
+fn unload_retry_late_long_recipe_has_phase_rounded_loss_bound() {
+    unload_retry_accounting(120, 100, RETRY_TICKS - 1);
+}
+
+#[test]
+fn unload_retry_early_one_tick_recipe_loses_at_most_one_retry_window() {
+    unload_retry_accounting(1, 0, 1);
+}
