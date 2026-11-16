@@ -39,6 +39,12 @@ pub(crate) struct Memory {
     hold: bool,
 }
 
+impl Memory {
+    pub(crate) fn settlement(&self) -> SettlementId {
+        self.settlement
+    }
+}
+
 fn clear(v: &mut VillagerState) {
     v.navigation_target = None;
     v.navigation_path.clear();
@@ -118,14 +124,17 @@ fn waypoint(state: &TickState, slot: EntitySlot, goal: BlockPos) -> Option<Block
     let pos = state.entities.pos(slot);
     let dx = f64::from(goal.x) + 0.5 - pos[0];
     let dz = f64::from(goal.z) + 0.5 - pos[2];
-    let fraction = (LEG_BLOCKS / dx.hypot(dz).max(1.0)).min(1.0);
+    let fraction = (LEG_BLOCKS / mc_physics::mth::length2(dx, dz).max(1.0)).min(1.0);
     let x = (pos[0] + dx * fraction).floor() as i32;
     let z = (pos[2] + dz * fraction).floor() as i32;
     let y = (pos[1] + (f64::from(goal.y) - pos[1]) * fraction).ceil() as i32;
     let body = state.entities.body(slot);
     for (ox, oz) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
         let (x, z) = (x + ox, z + oz);
-        if (f64::from(x) + 0.5 - pos[0]).hypot(f64::from(z) + 0.5 - pos[2]) > 64.0
+        if mc_physics::mth::length_squared2(
+            f64::from(x) + 0.5 - pos[0],
+            f64::from(z) + 0.5 - pos[2],
+        ) > 64.0 * 64.0
             || !state.world.is_active(x.div_euclid(16), z.div_euclid(16))
             || [-1, 1].into_iter().any(|a| {
                 [-1, 1].into_iter().any(|b| {
@@ -312,7 +321,8 @@ pub(crate) fn step(
                     state.entities.body(slot).height,
                 );
                 let arrived = supported.is_some_and(|p| {
-                    (p[0] - pos[0]).hypot(p[2] - pos[2]) < super::brain::WAYPOINT_REACH
+                    mc_physics::mth::length_squared2(p[0] - pos[0], p[2] - pos[2])
+                        < super::brain::WAYPOINT_REACH * super::brain::WAYPOINT_REACH
                         && (p[1] - pos[1]).abs() < 0.6
                 });
                 if arrived {

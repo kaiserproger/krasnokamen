@@ -75,7 +75,10 @@ fn capped_truncation_spends_three_retries_then_one_search_per_hold_cadence() {
                 .tick_budget
                 .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
         distribution.push(used);
-        assert!(used <= 1024, "return searches may consume at most a quarter of the shared node pool");
+        assert!(
+            used <= 1024,
+            "return searches may consume at most a quarter of the shared node pool"
+        );
         let memory = &crate::settlements::migration::return_memory(&mut state)[&uuid];
         assert_eq!(memory.failures, attempt + 1);
         assert_eq!(
@@ -568,6 +571,10 @@ fn actual_soldier_guard_goal_preempts_a_homeless_outside_return() {
     for _ in 0..1800 {
         state.day_time = 4000;
         crate::settlements::migration::return_tests::step(&mut state);
+        assert!(
+            state.entities.pos(slot)[0] >= 33.0,
+            "return must never pull a guarding soldier past its post toward the anchor"
+        );
         observed_trigger |= state
             .villager_pois
             .home_search
@@ -642,41 +649,85 @@ fn spain_seed_one_hundred_native_return_segment_node_distribution() {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let world = crate::world::ChunkWorld::new(
         100,
-        Arc::new(mc_worldgen::TerrainGenerator::new(100, Arc::clone(&registry.blocks))),
+        Arc::new(mc_worldgen::TerrainGenerator::new(
+            100,
+            Arc::clone(&registry.blocks),
+        )),
         &registry,
         mc_world::BlockStateId(registry.states.air),
-        [116,71,5],
+        [116, 71, 5],
         mc_world::OVERWORLD_GEOMETRY,
     );
-    let mut state = TickState::new(registry,world,12,512);
-    state.tickets.insert("spain-return".into(),(ChunkPos { x:7,z:0 },8));
+    let mut state = TickState::new(registry, world, 12, 512);
+    state
+        .tickets
+        .insert("spain-return".into(), (ChunkPos { x: 7, z: 0 }, 8));
     state.world.ensure_blocking(&state.desired_chunks());
     state.refresh_active_chunks(0);
-    let surface = |state: &TickState,x,z| {
-        (-64..318).rev().find_map(|y| allocator::standing(
-            &state.world,&state.registry,BlockPos {x,y,z},0.3,1.95))
+    let surface = |state: &TickState, x, z| {
+        (-64..318).rev().find_map(|y| {
+            allocator::standing(
+                &state.world,
+                &state.registry,
+                BlockPos { x, y, z },
+                0.3,
+                1.95,
+            )
+        })
     };
-    let goal = surface(&state,116,5).expect("Spain anchor has a native standing surface");
+    let goal = surface(&state, 116, 5).expect("Spain anchor has a native standing surface");
     let goal = allocator::at(goal);
-    let slot = allocator::tests::villager(&mut state,[116.5, f64::from(goal.y),5.5]);
+    let slot = allocator::tests::villager(&mut state, [116.5, f64::from(goal.y), 5.5]);
     let mut distribution = Vec::new();
-    for (x,z) in [(206,5),(180,69),(116,95),(52,69),(26,5),(52,-59),(116,-85),(180,-59)] {
-        let Some(origin) = surface(&state,x,z) else {continue};
-        state.entities.set_pos(slot,origin);
-        let Some(target) = waypoint(&state,slot,goal) else {continue};
+    for (x, z) in [
+        (206, 5),
+        (180, 69),
+        (116, 95),
+        (52, 69),
+        (26, 5),
+        (52, -59),
+        (116, -85),
+        (180, -59),
+    ] {
+        let Some(origin) = surface(&state, x, z) else {
+            continue;
+        };
+        state.entities.set_pos(slot, origin);
+        let Some(target) = waypoint(&state, slot, goal) else {
+            continue;
+        };
         state.tick += 1;
         state.tick_budget.reset(state.tick);
         let mut cache = std::mem::take(&mut state.villager_pois);
-        assert!(cache.spend_path(&mut state,Consumer::Brain));
-        let before = state.tick_budget.allowance(state.dimension,Consumer::Brain,Kind::PathNode);
+        assert!(cache.spend_path(&mut state, Consumer::Brain));
+        let before = state
+            .tick_budget
+            .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
         let found = allocator::find_path_limited_ctx(
-            &mut RouteCtx::tick(&mut state,Consumer::Brain),&mut cache,origin,target,
-            0.3,1.95,&mut Vec::new(),true,72,64,true,NODE_LIMIT);
-        let used = before-state.tick_budget.allowance(state.dimension,Consumer::Brain,Kind::PathNode);
+            &mut RouteCtx::tick(&mut state, Consumer::Brain),
+            &mut cache,
+            origin,
+            target,
+            0.3,
+            1.95,
+            &mut Vec::new(),
+            true,
+            72,
+            64,
+            true,
+            NODE_LIMIT,
+        );
+        let used = before
+            - state
+                .tick_budget
+                .allowance(state.dimension, Consumer::Brain, Kind::PathNode);
         assert!(used <= 1024);
-        distribution.push((x,z,used,found));
+        distribution.push((x, z, used, found));
         state.villager_pois = cache;
     }
-    assert!(distribution.len() >= 4,"native terrain must exercise multiple supported 64-block legs");
+    assert!(
+        distribution.len() >= 4,
+        "native terrain must exercise multiple supported 64-block legs"
+    );
     eprintln!("Spain seed100 origin116,71,5 return segments (x,z,nodes,reached): {distribution:?}");
 }

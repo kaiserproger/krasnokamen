@@ -654,3 +654,107 @@ fn native_daily_evaluation_uses_world_age_and_skips_an_inactive_anchor() {
         first
     );
 }
+
+#[test]
+fn remove_command_clears_source_destination_and_return_runtime_references() {
+    let mut state = fixture();
+    let removed = town(&mut state, "removed", 8, 32);
+    let surviving = town(&mut state, "surviving", 208, 32);
+    let a = resident(&mut state, removed, 9.5);
+    let b = resident(&mut state, surviving, 209.5);
+    observe(&mut state, removed);
+    observe(&mut state, surviving);
+    let a_slot = state.entities.slot_of(a).unwrap();
+    state.entities.set_pos(a_slot, [100.5, 64.0, 8.5]);
+    // Populate the runtime memory through the real rule and allocator census;
+    // native work priorities are exercised separately by the return-rule tests.
+    let mut v = state.entities.row_mut(a_slot).villager.take().unwrap();
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    assert!(cache.home_search[&a].no_candidates);
+    crate::villager::return_home::step(&mut state, &mut cache, a_slot, &mut v, false);
+    state.entities.row_mut(a_slot).villager = Some(v);
+    state.villager_pois = cache;
+    assert!(
+        state
+            .settlements
+            .migration
+            .returning
+            .values()
+            .any(|memory| memory.settlement() == removed)
+    );
+    // Seed both directions of the runtime dependency graph. The command must
+    // cancel the surviving source's walk too, not just the removed town's map key.
+    for (source, destination, entity, x) in
+        [(removed, surviving, a, 32), (surviving, removed, b, 224)]
+    {
+        let uuid = state
+            .entities
+            .row(state.entities.slot_of(entity).unwrap())
+            .uuid;
+        let exit = BlockPos { x, y: 64, z: 8 };
+        let migration = &mut state.settlements.migration;
+        migration.targets.insert(uuid, exit);
+        migration.walking.insert(
+            source,
+            Walk {
+                unit: Unit::Resident(entity),
+                members: vec![uuid],
+                destination: Some(destination),
+                exit,
+                bearing: 90.0,
+                deadline: state.tick + WALK_TIMEOUT,
+            },
+        );
+        migration.walking_sources.push(source);
+        migration.decisions.insert(source, "outbound walk".into());
+        migration
+            .deaths
+            .insert(source, VecDeque::from([state.tick]));
+    }
+    let command = crate::settlements::commands::parse(&["remove", "removed"]).unwrap();
+    crate::command_execution::execute(
+        &mut state,
+        crate::command_console::CONNECTION,
+        a,
+        &crate::commands::Command::Settlement(command),
+        &mut ChangeSet::default(),
+    );
+    assert!(state.settlements.get(removed).is_none());
+    let migration = &state.settlements.migration;
+    assert!(migration.observation(removed).is_none());
+    assert!(migration.observation(surviving).is_some());
+    assert!(!migration.deaths.contains_key(&removed));
+    assert!(!migration.decisions.contains_key(&removed));
+    assert!(!migration.decisions.contains_key(&surviving));
+    assert!(migration.walking.is_empty());
+    assert!(migration.walking_sources.is_empty());
+    assert!(migration.targets.is_empty());
+    assert!(
+        migration
+            .returning
+            .values()
+            .all(|memory| memory.settlement() != removed)
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(a_slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .settlement,
+        None
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(state.entities.slot_of(b).unwrap())
+            .villager
+            .as_ref()
+            .unwrap()
+            .settlement,
+        Some(surviving)
+    );
+    // Migration State/Memory have no persistence image: reopening derives them
+    // from the surviving native memberships, not from these cancelled intents.
+}

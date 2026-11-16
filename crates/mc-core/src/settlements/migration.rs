@@ -8,6 +8,7 @@ use crate::entities::EntitySlot;
 use crate::natural_spawn::Rng;
 use crate::tick::TickState;
 use crate::tick_budget::Consumer;
+use mc_physics::mth;
 use std::collections::BTreeMap;
 use std::collections::{BTreeSet, VecDeque};
 
@@ -118,11 +119,19 @@ impl State {
         self.observations.remove(&id);
         self.deaths.remove(&id);
         self.decisions.remove(&id);
-        if let Some(walk) = self.walking.remove(&id) {
-            for uuid in walk.members {
-                self.targets.remove(&uuid);
+        self.walking.retain(|source, walk| {
+            if *source != id && walk.destination != Some(id) {
+                return true;
             }
-        }
+            self.decisions.remove(source);
+            for uuid in &walk.members {
+                self.targets.remove(uuid);
+            }
+            false
+        });
+        self.walking_sources
+            .retain(|source| self.walking.contains_key(source));
+        self.returning.retain(|_, memory| memory.settlement() != id);
     }
 }
 pub(crate) fn return_memory(
@@ -191,7 +200,10 @@ fn simulated(state: &TickState, anchor: [i32; 3]) -> bool {
 }
 
 fn horizontal(a: [i32; 3], b: [i32; 3]) -> f64 {
-    (f64::from(a[0]) - f64::from(b[0])).hypot(f64::from(a[2]) - f64::from(b[2]))
+    mth::length2(
+        f64::from(a[0]) - f64::from(b[0]),
+        f64::from(a[2]) - f64::from(b[2]),
+    )
 }
 
 fn in_bounds(bounds: mc_script::ScriptWorldBounds, pos: BlockPos) -> bool {
@@ -521,9 +533,11 @@ fn proven_edge(
             Some(farthest)
         } else {
             let x =
-                (f64::from(anchor[0]) + 0.5 + radians.sin() * f64::from(distance)).floor() as i32;
-            let z =
-                (f64::from(anchor[2]) + 0.5 - radians.cos() * f64::from(distance)).floor() as i32;
+                (f64::from(anchor[0]) + 0.5 + f64::from(mth::sin(radians)) * f64::from(distance))
+                    .floor() as i32;
+            let z = (f64::from(anchor[2]) + 0.5
+                - f64::from(mth::cos(radians)) * f64::from(distance))
+            .floor() as i32;
             if !simulated(state, [x, anchor[1], z]) {
                 continue;
             }
@@ -851,7 +865,8 @@ fn outside_arrivals(
         return;
     };
     let Some(type_id) = state.registry.entity_types.id_of(
-        &mc_data::Identifier::parse("minecraft:villager").expect("constant villager identifier"),
+        &mc_data::Identifier::parse(mc_data::entity_types::VILLAGER)
+            .expect("constant villager identifier"),
     ) else {
         return;
     };
@@ -888,9 +903,10 @@ fn advance_walks(state: &mut TickState, changes: &mut ChangeSet) {
         let all_near = walk.members.iter().all(|uuid| {
             state.entities.slot_of_uuid(*uuid).is_some_and(|slot| {
                 let pos = state.entities.pos(slot);
-                (pos[0] - (f64::from(walk.exit.x) + 0.5))
-                    .hypot(pos[2] - (f64::from(walk.exit.z) + 0.5))
-                    <= transit::EXIT_REACH
+                mth::length2(
+                    pos[0] - (f64::from(walk.exit.x) + 0.5),
+                    pos[2] - (f64::from(walk.exit.z) + 0.5),
+                ) <= transit::EXIT_REACH
             })
         });
         let missing = walk.members.iter().any(|uuid| {
