@@ -340,5 +340,52 @@ fn short_stroll_rejects_a_roofed_well_but_keeps_a_dry_neighbor() {
         Some(BlockPos { x: 6, y: 202, z: 8 }),
         Activity::Idle,
     );
-    assert!(!v.navigation_path.is_empty(), "ordinary dry stroll still works");
+    assert!(
+        !v.navigation_path.is_empty(),
+        "ordinary dry stroll still works"
+    );
+}
+
+#[test]
+fn work_route_avoids_roofed_well_and_reaches_the_opposite_rim() {
+    let (mut state, _) = village_state();
+    let wood = block(&state, "minecraft:acacia_wood", &[]);
+    let leaves = block(&state, "minecraft:acacia_leaves", &[]);
+    let water = block(&state, "minecraft:water", &[]);
+    for x in 7..=9 {
+        for z in 7..=9 {
+            state.world.set_block(x, 201, z, wood);
+            state.world.set_block(x, 204, z, leaves);
+        }
+    }
+    state.world.set_block(8, 200, 8, wood);
+    state.world.set_block(8, 201, 8, water);
+    state.world.fold_overlay();
+    let slot = villager(&mut state, [7.5, 202.0, 8.5]);
+    let mut v = VillagerState::default();
+    let mut cache = PoiCache::default();
+    let target = BlockPos {
+        x: 10,
+        y: 202,
+        z: 8,
+    };
+    for _ in 0..400 {
+        begin_brain_tick(&mut state);
+        move_to(&mut state, &mut cache, slot, &mut v, Some(target), false);
+        let pos = state.entities.pos(slot);
+        assert!(
+            !(pos[0] > 8.0 && pos[0] < 9.0 && pos[2] > 8.0 && pos[2] < 9.0),
+            "work routing entered the roofed well instead of its dry rim: {pos:?}, path={:?}",
+            v.navigation_path
+        );
+        if pos[0] > 9.0 {
+            return;
+        }
+        state.tick += 1;
+    }
+    panic!(
+        "worker never reached the far rim: {:?}, path={:?}",
+        state.entities.pos(slot),
+        v.navigation_path
+    );
 }

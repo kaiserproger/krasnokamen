@@ -488,10 +488,13 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
         assert_eq!(needed_kinds(record, threshold).next(), Some(kind));
         record.buildings.insert(building.id, building);
     }
-    let authored: Vec<_> = blueprints::all(&state.registry)
-        .iter()
-        .map(|blueprint| blueprint.kind)
-        .collect();
+    // Cultural variants share a building kind; cover each native need once.
+    let mut authored = Vec::new();
+    for blueprint in blueprints::all(&state.registry) {
+        if !authored.contains(&blueprint.kind) {
+            authored.push(blueprint.kind);
+        }
+    }
     assert_eq!(authored.len(), 21);
     // The shepherd's hut, the wall, the gate and the ten profession workshops
     // are owner orders only: the planner never starts them as buildings on its

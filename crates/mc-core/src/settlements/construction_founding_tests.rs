@@ -31,7 +31,10 @@ fn prepared(stages: usize) -> (TickState, SettlementId, FoundingExpedition) {
     prepared_at(stages, [96, 200, 0])
 }
 
-fn prepared_at(stages: usize, destination: [i32; 3]) -> (TickState, SettlementId, FoundingExpedition) {
+fn prepared_at(
+    stages: usize,
+    destination: [i32; 3],
+) -> (TickState, SettlementId, FoundingExpedition) {
     let (mut state, parent, builder) = fixture();
     // Establish culture through actual paid construction, not a test flag.
     super::super::tests::start(&mut state, parent, "spanish_plaza", 1, None);
@@ -52,10 +55,18 @@ fn prepared_at(stages: usize, destination: [i32; 3]) -> (TickState, SettlementId
             .food_level = 12;
         if index < 3 {
             migrants.push(entity);
-            let diamond = state.registry.items.id_of(
-                &mc_data::Identifier::parse("minecraft:diamond").unwrap(),
-            ).unwrap();
-            state.entities.row_mut(slot).villager.as_mut().unwrap().inventory[7] = Some(
+            let diamond = state
+                .registry
+                .items
+                .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+                .unwrap();
+            state
+                .entities
+                .row_mut(slot)
+                .villager
+                .as_mut()
+                .unwrap()
+                .inventory[7] = Some(
                 mc_data::ItemStack::new(diamond, index + 1)
                     .with_custom_name(format!("Founding heirloom {index}")),
             );
@@ -190,15 +201,26 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
     let key = persistence::row_key(parent);
     let mut row: serde_json::Value = serde_json::from_slice(&image.globals[&key].payload).unwrap();
     row["value"].as_object_mut().unwrap().remove("founding");
-    image.globals.insert(key, crate::native_checkpoint::record(
-        image.tick, serde_json::to_vec(&row).unwrap(),
-    ));
+    image.globals.insert(
+        key,
+        crate::native_checkpoint::record(image.tick, serde_json::to_vec(&row).unwrap()),
+    );
     let manifest = serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
     crate::native_checkpoint::refresh_metadata(&mut image.globals, &manifest).unwrap();
-    store.commit_checkpoint(NativeCheckpoint {
-        tick: image.tick, previous_tick: image.tick, chunks: &[],
-        entities: &image.entities, players: &image.players, globals: &image.globals,
-    }, &state.registry.blocks, &state.registry.items).unwrap();
+    store
+        .commit_checkpoint(
+            NativeCheckpoint {
+                tick: image.tick,
+                previous_tick: image.tick,
+                chunks: &[],
+                entities: &image.entities,
+                players: &image.players,
+                globals: &image.globals,
+            },
+            &state.registry.blocks,
+            &state.registry.items,
+        )
+        .unwrap();
     drop(store);
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
     assert!(restored.settlements.get(parent).unwrap().founding.is_none());
@@ -209,7 +231,10 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
     record.name = "legacy_wal_town".into();
     record.revision += 1;
     let entry = JournalEntry::Settlement {
-        image: Box::new(crate::settlements::RecordImage { id: parent, value: Some(record) }),
+        image: Box::new(crate::settlements::RecordImage {
+            id: parent,
+            value: Some(record),
+        }),
         high_water: parent.0,
         tick,
     };
@@ -218,12 +243,18 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
     writer.flush().unwrap();
     drop(writer);
     let mut old: serde_json::Value = serde_json::to_value(entry).unwrap();
-    old["Settlement"]["image"]["value"].as_object_mut().unwrap().remove("founding");
+    old["Settlement"]["image"]["value"]
+        .as_object_mut()
+        .unwrap()
+        .remove("founding");
     let mut payload = serde_json::to_vec(&old).unwrap();
     payload.push(b'\n');
     // Retain the production writer's version/tick framing; replace only this
     // isolated fixture's legacy JSON payload and its length/CRC.
-    let path = directory.path().join("journal").join(format!("batch-{tick:020}-{tick:020}.bin"));
+    let path = directory
+        .path()
+        .join("journal")
+        .join(format!("batch-{tick:020}-{tick:020}.bin"));
     let mut frame = std::fs::read(&path).unwrap();
     frame.truncate(32);
     frame[24..28].copy_from_slice(&u32::try_from(payload.len()).unwrap().to_le_bytes());
@@ -233,7 +264,10 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
     let record = restored.settlements.get(parent).unwrap();
     assert!(record.founding.is_none());
-    assert_eq!(record.name, "legacy_wal_town", "production recovery consumed the old WAL row");
+    assert_eq!(
+        record.name, "legacy_wal_town",
+        "production recovery consumed the old WAL row"
+    );
     assert_eq!(members(&restored), members(&state));
 }
 
@@ -438,7 +472,7 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
         state.tick = (state.tick / PLAN_CADENCE + 1) * PLAN_CADENCE - 1;
         state.tick_control.set_frozen(true);
         let (baseline, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let _ = crate::core::journal_entries_for_tick(&mut state, &baseline);
+        crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
         assert!(state.settlements.get(parent).unwrap().founding.is_some());
         checkpoint(&mut state, &config);
         std::fs::write(
@@ -448,7 +482,7 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
         .unwrap();
         state.tick_control.set_frozen(false);
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(
             state.settlements.get(parent).unwrap().founding.is_none(),
             "actual planning tick must found"
@@ -591,7 +625,10 @@ fn review_create_command_cannot_publish_inside_an_expedition_claim() {
     checkpoint(&mut state, &config);
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
     assert!(restored.settlements.find("intruder").is_none());
-    assert_eq!(state.settlement_sequence, sequence, "refusal consumes no identity");
+    assert_eq!(
+        state.settlement_sequence, sequence,
+        "refusal consumes no identity"
+    );
     assert!(restored.settlements.get(parent).unwrap().founding.is_some());
 }
 
@@ -603,8 +640,11 @@ fn review_command_certificate_cannot_outlive_a_cancelled_expedition_claim() {
     let (name, origin) = expedition.sites()[0];
     // Ordinary certification accepts physical, player-authored geometry; it
     // must not gain civil authority merely because an expedition reserves it.
-    let rotated = blueprints::get(&state.registry, name).unwrap()
-        .level(1).unwrap().rotated(Rotation(0));
+    let rotated = blueprints::get(&state.registry, name)
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .rotated(Rotation(0));
     for (offset, id) in &rotated.blocks {
         let [x, y, z] = rotated.world(origin, *offset);
         state.world.set_block(x, y, z, id.0);
@@ -612,7 +652,13 @@ fn review_command_certificate_cannot_outlive_a_cancelled_expedition_claim() {
     let bounds = rotated.bounds(origin);
     state.world.fold_overlay();
     let result = crate::settlements::building_commands::certify(
-        &mut state, executor, Some("owner"), false, "house", bounds.min, bounds.max,
+        &mut state,
+        executor,
+        Some("owner"),
+        false,
+        "house",
+        bounds.min,
+        bounds.max,
     );
     for entity in households::members(&state, parent, &expedition.household) {
         households::detach(&mut state, entity);
@@ -623,34 +669,64 @@ fn review_command_certificate_cannot_outlive_a_cancelled_expedition_claim() {
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     checkpoint(&mut state, &config);
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
-    assert!(result.is_err(), "generic certification cannot borrow an outpost claim");
+    assert!(
+        result.is_err(),
+        "generic certification cannot borrow an outpost claim"
+    );
     assert_eq!(restored.settlements.get(parent).unwrap().buildings.len(), 1);
 }
 
 #[test]
 fn review_future_daughter_radius_fences_a_second_real_admission() {
     let (mut state, parent, expedition) = prepared(4);
-    let other = state.settlements.create(
-        &mut state.settlement_sequence, "neighbor".into(), "owner".into(), [272, 201, 0], 96,
-    ).unwrap();
+    let other = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "neighbor".into(),
+            "owner".into(),
+            [272, 201, 0],
+            96,
+        )
+        .unwrap();
     let mut family = Vec::new();
     for index in 0..24 {
         let slot = villager(&mut state, [272.5, 201.0, 0.5]);
         let entity = state.entities.body(slot).id;
         crate::settlements::bind(&mut state, other, entity).unwrap();
         state.entities.row_mut(slot).controls.no_ai = true;
-        state.entities.row_mut(slot).villager.as_mut().unwrap().food_level = 12;
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .food_level = 12;
         if index < 3 {
             family.push(entity);
         }
     }
     let household = households::form(
-        &mut state, other, &family, households::HouseholdOrigin::Migration,
-    ).unwrap();
-    let candidate = FoundingExpedition { destination: [136, 200, 0], household };
-    assert!(!overlaps(candidate.bounds(), expedition.bounds()), "rectangles are disjoint");
+        &mut state,
+        other,
+        &family,
+        households::HouseholdOrigin::Migration,
+    )
+    .unwrap();
+    let candidate = FoundingExpedition {
+        destination: [136, 200, 0],
+        household,
+    };
+    assert!(
+        !overlaps(candidate.bounds(), expedition.bounds()),
+        "rectangles are disjoint"
+    );
     flat_site(&mut state, &candidate);
-    state.settlements.get_mut(other).unwrap().construction_cursor = 2;
+    state
+        .settlements
+        .get_mut(other)
+        .unwrap()
+        .construction_cursor = 2;
     admit(&mut state, other);
     assert!(finish(&mut state, parent, &expedition));
     let directory = tempfile::tempdir().unwrap();
@@ -665,25 +741,52 @@ fn review_future_daughter_radius_fences_a_second_real_admission() {
 fn review_cancelled_history_does_not_poison_a_rebuilt_outpost_handover() {
     let (mut state, parent, expedition) = prepared(0);
     let (name, origin) = expedition.sites()[0];
-    assert!(begin(&mut state, Project {
-        settlement: parent, blueprint: name.into(), level: 1, origin, rotation: 0,
-        building: None, structure: String::new(), ordered: false, borrowed_builder: None,
-    }, "oak", 0));
+    assert!(begin(
+        &mut state,
+        Project {
+            settlement: parent,
+            blueprint: name.into(),
+            level: 1,
+            origin,
+            rotation: 0,
+            building: None,
+            structure: String::new(),
+            ordered: false,
+            borrowed_builder: None,
+        },
+        "oak",
+        0
+    ));
     cancel(&mut state, parent);
     state.settlements.get_mut(parent).unwrap().founding = Some(expedition.clone());
     let builder = state.entities.slots().next().unwrap();
     for (name, origin) in expedition.sites() {
-        assert!(begin(&mut state, Project {
-            settlement: parent, blueprint: name.into(), level: 1, origin, rotation: 0,
-            building: None, structure: String::new(), ordered: false, borrowed_builder: None,
-        }, "oak", 0));
+        assert!(begin(
+            &mut state,
+            Project {
+                settlement: parent,
+                blueprint: name.into(),
+                level: 1,
+                origin,
+                rotation: 0,
+                building: None,
+                structure: String::new(),
+                ordered: false,
+                borrowed_builder: None,
+            },
+            "oak",
+            0
+        ));
         fund(&mut state, name, 1);
         let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
         v.data.profession = Profession::Builder;
         v.activity = crate::villager::Activity::Work;
         complete(&mut state, parent, builder);
     }
-    assert!(finish(&mut state, parent, &expedition), "cancelled receipt is history, not live provenance");
+    assert!(
+        finish(&mut state, parent, &expedition),
+        "cancelled receipt is history, not live provenance"
+    );
     let directory = tempfile::tempdir().unwrap();
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     checkpoint(&mut state, &config);
@@ -695,16 +798,27 @@ fn review_cancelled_history_does_not_poison_a_rebuilt_outpost_handover() {
 #[test]
 fn review_population_radius_growth_cannot_steal_a_founding_claim() {
     let (mut state, parent, _) = prepared(0);
-    let other = state.settlements.create(
-        &mut state.settlement_sequence, "growing_neighbor".into(), "other".into(), [168, 201, 8], 16,
-    ).unwrap();
+    let other = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "growing_neighbor".into(),
+            "other".into(),
+            [168, 201, 8],
+            16,
+        )
+        .unwrap();
     for _ in 0..24 {
         let slot = villager(&mut state, [168.5, 201.0, 8.5]);
         let entity = state.entities.body(slot).id;
         crate::settlements::bind(&mut state, other, entity).unwrap();
     }
     state.settlements.grow_radii();
-    assert_eq!(state.settlements.get(other).unwrap().radius, 44, "unobstructed growth remains allowed");
+    assert_eq!(
+        state.settlements.get(other).unwrap().radius,
+        44,
+        "unobstructed growth remains allowed"
+    );
     assert!(state.settlements.get(parent).unwrap().founding.is_some());
     let directory = tempfile::tempdir().unwrap();
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);

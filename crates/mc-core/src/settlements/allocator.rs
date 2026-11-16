@@ -1059,7 +1059,21 @@ pub(crate) fn find_path_ctx(
                 {
                     continue;
                 }
-                let cost = node.cost + 10 + dy.unsigned_abs() * 4;
+                // Vanilla WATER has malus 8.0 (our cardinal step costs 10).
+                // Being standable is not a preference: without this cost a
+                // work route cuts through a roofed well's water bed, from
+                // which its swimming body cannot clear the rim and low roof.
+                let water_cost = if ctx
+                    .world
+                    .block_at(next.x, end[1].floor() as i32, next.z)
+                    .is_some_and(|id| {
+                        ctx.registry.materials.classify(id) == mc_physics::BlockMaterial::Water
+                    }) {
+                    80
+                } else {
+                    0
+                };
+                let cost = node.cost + 10 + dy.unsigned_abs() * 4 + water_cost;
                 if let Some(&old) = cache.visited.get(&next) {
                     if cache.nodes[old].cost <= cost {
                         break;

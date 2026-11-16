@@ -2,6 +2,9 @@
 //! Only the chosen site and household persist; stage is derived from the ledger.
 use super::*;
 
+static BREAD: std::sync::LazyLock<mc_data::Identifier> =
+    std::sync::LazyLock::new(|| mc_data::Identifier::parse("minecraft:bread").unwrap());
+
 const FOUNDING_POPULATION: usize = 24;
 const CHILD_RADIUS: u32 = 32;
 const SITES: [(&str, [i32; 3]); 4] = [
@@ -152,6 +155,11 @@ fn household_ready(state: &TickState, parent: SettlementId, household: &str, foo
     }) {
         return false;
     }
+    let bread = if food {
+        state.registry.items.id_of(&BREAD)
+    } else {
+        None
+    };
     members.into_iter().all(|entity| {
         let slot = state
             .entities
@@ -172,13 +180,7 @@ fn household_ready(state: &TickState, parent: SettlementId, household: &str, foo
                 || v.inventory
                     .iter()
                     .flatten()
-                    .filter(|stack| {
-                        state
-                            .registry
-                            .items
-                            .name_of(stack.item_id)
-                            .is_some_and(|name| name.path() == "bread")
-                    })
+                    .filter(|stack| Some(stack.item_id) == bread)
                     .map(|stack| stack.count.max(0))
                     .sum::<i32>()
                     >= 3)
@@ -456,8 +458,7 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
         .expect("prevalidated daughter identity");
     assert_eq!(created, child);
     for (kind, bounds, _) in certificates {
-        buildings::certify(state, child, kind, bounds)
-            .expect("prevalidated daughter certificate");
+        buildings::certify(state, child, kind, bounds).expect("prevalidated daughter certificate");
     }
     state.settlements.get_mut(child).unwrap().owner_name = owner_name;
     executor::commit_founding_transfer(state, transfer);

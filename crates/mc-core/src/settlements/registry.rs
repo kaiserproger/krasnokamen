@@ -453,14 +453,17 @@ impl Registry {
 
     fn claim_available(&self, id: SettlementId, anchor: [i32; 3], radius: u32) -> bool {
         self.records.values().all(|other| {
-            other.id == id || other.founding.as_ref().is_none_or(|site| {
-                !super::construction::founding::sphere_overlaps(anchor, radius, site.bounds())
-            })
+            other.id == id
+                || other.founding.as_ref().is_none_or(|site| {
+                    !super::construction::founding::sphere_overlaps(anchor, radius, site.bounds())
+                })
         })
     }
 
     pub(super) fn grow_radius(&mut self, id: SettlementId, radius: u32) {
-        let Some(record) = self.records.get(&id) else { return };
+        let Some(record) = self.records.get(&id) else {
+            return;
+        };
         if record.radius >= radius || !self.claim_available(id, record.anchor, radius) {
             return;
         }

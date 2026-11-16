@@ -159,3 +159,11 @@ wading and floating permission. A dry stroll must not send a resident down
 into a roofed village well merely because the water bed is standable.
 This is entry prevention, not a teleport or a claim that a trapped resident
 can jump through the well's low roof.
+
+Purposeful work and POI routes also charge the vanilla `WATER` malus (8.0,
+scaled to 80 against a cardinal step of 10). A standable water bed is not a
+dry-land preference: without that cost, workers cut through a roofed well
+instead of following its dry rim and can no longer reach food or construction.
+Water is still traversable when needed; swimming, fords, collision and physical
+escape rules are unchanged. This prevents new route entry, not recovery of an
+already trapped saved resident.
