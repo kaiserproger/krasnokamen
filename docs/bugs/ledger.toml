@@ -7184,14 +7184,3 @@ repro = "cargo"
 regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_with_a_pending_blow_by_a_departed_horse_reopens", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_after_a_foreign_attacker_dies_in_its_blow_merge_reopens", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_after_a_creeper_blast_on_soldiers_reopens", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_pending_blow_by_a_held_player_who_left_rebinds_after_recovery"]
 fix_commit = "ae0f2ec11"
 failing_first = "reported"
-
-[[bug]]
-id = "BATTLE-RECOVERY-PENDING-BLOW-DEPARTED-ATTACKER"
-title = "A pending retaliation blow by a battle column that departed, or by a non-player attacker dead at capture, makes a cleanly checkpointed battle world refuse every start with `unknown retaliation identity`"
-area = "gameplay"
-severity = "blocker"
-status = "open"
-source = "WindupBreaker 2026-11-17, receipts/A11WindupBreaker/REPORT.md F1 (P2 by the breaker; filed as blocker because a valid world refuses startup): the BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET fix (ab04093d7) clears grudges and `other` only through `combat.departed`, which exists only in the pass where the column leaves; `retaliation.pending` is filled by the damage merge after that pass and is not cleared, and `reconcile_capture` drops only non-holder players, so `validate_references` refuses the attacker. Pre-existing, not a regression of ab04093d7; contradicts the `prepare` doc sentence that the image never names an identity it does not carry. Plausible natural trigger: a foreign mob hits a soldier and dies in the same tick (not seen in a real run). Repro in wt/WindupBreaker (scratch tests, receipts/A11WindupBreaker/scratch-tests.patch): `wb_pending_blow_by_a_departed_horse_is_refused_by_recovery` and `wb_foreign_attacker_dies_same_merge` red with a real checkpoint + recover_offline (R/unit-wb-3.log, R/unit-wb-foreign.log)."
-repro = "cargo"
-regression = []
-failing_first = "reported"
