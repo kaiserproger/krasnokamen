@@ -266,3 +266,80 @@ fn game_time_wage_pre_freeze_legacy_debt_is_not_forgiven_or_counted_twice() {
     assert_eq!(contract(&f).paid, periods * 2);
     writer.flush().unwrap();
 }
+
+#[test]
+fn game_time_legacy_wage_wal_cuts_preserve_pending_and_unfunded_debt() {
+    for save_checkpoint in [false, true] {
+        for funded in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+            let mut f = disk_fixture(&config);
+            stock(&mut f.state, TREASURY_CHEST, f.emerald, 40);
+            let request = employ(&f, "1", 2, 5, if funded { 40 } else { 1 });
+            native(&mut f, request);
+            let first_due = contract(&f).next_due;
+            command(&mut f, "tick freeze");
+            let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+            for _ in 0..25 {
+                step(&mut f, &mut writer);
+            }
+            let owed = ((f.state.tick - first_due) / 5 + 1) * 2;
+            f.state
+                .settlements
+                .get_mut(f.settlement)
+                .unwrap()
+                .economy
+                .commerce
+                .clock = Clock::WorldTicks;
+            checkpoint(&mut f, &config);
+            let mut f = reopen(f, &config, writer);
+            let converted = contract(&f).clone();
+            assert_eq!(converted.legacy_owed, owed);
+            // Crash after forming the first converted batch, before publication.
+            command(&mut f, "tick freeze");
+            let (output, _, _) = crate::tick::run_tick(&mut f.state, &[]);
+            let unpublished = crate::core::journal_entries_for_tick(&mut f.state, &output).unwrap();
+            assert!(!unpublished.is_empty());
+            drop(unpublished);
+            let writer = JournalWriter::open(directory.path(), 1).unwrap();
+            let mut f = reopen(f, &config, writer);
+            assert_eq!(
+                contract(&f),
+                &converted,
+                "unpublished conversion is replayed"
+            );
+            // Publish conversion while frozen: pending debt must survive WAL alone.
+            command(&mut f, "tick freeze");
+            let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+            step(&mut f, &mut writer);
+            if save_checkpoint {
+                checkpoint(&mut f, &config);
+            }
+            let mut f = reopen(f, &config, writer);
+            assert_eq!(
+                contract(&f),
+                &converted,
+                "published conversion is not repeated"
+            );
+            let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+            step(&mut f, &mut writer);
+            assert_eq!(contract(&f).legacy_owed, 0);
+            assert_eq!(contract(&f).earned, owed);
+            assert_eq!(contract(&f).paid, if funded { owed } else { 0 });
+            if save_checkpoint {
+                checkpoint(&mut f, &config);
+            }
+            let mut f = reopen(f, &config, writer);
+            let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+            step(&mut f, &mut writer);
+            assert_eq!(contract(&f).legacy_owed, 0);
+            assert_eq!(contract(&f).earned, owed, "unfunded debt is not re-added");
+            assert_eq!(contract(&f).paid, if funded { owed } else { 0 });
+            assert_eq!(
+                carry_total(&f.state, f.worker),
+                if funded { owed as i32 } else { 0 }
+            );
+            writer.flush().unwrap();
+        }
+    }
+}

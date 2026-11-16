@@ -223,3 +223,60 @@ fn game_time_caravan_expired_at_zero_blocks_before_pickup() {
     assert_eq!(chest_total(&f.state, SRC_CHEST, f.bread), 3);
     assert_eq!(carry_total(&f.state, f.carrier), 0);
 }
+
+#[test]
+fn game_time_legacy_caravan_wal_cuts_preserve_converted_deadline() {
+    for save_checkpoint in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+        let mut f = disk_fixture(&config);
+        admit(&mut f);
+        command(&mut f, "tick freeze");
+        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        for _ in 0..20 {
+            step(&mut f, &mut writer);
+        }
+        let game = f.state.tick_control.game_ticks(f.state.tick);
+        let policy = &mut f
+            .state
+            .settlements
+            .get_mut(f.settlement)
+            .unwrap()
+            .economy
+            .caravan;
+        policy.clock = crate::settlements::commerce::Clock::WorldTicks;
+        policy.shipments.get_mut("clock").unwrap().game_deadline = None;
+        checkpoint(&mut f, &config);
+        let mut f = recover(f, &config, writer);
+        let converted = shipment(&f).clone();
+        assert_eq!(converted.game_deadline, Some(game));
+        // Lose the first converted batch before publication.
+        command(&mut f, "tick freeze");
+        let (output, _, _) = crate::tick::run_tick(&mut f.state, &[]);
+        let unpublished = crate::core::journal_entries_for_tick(&mut f.state, &output).unwrap();
+        assert!(!unpublished.is_empty());
+        drop(unpublished);
+        let writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut f = recover(f, &config, writer);
+        assert_eq!(shipment(&f), &converted);
+        command(&mut f, "tick freeze");
+        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        step(&mut f, &mut writer);
+        if save_checkpoint {
+            checkpoint(&mut f, &config);
+        }
+        let mut f = recover(f, &config, writer);
+        assert_eq!(
+            shipment(&f),
+            &converted,
+            "WAL conversion must not run again"
+        );
+        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        step(&mut f, &mut writer);
+        assert_eq!(shipment(&f).status, Status::Blocked);
+        assert_eq!(shipment(&f).game_deadline, Some(game));
+        assert_eq!(chest_total(&f.state, SRC_CHEST, f.bread), 3);
+        assert_eq!(carry_total(&f.state, f.carrier), 0);
+        writer.flush().unwrap();
+    }
+}
