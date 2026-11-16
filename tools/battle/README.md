@@ -102,11 +102,21 @@ This extends only the live capture lifecycle, not the recorded take window.
 This does not establish real-time performance or all-dirty residency.
 
 For crash drills, `--crash-handoff` writes `server-pid.json` for the direct
-server process. If it is SIGKILLed, the runner stops its recorder, copies the
-entire stopped world and backups into `crash-copy/` before any restart, and
-writes `crash-handoff.json`; other failures still fail. WAL pruning remains
-normal; an event-driven hard-link archive captures immutable published batches
-in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
+server process. If it is SIGKILLed, the runner stops its recorder and hashes the
+stopped original world, backups, WAL archive, log and any pre-cut
+census/inventory witnesses, then copies them into `crash-copy/`. Before any
+restart, it refuses a copy that differs. `crash-handoff.json` and `result.json`
+record both file manifests (relative path, size and SHA-256) and the SHA-256 of
+`crash-manifest.json`. Inspect only a derived copy verified against that
+manifest, never the primary evidence. Other failures still fail. WAL pruning
+remains normal; an event-driven hard-link archive captures immutable published
+batches in `crash-copy/wal-archive`. A missed segment or inotify overflow fails the run.
+The crash census records each persisted non-player's dimension, UUID and wire
+ID; players use dimension, UUID and holder images because reconnect may assign a
+new runtime ID. A clean checkpoint alone does not prove a restored live ID:
+the frozen recovery gate observes actual spawn packets through a protocol client.
+Missing spawn evidence is incomplete, never a match; an observed ID or
+dimension mismatch fails the cut.
 Restart the original world and server with
 `python3 tools/battle/run-battle.py --recover-from-crash /absolute/run-dir`.
 This replaces the runner process with the server, using the original config;

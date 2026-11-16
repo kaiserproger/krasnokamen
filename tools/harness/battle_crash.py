@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
+import math
 import json
 import os
 import re
 import signal
 import select
-import shutil
 import subprocess
 import struct
 import sys
@@ -16,6 +17,7 @@ import uuid
 import time
 from pathlib import Path
 
+from tools.battle.crash_snapshot import verified_copy, verify_tree
 from . import runtime
 from .backends.protocol_lifecycle import reserve_matrix_port
 from .crash_wal import classify_observation, read_published
@@ -73,7 +75,7 @@ def fields(text):
     raise ValueError('unterminated SNBT')
 
 
-def census(text):
+def census(text, dimension=None, *, allow_empty=False):
     result = {}
     for line in text.splitlines():
         marker = ' has the following entity data: '
@@ -84,14 +86,29 @@ def census(text):
         ident = values.get('UUID')
         if not ident or ident in result:
             raise ValueError(f'entity missing or duplicate UUID: {ident}')
-        result[ident] = {'type': label, 'holders': {key: values[key] for key in
+        result[ident] = {'type': label, 'dimension': dimension, 'holders': {key: values[key] for key in
                           ('Inventory', 'EnderItems', 'Items', 'HandItems', 'ArmorItems',
                            'Item', 'item', 'FireworksItem', 'equipment')
                           if key in values},
                          'age': values.get('Age'), 'life': values.get('life'), 'pos': values.get('Pos'),
                          'in_ground': values.get('inGround'), 'tags': values.get('Tags', '[]')}
-    if not result:
+    if not result and not allow_empty:
         raise ValueError('empty census')
+    return result
+
+
+def dimension_census(console):
+    """Spatial selector scopes @e to each dimension; check against the global set."""
+    result = {}
+    for dimension in ('minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'):
+        text = console.command(f'execute in {dimension} run execute as @e[distance=0..] run data get entity @s')
+        part = census(text, dimension, allow_empty=True)
+        if result.keys() & part.keys():
+            raise ValueError('duplicate UUID in dimension census')
+        result.update(part)
+    global_entities = census(console.command('execute as @e run data get entity @s'), allow_empty=True)
+    if not result or result.keys() != global_entities.keys():
+        raise ValueError('dimension census does not cover global entity census')
     return result
 
 
@@ -177,24 +194,128 @@ def cut_verdict(comparison, *, valid, custody_ok, probe_ok):
     return 'incomplete' if comparison['unverified'] else 'passed'
 
 
-def durable_census(run, snapshot, wal):
-    """Project holders before restore_entity/live hydration, sharing recovery's decoder/WAL fold."""
+def verify_witnesses(run, snapshot, baseline, grant_inventory):
+    for name, expected in (('before-census.json', baseline),
+                           ('acknowledged-inventory.json', grant_inventory)):
+        witness = snapshot / 'witness' / name
+        if witness.read_bytes() != (run / name).read_bytes() or json.loads(witness.read_text()) != expected:
+            raise ValueError(f'pre-recovery witness mismatch: {name}')
+
+
+def project_world(run, copied_world, name):
+    """Project a verified disposable world without starting the tick owner."""
     command = json.loads((run / 'server-command.json').read_text())
-    copied_world = (run / 'durable-census-world').resolve()
-    receipt = (run / 'durable-census.json').resolve()
-    shutil.copytree(snapshot / 'world', copied_world)
+    receipt = (run / f'{name}.json').resolve()
     argv = [command['binary'], '--config', command['config'], 'world', 'crash-census',
             '--copy', str(copied_world), '--receipt', str(receipt)]
     result = subprocess.run(argv, cwd=run, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             timeout=300, check=False)
-    (run / 'durable-census.log').write_bytes(result.stdout)
+    (run / f'{name}.log').write_bytes(result.stdout)
     if result.returncode:
-        raise RuntimeError(f'durable census failed ({result.returncode}): {run / "durable-census.log"}')
+        raise RuntimeError(f'{name} failed ({result.returncode}): {run / f"{name}.log"}')
     projected = json.loads(receipt.read_text())
+    return projected
+
+
+def projected_entities(projected):
+    return {uuid_snbt(ident): {**row, 'dimension': dimension}
+            for dimension, entities in projected['entities'].items()
+            for ident, row in entities.items()}
+
+
+def durable_census(run, snapshot, wal):
+    """Project holders from the verified inspection copy, never the primary evidence."""
+    verify_tree(snapshot, json.loads((run / 'crash-handoff.json').read_text()))
+    projected = project_world(run, (snapshot / 'world').resolve(), 'durable-census')
     if (projected['checkpoint_tick'], projected['durable_tick']) != (
             wal['checkpoint_tick'], wal['published_through']):
         raise ValueError('durable census checkpoint/WAL fence mismatch')
-    return {uuid_snbt(ident): row for ident, row in projected['entities'].items()}
+    return projected_entities(projected)
+
+
+def compare_wire_ids(expected, actual):
+    """Players reconnect with new wire IDs; compare only persisted non-player IDs."""
+    expected = {ident: row for ident, row in expected.items() if row['kind'] != 'player'}
+    actual = {ident: row for ident, row in actual.items() if row['kind'] != 'player'}
+    missing = sorted(expected.keys() - actual.keys())
+    new = sorted(actual.keys() - expected.keys())
+    changed = sorted(ident for ident in expected.keys() & actual.keys()
+                     if not isinstance(expected[ident].get('wire_id'), int)
+                     or (expected[ident]['dimension'], expected[ident]['wire_id'])
+                     != (actual[ident]['dimension'], actual[ident].get('wire_id')))
+    return {'missing': missing, 'new': new, 'changed': changed}
+
+
+def apply_wire_comparison(comparison, wire):
+    comparison['changed'] = sorted(set(comparison['changed']) | set(wire['changed']) | set(wire['new']))
+    for ident in wire['missing']:
+        if ident not in comparison['missing']:
+            comparison['unverified'][ident] = {'reason': 'wire spawn not observed'}
+
+
+def observe_wire_ids(console, run, address, cache, expected, early):
+    """Observe persisted non-players through real spawn packets, grouped by dimension/chunk."""
+    groups = {}
+    for ident, saved in expected.items():
+        if saved['kind'] == 'player' or ident not in early:
+            continue
+        raw = early[ident].get('pos')
+        if not isinstance(raw, str) or not raw.startswith('[') or not raw.endswith(']'):
+            raise ValueError(f'missing census position for {ident}')
+        values = [float(value.strip().removesuffix('d').removesuffix('f'))
+                  for value in raw[1:-1].split(',')]
+        if len(values) != 3 or not all(math.isfinite(value) for value in values):
+            raise ValueError(f'invalid census position for {ident}')
+        dimension = early[ident]['dimension']
+        groups.setdefault((dimension, math.floor(values[0] / 16), math.floor(values[2] / 16)),
+                          []).append((ident, values))
+    actor = ProtocolMatrixClient('WireWitness', address, run, cache, console.command,
+                                 account_uuid=offline_uuid('WireWitness'), timeout_seconds=120)
+    observed, visits = {}, []
+    try:
+        reply = console.command('gamemode spectator WireWitness')
+        if 'spectator' not in reply.lower():
+            raise RuntimeError(f'could not set wire witness spectator: {reply[-500:]}')
+        for (dimension, chunk_x, chunk_z), members in sorted(groups.items()):
+            pos = members[0][1]
+            teleports = actor.observer.teleports
+            console.command(f'execute in {dimension} run tp WireWitness {pos[0]} {pos[1]} {pos[2]}')
+            actor.wait_until(lambda: actor.observer.teleports > teleports,
+                             description='wire witness teleport', timeout_seconds=120)
+            actor.wait_until(lambda: (chunk_x, chunk_z) in actor.observer.chunks,
+                             description='wire witness destination chunk', timeout_seconds=120)
+            dimension_reply = console.command('data get entity WireWitness Dimension')
+            if dimension not in dimension_reply:
+                raise RuntimeError(f'wire witness dimension mismatch: {dimension_reply[-500:]}')
+            wanted = {ident for ident, _ in members}
+            def seen_members():
+                snapshot = actor.snapshot()
+                return wanted <= {uuid_snbt(entity['uuid']) for entity in snapshot.get('entities', [])}
+            try:
+                actor.wait_until(seen_members, description='wire witness entity spawns', timeout_seconds=15)
+            except TimeoutError:
+                pass  # Missing packets remain unverified; they can never be counted as a pass.
+            snapshot = actor.snapshot()
+            errors = snapshot.get('observation_errors', {})
+            if errors.get('entities') or errors.get('entity_lifecycle'):
+                raise RuntimeError(f'wire entity observer incomplete: {errors}')
+            matching = []
+            for entity in snapshot.get('entities', []):
+                ident = uuid_snbt(entity['uuid'])
+                if ident not in wanted:
+                    continue
+                row = {'kind': expected[ident]['kind'], 'dimension': dimension, 'wire_id': entity['id']}
+                if ident in observed and observed[ident] != row:
+                    raise ValueError(f'conflicting wire identities for {ident}')
+                observed[ident] = row
+                matching.append(entity)
+            visits.append({'dimension': dimension, 'chunk': [chunk_x, chunk_z],
+                           'expected': sorted(wanted), 'observed': matching})
+    finally:
+        actor.disconnect()
+    receipt = {'observed': observed, 'visits': visits}
+    save_json(run / 'wire-identity.json', receipt)
+    return observed
 
 
 def compare_durable(expected, actual):
@@ -206,7 +327,8 @@ def compare_durable(expected, actual):
         saved, live = expected[ident], actual[ident]
         kind = saved['kind'].split(':', 1)[-1].replace('_', '').lower()
         label = live['type'].replace(' ', '').lower()
-        if (kind != 'player' and kind != label) or saved['holders'] != live['holders']:
+        if (not saved.get('dimension') or saved['dimension'] != live.get('dimension')
+                or (kind != 'player' and kind != label) or saved['holders'] != live['holders']):
             changed.append(ident)
     return {'missing': missing, 'new': new, 'changed': changed, 'unverified': {}}
 
@@ -402,7 +524,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                 # The control needs an actually observed old arrow with headroom.
                 # Each fenced query waits on server events, not elapsed wall time.
                 for _ in range(120):
-                    observed = census(console.command('execute as @e run data get entity @s'))
+                    observed = dimension_census(console)
                     if any(entity['type'] == 'Arrow' and entity.get('in_ground') == '1b'
                            and isinstance(entity.get('life'), str)
                            and re.fullmatch(r'\d+s', entity['life'])
@@ -414,7 +536,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             console.wait_reply('save-all', 'Saved the game', ('Failed to save the game',))
             baseline_checkpoint = checkpoint(logfile)
             before_tick_lo = simulation_tick(console)
-            baseline = census(console.command('execute as @e run data get entity @s'))
+            baseline = dimension_census(console)
             before_tick_hi = simulation_tick(console)
             save_json(run / 'before-census.json', baseline)
             roster = {line.strip() for line in (run / 'roster.txt').read_text().splitlines() if line.strip()}
@@ -447,6 +569,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             if len(granted.get('inventory', [])) != 1 or granted.get('cursor', 'unobserved') is not None:
                 raise RuntimeError('acknowledged grant did not leave one stack and an empty cursor')
             grant_inventory = granted['inventory']
+            save_json(run / 'acknowledged-inventory.json', grant_inventory)
             item_id = next(number for number, name in actors[1].items.items() if name == 'minecraft:netherite_ingot')
             archive = run / 'wal-archive'
             if moment in ('after-publish', 'after-checkpoint'):
@@ -469,11 +592,20 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             code = process.wait(timeout=300)
             if code != 0:
                 raise RuntimeError(f'battle handoff failed {code}; see driver log')
-            save_json(run / 'acknowledged-inventory.json', grant_inventory)
             handoff = json.loads((run / 'crash-handoff.json').read_text())
+            record['pre_recovery_evidence'] = {
+                name: {'path': str(run / name),
+                       'sha256': hashlib.sha256((run / name).read_bytes()).hexdigest()}
+                for name in ('before-census.json', 'acknowledged-inventory.json')}
+            save_json(run / 'cut-evidence.json', record)
             if handoff['exit'] != -signal.SIGKILL:
                 raise RuntimeError('missing SIGKILL proof')
-            snapshot = Path(handoff['crash_copy'])
+            primary = Path(handoff['crash_copy'])
+            snapshot = run / 'crash-inspection-copy'
+            record['crash_verification'] = verified_copy(primary, snapshot, handoff)
+            record['crash_copy'] = str(primary)
+            verify_witnesses(run, snapshot, baseline, grant_inventory)
+            save_json(run / 'cut-evidence.json', record)
             cp = checkpoint(snapshot / 'server.log')
             wal = read_published(snapshot / 'wal-archive', cp)
             retained = read_published(snapshot / 'world/journal', cp)
@@ -483,8 +615,8 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                 raise ValueError('archived and retained published WAL tails differ')
             images = [image for image in grant_images(wal, offline_uuid('Proto1'), item_id)
                       if image['hi'] > baseline_checkpoint]
-            durable = durable_census(run, snapshot, wal)
             tmp = [str(p.name) for p in (snapshot / 'world/journal').glob('*.tmp') if p.stat().st_size]
+            durable = durable_census(run, snapshot, wal)
             image = images[-1] if images else None
             image_checkpointed = any(image['hi'] <= cp for image in images)
             valid = {'before-checkpoint': cp == baseline_checkpoint,
@@ -494,7 +626,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
             record.update({'baseline_checkpoint': baseline_checkpoint, 'checkpoint_at_cut': cp,
                            'published_through': wal['published_through'], 'grant_images': images,
                            'unpublished_temporary_files': tmp, 'moment_observed': valid,
-                           'crash_copy': str(snapshot), 'wal_archive': str(snapshot / 'wal-archive')})
+                           'crash_copy': str(primary), 'wal_archive': str(snapshot / 'wal-archive')})
             save_json(run / 'cut-evidence.json', record)
             recovered_log = run / 'recovery.log'
             with recovered_log.open('wb') as out:
@@ -524,7 +656,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                     recovery_input.write(text.encode())
                 recovered_console = Console(recovered_log, recovery, send_recovery)
                 # First input is the read-only census, before any client joins.
-                early = census(recovered_console.command('execute as @e run data get entity @s'))
+                early = dimension_census(recovered_console)
                 recovery_tick_lo = simulation_tick(recovered_console)
                 freeze_reply = recovered_console.command('tick query')
                 if 'frozen' not in freeze_reply.lower():
@@ -533,11 +665,17 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                 if recovery_tick_lo != recovery_tick_hi:
                     raise RuntimeError('recovery census was not frozen')
                 save_json(run / 'after-early-census.json', early)
+                wire_observed = observe_wire_ids(recovered_console, run, ('127.0.0.1', port),
+                                                 cache, durable, early)
+                if simulation_tick(recovered_console) != recovery_tick_hi:
+                    raise RuntimeError('simulation advanced during wire identity observation')
+                wire_comparison = compare_wire_ids(durable, wire_observed)
                 # Keep simulation frozen across player reconnects too.
                 for name in ('Proto0', 'Proto1', 'BattleRecorder'):
                     actors.append(ProtocolMatrixClient(name, ('127.0.0.1', port), run, cache,
                         recovered_console.command, account_uuid=offline_uuid(name), timeout_seconds=120))
-                after = census(recovered_console.command('execute as @e run data get entity @s'))
+                after = dimension_census(recovered_console)
+                after.pop(uuid_snbt(str(offline_uuid('WireWitness'))), None)
                 if simulation_tick(recovered_console) != recovery_tick_hi:
                     raise RuntimeError('simulation advanced during frozen player reconnects')
                 save_json(run / 'after-census.json', after)
@@ -585,6 +723,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                     del after_holders[old_control_id]
                     record['negative_control_removed'] = old_control_id
                 comparison = compare_durable(durable, after_holders)
+                apply_wire_comparison(comparison, wire_comparison)
                 # An arrow witnessed before the cut but not in the durable image
                 # needs an identity-scoped removal proof; expiry is not proof.
                 removals = {}
@@ -609,6 +748,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                                                       'recovery': [recovery_tick_lo, recovery_tick_hi]},
                                'maximum_elapsed_ticks': elapsed_upper, 'freeze_reply': freeze_reply,
                                'entity_comparison': comparison,
+                               'wire_identity_comparison': wire_comparison,
                                'old_arrow_control': {'uuid': old_control_id,
                                                      'life': max(old_candidates)[0] if old_candidates else None,
                                                      'drop_negative_control_failed': old_control_failed},
@@ -631,7 +771,7 @@ def one(run, moment, pin, client_binary, client_data, cache, world, negative_con
                                                   'KRASNOKAMEN_CLIENT_BINARY': str(client_binary),
                                                   'KRASNOKAMEN_BATTLE_CLIENT_ROOT': str(client_data),
                                                   'KRASNOKAMEN_BATTLE_WORLD': str(world)}},
-                        'runner_command': argv, 'moment': moment, 'crash_copy': str(snapshot),
+                        'runner_command': argv, 'moment': moment, 'crash_copy': str(primary),
                         'before_census': str(run / 'before-census.json'),
                         'after_census': str(run / 'after-census.json'),
                         'note': 'Investigate multi-tick census differences and published image before filing as a defect.',
