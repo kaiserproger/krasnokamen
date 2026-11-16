@@ -59,6 +59,13 @@ struct BrainCadence {
     was_busy: bool,
 }
 
+#[cfg(test)]
+#[derive(Debug, Default)]
+pub(crate) struct ExecutionTrace {
+    expected: Vec<EntityId>,
+    actual: Vec<EntityId>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResidentBrain {
     id: EntityId,
@@ -830,18 +837,30 @@ fn recover_penetration(state: &mut TickState, slot: EntitySlot) {
 pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
     #[cfg(test)]
     let brain_start = std::time::Instant::now();
-    if state.entities.villager_chunks().is_empty() {
+    if state.entities.villager_chunks().is_empty() && state.villager_pois.residents.is_empty() {
         state.tick_budget.finish(state.dimension, Consumer::Brain);
         return;
     }
-    // The allocator ran immediately before this tick and owns every POI
-    // memory; the brain never acquires or validates claims itself.
+    // POI allocation precedes settlement policy. Reconcile only the entity
+    // projection after policy can remove, move or introduce bodies.
     let mut cache = std::mem::take(&mut state.villager_pois);
+    cache.reconcile_entities(state);
     #[cfg(test)]
     let refreshed = brain_start.elapsed().as_micros();
     cache.prepare_brains(state);
     #[cfg(test)]
     let prepared = brain_start.elapsed().as_micros();
+    #[cfg(test)]
+    if let Some(trace) = cache.execution_trace.as_mut() {
+        trace.expected.clear();
+        trace.actual.clear();
+        trace
+            .expected
+            .extend(cache.execution_indices.iter().filter_map(|&index| {
+                let brain = cache.resident_data[index];
+                brain.active.then_some(brain.id)
+            }));
+    }
     #[cfg(test)]
     let acquired = brain_start.elapsed().as_micros();
     #[cfg(test)]
@@ -853,6 +872,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let slot = cache.residents[index];
         let id = cache.resident_data[index].id;
+        #[cfg(test)]
+        if let Some(trace) = cache.execution_trace.as_mut() {
+            trace.actual.push(state.entities.body(slot).id);
+        }
         if state
             .entities
             .row(slot)
@@ -1531,3 +1554,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
 #[cfg(test)]
 #[path = "brain_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "roster_tests.rs"]
+pub(crate) mod roster_tests;

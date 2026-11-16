@@ -219,6 +219,10 @@ pub struct EntityStore {
     /// Conservative horizontal query extent. Shrinking/removal never reduces it.
     max_half_width: f64,
     brain_revision: u64,
+    /// Entity projections observe every notified write, not just resident
+    /// membership. Indexing spawn/remove/transfer also notifies, including a
+    /// nonresident swap-remove whose tail is an item.
+    projection_revision: u64,
     brain_changes: rustc_hash::FxHashSet<EntityId>,
     /// Wire candidate deduplication is dense for live rows; only identities
     /// removed before publication need sparse custody across a possible rebirth.
@@ -361,6 +365,7 @@ impl EntityStore {
     /// One notification point for entity mutations. Additional consumers (for
     /// example the journal) belong here; clock-only projection bypasses it.
     fn entity_changed(&mut self, id: EntityId, resident: bool, slot: EntitySlot) {
+        self.projection_revision = self.projection_revision.wrapping_add(1);
         if !std::mem::replace(&mut self.wire_marked[slot.0 as usize], true) {
             self.wire_pending.push((id, slot));
         }
@@ -461,6 +466,10 @@ impl EntityStore {
 
     pub(crate) fn brain_revision(&self) -> u64 {
         self.brain_revision
+    }
+
+    pub(crate) fn projection_revision(&self) -> u64 {
+        self.projection_revision
     }
 
     pub(crate) fn brain_changes(&self) -> &rustc_hash::FxHashSet<EntityId> {

@@ -146,6 +146,9 @@ pub(crate) struct PoiCache {
     pub(crate) selected: Vec<EntitySlot>,
     pub(crate) motion_revision: Option<u64>,
     pub(crate) full_brains: Vec<bool>,
+    pub(crate) entity_revision: Option<u64>,
+    #[cfg(test)]
+    pub(crate) execution_trace: Option<crate::villager::brain::ExecutionTrace>,
     pub(crate) removed_items: Vec<EntitySlot>,
     pub(crate) nearby_residents: Vec<EntitySlot>,
     pub(crate) player_chunks: Vec<(i32, i32)>,

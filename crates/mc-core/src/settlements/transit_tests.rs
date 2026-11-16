@@ -694,3 +694,43 @@ fn operator_command_departs_from_where_the_household_stands() {
         "{list:?}"
     );
 }
+
+#[test]
+fn migration_roster_partial_arrival_rollback_keeps_live_brains_and_sensors() {
+    let mut d = departed();
+    d.state.tick = d.state.settlements.transit.get(d.id).unwrap().arrives;
+    player_to(&mut d.state, [1000.5, 64.0, 8.5]);
+    let stay = resident(&mut d.state, d.destination, [1000.5, 64.0, 10.5]);
+    let item =
+        crate::villager::brain::roster_tests::dropped_item(&mut d.state, [1001.5, 64.0, 10.5]);
+    let mut changes = ChangeSet::default();
+    crate::settlements::allocator::tick(&mut d.state, &mut changes);
+    // The first member restores; the second refuses before it can spawn.
+    // Corrupt only this test's live record, not a production recovery check.
+    let record = d
+        .state
+        .settlements
+        .transit
+        .records
+        .get_mut(&d.id.0)
+        .unwrap();
+    record.members[1].type_id = u32::MAX;
+    let first = record.members[0].uuid.parse::<uuid::Uuid>().unwrap();
+    let before = d.state.entities.len();
+    let revision = d.state.entities.brain_revision();
+    assert!(tick(&mut d.state, &mut changes).is_empty());
+    assert!(d.state.entities.brain_revision() > revision);
+    assert_eq!(d.state.entities.len(), before);
+    assert!(d.state.entities.slot_of_uuid(first).is_none());
+    assert!(d.state.settlements.transit.get(d.id).is_some());
+    assert!(changes.entities_spawned.is_empty());
+    let executed = crate::villager::brain::roster_tests::check_tick(&mut d.state, &mut changes);
+    assert_eq!(executed, [stay]);
+    let slot = d.state.entities.slot_of(item).unwrap();
+    assert!(
+        d.state
+            .villager_pois
+            .items_near([1001.5, 64.0, 10.5])
+            .contains(&slot)
+    );
+}

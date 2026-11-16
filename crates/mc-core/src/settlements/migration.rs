@@ -164,6 +164,10 @@ pub(crate) mod return_tests;
 #[path = "migration_flow_tests.rs"]
 mod flow_tests;
 
+#[cfg(test)]
+#[path = "migration_roster_tests.rs"]
+mod roster_tests;
+
 #[derive(Debug, Clone)]
 enum Unit {
     Household(String),
@@ -372,6 +376,10 @@ fn eligible(
             || v.wandering
             || v.smelting.is_some()
             || v.data.profession == crate::villager::VillagerProfession::Builder
+            // A certified native work point is an economic role too, even
+            // without a commercial employment contract. Release it before
+            // automatic migration rather than silently dismantling production.
+            || super::buildings::building_for_job(state, v).is_some()
             || state.settlements.records().any(|town| {
                 town.project
                     .as_ref()

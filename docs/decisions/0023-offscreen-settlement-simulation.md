@@ -171,6 +171,20 @@ This restates the binding design (`receipts/SpainCulture/IMMIGRATION-DESIGN.md`,
   `transit::tick` returns each arrival that joined (`Arrival`: source,
   destination, household, member UUIDs) to the migration policy in the same
   tick; it is never persisted.
+- **Automatic role holders.** Automatic migration also refuses an occupied
+  certified native work point, not only commercial employment. The role must
+  be released before selection or departure; an empty carry is not proof that
+  a mine, lumber camp or workshop no longer needs its assigned worker.
+- **Brain observation boundary.** Keep allocator → settlement policy → brain:
+  policy uses the fresh POI census, while departures and arrivals retain their
+  same-tick custody. Before brain admission, reconcile the cached entity
+  projection if the entity-store notification epoch changed. Unlike the
+  resident-membership revision, that epoch also covers nonresident swap-removes
+  and row-only policy writes. Reuse the allocator's entity refresh (resident
+  identities, claims, profiles and nearby item/threat sensors), preserving
+  surviving identities' cadence and clearing obsolete slot scratch. Do not
+  repeat POI scanning, job/bed assignment or economy. The unchanged-epoch path
+  returns without allocation; the changed path retains the existing roster/update sorts.
 - **Record.** Source, destination and its anchor, departure and arrival game
   time, bearing, exit, status, the household record `leave` removed, and each
   member's image in the WAL entity codec. Member images name no settlement or
