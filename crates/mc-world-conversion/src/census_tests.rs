@@ -96,6 +96,8 @@ pub(crate) struct Fixture {
 }
 
 pub(crate) type EntityFixture = (u32, i32, i32, u128, Vec<(String, Tag)>);
+/// One migration transit row: (record UUID, member UUIDs, household).
+pub(crate) type TransitFixture<'a> = (u128, &'a [u128], Option<&'a str>);
 
 /// Stopped native world: `entities` as (dimension, chunk x, chunk z, UUID, payload),
 /// optional persisted settlement 7, one baseline overworld chunk.
@@ -103,12 +105,11 @@ fn world(entities: Vec<EntityFixture>, settlement: bool) -> Fixture {
     world_with(entities, settlement, &[])
 }
 
-/// [`world`] plus migration transit rows as (record UUID, member UUIDs,
-/// household).
+/// [`world`] plus migration transit rows.
 pub(crate) fn world_with(
     entities: Vec<EntityFixture>,
     settlement: bool,
-    transits: &[(u128, &[u128], Option<&str>)],
+    transits: &[TransitFixture],
 ) -> Fixture {
     let dir = tempfile::tempdir().unwrap();
     let world = dir.path().join("world");
@@ -270,7 +271,7 @@ fn census_refuses_transit_custody_held_twice() {
             ),
         )
     };
-    let cases: [(&[(u128, &[u128], Option<&str>)], &str); 3] = [
+    let cases: [(&[TransitFixture], &str); 3] = [
         (
             &[(0x10, &[0x10], None)],
             "UUID 00000000-0000-0000-0000-000000000010 of transit record",

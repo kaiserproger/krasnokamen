@@ -4,7 +4,9 @@ use std::sync::Arc;
 use mc_core::dimensions::Dimension;
 use mc_core::journal::{JournalEntry, JournalWriter, ReplayEntity};
 
-use crate::census_tests::{EntityFixture, Fixture, fields, member, transit_row, world_with};
+use crate::census_tests::{
+    EntityFixture, Fixture, TransitFixture, fields, member, transit_row, world_with,
+};
 use crate::custody_census;
 use crate::recovery_roundtrip_tests::entity_entry;
 
@@ -17,7 +19,7 @@ fn uuid(n: u128) -> String {
 
 /// Villager `LEAD` (wire 10, household 7-1) and lone resident `LONE`
 /// (wire 11) of persisted settlement 7, plus `transits` rows.
-fn town(transits: &[(u128, &[u128], Option<&str>)]) -> Fixture {
+fn town(transits: &[TransitFixture]) -> Fixture {
     let registry = crate::test_support::registry().unwrap();
     let villagers: Vec<EntityFixture> = vec![
         (
@@ -131,7 +133,7 @@ fn custody_census_reads_a_checkpointed_transit_row() {
 /// Negative controls: each custody violation at the durable boundary is a FAIL.
 #[test]
 fn custody_census_refuses_a_uuid_held_twice() {
-    let cases: [(Vec<(u128, &[u128], Option<&str>)>, Vec<JournalEntry>, &str); 6] = [
+    let cases: [(Vec<TransitFixture>, Vec<JournalEntry>, &str); 6] = [
         // Body kept while its record was published (body + record).
         (
             vec![],

@@ -397,8 +397,8 @@ fn nbt_uuid(fields: &[(String, Tag)]) -> Option<uuid::Uuid> {
     };
     let ints: [i32; 4] = ints.as_slice().try_into().ok()?;
     let mut bytes = [0; 16];
-    for (chunk, int) in bytes.chunks_exact_mut(4).zip(ints) {
-        chunk.copy_from_slice(&int.to_be_bytes());
+    for (chunk, int) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(ints) {
+        *chunk = int.to_be_bytes();
     }
     Some(uuid::Uuid::from_bytes(bytes))
 }
