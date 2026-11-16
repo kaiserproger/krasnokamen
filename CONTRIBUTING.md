@@ -69,11 +69,13 @@ The command installs the canonical 26.3 cache in `data/vanilla/` and, beside
 it, the 26.1.2/26.2 endpoint caches and both adjacent mapping snapshots
 (`data/vanilla-26.1.2`, `data/vanilla-26.2`, `data/vanilla-steps`). **The
 tests read exactly these checkout paths**: not the per-user cache, and not
-through a symlink (a symlinked `data/vanilla` is refused). The server finds
-the same cache when started from the checkout. Without `--cache` the import
-goes to the operator default `$XDG_DATA_HOME/krasnokamen/content/26.3`
-(otherwise `~/.local/share/krasnokamen/content/26.3`), which the server
-prefers but the tests never read; selection order and `--cache` are documented in
+through a symlink (a symlinked `data/vanilla` is refused). The server also
+searches the checkout, but a complete per-user cache takes precedence. The
+Run command below selects the checkout cache explicitly; a configured
+`[data].vanilla_data_dir` overrides that selection. Without `--cache` the
+import goes to the operator default `$XDG_DATA_HOME/krasnokamen/content/26.3`
+(otherwise `~/.local/share/krasnokamen/content/26.3`), which tests never read;
+selection order and `--cache` are documented in
 [the operating guide](docs/OPERATING.md#vanilla-content-cache), which also
 covers `content verify`. **Mojang bytes never enter Git**: `data/vanilla/`,
 `data/vanilla-*` and `.analysis/` are ignored — never stage them, and never
@@ -84,7 +86,7 @@ from memory ([protocol changes](docs/development/protocol-changes.md)).
 ## Run
 
 ```sh
-cargo run -p mc-edge --bin krasnokamen -- --config example.toml
+KRASNOKAMEN_CONTENT_CACHE="$PWD/data/vanilla" cargo run -p mc-edge --bin krasnokamen -- --config example.toml
 ```
 
 Then connect a Minecraft Java 26.3 client to `127.0.0.1:25565`.
