@@ -662,7 +662,7 @@ fn cancel_and_replay_never_duplicate() {
         )
         .unwrap()
     );
-    assert!(!active(&policy));
+    assert_eq!(policy.jobs["once"].paused.as_deref(), Some(MANUAL));
     assert_eq!(target(&policy, worker), None);
     assert!(
         execute(
@@ -686,8 +686,10 @@ fn cancel_and_replay_never_duplicate() {
         .unwrap()
     );
     assert_eq!(policy.cancelled, 1);
-    assert!(!active(&policy));
-    assert!(!tick(&mut world, id, &mut policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
+    let cancelled_jobs = policy.jobs.clone();
+    tick(&mut world, id, &mut policy); // Daily consumption initializes independently.
+    assert_eq!(policy.jobs, cancelled_jobs);
     assert_eq!(stock_total(&world, body, "minecraft:cake"), 0);
     assert_eq!(stock_total(&world, body, "minecraft:milk_bucket"), 3);
     // Replay after cancel is a terminal no-op, never a second job.
@@ -847,14 +849,19 @@ fn retry_timer_changes_are_reported_but_early_ticks_leave_policy_untouched() {
         Some("missing input")
     );
     let parked = policy.clone();
-    world.tick = policy.jobs["retry"].next_due - 1;
+    world.tick = policy.jobs["retry"].retry_at - 1;
     assert!(!tick(&mut world, id, &mut policy));
     assert_eq!(policy, parked);
     world.tick += 1;
-    assert!(
-        tick(&mut world, id, &mut policy),
-        "the next retry time must reach the WAL"
+    assert!(!tick(&mut world, id, &mut policy));
+    assert!(policy.jobs["retry"].retry_at > world.tick);
+    assert_eq!(
+        serde_json::to_value(&policy).unwrap(),
+        serde_json::to_value(&parked).unwrap(),
+        "runtime retries cannot advance the persisted period watermark"
     );
+    world.tick = policy.jobs["retry"].next_due;
+    assert!(tick(&mut world, id, &mut policy));
     assert!(policy.jobs["retry"].next_due > world.tick);
     assert_eq!(policy.jobs["retry"].done, 0);
     assert!(policy.jobs["retry"].receipts.is_empty());
@@ -1256,3 +1263,6 @@ fn production_supply_skips_reserved_stock_and_uses_free_stock_across_sources() {
 
 #[path = "production_delivery_tests.rs"]
 mod delivery_tests;
+
+#[path = "offscreen_production_tests.rs"]
+mod offscreen_tests;

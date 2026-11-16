@@ -314,6 +314,7 @@ pub(crate) fn observe(
             view.completed = job.done;
             view.paused.clone_from(&job.paused);
             view.cancelled = job.cancelled;
+            // Shared simulated/off-screen period watermark, in game ticks.
             view.next_due = job.next_due;
             view
         })

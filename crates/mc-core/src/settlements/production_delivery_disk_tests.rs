@@ -62,6 +62,7 @@ fn fixture(config: &CoreConfig) -> Disk {
         }),
     )
     .unwrap();
+    economy::tick(&mut world); // Initialize the independent daily consumption clock.
     Disk {
         world,
         town,
@@ -172,7 +173,7 @@ fn command(f: &mut Disk, request: Request) {
     economy::execute(&mut f.world, f.town, economy::Request::Production(request)).unwrap();
 }
 
-fn set_deadline_through_owner(f: &mut Disk, name: &str, due: u64) {
+fn set_schedule_through_owner(f: &mut Disk, name: &str, due: u64, retry: u64) {
     let revision = f
         .world
         .settlements
@@ -181,14 +182,16 @@ fn set_deadline_through_owner(f: &mut Disk, name: &str, due: u64) {
         .revision
         .checked_add(1)
         .unwrap();
-    f.world
+    let job = f
+        .world
         .settlements
         .economy_for_tick(f.town)
         .production
         .jobs
         .get_mut(name)
-        .unwrap()
-        .next_due = due;
+        .unwrap();
+    job.next_due = due;
+    job.retry_at = retry;
     f.world.settlements.finish_economy(f.town, revision, true);
 }
 
@@ -290,14 +293,14 @@ fn reopen(f: Disk, config: &CoreConfig, mut writer: JournalWriter) -> (Disk, Jou
         .production
         .jobs
         .iter()
-        .map(|(name, job)| (name.clone(), job.next_due))
+        .map(|(name, job)| (name.clone(), job.next_due, job.retry_at))
         .collect();
-    for (name, _) in &saved {
-        set_deadline_through_owner(&mut f, name, u64::MAX);
+    for (name, _, _) in &saved {
+        set_schedule_through_owner(&mut f, name, u64::MAX, u64::MAX);
     }
     let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-    for (name, due) in saved {
-        set_deadline_through_owner(&mut f, &name, due);
+    for (name, due, retry) in saved {
+        set_schedule_through_owner(&mut f, &name, due, retry);
     }
     let entries = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
     assert_policy_postimage(&entries, &f);
@@ -478,12 +481,21 @@ fn unpublished_store_rolls_back_but_published_store_replays_exactly_once() {
         if checkpoint_pending {
             checkpoint(&mut f, &config);
         }
-        // Persist approach/deadline through the actual policy owner, not an
-        // unjournaled mutable projection of economy state.
+        // Publish the approach through the policy owner. The retry is runtime
+        // scheduling only and does not change the production-period watermark.
         beside(&mut f.world, f.body, f.chest);
         // Persist the approach but hold delivery until the following tick.
         let next_tick = f.world.tick.saturating_add(1);
-        set_deadline_through_owner(&mut f, "durable", next_tick);
+        let period_due = f
+            .world
+            .settlements
+            .get(f.town)
+            .unwrap()
+            .economy
+            .production
+            .jobs["durable"]
+            .next_due;
+        set_schedule_through_owner(&mut f, "durable", period_due, next_tick);
         let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
         assert_policy_postimage(&entries, &f);
@@ -691,14 +703,17 @@ fn cancelled_partial_obligation_stays_unpaid_when_same_uuid_delivers_a_new_job_a
                 .delivery_complete()
         );
         assert_eq!(
-            f.world
-                .settlements
-                .get(f.town)
-                .unwrap()
-                .economy
-                .production
-                .jobs["durable"],
-            old
+            serde_json::to_value(
+                &f.world
+                    .settlements
+                    .get(f.town)
+                    .unwrap()
+                    .economy
+                    .production
+                    .jobs["durable"]
+            )
+            .unwrap(),
+            serde_json::to_value(&old).unwrap()
         );
         assert_eq!(
             stock_total(&f.world, f.body, "minecraft:oak_planks"),

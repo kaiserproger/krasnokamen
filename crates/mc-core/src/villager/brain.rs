@@ -209,7 +209,7 @@ struct FoodItem {
     farmer_pickup: bool,
 }
 
-fn food_points_for_name(name: &str) -> u8 {
+pub(crate) fn food_points_for_name(name: &str) -> u8 {
     match name {
         "bread" => 4,
         "carrot" | "potato" | "beetroot" => 1,

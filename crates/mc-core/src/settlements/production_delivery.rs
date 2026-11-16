@@ -160,7 +160,10 @@ pub(super) fn store(
     settlement: SettlementId,
     job: &mut Job,
 ) -> Result<bool, Failure> {
-    let retry = world.tick.saturating_add(RETRY_TICKS);
+    let retry = world
+        .tick_control
+        .game_ticks(world.tick)
+        .saturating_add(RETRY_TICKS);
     let carry = inventory::load(
         world,
         &inventory::Endpoint::VillagerCarry { uuid: job.worker },
@@ -222,7 +225,7 @@ pub(super) fn store(
                 park(job, "awaiting output storage", retry);
             } else {
                 job.paused = None;
-                job.next_due = retry;
+                job.retry_at = retry;
             }
             return Ok(true);
         }

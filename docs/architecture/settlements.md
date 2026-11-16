@@ -94,6 +94,32 @@ recovery. Archives that still need conversion must first be upgraded with this
 version; removing the shim must reject them explicitly rather than reinterpret
 their timestamps.
 
+Production and daily consumption share their respective persisted game-time
+watermarks across simulation transitions. New job periods have a deterministic
+settlement-ID phase. A station outside `is_active` accrues deferred portions,
+even when resident; it never changes carry, equipment, blocks or containers.
+The first active owner visit reconciles those portions through the ordinary
+recipe planner and fenced physical storage commit. All declared storage chunks
+must be resident; otherwise reconciliation waits. Once resident, it applies only
+affordable portions with output space and drops the rest in that visit. Navigation
+and delivery retries are runtime-only and cannot authorize a portion. Legacy
+production deadlines translate remaining world duration once after WAL recovery;
+an overdue legacy job retains just one opportunity, not historical catch-up.
+Missing deferred fields default to zero. Remove the production legacy converter
+only after supported stores and their retained restore backups have been upgraded.
+
+Daily food consumption is new gameplay, owned by production's consumption module
+for **all** settlements, including those with no jobs: one food point per living
+member per 24,000 game ticks (`DAILY_FOOD_POINTS`). Existing villager food values
+apply (bread four, vegetables one). The same daily watermark debits simulated
+settlements physically and unsimulated settlements abstractly. On the first
+active visit with resident storage it consumes real unreserved food, drops any
+unfunded demand, and carries only prepaid excess from the final whole item to the
+next day. This credit is less than one item's food value, never an unpaid hunger
+backlog. The anchor selects simulation for this town-wide demand. Freeze and
+downtime accrue nothing. Debit, credit, watermark and inventory post-images share
+the existing settlement/chunk tick-WAL and checkpoint boundary.
+
 ## Durability and plugin boundary
 
 Touched settlement post-images and deletions share the dimension-wrapped tick

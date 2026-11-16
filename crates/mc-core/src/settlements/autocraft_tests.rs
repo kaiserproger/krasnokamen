@@ -378,7 +378,7 @@ fn cancelling_any_step_stops_the_whole_order_and_admission_is_idempotent() {
         .economy
         .production;
     assert_eq!(policy.cancelled, 2);
-    assert!(!production::active(policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     assert_eq!(
         economy::target(&town.state, Some(town.id), town.worker),
         None
@@ -520,9 +520,27 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
         !reasons.contains("no storage") && !reasons.contains("missing input"),
         "{reasons:?}"
     );
-    // Nothing dropped, nothing fabricated.
+    // Daily consumption pays one bread from storage and retains its excess.
+    let policy = serde_json::to_value(
+        &town
+            .state
+            .settlements
+            .get(town.id)
+            .unwrap()
+            .economy
+            .production,
+    )
+    .unwrap();
+    let days = town.state.tick_control.game_ticks(town.state.tick) / 24_000;
+    let credit = policy["consumption"]["credit"].as_u64().unwrap();
     assert_eq!(
-        town.carried("minecraft:bread") + town.stored("minecraft:bread"),
+        days + credit,
+        4,
+        "one paid bread covers demand plus prepaid credit"
+    );
+    let consumed_bread = 1;
+    assert_eq!(
+        town.carried("minecraft:bread") + town.stored("minecraft:bread") + consumed_bread,
         171
     );
     assert_eq!(
@@ -558,7 +576,7 @@ fn cancelling_a_finished_dependency_cancels_the_unfinished_rest_of_its_order() {
         .economy
         .production;
     assert_eq!(policy.cancelled, 1);
-    assert!(!production::active(policy));
+    assert!(policy.jobs.values().all(|job| !job.unfinished()));
     assert_eq!(
         economy::target(&town.state, Some(town.id), town.worker),
         None

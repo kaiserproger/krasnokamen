@@ -318,7 +318,7 @@ impl ScriptSettlementEconomyAction {
 
 /// One live production job observation: requested/completed portions plus
 /// the native pause reason (absent while running), the cancel flag and the
-/// next due tick.
+/// next due game-clock tick (excluding frozen ticks and server downtime).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
