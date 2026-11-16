@@ -468,6 +468,24 @@ class Horizon:
     def last_event(self) -> int:
         return self.driver("events")["last"]
 
+    def wait_kit(self, timeout: float = 60) -> None:
+        """Until this client shows the kit's spear and shield, or the deadline: the server logs a rearm
+        before its slot packets reach the client. The capture that follows reports what arrived."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            counts = self.driver("inventory")["counts"]
+            if counts.get("minecraft:iron_spear") and counts.get("minecraft:shield"):
+                return
+            time.sleep(0.25)
+
+    def wait_camera(self, entity: int, timeout: float = 60) -> None:
+        """Until this spectator's camera is bound to `entity`, or the deadline (same reason as wait_kit)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if (self.driver("state").get("camera") or {}).get("entity_id") == entity:
+                return
+            time.sleep(0.25)
+
     def capture(self, phase: str) -> dict[str, Any]:
         data = {key: self.driver(key) for key in ("state", "inventory")}
         shot = self.driver("screenshot", path=str(self.home / f"{phase}.png"))
@@ -1327,6 +1345,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         session.holder.start(session.address, "after-crash")
         console.wait(rf"Battle live rearmed: {HOLDER} side=1", mark)
         console.wait(rf"Battle spectator placed: {VIEWER} target={HOLDER}", mark)
+        session.holder.wait_kit()
         session.holder.capture("after-crash-rejoin")
         backups.append(_phase_census(console, items, "crash-rejoin", aux, session.clients))
         mark = console.mark()
@@ -1336,6 +1355,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         session.holder.driver("respawn")
         session.holder.driver("wait_for", condition="screen", value="playing", timeout=120)
         console.wait(rf"Battle live respawned: {HOLDER} side=1", mark)
+        session.holder.wait_kit()
         session.holder.capture("after-respawn")
         backups.append(_phase_census(console, items, "death-respawn", aux, session.clients))
         mark = console.mark()
@@ -1343,6 +1363,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
         console.wait(rf"Battle player offline: {HOLDER}", mark)
         session.holder.start(session.address, "after-reconnect")
         console.wait(rf"Battle live rearmed: {HOLDER} side=1", mark)
+        session.holder.wait_kit()
         session.holder.capture("after-reconnect")
         backups.append(_phase_census(console, items, "reconnect", aux, session.clients))
         for client in session.clients:
@@ -1408,6 +1429,8 @@ def crash_handoff(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str,
                     console.send(command)
                     console.wait(re.escape(reply), mark, timeout=120, fail=re.compile(r"Command failed:|Battle error:"))
                 entity = _holder_entity(console)
+                session.holder.wait_kit()
+                session.viewer.wait_camera(entity)
                 post = [client.capture("after-manual-start") for client in session.clients]
                 roles(report, "clients_hold_roles_in_recovered_battle", post[0], post[1], entity)
                 strike, rows = session.first_strike(limit=RESUMED_STRIKE_TICK_LIMIT, need_fighting=False)
@@ -1602,6 +1625,8 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
         console.wait(rf"Battle live rearmed: {HOLDER} side=1", mark)
         console.wait(rf"Battle spectator placed: {VIEWER} target={HOLDER}", mark)
         entity = _holder_entity(console, mark)
+        holder.wait_kit()
+        viewer.wait_camera(entity)
         unlocked = [client.capture("after-login") for client in clients]
         roles(report, "roles_restored_after_login", unlocked[0], unlocked[1], entity)
         check(report, "holder_rearmed_once_after_login", console.count(rf"Battle live rearmed: {HOLDER} ") == 1,
@@ -1613,6 +1638,7 @@ def auth_hydration(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str
         holder.start(address, "reentry")
         _authenticate(holder, passwords[HOLDER], register=False)
         console.wait(rf"Battle player online: {HOLDER} entity=", mark)
+        holder.wait_kit()
         reentered = holder.capture("after-reentry")
         check(report, "reentry_issues_no_second_kit",
               _kit_counts(reentered["inventory"]["counts"], items) == {item: 1 for item in items},
