@@ -464,7 +464,7 @@ pub(super) fn move_committed(
 
 /// Physics and the already committed path only: no sensors or route searches.
 /// The proof is reused only within this synchronous movement call.
-pub(super) fn move_committed_with_route(
+pub(crate) fn move_committed_with_route(
     state: &mut TickState,
     slot: EntitySlot,
     v: &mut VillagerState,
