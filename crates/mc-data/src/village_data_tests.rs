@@ -1623,46 +1623,43 @@ fn spawn_overrides_read_the_26_1_2_and_26_3_spawner_codecs() {
     assert!(error.to_string().contains("BiasedToBottom"), "{error}");
 }
 
-/// Real `swamp_hut.json` spawn overrides: the host content cache's copy (26.1.2
-/// grammar, from the `GAMEPLAY_DATAPACK_RELEASE` bundle) and the 26.3 jar's copy
-/// (`minecraft-merged.jar`, `data/minecraft/worldgen/structure/swamp_hut.json`).
+/// The local content cache's real `swamp_hut.json` (26.1.2 grammar, from the
+/// `GAMEPLAY_DATAPACK_RELEASE` bundle) reads through the spawn-override parser.
+/// Mojang files stay out of Git: the 26.3 `count` shape is covered by the
+/// synthetic cases above. Skips loudly when no cache is present.
 #[test]
-fn real_swamp_hut_spawn_overrides_read_in_both_grammars() {
-    for (source, text) in [
-        (
-            "26.1.2 cache",
-            include_str!("village_data_fixtures/swamp_hut_26_1_2_cache.json"),
-        ),
-        (
-            "26.3 jar",
-            include_str!("village_data_fixtures/swamp_hut_26_3_jar.json"),
-        ),
-    ] {
-        let json: Value = serde_json::from_str(text).unwrap();
-        let overrides = parse_spawn_overrides(
-            &identifier("minecraft:swamp_hut"),
-            json.get("spawn_overrides").unwrap(),
-        )
-        .unwrap_or_else(|error| panic!("{source}: {error}"));
-        let spawns: Vec<_> = overrides
-            .iter()
-            .map(|entry| {
-                let spawn = &entry.spawns[0];
-                (
-                    spawn.entity_type.to_string(),
-                    spawn.weight,
-                    spawn.min_count,
-                    spawn.max_count,
-                )
-            })
-            .collect();
-        assert_eq!(
-            spawns,
-            [
-                ("minecraft:cat".to_owned(), 1, 1, 1),
-                ("minecraft:witch".to_owned(), 1, 1, 1)
-            ],
-            "{source}"
+fn real_cache_swamp_hut_spawn_overrides_read() {
+    let Some(worldgen) = real_cache_worldgen() else {
+        eprintln!(
+            "SKIP real_cache_swamp_hut_spawn_overrides_read: no vanilla content cache \
+             (set KRASNOKAMEN_CONTENT_CACHE, or place one at /tmp/jdk-cold2)"
         );
-    }
+        return;
+    };
+    let text = std::fs::read_to_string(worldgen.join("structure/swamp_hut.json")).unwrap();
+    let json: Value = serde_json::from_str(&text).unwrap();
+    let overrides = parse_spawn_overrides(
+        &identifier("minecraft:swamp_hut"),
+        json.get("spawn_overrides").unwrap(),
+    )
+    .unwrap();
+    let spawns: Vec<_> = overrides
+        .iter()
+        .map(|entry| {
+            let spawn = &entry.spawns[0];
+            (
+                spawn.entity_type.to_string(),
+                spawn.weight,
+                spawn.min_count,
+                spawn.max_count,
+            )
+        })
+        .collect();
+    assert_eq!(
+        spawns,
+        [
+            ("minecraft:cat".to_owned(), 1, 1, 1),
+            ("minecraft:witch".to_owned(), 1, 1, 1)
+        ]
+    );
 }
