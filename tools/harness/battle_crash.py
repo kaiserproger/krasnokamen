@@ -177,7 +177,7 @@ def cut_verdict(comparison, *, valid, custody_ok, probe_ok):
 
 
 def durable_census(run, snapshot, wal):
-    """Project a disposable crash copy through the server's offline WAL fold."""
+    """Project checkpoint/WAL holders on a disposable copy, before entity hydration."""
     command = json.loads((run / 'server-command.json').read_text())
     copied_world = (run / 'durable-census-world').resolve()
     receipt = (run / 'durable-census.json').resolve()
@@ -197,7 +197,7 @@ def durable_census(run, snapshot, wal):
 
 
 def compare_durable(expected, actual):
-    """Compare exact durable holder images against the frozen recovery census."""
+    """Compare pre-hydration durable holders against the frozen recovery census."""
     missing = sorted(expected.keys() - actual.keys())
     new = sorted(actual.keys() - expected.keys())
     changed = []

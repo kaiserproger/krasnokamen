@@ -92,6 +92,14 @@ A gate counts as evidence only when all of these hold:
   not a network reply or asynchronous pump statistic, to bound the observation.
   Compare dimension-scoped UUIDs, entity IDs and exact holder/slot/item images;
   reject identity reuse, history gaps or an unproved game-time/WAL mapping.
+- G3's expected custody image must precede entity hydration: project the checkpoint
+  plus fail-closed ordered WAL fold, not `encode_checkpoint` or `restore_entity`.
+  A second export using the same restore path is not an independent oracle.
+  Exercise a restore-only loss in a non-soldier holder on a separate pinned tree;
+  the same retained copy must pass with the candidate and disagree with the control.
+  G1 instead checks the client-witnessed issued kit and custody across phases:
+  its two exports may agree under a restore-only loss, but reconciliation must
+  remain not-passed. Preserve that control as well; agreement alone proves nothing.
 - A missing short-lived entity is not explained by “it probably expired”.
   Establish a conservative admitted-lifecycle bound or an ordered durable removal.
   A removal overlapping a multi-tick pre-census interval does not establish that

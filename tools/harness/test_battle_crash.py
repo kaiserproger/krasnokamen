@@ -112,6 +112,17 @@ class BattleCrashTest(unittest.TestCase):
                          ['arrow'])
         self.assertEqual(compare_durable(expected, {**actual, 'extra': actual['husk']})['new'], ['extra'])
 
+    def test_restore_only_loss_in_non_soldier_custody_fails_the_cut(self):
+        expected = {'drop': {'kind': 'minecraft:item',
+                             'holders': {'Item': '{id: "minecraft:iron_spear", count: 1}'}}}
+        intact = {'drop': {'type': 'Item', 'holders': expected['drop']['holders']}}
+        self.assertEqual(cut_verdict(compare_durable(expected, intact),
+                                    valid=True, custody_ok=True, probe_ok=True), 'passed')
+        for restored in ({}, {'drop': {'type': 'Item', 'holders': {}}}):
+            with self.subTest(restored=restored):
+                self.assertEqual(cut_verdict(compare_durable(expected, restored),
+                                            valid=True, custody_ok=True, probe_ok=True), 'failed')
+
     def test_tombstone_requires_continuous_identity_scoped_wal(self):
         ident = '00112233-4455-6677-8899-aabbccddeeff'
         image = {'Entity': {'id': 42, 'uuid': ident, 'tick': 4}}

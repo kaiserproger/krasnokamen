@@ -192,10 +192,14 @@ and takes its initial recovery census as the first console input, before any
 client joins or client commands. It is not a universal immutable snapshot.
 The internal `world crash-census --copy` command may repair redb metadata in
 the world it opens: give it only the harness-created disposable copy, never a
-retained source or a live world. That copy supplies the checkpoint-plus-WAL
-census; the before-crash live census is only a witness. Reconnected players
-are compared while simulation remains frozen. A missing witnessed arrow
-without an identity-scoped removal proof remains unverified and makes the cut
+retained source or a live world. Its entity and player holder census comes
+directly from the ordered checkpoint-plus-WAL replay, before entity restore or
+checkpoint encoding; the before-crash live census is only a witness.
+The battle kit gate retains its export-based censuses: its separate client-checked
+issued kit and cross-phase custody reconciliation reject restore-only loss even
+when both exports lose the same piece. Export agreement alone is not that proof.
+Reconnected players are compared while simulation remains frozen. A missing
+witnessed arrow without an identity-scoped removal proof remains unverified and makes the cut
 incomplete.
 
 Do not copy the catalog into prose; ask the harness:

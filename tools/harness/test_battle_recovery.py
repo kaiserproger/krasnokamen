@@ -135,6 +135,16 @@ class ReconcileTests(unittest.TestCase):
         early = history(100, 200, spawns=[self.spawn], removals=[{"dimension": "minecraft:overworld", "id": 42, "tick": 105}])
         self.assertEqual(br.reconcile([self.issued, self.dropped, gone], self.kit, set(), [early])["verdict"], "incomplete")
 
+    def test_common_restore_loss_in_both_exports_still_fails_issued_kit_reconciliation(self):
+        dropped = census("dropped", 110, [stack(f"player:{HOLDER}", "player", SHIELD)])
+        crash = census("crash", 120, dropped["stacks"])
+        result = br.reconcile([self.issued, dropped, crash], self.kit, set(), [self.history])
+        self.assertTrue(all(phase["reopen"]["agree"] for phase in result["phases"]))
+        self.assertEqual(result["verdict"], "incomplete")
+        self.assertTrue(any(row.get("key") == br.kit_key(SPEAR)
+                            and "1 unit(s) left custody with 0 ordered removal(s)" in row["reason"]
+                            for row in result["incomplete"]), result)
+
     def test_identity_reuse_gaps_and_clocks_are_incomplete(self):
         gone = census("death", 130, [stack(f"player:{HOLDER}", "player", SHIELD)])
         reused = history(100, 200, spawns=[self.spawn, {**self.spawn, "uuid": "other", "tick": 120}],
