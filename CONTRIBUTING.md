@@ -47,30 +47,33 @@ cargo build -p mc-edge --bin krasnokamen
 This produces the `krasnokamen` server binary (debug profile by default;
 use `--release` only when a gate or release requires it).
 
-## Content import (once per machine)
+## Content import (once per checkout)
 
 Krasnokamen does not ship Mojang files. Derive the game-data cache from the
-official server bundles — either let the server download them (needs JDK 25
-and network access to Mojang):
+official server bundles into the checkout's `data/vanilla/` — either let the
+server download them (needs JDK 25 and network access to Mojang):
 
 ```sh
-cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download
+cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download --cache data/vanilla
 ```
 
 or from server jars you already own (licensed copies; `--download` cannot be
 combined with `--from`):
 
 ```sh
-cargo run -p mc-edge --bin krasnokamen -- content import \
+cargo run -p mc-edge --bin krasnokamen -- content import --cache data/vanilla \
   --from /path/to/26.3/server.jar --gameplay-from /path/to/26.1.2/server.jar
 ```
 
-The command installs the canonical 26.3 cache plus the 26.1.2/26.2 endpoint
-caches and both adjacent mapping snapshots. The default cache location is
-`$XDG_DATA_HOME/krasnokamen/content/26.3` (otherwise
-`~/.local/share/krasnokamen/content/26.3`), with `data/vanilla/` in the
-working directory or a checkout ancestor as a fallback; selection order and
-`--cache` are documented in
+The command installs the canonical 26.3 cache in `data/vanilla/` and, beside
+it, the 26.1.2/26.2 endpoint caches and both adjacent mapping snapshots
+(`data/vanilla-26.1.2`, `data/vanilla-26.2`, `data/vanilla-steps`). **The
+tests read exactly these checkout paths**: not the per-user cache, and not
+through a symlink (a symlinked `data/vanilla` is refused). The server finds
+the same cache when started from the checkout. Without `--cache` the import
+goes to the operator default `$XDG_DATA_HOME/krasnokamen/content/26.3`
+(otherwise `~/.local/share/krasnokamen/content/26.3`), which the server
+prefers but the tests never read; selection order and `--cache` are documented in
 [the operating guide](docs/OPERATING.md#vanilla-content-cache), which also
 covers `content verify`. **Mojang bytes never enter Git**: `data/vanilla/`,
 `data/vanilla-*` and `.analysis/` are ignored — never stage them, and never
@@ -106,8 +109,12 @@ python3 -m tools.harness run correctness                       # L2: regressions
 - **L1** — L0 plus `run fmt` and `run code-health`. Run when finishing a change.
 - **L2** — `run correctness`: bug regressions, formatting, code-health,
   strict workspace Clippy and all nextest workspace/all-target tests. Run before
-  opening a code PR. It needs `cargo-nextest` and takes a while on a cold
-  target directory.
+  opening a code PR. It needs `cargo-nextest`, about 12 GiB of RAM, and on a
+  16-thread machine about 45 minutes with a warm target directory (a cold one
+  adds the full workspace build). If your machine cannot run it, open the PR
+  as a draft with your L1 receipts and say so: the PR's CI runs formatting,
+  Clippy, code-health, the bug regressions and a shortened test suite, and the
+  maintainer runs L2 on the merge candidate.
 - Each run writes a receipt under
   `.analysis/validation/<UTC>-<profile>-<unique>/result.json` (`status`,
   `commands`, `exits`, `logs`, `details`, `error`). `prepared` or `--check`
@@ -141,8 +148,9 @@ python3 -m tools.harness run correctness                       # L2: regressions
 4. File or update a bug row in [`docs/bugs/ledger.toml`](docs/bugs/ledger.toml)
    for anything broken you observed — see
    [the bug ledger](docs/bugs/README.md#filing-a-bug). A fix adds `regression`
-   refs and records `fix_commit`; **never set `status = "fixed"` by hand**, the
-   promotion tooling does that after running the negative control.
+   refs. Leave `fix_commit` out of your PR: the maintainer records it after
+   merging, when the commit id is final. **Never set `status = "fixed"` by
+   hand**; the promotion tooling does that after running the negative control.
 
 ## Pull requests
 

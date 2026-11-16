@@ -125,8 +125,9 @@ to bypass native validation.
    outgoing corrections. Cover rejected/stale inputs and custody when relevant.
 3. Add restart/recovery coverage for durable changes and protocol/decode tests
    when those boundaries change. State clearly which tests do not exercise a
-   real client. Run the relevant focused tests and required cargo baseline via
-   the [resource runner](heavy-commands-and-memory.md).
+   real client. Run the relevant focused tests and the
+   [L0–L2 levels](../../CONTRIBUTING.md#validation); on the shared owner host
+   wrap heavy commands in the [resource runner](heavy-commands-and-memory.md).
 4. For player-visible changes, run the exact scenario with an actual client
    under the [real-client gate playbook](real-client-gates.md). A new or changed
    gate requires a negative control that fails when the feature is absent or

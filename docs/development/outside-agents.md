@@ -56,6 +56,7 @@ From the repository root (debug by default):
 
 ```sh
 cargo build -p mc-edge --bin krasnokamen
+cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download --cache data/vanilla  # once per checkout; tests read data/vanilla*
 python3 -m tools.harness list
 ```
 
