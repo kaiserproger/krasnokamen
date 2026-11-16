@@ -361,9 +361,10 @@ Cleanup while agents run:
 - **Receipts and scenarios** (owner, 2026-11-07, narrowed 2026-11-16): a
   finished run keeps its reports, logs and `result.json` (text reports such as
   `.md`, `.yaml`, `.json`, `.txt`, plus `.log` files, delivered `.patch` files
-  and screenshots). Bulky reproducible inputs (client data roots, binaries,
-  jars, `.wasm`, `perf.data`, archives) may be deleted. Crash copies, WAL
-  archives, worlds and `journal/` are run data: keep them unless the owner
+  and screenshots). Only provably reproducible inputs may be deleted: copied
+  client data roots, binaries whose pin or build is kept elsewhere, jars and
+  `.wasm` copies. Crash copies, WAL archives, worlds, `journal/`, recorded
+  profiles (`perf.data`) and archives are run data: keep them unless the owner
   explicitly approves, and never delete them from a failing run. Keep the full
   run while its work is active or a named next task needs it.
 - Don't touch the owner's main checkouts and their `target/`, sccache, or other
