@@ -72,12 +72,15 @@ code stay where the code is.
   component. The code-health ratchet
   ([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07),
   `crates/xtask/src/code_health/ratchet.rs`) counts the top-level modules in the
-  largest one and fails when that number grows; it checks neither single edges
-  nor cycles among submodules. So a new feature is either a submodule of its
-  domain host (as `settlements::migration` above; the count stays the same), or
-  a new top-level module that nothing in the cycle refers to. A new top-level
-  module that the cycle calls and that uses `TickState` joins the cycle and fails
-  the ratchet.
+  largest one and fails above its ceiling; it does not enforce individual edges
+  or cycles among submodules. A new feature is either a submodule of its domain
+  host (as `settlements::migration` above), or a new top-level module that
+  nothing in the cycle refers to. A submodule adds no top-level node itself, but
+  its references can pull other top-level modules into the cycle; check that the
+  largest-cycle count does not grow. A new top-level module joins the cycle if
+  the graph detects paths in both directions; the ratchet fails if that puts the
+  count above its ceiling. It cannot see references resolved only through type
+  inference or method resolution.
 
 Checklist for the change and its review: module path and host named; state,
 systems and tests inside; exported interface listed; exactly one registration

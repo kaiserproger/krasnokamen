@@ -286,9 +286,11 @@ python3 -m tools.harness list
   systems and sibling `*_tests.rs` inside, a narrow explicit interface and one
   registration point owned by its host (for review and parallel lanes; it does
   not break a dependency cycle). It must not grow the number of top-level
-  modules in `mc-core`'s largest cycle, which the code-health ratchet enforces:
-  a feature is a submodule of its domain host, or a new top-level module that
-  nothing in the cycle refers to. Existing code is not moved now; extracting it
+  modules in `mc-core`'s largest cycle (code-health ratchet ceiling): a feature
+  is a submodule of its domain host or a new top-level module that nothing in
+  the cycle refers to, and a submodule's references count as its host's, so
+  they can still pull modules in; check the count on the integrated tree.
+  Existing code is not moved now; extracting it
   is a later goal along [ADR 0021](docs/decisions/0021-build-time-and-crate-split.md)
   ([how-to](docs/development/adding-a-feature.md#new-features-are-modules)).
 - Krasnokamen has no released compatibility surface of its own: migrate callers and

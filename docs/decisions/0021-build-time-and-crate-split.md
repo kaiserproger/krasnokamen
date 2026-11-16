@@ -15,7 +15,8 @@ cycle grows.
 built as its own module (or crate) with its state, systems and tests inside, a
 narrow interface and one host registration point, and does not grow the module
 count of the largest cycle (a submodule of its domain host, or a top-level
-module the cycle does not refer to;
+module the cycle does not refer to; a submodule's references count as its
+host's, so the count is checked on the integrated tree;
 [how-to](../development/adding-a-feature.md#new-features-are-modules)).
 Moving existing code into modules is a separate goal after the 21 November
 announcement, along this ADR's cycle-cut plan; until then existing code stays
