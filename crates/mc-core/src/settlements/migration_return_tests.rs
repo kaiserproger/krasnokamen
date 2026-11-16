@@ -95,6 +95,8 @@ pub(crate) fn step(state: &mut TickState) {
     let mut changes = ChangeSet::default();
     allocator::tick(state, &mut changes);
     crate::villager::brain::tick(state, &mut changes);
+    // Match the real tick's commit barrier: POIs observe committed revisions.
+    state.world.fold_overlay();
     state.tick += 1;
     state.day_time = 2000;
 }
@@ -282,6 +284,7 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
                 allocator::tick(&mut state, &mut changes);
                 construction::tick(&mut state);
                 crate::villager::brain::tick(&mut state, &mut changes);
+                state.world.fold_overlay();
                 let pos = allocator::at(state.entities.pos(builder));
                 let id = state.entities.body(builder).id;
                 outside_builder |= !state
@@ -372,8 +375,8 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
         assert_eq!(row.villager.as_ref().unwrap().inventory, inventory);
         assert!(
             row.villager.as_ref().unwrap().home.is_some(),
-            "daughter member did not reach a roofed bed: {:?}",
-            state.entities.pos(slot)
+            "daughter member did not reach a roofed bed: pos={:?}",
+            state.entities.pos(slot),
         );
     }
 }
