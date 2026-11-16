@@ -7123,3 +7123,14 @@ repro = "source"
 regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::short_stroll_rejects_a_roofed_well_but_keeps_a_dry_neighbor", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::work_route_avoids_roofed_well_and_reaches_the_opposite_rim"]
 failing_first = "reported"
 repro_check = "Fix-only baseline red: wt/SpainCulture/.analysis/validation/20261115T100236-test-6x5764yk/test.log. Existing production wander_to accepted a water-bed node between the two dry rim nodes; the narrow fix rejects wet-foot steps only for short land strolls. Trial-4 then showed work routes entering the same well (native bodies inside it, receipts/SpainCulture/REPORT.md section SpainGrowth): the allocator now charges the vanilla WATER malus 8.0, fix-only control red at wt/SpainCulture/.analysis/validation/20261116T100702-test-zezxy7vv. Collision physics are unchanged. Entry-prevention regression is not proof that a villager already trapped under the 1.95-body/2-block roof can escape; no teleport/unstick fallback. Main owns independent promotion."
+
+[[bug]]
+id = "WORLD-PRUNE-PANICS-ON-CRASH-IMAGE"
+title = "world prune panics on a SIGKILLed battle world image instead of pruning or refusing"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "A11Regression 2026-11-16, receipts/A11Regression/REPORT.md finding 1 and receipts/A11Regression/prune-panic (command.txt, prune-1.log, prune-2.log): `krasnokamen world prune --keep-radius 4194304 --dry-run` on a hash-verified copy of receipts/A11FinalBreaker/real-sigkill-clear-candidate-crash-1-1/crash-copy/world (pin b06399a7e288-10ec419b) exits 101 twice with `core process panic ... crates/mc-core/src/chunk_loader.rs:251:18: Cannot block the current thread from within a runtime`. The same command prunes a clean world normally (probe-export/clean-prune.log); the source image is unchanged. Offline operator tool on a crash image; dry run, no data change."
+repro = "manual"
+regression = []
+failing_first = "reported"
