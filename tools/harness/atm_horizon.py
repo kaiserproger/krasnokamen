@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 from . import runtime
 from .atm_carry import digest, inventory, tree_hash, write_json
@@ -25,9 +26,9 @@ from .profiles import ProfileContext
 
 
 class Horizon:
-    def __init__(self, args, directory, env, receipt):
+    def __init__(self, args, directory, env, receipt, socket):
         self.args, self.directory, self.env, self.receipt = args, directory, env, receipt
-        self.socket = directory / "ctl.sock"
+        self.socket = socket
 
     def call(self, *arguments):
         command = [str(self.args.ctl), "--socket", str(self.socket), *map(str, arguments)]
@@ -66,6 +67,12 @@ class Horizon:
             raise ValueError(f"teleport not observed: expected {xyz}, got {position}")
         return state
 
+@contextmanager
+def control_socket():
+    with tempfile.TemporaryDirectory(prefix="atm-ctl-", dir="/tmp") as directory:
+        yield Path(directory) / "ctl.sock"
+
+
 
 @contextmanager
 def session(args, config, port, label, receipt):
@@ -80,6 +87,7 @@ def session(args, config, port, label, receipt):
                SDL_VIDEODRIVER="x11", PULSE_SERVER="unix:/nonexistent", PIPEWIRE_REMOTE="/nonexistent")
     env.pop("WAYLAND_DISPLAY", None)
     with ExitStack() as cleanup:
+        socket = cleanup.enter_context(control_socket())
         server_log = cleanup.enter_context((directory / "server.log").open("wb"))
         command = [str(args.server), "--config", str(config), "--no-console"]
         server = runtime.start_server(command, cwd=runtime.REPO_ROOT, stdout=server_log,
@@ -91,7 +99,7 @@ def session(args, config, port, label, receipt):
         cleanup.callback(display_log.close)
         cleanup.callback(runtime.stop_process, xvfb)
         env["DISPLAY"] = display
-        horizon = Horizon(args, directory, env, receipt)
+        horizon = Horizon(args, directory, env, receipt, socket)
         command = [str(args.client), "--control-socket", str(horizon.socket), "--offscreen",
                    "--resources", str(args.resources), "--game-dir", str(directory), "--render-distance", "4"]
         client_log = cleanup.enter_context((directory / "client.log").open("wb"))
