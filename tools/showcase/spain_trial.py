@@ -157,6 +157,16 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
+ACCEL_KEYS = ('gathering_yield', 'construction_speed', 'birth_chance')
+ACCEL_LINE = re.compile(r'test_acceleration gathering_yield=(\S+) construction_speed=(\S+) birth_chance=(\S+)')
+
+
+def effective_acceleration(log: str) -> dict[str, float] | None:
+    """The server's startup line with its effective test multipliers; None when this pin logs none."""
+    found = ACCEL_LINE.findall(log)
+    return dict(zip(ACCEL_KEYS, map(float, found[-1]))) if found else None
+
+
 @contextlib.contextmanager
 def spawn_on(cpus: set[int] | None):
     """Processes started inside run on `cpus` from their first instruction.
@@ -296,6 +306,10 @@ def main() -> None:
     parser.add_argument('--client-cpus', help='taskset CPU list for the client and its Xvfb')
     parser.add_argument('--client-render-threads', type=int, help='LP_NUM_THREADS for the client renderer')
     parser.add_argument('--client-max-fps', type=int, help='isolated client settings with vsync off and this FPS cap')
+    # Test-only native multipliers (owner 2026-11-16, OWNER-ACCEL-DECISION.md); acceptance runs keep 1.0.
+    parser.add_argument('--gathering-yield', type=float, default=1.0, help='[test_acceleration] gathering_yield')
+    parser.add_argument('--construction-speed', type=float, default=1.0, help='[test_acceleration] construction_speed')
+    parser.add_argument('--birth-chance', type=float, default=1.0, help='[test_acceleration] birth_chance')
     args = parser.parse_args()
     if args.days < 1 or args.days * 24000 % 60:
         parser.error('days must yield 60 integral simulation intervals')
@@ -325,6 +339,9 @@ def main() -> None:
            'cpus': {'server': args.server_cpus, 'client': args.client_cpus},
            'client_render_threads': args.client_render_threads,
            'fixture_disclosure': 'Bounded gifted supplies in real storage; no structure paste, no population grant, no time add.'}
+    requested = dict(zip(ACCEL_KEYS, (args.gathering_yield, args.construction_speed, args.birth_chance)))
+    run['test_acceleration'] = {'requested': requested, 'effective': None}
+    run['accelerated'] = any(value != 1.0 for value in requested.values())
     driver = Path(__file__).resolve()
     run['driver'] = {'path': str(driver), 'sha256': hashlib.sha256(driver.read_bytes()).hexdigest()}
     run['material_fixture_plan'] = {
@@ -338,7 +355,10 @@ def main() -> None:
     config.write_text(village.server_config_text((runtime.REPO_ROOT / 'playable.toml').read_text(), port=port,
         world_dir=str(out / 'world'), plugins_dir=str(out / 'plugins'), seed=args.seed, civilization=False)
         .replace('view_distance = 4', 'view_distance = 12').replace('simulation_distance = 4', 'simulation_distance = 12')
-        + f'\n[dashboard]\nenabled = true\nbind_address = "127.0.0.1"\nport = {dashboard}\n')
+        + f'\n[dashboard]\nenabled = true\nbind_address = "127.0.0.1"\nport = {dashboard}\n'
+        # Written only when accelerating, so pins without the section still run at their defaults.
+        + ('\n[test_acceleration]\n' + ''.join(f'{key} = {value!r}\n' for key, value in requested.items())
+           if run['accelerated'] else ''))
     (out / 'plugins').mkdir()
     ctx = ProfileContext(out, client='native', windowed=True, timeout_seconds=args.timeout)
     server = client = xvfb = mcp = None
@@ -500,6 +520,7 @@ def main() -> None:
             runtime.stop_process(xvfb)
             log_handle.close()
             run['elapsed_seconds'] = time.monotonic() - started
+            run['test_acceleration']['effective'] = effective_acceleration(log_path.read_text(errors='replace'))
             run['shutdown'] = {'server': server.returncode if server is not None else None, 'client': client.returncode if client is not None else None}
             run['client'] = ctx.client_evidence
             dump(out / 'run.json', run)
@@ -511,9 +532,13 @@ def main() -> None:
             if run['snapshots'] and telemetry_path.exists():
                 chronicle = extract(run, [json.loads(line) for line in telemetry_path.read_text().splitlines() if line], log_path.read_text(errors='replace'))
                 dump(out / 'chronicle.json', chronicle)
-                (out / 'captions.txt').write_text('\n'.join(event['caption'] for event in chronicle['events']) + '\n')
+                captions = [event['caption'] for event in chronicle['events']]
+                if run['accelerated']:
+                    captions.insert(0, f'ACCELERATED TEST RUN (not normal rates): {requested}')
+                (out / 'captions.txt').write_text('\n'.join(captions) + '\n')
             if len(run['frames']) == 60:
-                command = ['ffmpeg', '-nostdin', '-y', '-framerate', '1', '-i', str(out / 'screenshots/frame-%03d.png'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(out / 'timelapse.mp4')]
+                timelapse = out / ('timelapse-ACCELERATED.mp4' if run['accelerated'] else 'timelapse.mp4')
+                command = ['ffmpeg', '-nostdin', '-y', '-framerate', '1', '-i', str(out / 'screenshots/frame-%03d.png'), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(timelapse)]
                 with (out / 'encode.log').open('wb') as log:
                     subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
             dump(out / 'run.json', run)
