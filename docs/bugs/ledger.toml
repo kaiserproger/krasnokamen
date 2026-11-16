@@ -7147,3 +7147,15 @@ source = "Independent review receipts/ReviewPruneFix/REPORT.md (architect-fable,
 repro = "source"
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "SETTLEMENT-REMOVAL-STALE-ROW-BLOCKS-STARTUP"
+title = "A settlement removed after it reached a checkpoint keeps its settlement/<id> native row; the next startup refuses the world with a capture tick mismatch"
+area = "gameplay"
+severity = "blocker"
+status = "open"
+source = "CoreGeneralist 2026-11-16, found while writing migration-transit disk tests (wt/MigrationTransit mc-world red receipt .analysis/validation/20261116T142745-test-ulbyie48). Reachable path on main: `/settlement remove <name>` (command_execution/settlement.rs:156, allowed for the settlement's owner or an operator), then a checkpoint, then startup. commit_checkpoint_stream (mc-world/src/native/checkpoint.rs) only inserts incoming global rows, so the row core/journal.rs list_stale_settlement_rows omitted stays with its old capture tick and validate_globals refuses it at the next read: `native settlement/1: capture tick mismatch`. Write-up with contributing factors and defense layers: receipts/SettlementRowDelete/WRITEUP.md."
+repro = "cargo"
+regression = ["cargo:mc-core:core::settlement_removal_persistence_tests::removed_settlement_row_is_deleted_by_the_next_checkpoint_and_the_world_reopens"]
+failing_first = "reported"
+repro_check = "Red on origin/main d47968232 without the fix: wt/SettlementRowDelete/.analysis/validation/20261116T145232-test-igi5nlbk (reopen fails `Storage(\"native source: native settlement/1: capture tick mismatch\")`)."

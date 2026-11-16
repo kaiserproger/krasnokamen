@@ -893,6 +893,20 @@ impl NativeStore {
                     return Err(failure(immutable, "immutable descriptor changed"));
                 }
             }
+            // Settlement rows are one row per record and complete per image: a
+            // stored row the image omits was deleted by its owner. Leaving it
+            // would keep an older capture tick that the next read refuses.
+            let mut omitted = Vec::new();
+            for row in db(global.iter())? {
+                let (key, _) = db(row)?;
+                let key = key.value();
+                if key.starts_with("settlement/") && !image.globals.contains_key(key) {
+                    omitted.push(key.to_owned());
+                }
+            }
+            for key in &omitted {
+                db(global.remove(key.as_str()))?;
+            }
             for (key, record) in image.globals {
                 let bytes = if key == "checkpoint" {
                     let payload =

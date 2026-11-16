@@ -74,7 +74,9 @@ suffocation applies there).
 
 Touched settlement post-images and deletions share the dimension-wrapped tick
 WAL. Checkpoints store individual `settlement/<id>` rows and the shared
-`settlement_sequence` high-water row, not a single unbounded registry blob.
+`settlement_sequence` high-water row, not a single unbounded registry blob; the
+checkpoint that no longer carries a removed settlement deletes its row in the
+same native transaction.
 The villager membership column is persisted with the entity in the same
 recovery boundary. Recovery validates settlement references instead of silently
 clearing them; unsupported old plugin settlement state does not become a

@@ -1633,6 +1633,9 @@ mod default_game_mode_persistence_tests;
 #[cfg(test)]
 #[path = "core/difficulty_persistence_tests.rs"]
 mod difficulty_persistence_tests;
+#[cfg(test)]
+#[path = "core/settlement_removal_persistence_tests.rs"]
+mod settlement_removal_persistence_tests;
 
 #[cfg(test)]
 #[path = "core_outbox_tests.rs"]
