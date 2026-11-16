@@ -25,7 +25,9 @@ pub struct PruneRequest {
     pub center: Option<[i32; 2]>,
     /// Only chunks whose inhabited time is at most this many ticks are pruned.
     pub max_inhabited_ticks: i64,
-    /// Report what would be pruned and write nothing.
+    /// Report what would be pruned and prune nothing. The world is still
+    /// opened like a server start first, so an uncleanly stopped world has its
+    /// crash journal tail recovered into the store before chunks are judged.
     pub dry_run: bool,
 }
 
