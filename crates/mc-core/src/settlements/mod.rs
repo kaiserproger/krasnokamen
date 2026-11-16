@@ -22,6 +22,7 @@ pub(crate) mod economy_commands;
 pub(crate) mod economy_customization;
 pub(crate) mod forestry;
 pub(crate) mod layout;
+pub(crate) mod migration;
 pub mod presentation;
 mod production;
 pub(crate) use crate::plugin_inventories::native as inventory;
