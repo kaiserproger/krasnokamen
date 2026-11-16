@@ -450,11 +450,12 @@ pub(crate) fn overworld_terrain_from(
                 Some(inputs) => inputs.biome_tags.clone(),
                 None => tags.clone(),
             };
+        let villages =
+            mc_data::Identifier::parse("minecraft:villages").expect("static village structure set");
         let closure = Arc::new(
             mc_worldgen::village::load_village_closure(
                 vanilla_data_dir,
-                &mc_data::Identifier::parse("minecraft:villages")
-                    .expect("static village structure set"),
+                &villages,
                 &registry.blocks,
             )
             .map_err(|error| CoreError::Worldgen(error.to_string()))?,
@@ -505,7 +506,7 @@ pub(crate) fn overworld_terrain_from(
                 .into_iter()
                 .flatten()
             {
-                if set.as_str() != "minecraft:villages" && !sets.contains(set) {
+                if *set != villages && !sets.contains(set) {
                     sets.push(set.clone());
                 }
             }
