@@ -9,12 +9,17 @@ pub(super) fn create(copy: &Path, receipt: &Path) -> anyhow::Result<File> {
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or(Path::new("."))
         .canonicalize()?;
-    let name = receipt.file_name().ok_or_else(|| anyhow::anyhow!("receipt has no filename"))?;
+    let name = receipt
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("receipt has no filename"))?;
     let destination = parent.join(name);
     if destination.starts_with(&root) {
         anyhow::bail!("crash census receipt must be outside the copied world");
     }
-    Ok(OpenOptions::new().write(true).create_new(true).open(destination)?)
+    Ok(OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)?)
 }
 
 #[cfg(test)]
