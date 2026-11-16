@@ -2,8 +2,8 @@
 
 **Date:** 2026-11-16  
 **Status:** Proposed (draft until Main accepts it after independent review).
-Slice 1, migration transit custody, is implemented on `wt/MigrationTransit`;
-nothing else in this ADR is implemented.  
+Migration transit (slice 1) and migration flows are implemented on their
+respective branches; remaining slices retain their delivery status below.  
 **Related:** [0013](0013-core-model-v2.md) (native authority, one tick WAL),
 [0020](0020-entity-checkpoints-at-one-million.md) (entity tombstones),
 [0021](0021-build-time-and-crate-split.md) (module cycle),
@@ -205,6 +205,7 @@ Write sets are disjoint; each slice owns its tests and docs paragraph.
 | Slice | Writes | Delivers |
 |---|---|---|
 | 1 Migration transit (done on branch) | `settlements/transit.rs`, `transit_tests.rs`, `transit_disk_tests.rs`, `households.rs` leave/join, `registry.rs` field, `settlements/persistence.rs` hookups, `journal.rs`/`journal/replay.rs` `Transit` entry, `mc-world` native checkpoint rows, `mc-world-conversion` census | this ADR's section 6 |
+| Migration flows (done on branch) | `settlements/migration.rs`, `villager/return_home.rs`, one brain registration (+ tests) | runtime policy owns membership relocation and immigrant spawn; weak physical return goals; [Migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return) |
 | 2 Game-time economy clocks | `settlements/commerce.rs`, `settlements/caravan.rs` (+ tests) | wages and caravan deadlines stop under `/tick freeze`; double-count test across freeze |
 | 3 Production and consumption | `settlements/production.rs`, new `settlements/offscreen_production.rs` (+ tests) | deferred portions and food debit with load reconciliation |
 | 4 Construction labour | new `settlements/offscreen_construction.rs`, one call in `construction.rs` | labour credit and accelerated application on load |
