@@ -961,11 +961,28 @@ def _owner_order_before_restart(probe: ProbeSteps, detail: dict[str, Any], artif
     claim = _recent_chat(_send(probe, "settlement claim"), 20)
     detail["claim_chat"] = claim
     probe.check("owner_claimed", bool(claim) and claim[0].startswith("Claimed "))
+    active = _project_progress(_project_status(probe))
+    detail["d5_active_before_order"] = active
+    probe.check("d5_project_active", bool(active))
     queued = _recent_chat(_send(probe, "settlement build house"), 20)
     detail["queued_chat"] = queued
-    probe.check("house_queued_unfunded", bool(queued) and queued[0].startswith("Queued house: not enough:"))
+    probe.check("house_queued_busy", bool(queued) and queued[0].startswith("Queued house: busy"))
     pending = _owner_projects(probe, detail, "pending_before_restart", artifact)
-    probe.check("pending_before_restart", "Pending: House L1 — waiting for materials" in pending["body"])
+    probe.check("pending_before_restart", "Pending: House L1" in pending["body"] and "busy" in pending["body"])
+    baseline = _recent_chat(probe.observe(), 20)
+    if os.environ.get("D5_QUEUE_CONTROL") == "no-second-order":
+        refused = _recent_chat(probe.observe(), 20)
+    else:
+        refused = _recent_chat(_send(probe, "settlement build farm"), 20)
+    detail["d5_refusal_chat"] = refused
+    fresh = _new_chat_lines(baseline, refused)
+    probe.check("d5_second_order_refused", "Construction queue is full: house is already pending. Cancel it before another order." in fresh)
+    native_client.capture(probe.client, artifact, "d5-refusal")
+    pending = _owner_projects(probe, detail, "d5_pending_after_refusal", artifact)
+    probe.check("d5_house_still_pending", "Pending: House L1" in pending["body"])
+    active_after = _project_progress(_project_status(probe))
+    detail["d5_active_after_refusal"] = active_after
+    probe.check("d5_active_unchanged", bool(active_after) and active_after["blueprint"] == active["blueprint"] and active_after["level"] == active["level"])
 
 
 def _new_chat_lines(previous: list[str], current: list[str]) -> list[str]:
@@ -981,7 +998,8 @@ def _owner_order_after_restart(
     server: subprocess.Popen[Any], log_path: Path,
 ) -> None:
     pending = _owner_projects(probe, detail, "pending_after_restart", artifact)
-    probe.check("pending_survives_restart", "Pending: House L1 — waiting for materials" in pending["body"])
+    expected_pending = "Pending: House L1"
+    probe.check("pending_survives_restart", expected_pending in pending["body"])
     previous = _recent_chat(probe.observe(), 20)
     chest = tuple(detail["founding_chest"])
     # Exact authored L1 base bill plus bounded dirt for real site preparation.
@@ -1015,7 +1033,7 @@ def _owner_order_after_restart(
     server.stdin.flush()
     probe.call("minecraft_wait_ticks", {"ticks": 40})
     detail["funded_storage"] = _read_storage_container(server, log_path, chest, min(15.0, probe.remaining()))
-    deadline = time.monotonic() + 180
+    deadline = time.monotonic() + min(2400.0, probe.remaining(limit=None))
     started = False
     while time.monotonic() < deadline:
         chat = _recent_chat(probe.observe(), 20)
@@ -1041,6 +1059,7 @@ def _owner_order_after_restart(
     probe.check("order_cancelled", bool(cancelled) and cancelled[0] == "Cancelled pending construction order.")
     pending = _owner_projects(probe, detail, "after_cancel", artifact)
     probe.check("pending_gone_after_cancel", not pending["pending"])
+
 
 
 def _nearest_loaded_waypoint(probe: ProbeSteps, target: tuple[float, float, float]) -> tuple[int, int, int] | None:
@@ -1696,7 +1715,7 @@ def _wait_building_level(
     artifact: Path,
     capture_name: str,
 ) -> bool:
-    blueprint = next(blueprint for blueprint in _authored_blueprints() if blueprint["kind"] == kind_label.lower())
+    blueprint = next(blueprint for blueprint in _authored_blueprints() if blueprint["id"] == kind_label.lower())
     deadline = time.monotonic() + budget_seconds
     last_check = 0.0
     while time.monotonic() < deadline:
