@@ -47,41 +47,57 @@ mod stop_tests;
 type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
 pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
 
-/// Minimum wall-clock interval between two "input queue full" warnings.
+/// Minimum interval between two "input queue full" warnings.
 const INPUT_DROP_WARN_INTERVAL_MS: u64 = 10_000;
 
 /// Rate limiter for the input-drop warning: at most one warning per
 /// [`INPUT_DROP_WARN_INTERVAL_MS`] across every submitting thread.
 ///
-/// One atomic load on the drop path and a CAS only when the interval has
-/// expired, so the full-queue path never takes a lock or logs per input.
-/// `last_ms == 0` means "never warned".
-#[derive(Debug, Default)]
+/// Time is read from one monotonic [`Instant`] origin, never the wall clock,
+/// so an NTP step can neither re-arm nor mute the warning, and there is no
+/// zero-clock case: the first claim always warns. One atomic load on the drop
+/// path and a CAS only when the interval has expired, so the full-queue path
+/// never takes a lock and never logs per input.
+#[derive(Debug)]
 struct DropWarn {
+    origin: std::time::Instant,
+    /// Milliseconds since `origin` of the last emitted warning;
+    /// [`DropWarn::NEVER`] until the first one.
     last_ms: AtomicU64,
 }
 
 impl DropWarn {
-    /// True when a drop at `now_ms` should warn; claims the interval when so.
-    fn claim(&self, now_ms: u64) -> bool {
-        let now_ms = now_ms.max(1);
+    /// `last_ms` value meaning "never warned".
+    const NEVER: u64 = u64::MAX;
+
+    fn new() -> Self {
+        Self {
+            origin: std::time::Instant::now(),
+            last_ms: AtomicU64::new(Self::NEVER),
+        }
+    }
+
+    /// True when this drop should warn; claims the interval when so.
+    fn claim(&self) -> bool {
+        self.claim_at(
+            self.origin
+                .elapsed()
+                .as_millis()
+                .min(u128::from(Self::NEVER - 1)) as u64,
+        )
+    }
+
+    /// [`DropWarn::claim`] at `now_ms` after the origin, so the interval
+    /// contract is testable without sleeping.
+    fn claim_at(&self, now_ms: u64) -> bool {
         let last = self.last_ms.load(Ordering::Relaxed);
-        if last != 0 && now_ms.saturating_sub(last) < INPUT_DROP_WARN_INTERVAL_MS {
+        if last != Self::NEVER && now_ms.saturating_sub(last) < INPUT_DROP_WARN_INTERVAL_MS {
             return false;
         }
         self.last_ms
             .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
             .is_ok()
     }
-}
-
-/// UNIX milliseconds; `0` when the clock is unavailable (the throttle then
-/// warns on every expired interval, never more than once per claim).
-fn unix_ms_u64() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis().min(u128::from(u64::MAX)) as u64)
-        .unwrap_or(0)
 }
 
 /// Publish impulse epochs after travel, resolving stable entity ids in their
@@ -1108,7 +1124,7 @@ impl Core {
                 #[cfg(test)]
                 backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
-                input_drop_warn: DropWarn::default(),
+                input_drop_warn: DropWarn::new(),
                 tick_tx: tick_tx.downgrade(),
                 knockback_publication,
                 timing_tx: timing_tx.downgrade(),
@@ -1249,7 +1265,7 @@ impl Core {
             Ok(()) => true,
             Err(_) => {
                 let dropped = self.inner.input_dropped.fetch_add(1, Ordering::Relaxed) + 1;
-                if self.inner.input_drop_warn.claim(unix_ms_u64()) {
+                if self.inner.input_drop_warn.claim() {
                     tracing::warn!(
                         dropped,
                         capacity = self.inner.input_tx.max_capacity(),

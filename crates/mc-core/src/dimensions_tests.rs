@@ -2795,11 +2795,13 @@ fn data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wa
     assert_eq!(replayed.inventory, before.inventory);
 }
 
-// B6 (CS341 REPORT-B.md): the knockback epoch publication used to turn the
-// "tick output snapshot is unique" assumption into an `.expect` panic and to
-// deep-copy the epoch map on every impulse tick. These pin the two properties
-// the fix keeps: a shared snapshot is rebuilt instead of panicking, and an
-// unchanged tick publishes the same (non-empty) map handle without a copy.
+// B6 (CS341 REPORT-B.md): the knockback epoch publication turned the "tick
+// output snapshot is unique" assumption into an `.expect` panic. The fix
+// rebuilds a shared snapshot instead of panicking, and keeps the epoch
+// assignment outside the change condition so an unchanged tick republishes the
+// same (non-empty) map handle. The per-impulse `Arc::make_mut` copy is kept by
+// decision (an O(K) node walk over tracked connections, measured and recorded
+// in the row); these checks pin the two properties above, not that copy.
 
 #[test]
 fn shared_tick_snapshot_never_panics_the_knockback_observer() {

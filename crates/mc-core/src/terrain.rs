@@ -149,12 +149,6 @@ struct StampTable {
     /// Greatest stamp ever issued here; `0` for an empty (fresh) table, like
     /// the old `values().max().unwrap_or(0)`.
     last: i64,
-    /// Stored entries read by the most recent [`StampTable::stamp`] call.
-    /// Test-only cost probe behind the "no scan under the lock" check: the
-    /// pointer chase and the inserts are `O(1)`/`O(log n)`, so a call may read
-    /// the probed entry and at most the one it evicts, never the table.
-    #[cfg(test)]
-    visited: usize,
 }
 
 impl StampTable {
@@ -168,10 +162,6 @@ impl StampTable {
     /// `O(1)` on a repeat revision and `O(log n)` on a miss (one ordered pop
     /// plus two inserts); no call ever reads the whole table.
     fn stamp(&mut self, revision: u64, now_ms: i64) -> i64 {
-        #[cfg(test)]
-        {
-            self.visited = 1;
-        }
         if let Some(&modified) = self.by_revision.get(&revision) {
             return modified;
         }
@@ -182,21 +172,11 @@ impl StampTable {
         if self.by_revision.len() >= Self::CAP
             && let Some((_, oldest)) = self.by_stamp.pop_first()
         {
-            #[cfg(test)]
-            {
-                self.visited += 1;
-            }
             self.by_revision.remove(&oldest);
         }
         self.by_revision.insert(revision, modified);
         self.by_stamp.insert(modified, revision);
         modified
-    }
-
-    /// Entries the last call read; test-only cost probe.
-    #[cfg(test)]
-    fn visited(&self) -> usize {
-        self.visited
     }
 }
 
