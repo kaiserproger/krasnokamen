@@ -1072,6 +1072,12 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
         };
         let target = [pos[0] + 3.0, pos[1], pos[2] + 7.0];
         aim(&mut state, target);
+        // The guard pin: with a look target and the facing behind it, the rest
+        // must be refused (red without the fix, where the row rests).
+        assert!(
+            !can_early_rest(&mut state, slot),
+            "{species} must not rest while its facing is behind the target"
+        );
         // One turn of at most 90 degrees, plus at most one sub-quantum step.
         let mut steps = 0;
         while !can_early_rest(&mut state, slot) {
