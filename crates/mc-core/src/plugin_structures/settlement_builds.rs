@@ -620,6 +620,7 @@ pub(crate) fn source_images(state: &TickState, id: SettlementId) -> Vec<inventor
 pub(super) fn debit(
     state: &mut TickState,
     id: SettlementId,
+    handle: &str,
     builder: &str,
     required: &BTreeMap<String, u64>,
     cells: &[super::Cell],
@@ -635,10 +636,13 @@ pub(super) fn debit(
     }) {
         return Err(Failure::Forbidden);
     }
-    let project = state
-        .settlements
-        .get(id)
-        .and_then(|record| crate::settlements::construction::projects(record).next());
+    // The handle names the project this step belongs to, and the builder must
+    // be the one bound to it: a parallel settlement's builder cannot pay for
+    // another project's cells (S1b/S2).
+    let project = state.settlements.get(id).and_then(|record| {
+        crate::settlements::construction::project_of_builder(record, uuid)
+            .filter(|project| project.structure == handle)
+    });
     // A new site and an upgrade both carry clear-stage cells: an upgrade that
     // clears natural forest or a registered tree must credit the same drops.
     let preparing = project.is_some();
@@ -1098,6 +1102,7 @@ fn haul_plan(
 pub(crate) fn fetch(
     state: &mut TickState,
     uuid: uuid::Uuid,
+    handle: &str,
     position: [i32; 3],
     item: u32,
 ) -> Result<(), Failure> {
@@ -1115,10 +1120,13 @@ pub(crate) fn fetch(
     let carry = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
     let (plan, mut remaining_bill) = {
         let ledger = ledger(state)?;
+        // Only the builder bound to this project hauls for it, and only against
+        // that project's remaining bill (S1b/S2: carry is per project).
         let project = state
             .settlements
             .get(id)
-            .and_then(|record| crate::settlements::construction::projects(record).next())
+            .and_then(|record| crate::settlements::construction::project_of_builder(record, uuid))
+            .filter(|project| project.structure == handle)
             .ok_or(Failure::Forbidden)?;
         let record = structure(&ledger, &owner(id), &project.structure)?;
         let mut bill = remaining(record)

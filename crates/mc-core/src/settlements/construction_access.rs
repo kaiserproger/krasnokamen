@@ -37,6 +37,25 @@ pub(crate) fn project_for_structure<'a>(
     projects(record).find(|project| project.structure == structure)
 }
 
+/// The project this villager builds.
+///
+/// S0 has one project per settlement and records only a *borrowed* gatherer on
+/// it, so the single active project answers for every builder of the
+/// settlement. S1b replaces this body with the persisted `builder` binding; the
+/// callers (`debit`, `fetch`, the builder brain) never change.
+pub(crate) fn project_of_builder(
+    record: &SettlementRecord,
+    builder: uuid::Uuid,
+) -> Option<&Project> {
+    projects(record)
+        .find(|project| {
+            project
+                .borrowed_builder
+                .is_some_and(|(borrowed, _)| borrowed == builder)
+        })
+        .or_else(|| projects(record).next())
+}
+
 /// Every pending owner request, in the order it was submitted.
 pub(crate) fn orders(record: &SettlementRecord) -> impl Iterator<Item = &OwnerOrder> {
     record.pending_order.iter()

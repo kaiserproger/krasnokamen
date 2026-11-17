@@ -337,12 +337,13 @@ pub(super) fn owns_project(record: &SettlementRecord, project: &Project) -> bool
 
 pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId) {
     let record = state.settlements.get(parent).expect("founding parent");
-    if record
+    if let Some(project) = record
         .project
         .as_ref()
-        .is_some_and(|project| owns_project(record, project))
+        .filter(|project| owns_project(record, project))
     {
-        cancel_project(state, parent).expect("cancel admitted founding structure");
+        let structure = project.structure.clone();
+        cancel_project(state, parent, &structure).expect("cancel admitted founding structure");
     }
     let record = state.settlements.get_mut(parent).unwrap();
     record.founding = None;

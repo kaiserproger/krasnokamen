@@ -18,7 +18,8 @@ pub(crate) use availability::gatherer_for_item;
 #[path = "construction_access.rs"]
 mod access;
 pub(crate) use access::{
-    bound_builder, head_order, idle, project_for_structure, projects, record_heap_bytes, upgrading,
+    bound_builder, head_order, idle, orders, project_for_structure, project_of_builder, projects,
+    record_heap_bytes, upgrading,
 };
 pub(crate) use access::{head_order_of, projects_of};
 
@@ -221,7 +222,7 @@ pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<
 
 pub(crate) fn pending_reason(state: &TickState, id: SettlementId) -> Option<String> {
     let record = state.settlements.get(id)?;
-    let order = record.pending_order.as_ref()?;
+    let order = orders(record).next()?;
     if claim_slot(state, id).is_err() {
         return Some("busy".into());
     }
@@ -335,11 +336,13 @@ fn claim_slot(state: &TickState, id: SettlementId) -> Result<(), String> {
 
 /// Cancel without undoing placed cells or refunding stock. Callers own the
 /// admission policy; stall recovery must never discard paid construction.
-fn cancel_project(state: &mut TickState, id: SettlementId) -> Result<(), String> {
+/// Addressed by structure handle so a parallel settlement cancels exactly its
+/// own project (S1b); a handle that names no active project is a no-op.
+fn cancel_project(state: &mut TickState, id: SettlementId, structure: &str) -> Result<(), String> {
     let Some((handle, borrowed)) = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.as_ref())
+        .and_then(|record| access::project_for_structure(record, structure))
         .map(|project| (project.structure.clone(), project.borrowed_builder))
     else {
         return Ok(());
@@ -2127,7 +2130,7 @@ pub(crate) fn retry_preparation(
     project: &Project,
 ) -> Result<(), String> {
     executor::return_carry(state, id);
-    cancel_project(state, id)?;
+    cancel_project(state, id, &project.structure)?;
     let record = state
         .settlements
         .get_mut(id)
@@ -2453,11 +2456,14 @@ fn release_builder(
     }
 }
 
-pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
+/// Finishes the project that owns `structure`. A handle that names no active
+/// project of this settlement finishes nothing (S1b: several projects).
+pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure: &str) -> bool {
     let Some(project) = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.clone())
+        .and_then(|record| access::project_for_structure(record, structure))
+        .cloned()
     else {
         return false;
     };

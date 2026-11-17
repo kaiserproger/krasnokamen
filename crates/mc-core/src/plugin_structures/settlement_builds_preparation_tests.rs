@@ -18,6 +18,7 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
     // The same canonical debit must credit clear-cell drops for an upgrade,
     // not only for a new site's preparation.
     project.building = Some(crate::settlements::buildings::BuildingId(1));
+    let handle = project.structure.clone();
     state.settlements.get_mut(id).unwrap().project = Some(project);
     let builder = state.entities.row(builder).uuid.to_string();
     let before = counts(&state);
@@ -33,7 +34,7 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
         *expected.entry(drop.item_id).or_default() += drop.count;
     }
     assert_eq!(
-        debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+        debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
         Ok(())
     );
     assert_eq!(counts(&state), expected, "upgrade clear drops once");
@@ -52,6 +53,15 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
     crate::settlements::construction::tests::fund(&mut state, "storage", 1);
     crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
+    let handle = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .unwrap()
+        .structure
+        .clone();
     let builder = state.entities.row(builder).uuid.to_string();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let cells = [super::super::Cell {
@@ -68,7 +78,7 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
         let value = block(&state, name, &[]);
         state.world.set_block(root[0], root[1], root[2], value);
         assert_eq!(
-            debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+            debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
             Err(Failure::Blocked),
             "{name}"
         );

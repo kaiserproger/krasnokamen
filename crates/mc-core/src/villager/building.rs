@@ -378,7 +378,7 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         let next = match executor::next_cell(state, id, &project.structure) {
             Ok(Some(next)) => next,
             Ok(None) => {
-                construction::finish_project(state, id);
+                construction::finish_project(state, id, &project.structure);
                 return;
             }
             Err(_) => return,
@@ -414,8 +414,13 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
                 && super::mining::near(state, slot, point, 2.5)
             {
                 let uuid = state.entities.row(slot).uuid;
-                if let Err(reason) = executor::fetch(state, uuid, [point.x, point.y, point.z], item)
-                {
+                if let Err(reason) = executor::fetch(
+                    state,
+                    uuid,
+                    &project.structure,
+                    [point.x, point.y, point.z],
+                    item,
+                ) {
                     construction::note_build_refusal(state, id, reason);
                 }
             }
@@ -427,7 +432,7 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         let uuid = state.entities.row(slot).uuid;
         match executor::advance(state, id, &project.structure, uuid) {
             Ok(true) => {
-                construction::finish_project(state, id);
+                construction::finish_project(state, id, &project.structure);
                 return;
             }
             Ok(false) => {}

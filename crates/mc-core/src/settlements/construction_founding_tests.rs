@@ -181,7 +181,7 @@ fn an_outpost_builder_outside_the_civil_radius_still_places_paid_cells() {
         .unwrap()
         .unwrap();
     let uuid = state.entities.row(builder).uuid;
-    executor::fetch(&mut state, uuid, [1, 201, 1], item).unwrap();
+    executor::fetch(&mut state, uuid, &project.structure, [1, 201, 1], item).unwrap();
     state
         .world
         .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(

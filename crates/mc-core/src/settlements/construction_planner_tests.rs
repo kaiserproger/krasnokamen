@@ -2029,7 +2029,10 @@ fn running_structure_neither_certifies_nor_admits_an_upgrade() {
     }
     let certified = state.settlements.get(id).unwrap().buildings.len();
     fund(&mut state, "farm", 2);
-    assert!(!finish_project(&mut state, id), "Running never certifies");
+    assert!(
+        !finish_project(&mut state, id, &project.structure),
+        "Running never certifies"
+    );
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.buildings.len(), certified, "no farm certificate yet");

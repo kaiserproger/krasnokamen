@@ -1127,7 +1127,14 @@ fn execute_operation(
             // Debit and placement are preflighted on the same single tick owner.
             // Their queues and the durable receipt join the root tick WAL image.
             if let Some(settlement) = record.settlement {
-                settlement_builds::debit(state, settlement, reservation_ref, &consumed, portion)?;
+                settlement_builds::debit(
+                    state,
+                    settlement,
+                    &structure_id,
+                    reservation_ref,
+                    &consumed,
+                    portion,
+                )?;
             } else {
                 let reservation = inventories::reservation(state, owner, reservation_ref)?;
                 inventories::commit_reserved_debit(
