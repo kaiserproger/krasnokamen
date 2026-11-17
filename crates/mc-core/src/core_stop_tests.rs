@@ -379,3 +379,130 @@ fn stop_error_display_includes_source_chain() {
         "journal write failed: disk full"
     );
 }
+
+/// A startup failure after the journal owner started must join it before
+/// returning Err, with the world lease held until it has ended. Otherwise the
+/// flock is released while the journal owner is still a writer, so a second
+/// start on the same world becomes a second writer.
+#[test]
+fn startup_failure_after_the_journal_owner_started_joins_it_before_returning() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.checkpoint_every_ticks = u64::MAX;
+    Core::open(config.clone())
+        .expect("create the world")
+        .shutdown();
+    // `InputLog::open` is the fallible step after the journal owner spawned: a
+    // regular file in the log directory's place fails exactly that step.
+    std::fs::write(
+        directory.path().join(crate::input_log::DIR),
+        b"not a directory",
+    )
+    .unwrap();
+    // Hold the owner's exit, so "joined before returning" is measured instead of
+    // racing the owner's own quick exit on the closed work queue.
+    let (entered_tx, entered) = std::sync::mpsc::channel();
+    let (release, release_rx) = std::sync::mpsc::channel();
+    *super::journal::JOURNAL_EXIT_HOLD.lock() =
+        Some((directory.path().to_path_buf(), entered_tx, release_rx));
+
+    let mut failing = config.clone();
+    failing.input_log = true;
+    let (returned_tx, returned) = std::sync::mpsc::channel();
+    let opening = std::thread::spawn(move || {
+        let result = Core::open(failing).map(|_| ());
+        let _ = returned_tx.send(());
+        result
+    });
+    entered
+        .recv()
+        .expect("the journal owner never reached its exit path");
+    // A start that joins its journal owner cannot return while that owner is
+    // held here; the deadline only bounds a start that does not join at all.
+    let early = returned.recv_timeout(std::time::Duration::from_secs(2));
+    release.send(()).expect("release the journal owner");
+    let error = opening
+        .join()
+        .expect("failed start thread")
+        .expect_err("start must fail")
+        .to_string();
+    assert!(
+        early.is_err(),
+        "the failed start returned while its journal owner was still running"
+    );
+    assert!(error.contains("input log"), "{error}");
+    // Joined and lease-free: the same process reopens the world instead of
+    // meeting a live writer behind a released lease.
+    Core::open(config)
+        .expect("reopen after the failed start")
+        .shutdown();
+}
+
+/// The startup owner guard stops and joins its owners before the lease is
+/// released, for both windows `Core::open` has: the journal owner alone (the
+/// tick never started) and the journal plus tick owners.
+#[test]
+fn startup_owner_guard_stops_and_joins_before_the_lease_is_released() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let directory = tempfile::tempdir().unwrap();
+    let _lease = lock_world_lease(directory.path()).expect("lease the world");
+
+    // Journal only: nothing else owns the work queue, so closing it ends the
+    // journal owner and the guard's drop joins it.
+    let journal_done = Arc::new(AtomicBool::new(false));
+    let (work_tx, work_rx) = std::sync::mpsc::sync_channel::<JournalWork>(1);
+    let (shutdown_tx, _) = std::sync::mpsc::channel::<()>();
+    let flag = Arc::clone(&journal_done);
+    let journal = std::thread::spawn(move || {
+        let _ = work_rx.recv();
+        flag.store(true, Ordering::SeqCst);
+    });
+    drop(stop::StartupOwners::new(shutdown_tx, work_tx, journal));
+    assert!(
+        journal_done.load(Ordering::SeqCst),
+        "journal owner outlived the guard"
+    );
+
+    // Journal and tick: the guard signals the tick owner, joins it, and only
+    // then releases anything; a tick that is still running must see the world
+    // still leased.
+    let tick_done = Arc::new(AtomicBool::new(false));
+    let lease_held = Arc::new(AtomicBool::new(false));
+    let second_journal_done = Arc::new(AtomicBool::new(false));
+    let (work_tx, work_rx) = std::sync::mpsc::sync_channel::<JournalWork>(1);
+    let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel::<()>();
+    let flag = Arc::clone(&second_journal_done);
+    let journal = std::thread::spawn(move || {
+        let _ = work_rx.recv();
+        flag.store(true, Ordering::SeqCst);
+    });
+    let mut guard = stop::StartupOwners::new(shutdown_tx, work_tx, journal);
+    let work = guard.take_work();
+    let probe_dir = directory.path().to_path_buf();
+    let running = Arc::clone(&tick_done);
+    let held = Arc::clone(&lease_held);
+    let tick = std::thread::spawn(move || {
+        let probe = mc_world::storage::open_for_lease(&probe_dir).expect("probe the lease");
+        held.store(
+            matches!(probe.try_lock(), Err(std::fs::TryLockError::WouldBlock)),
+            Ordering::SeqCst,
+        );
+        let _ = shutdown_rx.recv();
+        let _ = work.send(super::JournalWork::Shutdown);
+        running.store(true, Ordering::SeqCst);
+    });
+    guard.set_tick(tick);
+    drop(guard);
+    assert!(
+        tick_done.load(Ordering::SeqCst),
+        "tick owner outlived the guard"
+    );
+    assert!(
+        second_journal_done.load(Ordering::SeqCst),
+        "journal owner outlived the tick owner's Shutdown item"
+    );
+    assert!(
+        lease_held.load(Ordering::SeqCst),
+        "the lease was free while an owner thread was still running"
+    );
+}

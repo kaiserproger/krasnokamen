@@ -44,8 +44,8 @@ mod stop;
 #[path = "core_stop_tests.rs"]
 mod stop_tests;
 
-type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
-pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
+mod outbox;
+pub(crate) use outbox::*;
 
 /// Publish impulse epochs after travel, resolving stable entity ids in their
 /// current world rather than only the world where the explosion happened.
@@ -96,46 +96,6 @@ pub use session::PlayerSession;
 #[cfg(test)]
 #[path = "core_session_tests.rs"]
 mod session_tests;
-
-/// Only edge consumers share this receiver; the tick owns its sender.
-#[derive(Debug)]
-struct ReliableOutbox(parking_lot::Mutex<OutboxReceiver>);
-
-#[derive(Debug)]
-struct OutboxReceiver {
-    receiver: std::sync::mpsc::Receiver<TimedOutboxBatch>,
-    pending: Option<TimedOutboxBatch>,
-}
-
-impl ReliableOutbox {
-    fn drain(&self, through: u64) -> OutboxBatch {
-        let mut receiver = self.0.lock();
-        let mut store: HashMap<ConnectionId, Vec<PlayerChange>> = HashMap::new();
-        while let Some((tick, batch)) = receiver
-            .pending
-            .take()
-            .or_else(|| receiver.receiver.try_recv().ok())
-        {
-            if tick > through {
-                receiver.pending = Some((tick, batch));
-                break;
-            }
-            for (connection, queue) in batch {
-                let slot = store.entry(connection).or_default();
-                if !slot
-                    .last()
-                    .is_some_and(|change| matches!(change, PlayerChange::Disconnect { .. }))
-                {
-                    slot.extend(queue);
-                }
-            }
-        }
-        store
-            .into_iter()
-            .filter(|(_, queue)| !queue.is_empty())
-            .collect()
-    }
-}
 
 use mc_world::ChunkGenerator;
 
@@ -936,6 +896,9 @@ impl Core {
         let (moderation_selector_tx, moderation_selector_rx) = mpsc_channel(32);
         let (tick_tx, _) = broadcast::channel::<TickOutput>(config.broadcast_cap.max(1));
         let (timing_tx, _) = broadcast::channel::<(u64, TickTimes)>(16384);
+        // Bound the one presented-to-edge queue in bytes; the tick charges each
+        // batch and the edge releases it (see `core/outbox.rs`).
+        let outbox_budget = Arc::new(OutboxBudget::new(config.outbox_queue_bytes));
         let (outbox_tx, outbox_rx) = std::sync::mpsc::channel();
         let (work_tx, work_rx) = journal_work_channel();
         let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel::<()>();
@@ -972,6 +935,12 @@ impl Core {
             })
             .map_err(|err| CoreError::Storage(err.to_string()))?;
 
+        // Owners are alive from here on. This guard is declared after
+        // `world_lease` above, so on any later startup error it drops first and
+        // stops and joins them while the lease is still held: the world never
+        // becomes leasable while a journal/tick owner is still writing it.
+        let mut owners = stop::StartupOwners::new(shutdown_tx, work_tx, journal_handle);
+
         // Only known unlocked sessions pass the edge fence; a connection not
         // processed by the tick yet must never inherit administrative access.
         let unlocked_sessions = Arc::new(parking_lot::RwLock::new(BTreeSet::new()));
@@ -1006,8 +975,11 @@ impl Core {
             timing_broadcast: timing_tx.clone(),
             #[cfg(test)]
             pause_state: pause_state_tx,
-            outbox: outbox_tx,
-            work_tx,
+            outbox: OutboxSender::new(outbox_tx, Arc::clone(&outbox_budget)),
+            outbox_stall: StallWatch::new(std::time::Duration::from_millis(
+                config.outbox_stall_ms.max(1),
+            )),
+            work_tx: owners.take_work(),
             journal_budget,
             unlocked_sessions: Arc::clone(&unlocked_sessions),
             shutdown_rx,
@@ -1026,10 +998,16 @@ impl Core {
                 tick_loop(tick_state, channels);
             })
             .map_err(|err| CoreError::Storage(err.to_string()))?;
-        build_gate.set_tick_owner(tick_handle.thread().clone(), input_tx.clone());
+        owners.set_tick(tick_handle);
+        build_gate.set_tick_owner(owners.tick_thread(), input_tx.clone());
 
         // Snapshot the worker count once.
         let worker_count = crate::tick::worker_threads();
+        let stop::StartedOwners {
+            shutdown,
+            tick,
+            journal,
+        } = owners.started();
         Ok(Self {
             inner: Arc::new(CoreInner {
                 #[cfg(test)]
@@ -1048,13 +1026,10 @@ impl Core {
                 timing_tx: timing_tx.downgrade(),
                 #[cfg(test)]
                 pause_state: pause_state_rx,
-                outbox: ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
-                    receiver: outbox_rx,
-                    pending: None,
-                })),
-                shutdown_tx: std::sync::Mutex::new(Some(shutdown_tx)),
-                tick_handle: std::sync::Mutex::new(Some(tick_handle)),
-                journal_handle: std::sync::Mutex::new(Some(journal_handle)),
+                outbox: ReliableOutbox::new(outbox_rx, outbox_budget),
+                shutdown_tx: std::sync::Mutex::new(Some(shutdown)),
+                tick_handle: std::sync::Mutex::new(Some(tick)),
+                journal_handle: std::sync::Mutex::new(Some(journal)),
                 world_lease: std::sync::Mutex::new(Some(world_lease)),
                 worker_count,
                 world_spawn,
@@ -1400,6 +1375,22 @@ impl Core {
     /// Drain only batches represented in the published snapshot, preserving newer batches.
     pub fn try_drain_outbox_through(&self, tick: u64) -> Vec<(ConnectionId, Vec<PlayerChange>)> {
         self.inner.outbox.drain(tick)
+    }
+
+    /// Estimated bytes queued in the tick→edge reliable handoff right now.
+    ///
+    /// Worst case is the configured hard cap (`outbox_queue_bytes`); a
+    /// non-empty queue that stops draining for `OUTBOX_STALL_LIMIT` halts the
+    /// tick fail-closed instead of growing further.
+    #[must_use]
+    pub fn outbox_queued_bytes(&self) -> usize {
+        self.inner.outbox.budget().queued_bytes()
+    }
+
+    /// Peak queued reliable bytes since this core opened.
+    #[must_use]
+    pub fn outbox_peak_bytes(&self) -> usize {
+        self.inner.outbox.budget().peak_bytes()
     }
 
     /// Force a durable checkpoint through the tick capture and journal writer.

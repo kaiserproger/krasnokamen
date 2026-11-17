@@ -334,6 +334,14 @@ Raw command, pin provenance and logs are retained in the executor's
 7. Names alone are not evidence: inspect the owning symbol before changing a
    specific mutation or claiming a test covers it. Historical warehouse-pilot
    tests and old multi-journal recovery receipts do not prove native v2 behavior.
+8. Every cross-thread queue is bounded in bytes or items, or it has a written
+   reason and a counter. The tick→edge reliable handoff is the one the audit
+   caught unbounded: it now charges `outbox_queue_bytes` (256 MiB, warning at
+   8 MiB) with a 10 s watchdog that fires only while queued bytes exist and no
+   drain has consumed a batch, a push that does not fit never blocks and never
+   drops, and the halt's terminal `Disconnect` batch is admitted past the cap
+   (`crates/mc-core/src/core/outbox.rs`,
+   [persistence](persistence.md#hazards-and-defense-layers)).
 
 ## Entity wire publication optimization
 

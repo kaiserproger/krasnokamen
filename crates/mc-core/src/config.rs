@@ -27,6 +27,17 @@ pub struct CoreConfig {
     /// Per-connection reliable [`PlayerChange`](crate::boundary::PlayerChange)
     /// outbox depth. Overflow disconnects the connection.
     pub player_outbox_cap: usize,
+    /// Hard cap on the tick→edge reliable presentation bytes queued, in bytes
+    /// (see `core/outbox.rs`). The tick never blocks on the edge: a batch that
+    /// does not fit, or a non-empty queue that stops draining for
+    /// `OUTBOX_STALL_LIMIT`, halts the core fail-closed with one explicit
+    /// disconnect reason per live connection.
+    pub outbox_queue_bytes: usize,
+    /// How long the tick→edge reliable handoff may hold queued batches with no
+    /// completed drain before the core halts fail-closed (`core/outbox.rs`).
+    /// The hard cap bounds bytes; this bounds time, which is what a
+    /// wedged-but-alive edge pump produces.
+    pub outbox_stall_ms: u64,
     /// Journal fsync cadence: fsync after this many appended batches.
     pub journal_fsync_every_batches: u32,
     /// Checkpoint capture cadence; successful commits prune the covered journal.
@@ -124,6 +135,14 @@ impl Default for MobGriefingRules {
     }
 }
 
+/// Default hard cap on the tick→edge reliable presentation bytes queued
+/// (`CoreConfig::outbox_queue_bytes`, `core/outbox.rs`).
+pub const OUTBOX_QUEUE_BYTES: usize = 256 << 20;
+
+/// Default limit on a non-empty tick→edge outbox that consumes no batch
+/// (`CoreConfig::outbox_stall_ms`, `core/outbox.rs`).
+pub const OUTBOX_STALL_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
+
 impl CoreConfig {
     /// Minimal config; queue depths and cadences take tested defaults.
     #[must_use]
@@ -136,6 +155,8 @@ impl CoreConfig {
             input_queue_cap: 4096,
             broadcast_cap: 32,
             player_outbox_cap: 512,
+            outbox_queue_bytes: OUTBOX_QUEUE_BYTES,
+            outbox_stall_ms: OUTBOX_STALL_LIMIT.as_millis() as u64,
             journal_fsync_every_batches: 10,
             checkpoint_every_ticks: 1200,
             vanilla_data_dir: None,

@@ -9,10 +9,10 @@ fn chat(message: &str) -> PlayerChange {
 #[test]
 fn reliable_handoff_coalesces_fifo_batches_and_keeps_disconnect_last() {
     let (sender, receiver) = std::sync::mpsc::channel();
-    let outbox = ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
+    let outbox = ReliableOutbox::new(
         receiver,
-        pending: None,
-    }));
+        Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
+    );
     let first = ConnectionId(1);
     let second = ConnectionId(2);
     sender
@@ -58,10 +58,10 @@ fn reliable_handoff_coalesces_fifo_batches_and_keeps_disconnect_last() {
 #[test]
 fn draining_does_not_consume_later_batches() {
     let (sender, receiver) = std::sync::mpsc::channel();
-    let outbox = ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
+    let outbox = ReliableOutbox::new(
         receiver,
-        pending: None,
-    }));
+        Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
+    );
     let connection = ConnectionId(1);
     sender
         .send((1, vec![(connection, vec![chat("first")])]))
@@ -77,10 +77,10 @@ fn draining_does_not_consume_later_batches() {
 #[test]
 fn snapshot_watermark_drains_covered_batches_but_not_future_batches() {
     let (sender, receiver) = std::sync::mpsc::channel();
-    let outbox = ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
+    let outbox = ReliableOutbox::new(
         receiver,
-        pending: None,
-    }));
+        Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
+    );
     let connection = ConnectionId(1);
     for (tick, text) in [(1, "one"), (2, "two"), (3, "three")] {
         sender

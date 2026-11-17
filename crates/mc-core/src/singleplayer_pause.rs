@@ -22,7 +22,7 @@ impl SingleplayerPause {
         &mut self,
         state: &TickState,
         inputs: &mut Vec<PlayerInput>,
-        outbox: &std::sync::mpsc::Sender<crate::core::TimedOutboxBatch>,
+        outbox: &crate::core::OutboxSender,
     ) -> bool {
         // A login (ProfileLogin precedes Join in its own batch) ends the pause like Join, so a
         // reconnecting owner's duplicate-login kick is never dropped while paused.
@@ -73,7 +73,10 @@ impl SingleplayerPause {
             if allowed {
                 self.owner = requested.then_some(*connection);
             } else {
-                let _ = outbox.send((
+                // A refused budget is the stall watchdog's/hard cap's business:
+                // the next tick halts fail-closed, so this reply is not dropped
+                // into a healthy queue's void.
+                let _ = outbox.push(
                     state.tick,
                     vec![(
                         *connection,
@@ -81,7 +84,7 @@ impl SingleplayerPause {
                             message: "Cannot pause: one online operator is required.".into(),
                         }],
                     )],
-                ));
+                );
             }
             false
         });

@@ -273,7 +273,11 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
                 spawn_rx,
                 ticket_rx,
                 moderation_selector_rx,
-                outbox: outbox_tx,
+                outbox: OutboxSender::new(
+                    outbox_tx,
+                    Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
+                ),
+                outbox_stall: StallWatch::new(crate::config::OUTBOX_STALL_LIMIT),
                 tick_broadcast,
                 knockback_publication: Arc::new(parking_lot::RwLock::new(Arc::default())),
                 timing_broadcast,

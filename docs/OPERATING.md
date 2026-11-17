@@ -125,6 +125,16 @@ server CPU affinity and its memory cap do not include the graphical client.
 `explore-3` means three exploring players, not the twenty-player workload under
 a different name.
 
+The 8 GiB shape also needs the one queue between the simulation and the network
+layer bounded, because the tick never waits for a slow edge:
+`[data] outbox_queue_bytes` (256 MiB by default) caps the queued reliable
+backlog and warns once at 8 MiB with the queued bytes. A backlog that reaches the
+cap, or that no drain touches for 10 s, stops the server fail-closed with one
+explicit disconnect reason per player; the next start replays the retained WAL
+([persistence](architecture/persistence.md#hazards-and-defense-layers)). A
+lagging player shows up there and in the dashboard's `reliable_drops` long before
+the host would OOM; raise the cap only after reading the warning's byte count.
+
 ### Singleplayer with software Vulkan
 
 On 2026-11-07, fresh seed 42, installed 26.3 content, 1280×720 Low preset,
@@ -196,6 +206,7 @@ enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
 # backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
+# outbox_queue_bytes = 268435456  # tick→edge reliable backlog cap (256 MiB)
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records

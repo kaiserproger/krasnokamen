@@ -56,6 +56,33 @@ class ProcessStopTests(unittest.TestCase):
         kill.assert_called_once_with(123, signal.SIGTERM)
         process.wait.assert_called_once_with(timeout=8.0)
 
+    def test_server_process_stops_with_the_budget_beyond_its_shutdown_path(self) -> None:
+        # A server kicks every connection, drains the connection tasks (10 s per
+        # join) and then runs the final checkpoint and journal flush. A stop that
+        # SIGKILLs earlier turns the gate's clean stop into a crash restart.
+        self.assertGreater(runtime.SERVER_STOP_TIMEOUT_SECONDS, runtime.SERVER_DRAIN_SECONDS)
+        self.assertGreaterEqual(
+            runtime.SERVER_STOP_TIMEOUT_SECONDS,
+            runtime.SERVER_DRAIN_SECONDS + runtime.SERVER_CHECKPOINT_SECONDS,
+        )
+        process = mock.Mock(pid=123, returncode=0)
+        process.poll.return_value = None
+        with mock.patch.object(runtime.subprocess, "Popen", return_value=process):
+            server = runtime.start_server(["krasnokamen"])
+        self.assertEqual(runtime.stop_budget(server), runtime.SERVER_STOP_TIMEOUT_SECONDS)
+        with mock.patch.object(runtime.os, "killpg") as kill:
+            runtime.stop_process(server)
+        kill.assert_called_once_with(123, signal.SIGTERM)
+        process.wait.assert_called_once_with(timeout=runtime.SERVER_STOP_TIMEOUT_SECONDS)
+
+    def test_explicit_stop_budget_still_wins_over_the_server_default(self) -> None:
+        process = mock.Mock(pid=123, returncode=0)
+        process.poll.return_value = None
+        process.harness_stop_budget = runtime.SERVER_STOP_TIMEOUT_SECONDS
+        with mock.patch.object(runtime.os, "killpg"):
+            runtime.stop_process(process, timeout_seconds=12.5)
+        process.wait.assert_called_once_with(timeout=12.5)
+
 
 class ClientSettingsTests(unittest.TestCase):
     def test_invalid_username_rejected(self) -> None:

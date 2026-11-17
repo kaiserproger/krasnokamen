@@ -281,6 +281,13 @@ pub struct DataSection {
     /// empty-server pause still checkpoint. Zero counts as one.
     #[serde(default = "default_checkpoint_every_ticks")]
     pub checkpoint_every_ticks: u64,
+    /// Hard cap on reliable presentation bytes queued between the core tick and
+    /// the edge pump, in bytes (default 256 MiB). The tick never blocks on a
+    /// slow edge: exceeding this cap, or leaving the queue undrained for 10 s,
+    /// halts the server fail-closed with an explicit disconnect reason. The
+    /// warning mark is 8 MiB. See `docs/architecture/persistence.md`.
+    #[serde(default = "default_outbox_queue_bytes")]
+    pub outbox_queue_bytes: usize,
 }
 
 impl Default for DataSection {
@@ -291,6 +298,7 @@ impl Default for DataSection {
             vanilla_data_dir: default_vanilla_data_dir(),
             backup_dir: None,
             checkpoint_every_ticks: default_checkpoint_every_ticks(),
+            outbox_queue_bytes: default_outbox_queue_bytes(),
         }
     }
 }
@@ -617,6 +625,12 @@ fn default_checkpoint_every_ticks() -> u64 {
     // mc-core's `CoreConfig::new` cadence.
     1200
 }
+
+fn default_outbox_queue_bytes() -> usize {
+    // mc-core's own default: the 8 GiB target keeps presentation backlog well
+    // inside its memory cap (see docs/OPERATING.md).
+    mc_core::config::OUTBOX_QUEUE_BYTES
+}
 fn default_bind_address() -> String {
     "127.0.0.1".to_owned()
 }
@@ -722,6 +736,10 @@ impl EdgeConfig {
         anyhow::ensure!(
             cfg.recorder.world_queue_bytes > 0,
             "recorder.world_queue_bytes must be positive"
+        );
+        anyhow::ensure!(
+            cfg.data.outbox_queue_bytes > 0,
+            "data.outbox_queue_bytes must be positive"
         );
         Ok(cfg)
     }

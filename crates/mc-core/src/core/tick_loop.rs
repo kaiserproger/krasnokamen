@@ -16,8 +16,11 @@ pub(super) struct TickChannels {
     pub(super) spawn_rx: Receiver<SpawnRequest>,
     pub(super) ticket_rx: Receiver<RemoteTicket>,
     pub(super) moderation_selector_rx: Receiver<moderation_selector::Request>,
-    /// Reliable FIFO handoff; only the tick owns the sender.
-    pub(super) outbox: std::sync::mpsc::Sender<TimedOutboxBatch>,
+    /// Reliable FIFO handoff; only the tick owns the sender. Bounded in bytes
+    /// with a non-blocking fail-closed push (see `core/outbox.rs`).
+    pub(super) outbox: OutboxSender,
+    /// Tick-side time bound on a non-draining outbox (see `core/outbox.rs`).
+    pub(super) outbox_stall: StallWatch,
     pub(super) tick_broadcast: broadcast::Sender<TickOutput>,
     pub(super) knockback_publication: KnockbackPublication,
     pub(super) timing_broadcast: broadcast::Sender<(u64, TickTimes)>,
@@ -311,11 +314,32 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
         let owner_post_start = std::time::Instant::now();
         // Hand off before waking edge subscribers. The receiver coalesces
         // batches in FIFO order and never extends a sealed Disconnect queue.
-        if !drains.is_empty() {
-            channels
-                .outbox
-                .send((output.tick, drains))
-                .expect("reliable outbox receiver dropped");
+        // The push charges the batch against the byte cap and never blocks: a
+        // batch that does not fit stops the core fail-closed instead of being
+        // dropped (see `core/outbox.rs`).
+        if !drains.is_empty()
+            && let Err(refusal) = channels.outbox.push(output.tick, drains)
+        {
+            halt_authority(&mut state, &channels, &refusal.reason());
+            break;
+        }
+        // A pump that is alive but not keeping up is invisible to task
+        // supervision; a non-empty outbox whose drain epoch has not moved for
+        // the whole limit halts the same way.
+        if let Some(stalled) = channels
+            .outbox_stall
+            .stalled_at(channels.outbox.budget(), std::time::Instant::now())
+        {
+            halt_authority(
+                &mut state,
+                &channels,
+                &format!(
+                    "edge pump not draining for {} s, {} bytes queued (fail closed)",
+                    stalled.as_secs(),
+                    channels.outbox.queued_bytes()
+                ),
+            );
+            break;
         }
         if state.require_plugin_login {
             let mut mirror = channels.unlocked_sessions.write();
@@ -709,8 +733,13 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
                 .flat_map(|world| std::mem::take(&mut world.outbox)),
         )
         .collect();
-    channels
-        .outbox
-        .send((state.tick, drains))
-        .expect("reliable outbox receiver dropped");
+    // One admission past the cap: the reason must reach every live connection
+    // even when the cap is exactly what failed.
+    if let Err(refusal) = channels.outbox.push_terminal(state.tick, drains) {
+        tracing::error!(
+            tick = state.tick,
+            cause = %refusal.reason(),
+            "terminal disconnect could not be queued"
+        );
+    }
 }
