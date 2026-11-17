@@ -90,6 +90,11 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
         let coreperf = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some();
         let mut knockback_ticks = BTreeMap::new();
+        // Routing view kept across ticks: refreshed only when a connection
+        // registered or left (`ConnectionRegistry::routing_snapshot`), so an
+        // unchanged tick clones no handles at all.
+        let mut connections: HashMap<ConnectionId, ConnectionHandles> = HashMap::new();
+        let mut connections_generation = 0u64;
         loop {
             let out = match rx.recv().await {
                 Ok(out) => out,
@@ -106,7 +111,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 Err(broadcast::error::RecvError::Closed) => {
                     // Drain terminal reliable disconnects before closing, both
                     // for graceful shutdown and for an authoritative failure.
-                    let (mut connections, _) = server.connections.routing_snapshot();
+                    refresh_routing(&server, &mut connections, &mut connections_generation);
                     route_outbox(
                         &server,
                         &mut viewers,
@@ -134,7 +139,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
             // takes.
             #[cfg(test)]
             pump_gate(&server);
-            let (mut connections, roster) = server.connections.routing_snapshot();
+            let roster = refresh_routing(&server, &mut connections, &mut connections_generation);
             route_outbox(
                 &server,
                 &mut viewers,
@@ -261,6 +266,25 @@ pub(super) fn configured_viewer(
         viewer.advancements = Arc::clone(&packets.advancements);
     }
     viewer
+}
+
+/// Refresh the pump's routing view when a connection registered or left.
+///
+/// The view outlives a tick, so the pump no longer rebuilds every handle
+/// triplet per tick: a registration, a disconnect and a refusing write all
+/// move the registry's generation, and the next refresh replaces the view
+/// wholesale — the same content the per-tick clone used to produce.
+fn refresh_routing(
+    server: &Arc<EdgeServer>,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    generation: &mut u64,
+) -> Option<Vec<String>> {
+    let (handles, roster) = server.connections.routing_snapshot(generation);
+    if let Some(handles) = handles {
+        connections.clear();
+        connections.extend(handles);
+    }
+    roster
 }
 
 pub(super) fn route_outbox(

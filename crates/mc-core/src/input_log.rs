@@ -399,6 +399,7 @@ fn tick_line(
 }
 
 fn write_loop(rx: &Receiver<Msg>, mut out: BufWriter<std::fs::File>) {
+    crate::thread_sched::mark_current_thread_idle();
     let mut failed = false;
     loop {
         let msg = match rx.try_recv() {

@@ -199,6 +199,7 @@ impl ChunkLoader {
                 std::thread::Builder::new()
                     .name(format!("chunk-load-{index}"))
                     .spawn(move || {
+                        crate::thread_sched::mark_current_thread_idle();
                         for (pos, ticket) in job_rx {
                             let chunk =
                                 catch_unwind(AssertUnwindSafe(|| source.load_or_generate(pos)));

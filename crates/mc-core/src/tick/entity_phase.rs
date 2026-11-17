@@ -1768,7 +1768,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         passive: passive_follow::Context {
             players: grid(&players, temptation_consumers),
             states: &state.players,
-            locked: state.require_plugin_login.then_some(&state.locked_sessions),
+            locked: state
+                .require_plugin_login
+                .then_some(state.locked_sessions.as_set()),
         },
         dolphin_toys: &dolphin_toys,
         villagers: villager_grid,

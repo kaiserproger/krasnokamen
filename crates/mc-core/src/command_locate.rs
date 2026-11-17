@@ -704,6 +704,7 @@ struct LocateDone {
 }
 
 fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
+    crate::thread_sched::mark_current_thread_idle();
     for job in jobs {
         let start = std::time::Instant::now();
         let hit = match job.kind {

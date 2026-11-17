@@ -1564,6 +1564,7 @@ impl Runtime {
         std::thread::Builder::new()
             .name("datapack-worker".into())
             .spawn(move || {
+                crate::thread_sched::mark_current_thread_idle();
                 let _ = tx.send(work(&root, selection, &running, base.as_deref(), &current));
             })
             .map_err(|error| format!("Starting datapack worker: {error}"))?;

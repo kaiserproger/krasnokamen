@@ -225,6 +225,59 @@ pub struct Connections {
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted; absent means `Full`.
     chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
+    /// Advances on every join, leave and dimension move. The tick's
+    /// edge-visible session mirror is re-projected only when this or
+    /// [`SessionLocks::generation`] moved (see `core::session_mirror`).
+    membership_generation: u64,
+}
+
+/// The tick's authoritative plugin-login lock set, with a change counter.
+///
+/// The set is private so every mutation advances
+/// [`generation`](Self::generation): the tick projects the edge-visible
+/// unlocked-session mirror only when a lock changed, instead of rebuilding it
+/// under an exclusive lock on every tick.
+#[derive(Debug, Default)]
+pub(crate) struct SessionLocks {
+    locked: BTreeSet<ConnectionId>,
+    generation: u64,
+}
+
+impl SessionLocks {
+    pub(crate) fn insert(&mut self, connection: ConnectionId) -> bool {
+        let inserted = self.locked.insert(connection);
+        if inserted {
+            self.generation += 1;
+        }
+        inserted
+    }
+
+    pub(crate) fn remove(&mut self, connection: &ConnectionId) -> bool {
+        let removed = self.locked.remove(connection);
+        if removed {
+            self.generation += 1;
+        }
+        removed
+    }
+
+    /// The authoritative set, for read-only callers (plugin events, entity
+    /// phase) that take it as a plain `BTreeSet`.
+    pub(crate) fn as_set(&self) -> &BTreeSet<ConnectionId> {
+        &self.locked
+    }
+
+    #[must_use]
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+}
+
+impl std::ops::Deref for SessionLocks {
+    type Target = BTreeSet<ConnectionId>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.locked
+    }
 }
 
 impl Connections {
@@ -239,6 +292,7 @@ impl Connections {
         self.by_entity.insert(entity, connection);
         self.names.insert(connection, name);
         self.uuids.insert(connection, uuid);
+        self.membership_generation += 1;
     }
 
     /// Connection for a player entity, if joined.
@@ -309,6 +363,7 @@ impl Connections {
         self.by_entity.remove(&entity);
         self.names.remove(&connection);
         self.uuids.remove(&connection);
+        self.membership_generation += 1;
         Some(entity)
     }
 
@@ -320,6 +375,9 @@ impl Connections {
         self.by_entity.remove(&entity);
         let uuid = self.uuids.remove(&connection).expect("joined UUID");
         let name = self.names.remove(&connection).expect("joined name");
+        // Destination `insert` advances its own generation; the source lost a
+        // member here.
+        self.membership_generation += 1;
         destination.insert(connection, entity, uuid, name);
         if let Some(view_distance) = self.view_distances.remove(&connection) {
             destination.view_distances.insert(connection, view_distance);
@@ -341,6 +399,13 @@ impl Connections {
     /// All joined connections (reliable fan-out targets).
     pub fn all_connections(&self) -> impl Iterator<Item = ConnectionId> + '_ {
         self.by_connection.keys().copied()
+    }
+
+    /// Advances on every join, leave and dimension move (see
+    /// `core::session_mirror` for the reader).
+    #[must_use]
+    pub(crate) fn membership_generation(&self) -> u64 {
+        self.membership_generation
     }
 }
 
@@ -385,7 +450,7 @@ pub struct TickState {
     pub connections: Connections,
     /// Opt-in native login fence; authorization belongs to the live session.
     pub(crate) require_plugin_login: bool,
-    pub(crate) locked_sessions: BTreeSet<ConnectionId>,
+    pub(crate) locked_sessions: SessionLocks,
     /// Consecutive unsupported non-descending movement samples permitted before
     /// anti-flight corrects and disconnects the player; zero disables it.
     pub(crate) max_airtime_ticks: u32,
@@ -698,7 +763,7 @@ impl TickState {
             entities: EntityStore::default(),
             connections: Connections::default(),
             require_plugin_login: false,
-            locked_sessions: BTreeSet::new(),
+            locked_sessions: SessionLocks::default(),
             max_airtime_ticks: 80,
             enable_command_block: false,
             spawn_protection: 16,

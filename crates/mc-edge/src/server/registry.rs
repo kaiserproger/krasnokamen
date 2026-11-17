@@ -17,6 +17,10 @@ pub(super) struct RegistryInner {
     /// Wakes the connection owner with the reason the registry dropped it.
     pub(super) closers: HashMap<ConnectionId, tokio::sync::oneshot::Sender<&'static str>>,
     pub(super) handles: HashMap<ConnectionId, ConnectionHandles>,
+    /// Advances whenever `handles` gains or loses a connection. The pump keeps
+    /// its routing view across ticks and copies it again only when this moves,
+    /// so an unchanged tick takes no handle clone at all.
+    pub(super) routing_generation: u64,
     pub(super) names: HashMap<ConnectionId, String>,
     pub(super) view_distances: HashMap<ConnectionId, i32>,
     /// Recorder connections ([`crate::recorder`]), fixed at join.
@@ -128,6 +132,7 @@ impl ConnectionRegistry {
         );
         handles.knockback_baseline = published_knockback_count();
         inner.handles.insert(id, handles);
+        inner.routing_generation += 1;
         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
     }
 
@@ -301,6 +306,7 @@ impl ConnectionRegistry {
             let mut inner = self.inner.lock();
             inner.joining.remove(&id);
             inner.handles.remove(&id);
+            inner.routing_generation += 1;
             if inner.names.remove(&id).is_some() {
                 inner.roster_dirty = true;
             }
@@ -344,26 +350,38 @@ impl ConnectionRegistry {
             .collect()
     }
 
-    // One handle copy per pump iteration; roster work only follows a change.
+    /// The pump's routing view for one tick. Handles are returned only when a
+    /// connection registered or left since `generation` last observed a copy,
+    /// and the copy and the recorded generation come from one critical
+    /// section: an unchanged tick takes the mutex, compares one counter and
+    /// clones no handle. Roster work follows [`set_name`](Self::set_name).
     pub(super) fn routing_snapshot(
         &self,
+        generation: &mut u64,
     ) -> (
-        HashMap<ConnectionId, ConnectionHandles>,
+        Option<Vec<(ConnectionId, ConnectionHandles)>>,
         Option<Vec<String>>,
     ) {
-        let (handles, names) = {
-            let mut inner = self.inner.lock();
-            let names = if std::mem::take(&mut inner.roster_dirty) {
-                Some(inner.names.values().cloned().collect::<Vec<_>>())
-            } else {
-                None
-            };
-            (inner.handles.clone(), names)
+        let mut inner = self.inner.lock();
+        let handles = if inner.routing_generation == *generation {
+            None
+        } else {
+            *generation = inner.routing_generation;
+            Some(
+                inner
+                    .handles
+                    .iter()
+                    .map(|(id, handles)| (*id, handles.clone()))
+                    .collect(),
+            )
         };
-        let names = names.map(|mut names| {
+        let names = if std::mem::take(&mut inner.roster_dirty) {
+            let mut names = inner.names.values().cloned().collect::<Vec<_>>();
             names.sort();
-            names
-        });
+            Some(names)
+        } else {
+            None
+        };
         (handles, names)
     }
 
