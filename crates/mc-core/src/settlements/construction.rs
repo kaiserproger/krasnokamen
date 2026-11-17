@@ -980,7 +980,45 @@ pub(crate) fn replant_conflicts(state: &TickState, root: [i32; 3]) -> bool {
             || state
                 .settlements
                 .records()
+                .filter(|record| {
+                    // Street headroom and lots stay inside the territory's
+                    // horizontal extent. Outpost claims may lie outside it.
+                    let horizontal = ScriptWorldBounds::new(
+                        [bounds.min[0], record.anchor[1], bounds.min[2]],
+                        [bounds.max[0], record.anchor[1], bounds.max[2]],
+                    )
+                    .expect("valid crown projection");
+                    founding::sphere_overlaps(record.anchor, record.radius, horizontal)
+                        || record.founding.as_ref().is_some_and(|expedition| {
+                            let claim = expedition.bounds();
+                            [0, 2].into_iter().all(|axis| {
+                                bounds.min[axis] <= claim.max[axis]
+                                    && claim.min[axis] <= bounds.max[axis]
+                            })
+                        })
+                })
                 .any(|record| layout::planting_blocks_access(state, record, bounds))
+    })
+}
+
+/// Geometrically feasible housing, independent of today's material balance.
+/// The network may forecast a proposed planting without mutating the world.
+pub(super) fn has_house_lot(
+    state: &TickState,
+    record: &SettlementRecord,
+    network: &mut layout::Network<'_>,
+    blueprint: &blueprints::Blueprint,
+) -> bool {
+    network.frontage().into_iter().any(|(front, normal)| {
+        let Some(lot) = network.lot(blueprint, front, normal) else {
+            return false;
+        };
+        site_free(
+            state,
+            record,
+            lot.origin,
+            blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
+        )
     })
 }
 
