@@ -50,13 +50,14 @@ def run_candidate(ctx: Any, timeout: float) -> dict[str, Any]:
 
 
 def run(first: Any, runtime: Any, artifact_dir: Path, server_log: Path) -> dict[str, Any]:
-    report: dict[str, Any] = {"passed": False, "versions": ["26.3", "26.1.2"], "steps": {}}
+    second_version = "26.3" if os.environ.get("A8_NEGATIVE_CONTROL") == "same-version" else "26.1.2"
+    report: dict[str, Any] = {"passed": False, "versions": ["26.3", second_version], "steps": {}}
     output = artifact_dir / "mixed-interaction.json"
-    second_root = artifact_dir / "fabric-26.1.2"
+    second_root = artifact_dir / f"fabric-{second_version}"
     second_root.mkdir()
     previous = os.environ.get("KRASNOKAMEN_JAVA_VERSION")
     try:
-        os.environ["KRASNOKAMEN_JAVA_VERSION"] = "26.1.2"
+        os.environ["KRASNOKAMEN_JAVA_VERSION"] = second_version
         with contextlib.ExitStack() as stack:
             xvfb, display, xlog = runtime.start_xvfb(second_root)
             stack.callback(xlog.close)
@@ -77,7 +78,7 @@ def run(first: Any, runtime: Any, artifact_dir: Path, server_log: Path) -> dict[
             second.call_tool("minecraft_connect", {"server_addr": address})
             _confirm_exact_permission(second, address, 90)
             if not second.call_tool("minecraft_wait_for_play", {"timeout_seconds": 120}).get("in_play"):
-                raise AssertionError("26.1.2 client did not enter Play")
+                raise AssertionError(f"{second_version} client did not enter Play")
             report["steps"]["admitted_protocols"] = admitted_protocols(server_log)
             a = JavaMatrixClient("GateFabric", first, address, artifact_dir)
             b = JavaMatrixClient("MixedVersion", second, address, artifact_dir)
