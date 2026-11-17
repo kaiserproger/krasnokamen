@@ -142,6 +142,14 @@ _PROFILE_VERDICTS = {
         'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
     'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
+    # D8 control: run the unchanged profile on its own reverted tree/pin with
+    # MAX_PROJECTS=1. `two_projects_advance` must fail; never skip a player
+    # command via environment. _release_server enforces the control tree's pin.
+    'village-owner-order-qa': ('owner_order_acceptance', frozenset({
+        'two_orders_pending', 'funded_later_starts', 'unfunded_head_fences_autonomy',
+        'two_projects_advance', 'all_sites_on_map', 'parallel_restart',
+        'queue_limit_named', 'cancel_by_index',
+    })),
     # backends/screens_voice_qa.py verdicts: consent, audio, respawn and SVC proximity/group voice.
     'screens-voice-qa': ('screens_voice', frozenset({
         'native_loads_computer_monitor', 'owner_consent_names_app_audio', 'owner_deny_sends_no_audio',
@@ -172,7 +180,8 @@ _PROFILE_OVERRIDES = {
     'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
     'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE',
                              'VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'),
-    'village-owner-order-qa': ('D5_QUEUE_CONTROL',),
+    'village-owner-order-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE',
+                             'VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'),
 }
 
 

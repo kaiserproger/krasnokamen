@@ -18,7 +18,7 @@ A claimed settlement shows its owner, radius, working and idle residents, buildi
 
 ## Map
 
-Open **Map** from the claimed main screen, **Buildings**, or `/settlement menu map`. The 13×13 grid is north-up; the scale below it gives the square of blocks represented by each cell. Green marks territory, dark grey marks outside, orange marks the active construction site and magenta marks you when visible. Certified buildings have type-specific colours. The legend names the visible features and counts buildings by kind.
+Open **Map** from the claimed main screen, **Buildings**, or `/settlement menu map`. The 13×13 grid is north-up; the scale below it gives the square of blocks represented by each cell. Green marks territory, dark grey marks outside, orange marks every active construction site and magenta marks you when visible. Certified buildings have type-specific colours. The legend names the visible features and counts buildings by kind.
 
 The street plan is drawn under buildings: grey **Road (paved)**, pale **Road (planned)** and light blue **Lamp (planned)**. Hover for details; building hovers include type, number, level and corners. Click a building to open its icon page or a construction site to open project status. Street features have hovers but no click action. When features overlap, the site takes priority over buildings, which take priority over streets.
 
@@ -61,6 +61,59 @@ Manage the roster and orders from **Army**; see [army](army.md).
 
 View and request construction from **Projects**; see [owner build requests](construction.md#owner-build-requests).
 
+### Construction text contract (D8)
+
+Up to eight projects build concurrently and up to eight owner orders wait in
+entry order (`MAX_PROJECTS = 8`, `MAX_ORDERS = 8`). An unfunded head order keeps
+autonomous admission waiting, but a funded later owner order can start. A
+site-refused order stays at its original position while later funded orders
+are tried. Materials already needed by active sites are not available twice.
+
+English chat replies (blueprint identifiers, not display names):
+
+- Started: `Started house construction.` (unchanged).
+- Queued: `Queued house: <reason>` (unchanged; reason describes this request,
+  not another order at the head).
+- Full: `Construction queue is full: MAX_ORDERS=8.`
+- `/settlement build cancel [index]` cancels one pending order, using the
+  one-based index shown on screen; omitted index means 1 (the head).
+  Success remains `Cancelled pending construction order.` No pending order:
+  `No pending construction order.` Invalid index:
+  `No pending construction order at index <index>.`
+
+The **Construction** screen and its status dialog list **all** active projects
+and pending orders, never just the first. The status body starts with
+`Active projects: <count>/8` and `Pending orders: <count>/8`, followed by
+`Head: <display name> L<level>` or `Head: none`. Each active project has these
+four consecutive lines (the corner is its stable site identity):
+
+```text
+Storage L1 · Building
+5/100
+-12 70 24
+Builder: <uuid or unbound>
+```
+
+The phase is the live preparation/build phase, not a constant; progress is the
+structure ledger's completed/total cells. Each pending order has one line:
+`Pending #<index>: <display name> L<level> · <reason>`, with indices 1..count.
+Shortage details remain below their order. For example,
+`Pending #1: House L1 · not enough: minecraft:white_wool x3` and
+`Pending #2: Farm L1 · busy`. Existing funding/site reasons retain their spelling.
+The map gives each active site a hover naming its blueprint, level and corner;
+overlapping map cells retain all site descriptions. Its legend also lists each
+site as `Active site: <display name> L<level> · <x> <y> <z>`.
+Clicking any active site opens the complete Construction status. The summary
+count/head does not replace the project list.
+
+The `village-owner-order-qa` gate observes two waiting orders, a funded later
+order lifting over an unfunded head, the head fencing autonomous admission, two
+simultaneously advancing sites, all sites on the map, the same set after restart,
+the named queue limit and indexed cancellation. Its D8 negative control runs
+the **unchanged gate** against a separate tree with the parallel cap reverted
+to one and its own `pin-release` binary. No environment switch skips commands
+or manufactures a failing observation.
+
 ## Settings
 
 **Settings** shows the name, radius and revision. The owner or an operator can enter a new name and select **Rename**.
@@ -90,6 +143,7 @@ Names contain 1–64 ASCII letters, digits, `_` or `-`. For management commands 
 | `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` | Certify a building. | Owner/operator |
 | `/settlement building upgrade <id>` | Upgrade a certificate. | Owner/operator |
 | `/settlement build <blueprint>` or `/settlement build upgrade <id>` | Request construction or a native-built upgrade in the settlement containing you. | Owner/operator |
+| `/settlement build cancel [index]` | Cancel the pending order at the one-based index (default: head). | Owner/operator |
 | `/settlement army list` | List soldiers in the settlement containing you. | Anyone |
 | `/settlement army recruit`, `/settlement army dismiss <uuid>`, `/settlement army order <all\|uuid> <follow\|guard\|patrol\|return>` | Manage soldiers. | Owner/operator |
 | `/settlement production <name> status`, `/settlement commerce <name> status`, `/settlement payroll <name> status`, `/settlement caravan <name> status` | Read economy status. | Anyone |
