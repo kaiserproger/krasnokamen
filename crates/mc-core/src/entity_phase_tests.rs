@@ -1071,8 +1071,8 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
                 .set_rot(slot, write.rotation[0], write.rotation[1]);
         };
         let target = [pos[0] + 3.0, pos[1], pos[2] + 7.0];
-        // A turn below half a wire quantum (0.703125 deg) cannot change the
-        // client-visible rotation, so the row keeps resting: 0.0209 blocks of
+        // A turn below half a wire quantum (0.703125 deg) is inside the rest's
+        // bounded angular error, so the row keeps resting: 0.0209 blocks of
         // lateral offset over 4 blocks is 0.3 deg off the +z bearing.
         state.entities.set_rot(slot, 0.0, 0.0);
         aim(&mut state, [pos[0] + 0.0209, pos[1], pos[2] + 4.0]);
@@ -1139,6 +1139,34 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
             "{species} still does not walk"
         );
     }
+}
+
+/// The rest's tolerance is half a wire quantum on the signed yaw error,
+/// wrapped across +-180 degrees: just inside rests, just outside steps.
+#[test]
+fn battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error() {
+    let (mut state, slot) = resting_mob("minecraft:husk");
+    state.entities.set_faction(slot, 1);
+    let pos = state.entities.pos(slot);
+    let len = state.entities.len();
+    let aim = |state: &mut TickState, dx: f64, dz: f64| {
+        let columns = &mut state.hostile.battle.columns;
+        columns.look_by_slot.resize(len, None);
+        columns.look_by_slot[slot.0 as usize] = Some([pos[0] + dx, pos[1], pos[2] + dz]);
+    };
+    // tan(0.703125 deg) * 4 = 0.0491 blocks of lateral offset at 4 blocks.
+    state.entities.set_rot(slot, 0.0, 0.0);
+    aim(&mut state, 0.0480, 4.0);
+    assert!(can_early_rest(&mut state, slot), "0.687 deg rests");
+    aim(&mut state, 0.0502, 4.0);
+    assert!(!can_early_rest(&mut state, slot), "0.719 deg steps");
+    // Behind the row: 179.9 deg against a 180 deg bearing is 0.1 deg, not 359.9.
+    state.entities.set_rot(slot, 179.9, 0.0);
+    aim(&mut state, 0.0, -4.0);
+    assert!(
+        can_early_rest(&mut state, slot),
+        "the yaw error wraps across +-180"
+    );
 }
 
 /// A mounted battle rider is not a standing row (`taming::suppress_ai` is

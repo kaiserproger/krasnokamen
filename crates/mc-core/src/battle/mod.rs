@@ -470,8 +470,9 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
 }
 
 /// Half of one wire rotation quantum (a full turn is 256 steps, so one step is
-/// 360/256 = 1.40625 degrees): a turn smaller than this rounds to the same
-/// client-visible rotation, so it cannot be seen and must not cost a step.
+/// 360/256 = 1.40625 degrees). The edge packs angles with `floor`, so even a
+/// sub-quantum turn can change the packed byte: this is a bounded angular error
+/// the rest accepts, not an invisible one.
 const REST_TURN_QUANTUM: f32 = 0.703_125;
 
 /// Whether a rested battle row's skipped step would still turn it toward its
@@ -487,10 +488,11 @@ const REST_TURN_QUANTUM: f32 = 0.703_125;
 /// moves almost every tick (`columns.rs` re-projects `target.pos`), and a
 /// measured census of a 300-per-side staged battle found 91% of the refused
 /// turns below one 1.40625-degree quantum and 99.5% caused by that jitter, so
-/// exact equality would spend a whole step on a rotation the client rounds away
+/// exact equality would spend a whole step on every sub-quantum turn
 /// (receipts/BattleRest/BOUNDS-REST-TAKES.md). Everything at or above half a
-/// quantum still steps, so a resting row's drawn facing stays within one wire
-/// quantum of its target bearing.
+/// quantum still steps, so a resting row's stored facing stays within half a
+/// quantum of the step's; after the edge's `floor` packing its drawn facing can
+/// be up to almost 1.5 quanta from the target bearing.
 pub(crate) fn rest_turns_toward_target(
     columns: &Columns,
     slot: crate::entities::EntitySlot,
