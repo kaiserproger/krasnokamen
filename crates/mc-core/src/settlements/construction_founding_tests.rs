@@ -1113,7 +1113,10 @@ fn outpost_sites_are_ordinary_projects_one_per_site() {
     let owned: Vec<_> = projects(record)
         .filter(|project| owns_project(record, project))
         .collect();
-    assert_eq!(owned.len(), MAX_PROJECTS.min(2));
+    // Joint funding of several sites is the executor's proof (S2); here only
+    // that the funded sites run side by side as far as the cap allows.
+    assert!(owned.len() >= MAX_PROJECTS.min(2));
+    assert!(owned.len() <= MAX_PROJECTS);
     assert_eq!(owned.len(), projects(record).count());
     let origins: std::collections::BTreeSet<_> = owned.iter().map(|p| p.origin).collect();
     let handles: std::collections::BTreeSet<_> = owned.iter().map(|p| &p.structure).collect();
@@ -1134,24 +1137,25 @@ fn a_site_under_construction_is_never_admitted_twice() {
         .map(|project| project.structure.clone())
         .collect::<Vec<_>>();
     assert_eq!(first.len(), 1);
-    // The remaining sites are unfunded, so nothing but a duplicate of the
-    // first site could start now.
     let stock = chest(&state);
     for _ in 0..4 {
         plan(&mut state, parent);
     }
     let record = state.settlements.get(parent).unwrap();
-    let again: Vec<_> = projects(record)
-        .map(|project| project.structure.clone())
-        .collect();
-    assert_eq!(again, first, "the site keeps its single project");
-    assert_eq!(chest(&state), stock, "no new reservation or movement");
+    assert!(
+        project_for_structure(record, &first[0]).is_some(),
+        "the first project is kept"
+    );
     assert_eq!(
         projects(record)
             .filter(|project| is_site(project, name, origin))
             .count(),
-        1
+        1,
+        "the site keeps its single project"
     );
+    let origins: std::collections::BTreeSet<_> = projects(record).map(|p| p.origin).collect();
+    assert_eq!(origins.len(), projects(record).count());
+    assert_eq!(chest(&state), stock, "no new reservation or movement");
 }
 
 #[test]
