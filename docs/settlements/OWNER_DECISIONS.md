@@ -157,6 +157,8 @@ claims require the actual pinned-server run, not this design decision.
 - Water and lava on a needed lot are filled with real blocks (excavated soil or
   storage) from a safe stand; there are no bucket orders or bucket crafting.
 - A builder never stands in, walks through or falls into lava, and never digs a
-  cell next to lava beside its stand.
+  cell next to lava beside its stand. After a lava source is filled, the builder
+  waits for the remaining flow to drain before working there.
 - Among candidate lots the one with the least preparation (cut, fill and
-  liquids) is chosen, so the queue head never stalls on filling a lake.
+  liquids) is chosen, which reduces the risk of the queue head stalling on
+  filling a lake.
