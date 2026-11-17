@@ -47,6 +47,43 @@ mod stop_tests;
 type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
 pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
 
+/// Minimum wall-clock interval between two "input queue full" warnings.
+const INPUT_DROP_WARN_INTERVAL_MS: u64 = 10_000;
+
+/// Rate limiter for the input-drop warning: at most one warning per
+/// [`INPUT_DROP_WARN_INTERVAL_MS`] across every submitting thread.
+///
+/// One atomic load on the drop path and a CAS only when the interval has
+/// expired, so the full-queue path never takes a lock or logs per input.
+/// `last_ms == 0` means "never warned".
+#[derive(Debug, Default)]
+struct DropWarn {
+    last_ms: AtomicU64,
+}
+
+impl DropWarn {
+    /// True when a drop at `now_ms` should warn; claims the interval when so.
+    fn claim(&self, now_ms: u64) -> bool {
+        let now_ms = now_ms.max(1);
+        let last = self.last_ms.load(Ordering::Relaxed);
+        if last != 0 && now_ms.saturating_sub(last) < INPUT_DROP_WARN_INTERVAL_MS {
+            return false;
+        }
+        self.last_ms
+            .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+    }
+}
+
+/// UNIX milliseconds; `0` when the clock is unavailable (the throttle then
+/// warns on every expired interval, never more than once per claim).
+fn unix_ms_u64() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
 /// Publish impulse epochs after travel, resolving stable entity ids in their
 /// current world rather than only the world where the explosion happened.
 pub(crate) fn observe_explosion_knockback(
@@ -118,6 +155,10 @@ pub use session::PlayerSession;
 #[cfg(test)]
 #[path = "core_session_tests.rs"]
 mod session_tests;
+
+#[cfg(test)]
+#[path = "core_input_drop_tests.rs"]
+mod input_drop_tests;
 
 /// Only edge consumers share this receiver; the tick owns its sender.
 #[derive(Debug)]
@@ -402,6 +443,8 @@ struct CoreInner {
         )>,
     >,
     input_dropped: AtomicU64,
+    /// Rate limiter for the "input queue full" warning beside the counter.
+    input_drop_warn: DropWarn,
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
     tick_tx: broadcast::WeakSender<TickOutput>,
@@ -1065,6 +1108,7 @@ impl Core {
                 #[cfg(test)]
                 backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
+                input_drop_warn: DropWarn::default(),
                 tick_tx: tick_tx.downgrade(),
                 knockback_publication,
                 timing_tx: timing_tx.downgrade(),
@@ -1198,13 +1242,20 @@ impl Core {
     }
 
     /// Submit one decoded player input. Bounded and push-woken: returns
-    /// `false` (and counts the drop) when the queue is full. Never blocks.
-    /// Safe to call from Tokio I/O threads.
+    /// `false` (and counts and rate-limitedly warns about the drop) when the
+    /// queue is full. Never blocks. Safe to call from Tokio I/O threads.
     pub fn submit(&self, input: PlayerInput) -> bool {
         match self.inner.input_tx.try_send(input) {
             Ok(()) => true,
             Err(_) => {
-                self.inner.input_dropped.fetch_add(1, Ordering::Relaxed);
+                let dropped = self.inner.input_dropped.fetch_add(1, Ordering::Relaxed) + 1;
+                if self.inner.input_drop_warn.claim(unix_ms_u64()) {
+                    tracing::warn!(
+                        dropped,
+                        capacity = self.inner.input_tx.max_capacity(),
+                        "input queue full: the refused input is lost and the server corrects the client"
+                    );
+                }
                 false
             }
         }

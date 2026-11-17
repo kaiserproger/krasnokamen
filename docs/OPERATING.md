@@ -1145,11 +1145,22 @@ metrics_bearer_token = "replace-with-a-secret"   # optional, /metrics only
 
 The scrape includes TPS, tick p50/p95/p99, the latest per-phase timings, online
 players, loaded chunks, entity count, resident memory, network bytes, reliable
-drops and skipped pump ticks. A token protects only `/metrics`: keep the loopback
-bind or put the JSON endpoints behind an authenticated reverse proxy. A
-non-loopback address needs `allow_remote = true`; otherwise the dashboard does
+drops, input drops and skipped pump ticks. A token protects only `/metrics`: keep
+the loopback bind or put the JSON endpoints behind an authenticated reverse
+proxy. A non-loopback address needs `allow_remote = true`; otherwise the dashboard does
 not start and a warning is logged. Operators at level 2 can run `/tps` and
 `/mspt` in game; both report the same rolling window and are observation only.
+
+Input drops (`network.input_drops` in `/stats`,
+`krasnokamen_network_input_drops_total` in `/metrics`) count player inputs the
+bounded core input queue refused because it was full: the input is gone, the
+server corrects the client, and players see rubber-banding. The count is read
+from the core when a payload is built, so it is current without waiting for a
+pump sample, and the core also logs one rate-limited warning (at most every ten
+seconds) with the running total. A non-zero, growing count at a given population
+means the queue no longer holds one tick of arrivals there; its depth is not an
+operator knob (the core's fixed 4096 slots plus one slot per configured
+`max_players`).
 
 `/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
 `/load-metrics`) returns one JSON object per retained core tick: the
