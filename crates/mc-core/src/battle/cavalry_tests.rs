@@ -968,7 +968,13 @@ fn sweep_pass_with(flank: bool, dismounted: bool, closing: bool, record: bool) -
         super::super::steering::step(&frame, &mut battle, &mut super::super::Output::default());
         step(&frame, &mut battle, &mut combat);
     }
-    battle.exposure.halt(None);
+    // a real boundary sample, as pause/reset/shutdown take it
+    let sample = super::super::exposure::Sample {
+        entities: &state.entities,
+        formation: &battle.formation,
+        columns: &battle.columns,
+    };
+    battle.exposure.halt(Some(&sample));
     let exposure = battle.exposure.lines().to_vec();
     SweepPass {
         plan,
@@ -1136,6 +1142,119 @@ fn an_episode_carries_the_movement_of_its_last_exposed_tick() {
     );
 }
 
+/// A run boundary closes an episode with the entity store's current position, so
+/// the last exposed tick's movement is in the line — not the pre-motion columns
+/// snapshot (Sol P1-a).
+#[test]
+fn a_boundary_close_reports_the_movement_of_the_last_exposed_tick() {
+    use super::super::formation::{Order, RegimentSpec, slot_position};
+    let (mut state, _, pos) = fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    let (px, py, pz) = (pos[0] as i32, pos[1] as i32, pos[2] as i32);
+    for x in px - 12..=px + 12 {
+        for z in pz - 14..=pz + 32 {
+            state.world.set_block(x, py - 1, z, stone);
+            for dy in 0..6 {
+                state.world.set_block(x, py + dy, z, air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let at = |dx: f64, dz: f64| [pos[0] + dx, pos[1], pos[2] + dz];
+    let mut battle = BattleState::default();
+    for (regiment, faction, origin, facing) in [
+        (1, 2, at(0.0, 32.0), [0.0, -1.0]),
+        (2, 1, at(10.0, 20.0), [0.0, 1.0]),
+    ] {
+        let soldier = spawn(&mut state, "husk", origin);
+        state.entities.set_faction(slot(&state, soldier), faction);
+        battle
+            .formation
+            .add_regiment(
+                RegimentSpec {
+                    id: regiment,
+                    faction,
+                    origin,
+                    facing,
+                    files: 1,
+                    frontage: 1.0,
+                    order: Order::Hold,
+                },
+                &[soldier],
+            )
+            .unwrap();
+    }
+    let cavalry = RegimentSpec {
+        id: 3,
+        faction: 1,
+        origin: at(-6.0, -8.0),
+        facing: [0.0, 1.0],
+        files: 1,
+        frontage: 2.0,
+        order: Order::Hold,
+    };
+    let place = super::super::formation::slot_position(&cavalry, 0);
+    let horse = spawn(&mut state, "horse", place);
+    let rider = spawn(&mut state, "husk", place);
+    state.entities.set_faction(slot(&state, rider), 1);
+    mount(&mut state, rider, horse).unwrap();
+    battle.formation.add_regiment(cavalry, &[rider]).unwrap();
+    crate::mounts::dismount(&mut state, rider);
+    // a broken enemy foot regiment: the regiment rides a chase
+    battle.formation.regiments[0].morale.broken = true;
+    state.hostile.battle = battle;
+    state.hostile.battle.running = true;
+    state.tick = 100;
+    crate::battle::step(&mut state);
+    let rider_slot = slot(&state, rider);
+    let exposed = state.entities.pos(rider_slot);
+    // the movement of the exposed tick, then the battle stops between ticks
+    let moved = [exposed[0] + 3.0, exposed[1], exposed[2]];
+    state.entities.set_pos(rider_slot, moved);
+    state.hostile.battle.running = false;
+    state.tick += 1;
+    crate::battle::step(&mut state);
+    let lines: Vec<String> = state.hostile.battle.exposure.lines().to_vec();
+    let episode = lines
+        .iter()
+        .find(|line| line.starts_with(&format!("Battle exposure: id={} ", rider.0)))
+        .unwrap_or_else(|| panic!("the boundary close is logged: {lines:?}"));
+    assert!(episode.ends_with("outcome=stopped"), "{episode}");
+    let travel: f64 = episode
+        .split(" travel=")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next())
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_else(|| panic!("travel in {episode}"));
+    assert!(
+        travel > 2.0,
+        "the boundary sample carries the last exposed tick's 3-block move: {episode}"
+    );
+}
+
+/// An identity the entity store does not hold cannot be sampled at a boundary:
+/// the close is `unsettled`, never another body's position.
+#[test]
+fn a_boundary_close_without_the_identity_is_unsettled() {
+    let mut state = fixture().0;
+    let mut battle = BattleState::default();
+    battle.exposure.begin(10);
+    battle.exposure.exposed(
+        EntityId(4242),
+        0,
+        [0.0, 0.0, 0.0],
+        super::super::exposure::Plan::Chase,
+    );
+    state.hostile.battle = battle;
+    state.hostile.battle.running = false;
+    crate::battle::step(&mut state);
+    let lines: Vec<String> = state.hostile.battle.exposure.lines().to_vec();
+    assert!(
+        lines.iter().any(|line| line.contains("outcome=unsettled")),
+        "no trustworthy final sample at the boundary: {lines:?}"
+    );
+}
+
 /// Recording moves nothing: the same fixture, run with the tracker enabled and
 /// disabled, produces identical plans, drives and positions. This is the
 /// telemetry-mutation control's counterpart — the mutation must change the log
@@ -1146,10 +1265,16 @@ fn exposure_recording_changes_no_drive_plan_or_position() {
         for closing in [false, true] {
             let recorded = sweep_pass_ticks(flank, true, closing);
             let silent = sweep_pass_unrecorded(flank, true, closing);
-            assert!(recorded.exposed, "the enabled tracker records the exposure");
+            // This control covers the simulation only, so it stays green when the
+            // observation itself is removed (the telemetry-mutation control): it never
+            // asserts that an episode was recorded.
             assert!(
-                !silent.exposed && silent.exposure.is_empty(),
-                "the disabled one records nothing"
+                silent
+                    .exposure
+                    .iter()
+                    .all(|line| !line.starts_with("Battle exposure: ")),
+                "the disabled tracker writes no episode: {:?}",
+                silent.exposure
             );
             assert_eq!(
                 recorded.plan, silent.plan,

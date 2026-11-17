@@ -18,9 +18,16 @@ usage:
   (`{battle_start_tick, ids: {id: [[tick, qx, qy, qz], ...]}}`, quantized 1/4096 blocks).
   Optional: without it the report holds the server-truth numbers only.
 
-Exit status: 0 = report written; 1 = malformed log (the offending line is named);
-2 = no exposure records in the take (fail closed: absence of records is not zero exposure,
-and this tool never reports a pass).
+Exit status: 0 = report written; 1 = malformed log (the offending line is named); 2 = at least one
+take has no exposure records (fail closed: absence of records is not zero exposure, and this tool
+never reports a pass). A take that started a run always writes a summary, so a silent take is a
+broken or filtered log, not a clean battle.
+
+`complete` judges the log (one summary, agreeing with its lines, nothing suppressed or capped).
+`usable_for_d1` additionally needs every counted window joinable: no uncovered wire tail, no
+episode without a wire step, no `unsettled` close, no exposure id the wire never carried and no
+episode starting before its body's wire dismount. Both are reported per take and aggregated in
+`pooled`.
 
 The report never decides the D1 verdict: it states the server-confirmed at-risk bodies and
 the D1 steps (> 2 blocks between two packets at most 6 ticks apart) that fall on their
@@ -43,9 +50,13 @@ D1_MAX_INTERVAL_TICKS = 6
 SERVER_EXCESS_BLOCKS = 2.0
 WIRE_QUANTUM = 4096.0
 
-OUTCOMES = ('reseated', 'dead', 'wounded', 'routing', 'inactive', 'targeted', 'plan_end', 'stopped', 'gone')
+OUTCOMES = ('reseated', 'dead', 'wounded', 'routing', 'inactive', 'targeted', 'plan_end', 'stopped', 'gone',
+           'unsettled')
 PLANS = ('chase', 'flank')
-EPISODE_KEYS = ('id', 'tick', 'ticks', 'motion', 'plan', 'from', 'to', 'travel', 'peak', 'outcome')
+EPISODE_KEYS = ('id', 'tick', 'ticks', 'motion', 'plan', 'from', 'to', 'travel', 'peak', 'excess', 'outcome')
+# Takes recorded before the line carried its own `excess` flag: the summary's authoritative
+# `excess_episodes` still counts them, and the per-episode flag is simply absent.
+LEGACY_EPISODE_KEYS = tuple(key for key in EPISODE_KEYS if key != 'excess')
 SUMMARY_KEYS = ('start', 'episodes', 'bodies', 'member_ticks', 'excess_episodes', 'suppressed', 'capped')
 EPISODE_MARK = 'Battle exposure: '
 SUMMARY_MARK = 'Battle exposure summary: '
@@ -63,10 +74,11 @@ def _vector(text):
 def _episode(line, where):
     body = line.split(EPISODE_MARK, 1)[1].strip()
     tokens = body.split()
-    if len(tokens) != len(EPISODE_KEYS):
+    keys = EPISODE_KEYS if len(tokens) == len(EPISODE_KEYS) else LEGACY_EPISODE_KEYS
+    if len(tokens) != len(keys):
         raise ValueError(f'{where}: {len(tokens)} fields, expected {len(EPISODE_KEYS)}: {line.strip()!r}')
     fields = {}
-    for expected, token in zip(EPISODE_KEYS, tokens):
+    for expected, token in zip(keys, tokens):
         key, sep, value = token.partition('=')
         if not sep or key != expected:
             raise ValueError(f'{where}: expected field {expected}=, got {token!r}: {line.strip()!r}')
@@ -85,6 +97,7 @@ def _episode(line, where):
             'to': _vector(fields['to']),
             'travel': float(fields['travel']),
             'peak': float(fields['peak']),
+            'excess': int(fields['excess']) if 'excess' in fields else None,
             'outcome': fields['outcome'],
         }
     except (TypeError, ValueError) as error:
@@ -93,6 +106,8 @@ def _episode(line, where):
         raise ValueError(f'{where}: unknown plan {episode["plan"]!r}: {line.strip()!r}')
     if episode['outcome'] not in OUTCOMES:
         raise ValueError(f'{where}: unknown outcome {episode["outcome"]!r}: {line.strip()!r}')
+    if episode['excess'] not in (0, 1, None):
+        raise ValueError(f'{where}: excess must be 0 or 1: {line.strip()!r}')
     if episode['ticks'] < 1:
         raise ValueError(f'{where}: an episode lasts at least one tick: {line.strip()!r}')
     # The phase contract the core writes: the guards of `tick` cover the motion
@@ -158,7 +173,10 @@ def episode_wire_steps(episode, steps):
     first, last = episode['motion']
     inside = []
     for (t0, x0, _, z0), (t1, x1, _, z1) in zip(steps, steps[1:]):
-        if t1 < first or t0 > last:
+        # The motion of a packet pair is (t0, t1]: it counts while t1 reaches the window's
+        # first tick and t0 is still before its last one. A pair that merely touches the
+        # right edge (t0 == last) is motion after the window.
+        if t1 < first or t0 >= last:
             continue
         blocks = math.hypot(x1 - x0, z1 - z0)
         interval = t1 - t0
@@ -170,6 +188,7 @@ def episode_wire_steps(episode, steps):
             'spans_start': t0 < first,
             'spans_end': t1 > last,
             'covers_window': t0 <= first and t1 >= last,
+            'right_edge_touch': t0 + 1 == last,
             'd1_step': blocks > D1_STEP_BLOCKS and 0 < interval <= D1_MAX_INTERVAL_TICKS,
         })
     return inside
@@ -217,7 +236,18 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
         'exposed_member_ticks': sum(episode['ticks'] for episode in episodes),
         'outcomes': dict(Counter(episode['outcome'] for episode in episodes)),
         'plans': dict(Counter(episode['plan'] for episode in episodes)),
-        'server_excess_episodes': sum(1 for episode in episodes if episode['peak'] > SERVER_EXCESS_BLOCKS),
+        # The core's own excess: per line when the line carries the flag (exact peak on the
+        # server), else its authoritative summary counter. Never re-derived from the
+        # three-decimal `peak` printed beside it.
+        'server_excess_episodes': (
+            sum(episode['excess'] for episode in episodes)
+            if episodes and all(episode['excess'] is not None for episode in episodes)
+            else sum(summary['excess_episodes'] for summary in summaries)
+        ),
+        'excess_source': (
+            'lines' if episodes and all(episode['excess'] is not None for episode in episodes)
+            else 'summary (legacy lines without the flag)'
+        ),
         'max_peak_blocks_per_tick': round(max((episode['peak'] for episode in episodes), default=0.0), 3),
         'max_travel_blocks': round(max((episode['travel'] for episode in episodes), default=0.0), 3),
         'summaries': summaries,
@@ -265,9 +295,6 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             reasons.append('the take carries no wire positions at all')
     take['incomplete'] = reasons
     take['complete'] = not reasons
-    # A take that suppressed episodes cannot support a bound: the missing ids and windows cannot be
-    # recovered from the counters. Say it, do not average over it.
-    take['usable_for_d1'] = take['complete']
     if wire is not None:
         rows, d1_bodies, d1_steps, uncorrelated, tail = [], set(), 0, [], 0
         for episode in episodes:
@@ -307,10 +334,33 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             'episodes_starting_before_dismount': len(early),
         }
         # An id the wire never carried is a real disagreement; an id whose dismount happened
-        # before the recording began is a coverage note, not a phantom.
-        if absent or early:
-            take['usable_for_d1'] = False
-            take['incomplete'].append('exposure and wire disagree')
+        # before the recording began is a coverage note. Both block usability (decided below);
+        # only the first also breaks the log's own completeness.
+        if absent:
+            take['incomplete'].append('exposure absent from the wire')
+    coverage_gaps = []
+    if not take['complete']:
+        coverage_gaps.extend(take['incomplete'])
+    if wire is not None:
+        tail_ticks = take['coverage']['tail_uncovered_ticks']
+        if tail_ticks > 0:
+            coverage_gaps.append(
+                f"uncovered wire tail: {tail_ticks} ticks past the last packet "
+                f"({take['wire']['episodes_past_the_last_packet']} episodes)")
+        if take['wire']['episodes_without_wire_step']:
+            coverage_gaps.append(f"{take['wire']['episodes_without_wire_step']} episodes without a wire step")
+    unsettled = take['outcomes'].get('unsettled', 0)
+    if unsettled:
+        coverage_gaps.append(f"{unsettled} episodes closed without a final sample (unsettled)")
+    if dismounts is not None:
+        if take['wire_dismounts']['exposure_absent_from_wire']:
+            coverage_gaps.append('exposure absent from the wire')
+        if take['wire_dismounts']['episodes_starting_before_dismount']:
+            coverage_gaps.append(
+                f"{take['wire_dismounts']['episodes_starting_before_dismount']} episodes start before"
+                ' their wire dismount')
+    take['coverage_gaps'] = coverage_gaps
+    take['usable_for_d1'] = not coverage_gaps
     if fling_take is not None:
         # D1 is a wire bound over ALL dismounted steps of the take; the exposure filter never
         # hides one. `fling_analysis.py` counts them, so carry its number as it stands.
@@ -333,6 +383,8 @@ def pooled(takes):
         'bodies_with_d1_step': sum(take.get('wire', {}).get('bodies_with_d1_step', 0) for take in takes),
         'capped': any(take['capped'] for take in takes),
         'complete': all(take['complete'] for take in takes),
+        'usable_for_d1': all(take['usable_for_d1'] for take in takes),
+        'unusable': [take['name'] for take in takes if not take['usable_for_d1']],
         'exposure_without_wire_dismount': sum(
             len(take.get('wire_dismounts', {}).get('exposure_without_wire_dismount', ())) for take in takes),
         'episodes_starting_before_dismount': sum(
@@ -416,13 +468,15 @@ def main(argv=None):
               f"{'; CAPPED' if take['capped'] else ''}"
               f"{' ' if take['complete'] else '; INCOMPLETE: ' + '; '.join(take['incomplete'])}")
         if not take['usable_for_d1']:
-            print(f"{take['name']}: UNUSABLE for a bound (see INCOMPLETE): not every episode is in the log",
+            print(f"{take['name']}: UNUSABLE for a bound: " + '; '.join(take['coverage_gaps']),
                   file=sys.stderr)
     pool = report['pooled']
     print(f"pooled: {pool['bodies_at_risk']} at-risk bodies, {pool['exposed_member_ticks']} member-ticks, "
           f"server excess episodes {pool['server_excess_episodes']}, D1 steps {pool['d1_steps']}")
-    if not any(take['records'] for take in takes):
-        print('no exposure records: absence is not zero exposure (fail closed)', file=sys.stderr)
+    silent = [take['name'] for take in takes if not take['records']]
+    if silent:
+        print(f"no exposure records in {', '.join(silent)}: absence is not zero exposure (fail closed)",
+              file=sys.stderr)
         return 2
     return 0
 

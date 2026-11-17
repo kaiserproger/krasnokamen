@@ -70,13 +70,22 @@ fn outcome_and_plan_names_are_the_ones_the_analyzer_parses() {
         Outcome::PlanEnd,
         Outcome::Stopped,
         Outcome::Gone,
+        Outcome::Unsettled,
     ]
     .map(Outcome::name);
     assert_eq!(
         names,
         [
-            "reseated", "dead", "wounded", "routing", "inactive", "targeted", "plan_end",
-            "stopped", "gone"
+            "reseated",
+            "dead",
+            "wounded",
+            "routing",
+            "inactive",
+            "targeted",
+            "plan_end",
+            "stopped",
+            "gone",
+            "unsettled"
         ]
     );
     assert_eq!([Plan::Chase.name(), Plan::Flank.name()], ["chase", "flank"]);
@@ -105,7 +114,8 @@ fn an_episode_reports_duration_travel_peak_and_the_motion_window() {
     assert_eq!(
         lines[0],
         "Battle exposure: id=1076 tick=5142 ticks=3 motion=5143-5145 plan=flank \
-         from=[0.000,64.000,0.000] to=[1.000,64.000,3.000] travel=3.162 peak=3.000 outcome=stopped"
+         from=[0.000,64.000,0.000] to=[1.000,64.000,3.000] travel=3.162 peak=3.000 excess=1 \
+         outcome=unsettled"
     );
     assert_eq!(
         lines[1],
@@ -129,6 +139,11 @@ fn excess_counts_only_steps_above_the_bound() {
     exposure.begin(11);
     exposure.exposed(EntityId(1), 0, [EXCESS_BLOCKS, 0.0, 0.0], Plan::Chase);
     exposure.halt(None);
+    assert!(
+        exposure.lines()[0].contains(" peak=2.000 excess=0 "),
+        "{:?}",
+        exposure.lines()[0]
+    );
     assert!(
         exposure.lines()[1].contains("excess_episodes=0"),
         "{:?}",
@@ -233,6 +248,7 @@ fn the_body_cap_bounds_the_distinct_bodies_and_reports_the_rest() {
 #[test]
 fn the_line_cap_bounds_the_emitted_episodes() {
     let mut exposure = Exposure::default();
+    exposure.begin(0);
     exposure.bodies.push(EntityId(1));
     let episode = Episode {
         id: EntityId(1),
@@ -262,48 +278,111 @@ fn the_line_cap_bounds_the_emitted_episodes() {
     );
 }
 
-/// The body cap: one flapper cannot spend the whole line budget, and the run
-/// reports that it was cut.
+/// A run that started reports even with no exposure at all: the summary is what
+/// tells a clean take from a log without the event.
 #[test]
-fn the_body_cap_stops_a_flapping_body_from_using_every_line() {
+fn a_run_without_exposure_writes_one_summary() {
     let mut exposure = Exposure::default();
-    for tick in 0..(LINES_MAX as u64 * 4) {
-        exposure.begin(tick);
-        // one body closes and reopens every tick, twice the line budget
-        exposure.exposed(EntityId(1), 0, [0.0, 0.0, 0.0], Plan::Chase);
-    }
+    exposure.begin(4242);
     exposure.halt(None);
-    let summary = exposure.lines().last().expect("summary");
-    assert!(summary.contains("episodes=1 bodies=1"), "{summary}");
+    assert_eq!(
+        exposure.lines(),
+        &[
+            "Battle exposure summary: start=4242 episodes=0 bodies=0 member_ticks=0 \
+           excess_episodes=0 suppressed=0 capped=false"
+                .to_string()
+        ],
+        "one summary, no episode line"
+    );
+    exposure.halt(None);
+    assert_eq!(
+        exposure.lines().len(),
+        1,
+        "a run that never started reports nothing"
+    );
 }
 
-/// A mass close at battle scale: 1000 distinct bodies exposed in one tick and
-/// closed in the next stays bounded, linear and truthful.
+/// One flapping body — closing and reopening every tick — does exhaust the line
+/// budget, and the run says so instead of silently dropping lines.
 #[test]
-fn a_thousand_bodies_close_in_one_tick_within_the_caps() {
+fn a_flapping_body_exhausts_the_line_cap_and_the_run_reports_it() {
+    let (entities, formation, columns) = (
+        EntityStore::default(),
+        FormationRuntime::default(),
+        Columns::default(),
+    );
+    let sample = Sample {
+        entities: &entities,
+        formation: &formation,
+        columns: &columns,
+    };
     let mut exposure = Exposure::default();
-    exposure.begin(1);
-    for id in 0..1000 {
-        exposure.exposed(
-            EntityId(id),
-            id as usize,
-            [f64::from(id), 0.0, 0.0],
-            Plan::Flank,
-        );
+    let mut tick = 0;
+    for _ in 0..(LINES_MAX + 44) {
+        exposure.begin(tick);
+        exposure.exposed(EntityId(1), 0, [0.0, 0.0, 0.0], Plan::Chase);
+        tick += 1;
+        // the body is not exposed on the next tick: its episode closes (`gone`)
+        exposure.begin(tick);
+        exposure.close(&sample, &[], &[]);
+        tick += 1;
     }
-    // every body moves half a block, then the whole set leaves the guard set
-    exposure.begin(2);
     exposure.halt(None);
     let lines = exposure.lines();
     let episodes = lines
         .iter()
         .filter(|line| line.starts_with("Battle exposure: "))
         .count();
-    assert_eq!(episodes, BODIES_MAX, "the body cap bounds the reported set");
+    assert_eq!(episodes, LINES_MAX as usize, "the line cap bounds one body");
     let summary = lines.last().expect("summary");
-    assert!(summary.contains("bodies=64"), "{summary}");
-    assert!(summary.contains("suppressed=936"), "{summary}");
+    assert!(summary.contains("episodes=300 bodies=1"), "{summary}");
+    assert!(summary.contains("suppressed=44"), "{summary}");
     assert!(summary.ends_with("capped=true"), "{summary}");
+}
+
+/// The body cap refuses a new body past the bound but never refuses a body the
+/// run has already reported: a known id may close and reopen freely.
+#[test]
+fn the_body_cap_refuses_a_new_body_but_never_a_known_one() {
+    let (entities, formation, columns) = (
+        EntityStore::default(),
+        FormationRuntime::default(),
+        Columns::default(),
+    );
+    let sample = Sample {
+        entities: &entities,
+        formation: &formation,
+        columns: &columns,
+    };
+    let mut exposure = Exposure::default();
+    let mut tick = 0;
+    for id in 0..BODIES_MAX as i32 {
+        exposure.begin(tick);
+        exposure.exposed(EntityId(id), id as usize, [0.0, 0.0, 0.0], Plan::Chase);
+        tick += 1;
+        exposure.begin(tick);
+        exposure.close(&sample, &[], &[]);
+        tick += 1;
+    }
+    // a 65th body is refused …
+    exposure.begin(tick);
+    exposure.exposed(EntityId(9999), 9999, [0.0, 0.0, 0.0], Plan::Chase);
+    assert!(!exposure.is_exposed(EntityId(9999)));
+    assert_eq!(exposure.suppressed, 1);
+    // … while a known body re-enters without being suppressed
+    exposure.begin(tick + 1);
+    exposure.exposed(EntityId(5), 5, [0.0, 0.0, 0.0], Plan::Chase);
+    assert!(exposure.is_exposed(EntityId(5)));
+    assert_eq!(
+        exposure.suppressed, 1,
+        "a known body is never refused for the body cap"
+    );
+    exposure.halt(None);
+    let summary = exposure.lines().last().expect("summary");
+    assert!(
+        summary.contains(&format!("bodies={BODIES_MAX}")),
+        "{summary}"
+    );
 }
 
 /// A paused battle closes its open episodes and starts a fresh run.
@@ -313,7 +392,7 @@ fn halt_closes_open_episodes_and_starts_a_fresh_run() {
     exposure.begin(50);
     exposure.exposed(EntityId(5), 1, [0.0, 0.0, 0.0], Plan::Flank);
     exposure.halt(None);
-    assert!(exposure.lines()[0].ends_with("outcome=stopped"));
+    assert!(exposure.lines()[0].ends_with("outcome=unsettled"));
     assert_eq!(exposure.open, 0);
     assert_eq!(exposure.member_ticks, 0);
     exposure.halt(None);
@@ -361,5 +440,15 @@ fn a_disabled_tracker_records_no_episode() {
     assert!(!exposure.is_exposed(EntityId(1)));
     assert_eq!(exposure.member_ticks, 0);
     exposure.halt(None);
-    assert!(exposure.lines().is_empty());
+    let lines = exposure.lines();
+    assert!(
+        lines
+            .iter()
+            .all(|line| !line.starts_with("Battle exposure: ")),
+        "no episode is recorded: {lines:?}"
+    );
+    assert!(
+        lines.last().unwrap().contains("episodes=0"),
+        "a run that started still reports its empty summary: {lines:?}"
+    );
 }

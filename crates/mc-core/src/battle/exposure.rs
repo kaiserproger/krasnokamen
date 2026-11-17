@@ -49,8 +49,10 @@ use crate::entities::EntityStore;
 /// field-1k take), so this bounds a pathological flapper without cutting a
 /// real battle.
 const LINES_MAX: u32 = 256;
-/// Distinct bodies one run may report. One body can flap; the bound counts
-/// bodies as well as lines so a single flapper cannot exhaust the lines.
+/// Distinct bodies one run may report: a run of a whole battlefield holds 8-15,
+/// so this bounds a pathological field without cutting a real battle. It does
+/// not bound one flapping body — [`LINES_MAX`] does, and a run that hits either
+/// bound reports itself `capped`.
 const BODIES_MAX: usize = 64;
 /// Open episodes one run tracks at once: the memory bound of the tracker.
 const OPEN_MAX: usize = 1024;
@@ -89,6 +91,8 @@ enum Outcome {
     PlanEnd,
     Stopped,
     Gone,
+    /// A run boundary closed it before a trustworthy final position existed.
+    Unsettled,
 }
 
 impl Outcome {
@@ -103,6 +107,7 @@ impl Outcome {
             Self::PlanEnd => "plan_end",
             Self::Stopped => "stopped",
             Self::Gone => "gone",
+            Self::Unsettled => "unsettled",
         }
     }
 }
@@ -248,14 +253,19 @@ impl Exposure {
             episode.plan = plan;
             return;
         }
-        if self.bodies.len() >= BODIES_MAX || self.open >= OPEN_MAX {
+        // `suppressed` counts records this run could not keep: one per would-be
+        // episode that was not tracked (a new body past `BODIES_MAX`, or
+        // `OPEN_MAX` open at once) and one per episode line past `LINES_MAX`.
+        // A body already reported is never refused for the body cap.
+        let known = self.bodies.contains(&id);
+        if (!known && self.bodies.len() >= BODIES_MAX) || self.open >= OPEN_MAX {
             self.suppressed += 1;
             return;
         }
         let slot = self.free_slot();
         self.aligned[member] = slot as u32 + 1;
         self.open += 1;
-        if !self.bodies.contains(&id) {
+        if !known {
             self.bodies.push(id);
         }
         self.episodes[slot] = Some(Episode {
@@ -286,7 +296,7 @@ impl Exposure {
             if episode.last_tick == self.server_tick {
                 continue;
             }
-            if let Some(pos) = body_position(&episode, sample) {
+            if let Some(pos) = step_position(&episode, sample) {
                 let episode = self.episodes[slot]
                     .as_mut()
                     .expect("open slot holds an episode");
@@ -320,20 +330,33 @@ impl Exposure {
     /// shutdown or the journal halt. Closes what is open, reports, and starts a
     /// fresh run for a resumed battle. `sample` is absent only where no body
     /// position is reachable.
+    ///
+    /// Every run that started reports, even one that saw no exposure at all:
+    /// without its summary a clean take is indistinguishable from a log with
+    /// the event filtered out, and the analyzer would have to fail closed on
+    /// it. `/tick freeze` is not a boundary: it skips the battle step entirely
+    /// (`tick.rs`), so an episode that spans a freeze keeps its condition ticks
+    /// open and its `ticks`/`motion` include the frozen ticks. The window only
+    /// widens — a fling is still inside it — and no line is lost.
     pub(super) fn halt(&mut self, sample: Option<&Sample<'_>>) {
         for slot in 0..self.episodes.len() {
             let Some(episode) = self.episodes[slot] else {
                 continue;
             };
-            if let Some(sample) = sample
-                && let Some(pos) = body_position(&episode, sample)
-            {
-                let episode = self.episodes[slot]
-                    .as_mut()
-                    .expect("open slot holds an episode");
-                episode.peak = episode.peak.max(horizontal(episode.to, pos));
-                episode.to = pos;
-            }
+            // At a boundary the columns still hold the snapshot the last battle
+            // step read (pre-motion), so the trustworthy position is the entity
+            // store's current one, by identity. Without it the close is recorded
+            // as `unsettled`, never as a clean one.
+            let relocated = sample
+                .and_then(|sample| boundary_position(sample, episode.id))
+                .map(|pos| {
+                    let episode = self.episodes[slot]
+                        .as_mut()
+                        .expect("open slot holds an episode");
+                    episode.peak = episode.peak.max(horizontal(episode.to, pos));
+                    episode.to = pos;
+                })
+                .is_some();
             let episode = self.episodes[slot]
                 .take()
                 .expect("open slot holds an episode");
@@ -341,9 +364,14 @@ impl Exposure {
             if self.aligned[episode.member] == slot as u32 + 1 {
                 self.aligned[episode.member] = 0;
             }
-            self.emit_episode(episode, Outcome::Stopped);
+            let outcome = if relocated {
+                Outcome::Stopped
+            } else {
+                Outcome::Unsettled
+            };
+            self.emit_episode(episode, outcome);
         }
-        if self.closed > 0 {
+        if self.first_tick.is_some() {
             let capped = self.emitted >= LINES_MAX || self.suppressed > 0;
             let (start, closed, bodies) =
                 (self.first_tick.unwrap_or(0), self.closed, self.bodies.len());
@@ -370,7 +398,10 @@ impl Exposure {
 
     fn emit_episode(&mut self, episode: Episode, outcome: Outcome) {
         self.closed += 1;
-        if episode.peak > EXCESS_BLOCKS {
+        // The authoritative excess: computed from the exact peak in blocks, never
+        // re-derived from the three-decimal field printed beside it.
+        let above = episode.peak > EXCESS_BLOCKS;
+        if above {
             self.excess += 1;
         }
         if self.emitted >= LINES_MAX {
@@ -383,7 +414,7 @@ impl Exposure {
         let (from, to) = (episode.from, episode.to);
         let motion = episode.first_tick + 1;
         self.emit(format_args!(
-            "Battle exposure: id={} tick={} ticks={} motion={}-{} plan={} from=[{:.3},{:.3},{:.3}] to=[{:.3},{:.3},{:.3}] travel={:.3} peak={:.3} outcome={}",
+            "Battle exposure: id={} tick={} ticks={} motion={}-{} plan={} from=[{:.3},{:.3},{:.3}] to=[{:.3},{:.3},{:.3}] travel={:.3} peak={:.3} excess={} outcome={}",
             episode.id.0,
             episode.first_tick,
             ticks,
@@ -398,6 +429,7 @@ impl Exposure {
             to[2],
             travel,
             episode.peak,
+            u8::from(above),
             outcome.name()
         ));
     }
@@ -469,27 +501,29 @@ impl Exposure {
 /// own) still reports what it saw instead of losing it silently.
 impl Drop for Exposure {
     fn drop(&mut self) {
-        if self.closed > 0 || self.open_count() > 0 {
+        if self.first_tick.is_some() || self.open_count() > 0 {
             self.halt(None);
         }
     }
 }
 
-/// The body's current position, from the columns row when the formation still
-/// knows the member and from the entity store otherwise.
-fn body_position(episode: &Episode, sample: &Sample<'_>) -> Option<[f64; 3]> {
+/// The body's position at a battle step, while the formation still holds the
+/// identity at the recorded member index: the columns row the step read, else
+/// the entity store by identity — never the slot another body may hold now.
+fn step_position(episode: &Episode, sample: &Sample<'_>) -> Option<[f64; 3]> {
     if let Some(member) = sample.formation.members.get(episode.member)
         && member.id == episode.id
+        && let Some(pos) = sample.columns.positions.get(episode.member)
     {
-        if let Some(pos) = sample.columns.positions.get(episode.member) {
-            return Some(*pos);
-        }
+        return Some(*pos);
     }
-    let slot = sample
-        .formation
-        .members
-        .get(episode.member)
-        .and_then(|m| m.slot)?;
+    boundary_position(sample, episode.id)
+}
+
+/// The body's current position at a run boundary, by identity only: the columns
+/// snapshot belongs to the last battle step and predates that step's motion.
+fn boundary_position(sample: &Sample<'_>, id: EntityId) -> Option<[f64; 3]> {
+    let slot = sample.entities.slot_of_any(id)?;
     Some(sample.entities.pos(slot))
 }
 

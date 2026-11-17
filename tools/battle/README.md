@@ -212,7 +212,8 @@ wounded action) and is not seated:
 
 ```
 INFO mc_core::battle::exposure: Battle exposure: id=1076 tick=5142 ticks=7 motion=5143-5149 plan=chase \
-  from=[-12.345,64.000,88.100] to=[-14.100,64.000,87.200] travel=1.985 peak=0.412 outcome=targeted
+  from=[-12.345,64.000,88.100] to=[-14.100,64.000,87.200] travel=1.985 peak=0.412 excess=0 \
+  outcome=targeted
 INFO mc_core::battle::exposure: Battle exposure summary: start=5142 episodes=37 bodies=12 \
   member_ticks=214 excess_episodes=0 suppressed=0 capped=false
 ```
@@ -224,9 +225,15 @@ episode on that window with no offset to fit. `ticks` is the duration, `travel` 
 start-to-end distance, `peak` the largest single-tick horizontal step — the closing sample is taken
 when the episode ends, so the movement of the last exposed tick is always inside it. `outcome` is
 `reseated`, `dead`, `wounded`, `routing`, `inactive`, `targeted`, `plan_end`, `stopped` (a run
-boundary closed it: pause, `battle reset`, shutdown or the journal halt) or `gone` (the identity left
-the formation). `excess_episodes` counts episodes whose peak is above 2 blocks per tick: the server's
-own excess signal, reported but not the verdict, because knockback moves a body too. One run logs at
+boundary closed it: pause, `battle reset`, shutdown or the journal halt with a trustworthy final
+sample), `unsettled` (a boundary closed it without one — the episode is observation-incomplete, never
+silently clean) or `gone` (the identity left the formation). `excess=1` and the summary's
+`excess_episodes` are the core's own per-tick > 2 blocks signal, computed from the exact peak rather
+than the three decimals printed beside it: the server-side analogue of the D1 step, reported but not
+the verdict, because knockback moves a body too. A run that started always writes its summary, even
+with zero episodes, so a clean take is never indistinguishable from a filtered log; `/tick freeze`
+is not a boundary (the battle step is skipped, so an episode spanning a freeze keeps the frozen ticks
+in `ticks`/`motion` — the window only widens). One run logs at
 most 256 episode lines and 64 distinct bodies; `suppressed` and `capped` in the summary report what
 those caps dropped, and a take that reports either is not usable for a bound. Nothing is persisted:
 `BattleState::exposure` is `serde(skip)`, so a recovered battle starts a fresh run and its summary's
@@ -236,10 +243,11 @@ those caps dropped, and a take that reports either is not usable for a bound. No
 yaw-1=POSITIONS.json --fling-json yaw-1=FLING.json` reads the lines out of a take's `server.log`, joins
 them with `wire_jitter.py --positions-out`, cross-checks them against `fling_analysis.py`'s real
 dismounts and D1 count, and reports the at-risk bodies and the D1 steps (> 2 blocks between two
-packets at most 6 ticks apart) whose interval intersects an exposure window. It fails closed: a take
-with no records exits 2, and a take whose log is missing its summary, whose summary disagrees with
-its lines, which resumed or was capped, or whose wire ends before the last window is reported
-`INCOMPLETE` and `UNUSABLE for a bound` instead of reading as zero exposure.
+packets at most 6 ticks apart) whose interval intersects an exposure window. It fails closed: any take with no records exits 2, and a take whose log is missing its summary or
+whose summary disagrees with its lines, which resumed or was capped, is `INCOMPLETE`. `usable_for_d1`
+additionally needs every counted window joinable — no uncovered wire tail, no episode without a wire
+step, no `unsettled` close, no exposure id the wire never carried — and both are aggregated over the
+run instead of reading as zero exposure.
 
 ## Checkpoint observation
 

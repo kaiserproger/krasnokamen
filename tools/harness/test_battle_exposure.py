@@ -9,11 +9,11 @@ from tools.harness.battle_exposure import (D1_MAX_INTERVAL_TICKS, D1_STEP_BLOCKS
 
 
 def episode_line(ident=1076, tick=5142, ticks=7, plan='chase', travel=1.985, peak=0.412, outcome='targeted',
-                 start=(-12.345, 64.0, 88.1), end=(-14.1, 64.0, 87.2), motion=None):
+                 start=(-12.345, 64.0, 88.1), end=(-14.1, 64.0, 87.2), motion=None, excess=0):
     motion = motion or f'{tick + 1}-{tick + ticks}'
     return (f'2026-11-17T09:37:41.664429Z  INFO mc_core::battle::exposure: Battle exposure: id={ident} '
             f'tick={tick} ticks={ticks} motion={motion} plan={plan} from=[{start[0]},{start[1]},{start[2]}] '
-            f'to=[{end[0]},{end[1]},{end[2]}] travel={travel} peak={peak} outcome={outcome}')
+            f'to=[{end[0]},{end[1]},{end[2]}] travel={travel} peak={peak} excess={excess} outcome={outcome}')
 
 
 def summary_line(start=5142, episodes=1, bodies=1, member_ticks=7, excess_episodes=0, suppressed=0,
@@ -52,7 +52,8 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(row['motion'], [5143, 5149])
         self.assertEqual(row['from'], [-12.345, 64.0, 88.1])
         self.assertEqual(row['to'], [-14.1, 64.0, 87.2])
-        self.assertEqual((row['travel'], row['peak'], row['outcome']), (1.985, 0.412, 'targeted'))
+        self.assertEqual((row['travel'], row['peak'], row['excess'], row['outcome']),
+                         (1.985, 0.412, 0, 'targeted'))
         self.assertEqual(summaries, [{'start': 5142, 'episodes': 1, 'bodies': 1, 'member_ticks': 7,
                                       'excess_episodes': 0, 'suppressed': 0, 'capped': False}])
 
@@ -60,8 +61,8 @@ class ParseTest(unittest.TestCase):
         reordered = episode_line().replace('ticks=7 motion=5143-5149', 'motion=5143-5149 ticks=7')
         with self.assertRaisesRegex(ValueError, r'server\.log:1: expected field ticks='):
             parse_log(reordered)
-        with self.assertRaisesRegex(ValueError, 'fields, expected 10'):
-            parse_log(episode_line().rsplit(' outcome=', 1)[0])
+        with self.assertRaisesRegex(ValueError, 'fields, expected 11'):
+            parse_log(episode_line().replace(' peak=0.412 excess=0', ''))
 
     def test_a_motion_window_that_breaks_the_phase_contract_is_refused(self):
         with self.assertRaisesRegex(ValueError, 'is not tick\\+1\\.\\.tick\\+ticks'):
@@ -77,6 +78,15 @@ class ParseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'at least one tick'):
             parse_log(episode_line(ticks=0, motion='5143-5142'))
 
+    def test_a_take_from_before_the_excess_flag_parses_and_counts_from_its_summary(self):
+        legacy = episode_line().replace(' excess=0', '')
+        episodes, summaries = parse_log('\n'.join([legacy, summary_line(excess_episodes=1)]))
+        self.assertIsNone(episodes[0]['excess'])
+        with tempfile.TemporaryDirectory() as root:
+            take = analyse_take('take', take_directory(root, '\n'.join([legacy, summary_line(excess_episodes=1)])))
+            self.assertEqual(take['server_excess_episodes'], 1)
+            self.assertIn('summary', take['excess_source'])
+
     def test_a_summary_with_a_bad_count_is_refused(self):
         with self.assertRaisesRegex(ValueError, 'capped must be true or false'):
             parse_log(summary_line(capped='yes'))
@@ -90,6 +100,12 @@ class WireJoinTest(unittest.TestCase):
             [tick, round(x * 4096), 0, round(z * 4096)] for tick, x, z in rows]}}
         with tempfile.TemporaryDirectory() as root:
             return wire_positions(positions_file(root, document))[1076]
+
+    def test_a_short_exposure_covered_by_one_packet_pair_counts(self):
+        steps = self.steps([(5140, 0.0, 0.0), (5146, 5.0, 0.0)])
+        found = episode_wire_steps({'motion': [5143, 5143]}, steps)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0]['covers_window'])
 
     def test_a_fling_inside_the_window_is_a_d1_step(self):
         steps = self.steps([(5140, 0.0, 0.0), (5144, 3.0, 0.0)])
@@ -124,6 +140,15 @@ class WireJoinTest(unittest.TestCase):
         # every packet is before the window, so no interval reaches it
         steps = self.steps([(5100, 0.0, 0.0), (5102, 5.0, 0.0), (5104, 5.5, 0.0)])
         self.assertEqual(episode_wire_steps({'motion': [5143, 5149]}, steps), [])
+
+    def test_a_pair_that_only_touches_the_right_edge_is_motion_after_the_window(self):
+        # motion of the pair (t0, t1] with t0 == last is after the window: excluded
+        steps = self.steps([(5149, 0.0, 0.0), (5151, 4.0, 0.0)])
+        self.assertEqual(episode_wire_steps({'motion': [5143, 5149]}, steps), [])
+        # one tick earlier the same pair covers the window's last tick and counts
+        steps = self.steps([(5148, 0.0, 0.0), (5150, 4.0, 0.0)])
+        found = episode_wire_steps({'motion': [5143, 5149]}, steps)
+        self.assertEqual([step['d1_step'] for step in found], [True])
 
     def test_the_bound_constants_are_the_runbook_ones(self):
         self.assertEqual((D1_STEP_BLOCKS, D1_MAX_INTERVAL_TICKS), (2.0, 6))
@@ -251,7 +276,11 @@ class TakeTest(unittest.TestCase):
                                       dismounts=[[900, '1076', 'left_view']])
             self.assertEqual(take['wire_dismounts']['exposure_without_wire_dismount'], [1076])
             self.assertEqual(take['wire_dismounts']['exposure_absent_from_wire'], [])
-            self.assertTrue(take['usable_for_d1'])
+            # the log is complete; the take is unusable only because its recorded window is
+            # not joined by the wire (the coverage rule), never because of a phantom id
+            self.assertTrue(take['complete'])
+            self.assertFalse(take['usable_for_d1'])
+            self.assertTrue(any('uncovered wire tail' in gap for gap in take['coverage_gaps']))
 
     def test_an_episode_starting_before_its_dismount_means_a_phase_mismatch(self):
         with tempfile.TemporaryDirectory() as root:
@@ -277,15 +306,17 @@ class TakeTest(unittest.TestCase):
     def test_pooling_sums_bodies_steps_and_usability(self):
         takes = [
             {'name': 'yaw-1', 'records': True, 'bodies_at_risk': 3, 'exposed_member_ticks': 10,
-             'server_excess_episodes': 0, 'capped': False, 'complete': True,
+             'server_excess_episodes': 0, 'capped': False, 'complete': True, 'usable_for_d1': True,
              'wire': {'d1_steps': 0, 'bodies_with_d1_step': 0}},
             {'name': 'yaw-2', 'records': True, 'bodies_at_risk': 4, 'exposed_member_ticks': 20,
-             'server_excess_episodes': 1, 'capped': False, 'complete': True,
+             'server_excess_episodes': 1, 'capped': False, 'complete': True, 'usable_for_d1': False,
              'wire': {'d1_steps': 2, 'bodies_with_d1_step': 1}},
         ]
         pool = pooled(takes)
         self.assertEqual((pool['bodies_at_risk'], pool['d1_steps'], pool['server_excess_episodes']), (7, 2, 1))
-        self.assertTrue(pool['complete'])
+        self.assertTrue(pool['complete'], "both logs are complete")
+        self.assertFalse(pool['usable_for_d1'], "one unusable take makes the pool unusable")
+        self.assertEqual(pool['unusable'], ['yaw-2'])
 
 
 class MainTest(unittest.TestCase):
