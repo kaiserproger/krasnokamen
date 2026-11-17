@@ -65,6 +65,36 @@ fn deferred_jobs_sleep_until_retry_but_new_periods_still_accrue() {
 }
 
 #[test]
+fn capped_offscreen_job_stops_journaling_until_simulated() {
+    let mut f = fixture(state());
+    let count = job(&f).count;
+    let period = job(&f).duration;
+    let capped_at = job(&f).next_due + period * u64::from(count - 1);
+    visit(&mut f, capped_at, false);
+    assert_eq!((job(&f).done, job(&f).deferred), (0, count));
+    assert!(!job(&f).waiting_simulated);
+    assert!(!f.world.settlements.take_images().is_empty());
+    let before = persistence_image(&f.world);
+    let step = period.max(RETRY_TICKS);
+    for visit_number in 1..=4 {
+        let now = capped_at + visit_number * step;
+        assert!(offscreen::ready(job(&f), now));
+        visit(&mut f, now, false);
+        assert!(
+            f.world.settlements.take_images().is_empty(),
+            "a capped offscreen job must not journal idle periods"
+        );
+        assert_eq!(persistence_image(&f.world), before);
+        assert_eq!(job(&f).retry_at, now + RETRY_TICKS);
+    }
+    let now = f.world.tick + RETRY_TICKS;
+    visit(&mut f, now, true);
+    assert_eq!((job(&f).done, job(&f).deferred), (count, 0));
+    assert_eq!(total(&f, "minecraft:bread"), count as i32);
+    assert_eq!(total(&f, "minecraft:wheat"), 0);
+}
+
+#[test]
 fn overdue_parked_job_does_not_enter_cursor_before_retry() {
     let mut f = fixture(state());
     fill(&mut f, vec![ItemStack::EMPTY; 27]);
@@ -199,6 +229,37 @@ fn persisted_legacy_clock_bound_fails_closed() {
     let job = policy.jobs.get_mut("supply").unwrap();
     job.next_due = job.duration + 1;
     assert!(offscreen::restore_clocks(&mut f.world).is_err());
+}
+
+#[test]
+fn legacy_one_tick_recipe_accepts_parked_retry_deadline() {
+    let mut f = fixture(state());
+    f.world.tick = 100;
+    let game = f.world.tick_control.game_ticks(f.world.tick);
+    let policy = &mut f
+        .world
+        .settlements
+        .get_mut(f.town)
+        .unwrap()
+        .economy
+        .production;
+    policy.clock = offscreen::Clock::WorldTicks;
+    let legacy_job = policy.jobs.get_mut("supply").unwrap();
+    legacy_job.duration = 1;
+    legacy_job.next_due = f.world.tick + RETRY_TICKS;
+    legacy_job.paused = Some("no ingredients".into());
+    offscreen::restore_clocks(&mut f.world).unwrap();
+    assert_eq!(job(&f).next_due, game + RETRY_TICKS);
+    assert_eq!(
+        f.world
+            .settlements
+            .get(f.town)
+            .unwrap()
+            .economy
+            .production
+            .clock,
+        offscreen::Clock::GameTicks
+    );
 }
 
 #[test]

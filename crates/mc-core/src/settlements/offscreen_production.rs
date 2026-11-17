@@ -101,7 +101,12 @@ pub(super) fn visit(
     now: u64,
 ) -> bool {
     if !simulated(world, job.station) {
+        job.retry_at = now.saturating_add(RETRY_TICKS);
         let waited = std::mem::take(&mut job.waiting_simulated);
+        // A full backlog only needs a runtime retry until simulation resumes.
+        if !waited && job.deferred == job.count - job.done {
+            return false;
+        }
         let periods = if job.done < job.count {
             advance(job, now)
         } else {
@@ -113,7 +118,6 @@ pub(super) fn visit(
             .deferred
             .saturating_add(owed.min(u64::from(u32::MAX)) as u32)
             .min(job.count - job.done);
-        job.retry_at = now.saturating_add(RETRY_TICKS);
         return periods != 0 || before != job.deferred || waited;
     }
     let mut changed = false;
@@ -331,9 +335,10 @@ fn restore_dimension(world: &mut TickState, now: u64, game: u64) -> Result<(), c
             .economy
             .production;
         for job in state.jobs.values_mut() {
+            // Legacy parking could delay even a one-tick recipe by RETRY_TICKS.
             if job.deferred != 0
                 || job.duration == 0
-                || job.next_due.saturating_sub(now) > job.duration
+                || job.next_due.saturating_sub(now) > job.duration.max(RETRY_TICKS)
             {
                 return Err(crate::CoreError::Storage(format!(
                     "native settlement {} production {}: inconsistent legacy clock",
