@@ -1761,6 +1761,10 @@ def main() -> int:
                         help="2s warmup + 5s measurement at full population; lifecycle only, never publication evidence")
     parser.add_argument("--smoke-residents", type=int,
                         help="smaller noncanonical resident cohort for --smoke only")
+    parser.add_argument("--scale-view-distance", type=int,
+                        help="scale profiles only: observer view distance (2..32, default 6); "
+                             "measurement control for the cost of visible entities — the resident "
+                             "cohort and the one-observer-per-pen coverage do not change")
     parser.add_argument("--scale-residents", type=int,
                         help="scale profiles only: override the ladder point (10..%d residents); "
                              "the observer count, pen coverage and recipe name follow the override"
@@ -1805,7 +1809,15 @@ def main() -> int:
             residents = scale_residents(args.profile, args.smoke_residents, args.scale_residents)
         except ValueError as error:
             parser.error(str(error))
-        args.clients, args.mobs, args.villagers, args.view_distance = 0, residents, 0, 6
+        # Measurement-only control: how much each observer sees, with the resident set and
+        # the one-observer-per-pen coverage untouched. Residents are admitted by observer
+        # proximity, so reducing the observer *count* would leave pens dormant and break the
+        # admission invariant; view distance is the knob that changes visible entities
+        # without changing who is observed.
+        view_distance = args.scale_view_distance if args.scale_view_distance is not None else 6
+        if not 2 <= view_distance <= 32:
+            parser.error("--scale-view-distance must be within 2..32")
+        args.clients, args.mobs, args.villagers, args.view_distance = 0, residents, 0, view_distance
         if args.mobs < 10:
             parser.error("scale population must be at least 10")
         if args.projectiles is not None and (
@@ -1850,6 +1862,8 @@ def main() -> int:
             parser.error("--smoke-residents requires a scale profile")
         if args.scale_residents is not None:
             parser.error("--scale-residents requires a scale profile")
+        if args.scale_view_distance is not None:
+            parser.error("--scale-view-distance requires a scale profile")
         if any(value is not None for value in (args.projectiles, args.xp_orbs, args.containers,
                                                 args.productive_npcs, args.damage_victims, args.map_frames,
                                                 args.churn_percent, args.daylight_zombies, args.wool_sheep,

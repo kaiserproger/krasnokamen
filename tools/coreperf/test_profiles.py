@@ -412,6 +412,24 @@ fi
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 profiles.scale_residents("scale-1m-all-active", *bad)
 
+    def test_scale_view_distance_is_a_measurement_control_on_one_fixture(self):
+        """View distance changes what observers see, never who is observed.
+
+        Residents are admitted by observer proximity, so this control must leave the
+        observer count (one per pen) and the cohort untouched — otherwise pens go dormant
+        and the admission invariant fails before any measurement starts.
+        """
+        recipe = profiles.scale_fixture(16384, "all-active")
+        observers = sum(row["active"] for row in recipe["coverage"])
+        self.assertEqual(observers, 16)
+        six = argparse.Namespace(mobs=16384, villagers=0, seed=42, view_distance=6)
+        eight = argparse.Namespace(mobs=16384, villagers=0, seed=42, view_distance=8)
+        # the fixture cache key carries the view distance, so a control arm is its own world
+        self.assertNotEqual(profiles.compare.fixture_cache_key(six, recipe, "registry"),
+                            profiles.compare.fixture_cache_key(eight, recipe, "registry"))
+        # and the recipe (cohort, pens, observers) is identical between the arms
+        self.assertEqual(profiles.load.digest(recipe), profiles.load.digest(profiles.scale_fixture(16384, "all-active")))
+
     def test_arbitrary_scale_rung_is_exact_and_has_its_own_cache_key(self):
         """A non-ladder rung (8,192) is a first-class fixture, not a ladder alias.
 
