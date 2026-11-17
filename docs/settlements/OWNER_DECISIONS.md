@@ -44,7 +44,10 @@ The supply recipes from the same decision (saddle, hay block) are implemented; s
 
 - Funded construction may physically clear natural forest from its lot and access path; admission itself changes no blocks.
 - Logs, saplings and other vanilla drops go to settlement storage without loss or duplication.
-- A block must match this world's deterministic generator and have no retained player placement record. Imported/unknown generator identities and persisted lumberjack sapling roots are protected after restart.
+- A block must have no retained player placement record. It must also match this
+  world's deterministic generator, and imported/unknown generator identities and
+  persisted lumberjack sapling roots remain protected after restart, except for
+  lumberjack trees on needed lots ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17)).
 - Water, lava, steep terrain and other existing terrain refusals remain refusals
   outside the settlement. Inside the settlement this is superseded by
   [lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17).
@@ -144,3 +147,12 @@ claims require the actual pinned-server run, not this design decision.
 - Unchanged: item conservation (excavated material goes to storage, fill uses
   real material), protection of player-placed blocks, and every rule outside the
   settlement.
+
+> а че мешает лаву расчистить или ведра? создаём заказ на ведра, его исполняет
+> (нету - крафтит сам, нет припасов - ну пиздец тогда, закапываем блоками),
+> очищаем, всё. главное не утонуть в лаве случайно нахуй
+
+- Water or lava on a needed lot is scooped with buckets: from storage, otherwise
+  the builder crafts them from real iron. Filled buckets go to storage. With
+  neither buckets nor iron, the liquid is buried under real blocks.
+- A builder never stands in, walks through or falls into lava.
