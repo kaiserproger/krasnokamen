@@ -60,11 +60,18 @@ def fixture(mobs: int, villagers: int) -> dict[str, Any]:
             # Spiders still take damage after detaching from a wall. Keep their
             # climb/drop below three blocks rather than disabling natural damage.
             ceiling = 67 if kind == "spider" else 71
+            # Sealed before cleared, same reason as the scale recipe
+            # (receipts/Perf1M/ENTITY-LOSS.md): an open pit in sand terrain fills
+            # itself with collapsed sand at the summon height.
             commands += [f"fill {x - 9} 64 {z - 9} {x + 73} {ceiling - 1} {z - 9} minecraft:stone",
                          f"fill {x - 9} 64 {z + 73} {x + 73} {ceiling - 1} {z + 73} minecraft:stone",
                          f"fill {x - 9} 64 {z - 8} {x - 9} {ceiling - 1} {z + 72} minecraft:stone",
                          f"fill {x + 73} 64 {z - 8} {x + 73} {ceiling - 1} {z + 72} minecraft:stone",
-                         f"fill {x - 9} {ceiling} {z - 9} {x + 73} {ceiling} {z + 73} minecraft:stone"]
+                         f"fill {x - 9} {ceiling} {z - 9} {x + 73} {ceiling} {z + 73} minecraft:stone",
+                         # Bound the sweep at ceiling-1: the spider pens roof at 67, and a
+                         # sweep to 70 would delete their ceiling (same fix as the scale
+                         # builder).
+                         f"fill {x - 8} 64 {z - 8} {x + 72} {ceiling - 1} {z + 72} minecraft:air"]
             if not group:
                 commands = rules + commands
                 commands.append("setblock 32 64 34 minecraft:crafting_table")

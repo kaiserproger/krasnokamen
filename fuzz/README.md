@@ -1,7 +1,10 @@
 # Decoder fuzzing (cargo-fuzz)
 
 Coverage-guided fuzzing of the bytes a client can make the server decode. This crate has its
-own `[workspace]` and is not a member of the root workspace, so CI/L2/code-health never build it.
+own `[workspace]` and is not a member of the root workspace, so L2 and code-health never build
+it; the `fuzz` job in `.github/workflows/ci.yml` runs the targets on every push and pull
+request, and `.github/workflows/fuzz-nightly.yml` runs the same legs nightly
+(see [`docs/AGENT_TOOLING.md`](../docs/AGENT_TOOLING.md#decoder-fuzzing-fuzz)).
 Needs the nightly toolchain and `cargo install cargo-fuzz`.
 
 Property for every target: malformed or truncated input yields a decode error, never a panic,
@@ -39,6 +42,11 @@ cargo +nightly fuzz run --dev --features edge edge_play -- -max_total_time=720 -
 ```
 
 `-malloc_limit_mb=32` additionally turns any single decode allocation over 32 MB into a finding.
+
+On the owner host `tools/dev/mem-run.sh` refuses release builds (a release binary is a
+`tools/dev/pin-release` pin), so add `--dev` to each command there — including the seed example.
+The dev profile executes fewer inputs per second; the CI legs in `.github/workflows/ci.yml` and
+`fuzz-nightly.yml` use the release profile for the same reason.
 
 ## Findings
 

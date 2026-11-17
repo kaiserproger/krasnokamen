@@ -654,7 +654,12 @@ pub struct BattleCounts {
 /// Immutable world state after a tick. Shared read-only; never mutated after
 /// publication. A reader may hold it for as long as it likes: the core never
 /// reuses its storage (copy-on-write pages, see ADR 0013 "Data layout").
-#[derive(Debug, Default)]
+///
+/// `Clone` exists for one fallback only: a tick snapshot that a second holder
+/// already shares is rebuilt instead of mutated
+/// (`crate::core::observe_explosion_knockback`). It is never taken when the
+/// snapshot is unique, which is every tick the loop publishes.
+#[derive(Debug, Default, Clone)]
 pub struct WorldSnapshot {
     pub tick: Tick,
     pub dimension: crate::dimensions::Dimension,

@@ -196,9 +196,9 @@ enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
 # backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
-journal_fsync_every_batches = 10  # directory fsync of already-written batches
-#                                  # 1..=1200; it does NOT bound the crash
-#                                  # loss window (the journal queue does, ~6.4 s)
+# journal_fsync_every_batches = 10  # 1..=1200 published batches between
+#                                    # directory fsyncs; power loss can drop
+#                                    # up to this many (see "What a crash can lose")
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records
@@ -225,6 +225,17 @@ beside the selected config. The old `[admin]`, `[simulation]`, `[autoscale]`,
 `[chunk_pipeline]`, worldgen-mode and per-package grant/roster/reload settings
 are not supported; the key list in `crates/mc-edge/src/config.rs` is the
 authority when in doubt.
+
+The config file can hold secrets: `proxy.secret` (Velocity forwarding),
+`msmp.bearer_token`, `dashboard.metrics_bearer_token` and `rcon.password`. The
+edge's debug formatting prints them redacted, and on Unix startup warns when the
+file carries any of them and has a group or other permission bit set. Keep it
+readable by the service user alone:
+
+```sh
+chown krasnokamen: server.toml
+chmod 600 server.toml
+```
 
 Behavior worth knowing:
 
@@ -293,6 +304,12 @@ port independently: authentication does not change listener exposure. Offline
 identities can be impersonated, operator names included; restrict offline
 servers to trusted players or a correctly authenticated network boundary
 (`auth.online_mode = true`, or a Velocity proxy).
+
+Startup logs a warning when that exposure has no identity check at all: offline
+mode, a non-loopback bind, `proxy.mode = "none"` and no plugin login gate
+(`auth.require_plugin_login`, or an auth-capable plugin package, which turns the
+gate on by itself). It is a warning, not a refusal — LAN offline play is
+supported — and it names the bind address it found.
 
 Connection admission:
 
@@ -944,6 +961,17 @@ configuration, back up before changing binaries or world identity, and never
 bypass identity validation by hand-editing saved metadata. Anvil is a
 compatibility format, not a live fallback or dual-write store.
 
+What a crash can lose beyond the last checkpoint comes from two windows. First,
+a tick is shown to clients once its journal batch is queued, before the batch is
+published (written, fsynced and renamed into place): up to 128 batches (6.4 s of
+ticks, at most 256 MiB of estimated payload) can wait behind the one the journal
+thread is handling. Any crash, SIGKILL included, can lose every batch not yet
+published: the queued ones, and the current one if its rename has not happened,
+so an empty queue does not close this window. Second, the journal directory is
+fsynced only every `journal_fsync_every_batches` published batches (10 by
+default), so a host power loss can also drop up to that many published batches.
+A clean stop flushes both.
+
 When upgrading from a build with the old scalar rider format, stop it cleanly
 before deploying: an old unclean WAL tail containing `rider` is refused at
 startup. A checkpoint containing the old `krasnokamen:Rider` key is also
@@ -1090,13 +1118,9 @@ the directory, the count and the retained bytes, and shows as
 `/stats`). Covered batches stay replay-inert, so the world stays correct while
 the journal grows; the next failed append is what halts the server.
 
-What a crash can lose is set by the journal queue, not by
-`journal_fsync_every_batches`: a tick reaches clients before its batch is
-queued, and up to 128 batches or 256 MiB (about 6.4 s at 20 TPS) may still be
-queued. Every batch file is fsynced before its rename, so a batch the writer has
-already published never loses its data; the directory-fsync window only decides
-how many published directory entries may be disordered by a power loss. Set it
-to 1 to remove that ordering risk at one fsync per tick.
+`journal_fsync_every_batches` sets only the power-loss window described in
+"What a crash can lose" above; 1 closes it at one directory fsync per tick. The
+process-crash window (the batch being written plus the queued ones) stays.
 
 ### Native backup and restore
 
@@ -1144,13 +1168,13 @@ but the next periodic checkpoint and generated-chunk saves wait until the copy
 finishes (WAL appends continue and dirty state stays resident). The copy is
 assembled in a hidden `.backup-<UTC>.partial` directory and renamed only after
 the manifest is durable, so a failed backup leaves nothing behind. Restore with
-Never open a world with an older binary than the one that last wrote it: newer
-manifests and WAL records are forward-only, and an older reader either defaults
-the newer state away or refuses the tail.
-
 `krasnokamen restore --from <backup> --world-dir <new>`, or point `world_dir` at
 a copy of the backup directory: opening replays the WAL to tick `N`, exactly as
 crash recovery does. It covers world state only.
+
+Never open a world with an older binary than the one that last wrote it: newer
+manifests and WAL records are forward-only, and an older reader either defaults
+the newer state away or refuses the tail.
 
 ## Observability
 
@@ -1172,11 +1196,23 @@ metrics_bearer_token = "replace-with-a-secret"   # optional, /metrics only
 
 The scrape includes TPS, tick p50/p95/p99, the latest per-phase timings, online
 players, loaded chunks, entity count, resident memory, network bytes, reliable
-drops, skipped pump ticks and the journal prune counters. A token protects only `/metrics`: keep the loopback
-bind or put the JSON endpoints behind an authenticated reverse proxy. A
-non-loopback address needs `allow_remote = true`; otherwise the dashboard does
+drops, input drops, skipped pump ticks and the journal prune counters. A token
+protects only `/metrics`: keep the loopback bind or put the JSON endpoints
+behind an authenticated reverse proxy. A non-loopback address needs
+`allow_remote = true`; otherwise the dashboard does
 not start and a warning is logged. Operators at level 2 can run `/tps` and
 `/mspt` in game; both report the same rolling window and are observation only.
+
+Input drops (`network.input_drops` in `/stats`,
+`krasnokamen_network_input_drops_total` in `/metrics`) count player inputs the
+bounded core input queue refused because it was full: the input is gone, the
+server corrects the client, and players see rubber-banding. The count is read
+from the core when a payload is built, so it is current without waiting for a
+pump sample, and the core also logs one rate-limited warning (at most every ten
+seconds) with the running total. A non-zero, growing count at a given population
+means the queue no longer holds one tick of arrivals there; its depth is not an
+operator knob (the core's fixed 4096 slots plus one slot per configured
+`max_players`).
 
 `/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
 `/load-metrics`) returns one JSON object per retained core tick: the

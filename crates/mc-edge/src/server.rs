@@ -345,6 +345,7 @@ impl EdgeServer {
     ) -> anyhow::Result<Self> {
         cfg.computer.validate()?;
         cfg.voice.validate()?;
+        crate::startup_warnings::warn_unsafe_startup(&cfg, hub.as_ref());
         let voice = crate::voice_service::Service::new(&cfg.voice);
         let dashboard = dashboard_state(&cfg);
         let loader_manifest = loader_manifest(&hub.registry().plugin_client_bundles)?;
@@ -365,6 +366,12 @@ impl EdgeServer {
         }
         let connections = Arc::new(ConnectionRegistry::new());
         dashboard.set_queue_source(Arc::clone(&connections));
+        // Cumulative input drops live in the core's submit path; the dashboard
+        // polls the counter instead of threading it through the pump.
+        dashboard.set_input_source(Arc::new({
+            let hub = Arc::clone(&hub);
+            move || hub.dropped_inputs()
+        }));
         let biomes = data.registry("worldgen/biome").cloned().ok_or_else(|| {
             anyhow::anyhow!("worldgen/biome registry missing: chunk encoding impossible")
         })?;
