@@ -442,6 +442,8 @@ struct CoreInner {
     #[cfg(test)]
     pause_state: tokio::sync::watch::Receiver<Option<u64>>,
     outbox: ReliableOutbox,
+    /// The halt's reason, set by the tick owner before its broadcast closes.
+    halt_reason: Arc<std::sync::OnceLock<String>>,
     shutdown_tx: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>>,
     tick_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     journal_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -1052,6 +1054,7 @@ impl Core {
         // Only known unlocked sessions pass the edge fence; a connection not
         // processed by the tick yet must never inherit administrative access.
         let unlocked_sessions = Arc::new(parking_lot::RwLock::new(BTreeSet::new()));
+        let halt_reason = Arc::new(std::sync::OnceLock::new());
         let input_log = if config.input_log {
             // Plugin commands and async plugin results enter `run_tick` from
             // wasm threads and are not logged: say so in the header.
@@ -1090,6 +1093,7 @@ impl Core {
             work_tx: owners.take_work(),
             journal_budget,
             unlocked_sessions: Arc::clone(&unlocked_sessions),
+            halt_reason: Arc::clone(&halt_reason),
             shutdown_rx,
             checkpoint_rx,
             backup_rx,
@@ -1151,6 +1155,7 @@ impl Core {
                 build_gate,
                 require_plugin_login: config.require_plugin_login,
                 unlocked_sessions,
+                halt_reason,
                 lod,
                 terrain,
                 terrain_epoch,
@@ -1479,6 +1484,15 @@ impl Core {
         receiver
             .await
             .map_err(|_| "Selector resolution unavailable".to_owned())?
+    }
+
+    /// The reason the tick owner halted with, once it has halted fail-closed;
+    /// `None` while it runs, after a requested shutdown, or if it panicked.
+    /// Set before the tick broadcast closes, so a subscriber that saw `Closed`
+    /// reads it without taking any lock.
+    #[must_use]
+    pub fn halt_reason(&self) -> Option<String> {
+        self.inner.halt_reason.get().cloned()
     }
 
     /// Try-drain reliably queued per-connection changes (never skipped).

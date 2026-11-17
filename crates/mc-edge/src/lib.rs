@@ -68,6 +68,8 @@ pub mod status;
 pub mod translation;
 
 mod conn_limit;
+mod edge_runtime;
+pub use edge_runtime::run_on_edge_runtime;
 mod remote_admin;
 mod resource_pack;
 mod screen;

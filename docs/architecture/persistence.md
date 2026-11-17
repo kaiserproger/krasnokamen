@@ -54,10 +54,20 @@ oversized batch is admitted alone into an empty queue. Two documented exceptions
 exceed the cap: that oversized batch, and the halt's own terminal `Disconnect`
 batch. A push that does not fit, or a non-empty queue whose drain has consumed
 nothing for 10 s, halts the core exactly like a failed journal append: one error
-naming the cause, an explicit `Disconnect` batch for every live connection
-(delivered by the edge pump, so a wedged pump delivers nothing and the process
-keeps running until restarted), no publish and no checkpoint. The tick's
-`Append` for that tick was already accepted
+naming the cause, an explicit `Disconnect` batch for every live connection, no
+publish and no checkpoint. The process exits after the journal owner's final
+flush even when the edge pump itself is wedged: `serve` watches the tick owner's
+own closing signal, waits up to 5 s for connections to close (a healthy pump's
+chance to route the batch), then kicks every remaining connection with the reason
+the tick owner recorded (`Core::halt_reason`) and exits (`shutdown_background`, so
+a worker parked in a synchronous section cannot keep it alive). The reason is
+best effort: a full connection queue or a kick timed out behind a registry lock
+the wedged pump holds leaves none, and the socket closes with the process. Those
+bounds are runtime timers; the edge's `edge-halt-watchdog` OS thread
+(`crates/mc-edge/src/server/halt_watchdog.rs`) ends the process with status 1
+when `serve` has not returned 60 s after a halt (every runtime worker blocked),
+after joining the core's owners. The
+tick's `Append` for that tick was already accepted
 by the journal queue — the handoff is asynchronous and the tick does not wait for
 the write — so recovery uses the published contiguous tail: everything before the
 last complete batch, with nothing accepted reordered. The warning mark is 8 MiB:

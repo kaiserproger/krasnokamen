@@ -350,6 +350,7 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
                 work_tx,
                 journal_budget: tick_budget,
                 unlocked_sessions: Arc::new(parking_lot::RwLock::new(Default::default())),
+                halt_reason: Default::default(),
                 shutdown_rx,
                 checkpoint_rx,
                 backup_rx: std::sync::mpsc::channel().1,

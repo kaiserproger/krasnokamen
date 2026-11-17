@@ -133,10 +133,17 @@ below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
 batch larger than the whole cap is admitted alone into an empty queue, and a
 halt's terminal disconnect batch is admitted past it so the reason can still be
 delivered. A batch that no longer fits under the cap, or a backlog that consumes
-no batch for 10 s, stops the core fail-closed (no publish, no checkpoint). Its
-explicit disconnect reason per player travels through the edge pump: when the
-pump itself is wedged, players are not disconnected and the process does not exit
-on its own, so restart it. The next start replays the retained WAL
+no batch for 10 s, stops the server fail-closed (no publish, no checkpoint), and
+the process exits after the journal's final flush even when the edge pump is the
+wedged part: the edge watches the core's own closing signal, waits up to 5 s for
+connections to close (the pump's chance to route the terminal batch), then kicks
+every remaining connection with the core's halt reason itself. The reason is best
+effort: a connection whose queue is full, or whose kick times out behind a
+registry lock the wedged pump holds, gets no reason; every connection still
+closes when the process exits. Those waits run on the edge runtime; when no
+runtime worker is free to finish them (a single-CPU host with the pump stuck), an
+OS watchdog thread ends the process with status 1 once 60 s pass after the halt,
+after the journal's final flush. The next start replays the retained WAL
 ([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
 warning's byte count before raising the cap. The queued and peak byte counters
 exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in

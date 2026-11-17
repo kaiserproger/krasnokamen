@@ -7,6 +7,38 @@ use std::collections::BTreeMap;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
+/// A test's pump gate callback.
+#[cfg(test)]
+type PumpGate = std::sync::Arc<dyn Fn() + Send + Sync>;
+
+/// Test-only pump gate: set by a test for one server, called by that server's
+/// pump after recording a tick and before it takes the registry lock.
+#[cfg(test)]
+static PUMP_GATE: std::sync::LazyLock<std::sync::Mutex<Option<(usize, PumpGate)>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+
+/// Park this server's pump in the gate until the test's gate returns.
+#[cfg(test)]
+pub(crate) fn arm_pump_gate(server: &Arc<EdgeServer>, gate: PumpGate) {
+    *PUMP_GATE.lock().expect("pump gate") = Some((Arc::as_ptr(server) as usize, gate));
+}
+
+/// Disarm the gate (every test that arms one must).
+#[cfg(test)]
+pub(crate) fn disarm_pump_gate() {
+    *PUMP_GATE.lock().expect("pump gate") = None;
+}
+
+#[cfg(test)]
+fn pump_gate(server: &Arc<EdgeServer>) {
+    let armed = PUMP_GATE.lock().expect("pump gate").clone();
+    if let Some((address, gate)) = armed
+        && address == Arc::as_ptr(server) as usize
+    {
+        gate();
+    }
+}
+
 /// Vanilla 26.3 `PlayerList.tick()` (javap) increments `sendAllPlayerInfoIn`
 /// and, once it exceeds 600, broadcasts one `UPDATE_LATENCY` player-info packet
 /// listing every player and resets it to 0: one packet per 601 ticks.
@@ -97,6 +129,11 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 }
             };
             server.tick_stats.record(out.tick);
+            // Test-only: a test parks the real pump here, in a synchronous
+            // section before the registry lock, the shape a fanout `install`
+            // takes.
+            #[cfg(test)]
+            pump_gate(&server);
             let (mut connections, roster) = server.connections.routing_snapshot();
             route_outbox(
                 &server,

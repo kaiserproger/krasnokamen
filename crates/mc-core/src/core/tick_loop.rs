@@ -31,6 +31,9 @@ pub(super) struct TickChannels {
     pub(super) journal_budget: Arc<JournalBudget>,
     /// Edge-visible projection of tick-observed unlocked sessions.
     pub(super) unlocked_sessions: Arc<parking_lot::RwLock<BTreeSet<ConnectionId>>>,
+    /// Set once by [`halt_authority`] before the tick broadcast closes, so the
+    /// edge reads the halt's own reason on `Closed` without draining the outbox.
+    pub(super) halt_reason: Arc<std::sync::OnceLock<String>>,
     pub(super) shutdown_rx: std::sync::mpsc::Receiver<()>,
     pub(super) checkpoint_rx: std::sync::mpsc::Receiver<std::sync::mpsc::Sender<bool>>,
     pub(super) backup_rx: std::sync::mpsc::Receiver<BackupJob>,
@@ -725,6 +728,7 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
         cause = reason,
         "core tick owner halted (fail closed)"
     );
+    let _ = channels.halt_reason.set(reason.to_owned());
     let live: Vec<(ConnectionId, crate::boundary::PlayerChange)> = std::iter::once(&*state)
         .chain(state.other_dimensions.values().map(|world| &**world))
         .flat_map(|world| world.connections.all_connections())
