@@ -1,0 +1,51 @@
+{
+  "id": "RETIRED-DEPLOYED-STAND-RETURNS-ON-RESTART",
+  "verdict": "promoted",
+  "fix_commit": "cd0ec2dc2",
+  "fix_commit_full": "cd0ec2dc2c03c8dab9f734cbb7edb1920b3ad5c4",
+  "promoted_at": "2026-11-17T00:53:19+00:00",
+  "tree_head": "b348bf9ec0f2ce25a8547b878214432e0ebd095f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/plugin_npcs/orders/deployment.rs",
+    "crates/mc-core/src/tick.rs",
+    "crates/mc-core/src/tick/merge.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/core_checkpoint_custody_tests.rs",
+    "crates/mc-core/src/plugin_npcs_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:plugin_npcs::tests::deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:plugin_npcs::tests::deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A12IssueCheck/.analysis/validation/20261117T004137-ledger-promote-pmbw83wi"
+}
