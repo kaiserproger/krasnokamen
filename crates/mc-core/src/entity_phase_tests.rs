@@ -99,6 +99,7 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
             vel: [0.0; 3],
             yaw: 0.0,
             pitch: 0.0,
+            head_yaw: 0.0,
             ground: true,
             horizontal_impulse: [0.0; 2],
             air_supply: 300,
