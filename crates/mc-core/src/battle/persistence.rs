@@ -1,4 +1,10 @@
 //! Battle decision history shares native entity custody's checkpoint/WAL fence.
+//!
+//! The checkpoint row and the WAL `Battle` record carry the full image. Within
+//! a WAL tail, later ticks carry `BattlePatch`: the image header and only the
+//! list elements that changed since the previous battle record (`capture`).
+//! The first battle record after a checkpoint capture or recovery is always
+//! full, so a patch never builds on a checkpoint row (`fold_patch`).
 use super::{BattleState, EnemyTarget, ground::Escape};
 use crate::{
     CoreError,
@@ -9,6 +15,7 @@ use crate::{
 };
 use mc_world::native::NativeDomainRecord;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::BTreeMap, sync::Arc};
 
 type Column = (EntityId, Option<EnemyTarget>, Option<Escape>);
@@ -64,7 +71,9 @@ fn reconcile_native_capture(state: &mut TickState) {
         .reconcile_capture(entities, &battle.live, &state.connections);
 }
 
-pub(crate) fn encode(state: &TickState) -> Result<String, CoreError> {
+/// Test-only encoding fault, armed per native store: every image encoding of
+/// that world (full image, patch or checkpoint row) fails once.
+fn injected_fault(state: &TickState) -> Result<(), CoreError> {
     #[cfg(test)]
     {
         let fault = {
@@ -89,16 +98,26 @@ pub(crate) fn encode(state: &TickState) -> Result<String, CoreError> {
             return Err(error("injected battle image encoding failure"));
         }
     }
-    let battle = &state.hostile.battle;
-    let columns: Vec<Column> = battle
+    #[cfg(not(test))]
+    let _ = state;
+    Ok(())
+}
+
+fn columns(battle: &BattleState) -> Vec<Column> {
+    battle
         .columns
         .ids
         .iter()
         .enumerate()
         .map(|(i, &id)| (id, battle.columns.targets[i], battle.columns.escape[i]))
-        .collect();
-    // A death merged after the battle pass is already a native tombstone.
-    let removed: Vec<_> = battle
+        .collect()
+}
+
+/// A death merged after the battle pass is already a native tombstone.
+fn removed(state: &TickState) -> Vec<EntityId> {
+    state
+        .hostile
+        .battle
         .formation
         .members
         .iter()
@@ -110,14 +129,245 @@ pub(crate) fn encode(state: &TickState) -> Result<String, CoreError> {
                 .is_none()
                 .then_some(m.id)
         })
-        .collect();
+        .collect()
+}
+
+pub(crate) fn encode(state: &TickState) -> Result<String, CoreError> {
+    injected_fault(state)?;
     serde_json::to_string(&Image {
         version: 1,
-        battle,
-        columns,
-        removed,
+        battle: &state.hostile.battle,
+        columns: columns(&state.hostile.battle),
+        removed: removed(state),
     })
     .map_err(error)
+}
+
+/// Index-aligned image lists a patch carries element by element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum List {
+    Members,
+    Regiments,
+    Fighters,
+    Ids,
+    Columns,
+    Removed,
+}
+
+impl List {
+    const ALL: [Self; 6] = [
+        Self::Members,
+        Self::Regiments,
+        Self::Fighters,
+        Self::Ids,
+        Self::Columns,
+        Self::Removed,
+    ];
+
+    /// JSON pointer of the list inside the full image.
+    fn pointer(self) -> &'static str {
+        match self {
+            Self::Members => "/battle/formation/members",
+            Self::Regiments => "/battle/formation/regiments",
+            Self::Fighters => "/battle/combat/fighters",
+            Self::Ids => "/battle/combat/ids",
+            Self::Columns => "/columns",
+            Self::Removed => "/removed",
+        }
+    }
+}
+
+/// Above every list capacity `validate_structure` accepts: a corrupt length
+/// fails closed before allocation.
+const MAX_LIST_LEN: usize = 40_000;
+
+/// Changed parts of the image since the previous battle record of the tail.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Patch {
+    /// The image without its lists (each list empty), when it changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    header: Option<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    lists: Vec<ListPatch>,
+}
+
+/// A list's new length and its changed elements as absolute values.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ListPatch {
+    list: List,
+    len: usize,
+    set: Vec<(usize, Value)>,
+}
+
+impl Patch {
+    fn is_empty(&self) -> bool {
+        self.header.is_none() && self.lists.is_empty()
+    }
+
+    /// The one place a patch reaches an image; a missing list, a length above
+    /// capacity or an index past the new length refuses, and an element left
+    /// unset after growth stays `null`, which `decode` refuses.
+    fn apply(self, image: &mut Value) -> Result<(), String> {
+        if let Some(mut header) = self.header {
+            for list in List::ALL {
+                let slot = header
+                    .pointer_mut(list.pointer())
+                    .filter(|slot| slot.is_array())
+                    .ok_or_else(|| format!("battle patch header lacks {list:?}"))?;
+                *slot = image
+                    .pointer_mut(list.pointer())
+                    .map(Value::take)
+                    .ok_or_else(|| format!("battle image lacks {list:?}"))?;
+            }
+            *image = header;
+        }
+        for ListPatch { list, len, set } in self.lists {
+            if len > MAX_LIST_LEN {
+                return Err(format!(
+                    "battle patch {list:?} length {len} exceeds capacity"
+                ));
+            }
+            let elements = image
+                .pointer_mut(list.pointer())
+                .and_then(Value::as_array_mut)
+                .ok_or_else(|| format!("battle image lacks {list:?}"))?;
+            elements.resize(len, Value::Null);
+            for (index, element) in set {
+                *elements.get_mut(index).ok_or_else(|| {
+                    format!("battle patch {list:?} index {index} past length {len}")
+                })? = element;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// WAL baseline of one dimension's battle image (`BattleState::journaled`).
+#[derive(Debug)]
+pub(crate) struct Journaled {
+    /// JSON of the last captured header and list elements.
+    parts: Parts,
+    /// No battle record since the last checkpoint capture or recovery: the
+    /// next change journals a full image, never a patch on a checkpoint row.
+    full_due: bool,
+}
+
+impl Journaled {
+    /// No image journaled in this WAL tail yet (fresh, or after recovery): the
+    /// first record is the whole image, even when that tick resets the battle.
+    pub(crate) fn full_due() -> Self {
+        Self {
+            parts: Parts::default(),
+            full_due: true,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct Parts {
+    header: String,
+    lists: [Vec<String>; List::ALL.len()],
+}
+
+/// Serialize the image part by part into `parts`; the patch holds the parts
+/// that differ from what `parts` held. Allocates only for changed parts.
+fn capture(state: &mut TickState, parts: &mut Parts) -> Result<Patch, CoreError> {
+    injected_fault(state)?;
+    let removed = removed(state);
+    let battle = &mut state.hostile.battle;
+    let columns = columns(battle);
+    let lists = (
+        std::mem::take(&mut battle.formation.members),
+        std::mem::take(&mut battle.formation.regiments),
+        std::mem::take(&mut battle.combat.fighters),
+        std::mem::take(&mut battle.combat.ids),
+    );
+    let header = serde_json::to_string(&Image {
+        version: 1,
+        battle: &*battle,
+        columns: &[] as &[Column],
+        removed: &[] as &[EntityId],
+    });
+    (
+        battle.formation.members,
+        battle.formation.regiments,
+        battle.combat.fighters,
+        battle.combat.ids,
+    ) = lists;
+    let header = header.map_err(error)?;
+    let mut patch = Patch::default();
+    if parts.header != header {
+        patch.header = Some(serde_json::from_str(&header).map_err(error)?);
+        parts.header = header;
+    }
+    let mut buffer = Vec::new();
+    let [
+        members,
+        regiments,
+        fighters,
+        ids,
+        column_parts,
+        removed_parts,
+    ] = &mut parts.lists;
+    let battle = &state.hostile.battle;
+    let formation = &battle.formation;
+    let combat = &battle.combat;
+    let buffer = &mut buffer;
+    let out = &mut patch;
+    diff_list(List::Members, &formation.members, members, buffer, out)?;
+    diff_list(
+        List::Regiments,
+        &formation.regiments,
+        regiments,
+        buffer,
+        out,
+    )?;
+    diff_list(List::Fighters, &combat.fighters, fighters, buffer, out)?;
+    diff_list(List::Ids, &combat.ids, ids, buffer, out)?;
+    diff_list(List::Columns, &columns, column_parts, buffer, out)?;
+    diff_list(List::Removed, &removed, removed_parts, buffer, out)?;
+    Ok(patch)
+}
+
+/// Compare each element's JSON with `old` and record the changed elements and
+/// a changed length, keeping `old` equal to the current elements.
+fn diff_list<T: Serialize>(
+    list: List,
+    elements: &[T],
+    old: &mut Vec<String>,
+    buffer: &mut Vec<u8>,
+    patch: &mut Patch,
+) -> Result<(), CoreError> {
+    let previous_len = old.len();
+    let mut set = Vec::new();
+    for (index, element) in elements.iter().enumerate() {
+        buffer.clear();
+        serde_json::to_writer(&mut *buffer, element).map_err(error)?;
+        if old
+            .get(index)
+            .is_some_and(|old| old.as_bytes() == buffer.as_slice())
+        {
+            continue;
+        }
+        set.push((index, serde_json::from_slice(buffer).map_err(error)?));
+        let json = String::from_utf8(buffer.clone()).map_err(error)?;
+        match old.get_mut(index) {
+            Some(slot) => *slot = json,
+            None => old.push(json),
+        }
+    }
+    old.truncate(elements.len());
+    if !set.is_empty() || previous_len != elements.len() {
+        patch.lists.push(ListPatch {
+            list,
+            len: elements.len(),
+            set,
+        });
+    }
+    Ok(())
 }
 
 pub(crate) fn decode(bytes: &str) -> Result<BattleState, CoreError> {
@@ -244,7 +494,7 @@ pub(crate) fn validate_replay(
     if let Some(fault) = &replay.battle_fault {
         return Err(error(fault));
     }
-    let Some(image) = &replay.battle else {
+    let Some(image) = image(replay) else {
         if replay.tickets.contains_key(super::staging::OWNER)
             || replay
                 .entities
@@ -255,7 +505,7 @@ pub(crate) fn validate_replay(
         }
         return Ok(());
     };
-    let battle = decode(image)?;
+    let battle = decode(&image)?;
     for member in &battle.formation.members {
         match replay.entities.get(&member.id.0) {
             Some(entity) if entity.alive && entity.health > 0.0 => {
@@ -329,13 +579,16 @@ pub(crate) fn restore(state: &mut TickState) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// Checkpoint rows of every dimension. The capture also makes each journaled
+/// battle's next record a full image: WAL batches after this tick then never
+/// patch the checkpoint row.
 pub(crate) fn checkpoint_rows(
     state: &mut TickState,
     tick: u64,
 ) -> Result<BTreeMap<String, NativeDomainRecord>, CoreError> {
-    reconcile_native_capture(state);
+    prepare_capture(state);
     for child in state.other_dimensions.values_mut() {
-        reconcile_native_capture(child);
+        prepare_capture(child);
     }
     std::iter::once(&*state)
         .chain(state.other_dimensions.values().map(|state| &**state))
@@ -346,6 +599,13 @@ pub(crate) fn checkpoint_rows(
             ))
         })
         .collect()
+}
+
+fn prepare_capture(state: &mut TickState) {
+    reconcile_native_capture(state);
+    if let Some(journaled) = &mut state.hostile.battle.journaled {
+        journaled.full_due = true;
+    }
 }
 
 pub(crate) fn checkpoint_image(
@@ -370,6 +630,8 @@ pub(crate) fn checkpoint_image(
     Ok(Some(Arc::new(image)))
 }
 
+/// One battle record per changed tick: the whole image when one is due,
+/// otherwise a patch of the changed parts. An unchanged image journals nothing.
 pub(crate) fn journal_entries(
     state: &mut TickState,
     entries: &mut Vec<JournalEntry>,
@@ -381,22 +643,96 @@ pub(crate) fn journal_entries(
         return Ok(());
     }
     reconcile_native_capture(state);
-    let image = encode(state)?;
-    if state
+    let mut journaled = state
         .hostile
         .battle
         .journaled
-        .as_ref()
-        .is_some_and(|old| **old == image)
-    {
-        return Ok(());
-    }
-    let image = Arc::new(image);
-    entries.push(JournalEntry::Battle {
-        value: Arc::clone(&image),
+        .take()
+        .unwrap_or_else(Journaled::full_due);
+    let record = capture(state, &mut journaled.parts).and_then(|patch| {
+        if patch.is_empty() {
+            Ok(None)
+        } else if journaled.full_due {
+            Ok(Some(JournalEntry::Battle {
+                value: Arc::new(encode(state)?),
+            }))
+        } else {
+            Ok(Some(JournalEntry::BattlePatch {
+                value: serde_json::to_value(patch).map_err(error)?,
+            }))
+        }
     });
-    state.hostile.battle.journaled = Some(image);
-    Ok(())
+    let result = match record {
+        Ok(record) => {
+            if let Some(record) = record {
+                entries.push(record);
+                journaled.full_due = false;
+            }
+            Ok(())
+        }
+        // The captured parts may now hold unjournaled state: start over.
+        Err(error) => {
+            journaled = Journaled::full_due();
+            Err(error)
+        }
+    };
+    state.hostile.battle.journaled = Some(journaled);
+    result
+}
+
+/// Fold state of one dimension's battle records in the WAL tail (`Replay::battle_tail`).
+#[derive(Debug, Default)]
+pub(crate) enum Tail {
+    /// No battle record folded: `Replay::battle` is the checkpoint row, which
+    /// a patch never builds on.
+    #[default]
+    Checkpoint,
+    /// `Replay::battle` is the latest full WAL image.
+    Full,
+    /// That image with every later patch applied.
+    Patched(Value),
+}
+
+pub(crate) fn fold_full(replay: &mut Replay, value: &Arc<String>) {
+    replay.battle = Some(Arc::clone(value));
+    replay.battle_tail = Tail::Full;
+}
+
+/// Apply one WAL patch to the replayed image; any refusal becomes the replay's
+/// battle fault, which recovery reports before decoding anything.
+pub(crate) fn fold_patch(replay: &mut Replay, value: &Value) {
+    if replay.battle_fault.is_some() {
+        return;
+    }
+    let folded = Patch::deserialize(value)
+        .map_err(|e| format!("malformed battle patch: {e}"))
+        .and_then(|patch| {
+            let mut image = match std::mem::take(&mut replay.battle_tail) {
+                Tail::Checkpoint => {
+                    return Err("battle patch without a full image earlier in the WAL tail".into());
+                }
+                Tail::Full => {
+                    serde_json::from_str(replay.battle.as_deref().map_or("", String::as_str))
+                        .map_err(|e| format!("malformed battle image: {e}"))?
+                }
+                Tail::Patched(image) => image,
+            };
+            patch.apply(&mut image)?;
+            Ok(image)
+        });
+    match folded {
+        Ok(image) => replay.battle_tail = Tail::Patched(image),
+        Err(fault) => replay.battle_fault = Some(fault),
+    }
+}
+
+/// The recovered image: the checkpoint row, or the latest full WAL image with
+/// its later patches.
+pub(crate) fn image(replay: &Replay) -> Option<Arc<String>> {
+    match &replay.battle_tail {
+        Tail::Patched(image) => Some(Arc::new(image.to_string())),
+        Tail::Checkpoint | Tail::Full => replay.battle.clone(),
+    }
 }
 
 pub(super) mod reach {

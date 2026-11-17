@@ -1182,7 +1182,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         crate::settlements::persistence::checkpoint_sequence(&globals, world.manifest.tick)
             .unwrap_or(0);
     for (&dimension, replay) in &world.dimensions {
-        if let Some(image) = &replay.battle {
+        if let Some(image) = crate::battle::persistence::image(replay) {
             globals.insert(
                 crate::battle::persistence::row_key(dimension),
                 record(tick, image.as_bytes().to_vec()),

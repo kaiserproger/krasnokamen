@@ -236,6 +236,86 @@ fn battle_resume_first_tick_reset_survives_wal_only_recovery() {
     );
 }
 
+/// Serialized bytes of a tick's battle records (full image or patch), by the
+/// WAL's own JSON, so the measurement does not depend on the record variant.
+fn battle_record_bytes(entries: &[JournalEntry]) -> usize {
+    entries
+        .iter()
+        .map(|entry| match entry {
+            JournalEntry::Dimension { entries, .. } => battle_record_bytes(entries),
+            entry => {
+                let json = serde_json::to_string(entry).unwrap();
+                if json.starts_with("{\"Battle") {
+                    json.len()
+                } else {
+                    0
+                }
+            }
+        })
+        .sum()
+}
+
+fn first_battle_record(entries: &[JournalEntry]) -> Option<String> {
+    entries.iter().find_map(|entry| match entry {
+        JournalEntry::Dimension { entries, .. } => first_battle_record(entries),
+        entry => {
+            Some(serde_json::to_string(entry).unwrap()).filter(|json| json.starts_with("{\"Battle"))
+        }
+    })
+}
+
+/// WAL bloat regression (CoreWalBloat, 2026-11-17): a running battle once
+/// journaled its whole image every tick. Through the production journal and
+/// WAL writer, only the first battle record after a checkpoint capture or a
+/// recovery is the full image; later ticks journal a small fraction of it,
+/// and crash recovery reproduces the live image over patches on both a
+/// checkpoint and a recovered baseline.
+#[test]
+fn battle_wal_journals_changed_parts_not_the_whole_image_each_tick() {
+    const TICKS: usize = 40;
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let full = persistence::encode(&drill.state).unwrap().len();
+    for round in ["checkpoint", "recovered"] {
+        let mut bytes = Vec::new();
+        for step in 0..TICKS {
+            let batch = drill.capture_tick(&[]);
+            let record = first_battle_record(&batch.entries).expect("a running battle changes");
+            assert_eq!(
+                record.starts_with("{\"Battle\":"),
+                step == 0,
+                "{round}: only the first battle record of the tail is the full image (tick {})",
+                batch.tick
+            );
+            bytes.push(battle_record_bytes(&batch.entries));
+            drill.append(&batch).unwrap();
+        }
+        let steady = bytes[1..].iter().sum::<usize>() / (TICKS - 1);
+        eprintln!(
+            "{round}: full image {full} B, first record {} B, steady {steady} B/tick",
+            bytes[0]
+        );
+        assert!(
+            steady * 4 <= full,
+            "{round}: a steady tick must journal a small fraction of the {full} B image, not {steady} B"
+        );
+        let expected = image(&drill.state);
+        let expected_pose = pose(&drill.state);
+        drill = drill.crash();
+        assert_eq!(
+            image(&drill.state),
+            expected,
+            "{round}: recovery folds the patches"
+        );
+        assert_eq!(
+            pose(&drill.state),
+            expected_pose,
+            "{round}: poses share the tick"
+        );
+        hydrate_battle(&mut drill.state);
+    }
+}
+
 #[test]
 fn battle_resume_abrupt_checkpoint_commit_recovers_whole_history() {
     const CHILD: &str = "KRASNOKAMEN_BATTLE_CHECKPOINT_DRILL_PATH";

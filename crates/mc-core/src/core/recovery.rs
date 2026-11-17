@@ -147,10 +147,10 @@ pub(super) fn load_dimension_state(
     // hydrates its own rows (matched by home dimension) folded with its
     // dimension-routed WAL tail. Membership columns hydrate with entities below.
     {
-        let battle_image = replay.battle.clone();
-        if let Some(image) = battle_image {
+        if let Some(image) = crate::battle::persistence::image(&replay) {
             tick_state.hostile.battle = crate::battle::persistence::decode(&image)?;
-            tick_state.hostile.battle.journaled = Some(image);
+            tick_state.hostile.battle.journaled =
+                Some(crate::battle::persistence::Journaled::full_due());
         }
         let sequence = match crate::settlements::persistence::checkpoint_sequence(
             settlement_globals,

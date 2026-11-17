@@ -138,9 +138,10 @@ pub(super) struct Fighter {
     /// Frozen-pass tick of a reserved kill: a second attacker must not credit
     /// the same casualty before native intent merge removes the body.
     slain: Option<u64>,
-    /// Last battle tick he stood guard, wound up or recovered from a blow:
-    /// the fight window of the `fighting` telemetry.
-    in_fight: Option<u64>,
+    /// Fight window of the `fighting` telemetry, written only when he enters
+    /// or leaves his fight loop (guard, windup, recovery) so that a steady
+    /// fight leaves the journaled image unchanged.
+    in_fight: Option<FightClock>,
     /// Tick he first found an enemy within his melee range in this
     /// engagement; cleared when a decision finds none.
     engaged_from: Option<u64>,
@@ -165,6 +166,24 @@ impl Default for Fighter {
             in_fight: None,
             engaged_from: None,
             arms: Default::default(),
+        }
+    }
+}
+
+/// Fight-loop clock of one fighter (`count_fighting`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum FightClock {
+    /// In his fight loop at his last count pass.
+    InLoop,
+    /// Battle tick of the last count pass he was in his fight loop.
+    Left(u64),
+}
+
+impl Fighter {
+    /// Out of his fight loop he keeps the last count tick he was in it.
+    fn leave_fight(&mut self, last_count: Option<u64>) {
+        if self.in_fight == Some(FightClock::InLoop) {
+            self.in_fight = last_count.map(FightClock::Left);
         }
     }
 }
@@ -207,7 +226,7 @@ pub struct Work {
 #[serde(deny_unknown_fields)]
 pub(crate) struct CombatRuntime {
     pub(super) fighters: Vec<Fighter>,
-    ids: Vec<EntityId>,
+    pub(super) ids: Vec<EntityId>,
     #[serde(skip)]
     // Used only on roster layout changes, never in per-fighter action passes.
     remap: FxHashMap<EntityId, Fighter>,
@@ -223,6 +242,9 @@ pub(crate) struct CombatRuntime {
     pub(super) sweeps: Vec<Option<super::cavalry::Sweep>>,
     /// Staged second weapons not yet claimed by a fighter (weapons.rs).
     pub(super) arsenal: super::weapons::Arsenal,
+    /// Battle tick of the last `count_fighting` pass: the last in-loop tick of
+    /// a fighter whose clock reads `InLoop` when he leaves his fight loop.
+    counted: Option<u64>,
     #[serde(skip)]
     pub(crate) work: Work,
 }
@@ -256,6 +278,16 @@ impl CombatRuntime {
         {
             return Err(super::persistence::error(
                 "fighter identities do not match execution columns",
+            ));
+        }
+        if self.counted.is_none()
+            && self
+                .fighters
+                .iter()
+                .any(|fighter| fighter.in_fight == Some(FightClock::InLoop))
+        {
+            return Err(super::persistence::error(
+                "fight-loop clock without a count tick",
             ));
         }
         Ok(())
@@ -662,6 +694,7 @@ const COUNT_CHUNK: usize = 256;
 pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &mut CombatRuntime) {
     use rayon::prelude::*;
     let tick = frame.tick;
+    let last_count = combat.counted;
     let (columns, formation, grid) = (&battle.columns, &battle.formation, &battle.grid);
     let entities = frame.entities;
     let count = |(chunk, fighters): (usize, &mut [Fighter])| {
@@ -669,6 +702,7 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
         for (offset, fighter) in fighters.iter_mut().enumerate() {
             let bi = chunk * COUNT_CHUNK + offset;
             if !columns.active[bi] || columns.carried[bi] {
+                fighter.leave_fight(last_count);
                 continue;
             }
             // A fugitive (unless at bay) is held in guard only as a placeholder.
@@ -681,7 +715,9 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
                     Action::Guard { .. } | Action::Windup { .. } | Action::Recover { .. }
                 )
             {
-                fighter.in_fight = Some(tick);
+                fighter.in_fight = Some(FightClock::InLoop);
+            } else {
+                fighter.leave_fight(last_count);
             }
             if fighter.weapon == Weapon::Bow {
                 continue;
@@ -711,9 +747,11 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
             counts.0 += 1;
             let recent = !fleeing
                 && !matches!(fighter.action, Action::Wounded)
-                && fighter
-                    .in_fight
-                    .is_some_and(|at| tick.saturating_sub(at) <= FIGHT_WINDOW_TICKS);
+                && match fighter.in_fight {
+                    Some(FightClock::InLoop) => true,
+                    Some(FightClock::Left(at)) => tick.saturating_sub(at) <= FIGHT_WINDOW_TICKS,
+                    None => false,
+                };
             counts.1 += u64::from(recent);
             // In action rather than standing guard: winding up, recovering
             // from his blow, staggered by a parry or blocking an incoming one.
@@ -745,6 +783,7 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
     combat.work.in_weapon_reach = in_reach;
     combat.work.fighting = fighting;
     combat.work.acting = acting;
+    combat.counted = Some(tick);
 }
 
 /// A shield bearer standing guard in order holds the shield up; a swing, a
