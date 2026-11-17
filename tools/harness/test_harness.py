@@ -320,6 +320,17 @@ class ReceiptContractTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0].client, "native")
         self.assertTrue(run.call_args.args[0].windowed)
 
+    def test_java_receipt_does_not_attribute_a_native_client_pin(self) -> None:
+        spec = {"scope": "real-client", "prerequisites": profiles._NONE, "run": lambda ctx: {}}
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), \
+                mock.patch.dict(profiles.PROFILES, {"java-receipt": spec}), \
+                mock.patch.dict(os.environ, {"KRASNOKAMEN_CLIENT_BINARY": "/irrelevant/native"}):
+            self.assertEqual(cli.cmd_run(["java-receipt", "--client", "java"]), 0)
+            payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
+        self.assertEqual(payload["client"], "java")
+        self.assertIsNone(payload["client_binary"])
+
     def test_unknown_profile_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):

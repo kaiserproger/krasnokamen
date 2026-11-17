@@ -1062,6 +1062,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="Loader connection, core-owned C binding opens the native settlement dialog, and native settlement create/list/info",
         limits="minimal native settlement smoke, not plugin production/war coverage; visual review required",
     ),
+    "loader-fabric-mixed-interaction": _entry(
+        id="loader-fabric-mixed-interaction",
+        summary="Two real Fabric versions exchange chat and an item",
+        owner="core:harness", evidence="graphical", profile="loader-live",
+        scenario_id="loader-fabric-mixed-interaction",
+        requires=("sibling:solaris-loader", "client-token", "xvfb"),
+        sources=("tools/harness/mixed_interaction.py",),
+        fixture="release server with Fabric 26.3 and 26.1.2 in one fresh world",
+        proves="bidirectional chat, UUID-fenced visibility, and inventory-observed item handoff",
+        limits="screenshots need visual review; no 26.2 gameplay claim",
+    ),
     "loader-fabric-mixed-version-build": _entry(
         id="loader-fabric-mixed-version-build",
         summary="Keep Fabric 26.3 live while Fabric/SVC 26.1.2 builds and starts",
