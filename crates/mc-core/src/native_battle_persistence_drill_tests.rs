@@ -1220,3 +1220,108 @@ fn battle_resume_pending_blow_by_a_held_player_who_left_rebinds_after_recovery()
         "the resumed battle answers the reconnected holder's blow"
     );
 }
+
+/// The compact entity records must survive the same kill point as the battle
+/// history: a published batch is durable, so the reopened world has the shield
+/// pose, the health and the in-flight projectile of the last published tick.
+/// A checkpoint capture in between reseeds the base image.
+fn shield(state: &mut TickState, id: EntityId, raised: bool) {
+    let slot = state.entities.slot_of(id).unwrap();
+    assert!(crate::hostile::set_extra(
+        state,
+        slot,
+        crate::battle::LIVING_FLAGS,
+        crate::boundary::EntityDataValue::Byte(0),
+        crate::boundary::EntityDataValue::Byte(if raised { 3 } else { 0 }),
+    ));
+    state.appearance_changed.push(id);
+}
+
+fn shield_pose(state: &TickState, id: EntityId) -> Option<i8> {
+    let slot = state.entities.slot_of(id)?;
+    state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find(|(index, _)| *index == crate::battle::LIVING_FLAGS)
+        .map(|(_, value)| match value {
+            crate::boundary::EntityDataValue::Byte(flags) => *flags,
+            other => panic!("living flags is a byte, got {other:?}"),
+        })
+}
+
+fn compact_ids(entries: &[JournalEntry], variant: fn(&JournalEntry) -> Option<i32>) -> Vec<i32> {
+    entries.iter().filter_map(variant).collect()
+}
+
+#[test]
+fn compact_entity_records_survive_a_crash_after_the_published_batch() {
+    let directory = tempfile::tempdir().unwrap();
+    // `prepared` ends with a checkpoint, so the first change must be a full image.
+    let mut drill = prepared(directory.path());
+    let member = drill.state.hostile.battle.formation.members[0].id;
+    // The battle itself raises shields, so toggle from the live pose.
+    let raised = shield_pose(&drill.state, member).unwrap_or(0) != 0;
+    shield(&mut drill.state, member, !raised);
+    let first = drill.capture_tick(&[]);
+    drill.append(&first).unwrap();
+    assert!(
+        first.entries.iter().any(
+            |entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0)
+        ),
+        "the first change after a capture writes the whole image"
+    );
+    // Later changes are compact.
+    shield(&mut drill.state, member, raised);
+    let compact = drill.capture_tick(&[]);
+    let appearances = compact_ids(&compact.entries, |entry| match entry {
+        JournalEntry::EntityAppearance { id, .. } => Some(*id),
+        _ => None,
+    });
+    assert!(
+        appearances.contains(&member.0),
+        "the toggled body takes a compact record: {appearances:?}"
+    );
+    assert!(!compact.entries.iter().any(
+        |entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0)
+    ));
+    drill.append(&compact).unwrap();
+    let durable_tick = drill.state.tick;
+    let expected = shield_pose(&drill.state, member);
+    // The next tick stays unpublished, exactly like a kill during the tick.
+    let unpublished = drill.capture_tick(&[]);
+    assert_eq!(unpublished.tick, durable_tick + 1);
+    let mut recovered = drill.crash();
+    assert_eq!(recovered.state.tick, durable_tick);
+    assert_eq!(
+        shield_pose(&recovered.state, member),
+        expected,
+        "the compact record's metadata byte survives the kill"
+    );
+    assert_eq!(
+        recovered.state.hostile.battle.formation.members[0].id,
+        member,
+        "the battle history still names the body the compact record updated"
+    );
+    // A checkpoint capture drops the bases: the next change is a full image
+    // again, and that image is what a later recovery folds.
+    recovered.checkpoint();
+    let raised = shield_pose(&recovered.state, member).unwrap_or(0) != 0;
+    shield(&mut recovered.state, member, !raised);
+    let reseeded = recovered.capture_tick(&[]);
+    recovered.append(&reseeded).unwrap();
+    assert!(
+        reseeded
+            .entries
+            .iter()
+            .any(|entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0)),
+        "a checkpoint capture reseeds the base image"
+    );
+    let expected = shield_pose(&recovered.state, member);
+    let durable = recovered.state.tick;
+    recovered = recovered.crash();
+    assert_eq!(recovered.state.tick, durable);
+    assert_eq!(shield_pose(&recovered.state, member), expected);
+}

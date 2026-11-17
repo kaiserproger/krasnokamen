@@ -20,6 +20,21 @@ meaningful entity changes are journaled; ordinary non-projectile mob motion and
 idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
 recovery.
+A body whose appearance changed (a battle shield is one metadata byte) journals
+`JournalEntry::EntityAppearance` instead of the whole image: the fields of the
+appearance image that differ, plus the health and effects scalars the image
+would have set. A projectile flight tick journals `JournalEntry::ProjectileFlight`:
+the authoritative pose and age, the landing transition, and the whole retained
+`ProjectileState` only when a payload, ledger or custody field changed
+(`journal_touched.rs` `compact_entry`). Both are deltas of the last full `Entity`
+image of the same WAL tail: the first record per body after a checkpoint capture
+or a recovery is always a full image, because a checkpoint stores neither the
+WAL's transient appearance (living flags, variant metadata) nor a replayed
+projectile state. A compact record without that base refuses recovery
+(`journal::validate_replay`, `entity_fault`), and it never moves the record's
+clock anchor, so state and villager projections stay paired with the images that
+were journaled. Full images remain for spawns, deaths, chunk crossings, dropped
+items and a changed entity identity.
 Dropped-item pose changes use compact native `ItemMotion` images, including items
 whose lifetime or pickup clock is infinite. Resting items emit no pose image.
 

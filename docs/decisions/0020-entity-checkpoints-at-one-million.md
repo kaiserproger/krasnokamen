@@ -166,6 +166,13 @@ after reopen then covers the tail it prunes.
 
 ## Reopen memory (the 1M peak)
 
+The compact entity records (`JournalEntry::EntityAppearance` /
+`ProjectileFlight`) keep their base in `JournalScan::fields`: one
+`Arc<EntityAppearance>` (a clone of the row's own allocation, no payload copy),
+the uuid, the type id and the retained projectile box per live entity — roughly
+70 B/entity at 1M, below the `EntityStateImage` baseline the touched set already
+retains for every body.
+
 `Replay.entities` (`BTreeMap<i32, ReplayEntity>`) holds the whole population
 before `restore` drains it. Every `ReplayEntity` stores these inline:
 

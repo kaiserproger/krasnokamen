@@ -66,7 +66,10 @@ fn image_ids(entries: &[JournalEntry]) -> Vec<i32> {
     let mut ids: Vec<i32> = entries
         .iter()
         .filter_map(|entry| match entry {
-            JournalEntry::Entity { id, .. } | JournalEntry::EntityState { id, .. } => Some(*id),
+            JournalEntry::Entity { id, .. }
+            | JournalEntry::EntityState { id, .. }
+            | JournalEntry::EntityAppearance { id, .. }
+            | JournalEntry::ProjectileFlight { id, .. } => Some(*id),
             _ => None,
         })
         .collect();
@@ -381,6 +384,9 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
             .count(),
         1
     );
+    // This state was built fresh from the WAL record, so its tail has no image
+    // for the body yet: the first change after recovery writes the whole image
+    // again (a compact record is a delta of an image in the same tail).
     assert!(repair.iter().any(|entry| matches!(entry,
         JournalEntry::Entity { id, appearance, .. } if *id == zombie.0
             && !appearance.extra.iter().any(|(index, value)| *index == 15
@@ -1390,3 +1396,6 @@ fn landing_reset_of_a_journaled_fall_distance_reaches_the_journal() {
 
 #[path = "journal_item_motion_tests.rs"]
 mod item_motion_tests;
+
+#[path = "journal_compact_tests.rs"]
+mod compact_tests;

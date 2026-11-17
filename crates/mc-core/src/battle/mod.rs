@@ -450,7 +450,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
 /// byte where 1 is `isUsingItem` and 2 selects the off hand. A raised battle
 /// shield is the off-hand use a blocking mob or player shows; native
 /// appearance custody journals and publishes it like any metadata change.
-const LIVING_FLAGS: u8 = 8;
+pub(crate) const LIVING_FLAGS: u8 = 8;
 const USING_OFF_HAND: i8 = 0b11;
 
 fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
