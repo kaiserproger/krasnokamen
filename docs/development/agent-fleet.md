@@ -10,16 +10,24 @@ records how fleets were run on the owner's machine and what went wrong.
 ### Announcement stabilization mode
 
 Owner-directed cutover, 2026-11-15, for the finite 21 November announcement;
-cap replaced by the owner on 2026-11-16 (23:53 host): **Main plus four to five
-actively executing child agents in total**, announcement rows and the
-off-screen settlement simulation goal together (fixers, implementers, gate and
-heavy-run owners). Reviewers and breakers do not count against this cap. At
-most 10 live agents and 3 concurrent builders; the builder-token, disk-floor
-and `mem-run` limits are unchanged. The off-screen simulation goal staffs its
-executors from the same cap through the
-[generalist roster](#generalist-roster). This mode overrides the general fleet
-defaults/history below, until the
-[finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
+cap replaced by the owner on 2026-11-18 (D25/D26, ~00:10 host): **at most six
+live executors on this host, at most three holding build tokens and at most
+three editing or reading**, announcement rows and the off-screen settlement
+simulation goal together (fixers, implementers, readers, gate and heavy-run
+owners). Every other piece of work is a queued TODO item, not a live agent:
+Main starts the next item when a slot frees (pull, not push), pre-freeze items
+first. More throughput comes from the second server, not from agents waiting
+for this host's tokens. Backlog streams (the `Tail*` items) wait for the second
+server. One standing review committee (one Opus and one Sol reviewer) serves
+every slice in batches by area; no per-task reviewer spawns. Persistence and D7
+changes still need both members' verdicts; other slices may take one member's.
+An agent that needs a build token runs one blocking command that waits for the
+token and then runs (the `mem-run` runner already does); never `timeout N true`,
+sleep or status-polling loops. Main's hourly report gives live executors, token
+holders, token waiters and their waiting time, CPU use and Main's RSS; the cap
+moves only on that data. The builder-token, disk-floor and `mem-run` limits are
+unchanged. This mode overrides the general fleet defaults/history below, until
+the [finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 is reached or the owner changes it.
 
 Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`:
