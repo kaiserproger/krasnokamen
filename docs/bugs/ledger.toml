@@ -4622,7 +4622,7 @@ area = "gameplay"
 repro = "source"
 severity = "major"
 status = "open"
-source = "UpgradeProof D18 harness on the retained trial-4 world (receipts/UpgradeProof/HANDOFF.md, logs/after-final.log), trees d7fd00e64 and 94968fcc6a alike: road level 1 at state=Running stage=0 work=34 consumed=0 pause=None from tick 304153 to 382153, so a funded owner upgrade order waits Queued{busy} forever. Same symptom family as CIV-SEED24-ROAD-CLEAR-STALL (fix_commit 2b8219d1, fence-post stand); whether that fix is in these trees and covers this cell is not yet checked. Cause not located."
+source = "UpgradeProof D18 harness on the retained trial-4 world (receipts/UpgradeProof/HANDOFF.md, logs/after-final.log), trees d7fd00e64 and 94968fcc6a alike: road level 1 at state=Running stage=0 work=34 consumed=0 pause=None from tick 304153 to 382153, so a funded owner upgrade order waits Queued{busy} forever. Same symptom family as CIV-SEED24-ROAD-CLEAR-STALL, but that row's fix 2b8219d1 (fence-post stand) is an ancestor of 94968fcc6a, so it does not cover this stall. Cause not located."
 regression = []
 failing_first = "reported"
 
