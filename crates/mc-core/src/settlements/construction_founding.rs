@@ -325,26 +325,41 @@ fn admit(state: &mut TickState, parent: SettlementId) {
     record.revision = record.revision.saturating_add(1);
 }
 
+/// True when `project` is the construction of exactly this expedition site.
+fn is_site(project: &Project, name: &str, origin: [i32; 3]) -> bool {
+    project.blueprint == name
+        && project.origin == origin
+        && project.rotation == 0
+        && project.level == 1
+}
+
 pub(super) fn owns_project(record: &SettlementRecord, project: &Project) -> bool {
     record.founding.as_ref().is_some_and(|expedition| {
-        expedition.sites().into_iter().any(|(name, origin)| {
-            project.blueprint == name
-                && project.origin == origin
-                && project.rotation == 0
-                && project.level == 1
-        })
+        expedition
+            .sites()
+            .into_iter()
+            .any(|(name, origin)| is_site(project, name, origin))
     })
 }
 
+/// True while a villager of the expedition household builds any project.
+fn member_bound(state: &TickState, parent: SettlementId, household: &str) -> bool {
+    super::super::households::members(state, parent, household)
+        .into_iter()
+        .filter_map(|entity| state.entities.slot_of(entity))
+        .any(|slot| bound_builder(&state.settlements, state.entities.row(slot).uuid))
+}
+
+/// Cancels every project the expedition owns, each through `cancel_project`.
 pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId) {
-    let owned = {
+    let owned: Vec<String> = {
         let record = state.settlements.get(parent).expect("founding parent");
         projects(record)
-            .next()
             .filter(|project| owns_project(record, project))
             .map(|project| project.structure.clone())
+            .collect()
     };
-    if let Some(structure) = owned {
+    for structure in owned {
         cancel_project(state, parent, &structure).expect("cancel admitted founding structure");
     }
     let record = state.settlements.get_mut(parent).unwrap();
@@ -370,15 +385,19 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
         cancel(state, parent);
         return false;
     }
-    if projects(state.settlements.get(parent).unwrap())
-        .next()
-        .is_some()
-    {
-        return true;
-    }
     for (name, origin) in expedition.sites() {
-        if executor::built_at(state, parent, name, origin) {
+        let record = state.settlements.get(parent).unwrap();
+        // One project per site: a site under construction is never admitted
+        // twice, and a finished one is never rebuilt.
+        if projects(record).any(|project| is_site(project, name, origin))
+            || executor::built_at(state, parent, name, origin)
+        {
             continue;
+        }
+        // A full project set keeps this expedition's turn, as an active
+        // project did while the store held one.
+        if claim_slot(state, parent).is_err() {
+            return true;
         }
         if pending {
             return false;
@@ -425,7 +444,10 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
         return false;
     }
     let source = state.settlements.get(parent).unwrap();
-    if projects(source).next().is_some()
+    // Handover waits for the expedition's own projects only, and never carries
+    // away a villager who is bound as a builder on any project.
+    if projects(source).any(|project| owns_project(source, project))
+        || member_bound(state, parent, &expedition.household)
         || source.revision > u64::MAX - 2
         || source.households[&expedition.household].revision == u64::MAX
     {
