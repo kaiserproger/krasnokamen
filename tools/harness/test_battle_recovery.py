@@ -363,6 +363,8 @@ class InputsAndOutputsTests(unittest.TestCase):
             for name in ("resources", "data", "world/native"):
                 (root / name).mkdir(parents=True)
             (root / "world/native/state.redb").write_bytes(b"x")
+            (root / "data/vanilla").mkdir()
+            self.enterContext(mock.patch.object(br, "REPO_ROOT", root))
             env = {"KRASNOKAMEN_SERVER_BINARY": str(server), "KRASNOKAMEN_BATTLE_WORLD": str(root / "world"),
                    "KRASNOKAMEN_BATTLE_WORLD_SEED": "935", "KRASNOKAMEN_BATTLE_HORIZON_CLIENT": str(root / "client"),
                    "KRASNOKAMEN_BATTLE_HORIZON_CTL": str(root / "ctl"),
