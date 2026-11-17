@@ -737,6 +737,14 @@ pub(super) fn debit(
                         .into_iter()
                         .map(|stack| (cell.at, stack)),
                 );
+                // A lot crop leaves its field with the lot: its harvest is
+                // vanilla loot, not conserved stock, so full storage spills it
+                // at the cell as vanilla does.
+                loot.extend(
+                    crate::settlements::construction::relayout::crop_drops(state, cell.at, block)?
+                        .into_iter()
+                        .map(|stack| (cell.at, stack)),
+                );
             }
         }
     }

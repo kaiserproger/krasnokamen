@@ -783,10 +783,13 @@ fn terrain_preparation_accepts_a_bounded_pillar_and_rejects_protected_cells() {
     for y in 201..=205 {
         state.world.set_block(6, y, 6, state.registry.states.air);
     }
+    // A dirt path is village work now, not a refusal: the lot re-lays it
+    // around the footprint (owner D10, `relayout::plan`). Authored blocks and
+    // fluids stay protected floors.
     for name in [
         "minecraft:oak_planks",
-        "minecraft:dirt_path",
         "minecraft:water",
+        "minecraft:lava",
     ] {
         let block = crate::settlements::allocator::tests::block(&state, name, &[]);
         state.world.set_block(6, 203, 6, block);
@@ -877,14 +880,7 @@ fn hillside_review_floor_under_overhang_preserves_fluids_and_protected_blocks() 
         site_free(&state, state.settlements.get(id).unwrap(), origin, size),
         "solid natural ground below the overhang is replaceable"
     );
-    for name in [
-        "minecraft:water",
-        "minecraft:lava",
-        "minecraft:dirt_path",
-        "minecraft:farmland",
-        "minecraft:wheat",
-        "minecraft:torch",
-    ] {
+    for name in ["minecraft:water", "minecraft:lava", "minecraft:torch"] {
         let block = crate::settlements::allocator::tests::block(&state, name, &[]);
         state.world.set_block(6, 200, 6, block);
         assert!(

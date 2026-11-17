@@ -337,7 +337,7 @@ fn level_inside(record: &SettlementRecord, x: i32, z: i32) -> bool {
     inside(record, [x, record.anchor[1], z])
 }
 
-fn sample(
+pub(super) fn sample(
     state: &TickState,
     record: &SettlementRecord,
     x: i32,
@@ -750,6 +750,12 @@ impl<'a> Network<'a> {
             route.push([cx, y, cz]);
         }
         Some(route)
+    }
+
+    /// The reached street column behind `building`'s door, exactly the column
+    /// [`Self::access`] indexes: the road graph a route must keep connected.
+    pub(crate) fn access_column(&self, building: &Building) -> Option<[i32; 3]> {
+        self.access(building).map(|index| self.cells[index])
     }
 
     /// A verge may carry a detour, but a door still fronts an actual street.

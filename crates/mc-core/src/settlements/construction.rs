@@ -3622,4 +3622,6 @@ mod liquid_tests;
 
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;
+#[path = "relayout.rs"]
+pub(crate) mod relayout;
 use preparation::planned_cells;

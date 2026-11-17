@@ -30,6 +30,7 @@ pub(super) enum Reason {
     ExecutorReservation,
     Preparation,
     MaterialBill,
+    NoPathDetour,
 }
 const REASONS: [Reason; 22] = [
     Reason::NoFrontage,
@@ -54,6 +55,7 @@ const REASONS: [Reason; 22] = [
     Reason::ExecutorReservation,
     Reason::Preparation,
     Reason::MaterialBill,
+    Reason::NoPathDetour,
 ];
 
 #[derive(Default)]
@@ -531,6 +533,9 @@ pub(super) fn check(
     if super::super::forestry::off_lot_sapling_overlaps(state, lot) {
         return Err(Reason::PlantingProvenance);
     }
+    // Village paths and farmland the lot covers: a path that carries the road
+    // network is re-laid around the lot, so those cells are not refusals.
+    let relayout = super::relayout::plan(state, record, lot)?;
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
             if distance_sq([x, max[1], z], record.anchor) > i64::from(record.radius).pow(2)
@@ -539,6 +544,7 @@ pub(super) fn check(
                 return Err(Reason::Territory);
             }
             let height = liquid::ground_y_for_lot(state, floor, x, z, Some(lot), clearance)
+                .or_else(|| relayout.as_ref().and_then(|plan| plan.height(x, z)))
                 .ok_or_else(|| {
                     (floor - SITE_BAND + 1..=floor + SITE_BAND + 1)
                         .find(|&y| {
@@ -556,7 +562,9 @@ pub(super) fn check(
                 .world
                 .physics_block_at(x, height, z)
                 .expect("loaded surface");
-            if !floor_replaceable(state, ground) {
+            if !floor_replaceable(state, ground)
+                && !relayout.as_ref().is_some_and(|plan| plan.floor(x, z))
+            {
                 return Err(Reason::ProtectedFloor);
             }
             let authored_floor =
@@ -577,7 +585,9 @@ pub(super) fn check(
             if state.block_entities.contains_key(&(x, floor, z)) {
                 return Err(Reason::ProtectedObstruction);
             }
-            if !floor_replaceable(state, floor_block) {
+            if !floor_replaceable(state, floor_block)
+                && !relayout.as_ref().is_some_and(|plan| plan.floor(x, z))
+            {
                 return Err(Reason::ProtectedFloor);
             }
             if floor_block != state.registry.states.air
@@ -611,6 +621,14 @@ pub(super) fn check(
                     .ok_or(Reason::Unloaded)?;
                 if liquid::has_fluid(state, block) {
                     return Err(Reason::LiquidInWork);
+                }
+                // A lot crop and a retired village path cell are the
+                // re-layout's own removal work, never a refusal.
+                if relayout
+                    .as_ref()
+                    .is_some_and(|plan| plan.clears([x, y, z]) || plan.retires([x, y, z]))
+                {
+                    continue;
                 }
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 let tree_clearable = tree && clearance.clearable(state, [x, y, z], Some(lot));
@@ -647,10 +665,6 @@ pub(super) fn check(
             }
         }
     }
-    // A certified natural zone is terrain, not a building: it keeps only its own
-    // columns and is tested against the whole preparation volume — the authored
-    // footprint and the fill down to the lowest discovered ground. A zone below
-    // the floor that the fill would cross still refuses (owner D10, review 1.1).
     let prepared_min = lowest;
     if record.buildings.values().any(|building| {
         building.natural_zone
@@ -674,7 +688,13 @@ pub(super) fn check(
     cost.liquid = liquids.total();
     cost.water = liquids.water;
     cost.lava = liquids.lava;
-    if executor::area_reserved(state, volume) {
+    // The re-laid village detour is executor work too: its own reservation
+    // refuses the lot exactly like the prepared volume.
+    if executor::area_reserved(state, volume) || relayout
+        .as_ref()
+        .and_then(|plan| plan.area())
+        .is_some_and(|area| executor::area_reserved(state, area))
+    {
         return Err(Reason::ExecutorReservation);
     }
     Ok(cost)

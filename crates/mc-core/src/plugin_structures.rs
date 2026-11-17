@@ -1523,7 +1523,7 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                         (None, None) => cell.quantity == 0,
                         (Some(_), None) => {
                             cell.quantity == 0
-                                && record
+                                && (record
                                     .snapshot
                                     .blueprint_id
                                     .strip_prefix("krasnokamen-settlements:")
@@ -1532,6 +1532,15 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                                             state, blueprint, cell.state,
                                         )
                                     })
+                                    // A lot retires a path or a field into the
+                                    // soil already in place: village work on
+                                    // its own lot column.
+                                    || crate::settlements::construction::relayout::free_soil(
+                                        state,
+                                        record.settlement,
+                                        cell.at,
+                                        cell.state,
+                                    ))
                         }
                         _ => false,
                     };
