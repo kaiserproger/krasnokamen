@@ -508,7 +508,11 @@ impl NativeStore {
             .open(path)?;
         let backend = NativeFile::acquire(file)?;
         let file = std::sync::Arc::clone(&backend.0);
-        let database = db(database_builder(cache_bytes).create_with_backend(backend))?;
+        // A new file has no allocator state yet, so redb initializes it through
+        // its repair path; that is not a repair of a world.
+        let mut builder = database_builder(cache_bytes);
+        builder.set_repair_callback(|_| {});
+        let database = db(builder.create_with_backend(backend))?;
         let mut transaction = db(database.begin_write())?;
         db(transaction.set_durability(Durability::Immediate))?;
         {

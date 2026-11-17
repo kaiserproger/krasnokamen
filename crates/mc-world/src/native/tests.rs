@@ -198,6 +198,37 @@ fn decorated_pot_26_3_native_reopen_migrates_old_sherds_without_losing_items() {
 }
 
 #[test]
+fn creating_and_reopening_a_store_is_not_a_redb_repair() {
+    // The repair counter is process-wide: run the body in a child process so a
+    // parallel test that repairs another store cannot change it.
+    const CHILD: &str = "KRASNOKAMEN_NATIVE_CREATE_REPAIR_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let name = concat!(
+            module_path!(),
+            "::creating_and_reopening_a_store_is_not_a_redb_repair"
+        );
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", name.split_once("::").unwrap().1, "--nocapture"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&child.stdout);
+        assert!(
+            child.status.success() && stdout.contains("1 passed"),
+            "{stdout}\n{}",
+            String::from_utf8_lossy(&child.stderr)
+        );
+        return;
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("state.redb");
+    let before = redb_repairs();
+    drop(NativeStore::create(&path, [3; 32]).unwrap());
+    drop(NativeStore::open(&path, [3; 32]).unwrap());
+    assert_eq!(redb_repairs(), before, "a new world must not log a repair");
+}
+
+#[test]
 fn failed_participant_rolls_back_every_overlay_and_watermark() {
     let temp = tempfile::tempdir().unwrap();
     let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
