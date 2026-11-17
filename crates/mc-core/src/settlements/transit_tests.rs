@@ -734,3 +734,181 @@ fn migration_roster_partial_arrival_rollback_keeps_live_brains_and_sensors() {
             .contains(&slot)
     );
 }
+
+fn review_island_transit() -> (TickState, TransitId, SettlementId, uuid::Uuid) {
+    let mut state = world(0);
+    let source = town(&mut state, "source", ANCHOR, 200);
+    let destination = town(&mut state, "destination", FAR, 200);
+    let member = resident(&mut state, source, [8.5, 64.0, 8.5]);
+    let uuid = uuid_of(&state, member);
+    // The real operator departure accepts the unit's current standing cell.
+    let id = depart(
+        &mut state,
+        &mut ChangeSet::default(),
+        source,
+        Unit::Resident(member),
+        destination,
+        BlockPos { x: 8, y: 64, z: 8 },
+        90.0,
+    )
+    .unwrap();
+    state.tick = state.settlements.transit.get(id).unwrap().arrives;
+    player_to(&mut state, [1000.5, 64.0, 8.5]);
+    assert!(edge_point(&state, FAR, 270.0).is_none());
+    (state, id, destination, uuid)
+}
+
+#[test]
+fn review_transit_island_arrives_at_nearest_anchor_cell_without_return_bearing() {
+    let (mut state, id, destination, uuid) = review_island_transit();
+    let mut changes = ChangeSet::default();
+    let arrivals = tick(&mut state, &mut changes);
+    assert_eq!(arrivals.len(), 1);
+    assert_eq!(arrivals[0].destination, destination);
+    assert!(state.settlements.transit.get(id).is_none());
+    let slot = state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(state.entities.pos(slot), [1000.5, 64.0, 8.5]);
+    assert_eq!(state.settlements.transit.entry_attempts, 1);
+    validate_custody(&state).unwrap();
+}
+
+#[test]
+fn review_transit_missing_ground_backs_off_without_persisting_or_rescanning() {
+    let (mut state, id, _, uuid) = review_island_transit();
+    for x in FAR[0] - 5..=FAR[0] + 5 {
+        for z in FAR[2] - 5..=FAR[2] + 5 {
+            for y in 58..=67 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let before = serde_json::to_value(state.settlements.transit.get(id).unwrap()).unwrap();
+    let mut entries = Vec::new();
+    let at = state.tick;
+    journal_entries(&mut state, at, &mut entries);
+    let mut changes = ChangeSet::default();
+    assert!(tick(&mut state, &mut changes).is_empty());
+    let deadline = state.settlements.transit.get(id).unwrap().retry_at;
+    assert_eq!(deadline, game_time(&state) + ARRIVAL_RETRY_TICKS);
+    assert_eq!(state.settlements.transit.entry_attempts, 1);
+    assert_eq!(
+        before,
+        serde_json::to_value(state.settlements.transit.get(id).unwrap()).unwrap()
+    );
+    entries.clear();
+    journal_entries(&mut state, at, &mut entries);
+    assert!(entries.is_empty());
+    let stone = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:stone").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(FAR[0], 63, FAR[2], stone);
+    state.world.fold_overlay();
+    for _ in 1..ARRIVAL_RETRY_TICKS {
+        state.tick += 1;
+        assert!(tick(&mut state, &mut changes).is_empty());
+        assert_eq!(state.settlements.transit.entry_attempts, 1);
+        assert!(state.entities.slot_of_uuid(uuid).is_none());
+    }
+    state.tick += 1;
+    assert_eq!(tick(&mut state, &mut changes).len(), 1);
+    assert_eq!(state.settlements.transit.entry_attempts, 2);
+    assert!(state.settlements.transit.get(id).is_none());
+}
+
+#[test]
+fn review_transit_restore_refusal_waits_before_retrying_partial_arrival() {
+    let mut d = departed();
+    d.state.tick = d.state.settlements.transit.get(d.id).unwrap().arrives;
+    player_to(&mut d.state, [1000.5, 64.0, 8.5]);
+    let original_type = d.state.settlements.transit.records[&d.id.0].members[1].type_id;
+    d.state
+        .settlements
+        .transit
+        .records
+        .get_mut(&d.id.0)
+        .unwrap()
+        .members[1]
+        .type_id = u32::MAX;
+    let mut changes = ChangeSet::default();
+    assert!(tick(&mut d.state, &mut changes).is_empty());
+    assert!(changes.entities_spawned.is_empty());
+    let revision = d.state.entities.projection_revision();
+    let deadline = d.state.settlements.transit.get(d.id).unwrap().retry_at;
+    for _ in 1..ARRIVAL_RETRY_TICKS {
+        d.state.tick += 1;
+        assert!(tick(&mut d.state, &mut changes).is_empty());
+        assert_eq!(d.state.entities.projection_revision(), revision);
+        assert_eq!(d.state.settlements.transit.entry_attempts, 1);
+    }
+    // Repair only the live test record; recovery rejects this corruption.
+    d.state
+        .settlements
+        .transit
+        .records
+        .get_mut(&d.id.0)
+        .unwrap()
+        .members[1]
+        .type_id = original_type;
+    d.state.tick += 1;
+    assert_eq!(game_time(&d.state), deadline);
+    assert_eq!(tick(&mut d.state, &mut changes).len(), 1);
+    assert_eq!(d.state.settlements.transit.entry_attempts, 2);
+    for uuid in d.uuids {
+        assert_eq!(places(&d.state, uuid), 1);
+    }
+}
+
+#[test]
+fn review_transit_refusal_budget_does_not_starve_older_waiting_arrivals() {
+    let mut state = world(0);
+    let source = town(&mut state, "source", ANCHOR, 200);
+    let destination = town(&mut state, "destination", FAR, 200);
+    let mut ids = Vec::new();
+    for _ in 0..MAX_ARRIVALS_PER_TICK + 1 {
+        let member = resident(&mut state, source, [8.5, 64.0, 8.5]);
+        let id = depart(
+            &mut state,
+            &mut ChangeSet::default(),
+            source,
+            Unit::Resident(member),
+            destination,
+            BlockPos { x: 8, y: 64, z: 8 },
+            90.0,
+        )
+        .unwrap();
+        ids.push(id.0);
+    }
+    ids.sort_unstable();
+    let healthy = *ids.last().unwrap();
+    for id in ids.iter().take(MAX_ARRIVALS_PER_TICK) {
+        state
+            .settlements
+            .transit
+            .records
+            .get_mut(id)
+            .unwrap()
+            .members[0]
+            .type_id = u32::MAX;
+    }
+    state.tick = state.settlements.transit.records[&healthy].arrives;
+    player_to(&mut state, [1000.5, 64.0, 8.5]);
+    let mut changes = ChangeSet::default();
+    assert!(tick(&mut state, &mut changes).is_empty());
+    assert_eq!(
+        state.settlements.transit.entry_attempts,
+        MAX_ARRIVALS_PER_TICK
+    );
+    assert_eq!(state.settlements.transit.records[&healthy].retry_at, 0);
+    state.tick += ARRIVAL_RETRY_TICKS;
+    assert_eq!(tick(&mut state, &mut changes).len(), 1);
+    assert!(!state.settlements.transit.records.contains_key(&healthy));
+    assert_eq!(
+        state.settlements.transit.entry_attempts,
+        MAX_ARRIVALS_PER_TICK * 2
+    );
+}

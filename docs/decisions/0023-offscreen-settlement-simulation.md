@@ -1,10 +1,9 @@
 # ADR 0023 - Off-screen settlement simulation
 
 **Date:** 2026-11-16  
-**Status:** Proposed (draft until Main accepts it after independent review).
-Migration transit (slice 1) and migration flows are implemented on their
-respective branches; slice 2, game-time economy clocks, is merged on main
-(`1360be18a`). Remaining slices retain their delivery status below.  
+**Status:** Accepted design; migration transit, migration flows, game-time economy
+clocks, and deferred production/consumption are implemented and integrated.
+Construction labour and birth credit (slices 4–5) remain planned, not implemented.  
 **Related:** [0013](0013-core-model-v2.md) (native authority, one tick WAL),
 [0020](0020-entity-checkpoints-at-one-million.md) (entity tombstones),
 [0021](0021-build-time-and-crate-split.md) (module cycle),
@@ -23,29 +22,32 @@ an explicit decision on block placement in unloaded chunks.
 
 ## What already advances off-screen
 
-The inventory (owner host, `receipts/OffscreenSim/INVENTORY.md`, with
-`file:line` evidence) and the pinning test `settlements/offscreen_pin_tests.rs`
-establish today's behaviour. Terms: *simulated* is `ChunkWorld::is_active`;
-*resident* is `has_chunk` and is wider; entity rows never leave memory.
+Current runtime boundaries (see [settlements](../architecture/settlements.md)):
+*simulated* is `ChunkWorld::is_active`; *resident* is `has_chunk` and is wider.
+Entity rows remain in memory unless native transit takes custody.
 
-- `economy::tick` visits every economically active settlement with no chunk
-  check. Payroll accrues every elapsed period at once (`projected_accrual`) and
-  is paid off-screen whenever the treasury container is resident; otherwise the
-  backlog is paid as one lump at the first resident tick, or never while it
-  exceeds the budget.
-- Production completes portions off-screen when the station chunk is resident
-  and the frozen worker body stands at its post; otherwise the job parks
-  `unloaded` and re-arms every 20 ticks.
-- Caravan deadlines expire off-screen although the carrier never moves.
-- Construction, recruitment, births and every villager brain branch wait for
-  simulated chunks. Nothing creates population, buildings or recruits off-screen.
-- Every economy clock used `world.tick`, which advances under `/tick freeze`
-  while game time and the settlement phase stop; downtime is safe because the
-  tick restores from the checkpoint. Slice 2 moved wages and caravan deadlines
-  to game time.
+- Wages and caravan deadlines use game time. Payroll accrues elapsed periods
+  off-screen and pays through real treasury storage when it is resident;
+  caravan deadlines can expire without moving the carrier.
+- Production outside the station's simulated area accrues bounded deferred
+  portions, including when the chunk is resident. It never changes a worker's
+  carry or physical storage there. An active owner visit reconciles through the
+  ordinary recipe planner and fenced storage commit when all storage is resident.
+  Unaffordable portions or output that cannot fit are dropped in that visit.
+- Daily consumption runs for every settlement, with or without production jobs.
+  One shared game-time watermark charges living body-backed members; unsimulated
+  demand becomes a deferred debit, paid from real food on an active visit.
+- Transit keeps complete native member images while bodies are absent. Due
+  members enter only when their destination is simulated. Migration decisions
+  and resident-death safety observations belong to the runtime policy.
+- Construction, recruitment, births and villager brains still require simulated
+  chunks. No construction labour or birth credit is implemented yet.
+- Freeze and downtime add no elapsed game-time periods. The one-time legacy
+  clock conversion and its removal conditions live in
+  [settlements](../architecture/settlements.md).
 
-No row of [open transitions](../STATUS.md#open-transitions) covers settlements
-or residency.
+The remaining construction/birth work is tracked in
+[open transitions](../STATUS.md#open-transitions).
 
 ## Decisions
 
@@ -64,7 +66,7 @@ Each accrual has exactly one persisted counter or watermark (wage `next_due`,
 job progress, a consumption or labour watermark). The on-screen system and its
 off-screen counterpart are two code paths of **one owner module** that advance
 the same counter, selected by one predicate evaluated per period (for example
-"station chunk resident"). A period consumed by either path is no longer
+"station chunk simulated"). A period consumed by either path is no longer
 available to the other, before or after load, so reconciliation never needs to
 subtract. The owners:
 
@@ -73,7 +75,7 @@ subtract. The owners:
 | Wages | `commerce` (today) | unchanged authority; its clocks use game time (slice 2, merged) |
 | Caravan deadline | `caravan` (today) | `game_deadline` in game time (slice 2, merged) |
 | Production portions | `production` | stays its only writer; off-screen periods become deferred portions in the job (slice 3) |
-| Consumption | `production`'s consumption owner (new, slice 3) | food demand per member per game day as a deferred debit |
+| Consumption | `production`'s consumption owner (slice 3) | food demand per member per game day as a deferred debit |
 | Construction labour | `construction` | labour credit in the project (slice 4) |
 | Births | `households`/birth path | birth credit, materialised on load (slice 5) |
 | Migration | `transit` (slice 1) | durable transit record, below |
@@ -111,10 +113,10 @@ image, so a crash before the next batch repeats the same conversion.
 
 No off-screen system writes blocks, block entities or container contents in a
 chunk that is not resident. Off-screen effects are abstract state in the owning
-record (deferred portions, debits, labour or birth credit). On the first tick
-the chunk is resident and the owner runs, the owner applies them through its
-ordinary physical path in one tick: inputs are taken from real storage, outputs
-placed into real containers, blocks placed by the structure executor.
+record (deferred portions, debits, labour or birth credit). On the first active
+owner visit with the required chunks resident, the owner applies them through
+its ordinary physical path: inputs from real storage, outputs in real
+containers, and (for planned slice 4) blocks through the structure executor.
 
 Reasons: writing unloaded chunks would load them (cost scales with every
 unloaded settlement), pin them resident through dirty-chunk eviction refusal,
@@ -126,7 +128,7 @@ at load. A deferred effect that cannot be applied (inputs missing, no space)
 applies the affordable part and drops the rest; nothing becomes a backlog that
 outlives one reconciliation.
 
-### 4. Construction progress
+### 4. Construction progress (planned, not implemented)
 
 Off-screen construction accrues labour credit in the project (assigned builders
 × elapsed game-time periods, capped by the work left in the structure ledger).
@@ -134,7 +136,7 @@ No block is placed off-screen. On load the executor spends the credit at an
 accelerated, bounded rate with physical materials from storage; credit without
 materials stays in the project until materials arrive or the project ends.
 
-### 5. Births
+### 5. Births (planned, not implemented)
 
 No entity is created off-screen. Off-screen births accrue a bounded birth credit
 for eligible households (free bed, food), evaluated with the existing birth
@@ -171,6 +173,15 @@ This restates the binding design (`receipts/SpainCulture/IMMIGRATION-DESIGN.md`,
   `transit::tick` returns each arrival that joined (`Arrival`: source,
   destination, household, member UUIDs) to the migration policy in the same
   tick; it is never persisted.
+- **Entry retries.** If the return bearing has no entry, try the nearest
+  standing foot cell within four horizontal and two vertical blocks of the
+  anchor. If neither exists, or restoration refuses, retain custody and retry
+  after 100 game ticks. The retry deadline is runtime-only and never changes
+  the persisted record or its WAL image; the first refusal logs its reason.
+  At most four entry searches/restores are attempted per tick, including failures.
+- **Resident deaths.** The native damage owner records an actual resident
+  death for the policy's seven-game-day safety window. Successful zombie
+  infection is conversion, not death, and does not enter that window.
 - **Automatic role holders.** Automatic migration also refuses an occupied
   certified native work point, not only commercial employment. The role must
   be released before selection or departure; an empty carry is not proof that
@@ -259,22 +270,25 @@ Write sets are disjoint; each slice owns its tests and docs paragraph.
 
 | Slice | Writes | Delivers |
 |---|---|---|
-| 1 Migration transit (done on branch) | `settlements/transit.rs`, `transit_tests.rs`, `transit_disk_tests.rs`, `households.rs` leave/join, `registry.rs` field, `settlements/persistence.rs` hookups, `journal.rs`/`journal/replay.rs` `Transit` entry, `mc-world` native checkpoint rows, `mc-world-conversion` census | this ADR's section 6 |
-| Migration flows (done on branch) | `settlements/migration.rs`, `villager/return_home.rs`, one brain registration (+ tests) | runtime policy owns membership relocation and immigrant spawn; weak physical return goals; [Migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return) |
+| 1 Migration transit (integrated) | `settlements/transit.rs`, `transit_tests.rs`, `transit_disk_tests.rs`, `households.rs` leave/join, `registry.rs` field, `settlements/persistence.rs` hookups, `journal.rs`/`journal/replay.rs` `Transit` entry, `mc-world` native checkpoint rows, `mc-world-conversion` census | this ADR's section 6 |
+| Migration flows (integrated) | `settlements/migration.rs`, `villager/return_home.rs`, one brain registration (+ tests) | runtime policy owns membership relocation and immigrant spawn; weak physical return goals; [Migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return) |
 | 2 Game-time economy clocks (merged, `1360be18a`) | `settlements/commerce.rs`, `settlements/caravan.rs` (+ tests) | wages and caravan deadlines stop under `/tick freeze`; double-count test across freeze; one-time legacy conversion (section 2) |
-| 3 Production and consumption | `settlements/production.rs`, new `settlements/offscreen_production.rs` (+ tests) | deferred portions and food debit with load reconciliation |
-| 4 Construction labour | new `settlements/offscreen_construction.rs`, one call in `construction.rs` | labour credit and accelerated application on load |
-| 5 Births | new `settlements/offscreen_births.rs`, one call in the birth path | birth credit realised through the existing path |
+| 3 Production and consumption (integrated) | `settlements/production.rs`, `settlements/offscreen_production.rs` (+ tests) | deferred portions and daily food debit; shared game-time watermarks, physical load reconciliation and WAL/recovery tests |
+| 4 Construction labour (planned) | `settlements/offscreen_construction.rs`, one call in `construction.rs` | labour credit and accelerated application on load; not implemented |
+| 5 Births (planned) | `settlements/offscreen_births.rs`, one call in the birth path | birth credit realised through the existing path; not implemented |
 
-Slices 2–5 depend only on sections 1–3; slice 2 goes first because every later
-watermark is game time.
+The remaining slices 4–5 depend on sections 1–3 and use the integrated
+game-time clock and native reconciliation boundaries.
 
 ## Consequences
 
-- Off-screen settlements progress without loading chunks; their physical world
-  changes only when simulated again, bounded by what is physically available.
-- New persisted authority in slices 2–5 lives in the owning settlement record
-  (serde defaults for old stores, no downgrade).
-- Today's residency-gated off-screen behaviour (payroll paid and portions
-  completed while resident but not simulated) stays until slice 3 replaces the
-  production predicate; slice 2 removed the freeze accrual.
+- Implemented off-screen production and consumption advance without loading
+  chunks; physical effects reconcile only during active visits with resident
+  storage, bounded by available inputs and output capacity.
+- Job deferred portions and consumption debit/credit share their owner's
+  persisted game-time watermark, settlement WAL image and checkpoint boundary.
+  Idle/retry scheduling is runtime-only and grants no additional accrual.
+- The old resident-but-unsimulated production path is replaced, not retained
+  alongside deferred production. Payroll retains its physical treasury rules.
+- Construction and births remain simulation-gated until slices 4–5 implement
+  their credits; the accepted design is not a claim that those features exist.

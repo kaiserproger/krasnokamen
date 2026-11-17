@@ -797,3 +797,116 @@ fn outbound_walk_uses_game_time_before_and_after_a_day_long_freeze() {
     assert!(self::target(&state, uuid).is_none());
     assert!(info(&state, source).contains("timed out"));
 }
+
+fn review_resident_hit(
+    state: &mut TickState,
+    victim: EntityId,
+    amount: f32,
+    source: Option<crate::intent::DamageSource>,
+) -> Vec<crate::boundary::EntityEvent> {
+    let slot = state.entities.slot_of(victim).unwrap();
+    state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            physical: None,
+            custom_armor: false,
+            amount,
+            kind: if source.is_some() {
+                crate::survival::DamageKind::Melee
+            } else {
+                crate::survival::DamageKind::GenericKill
+            },
+            source,
+        },
+    ));
+    state.commit_merge_effects().1
+}
+
+#[test]
+fn review_resident_death_reaches_daily_safety_once_and_expires() {
+    let mut state = fixture();
+    let source = town(&mut state, "source", 8, 32);
+    let victim = resident(&mut state, source, 10.5);
+    resident(&mut state, source, 11.5);
+    state.tick = phase(source);
+    let events = review_resident_hit(&mut state, victim, 100.0, None);
+    assert!(events.iter().any(|event| matches!(event,
+        crate::boundary::EntityEvent::Death { entity } if *entity == victim)));
+    assert!(state.entities.slot_of(victim).is_none());
+    state.test_acceleration.migration_rate = 0.0;
+    let mut changes = ChangeSet::default();
+    tick(&mut state, &mut changes, &[]);
+    let observed = state.settlements.migration.observation(source).unwrap();
+    assert_eq!(observed.facts.recent_deaths, 1);
+    // Native death animation retains the body until its later removal.
+    assert_eq!(observed.attractiveness.safety, 0.5);
+    changes.entity_events.extend(events);
+    state.commit_merge_effects();
+    state.tick += DAY_TICKS;
+    tick(&mut state, &mut changes, &[]);
+    assert_eq!(
+        state
+            .settlements
+            .migration
+            .observation(source)
+            .unwrap()
+            .facts
+            .recent_deaths,
+        1
+    );
+    state.tick += (SAFETY_DAYS - 1) * DAY_TICKS;
+    tick(&mut state, &mut changes, &[]);
+    let observed = state.settlements.migration.observation(source).unwrap();
+    assert_eq!(observed.facts.recent_deaths, 0);
+    assert_eq!(observed.attractiveness.safety, 1.0);
+}
+
+#[test]
+fn review_hard_infection_is_not_a_resident_death() {
+    let mut state = fixture();
+    state.difficulty = crate::survival::Difficulty::Hard;
+    let source = town(&mut state, "source", 8, 32);
+    let victim = resident(&mut state, source, 10.5);
+    let zombie_type = state.registry.entity_type_id("minecraft:zombie").unwrap();
+    let zombie = state.spawn_mob(zombie_type, [11.5, 64.0, 8.5], 20.0);
+    state.tick = phase(source);
+    let events = review_resident_hit(
+        &mut state,
+        victim,
+        100.0,
+        Some(crate::intent::DamageSource::Melee {
+            attacker: zombie,
+            position: [11.5, 64.0, 8.5],
+            yaw: 0.0,
+            bonus_knockback: 0.0,
+            sweep: false,
+            fire_ticks: 0,
+            bane_ticks: 0,
+        }),
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, crate::boundary::EntityEvent::Death { .. }))
+    );
+    let slot = state.entities.slot_of(victim).unwrap();
+    assert!(state.entities.body(slot).alive);
+    assert!(matches!(state.entities.body(slot).kind,
+        crate::entities::EntityKind::Mob { type_id }
+        if type_id == state.registry.entity_type_id("minecraft:zombie_villager").unwrap()));
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .conversion_time,
+        Some(-1)
+    );
+    state.test_acceleration.migration_rate = 0.0;
+    tick(&mut state, &mut ChangeSet::default(), &[]);
+    let observed = state.settlements.migration.observation(source).unwrap();
+    assert_eq!(observed.facts.recent_deaths, 0);
+    assert_eq!(observed.attractiveness.safety, 1.0);
+}

@@ -3,7 +3,7 @@
 
 use super::SettlementId;
 use super::{allocator, households, transit};
-use crate::boundary::{BlockPos, ChangeSet, EntityEvent, EntityId};
+use crate::boundary::{BlockPos, ChangeSet, EntityId};
 use crate::entities::EntitySlot;
 use crate::natural_spawn::Rng;
 use crate::tick::TickState;
@@ -138,6 +138,18 @@ pub(crate) fn return_memory(
     state: &mut crate::tick::TickState,
 ) -> &mut rustc_hash::FxHashMap<uuid::Uuid, crate::villager::return_home::Memory> {
     &mut state.settlements.migration.returning
+}
+
+/// Called by the resident death owner, before the dead body loses its lookup.
+pub(crate) fn note_death(state: &mut TickState, settlement: SettlementId) {
+    let now = state.tick_control.game_ticks(state.tick);
+    state
+        .settlements
+        .migration
+        .deaths
+        .entry(settlement)
+        .or_default()
+        .push_back(now);
 }
 
 fn phase(id: SettlementId) -> u64 {
@@ -1012,23 +1024,6 @@ fn advance_walks(state: &mut TickState, changes: &mut ChangeSet) {
 
 pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet, arrivals: &[transit::Arrival]) {
     let now = state.tick_control.game_ticks(state.tick);
-    for event in &changes.entity_events {
-        if let EntityEvent::Death { entity } = *event
-            && let Some(id) = state
-                .entities
-                .slot_of(entity)
-                .and_then(|slot| state.entities.row(slot).villager.as_ref())
-                .and_then(|v| v.settlement)
-        {
-            state
-                .settlements
-                .migration
-                .deaths
-                .entry(id)
-                .or_default()
-                .push_back(now);
-        }
-    }
     for arrival in arrivals {
         let unit_id = *arrival
             .members
