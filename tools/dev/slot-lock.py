@@ -25,10 +25,12 @@ and mem-run.sh (three build tokens) both run through it.
   queued; a caller that won at once gets the fd closed instead.
 - Priority (owner 2026-11-18: the priority slice gets the next freed build token):
   every waiter with --hold-gate FILE holds a shared flock on FILE while it waits, so
-  any number of priority waiters keep it held together; a waiter with --yield-gate
-  FILE that wins a slot while FILE is held gives the slot back at once, sleeps on an
-  exclusive flock of FILE until the last priority waiter has won, then queues again.
-  A --yield-gate caller also skips the at-once take while FILE is held.
+  any number of priority waiters keep it held together. A --yield-gate caller tests
+  FILE only once it holds a slot (taken at once or after waiting); if a priority
+  waiter holds FILE then, it gives the slot back, sleeps on an exclusive flock of
+  FILE until the last priority waiter has won, then queues again. Testing after the
+  take leaves no window: a priority waiter that registered before the test wins,
+  one that registered after it queued behind a slot already taken.
 """
 
 from __future__ import annotations
@@ -122,15 +124,9 @@ def main() -> None:
         return None
 
     chosen: list[tuple[int, str]] = []
-    skip_at_once = False
-    if yield_gate:
-        held = priority_waiting()
-        if held is not None:
-            os.close(held)
-            skip_at_once = True
     for slot in slots:  # every slot file exists, so readers can count free slots
         fd = open_slot(slot)
-        if not chosen and not skip_at_once:
+        if not chosen:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 chosen.append((fd, slot))
@@ -138,6 +134,11 @@ def main() -> None:
             except BlockingIOError:
                 pass
         os.close(fd)
+    if chosen and yield_gate:
+        held = priority_waiting()
+        if held is not None:
+            os.close(held)
+            os.close(chosen.pop()[0])  # a priority compile waits: queue behind it
 
     wait_file = None
     if chosen:

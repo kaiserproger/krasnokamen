@@ -29,6 +29,39 @@ for line in sys.stdin:
                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
         print(f"nested {out.returncode} {out.stdout.strip()}", flush=True)
 '''
+# Loaded by every Python process of one runner through PYTHONPATH (the runner itself is
+# unchanged): reports slot-lock.py's gate calls on a pipe and pauses after its first test
+# that found the gate free, until the test writes to the go pipe.
+GATE_HOOK = '''import fcntl, os
+_fds = os.environ.get("TOKEN_TEST_GATE_HOOK")
+if _fds:
+    _sig, _go = (int(fd) for fd in _fds.split(","))
+    _flock, _close, _free, _paused = fcntl.flock, os.close, set(), []
+
+    def _gate(fd):
+        try:
+            return os.readlink(f"/proc/self/fd/{fd}").endswith("priority.gate")
+        except OSError:
+            return False
+
+    def flock(fd, op):
+        if op == fcntl.LOCK_EX and _gate(fd):
+            os.write(_sig, b"y")  # yielding: about to sleep until no priority waiter is left
+        _flock(fd, op)
+        if op == fcntl.LOCK_EX | fcntl.LOCK_NB and _gate(fd):
+            _free.add(fd)  # the test found no priority waiter
+
+    def close(fd):
+        tested = fd in _free
+        _free.discard(fd)
+        _close(fd)
+        if tested and not _paused:
+            _paused.append(fd)
+            os.write(_sig, b"p")
+            os.read(_go, 1)
+
+    fcntl.flock, os.close = flock, close
+'''
 
 
 class Command:
@@ -368,6 +401,55 @@ class BuildTokenTests(unittest.TestCase):
         self.assertEqual(waiter.token, '2')
         for cmd in (winner, other, waiter):
             self.finish(cmd)
+        self.wait_tokens_free()
+
+    def test_a_background_compile_that_found_the_gate_free_yields_to_a_priority_compile_queued_after(self):
+        """Advisor: the at-once take tested the gate before taking a token, so a priority compile
+        could queue in between and lose the next freed token to the background compile."""
+        running, _ = self.hold_three()
+        hook_dir = self.root / 'hook'
+        hook_dir.mkdir()
+        (hook_dir / 'sitecustomize.py').write_text(GATE_HOOK)
+        sig_r, sig_w = os.pipe()
+        go_r, go_w = os.pipe()
+        for fd in (sig_r, go_w):
+            self.addCleanup(os.close, fd)
+        saved = self.env
+        self.env = saved | {'KRASNOKAMEN_BUILD_LANE': 'background', 'PYTHONPATH': str(hook_dir),
+                            'TOKEN_TEST_GATE_HOOK': f'{sig_w},{go_r}'}
+        try:
+            background = self.start('cargo', 'build', '-p', 'bg', pass_fds=(sig_w, go_r))
+        finally:
+            self.env = saved
+        os.close(sig_w)
+        os.close(go_r)
+        # The background runner either queued (all tokens busy) or found the gate free and
+        # paused before it takes a token; either way no priority compile is waiting yet.
+        readable, _, _ = select.select([background.ready, sig_r], [], [], BOUND)
+        self.assertTrue(readable, 'the background runner neither queued nor tested the gate')
+        if sig_r in readable:
+            self.assertEqual(os.read(sig_r, 1), b'p')
+        # Now a priority compile registers (a shared hold, as a waiting normal-lane runner
+        # takes it) and a token the background lane can take frees.
+        gate = os.open(self.state_dir / 'tokens' / 'priority.gate', os.O_WRONLY | os.O_CREAT, 0o666)
+        fcntl.flock(gate, fcntl.LOCK_SH)
+        freed = next(cmd for cmd in running if cmd.token == '1')
+        self.finish(freed)
+        os.write(go_w, b'g')
+        # The background compile either starts (stdout) or yields (the hook's `y`), never both.
+        readable, _, _ = select.select([background.proc.stdout, sig_r], [], [], BOUND)
+        self.assertTrue(readable, 'the background runner neither started nor yielded')
+        self.assertNotIn(background.proc.stdout, readable,
+                         'the background compile took a token while a priority compile waited')
+        self.assertEqual(os.read(sig_r, 1), b'y')
+        # The priority waiter wins and lets go: the background compile takes the token.
+        os.close(gate)
+        self.wait_run(background)
+        self.assertEqual(background.token, '1')
+        for cmd in running:
+            if cmd is not freed:
+                self.finish(cmd)
+        self.finish(background)
         self.wait_tokens_free()
 
 
