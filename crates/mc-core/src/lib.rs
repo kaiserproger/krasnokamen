@@ -215,7 +215,6 @@ pub mod survival;
 pub mod taming;
 mod target_grid;
 pub mod terrain;
-mod thread_sched;
 pub mod tick;
 pub(crate) mod tick_budget;
 pub(crate) mod tick_control;
@@ -272,8 +271,6 @@ mod spawn_clearance_tests;
 mod species_tests;
 #[cfg(test)]
 mod target_grid_tests;
-#[cfg(test)]
-mod thread_sched_tests;
 #[cfg(test)]
 mod tick_tests;
 #[cfg(test)]

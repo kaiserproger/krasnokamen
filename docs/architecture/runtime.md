@@ -32,34 +32,13 @@ are disconnected with the vanilla illegal-characters reason.
 | Authoritative state and tick | `mc-core` | decoded input → native validation → entity intents → deterministic merge → block work → one tick change set |
 | Parallel entity work | core worker pool | reads immutable state; writes disjoint entity next-state data, not shared regional state |
 | Disk/journal/checkpoint I/O | native journal worker | freezes immutable/owned checkpoint images; no synchronous fsync on a gameplay reply path |
-| Datapack reload and function-trace writes | short-lived `datapack-worker` thread in `mc-core` (`datapacks.rs`) | one thread per job, result over a bounded channel, outside the tick; `SCHED_IDLE` |
-| Background chunk generation, `/locate` and input logging | `mc-core` workers (`chunk_loader.rs`, `command_locate.rs`, `input_log.rs`) | results join the tick's input step, nothing waits on them; `SCHED_IDLE` |
+| Datapack reload and function-trace writes | short-lived `datapack-worker` thread in `mc-core` (`datapacks.rs:1322-1326`) | one thread per job, result over a bounded channel, outside the tick |
 | Socket decode/write and sessions | `mc-edge` connection tasks | no independent inventory, world or entity authority |
 | Per-viewer packet planning | edge fanout workers/pump | own workers, bounded connection credit, retained projection revisions |
 | Component execution | `mc-plugin-host` worker | serial bounded guest callbacks outside the tick; `mc-script` owns DTO/admission |
 | Loader wire | `mc-loader` | manifest/artifact/ACK/sound codecs, no gameplay state |
 | Vanilla capture/tooling | `mc-vanilla` | content import and shared harness client/process helpers |
 | Run/process/receipt lifecycle | `tools/harness` | v2-only server launch; one owned artifact directory and fail-closed receipt |
-
-### Thread priority
-
-Authoritative threads keep the policy and niceness the process was started
-with: `mc-core-tick`, `mc-core-journal` and `mc-core-native` (persistence
-order), the core rayon pool (it runs the tick's own phases) and the edge
-fanout pool (it spends the tick's fanout budget). Only work nothing waits on is
-lowered: the `chunk-load-*`, `datapack-worker`, `locate` and
-`mc-core-input-log` threads take the `SCHED_IDLE` helper in `mc-core`'s
-`thread_sched` module
-and run at `SCHED_IDLE` on Linux. That policy is the one unprivileged lever
-that still separates them from the tick when the whole process inherits
-`nice -n 19` — an agent-lane server, where raising the tick would need
-`CAP_SYS_NICE` and no niceness offset is left but down. An idle-policy thread
-runs only when no other thread on its CPU wants it, so the tick keeps its
-deadline and the background work uses the slack. A kernel refusal is logged
-once and leaves the thread on the inherited policy: startup never fails
-because of it. Elsewhere the call is a no-op. `KRASNOKAMEN_BACKGROUND_IDLE=0`
-keeps background threads on the inherited policy instead (the measurement arm
-of the A/B in `/var/tmp/w/receipts/EdgeScale/G6-AB.md`).
 
 World fanout may skip to the newest immutable snapshot and reconcile the
 viewer's held world state. Each viewer's world credit is its world queue's
