@@ -15,6 +15,110 @@ const QUEUED_CHUNKS: usize = 32;
 
 pub(super) const PLANTED_CROWN_RADIUS: u32 = 4;
 
+#[path = "forestry_tree_proof.rs"]
+mod tree_proof;
+
+/// Selection owns one bounded proof per root. The executor instead rechecks
+/// intrinsic vetoes on cells already certified in its canonical work manifest;
+/// it must not repeat a volume scan, or depend on a root retired while felling.
+pub(crate) struct Clearance {
+    proofs: Option<HashMap<[i32; 3], (tree_proof::Proof, bool)>>,
+}
+
+impl Default for Clearance {
+    fn default() -> Self {
+        Self {
+            proofs: Some(HashMap::default()),
+        }
+    }
+}
+
+impl Clearance {
+    pub(crate) fn prepared() -> Self {
+        Self { proofs: None }
+    }
+
+    fn owned(&mut self, state: &TickState, at: [i32; 3], leaf: bool) -> bool {
+        let Some(proofs) = self.proofs.as_mut() else {
+            return true;
+        };
+        state.settlements.records().any(|record| {
+            record.planted_trees.iter().any(|&root| {
+                if !in_halo(root, at) {
+                    return false;
+                }
+                let (proof, needed) = proofs
+                    .entry(root)
+                    .or_insert_with(|| (tree_proof::Proof::new(state, root), false));
+                let owned = if leaf {
+                    proof.permits(at)
+                } else {
+                    proof.owns_log(at)
+                };
+                *needed |= owned;
+                owned
+            })
+        })
+    }
+
+    pub(crate) fn append_whole_trees(
+        &self,
+        state: &TickState,
+        cells: &mut Vec<crate::plugin_structures::settlement_builds::PlannedCell>,
+    ) {
+        let Some(proofs) = &self.proofs else { return };
+        let mut seen: HashSet<_> = cells.iter().map(|cell| cell.at).collect();
+        for (&root, (proof, needed)) in proofs {
+            if !needed {
+                continue;
+            }
+            for at in proof.positions(root) {
+                let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
+                    continue;
+                };
+                if !tree_or_sapling(state, block) {
+                    continue;
+                }
+                let leaf = state
+                    .registry
+                    .blocks
+                    .by_id(BlockStateId(block))
+                    .is_some_and(|b| b.block.id.path().ends_with("_leaves"));
+                if !(proof.owns_log(at) || (leaf && proof.permits(at)))
+                    || vetoed(state, at)
+                    || (leaf && persistent(state, block))
+                    || !seen.insert(at)
+                {
+                    continue;
+                }
+                cells.push(crate::plugin_structures::settlement_builds::PlannedCell {
+                    at,
+                    state: state.registry.states.air,
+                    resource: None,
+                    quantity: 0,
+                });
+            }
+        }
+    }
+}
+
+pub(crate) fn vetoed(state: &TickState, at: [i32; 3]) -> bool {
+    state.block_log.player_touched(at) || near_unlogged_player(state, at)
+}
+
+pub(crate) fn persistent(state: &TickState, block: u32) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(BlockStateId(block))
+        .is_some_and(|definition| {
+            definition
+                .properties
+                .iter()
+                .any(|(key, value)| key == "persistent" && value == "true")
+        })
+}
+
 type Generated = (ChunkPos, Option<Evidence>, u128);
 
 fn tree_name(name: &str) -> bool {
@@ -318,6 +422,39 @@ pub(super) fn planted_crown_overlaps(
     })
 }
 
+/// A future off-lot crown cannot be put in the work manifest before it grows.
+/// Keep its one bounded halo refusal while the registered root is a sapling.
+pub(super) fn off_lot_sapling_overlaps(
+    state: &TickState,
+    bounds: mc_script::ScriptWorldBounds,
+) -> bool {
+    state.settlements.records().any(|record| {
+        record.planted_trees.iter().any(|&root| {
+            let inside = [0, 2]
+                .into_iter()
+                .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&root[axis]));
+            !inside
+                && [0, 2].into_iter().all(|axis| {
+                    root[axis] as i64 + PLANTED_CROWN_RADIUS as i64 >= bounds.min[axis] as i64
+                        && root[axis] as i64 - PLANTED_CROWN_RADIUS as i64
+                            <= bounds.max[axis] as i64
+                })
+                && root[1] <= bounds.max[1]
+                && root[1] + 64 >= bounds.min[1]
+                && state
+                    .world
+                    .physics_block_at(root[0], root[1], root[2])
+                    .is_none_or(|id| {
+                        state
+                            .registry
+                            .blocks
+                            .by_id(BlockStateId(id))
+                            .is_none_or(|block| block.block.id.path().ends_with("_sapling"))
+                    })
+        })
+    })
+}
+
 /// Retire vanished roots only when their whole possible trunk is loaded.
 pub(super) fn retire_missing(state: &mut TickState) {
     if !state.tick.is_multiple_of(20) {
@@ -367,12 +504,16 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
     let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
         return false;
     };
-    if !tree(state, block) || protected_tree(state, at) {
+    if !tree(state, block) || protected_tree(state, at) || near_unlogged_player(state, at) {
         return false;
     }
+    natural(state, at, block)
+}
+
+fn near_unlogged_player(state: &TickState, at: [i32; 3]) -> bool {
     // With capture disabled, a nearby live player is an additional veto. The
     // deterministic baseline still protects all nonmatching historical edits.
-    if !state.block_log.enabled()
+    !state.block_log.enabled()
         && state.players.keys().any(|id| {
             state.entities.slot_of(*id).is_some_and(|slot| {
                 let pos = state.entities.pos(slot);
@@ -380,9 +521,9 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
                     && (pos[2] - f64::from(at[2])).abs() <= 32.0
             })
         })
-    {
-        return false;
-    }
+}
+
+fn natural(state: &TickState, at: [i32; 3], block: u32) -> bool {
     let generated = state
         .settlements
         .forest
@@ -413,12 +554,104 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
         })
 }
 
+pub(crate) fn tree_or_sapling(state: &TickState, block: u32) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(BlockStateId(block))
+        .is_some_and(|definition| {
+            let name = definition.block.id.path();
+            tree_name(name) || name.ends_with("_sapling")
+        })
+}
+
+pub(crate) fn lot_bounds(
+    state: &TickState,
+    project: &super::construction::Project,
+) -> Option<mc_script::ScriptWorldBounds> {
+    let blueprint = super::blueprints::get(&state.registry, &project.blueprint)?;
+    let size = blueprint.footprint(super::blueprints::Rotation::from_quarter_turns(
+        project.rotation,
+    ));
+    mc_script::ScriptWorldBounds::new(
+        project.origin,
+        std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1),
+    )
+    .ok()
+}
+
+fn in_halo(root: [i32; 3], at: [i32; 3]) -> bool {
+    at[0].abs_diff(root[0]) <= PLANTED_CROWN_RADIUS
+        && at[2].abs_diff(root[2]) <= PLANTED_CROWN_RADIUS
+        && (root[1]..=root[1] + 64).contains(&at[1])
+}
+
+/// Missing roots cannot turn a conservative protection halo into permission.
+fn registered_planting(state: &TickState, at: [i32; 3]) -> Option<bool> {
+    let mut registered = false;
+    for record in state.settlements.records() {
+        for &root in &record.planted_trees {
+            if in_halo(root, at) {
+                state.world.physics_block_at(root[0], root[1], root[2])?;
+                registered |= at == root;
+            }
+        }
+    }
+    Some(registered)
+}
+
+impl Clearance {
+    /// Whole planted components are certified during selection, not per write.
+    pub(crate) fn clearable(
+        &mut self,
+        state: &TickState,
+        at: [i32; 3],
+        lot: Option<mc_script::ScriptWorldBounds>,
+    ) -> bool {
+        if vetoed(state, at) {
+            return false;
+        }
+        let on_lot = lot.is_some_and(|bounds| {
+            self.proofs.is_none()
+                || [0, 2]
+                    .into_iter()
+                    .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&at[axis]))
+        });
+        if on_lot
+            && let Some(block) = state.world.physics_block_at(at[0], at[1], at[2])
+            && let Some(definition) = state.registry.blocks.by_id(BlockStateId(block))
+        {
+            let name = definition.block.id.path();
+            if !tree_name(name) && !name.ends_with("_sapling") {
+                return false;
+            }
+            let Some(registered) = registered_planting(state, at) else {
+                return false;
+            };
+            if name.ends_with("_leaves") {
+                let nonpersistent = definition
+                    .properties
+                    .iter()
+                    .any(|(key, value)| key == "persistent" && value == "false");
+                return nonpersistent && (self.owned(state, at, true) || natural(state, at, block));
+            }
+            if registered && name.ends_with("_sapling") {
+                return true;
+            }
+            return tree_name(name) && (self.owned(state, at, false) || natural(state, at, block));
+        }
+        clearable(state, at)
+    }
+}
+
 pub(crate) fn drops(
     state: &TickState,
     at: [i32; 3],
     block: u32,
+    lot: Option<mc_script::ScriptWorldBounds>,
+    clearance: &mut Clearance,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
-    if !clearable(state, at) {
+    if !clearance.clearable(state, at, lot) {
         return Err(mc_script::ScriptOperationFailure::Blocked);
     }
     roll(state, at, block)
@@ -474,19 +707,34 @@ pub(crate) fn cells(
     state: &TickState,
     project: &super::construction::Project,
     size: [u8; 3],
+    clearance: &mut Clearance,
 ) -> Option<Preparation> {
     use crate::plugin_structures::settlement_builds::PlannedCell;
     let record = state.settlements.get(project.settlement)?;
+    let bounds = lot_bounds(state, project)?;
+    if let Some(proofs) = clearance.proofs.as_mut() {
+        // Proofs are scan-wide; the selected work roots are candidate-local.
+        for (_, needed) in proofs.values_mut() {
+            *needed = false;
+        }
+    }
     let mut lot = Vec::new();
     let mut lot_has_tree = false;
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-            let y = super::construction::surface_y(state, record.anchor[1], x, z)?;
+            let y = super::construction::surface_y_for_lot(
+                state,
+                project.origin[1],
+                x,
+                z,
+                Some(bounds),
+                clearance,
+            )?;
             lot_has_tree |= (y + 1..project.origin[1] + i32::from(size[1])).any(|above| {
                 state
                     .world
                     .physics_block_at(x, above, z)
-                    .is_some_and(|block| tree(state, block))
+                    .is_some_and(|block| tree_or_sapling(state, block))
             });
             lot.push([x, y, z]);
         }
@@ -495,7 +743,7 @@ pub(crate) fn cells(
         super::layout::Network::for_construction(state, record).construction_access(project);
     let mut columns = match route {
         Some(route) => route,
-        None if !lot_has_tree => {
+        None if !lot_has_tree && !planted_crown_overlaps(state, bounds) => {
             return Some(Preparation {
                 cells: Vec::new(),
                 corridor: None,
@@ -504,10 +752,15 @@ pub(crate) fn cells(
         None => return None,
     };
     for &[x, y, z] in &columns {
-        if planted_crown_overlaps(
-            state,
-            mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
-        ) {
+        let on_lot = [0, 2]
+            .into_iter()
+            .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&[x, y, z][axis]));
+        if !on_lot
+            && planted_crown_overlaps(
+                state,
+                mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
+            )
+        {
             return None;
         }
     }
@@ -538,10 +791,10 @@ pub(crate) fn cells(
             let Some(block) = state.world.physics_block_at(x, y, z) else {
                 break;
             };
-            if !tree(state, block) {
+            if !tree_or_sapling(state, block) {
                 continue;
             }
-            if !clearable(state, [x, y, z]) {
+            if !clearance.clearable(state, [x, y, z], Some(bounds)) {
                 // A protected crown above the actual work volume stays there.
                 if y <= floor + 2 || (on_lot && y < project.origin[1] + i32::from(size[1])) {
                     return None;
@@ -556,6 +809,27 @@ pub(crate) fn cells(
             });
         }
     }
+    clearance.append_whole_trees(state, &mut cells);
+    let mut first = 0;
+    for index in 0..cells.len() {
+        let at = cells[index].at;
+        if registered_planting(state, at) == Some(true)
+            && state
+                .world
+                .physics_block_at(at[0], at[1], at[2])
+                .is_some_and(|block| {
+                    state
+                        .registry
+                        .blocks
+                        .by_id(BlockStateId(block))
+                        .is_some_and(|block| block.block.id.path().ends_with("_sapling"))
+                })
+        {
+            // Stable: keep the corridor cells first and the manifest's own order.
+            cells[first..=index].rotate_right(1);
+            first += 1;
+        }
+    }
     Some(Preparation { cells, corridor })
 }
 
@@ -565,7 +839,17 @@ pub(crate) fn footing(
     at: [i32; 3],
 ) -> Option<crate::boundary::BlockPos> {
     let record = state.settlements.get(settlement)?;
-    let y = super::construction::surface_y(state, record.anchor[1], at[0], at[2])?;
+    let lot = super::construction::preparation::active_lot(state, record);
+    // The active project's own floor is the level the fill plan builds toward.
+    let centre = super::construction::preparation::active_floor(record);
+    let y = super::construction::surface_y_for_lot(
+        state,
+        centre,
+        at[0],
+        at[2],
+        lot,
+        &mut Clearance::prepared(),
+    )?;
     Some(crate::boundary::BlockPos {
         x: at[0],
         y: y + 1,
@@ -576,3 +860,16 @@ pub(crate) fn footing(
 #[cfg(test)]
 #[path = "forestry_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "forestry_native_tree_tests.rs"]
+pub(crate) mod native_tree_tests;
+
+#[cfg(test)]
+#[path = "forestry_followup_tests.rs"]
+mod followup_tests;
+
+#[cfg(test)]
+pub(crate) fn proof_builds() -> usize {
+    tree_proof::BUILDS.with(std::cell::Cell::get)
+}

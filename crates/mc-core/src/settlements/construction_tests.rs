@@ -328,6 +328,47 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     building::tick(state, id);
 }
 
+/// Fixture-only: the approved upgrade rule vetoes every tree or sapling cell in
+/// an upgrade's work diff, including the building's own authored log beam, before
+/// its authored-state exemption; with block capture disabled a live client within
+/// 32 blocks therefore refuses such an upgrade. A fixture that exercises a plain
+/// upgrade removes those cells here instead of weakening the rule. The refusal
+/// itself stays covered by
+/// `upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff` and the beam
+/// regressions.
+pub(crate) fn clear_work_diff_trees(state: &mut TickState, min: [i32; 3], max: [i32; 3]) -> usize {
+    let air = state.registry.states.air;
+    // The builder's placements may still sit in the chunk overlay; fold it so
+    // both the scan and the removal see the real blocks.
+    state.world.fold_overlay();
+    let mut cleared = 0;
+    for x in min[0]..=max[0] {
+        for z in min[2]..=max[2] {
+            for y in min[1]..=max[1] {
+                if state.world.block_at(x, y, z).is_some_and(|block| {
+                    crate::settlements::forestry::tree_or_sapling(state, block)
+                }) {
+                    state.world.set_block(x, y, z, air);
+                    cleared += 1;
+                }
+            }
+        }
+    }
+    cleared
+}
+
+/// Run bounded planning passes until a project starts. A whole cursor sweep
+/// may need several 64-candidate passes, so one `plan` call is not enough.
+pub(crate) fn plan_until_project(state: &mut TickState, id: SettlementId) {
+    for _ in 0..256 {
+        plan(state, id);
+        if state.settlements.get(id).unwrap().project.is_some() {
+            return;
+        }
+    }
+    panic!("the planner started no project within 256 bounded passes");
+}
+
 pub(crate) fn complete(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     for _ in 0..4096 {
         if state.settlements.get(id).unwrap().project.is_none() {
@@ -369,7 +410,7 @@ fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
     chest[0] = ItemStack::new(acacia, 64);
     chest[1] = ItemStack::new(acacia, 64);
     chest[2] = ItemStack::new(cobble, 64);
-    plan(&mut state, id);
+    plan_until_project(&mut state, id);
     let project = state
         .settlements
         .get(id)
@@ -417,7 +458,7 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
         if ordered {
             request_build(&mut state, id, "storage").expect("oak bill funds owner order");
         } else {
-            plan(&mut state, id);
+            plan_until_project(&mut state, id);
         }
         let project = state
             .settlements
@@ -744,7 +785,7 @@ fn builder_stalls_without_stock_then_consumes_exact_materials_in_order_and_certi
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     let before = executor::status(&state, id, &project.structure).unwrap();
     for _ in 0..4 {
         attempt(&mut state, id, slot);
@@ -823,7 +864,7 @@ fn upgrade_uses_diff_and_certifies_level_two() {
     let old_writes = state.plugin_block_writes.len();
     start(&mut state, id, "house", 2, Some(building));
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     fund(&mut state, "house", 2);
     complete(&mut state, id, slot);
     assert_eq!(

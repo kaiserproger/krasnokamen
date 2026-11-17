@@ -1577,6 +1577,10 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
     click(&mut state, id, "project_cancel_pending", &[]);
 
     // Funded L2 stock starts the upgrade immediately, with no debit.
+    // The fixture captures block history (the production default), so the
+    // building's own authored beams pass the upgrade fence as authored state
+    // instead of tripping the disabled-history live-player veto.
+    state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
     crate::settlements::construction::tests::fund(&mut state, "house", 2);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let started = last_dialog(&click(

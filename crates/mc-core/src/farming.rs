@@ -133,6 +133,10 @@ impl FarmStates {
             .unwrap_or(Kind::Inert)
     }
 
+    pub(crate) fn is_farmland(&self, state: u32) -> bool {
+        self.kind(state) == Kind::Farmland
+    }
+
     /// Whether anything in the section can random tick.
     fn section_ticks(&self, section: &ChunkSection) -> bool {
         if section.is_empty() {

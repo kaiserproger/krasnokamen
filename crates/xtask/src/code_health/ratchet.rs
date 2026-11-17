@@ -56,8 +56,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // R6 G1 (CrowdPush, 2026-11-18): the player and falling-block body sizes are
     // contract lookups, and their type names live once as
     // `blueprint::PLAYER_TYPE_NAME` / `FALLING_BLOCK_TYPE_NAME`, which the
-    // existing loot and falling-block sites reuse: 2632, no headroom taken.
-    vanilla_id_literals: 2_632,
+    // existing loot and falling-block sites reuse: no headroom taken.
+    // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
+    // reuse and the already-resolved dirt state remove one net literal, 2026-11-17: 2631.
+    vanilla_id_literals: 2_631,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,

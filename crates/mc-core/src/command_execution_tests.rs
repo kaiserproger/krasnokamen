@@ -3619,6 +3619,10 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
     complete(&mut state, id, builder);
+    // The fixture captures block history (the production default), so the
+    // building's own authored beams pass the upgrade fence as authored state
+    // instead of tripping the disabled-history live-player veto.
+    state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
     let building = *state
         .settlements
         .get(id)

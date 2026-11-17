@@ -246,12 +246,14 @@ pub(crate) fn status(
 }
 
 /// A foreign edit inside a native site pauses the structure as
-/// `footprint_changed`. The next construction admission accepts the world as
-/// it now is: re-snapshot the footprint and resume. Remaining cells are placed
-/// over whatever stands there; a placed cell that the edit emptied is queued
-/// again at completion by [`reopen_emptied`], while a solid foreign block in a
-/// placed cell is left alone.
-/// Returns whether a paused structure was resumed.
+/// `footprint_changed`. The clear stage is cancelled and its owner order retried
+/// only for its own stale-tree hazard: nothing has been felled yet, the clear
+/// manifest still holds a registered root that is no longer a sapling, and the
+/// order keeps its place in the queue. Everything else, including natural leaf
+/// decay and any started felling, re-snapshots the footprint and resumes: a
+/// placed cell that the edit emptied is queued again at completion by
+/// [`reopen_emptied`], while a solid foreign block in a placed cell is left alone.
+/// Returns whether recovery resumed or cancelled the structure.
 pub(crate) fn recover(
     state: &mut TickState,
     settlement: SettlementId,
@@ -264,6 +266,54 @@ pub(crate) fn recover(
     let committed = record.snapshot.state == ScriptStructureState::Committed;
     if !paused && !committed {
         return Ok(false);
+    }
+    let retry = (paused
+        && record.snapshot.consumed.is_empty()
+        // Once any clear cell is worked the manifest itself authorizes the
+        // remaining cells; cancelling here could never re-certify a partially
+        // felled tree whose registration the cut already retired.
+        && record.snapshot.completed_work_units == 0
+        && record
+            .snapshot
+            .stages
+            .get(record.snapshot.current_stage_index as usize)
+            .is_some_and(|stage| stage.stage == "clear")
+        // Only a registered root that grew out of its certified sapling, and
+        // only while the order keeps its queue slot, may cancel.
+        && crate::settlements::construction::preparation::stale_tree_certification(
+            state,
+            settlement,
+            handle,
+            &record
+                .cells
+                .get(record.snapshot.current_stage_index as usize)
+                .map(|cells| {
+                    cells
+                        .iter()
+                        .skip(record.snapshot.completed_work_units as usize)
+                        .map(|cell| cell.at)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            |block| {
+                state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .is_some_and(|definition| {
+                        definition.block.id.path().ends_with("_sapling")
+                    })
+            },
+        ))
+    .then(|| {
+        crate::settlements::construction::preparation::changed_project(state, settlement, handle)
+    })
+    .flatten();
+    if let Some(project) = retry {
+        drop(ledger);
+        crate::settlements::construction::retry_preparation(state, settlement, &project)
+            .map_err(|_| Failure::Blocked)?;
+        return Ok(true);
     }
     let target = world(state, &record.snapshot.dimension)?;
     let build = record
@@ -583,13 +633,17 @@ pub(super) fn debit(
     }) {
         return Err(Failure::Forbidden);
     }
-    let preparing = state
+    let project = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.as_ref())
-        .is_some_and(|project| project.building.is_none());
+        .and_then(|record| record.project.as_ref());
+    // A new site and an upgrade both carry clear-stage cells: an upgrade that
+    // clears natural forest or a registered tree must credit the same drops.
+    let preparing = project.is_some();
+    let lot = project.and_then(|project| crate::settlements::forestry::lot_bounds(state, project));
     let mut drops = Vec::new();
     let mut loot = Vec::new();
+    let mut clearance = crate::settlements::forestry::Clearance::prepared();
     if preparing {
         for cell in cells
             .iter()
@@ -599,9 +653,64 @@ pub(super) fn debit(
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
                 .ok_or(Failure::Unloaded)?;
-            if crate::settlements::forestry::tree(state, block) {
-                drops.extend(crate::settlements::forestry::drops(state, cell.at, block)?);
+            if crate::settlements::forestry::tree_or_sapling(state, block) {
+                drops.extend(crate::settlements::forestry::drops(
+                    state,
+                    cell.at,
+                    block,
+                    lot,
+                    &mut clearance,
+                )?);
+            } else if crate::settlements::construction::excavatable(state, block) {
+                // Bounded terrain cut: recheck the cell the survey certified
+                // immediately before the debit, credit its own mining drop in
+                // this same transaction, and never write fluid or lava in.
+                if state.block_log.player_touched(cell.at) {
+                    return Err(Failure::Blocked);
+                }
+                let path = state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .map(|definition| definition.block.id.path())
+                    .ok_or(Failure::Blocked)?;
+                let item = crate::villager::mining::item_id(
+                    state,
+                    crate::villager::mining::drop_name(path),
+                )
+                .ok_or(Failure::Blocked)?;
+                let count = crate::villager::mining::drop_count(path);
+                for (dx, dy, dz) in [
+                    (1, 0, 0),
+                    (-1, 0, 0),
+                    (0, 1, 0),
+                    (0, -1, 0),
+                    (0, 0, 1),
+                    (0, 0, -1),
+                ] {
+                    let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
+                    let neighbour = state
+                        .world
+                        .block_at(at[0], at[1], at[2])
+                        .ok_or(Failure::Unloaded)?;
+                    // Lava or water next to the cell would flow into the cut.
+                    if state.registry.states.lava_levels.contains(&neighbour)
+                        || state
+                            .registry
+                            .blocks
+                            .by_id(mc_world::BlockStateId(neighbour))
+                            .is_some_and(|definition| definition.has_fluid())
+                    {
+                        return Err(Failure::Blocked);
+                    }
+                }
+                drops.push(mc_data::ItemStack::new(item, count));
             } else {
+                // A log-tag variant excluded from tree ownership must never
+                // pass through the flora path with an empty drop list.
+                if state.registry.tree_logs.get(block as usize) == Some(&true) {
+                    return Err(Failure::Blocked);
+                }
                 loot.extend(
                     crate::settlements::forestry::plant_drops(state, cell.at, block)?
                         .into_iter()
@@ -611,6 +720,9 @@ pub(super) fn debit(
         }
     }
     if required.is_empty() && drops.is_empty() && loot.is_empty() {
+        if preparing {
+            retire_cleared_roots(state, cells);
+        }
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -668,6 +780,9 @@ pub(super) fn debit(
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
     inventory::commit(state, changes)?;
+    if preparing {
+        retire_cleared_roots(state, cells);
+    }
     for (at, stack) in spilled {
         crate::tick::spawn_item_entity(
             state,
@@ -680,6 +795,26 @@ pub(super) fn debit(
         );
     }
     Ok(())
+}
+
+fn retire_cleared_roots(state: &mut TickState, cells: &[super::Cell]) {
+    let air = state.registry.states.air;
+    for cell in cells.iter().filter(|cell| cell.state == air) {
+        loop {
+            let owner = state
+                .settlements
+                .records()
+                .find(|record| record.planted_trees.contains(&cell.at))
+                .map(|record| record.id);
+            let Some(id) = owner else { break };
+            let record = state
+                .settlements
+                .get_mut(id)
+                .expect("registered planting owner");
+            record.planted_trees.remove(&cell.at);
+            record.revision = record.revision.saturating_add(1);
+        }
+    }
 }
 
 pub(crate) fn missing(
@@ -836,6 +971,75 @@ pub(crate) fn built_at(
                 && record.snapshot.state == ScriptStructureState::Committed
         })
     })
+}
+
+/// Upgrade tree cells follow the same fence as a new site: a player-touched or
+/// persistent cell, unknown generator evidence, a protected root halo or a live
+/// player with capture disabled refuses; a previous committed building's exact
+/// authored state is a beam, not forest; every other tree or sapling cell becomes
+/// clear-stage work, so the executor cuts it with conserved drops.
+pub(crate) fn upgrade_trees_clear(
+    state: &TickState,
+    id: SettlementId,
+    blueprint: &str,
+    origin: [i32; 3],
+    cells: &[PlannedCell],
+    lot: Option<mc_script::ScriptWorldBounds>,
+    clearance: &mut crate::settlements::forestry::Clearance,
+) -> Result<Vec<PlannedCell>, Failure> {
+    let ledger = ledger(state)?;
+    let previous = ledger
+        .structures
+        .values()
+        .filter(|record| {
+            record.settlement == Some(id)
+                && record
+                    .snapshot
+                    .blueprint_id
+                    .strip_prefix("krasnokamen-settlements:")
+                    == Some(blueprint)
+                && same_site(state, record, origin)
+                && record.snapshot.state == ScriptStructureState::Committed
+        })
+        .max_by_key(|record| record.snapshot.revision);
+    let mut cleared = Vec::new();
+    for cell in cells {
+        let block = state
+            .world
+            .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        if !crate::settlements::forestry::tree_or_sapling(state, block) {
+            continue;
+        }
+        // Attribution and the disabled-history/live-player veto precede even
+        // an exact match with a building's own previous authored beam.
+        if crate::settlements::forestry::vetoed(state, cell.at) {
+            return Err(Failure::Forbidden);
+        }
+        if crate::settlements::forestry::persistent(state, block) {
+            return Err(Failure::Blocked);
+        }
+        if previous.is_some_and(|record| {
+            record
+                .cells
+                .iter()
+                .flatten()
+                .any(|authored| authored.at == cell.at && authored.state == block)
+        }) {
+            // The building's own authored beam; the upgrade replaces it.
+            continue;
+        }
+        if !clearance.clearable(state, cell.at, lot) {
+            return Err(Failure::Blocked);
+        }
+        cleared.push(PlannedCell {
+            at: cell.at,
+            state: state.registry.states.air,
+            resource: None,
+            quantity: 0,
+        });
+    }
+    Ok(cleared)
 }
 
 pub(crate) fn next_material(
@@ -1361,3 +1565,7 @@ pub(crate) fn prepare_founding_transfer(
 pub(crate) fn commit_founding_transfer(state: &mut TickState, prepared: PreparedFoundingTransfer) {
     save(state, &prepared.0);
 }
+
+#[cfg(test)]
+#[path = "settlement_builds_preparation_tests.rs"]
+mod preparation_tests;

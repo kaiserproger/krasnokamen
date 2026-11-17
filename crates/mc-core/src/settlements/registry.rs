@@ -36,8 +36,8 @@ pub struct SettlementRecord {
     pub building_sequence: u64,
     #[serde(default)]
     pub buildings: BTreeMap<super::buildings::BuildingId, super::buildings::Building>,
-    /// Lumberjack sapling roots survive growth and restart; site preparation
-    /// never clears a tree growing from one of these positions.
+    /// Lumberjack roots survive growth and restart. Felling their exact root
+    /// cell retires the planting in the same transaction as conserved drops.
     #[serde(default)]
     pub planted_trees: std::collections::BTreeSet<[i32; 3]>,
     #[serde(default)]
@@ -109,6 +109,9 @@ pub struct Registry {
     pub(super) builder_watch: BTreeMap<SettlementId, super::construction::BuilderWatch>,
     /// Pending-site refusal sweeps, derived and never persisted.
     pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
+    /// Whole-sweep cheapest-lot scratch, derived and never persisted. A restart
+    /// discards it and restarts the sweep from the persisted cursor.
+    pub(super) site_sweep: BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,
@@ -641,6 +644,7 @@ impl Registry {
         self.counts.remove(&id);
         self.economic_active.remove(&id);
         self.site_watch.remove(&id);
+        self.site_sweep.remove(&id);
         self.resident_settlement.retain(|_, sid| *sid != id);
         self.resident_ids.remove(&id);
         self.household_counts.remove(&id);
@@ -690,6 +694,7 @@ impl Registry {
         } else {
             self.economic_active.remove(&image.id);
             self.site_watch.remove(&image.id);
+            self.site_sweep.remove(&image.id);
             if let Some(record) = self.records.remove(&image.id) {
                 for household in record.households.keys() {
                     self.household_sizes.remove(household);

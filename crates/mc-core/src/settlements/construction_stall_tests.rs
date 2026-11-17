@@ -260,7 +260,7 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
 }
 
 #[test]
-fn a_decayed_crown_clear_cell_uses_its_column_footing_beyond_perimeter_reach() {
+fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancelling() {
     let (mut state, id, builder) = fixture();
     let next = [8, 220, 8];
     let leaf = super::super::allocator::tests::block(
@@ -324,18 +324,196 @@ fn a_decayed_crown_clear_cell_uses_its_column_footing_beyond_perimeter_reach() {
     let target = target.expect("an emptied planned crown cell still has its column-footing target");
     assert_eq!([target.pos.x, target.pos.y, target.pos.z], [8, 201, 8]);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    // Normal footprint refresh/resume, then the canonical clear operation.
+    // Natural decay is not a stale certification: the footing stays valid and
+    // the same structure resumes instead of cancelling the owner's order.
     for _ in 0..3 {
         crate::villager::building::tick(&mut state, id);
     }
     let snapshot = executor::status(&state, id, &structure).unwrap();
-    assert_eq!(snapshot.current_stage_index, 1);
+    assert_eq!(snapshot.state, ScriptStructureState::Running);
     assert_eq!(
-        executor::next_cell(&state, id, &structure).unwrap(),
-        Some(build)
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure,
+        structure
+    );
+    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert_eq!(
+        state.world.block_at(build[0], build[1], build[2]),
+        Some(air)
     );
     assert!(snapshot.consumed.is_empty());
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+}
+
+/// A newer pending order must never take the slot from the active owner order:
+/// a cancellation here is not requeued and breaks the owner's FIFO decision.
+#[test]
+fn a_newer_pending_order_never_drops_the_active_clear_stage() {
+    let (mut state, id, builder) = fixture();
+    let next = [8, 220, 8];
+    let air = state.registry.states.air;
+    let log = super::super::allocator::tests::block(&state, "minecraft:oak_log", &[]);
+    state.world.set_block(next[0], next[1], next[2], log);
+    state.world.fold_overlay();
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
+    let structure = executor::prepare(
+        &mut state,
+        id,
+        "house".into(),
+        bounds,
+        bounds,
+        vec![executor::PlannedCell {
+            at: next,
+            state: air,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    state.settlements.get_mut(id).unwrap().project = Some(Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: structure.clone(),
+        ordered: true,
+        borrowed_builder: None,
+    });
+    // The registered root outgrew its certified sapling: the clear manifest's
+    // tree certification is genuinely stale.
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(next);
+    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+        blueprint: "storage".into(),
+        level: 1,
+        building: None,
+    });
+    // The planned cell decays after certification, so the executor pauses.
+    state.world.set_block(next[0], next[1], next[2], air);
+    state.world.fold_overlay();
+    let uuid = state.entities.row(builder).uuid;
+    executor::advance(&mut state, id, &structure, uuid).unwrap();
+    assert_eq!(
+        executor::status(&state, id, &structure)
+            .unwrap()
+            .pause_reason
+            .as_deref(),
+        Some("footprint_changed")
+    );
+    crate::villager::building::tick(&mut state, id);
+    let snapshot = executor::status(&state, id, &structure).unwrap();
+    assert_eq!(
+        snapshot.state,
+        ScriptStructureState::Running,
+        "a newer pending order must not take the active order's slot"
+    );
+    assert_eq!(snapshot.current_stage_index, 0);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure,
+        structure
+    );
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .pending_order
+            .as_ref()
+            .unwrap()
+            .blueprint,
+        "storage"
+    );
+}
+
+/// A pause in the build stage, even before its first paid cell, is a resume on
+/// the same structure handle: only a clear-stage stale tree certification cancels.
+#[test]
+fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
+    let (mut state, id, builder) = fixture();
+    let at = [8, 202, 8];
+    let log = super::super::allocator::tests::block(&state, "minecraft:oak_log", &[]);
+    state.world.set_block(at[0], at[1], at[2], log);
+    state.world.fold_overlay();
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
+    let structure = executor::prepare(
+        &mut state,
+        id,
+        "house".into(),
+        bounds,
+        bounds,
+        vec![executor::PlannedCell {
+            at,
+            state: log,
+            resource: Some("minecraft:oak_log".into()),
+            quantity: 1,
+        }],
+    )
+    .unwrap();
+    state.settlements.get_mut(id).unwrap().project = Some(Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: structure.clone(),
+        ordered: true,
+        borrowed_builder: None,
+    });
+    // A registered root that is no longer a sapling sits in the build cells, so
+    // only the stage condition prevents a cancel here.
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(at);
+    let stone = super::super::allocator::tests::block(&state, "minecraft:stone", &[]);
+    state.world.set_block(at[0], at[1], at[2], stone);
+    let uuid = state.entities.row(builder).uuid;
+    executor::advance(&mut state, id, &structure, uuid).unwrap();
+    assert_eq!(
+        executor::status(&state, id, &structure)
+            .unwrap()
+            .pause_reason
+            .as_deref(),
+        Some("footprint_changed")
+    );
+    crate::villager::building::tick(&mut state, id);
+    let snapshot = executor::status(&state, id, &structure).unwrap();
+    assert_eq!(snapshot.state, ScriptStructureState::Running);
+    assert_eq!(snapshot.current_stage_index, 0);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure,
+        structure
+    );
+    assert!(snapshot.consumed.is_empty());
 }
 
 /// The planner's builder pass, as `tick` runs it, for two stall windows of a

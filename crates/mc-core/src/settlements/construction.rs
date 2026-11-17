@@ -672,7 +672,6 @@ fn start_build(
         return Err(error);
     }
     let images = executor::source_images(state, id);
-    let record = state.settlements.get(id).expect("claimed settlement");
     // A direct owner request searches once for immediate admission. Retried
     // pending work shares the autonomous planner's bounded, resumable scan.
     let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
@@ -682,14 +681,26 @@ fn start_build(
         .lock()
         .expect("forest cache poisoned")
         .misses();
-    let (site, cursor, report) = site_project(
-        state,
-        record,
-        std::iter::once(blueprint),
-        start,
-        attempts,
-        &images,
-    );
+    let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+    let pass = {
+        let record = state.settlements.get(id).expect("claimed settlement");
+        site_project(
+            state,
+            record,
+            std::iter::once(blueprint),
+            &mut sweeps,
+            start,
+            attempts,
+            &images,
+        )
+    };
+    state.settlements.site_sweep.insert(id, sweeps);
+    let SitePass {
+        site,
+        cursor,
+        report,
+        ..
+    } = pass;
     let Some(mut site) = site else {
         if planning_cursor.is_none()
             && state
@@ -767,7 +778,10 @@ fn start_upgrade(
         ordered: true,
         borrowed_builder: None,
     };
-    if !begin(state, project, &species, color) {
+    let (bounds, mut cells) = planned_cells(state, &project, &species, &mut Default::default())
+        .map_err(|reason| format!("Construction admission refused: {reason:?}."))?;
+    apply_bed_color(state, &mut cells, color).ok_or("Construction bed color unavailable.")?;
+    if !begin_cells(state, project, bounds, cells) {
         return Err("Construction admission failed.".into());
     }
     Ok(())
@@ -951,15 +965,18 @@ pub(super) fn has_house_lot(
     network: &mut layout::Network<'_>,
     blueprint: &blueprints::Blueprint,
 ) -> bool {
+    let mut clearance = super::forestry::Clearance::default();
     network.frontage().into_iter().any(|(front, normal)| {
         let Some(lot) = network.lot(blueprint, front, normal) else {
             return false;
         };
-        site_free(
+        site_free_claim(
             state,
             record,
             lot.origin,
             blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
+            record.founding.as_ref(),
+            &mut clearance,
         )
     })
 }
@@ -1029,7 +1046,7 @@ pub(crate) fn clearable(state: &TickState, block: u32) -> bool {
 
 /// Only natural terrain can be excavated; buildings, paths and fluids are not
 /// site preparation materials.
-fn excavatable(state: &TickState, block: u32) -> bool {
+pub(crate) fn excavatable(state: &TickState, block: u32) -> bool {
     state
         .registry
         .blocks
@@ -1056,8 +1073,6 @@ fn excavatable(state: &TickState, block: u32) -> bool {
                 )
         })
 }
-
-const SITE_VARIANCE: i32 = 3;
 
 /// Floor replacement permits solid ground or clearable fill space, but never
 /// fluids, paths, paid crops or authored non-ground blocks under an overhang.
@@ -1086,7 +1101,14 @@ pub(super) fn site_free(
     origin: [i32; 3],
     size: [u8; 3],
 ) -> bool {
-    site_free_claim(state, record, origin, size, record.founding.as_ref())
+    site_free_claim(
+        state,
+        record,
+        origin,
+        size,
+        record.founding.as_ref(),
+        &mut Default::default(),
+    )
 }
 
 fn site_free_claim(
@@ -1095,146 +1117,9 @@ fn site_free_claim(
     origin: [i32; 3],
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
+    clearance: &mut super::forestry::Clearance,
 ) -> bool {
-    site_refusals::check(state, record, origin, size, expedition).is_ok()
-}
-
-fn planned_cells(
-    state: &TickState,
-    project: &Project,
-    species: &str,
-) -> Option<(ScriptWorldBounds, Vec<executor::PlannedCell>)> {
-    let blueprint = blueprints::get(&state.registry, &project.blueprint)?;
-    let level = blueprint.level(project.level)?;
-    let rotated = level.rotated(Rotation::from_quarter_turns(project.rotation));
-    let mut quota = level.materials.clone();
-    let mut cells: Vec<_> = rotated
-        .removals
-        .iter()
-        .map(|offset| executor::PlannedCell {
-            at: rotated.world(project.origin, *offset),
-            state: state.registry.states.air,
-            resource: None,
-            quantity: 0,
-        })
-        .collect();
-    let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
-    let mut bottom = project.origin[1];
-    let mut corridor = None;
-    if project.building.is_none() {
-        let dirt = state
-            .registry
-            .blocks
-            .block(&mc_data::Identifier::parse("minecraft:dirt").ok()?)?
-            .default
-            .0;
-        for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
-            for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-                let ground = surface_y(state, project.origin[1], x, z)?;
-                for y in ground + 1..=project.origin[1] {
-                    // The authored floor already pays for its own cells.
-                    if y == project.origin[1]
-                        && rotated
-                            .blocks
-                            .iter()
-                            .any(|(offset, _)| rotated.world(project.origin, *offset) == [x, y, z])
-                    {
-                        continue;
-                    }
-                    bottom = bottom.min(y);
-                    cells.push(executor::PlannedCell {
-                        at: [x, y, z],
-                        state: dirt,
-                        resource: Some("minecraft:dirt".into()),
-                        quantity: 1,
-                    });
-                }
-            }
-        }
-    }
-    for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
-        for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-            for y in project.origin[1] + 1..project.origin[1] + i32::from(size[1]) {
-                let block = state.world.physics_block_at(x, y, z)?;
-                if block != state.registry.states.air
-                    && (clearable(state, block)
-                        || (project.building.is_none() && excavatable(state, block)))
-                    && !cells.iter().any(|cell| cell.at == [x, y, z])
-                {
-                    cells.push(executor::PlannedCell {
-                        at: [x, y, z],
-                        state: state.registry.states.air,
-                        resource: None,
-                        quantity: 0,
-                    });
-                }
-            }
-        }
-    }
-    for (offset, block) in &rotated.blocks {
-        let placed = *block;
-        let (resource, quantity) =
-            if let Some((item, quantity)) = blueprints::material_for(&state.registry, *block) {
-                let (_, remaining) = quota.iter_mut().find(|(id, _)| *id == item)?;
-                *remaining = remaining.checked_sub(quantity)?;
-                (
-                    Some(state.registry.items.name_of(item)?.to_string()),
-                    quantity,
-                )
-            } else {
-                (None, 0)
-            };
-        cells.push(executor::PlannedCell {
-            at: rotated.world(project.origin, *offset),
-            state: placed.0,
-            resource,
-            quantity,
-        });
-    }
-    // Catalog materials must map exactly to physical cells; never build free
-    // blocks because a blueprint cannot be funded by its declared stock.
-    if quota.iter().any(|(_, count)| *count != 0) {
-        return None;
-    }
-    apply_species(state, &mut cells, species)?;
-    if project.building.is_none() {
-        let preparation = super::forestry::cells(state, project, size)?;
-        corridor = preparation.corridor;
-        let mut preparation = preparation.cells;
-        if !preparation.is_empty() {
-            let removed: std::collections::BTreeSet<_> =
-                preparation.iter().map(|cell| cell.at).collect();
-            cells.retain(|cell| {
-                cell.state != state.registry.states.air || !removed.contains(&cell.at)
-            });
-            preparation.append(&mut cells);
-            cells = preparation;
-        }
-    }
-    // Include the whole placement extent (roof crowns/yards) in executor
-    // interference fencing; certification uses the narrower authored bounds.
-    let mut min = [project.origin[0], bottom, project.origin[2]];
-    let mut max = std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1);
-    // A winding access walk can enclose unrelated managed trees. Protect
-    // the actual lot here and the walk's columns in forestry::cells, not
-    // the empty space inside their combined executor envelope.
-    if super::forestry::planted_crown_overlaps(state, ScriptWorldBounds::new(min, max).ok()?) {
-        return None;
-    }
-    for cell in &cells {
-        for axis in 0..3 {
-            min[axis] = min[axis].min(cell.at[axis]);
-            max[axis] = max[axis].max(cell.at[axis]);
-        }
-    }
-    if let Some(corridor) = corridor {
-        for axis in 0..3 {
-            min[axis] = min[axis].min(corridor.min[axis]);
-            max[axis] = max[axis].max(corridor.max[axis]);
-        }
-    }
-    let bounds = ScriptWorldBounds::new(min, max).ok()?;
-    Some((bounds, cells))
+    site_refusals::check(state, record, origin, size, expedition, clearance, None).is_ok()
 }
 
 /// Rewrite the already-funded authored cells, not the stored project later.
@@ -1320,7 +1205,8 @@ fn cell_bill(state: &TickState, cells: &[executor::PlannedCell]) -> Option<Vec<(
 }
 
 fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> bool {
-    let Some((bounds, mut cells)) = planned_cells(state, &project, species) else {
+    let Ok((bounds, mut cells)) = planned_cells(state, &project, species, &mut Default::default())
+    else {
         return false;
     };
     if apply_bed_color(state, &mut cells, color).is_none() {
@@ -1478,6 +1364,24 @@ pub(super) const SITE_BAND: i32 = 8;
 /// block with clearable space directly above it. Hillside villages have no
 /// flat ground at the bell's own elevation, so sites follow the terrain.
 pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<i32> {
+    surface_y_for_lot(
+        state,
+        anchor_y,
+        x,
+        z,
+        None,
+        &mut super::forestry::Clearance::prepared(),
+    )
+}
+
+pub(super) fn surface_y_for_lot(
+    state: &TickState,
+    anchor_y: i32,
+    x: i32,
+    z: i32,
+    lot: Option<ScriptWorldBounds>,
+    clearance: &mut super::forestry::Clearance,
+) -> Option<i32> {
     (anchor_y - SITE_BAND..=anchor_y + SITE_BAND)
         .rev()
         .find(|&y| {
@@ -1492,7 +1396,7 @@ pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Opt
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above) || super::forestry::clearable(state, [x, y + 1, z])
+                    clearable(state, above) || clearance.clearable(state, [x, y + 1, z], lot)
                 })
         })
 }
@@ -1503,82 +1407,119 @@ struct FundedSite {
     cells: Vec<executor::PlannedCell>,
 }
 
+/// One bounded pass of the funded site search.
+struct SitePass {
+    site: Option<FundedSite>,
+    cursor: u32,
+    report: site_refusals::Report,
+    /// At least one kind's whole sweep still has candidates to examine.
+    running: bool,
+    /// Some unfinished sweep already holds a legal candidate, so its cheapest
+    /// lot is worth holding the slot for. An empty sweep never blocks other work.
+    waiting: bool,
+}
+
 /// Search the funded kinds in priority order over one shared street walk.
-/// Divide the admission's total attempt budget among them: an unplaceable
-/// early kind must not hide a later legal lot. Each kind resumes at the same
-/// frontage cursor. Owner requests pass one kind and retain their full scan.
+/// A kind may admit only after its whole cursor sweep has been examined, and
+/// then only its cheapest legal lot; an unfinished sweep admits nothing. Each
+/// kind advances its own resumable sweep every pass, so a completed empty kind
+/// cannot starve a later one, and the first kind in priority order still wins
+/// when several are ready. Admission is decided on the authored bill only, so
+/// foundation material is a project shortfall, not a site refusal. Only the
+/// winner is materialized.
 fn site_project<'a>(
     state: &TickState,
     record: &SettlementRecord,
-    blueprints: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
+    kinds: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
+    sweeps: &mut site_refusals::Sweeps,
     start: u32,
     attempts: u32,
     images: &[super::inventory::Image],
-) -> (Option<FundedSite>, u32, site_refusals::Report) {
-    let share = attempts / blueprints.len().max(1) as u32;
+) -> SitePass {
     let mut network = layout::Network::for_construction(state, record);
-    let fronts = network.frontage();
-    let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
+    let count = u32::try_from(network.frontage().len()).unwrap_or(u32::MAX);
     let mut report = site_refusals::Report {
         frontages: count,
         ..Default::default()
     };
     if count == 0 {
         report.reject(site_refusals::Reason::NoFrontage, record.anchor);
-        return (None, 0, report);
+        return SitePass {
+            site: None,
+            cursor: 0,
+            report,
+            running: false,
+            waiting: false,
+        };
     }
-    let mut index = start % count;
-    for blueprint in blueprints {
-        index = start % count;
-        for _ in 0..share.min(count) {
-            let (front, normal) = fronts[index as usize];
-            index = (index + 1) % count;
-            report.examined += 1;
-            let Some(lot) = network.lot(blueprint, front, normal) else {
-                report.reject(site_refusals::Reason::LotGeometry, front);
-                continue;
-            };
-            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-            if let Err(reason) =
-                site_refusals::check(state, record, lot.origin, size, record.founding.as_ref())
-            {
-                report.reject(reason, lot.origin);
-                continue;
+    let mut cursor = start % count;
+    let share = (attempts / kinds.len().max(1) as u32).max(1);
+    let mut running = false;
+    let mut clearance = super::forestry::Clearance::default();
+    for blueprint in kinds {
+        let Some(level) = blueprint.level(1) else {
+            continue;
+        };
+        let floors = std::array::from_fn(|turns| {
+            site_refusals::floor_columns(blueprint, u8::try_from(turns).expect("quarter turns"))
+        });
+        let Some((species, color)) = funded_variant(state, record.id, &level.materials, images)
+        else {
+            report.reject(site_refusals::Reason::MaterialBill, record.anchor);
+            continue;
+        };
+        let mut budget = share;
+        match site_refusals::advance(
+            state,
+            record,
+            &mut network,
+            blueprint,
+            &floors,
+            &mut clearance,
+            sweeps,
+            cursor,
+            &mut budget,
+            &mut report,
+        ) {
+            site_refusals::Advance::Incomplete(next) => {
+                cursor = next;
+                running = true;
             }
-            let project = Project {
-                settlement: record.id,
-                blueprint: blueprint.id.clone(),
-                level: 1,
-                origin: lot.origin,
-                rotation: lot.rotation,
-                building: None,
-                structure: String::new(),
-                ordered: false,
-                borrowed_builder: None,
-            };
-            let Some((bounds, mut cells)) = planned_cells(state, &project, "oak") else {
-                report.reject(site_refusals::Reason::Preparation, lot.origin);
-                continue;
-            };
-            if let Some(bill) = cell_bill(state, &cells)
-                && let Some((species, color)) = funded_variant(state, record.id, &bill, images)
-                && apply_species(state, &mut cells, species).is_some()
-                && apply_bed_color(state, &mut cells, color).is_some()
-            {
-                return (
-                    Some(FundedSite {
-                        project,
-                        bounds,
-                        cells,
-                    }),
-                    0,
-                    report,
+            site_refusals::Advance::Empty => {
+                cursor = 0;
+            }
+            site_refusals::Advance::Cheapest(origin, rotation) => {
+                let site = site_refusals::materialize(
+                    state,
+                    record,
+                    site_refusals::Winner {
+                        blueprint,
+                        origin,
+                        rotation,
+                        species,
+                        color,
+                    },
+                    &floors[usize::from(rotation) % 4],
+                    &mut clearance,
+                    &mut report,
                 );
+                return SitePass {
+                    site,
+                    cursor: 0,
+                    report,
+                    running: false,
+                    waiting: false,
+                };
             }
-            report.reject(site_refusals::Reason::MaterialBill, lot.origin);
         }
     }
-    (None, index, report)
+    SitePass {
+        site: None,
+        cursor,
+        report,
+        running,
+        waiting: sweeps.waiting(),
+    }
 }
 
 /// Street work for the buildings already standing: the first unpaved road
@@ -1669,65 +1610,100 @@ fn plan(state: &mut TickState, id: SettlementId) {
     let gathering = gatherer_demand(state, record, &images)
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
     // Housing gets its own bounded scan. If it has no site, ordinary funded
-    // candidates still get their shared scan in this same planning pass.
-    let (house, cursor, _) = priority_house(state, record, &images).map_or_else(
-        || {
-            (
-                None,
-                record.construction_cursor,
-                site_refusals::Report::default(),
-            )
-        },
-        |house| {
-            site_project(
-                state,
-                record,
-                std::iter::once(house),
-                record.construction_cursor,
-                SITE_ATTEMPTS,
-                &images,
-            )
-        },
-    );
+    // candidates still get their shared scan in this same planning pass. Both
+    // read and extend the same runtime-only sweep scratch.
+    let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+    let record = state.settlements.get(id).expect("planned settlement");
+    let (house, house_cursor, funded_site, search_running, search_waiting) = {
+        let sweeps = &mut sweeps;
+        let house = priority_house(state, record, &images).map_or_else(
+            || SitePass {
+                site: None,
+                cursor: record.construction_cursor,
+                report: site_refusals::Report::default(),
+                running: false,
+                waiting: false,
+            },
+            |house| {
+                site_project(
+                    state,
+                    record,
+                    std::iter::once(house),
+                    sweeps,
+                    record.construction_cursor,
+                    SITE_ATTEMPTS,
+                    &images,
+                )
+            },
+        );
+        let mut running = house.running;
+        let mut waiting = house.waiting;
+        let mut funded_site = None;
+        if house.site.is_none() {
+            let mut funded = [None; AUTONOMOUS_KINDS];
+            let mut funded_count = 0;
+            let catalog = catalog(state, record);
+            for kind in candidate_kinds(state, record, &images) {
+                let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind)
+                else {
+                    continue;
+                };
+                if blueprint.level(1).is_some_and(|level| {
+                    funded_variant(state, id, &level.materials, &images).is_some()
+                }) {
+                    funded[funded_count] = Some(blueprint);
+                    funded_count += 1;
+                }
+            }
+            if funded_count != 0 {
+                let pass = site_project(
+                    state,
+                    record,
+                    funded
+                        .into_iter()
+                        .take(funded_count)
+                        .map(|blueprint| blueprint.expect("funded prefix")),
+                    sweeps,
+                    house.cursor,
+                    SITE_ATTEMPTS,
+                    &images,
+                );
+                running |= pass.running;
+                waiting |= pass.waiting;
+                funded_site = Some(pass);
+            }
+        }
+        (house.site, house.cursor, funded_site, running, waiting)
+    };
+    state.settlements.site_sweep.insert(id, sweeps);
     if let Some(site) = house {
         begin_cells(state, site.project, site.bounds, site.cells);
         return;
     }
-    let mut funded = [None; AUTONOMOUS_KINDS];
-    let mut funded_count = 0;
-    let catalog = catalog(state, record);
-    for kind in candidate_kinds(state, record, &images) {
-        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
-            continue;
-        };
-        if blueprint
-            .level(1)
-            .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
-        {
-            funded[funded_count] = Some(blueprint);
-            funded_count += 1;
-        }
-    }
-    if funded_count != 0 {
-        let (site, cursor, _) = site_project(
-            state,
-            record,
-            funded
-                .into_iter()
-                .take(funded_count)
-                .map(|blueprint| blueprint.expect("funded prefix")),
-            cursor,
-            SITE_ATTEMPTS,
-            &images,
-        );
+    let funded_kinds = funded_site.is_some();
+    if let Some(pass) = funded_site {
         let record = state.settlements.get_mut(id).expect("planned settlement");
-        record.construction_cursor = cursor;
+        record.construction_cursor = pass.cursor;
         record.revision = record.revision.saturating_add(1);
-        if let Some(site) = site {
+        if let Some(site) = pass.site {
             begin_cells(state, site.project, site.bounds, site.cells);
             return;
         }
     }
+    // A kind's sweep is still running and already holds a legal candidate: its
+    // cheapest lot is decided only after the last one, so the slot waits. An
+    // unfinished sweep with nothing legal yet must not hold it.
+    if search_running && search_waiting {
+        if !funded_kinds {
+            let record = state.settlements.get_mut(id).expect("planned settlement");
+            if record.construction_cursor != house_cursor {
+                record.construction_cursor = house_cursor;
+                record.revision = record.revision.saturating_add(1);
+            }
+        }
+        return;
+    }
+    let cursor = house_cursor;
     // A funded new building may have no legal lot. Existing houses must still
     // be able to gain beds through their reserved upgrade footprint.
     let record = state.settlements.get(id).expect("planned settlement");
@@ -1736,7 +1712,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     {
         return;
     }
-    if funded_count == 0 {
+    if !funded_kinds {
         let record = state.settlements.get_mut(id).expect("planned settlement");
         if record.construction_cursor != cursor {
             record.construction_cursor = cursor;
@@ -2098,6 +2074,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
+    let lot = super::forestry::lot_bounds(state, &project);
     let protected = snapshot
         .stages
         .get(snapshot.current_stage_index as usize)
@@ -2106,8 +2083,8 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             state
                 .world
                 .physics_block_at(at[0], at[1], at[2])
-                .is_some_and(|block| super::forestry::tree(state, block))
-                && super::forestry::protected_tree(state, at)
+                .is_some_and(|block| super::forestry::tree_or_sapling(state, block))
+                && !super::forestry::Clearance::prepared().clearable(state, at, lot)
         });
     let cause = if protected {
         "protected_tree_in_preparation"
@@ -2214,7 +2191,7 @@ pub(crate) fn note_build_refusal(
     }
 }
 
-fn retry_preparation(
+pub(crate) fn retry_preparation(
     state: &mut TickState,
     id: SettlementId,
     project: &Project,
@@ -3177,6 +3154,10 @@ mod planner_tests;
 mod site_tests;
 
 #[cfg(test)]
+#[path = "construction_terrain_tests.rs"]
+mod terrain_tests;
+
+#[cfg(test)]
 #[path = "construction_stall_tests.rs"]
 mod stall_tests;
 
@@ -3187,3 +3168,7 @@ mod fortification_tests;
 #[cfg(test)]
 #[path = "construction_growth_tests.rs"]
 mod growth_tests;
+
+#[path = "construction_preparation.rs"]
+pub(crate) mod preparation;
+use preparation::planned_cells;
