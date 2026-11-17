@@ -297,3 +297,89 @@ fn an_in_reach_builder_holds_position_instead_of_recentering_out_of_reach() {
             > before
     );
 }
+
+#[test]
+fn a_builder_keeps_its_supported_perimeter_goal_across_a_route_detour_and_finishes() {
+    let (mut state, town, builder, project) = final_approach_fixture();
+    state.entities.set_pos(builder, [20.5, 201.0, 9.5]);
+    state.entities.set_vel(builder, [0.0; 3]);
+    state.tick_budget.reset(state.tick);
+    let mut changes = ChangeSet::default();
+    crate::settlements::allocator::tick(&mut state, &mut changes);
+    crate::villager::brain::tick(&mut state, &mut changes);
+    let target = state
+        .entities
+        .row(builder)
+        .villager
+        .as_ref()
+        .unwrap()
+        .navigation_target
+        .expect("the native brain commits a perimeter route");
+    assert_eq!(
+        target,
+        BlockPos {
+            x: 15,
+            y: 200,
+            z: 9
+        }
+    );
+    assert!(
+        !state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .navigation_path
+            .is_empty()
+    );
+    // A terrain detour or body displacement makes the adjacent supported
+    // perimeter cell nearer. The retained seed-100 builder switched these
+    // goals every step, reversing its route at the same hillside junction.
+    state.entities.set_pos(builder, [20.5, 201.0, 8.5]);
+    state.entities.set_vel(builder, [0.0; 3]);
+    let next = executor::next_cell(&state, town, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        site_target(&state, &project, next, builder, None),
+        Some(BlockPos {
+            x: 15,
+            y: 200,
+            z: 8
+        }),
+        "the other stand really is nearer"
+    );
+    let mut v = state.entities.row_mut(builder).villager.take().unwrap();
+    let retained = work(&mut state, builder, &mut v, &mut changes).unwrap();
+    state.entities.row_mut(builder).villager = Some(v);
+    assert_eq!(
+        retained.pos, target,
+        "a still-legal committed route must not reverse"
+    );
+    let before = executor::status(&state, town, &project.structure).unwrap();
+    assert!(
+        !before.consumed.is_empty(),
+        "this is already paid construction"
+    );
+    // No navigation assistance beyond the controlled displacement above.
+    for _ in 0..4000 {
+        state.day_time = 4000;
+        crate::tick::run_tick(&mut state, &[]);
+        if executor::built_at(&state, town, &project.blueprint, project.origin) {
+            let after = executor::status(&state, town, &project.structure).unwrap();
+            assert!(after.remaining.is_empty());
+            for paid in &before.consumed {
+                assert!(after.consumed.iter().any(
+                    |entry| entry.resource == paid.resource && entry.quantity >= paid.quantity
+                ));
+            }
+            return;
+        }
+    }
+    panic!(
+        "the paid house never finished after its route detour: pos={:?}, next={:?}",
+        state.entities.pos(builder),
+        executor::next_cell(&state, town, &project.structure)
+    );
+}

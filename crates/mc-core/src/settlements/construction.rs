@@ -45,8 +45,8 @@ pub struct Project {
     pub building: Option<BuildingId>,
     /// The canonical structure ledger owns all work/material progress.
     pub structure: String,
-    /// Set by an owner/operator order. The planner never preempts it; an
-    /// unordered (autonomous) project that placed nothing yields to an order.
+    /// Set by an owner/operator order. Active projects retain their FIFO slot,
+    /// including autonomous work that has not placed a cell yet.
     #[serde(default)]
     pub ordered: bool,
     /// Temporary builder identity and original profession, restored on release.
@@ -64,21 +64,14 @@ pub struct OwnerOrder {
 #[derive(Debug, PartialEq)]
 pub(crate) enum OrderOutcome {
     Started,
-    Queued { reason: String, replaced: bool },
+    Queued { reason: String },
 }
 
 impl OrderOutcome {
     pub(crate) fn message(&self, blueprint: &str) -> String {
         match self {
             Self::Started => format!("Started {blueprint} construction."),
-            Self::Queued { reason, replaced } => format!(
-                "Queued {blueprint}: {reason}{}",
-                if *replaced {
-                    " (replaced previous order)"
-                } else {
-                    ""
-                }
-            ),
+            Self::Queued { reason } => format!("Queued {blueprint}: {reason}"),
         }
     }
 }
@@ -163,6 +156,16 @@ fn submit_order(
     id: SettlementId,
     order: OwnerOrder,
 ) -> Result<OrderOutcome, String> {
+    if let Some(pending) = state
+        .settlements
+        .get(id)
+        .and_then(|record| record.pending_order.as_ref())
+    {
+        return Err(format!(
+            "Construction queue is full: {} is already pending. Cancel it before another order.",
+            pending.blueprint
+        ));
+    }
     match start_order(state, id, &order, None) {
         Ok(()) => {
             let record = state.settlements.get_mut(id).expect("admitted settlement");
@@ -178,7 +181,7 @@ fn submit_order(
                 .settlements
                 .get_mut(id)
                 .ok_or("Settlement not found.")?;
-            let replaced = record.pending_order.replace(order).is_some();
+            record.pending_order = Some(order);
             record.revision = record.revision.saturating_add(1);
             Ok(OrderOutcome::Queued {
                 reason: if reason == "Busy." {
@@ -186,7 +189,6 @@ fn submit_order(
                 } else {
                     reason
                 },
-                replaced,
             })
         }
         Err(error) => Err(error),
@@ -260,14 +262,6 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
         return true;
     }
     let images = executor::source_images(state, id);
-    // Keep the order queued while a fundable house restores breeding capacity.
-    if !matches!(
-        blueprints::get(&state.registry, &order.blueprint).map(|bp| bp.kind),
-        Some(BuildingKind::House | BuildingKind::Storage)
-    ) && house_precedes_order(state, record, &images)
-    {
-        return false;
-    }
     let Some(level) =
         blueprints::get(&state.registry, &order.blueprint).and_then(|bp| bp.level(level_number))
     else {
@@ -318,27 +312,19 @@ fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {
     }
 }
 
-/// `Busy.` unless the active project is autonomous and has placed nothing.
-/// Returns whether such a project must be cancelled to admit the order.
-fn claim_slot(state: &TickState, id: SettlementId) -> Result<bool, String> {
+/// An active project retains its FIFO slot, regardless of progress or origin.
+fn claim_slot(state: &TickState, id: SettlementId) -> Result<(), String> {
     let record = state.settlements.get(id).ok_or("Settlement not found.")?;
-    let Some(project) = &record.project else {
-        return Ok(false);
-    };
-    let untouched = !project.ordered
-        && executor::status(state, id, &project.structure).is_ok_and(|snapshot| {
-            snapshot.current_stage_index == 0 && snapshot.completed_work_units == 0
-        });
-    if untouched {
-        Ok(true)
-    } else {
+    if record.project.is_some() {
         Err("Busy.".into())
+    } else {
+        Ok(())
     }
 }
 
-/// Cancel a project whose completed cells spent no materials. Stock and
-/// builder carry stay where they are; callers guard paid construction.
-fn preempt(state: &mut TickState, id: SettlementId) -> Result<(), String> {
+/// Cancel without undoing placed cells or refunding stock. Callers own the
+/// admission policy; stall recovery must never discard paid construction.
+fn cancel_project(state: &mut TickState, id: SettlementId) -> Result<(), String> {
     let Some((handle, borrowed)) = state
         .settlements
         .get(id)
@@ -674,11 +660,7 @@ fn start_build(
     blueprint: &str,
     planning_cursor: Option<u32>,
 ) -> Result<(), String> {
-    let preempting = claim_slot(state, id)?;
-    if preempting {
-        // Materials the autonomous project's builder already hauled count as stock.
-        executor::return_carry(state, id);
-    }
+    claim_slot(state, id)?;
     let registry = std::sync::Arc::clone(&state.registry);
     let blueprint = blueprints::get(&registry, blueprint).ok_or("Unknown blueprint.")?;
     let level = blueprint.level(1).ok_or("Blueprint has no first level.")?;
@@ -686,20 +668,6 @@ fn start_build(
         return Err(error);
     }
     let images = executor::source_images(state, id);
-    if !matches!(blueprint.kind, BuildingKind::House | BuildingKind::Storage)
-        && house_precedes_order(
-            state,
-            state.settlements.get(id).expect("claimed settlement"),
-            &images,
-        )
-    {
-        return Err("Busy.".into());
-    }
-    // The untouched autonomous site is released first so the order may take
-    // its footprint; an unplaceable order leaves the planner to replan.
-    if preempting {
-        preempt(state, id)?;
-    }
     let record = state.settlements.get(id).expect("claimed settlement");
     // A direct owner request searches once for immediate admission. Retried
     // pending work shares the autonomous planner's bounded, resumable scan.
@@ -757,10 +725,7 @@ fn start_upgrade(
     id: SettlementId,
     building: BuildingId,
 ) -> Result<(), String> {
-    let preempting = claim_slot(state, id)?;
-    if preempting {
-        executor::return_carry(state, id);
-    }
+    claim_slot(state, id)?;
     let record = state.settlements.get(id).expect("claimed settlement");
     let building = record
         .buildings
@@ -796,9 +761,6 @@ fn start_upgrade(
         ordered: true,
         borrowed_builder: None,
     };
-    if preempting {
-        preempt(state, id)?;
-    }
     if !begin(state, project, &species, color) {
         return Err("Construction admission failed.".into());
     }
@@ -929,32 +891,6 @@ fn priority_house(
     funded_variant(state, record.id, &level.materials, images)
         .is_some()
         .then_some(blueprint)
-}
-
-/// An existing housing project retains its slot; an unplaceable house must
-/// not hold back a funded owner order.
-fn house_precedes_order(
-    state: &TickState,
-    record: &SettlementRecord,
-    images: &[super::inventory::Image],
-) -> bool {
-    let Some(house) = priority_house(state, record, images) else {
-        return false;
-    };
-    record
-        .project
-        .as_ref()
-        .is_some_and(|project| project.blueprint == house.id)
-        || site_project(
-            state,
-            record,
-            std::iter::once(house),
-            record.construction_cursor,
-            SITE_ATTEMPTS,
-            images,
-        )
-        .0
-        .is_some()
 }
 
 /// Reuse the executor's reservation, including the admitted clearing corridor.
@@ -1751,10 +1687,10 @@ fn street_site(
 }
 
 fn plan(state: &mut TickState, id: SettlementId) {
-    if furnace::plan(state, id) {
+    if plan_order(state, id) {
         return;
     }
-    if plan_order(state, id) {
+    if furnace::plan(state, id) {
         return;
     }
     if founding::plan(state, id) {
@@ -2273,7 +2209,7 @@ fn retry_preparation(
     project: &Project,
 ) -> Result<(), String> {
     executor::return_carry(state, id);
-    preempt(state, id)?;
+    cancel_project(state, id)?;
     let record = state
         .settlements
         .get_mut(id)

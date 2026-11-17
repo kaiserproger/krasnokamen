@@ -72,14 +72,18 @@ fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 }
 
 #[test]
-fn exhausted_roofed_beds_put_another_house_before_a_queued_cultural_order() {
+fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
-    // Keep the autonomous house untouched across several owner-order passes.
+    plan(&mut state, id);
+    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    assert_eq!(project.blueprint, "spanish_house");
+    assert!(!project.ordered);
+    // Keep the earlier autonomous house untouched across later order passes.
     state.day_time = 0;
     let result = request_build(&mut state, id, "spanish_church").unwrap();
     assert!(
         matches!(result, OrderOutcome::Queued { .. }),
-        "growth housing must keep the cultural order queued: {result:?}"
+        "the earlier house must retain its FIFO slot: {result:?}"
     );
     for _ in 0..40 {
         crate::tick::run_tick(&mut state, &[]);
@@ -99,6 +103,37 @@ fn exhausted_roofed_beds_put_another_house_before_a_queued_cultural_order() {
         record.pending_order.as_ref().unwrap().blueprint,
         "spanish_church"
     );
+}
+
+#[test]
+fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
+    let (mut state, id) = housing_fixture(false);
+    state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .fill(mc_data::ItemStack::EMPTY);
+    assert!(matches!(
+        request_build(&mut state, id, "spanish_fortress").unwrap(),
+        OrderOutcome::Queued { reason } if reason.starts_with("not enough:")
+    ));
+    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_fortress", 1)]);
+    state.day_time = 0;
+    for _ in 0..256 {
+        crate::tick::run_tick(&mut state, &[]);
+        if state.settlements.get(id).unwrap().project.is_some() {
+            break;
+        }
+    }
+    let record = state.settlements.get(id).unwrap();
+    let project = record
+        .project
+        .as_ref()
+        .expect("the queued funded order starts");
+    assert_eq!(project.blueprint, "spanish_fortress");
+    assert!(project.ordered);
+    assert!(record.pending_order.is_none());
 }
 
 #[test]
