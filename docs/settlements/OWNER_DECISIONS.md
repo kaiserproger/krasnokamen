@@ -115,3 +115,12 @@ claims require the actual pinned-server run, not this design decision.
   access to streets, plots or reserved sites.
 - Only settlements the canopy can reach are checked; an unrelated settlement
   never vetoes a planting.
+
+## Construction queue order — owner, 2026-11-17
+
+> а никто и не должен уступать домам мэйби? в каком порядке в очередь встали заказы, в том и остаются
+
+- Construction projects keep the order in which they entered the queue; nothing
+  jumps ahead because of housing.
+- When the active slot frees, the earliest-queued project takes it. A house the
+  planner chooses later enters the queue behind what is already queued.
