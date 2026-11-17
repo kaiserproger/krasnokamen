@@ -1042,14 +1042,7 @@ fn unavailable_native_project_is_not_a_complete_bar_or_a_funded_map_action() {
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
     crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
-    state
-        .settlements
-        .get_mut(id)
-        .unwrap()
-        .project
-        .as_mut()
-        .unwrap()
-        .structure = "gone-native-site".into();
+    state.settlements.get_mut(id).unwrap().projects[0].structure = "gone-native-site".into();
     let ctx = Ctx {
         id,
         manage: true,

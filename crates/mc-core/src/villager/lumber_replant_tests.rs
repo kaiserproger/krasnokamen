@@ -15,14 +15,7 @@ fn replanting_respects_the_future_crown_around_an_active_house() {
         open_plan(&mut state);
         let id = worker.settlement.unwrap();
         start(&mut state, id, "house", 1, None);
-        let origin = state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .origin;
+        let origin = state.settlements.get(id).unwrap().projects[0].origin;
         // The retained Spanish house was blocked by a replanted root one cell
         // outside its west boundary: the protected crown grew into the site.
         let base = [origin[0] + dx, 201, origin[2] + dz];
@@ -100,7 +93,7 @@ fn replanting_respects_admitted_corridors_without_reserving_the_whole_world() {
             }],
         )
         .unwrap();
-        state.settlements.get_mut(id).unwrap().project = Some(Project {
+        state.settlements.get_mut(id).unwrap().projects = vec![Project {
             settlement: id,
             blueprint: blueprint.into(),
             level: 1,
@@ -109,8 +102,8 @@ fn replanting_respects_admitted_corridors_without_reserving_the_whole_world() {
             building: None,
             structure: handle,
             ordered: false,
-            borrowed_builder: None,
-        });
+            builder: None,
+        }];
         for (base, planted) in [([2, 201, 2], false), ([-8, 201, -8], true)] {
             let dirt = block(&state, "minecraft:dirt", &[]);
             let sapling = block(&state, "minecraft:oak_sapling", &[]);
@@ -173,7 +166,7 @@ fn repeated_lumber_replants_leave_a_reachable_funded_house_lot() {
         construction::OrderOutcome::Started,
     );
     let town = state.settlements.get(id).unwrap();
-    assert_eq!(town.project.as_ref().unwrap().blueprint, "spanish_house");
+    assert_eq!(town.projects[0].blueprint, "spanish_house");
     assert!(town.planted_trees.len() >= 10, "not a blanket planting ban");
     assert!(
         town.planted_trees.len() < attempts.len(),

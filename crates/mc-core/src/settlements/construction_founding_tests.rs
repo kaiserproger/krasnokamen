@@ -97,7 +97,7 @@ fn prepared_at(
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                borrowed_builder: None
+                builder: None
             },
             "oak",
             0
@@ -174,8 +174,9 @@ fn an_outpost_builder_outside_the_civil_radius_still_places_paid_cells() {
         .settlements
         .get(parent)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .unwrap();
     let (item, _) = executor::next_material(&state, parent, &project.structure)
         .unwrap()
@@ -481,10 +482,11 @@ fn queue_unfunded_order(state: &mut TickState, parent: SettlementId, blueprint: 
             .settlements
             .get(parent)
             .unwrap()
-            .pending_order
+            .orders
+            .first()
             .is_some()
     );
-    assert!(state.settlements.get(parent).unwrap().project.is_none());
+    assert!(state.settlements.get(parent).unwrap().projects.is_empty());
 }
 
 #[test]
@@ -499,8 +501,8 @@ fn pending_order_does_not_block_completed_founding_handover() {
         .id;
     let record = state.settlements.get(parent).unwrap();
     assert!(record.founding.is_none());
-    assert!(record.project.is_none());
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert!(record.projects.is_empty());
+    assert_eq!(record.orders[0].blueprint, "house");
     assert_eq!(state.settlements.member_count(child), 3);
     for (name, origin) in expedition.sites() {
         assert!(!executor::built_at(&state, parent, name, origin));
@@ -525,8 +527,8 @@ fn pending_order_does_not_block_lost_founding_household_cancellation() {
         record.founding.is_none(),
         "lost family releases the expedition claim"
     );
-    assert!(record.project.is_none());
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert!(record.projects.is_empty());
+    assert_eq!(record.orders[0].blueprint, "house");
     assert_eq!(state.settlements.records().count(), 1);
 }
 
@@ -557,10 +559,10 @@ fn pending_order_still_blocks_new_founding_construction() {
         expedition.destination
     );
     assert!(
-        record.project.is_none(),
+        record.projects.is_empty(),
         "even funded new outpost work waits"
     );
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "farm");
+    assert_eq!(record.orders[0].blueprint, "farm");
     assert_eq!(state.settlements.records().count(), 1);
 }
 
@@ -954,7 +956,7 @@ fn review_cancelled_history_does_not_poison_a_rebuilt_outpost_handover() {
             building: None,
             structure: String::new(),
             ordered: false,
-            borrowed_builder: None,
+            builder: None,
         },
         "oak",
         0
@@ -974,7 +976,7 @@ fn review_cancelled_history_does_not_poison_a_rebuilt_outpost_handover() {
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                borrowed_builder: None,
+                builder: None,
             },
             "oak",
             0

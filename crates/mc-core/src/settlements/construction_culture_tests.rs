@@ -19,7 +19,7 @@ fn spanish_blueprints_finish_through_paid_resident_construction() {
         fund(&mut state, name, 1);
         complete(&mut state, id, worker);
         let town = state.settlements.get(id).unwrap();
-        assert!(town.project.is_none(), "{name}");
+        assert!(town.projects.is_empty(), "{name}");
         let building = town.buildings.values().next().unwrap();
         assert_eq!(placement(&state, id, building).unwrap().0.id, name);
         assert!(spanish_faction(&state, town), "{name}");
@@ -67,16 +67,16 @@ fn style_follows_owner_cohort_but_not_names_pending_orders_or_unowned_peers() {
         &state,
         state.settlements.get(peer).unwrap()
     ));
-    state.settlements.get_mut(parent).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(parent).unwrap().orders = vec![OwnerOrder {
         blueprint: "spanish_house".into(),
         level: 1,
         building: None,
-    });
+    }];
     assert!(!spanish_faction(
         &state,
         state.settlements.get(peer).unwrap()
     ));
-    state.settlements.get_mut(parent).unwrap().pending_order = None;
+    state.settlements.get_mut(parent).unwrap().orders.clear();
     start(&mut state, parent, "spanish_house", 1, None);
     fund(&mut state, "spanish_house", 1);
     complete(&mut state, parent, worker);

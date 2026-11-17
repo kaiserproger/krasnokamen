@@ -19,7 +19,7 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
     // not only for a new site's preparation.
     project.building = Some(crate::settlements::buildings::BuildingId(1));
     let handle = project.structure.clone();
-    state.settlements.get_mut(id).unwrap().project = Some(project);
+    state.settlements.get_mut(id).unwrap().projects = vec![project];
     let builder = state.entities.row(builder).uuid.to_string();
     let before = counts(&state);
     let cells = [super::super::Cell {
@@ -53,13 +53,7 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
     crate::settlements::construction::tests::fund(&mut state, "storage", 1);
     crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let builder = state.entities.row(builder).uuid.to_string();

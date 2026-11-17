@@ -2211,7 +2211,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
             Target::Refresh,
         );
         let builder = project
-            .borrowed_builder
+            .builder
             .map(|(worker, _)| super::super::presentation::villager_name(worker).to_owned())
             .unwrap_or_else(|| {
                 tr(

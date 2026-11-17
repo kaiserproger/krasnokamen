@@ -272,7 +272,15 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
         fund(&mut state, name, 1);
         state.tick = state.tick.div_ceil(20) * 20;
         construction::tick(&mut state);
-        assert!(state.settlements.get(parent).unwrap().project.is_some());
+        assert!(
+            state
+                .settlements
+                .get(parent)
+                .unwrap()
+                .projects
+                .first()
+                .is_some()
+        );
         let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
         v.data.profession = VillagerProfession::Builder;
         v.activity = Activity::Work;
@@ -298,12 +306,12 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
                         .get(&id)
                         .is_some_and(|r| r.no_candidates);
                 state.tick += 1;
-                if state.settlements.get(parent).unwrap().project.is_none() {
+                if state.settlements.get(parent).unwrap().projects.is_empty() {
                     break;
                 }
             }
             assert!(
-                state.settlements.get(parent).unwrap().project.is_none(),
+                state.settlements.get(parent).unwrap().projects.is_empty(),
                 "native outside builder must finish the outpost house: status={:?} pos={:?} villager={:?}",
                 construction::project_status(&state, parent),
                 state.entities.pos(builder),

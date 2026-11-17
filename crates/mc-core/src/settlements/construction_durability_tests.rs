@@ -6,7 +6,7 @@ fn one_builder_advance_seals_block_debit_and_cursor_before_closed_writer_replay(
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let next = executor::next_cell(&state, id, &project.structure)
         .unwrap()
         .unwrap();

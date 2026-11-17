@@ -52,7 +52,7 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
     state.world.set_block(other[0], other[1], other[2], plant);
     fund(&mut state, "storage", 1);
     assert!(begin(&mut state, expected.clone(), "oak", 0));
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(project.origin, expected.origin);
     assert_eq!(
         executor::next_cell(&state, id, &project.structure).unwrap(),
@@ -68,13 +68,13 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
         .map(|at| (at, state.world.block_at(at[0], at[1], at[2]).unwrap()))
         .collect();
     for _ in 0..16 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
         attempt(&mut state, id, builder);
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "changed unpaid preparation must cancel, not resume its stale work cells"
     );
     let cancelled = executor::status(&state, id, &project.structure).unwrap();
@@ -86,8 +86,8 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
             .settlements
             .get(id)
             .unwrap()
-            .pending_order
-            .as_ref()
+            .orders
+            .first()
             .unwrap()
             .blueprint,
         "storage"
@@ -103,7 +103,7 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
         begin(&mut state, expected.clone(), "oak", 0),
         "the grown native tree can be recertified"
     );
-    let renewed = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let renewed = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(renewed.origin, expected.origin);
     let (_, cells) = planned_cells(&state, &renewed, "oak", &mut Default::default()).unwrap();
     for &(at, _) in &grown {
@@ -154,7 +154,7 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
             .contains(&root)
     );
     complete(&mut state, id, builder);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 #[test]

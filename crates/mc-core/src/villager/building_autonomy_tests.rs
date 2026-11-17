@@ -375,8 +375,8 @@ fn seed_100_west_unemployed_resident_is_assigned_to_funded_storage() {
             .settlements
             .get(id)
             .unwrap()
-            .project
-            .as_ref()
+            .projects
+            .first()
             .is_some_and(|project| project.blueprint == "storage" && project.level == 1);
         if assigned && started {
             return;
@@ -384,7 +384,7 @@ fn seed_100_west_unemployed_resident_is_assigned_to_funded_storage() {
     }
     panic!(
         "west unemployed resident was not assigned to funded Storage L1; project={:?}",
-        state.settlements.get(id).unwrap().project
+        state.settlements.get(id).unwrap().projects
     );
 }
 
@@ -498,8 +498,8 @@ fn seed_100_builder_continues_after_first_storage_through_native_ticks() {
         crate::tick::run_tick(&mut state, &[]);
         let record = state.settlements.get(id).unwrap();
         let current = record
-            .project
-            .as_ref()
+            .projects
+            .first()
             .map(|p| (p.blueprint.as_str(), p.level, p.origin));
         if current
             != previous
@@ -636,8 +636,8 @@ fn empty_village_gathers_and_starts_storage_through_native_ticks() {
                 .settlements
                 .get(id)
                 .unwrap()
-                .project
-                .as_ref()
+                .projects
+                .first()
                 .is_some_and(|project| project.blueprint == "storage")
         {
             return;
@@ -730,9 +730,13 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
         // Deterministic work budget for the whole run (closure uses about
         // 20,000 full proofs and 870,000 recipe candidates). Disabling the
         // recipe index, dependency admission or the funding memo exceeds it.
+        // D8's funded-first queue scan adds one proof per queued request that
+        // waits behind an unfunded head: measured 21,033 proofs and 1,500,239
+        // recipe candidates on 2026-11-18, so the candidate bound rises to
+        // 1,700,000 while the proof bound stays 30,000.
         let work = crate::settlements::construction_crafting::scan_stats();
         assert!(
-            work.funding_calls <= 30_000 && work.recipes_scanned <= 1_500_000,
+            work.funding_calls <= 30_000 && work.recipes_scanned <= 1_700_000,
             "construction funding work exceeded its budget at tick {}: {work:?}",
             state.tick
         );

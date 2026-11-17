@@ -1007,7 +1007,7 @@ fn mine_upgrade_finishes_while_the_miner_has_a_live_entrance_shaft() {
     site::start(&mut state, id, "mine", 2, Some(bid));
     site::fund(&mut state, "mine", 2);
     for _ in 0..4096 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
         // The Miner's real work entrypoint, one attempt per Builder attempt.
@@ -1029,9 +1029,9 @@ fn mine_upgrade_finishes_while_the_miner_has_a_live_entrance_shaft() {
     }
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.project.is_none(),
+        record.projects.is_empty(),
         "the upgrade finishes: {:?}",
-        record.project.as_ref().map(
+        record.projects.first().map(
             |project| crate::plugin_structures::settlement_builds::status(
                 &state,
                 id,

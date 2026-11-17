@@ -86,18 +86,29 @@ fn pending_owner_order_survives_native_checkpoint_and_rejects_corruption() {
     let _ = construction::request_build(&mut live, id, "house");
     let rows = checkpoint_rows(&live, 9).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&rows[&row_key(id)].payload).unwrap();
-    assert_eq!(value["value"]["pending_order"]["blueprint"], "house");
+    assert_eq!(value["value"]["orders"][0]["blueprint"], "house");
     let mut restored = state();
     hydrate_dimension(&mut restored, &rows, &Replay::default(), id.0).unwrap();
     assert_eq!(restored.settlements.get(id), live.settlements.get(id));
-    let mut old_rows = rows.clone();
-    let mut old_value = value.clone();
-    old_value["value"]
-        .as_object_mut()
-        .unwrap()
-        .remove("pending_order");
-    old_rows.get_mut(&row_key(id)).unwrap().payload = serde_json::to_vec(&old_value).unwrap();
-    hydrate_dimension(&mut state(), &old_rows, &Replay::default(), id.0).unwrap();
+    // The clean break: a pre-D8 row still carries the removed key (an unknown
+    // field here), and a row that lost the new required key refuses too.
+    for (case, key, value_) in [
+        ("legacy key present", "pending_order", serde_json::json!([])),
+        ("required key absent", "orders", serde_json::Value::Null),
+    ] {
+        let mut old_rows = rows.clone();
+        let mut old_value = value.clone();
+        if value_.is_null() {
+            old_value["value"].as_object_mut().unwrap().remove(key);
+        } else {
+            old_value["value"][key] = value_;
+        }
+        old_rows.get_mut(&row_key(id)).unwrap().payload = serde_json::to_vec(&old_value).unwrap();
+        assert!(
+            hydrate_dimension(&mut state(), &old_rows, &Replay::default(), id.0).is_err(),
+            "{case}: the row must refuse"
+        );
+    }
     for corrupt in [
         serde_json::json!({"blueprint": "", "level": 1, "building": null}),
         serde_json::json!({"blueprint": "unknown", "level": 1, "building": null}),
@@ -107,7 +118,7 @@ fn pending_owner_order_survives_native_checkpoint_and_rejects_corruption() {
     ] {
         let mut corrupt_rows = rows.clone();
         let mut corrupt_value = value.clone();
-        corrupt_value["value"]["pending_order"] = corrupt;
+        corrupt_value["value"]["orders"] = serde_json::json!([corrupt]);
         corrupt_rows.get_mut(&row_key(id)).unwrap().payload =
             serde_json::to_vec(&corrupt_value).unwrap();
         assert!(hydrate_dimension(&mut state(), &corrupt_rows, &Replay::default(), id.0).is_err());
@@ -285,9 +296,9 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
                     economy: Default::default(),
                     village_source: None,
                     bootstrap_storage: None,
-                    project: None,
+                    projects: Vec::new(),
                     furnace_workstation: None,
-                    pending_order: None,
+                    orders: Vec::new(),
                     construction_cursor: 0,
                     founding: None,
                 },
@@ -322,9 +333,9 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
                 economy: Default::default(),
                 village_source: None,
                 bootstrap_storage: None,
-                project: None,
+                projects: Vec::new(),
                 furnace_workstation: None,
-                pending_order: None,
+                orders: Vec::new(),
                 construction_cursor: 0,
                 founding: None,
             }),
@@ -356,9 +367,9 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             economy: Default::default(),
             village_source: None,
             bootstrap_storage: None,
-            project: None,
+            projects: Vec::new(),
             furnace_workstation: None,
-            pending_order: None,
+            orders: Vec::new(),
             construction_cursor: 0,
             founding: None,
         }),
@@ -384,9 +395,9 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             economy: Default::default(),
             village_source: None,
             bootstrap_storage: None,
-            project: None,
+            projects: Vec::new(),
             furnace_workstation: None,
-            pending_order: None,
+            orders: Vec::new(),
             construction_cursor: 0,
             founding: None,
         }),

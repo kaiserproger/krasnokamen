@@ -49,16 +49,17 @@ pub struct SettlementRecord {
     pub village_source: Option<String>,
     #[serde(default)]
     pub bootstrap_storage: Option<[i32; 3]>,
-    #[serde(default)]
-    pub project: Option<super::construction::Project>,
+    /// Active construction projects, in admission order. D8: several projects
+    /// build at once; no `serde(default)`, so a row without this key refuses.
+    pub projects: Vec<super::construction::Project>,
     /// Reference to the canonical committed one-cell furnace structure.
     /// Discovery validates the ledger record and live block, not this pointer alone.
     #[serde(default)]
     pub(crate) furnace_workstation: Option<String>,
-    /// One owner request. Fundable growth housing precedes optional orders;
-    /// otherwise the request is retried before autonomous planning.
-    #[serde(default)]
-    pub pending_order: Option<super::construction::OwnerOrder>,
+    /// Owner requests in submission order. The planner starts the head unless a
+    /// later request is funded; no `serde(default)`, so a row without this key
+    /// refuses.
+    pub orders: Vec<super::construction::OwnerOrder>,
     #[serde(default)]
     pub construction_cursor: u32,
     #[serde(default)]
@@ -508,9 +509,9 @@ impl Registry {
             economy: super::economy::State::default(),
             village_source: None,
             bootstrap_storage: None,
-            project: None,
+            projects: Vec::new(),
             furnace_workstation: None,
-            pending_order: None,
+            orders: Vec::new(),
             construction_cursor: 0,
             founding: None,
         };
@@ -559,9 +560,9 @@ impl Registry {
             economy: super::economy::State::default(),
             village_source: Some(source.to_owned()),
             bootstrap_storage: None,
-            project: None,
+            projects: Vec::new(),
             furnace_workstation: None,
-            pending_order: None,
+            orders: Vec::new(),
             construction_cursor: 0,
             founding: None,
         };

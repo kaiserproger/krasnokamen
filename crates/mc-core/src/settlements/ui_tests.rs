@@ -261,7 +261,7 @@ fn click(
         "project_order" | "project_upgrade" | "project_cancel_pending"
     ) && let Some(record) = state.settlements.get(id)
     {
-        let pending = record.pending_order.as_ref();
+        let pending = record.orders.first();
         for (key, value) in [
             (
                 "pending_blueprint",
@@ -590,7 +590,7 @@ fn non_owner_sees_the_screens_read_only_and_every_mutating_click_is_refused() {
     }
     let record = state.settlements.get(id).unwrap();
     assert!(record.buildings.is_empty());
-    assert!(record.project.is_none());
+    assert!(record.projects.is_empty());
     assert_eq!(record.name, "oak");
 }
 
@@ -1203,7 +1203,7 @@ fn autonomous_dialog_claim_requires_live_presence_and_refreshes_management() {
         click(&mut state, id, action, &extra);
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "even an operator must claim before ordering construction"
     );
     let entity = state.connections.entity_of(CONN).unwrap();
@@ -1274,7 +1274,7 @@ fn blueprint_build(state: &mut TickState, id: SettlementId, blueprint: &str) -> 
     start(state, id, blueprint, 1, None);
     fund(state, blueprint, 1);
     complete(state, id, slot);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     *state
         .settlements
         .get(id)
@@ -1354,18 +1354,18 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
             .settlements
             .get(id)
             .unwrap()
-            .pending_order
-            .as_ref()
+            .orders
+            .first()
             .unwrap()
             .blueprint,
         "watch_tower"
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
     assert!(status.body.contains("Watchtower"), "{}", status.body);
     let cancelled = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
     assert!(cancelled.body.contains("Pending order cancelled."));
-    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert!(state.settlements.get(id).unwrap().orders.is_empty());
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert_eq!(state.world.block_at(8, 201, 8), before_block);
     assert_eq!(poor.title, page.title);
@@ -1388,8 +1388,9 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .expect("funded order starts immediately");
     assert_eq!(project.blueprint, "watch_tower");
     assert_eq!(project.level, 1);
@@ -1416,21 +1417,14 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
             .settlements
             .get(id)
             .unwrap()
-            .pending_order
-            .as_ref()
+            .orders
+            .first()
             .unwrap()
             .blueprint,
         "house"
     );
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .expect("active project kept")
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "watch_tower"
     );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, before);
@@ -1454,7 +1448,7 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                 "project_order",
                 &[("blueprint", string("spanish_plaza"))],
             );
-            let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+            let project = &state.settlements.get(id).unwrap().projects[0];
             assert_eq!(project.blueprint, "spanish_plaza");
             let snapshot =
                 crate::plugin_structures::settlement_builds::status(&state, id, &project.structure)
@@ -1471,8 +1465,8 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                     .settlements
                     .get(id)
                     .unwrap()
-                    .pending_order
-                    .as_ref()
+                    .orders
+                    .first()
                     .unwrap()
                     .blueprint,
                 pending
@@ -1546,7 +1540,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         }],
     ));
     assert!(stale.body.contains("changed"), "{}", stale.body);
-    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert!(state.settlements.get(id).unwrap().orders.is_empty());
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     let record = state.settlements.get_mut(id).unwrap();
     record.buildings.get_mut(&building).unwrap().level = 1;
@@ -1566,13 +1560,13 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
             .settlements
             .get(id)
             .unwrap()
-            .pending_order
-            .as_ref()
+            .orders
+            .first()
             .unwrap()
             .building,
         Some(building)
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     click(&mut state, id, "project_cancel_pending", &[]);
 
@@ -1598,8 +1592,9 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .expect("funded upgrade starts immediately");
     assert_eq!(project.building, Some(building));
     assert_eq!(project.level, 2);
@@ -1693,12 +1688,12 @@ fn projects_show_localized_missing_owned_furnace_for_house_wool() {
     chest.slots[0] = mc_data::ItemStack::new(raw, 2);
     chest.slots[1] = mc_data::ItemStack::new(coal, 1);
     chest.slots[2] = mc_data::ItemStack::new(logs, 64);
-    state.settlements.get_mut(id).unwrap().pending_order =
-        Some(crate::settlements::construction::OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders =
+        vec![crate::settlements::construction::OwnerOrder {
             blueprint: "house".into(),
             level: 1,
             building: None,
-        });
+        }];
     let english = last_dialog(&click(&mut state, id, "project_status", &[]));
     assert!(
         english.body.contains("needs a settlement-owned furnace"),
@@ -1790,7 +1785,7 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
     assert!(!details.has("project_cancel_review"));
     let denied = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
     assert!(denied.body.contains("Only the owner or an operator"));
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
     state.settlements.get_mut(id).unwrap().owner = Some(PLAYER.into());
     set_locale(&mut state, "ru_ru");
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
@@ -1806,7 +1801,7 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
     assert!(review.has("project_cancel_pending"));
     let cancelled = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
     assert!(cancelled.body.contains("Заказ в очереди отменён."));
-    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert!(state.settlements.get(id).unwrap().orders.is_empty());
 }
 
 #[test]
@@ -1938,8 +1933,9 @@ fn project_status_active_shows_readable_progress() {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .expect("native admitted project");
     let snapshot =
         crate::plugin_structures::settlement_builds::status(&state, id, &project.structure)
@@ -2013,7 +2009,7 @@ fn projects_clicks_are_read_only_for_visitors_and_forged_payloads_start_nothing(
             "{action}"
         );
     }
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 
     // Owner clicks with forged or stale payloads start nothing and stay on page.
     let mut state = joined(0);
@@ -2039,7 +2035,7 @@ fn projects_clicks_are_read_only_for_visitors_and_forged_payloads_start_nothing(
         &[("b", string(&(5u64 << 32 | 1).to_string()))],
     ));
     assert!(foreign.body.contains("no longer exists"));
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 // ------------------------------------------------------------------ localisation
@@ -2164,7 +2160,7 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
         }],
     ));
     assert!(queued.body.contains("Pending: House L1"), "{}", queued.body);
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
     for payload in [
         cached,
         Tag::Compound(vec![
@@ -2182,7 +2178,7 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
         ));
         assert!(refused.body.contains("changed"), "{}", refused.body);
         let record = state.settlements.get(id).unwrap();
-        assert!(record.project.is_none() && record.pending_order.is_some());
+        assert!(record.projects.is_empty() && record.orders.first().is_some());
     }
     click(
         &mut state,
@@ -2190,10 +2186,10 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
         "project_order",
         &[("blueprint", string("house"))],
     );
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
     let entity = state.connections.entity_of(CONN).unwrap();
     state.players.get_mut(&entity).unwrap().game_mode = crate::commands::GameMode::Spectator;
     let refused = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
     assert!(refused.body.contains("Only the owner or an operator"));
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
 }

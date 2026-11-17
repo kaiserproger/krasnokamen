@@ -79,11 +79,17 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
     ));
     let outcome = request_build(&mut state, id, "lumber_camp").unwrap();
     assert!(
-        state.settlements.get(id).unwrap().project.is_some(),
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some(),
         "funded admission: {outcome:?}"
     );
     for _ in 0..4096 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
         attempt(&mut state, id, builder);
@@ -99,7 +105,7 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
             )
         })
         .collect();
-    if let Some(project) = state.settlements.get(id).unwrap().project.as_ref() {
+    if let Some(project) = state.settlements.get(id).unwrap().projects.first() {
         panic!(
             "remaining stock: {stock:?}; status={:?}; next={:?}; material={:?}; carry={:?}",
             project_status(&state, id),
@@ -147,7 +153,7 @@ fn storage_order_uses_acacia_logs_without_oak() {
         chest.slots[slot] = ItemStack::new(item, count);
     }
     request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(project.blueprint, "storage");
     complete(&mut state, id, builder);
     let building = state
@@ -247,7 +253,7 @@ pub(crate) fn start(
             building,
             structure: String::new(),
             ordered: true,
-            borrowed_builder: None,
+            builder: None,
         },
         "oak",
         0,
@@ -290,8 +296,8 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .as_ref()
+        .projects
+        .first()
         .and_then(|project| {
             executor::next_material(state, id, &project.structure)
                 .ok()
@@ -359,12 +365,12 @@ pub(crate) fn clear_work_diff_trees(state: &mut TickState, min: [i32; 3], max: [
 
 pub(crate) fn complete(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     for _ in 0..4096 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             return;
         }
         attempt(state, id, slot);
     }
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     panic!(
         "construction did not finish: {:?}; next={:?}; material={:?}; builder={:?}; carry={:?}",
         project_status(state, id),
@@ -399,13 +405,7 @@ fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
     chest[1] = ItemStack::new(acacia, 64);
     chest[2] = ItemStack::new(cobble, 64);
     plan(&mut state, id);
-    let project = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .expect("acacia stock funds storage");
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
     let log = first_log(&state, project);
     complete(&mut state, id, slot);
@@ -448,13 +448,7 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
         } else {
             plan(&mut state, id);
         }
-        let project = state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .expect("oak bill funds storage despite acacia stock");
+        let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, "storage");
         let log = first_log(&state, project);
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[25] =
@@ -486,19 +480,19 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "storage", 1);
     for _ in 0..128 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "storage"
     );
     complete(&mut state, id, slot);
@@ -509,19 +503,19 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "house", 1);
     for _ in 0..4096 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "house"
     );
 }
@@ -646,7 +640,7 @@ fn builder_hauls_before_shared_executor_debits_and_journals_a_single_cell() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     let item = executor::next_material(&state, id, &project.structure)
         .unwrap()
         .unwrap()
@@ -772,7 +766,7 @@ fn builder_haul_fits_the_real_carry_and_moves_exactly_what_it_loads() {
 fn builder_stalls_without_stock_then_consumes_exact_materials_in_order_and_certifies() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     let before = executor::status(&state, id, &project.structure).unwrap();
     for _ in 0..4 {
@@ -851,7 +845,7 @@ fn upgrade_uses_diff_and_certifies_level_two() {
         .unwrap();
     let old_writes = state.plugin_block_writes.len();
     start(&mut state, id, "house", 2, Some(building));
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     fund(&mut state, "house", 2);
     complete(&mut state, id, slot);
@@ -927,17 +921,17 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     for _ in 0..5 {
         attempt(&mut state, id, slot);
     }
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let snapshot = executor::status(&state, id, &project.structure).unwrap();
     assert!(snapshot.completed_work_units > 0);
     assert!(matches!(
         request_build(&mut state, id, "watch_tower").unwrap(),
         OrderOutcome::Queued { reason } if reason == "busy"
     ));
-    assert_eq!(
-        request_build(&mut state, id, "farm").unwrap_err(),
-        "Construction queue is full: watch_tower is already pending. Cancel it before another order."
-    );
+    assert!(matches!(
+        request_build(&mut state, id, "farm").unwrap(),
+        OrderOutcome::Queued { reason } if reason == "busy"
+    ));
     let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
     let ledger = serde_json::to_vec(
         state
@@ -979,7 +973,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     );
     assert_eq!(restored.settlements.get(id), state.settlements.get(id));
     complete(&mut restored, id, restored_slot);
-    assert!(restored.settlements.get(id).unwrap().project.is_none());
+    assert!(restored.settlements.get(id).unwrap().projects.is_empty());
     assert!(
         restored.block_entities[&(1, 201, 1)]
             .slots
@@ -989,16 +983,28 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     fund(&mut restored, "watch_tower", 1);
     for _ in 0..128 {
         plan(&mut restored, id);
-        if restored.settlements.get(id).unwrap().project.is_some() {
+        if restored
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
     let record = restored.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    let next = record
-        .project
-        .as_ref()
-        .expect("the restored FIFO order starts first");
+    assert_eq!(
+        record
+            .orders
+            .iter()
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["farm"],
+        "the request behind the started one keeps its place"
+    );
+    let next = &record.projects[0];
     assert_eq!(next.blueprint, "watch_tower");
     assert!(next.ordered);
 }
@@ -1047,7 +1053,7 @@ fn removing_settlement_cancels_canonical_work_without_destroying_carried_materia
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     building::tick(&mut state, id);
     let carry = state
         .entities
@@ -1096,7 +1102,7 @@ fn native_clear_and_build_stages_validate_before_and_after_a_restart_boundary() 
     let grass = block(&state, "minecraft:short_grass", &[]);
     state.world.set_block(4, 201, 4, grass);
     start(&mut state, id, "house", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     crate::plugin_structures::validate(&state).expect("clear+build stages have unique cells");
     building::tick(&mut state, id);
     crate::plugin_structures::validate(&state)
@@ -1113,13 +1119,7 @@ fn builder_places_carried_cells_on_four_tick_admissions() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let (item, quantity) = executor::next_material(&state, id, &handle)
@@ -1165,14 +1165,7 @@ fn builder_leaves_future_footprint_before_first_placement() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
-    let project = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
-        .clone();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let size = blueprints::get(&state.registry, &project.blueprint)
         .unwrap()
         .footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
@@ -1227,13 +1220,7 @@ fn builder_walks_to_solid_storage_then_selects_exact_site_target() {
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
     state.entities.set_pos(slot, [14.5, 201.0, 14.5]);
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let (item, _) = executor::next_material(&state, id, &handle)
@@ -1304,13 +1291,7 @@ fn builder_perimeter_goal_keeps_body_outside_footprint_at_arrival_tolerance() {
         let (mut state, id, slot) = fixture();
         start(&mut state, id, "house", 1, None);
         fund(&mut state, "house", 1);
-        let handle = state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
+        let handle = state.settlements.get(id).unwrap().projects[0]
             .structure
             .clone();
         // Fetch the real first stack at the chest, then take the exact goal.
@@ -1356,13 +1337,13 @@ fn builder_finishes_a_house_through_real_movement() {
         state.tick_budget.reset(now);
         let mut changes = ChangeSet::default();
         crate::settlements::tick(&mut state, &mut changes);
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             return;
         }
         crate::villager::brain::tick(&mut state, &mut changes);
         state.world.fold_overlay();
     }
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let v = state.entities.row(slot).villager.as_ref().unwrap();
     panic!(
         "house stalled: {:?}\nnext={:?} material={:?} builder={:?} target={:?} path={:?} activity={:?} carry={:?}",
@@ -1457,7 +1438,7 @@ fn builder_builds_a_house_from_remote_shell_storage_within_ten_minutes() {
         state.tick_budget.reset(now);
         changes = ChangeSet::default();
         crate::settlements::tick(&mut state, &mut changes);
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             eprintln!("house finished at tick {now}");
             return;
         }
@@ -1465,7 +1446,7 @@ fn builder_builds_a_house_from_remote_shell_storage_within_ten_minutes() {
         state.world.fold_overlay();
     }
     let _ = changes;
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let v = state.entities.row(slot).villager.as_ref().unwrap();
     let door = |y| {
         state
@@ -1536,7 +1517,7 @@ fn gate_level_one_is_built_cell_for_cell_in_every_rotation() {
                 building: None,
                 structure: String::new(),
                 ordered: true,
-                borrowed_builder: None,
+                builder: None,
             },
             "oak",
             0,

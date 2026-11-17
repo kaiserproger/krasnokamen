@@ -8,7 +8,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
         let (mut state, id, slot) = fixture();
         start(&mut state, id, "house", 1, None);
         fund(&mut state, "house", 1);
-        let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+        let project = state.settlements.get(id).unwrap().projects[0].clone();
         let (cell, expected) = first_cell(&state, "house", "oak_log");
         for _ in 0..4096 {
             if state.world.block_at(cell[0], cell[1], cell[2]) == Some(expected) {
@@ -20,7 +20,15 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             state.world.block_at(cell[0], cell[1], cell[2]),
             Some(expected)
         );
-        assert!(state.settlements.get(id).unwrap().project.is_some());
+        assert!(
+            state
+                .settlements
+                .get(id)
+                .unwrap()
+                .projects
+                .first()
+                .is_some()
+        );
         let log = state
             .registry
             .items
@@ -96,7 +104,15 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             state.world.block_at(cell[0], cell[1], cell[2]),
             Some(state.registry.states.air)
         );
-        assert!(state.settlements.get(id).unwrap().project.is_some());
+        assert!(
+            state
+                .settlements
+                .get(id)
+                .unwrap()
+                .projects
+                .first()
+                .is_some()
+        );
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots = saved_stock;
         state
             .entities
@@ -175,7 +191,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             Some(expected),
             "restart={restart}"
         );
-        assert!(state.settlements.get(id).unwrap().project.is_none());
+        assert!(state.settlements.get(id).unwrap().projects.is_empty());
     }
 }
 
@@ -198,7 +214,7 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "farm", 1, None);
     fund(&mut state, "farm", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (soil, soil_state) = first_cell(&state, "farm", "farmland");
     let (crop, crop_state) = first_cell(&state, "farm", "wheat");
     for _ in 0..4096 {
@@ -210,7 +226,13 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
         attempt(&mut state, id, slot);
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_some(),
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some(),
         "evolution occurs mid-build"
     );
     assert_eq!(
@@ -240,7 +262,7 @@ fn foreign_plank_replacement_pauses_without_debit_then_next_admission_resumes_an
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (plank, plank_state) = first_cell(&state, "house", "oak_planks");
     for _ in 0..4096 {
         if state.world.block_at(plank[0], plank[1], plank[2]) == Some(plank_state) {
@@ -248,7 +270,15 @@ fn foreign_plank_replacement_pauses_without_debit_then_next_admission_resumes_an
         }
         attempt(&mut state, id, slot);
     }
-    assert!(state.settlements.get(id).unwrap().project.is_some());
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+    );
     let before = executor::status(&state, id, &project.structure).unwrap();
     let writes = state.plugin_block_writes.len();
     state
@@ -335,7 +365,7 @@ fn complete_authored(
     cells: &[([i32; 3], u32)],
 ) {
     for _ in 0..8192 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             for (at, authored) in cells {
                 assert_eq!(
                     state.world.block_at(at[0], at[1], at[2]),
@@ -392,7 +422,13 @@ fn a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies() {
         attempt(&mut state, id, slot);
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_some(),
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some(),
         "the log is placed mid-build"
     );
     state
@@ -427,7 +463,7 @@ fn a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_pr
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (log, log_state) = first_cell(&state, "house", "oak_log");
     let log_item = item_id(&state, "minecraft:oak_log");
     add_spare(&mut state, log_item, 2);
@@ -449,7 +485,15 @@ fn a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_pr
         }
         attempt(&mut state, id, slot);
     }
-    assert!(state.settlements.get(id).unwrap().project.is_some());
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+    );
     complete_authored(&mut state, id, slot, &[(log, log_state)]);
     assert_eq!(state.settlements.get(id).unwrap().buildings.len(), 1);
     crate::plugin_structures::validate(&state).unwrap();
@@ -460,7 +504,7 @@ fn a_second_break_during_the_repair_requeues_the_repair_stage() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (log, log_state) = first_cell(&state, "house", "oak_log");
     let (plank, plank_state) = first_cell(&state, "house", "oak_planks");
     for name in ["minecraft:oak_log", "minecraft:oak_planks"] {

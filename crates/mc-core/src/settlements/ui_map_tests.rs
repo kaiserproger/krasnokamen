@@ -324,7 +324,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
     crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!((project.origin, project.rotation), ([11, 200, 13], 1));
     let grid = grid(&ctx(id), &state, state.settlements.get(id).unwrap(), None);
     // Storage is 9 wide and 5 deep; turned once it covers x 11..15, z 13..21.
@@ -780,6 +780,6 @@ fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
             .iter()
             .all(|action| action == "krasnokamen:settlement/map")
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
-    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    assert!(state.settlements.get(id).unwrap().orders.is_empty());
 }

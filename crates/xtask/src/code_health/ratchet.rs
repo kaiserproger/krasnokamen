@@ -60,17 +60,21 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     path_equality: 113,
     panics: 5,
     merge_block_write_pushes: 17,
-    // D9 baseline on b58021e61, 2026-11-17, was 31; D8 moved every read outside
-    // the construction module behind `settlements/construction_access.rs`, so
-    // the interface is the only place that names these fields: 0 on the D8
-    // branch. Any new access outside `settlements/construction*.rs` fails.
+    // D9 baseline on b58021e61, 2026-11-17, was 31 field accesses; D8 moved
+    // every read outside the construction module behind
+    // `settlements/construction_access.rs` and renamed the fields to
+    // `projects`/`orders` in the same change, so the matcher follows the names
+    // in use. 0 on the D8 branch; any new access outside
+    // `settlements/construction*.rs` fails.
     construction_field_accesses: 0,
     hot_files: &[
         ("tick/entity_phase.rs", 734),
         // D8 moved the record's construction fields behind
         // `settlements/construction_access.rs`; 1028 after the split, measured
-        // on the D8 branch, 2026-11-17.
-        ("settlements/construction.rs", 1_028),
+        // on the D8 branch, 2026-11-17. The store flip and the queue rules
+        // (S1b: project/order vectors, funded-first plan, binding liveness) add
+        // 30: 1058.
+        ("settlements/construction.rs", 1_058),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],
@@ -120,7 +124,7 @@ fn describe(counter: Counter) -> (&'static str, &'static str, &'static str) {
              any receiver named `merge_block_writes` whatever its type",
         ),
         Counter::ConstructionFieldAccess => (
-            "`.project`/`.pending_order` accesses outside construction",
+            "`.projects`/`.orders` accesses outside construction",
             "construction state escapes its owner; use the construction interface",
             "field names are a structural proxy for SettlementRecord, without \
              receiver type resolution; unrelated same-named fields count too",

@@ -99,7 +99,7 @@ pub(crate) fn forest() -> (
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
     };
     let root = [lot.origin[0] + 2, 201, lot.origin[2] + 2];
     let corridor = network.construction_access(&project).unwrap();
@@ -204,7 +204,7 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let log = state.world.block_at(root[0], root[1], root[2]).unwrap();
     construction::request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.origin, expected.origin);
     assert_eq!(
         state.block_entities[&(1, 201, 1)].slots,
@@ -218,7 +218,7 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
     );
     let old = count(&state, "minecraft:birch_log");
     for _ in 0..4096 {
-        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+        let project = &state.settlements.get(id).unwrap().projects[0];
         if crate::plugin_structures::settlement_builds::next_material(
             &state,
             id,
@@ -279,7 +279,7 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
         }
     }
     complete(&mut state, id, builder);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     let building = state
         .settlements
         .get(id)
@@ -334,7 +334,7 @@ fn updated_leaf_distance_remains_clearable_without_ignoring_other_properties() {
     fund(&mut state, "storage", 1);
     construction::request_build(&mut state, id, "storage").unwrap();
     complete(&mut state, id, builder);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 #[test]
@@ -460,7 +460,7 @@ fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
         construction::request_build(&mut state, id, "storage").unwrap(),
         construction::OrderOutcome::Queued { .. }
     ));
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
     let active = state.world.chunks().map(|chunk| chunk.pos).collect();
     state.world.set_active_chunks(active, state.tick);
     let generator = state.world.generator();
@@ -474,13 +474,20 @@ fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
         }
         state.tick += 4;
         construction::tick(&mut state);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
     let record = state.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    assert_eq!(record.project.as_ref().unwrap().origin, project.origin);
+    assert!(record.orders.is_empty());
+    assert_eq!(record.projects[0].origin, project.origin);
 }
 
 #[cfg(target_os = "linux")]
@@ -808,13 +815,7 @@ fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
     let (mut state, id, builder, _, _, _) = forest();
     fund(&mut state, "storage", 1);
     construction::request_build(&mut state, id, "storage").unwrap();
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let (next, previous) = (0..64)
@@ -929,7 +930,15 @@ fn protected_crown_above_access_headroom_stays_while_the_building_finishes() {
     assert!(!clearable(&state, at));
     fund(&mut state, "storage", 1);
     construction::request_build(&mut state, id, "storage").unwrap();
-    assert!(state.settlements.get(id).unwrap().project.is_some());
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+    );
     complete(&mut state, id, builder);
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(leaves));
 }
@@ -1299,7 +1308,7 @@ fn guide_builder(state: &mut TickState, slot: crate::entities::EntitySlot) {
             state
                 .settlements
                 .get(id)
-                .and_then(|record| record.project.as_ref().map(|project| (id, project)))
+                .and_then(|record| record.projects.first().map(|project| (id, project)))
         })
         .and_then(|(id, project)| {
             crate::plugin_structures::settlement_builds::next_material(
@@ -1405,14 +1414,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     let checkpoint_cursor = crate::plugin_structures::settlement_builds::status(
         &state,
         id,
-        &state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        &state.settlements.get(id).unwrap().projects[0].structure,
     )
     .unwrap()
     .completed_work_units;
@@ -1470,13 +1472,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
         !felled.is_empty(),
         "the unsealed batch contains the physical tree cut"
     );
-    let before_project = before
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap();
+    let before_project = &before.settlements.get(id).unwrap().projects[0];
     let before_cursor =
         crate::plugin_structures::settlement_builds::status(&before, id, &before_project.structure)
             .unwrap()
@@ -1490,14 +1486,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     let expected_cursor = crate::plugin_structures::settlement_builds::status(
         &state,
         id,
-        &state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        &state.settlements.get(id).unwrap().projects[0].structure,
     )
     .unwrap()
     .completed_work_units;
@@ -1542,13 +1531,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
             Some(restored.registry.states.air)
         );
     }
-    let project = restored
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap();
+    let project = &restored.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         crate::plugin_structures::settlement_builds::status(&restored, id, &project.structure)
             .unwrap()
@@ -1559,13 +1542,8 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     // Unpaid interference recovery may requeue; keep native ticks running
     // until that order is re-admitted rather than ending at cancellation.
     for _ in 0..10_000 {
-        if restored.settlements.get(id).unwrap().project.is_none()
-            && restored
-                .settlements
-                .get(id)
-                .unwrap()
-                .pending_order
-                .is_none()
+        if restored.settlements.get(id).unwrap().projects.is_empty()
+            && restored.settlements.get(id).unwrap().orders.is_empty()
         {
             break;
         }
@@ -1577,13 +1555,8 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     }
     assert_eq!(count(&restored, "minecraft:birch_log"), baseline + 8);
     for _ in 0..36_000 {
-        if restored.settlements.get(id).unwrap().project.is_none()
-            && restored
-                .settlements
-                .get(id)
-                .unwrap()
-                .pending_order
-                .is_none()
+        if restored.settlements.get(id).unwrap().projects.is_empty()
+            && restored.settlements.get(id).unwrap().orders.is_empty()
         {
             break;
         }
@@ -1591,7 +1564,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
         crate::tick::run_tick(&mut restored, &[]);
     }
     assert!(
-        restored.settlements.get(id).unwrap().project.is_none(),
+        restored.settlements.get(id).unwrap().projects.is_empty(),
         "status={:?} day={} builder={:?}",
         construction::project_status(&restored, id),
         restored.day_time,

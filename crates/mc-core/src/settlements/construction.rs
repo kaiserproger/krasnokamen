@@ -33,6 +33,11 @@ pub(super) mod founding;
 pub(super) mod site_refusals;
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
+/// Active projects a settlement may hold at once. S1b keeps one until the
+/// executor addresses every lookup by binding (S2 raises it to 8).
+pub(crate) const MAX_PROJECTS: usize = 1;
+/// Owner requests kept in the queue; a request beyond it is refused by name.
+pub(crate) const MAX_ORDERS: usize = 8;
 
 /// A same-dimension native outpost. Construction stage and culture are derived
 /// from committed structures; lineage belongs to the run's audit, not this row.
@@ -60,10 +65,12 @@ pub struct Project {
     /// including autonomous work that has not placed a cell yet.
     #[serde(default)]
     pub ordered: bool,
-    /// Temporary builder identity and original profession, restored on release.
-    pub borrowed_builder: Option<(uuid::Uuid, Profession)>,
+    /// The resident bound to this project and the profession to restore on
+    /// release (`None` for a native Builder). One binding per project, and a
+    /// villager is bound to at most one project.
+    pub builder: Option<(uuid::Uuid, Option<Profession>)>,
 }
-/// The sole pending owner request, stored in the settlement post-image.
+/// One pending owner request, stored in the settlement post-image.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerOrder {
@@ -139,10 +146,8 @@ pub(crate) fn owner_upgrade_level(
     let target = record.buildings.get(&building)?;
     let (blueprint, ..) = upgrade_blueprint(state, id, target)?;
     let current = if claim_slot(state, id).is_err() {
-        record
-            .project
-            .as_ref()
-            .filter(|project| project.building == Some(building))
+        access::projects(record)
+            .find(|project| project.building == Some(building))
             .map_or(target.level, |project| project.level)
     } else {
         target.level
@@ -167,22 +172,17 @@ fn submit_order(
     id: SettlementId,
     order: OwnerOrder,
 ) -> Result<OrderOutcome, String> {
-    if let Some(pending) = state
+    if state
         .settlements
         .get(id)
-        .and_then(|record| record.pending_order.as_ref())
+        .is_none_or(|record| access::orders(record).count() >= MAX_ORDERS)
     {
         return Err(format!(
-            "Construction queue is full: {} is already pending. Cancel it before another order.",
-            pending.blueprint
+            "Construction queue is full: {MAX_ORDERS} orders are pending. Cancel one before another order."
         ));
     }
     match start_order(state, id, &order, None) {
-        Ok(()) => {
-            let record = state.settlements.get_mut(id).expect("admitted settlement");
-            record.pending_order = None;
-            Ok(OrderOutcome::Started)
-        }
+        Ok(()) => Ok(OrderOutcome::Started),
         Err(reason)
             if reason == "Busy."
                 || reason.starts_with("not enough:")
@@ -192,7 +192,7 @@ fn submit_order(
                 .settlements
                 .get_mut(id)
                 .ok_or("Settlement not found.")?;
-            record.pending_order = Some(order);
+            access::push_order(record, order);
             record.revision = record.revision.saturating_add(1);
             Ok(OrderOutcome::Queued {
                 reason: if reason == "Busy." {
@@ -211,10 +211,7 @@ pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<
         .settlements
         .get_mut(id)
         .ok_or("Settlement not found.")?;
-    record
-        .pending_order
-        .take()
-        .ok_or("No pending construction order.")?;
+    access::take_head_order(record).ok_or("No pending construction order.")?;
     record.revision = record.revision.saturating_add(1);
     state.settlements.site_watch.remove(&id);
     Ok(())
@@ -241,70 +238,111 @@ pub(crate) fn pending_reason(state: &TickState, id: SettlementId) -> Option<Stri
     )
 }
 
-/// Returns true whenever the pending order owns this planning turn.
+/// Returns true whenever a pending order owns this planning turn.
+///
+/// Owner D8: a request whose materials are already in storage moves ahead of
+/// unfunded ones; otherwise the entry order holds. The head's turn is never
+/// given to autonomous planning while it waits for materials, so a later
+/// autonomous house cannot overtake it.
 fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
-    let Some(record) = state.settlements.get(id) else {
+    if state
+        .settlements
+        .get(id)
+        .is_none_or(|record| access::orders(record).next().is_none())
+    {
         return false;
-    };
-    let Some(order) = &record.pending_order else {
+    }
+    // An upgrade whose building is gone or has no next level is dropped from
+    // wherever it sits in the queue.
+    let mut dropped = Vec::new();
+    for (index, order) in access::orders(state.settlements.get(id).expect("settlement")).enumerate()
+    {
+        if order.building.is_some() && order_level(state, id, order).is_none() {
+            dropped.push((index, order.blueprint.clone()));
+        }
+    }
+    for (index, blueprint) in dropped.into_iter().rev() {
+        let record = state.settlements.get_mut(id).expect("pending settlement");
+        access::take_order(record, index);
+        record.revision = record.revision.saturating_add(1);
+        notify_owner(
+            state,
+            id,
+            format!("Dropped {blueprint} order: building gone or no upgrade available."),
+        );
+    }
+    if access::orders(state.settlements.get(id).expect("settlement"))
+        .next()
+        .is_none()
+    {
         return false;
-    };
-    let level_number = if let Some(building) = order.building {
-        let target = record.buildings.get(&building);
-        let next = target.and_then(|target| {
-            blueprints::get(&state.registry, &order.blueprint)
-                .and_then(|blueprint| blueprint.level(target.level + 1))
-                .map(|_| target.level + 1)
-        });
-        let Some(next) = next else {
-            let blueprint = order.blueprint.clone();
-            cancel_pending(state, id).expect("pending order");
-            notify_owner(
-                state,
-                id,
-                format!("Dropped {blueprint} order: building gone or no upgrade available."),
-            );
-            return false;
-        };
-        next
-    } else {
-        1
-    };
+    }
     if claim_slot(state, id).is_err() {
         return true;
     }
+    // Funded candidates in queue order; the head is first when it is funded.
     let images = executor::source_images(state, id);
-    let Some(level) =
-        blueprints::get(&state.registry, &order.blueprint).and_then(|bp| bp.level(level_number))
-    else {
+    let mut candidates: Vec<(usize, u8)> = Vec::new();
+    {
+        let record = state.settlements.get(id).expect("settlement");
+        for (index, order) in access::orders(record).enumerate() {
+            let Some(level_number) = order_level(state, id, order) else {
+                continue;
+            };
+            let Some(level) = blueprints::get(&state.registry, &order.blueprint)
+                .and_then(|blueprint| blueprint.level(level_number))
+            else {
+                continue;
+            };
+            if funded_variant(state, id, &level.materials, &images).is_some() {
+                candidates.push((index, level_number));
+            }
+        }
+    }
+    // Nothing funded: the head keeps the turn and the settlement waits.
+    let Some(&(first, _)) = candidates.first() else {
         return true;
     };
-    if funded_variant(state, id, &level.materials, &images).is_none() {
-        return true;
-    }
-    let mut order = state
-        .settlements
-        .get_mut(id)
-        .expect("pending settlement")
-        .pending_order
-        .take()
-        .expect("pending order");
-    order.level = level_number;
-    let cursor = state
-        .settlements
-        .get(id)
-        .expect("pending settlement")
-        .construction_cursor;
-    if start_order(state, id, &order, Some(cursor)).is_err() {
-        state
+    // A funded request that cannot start for lack of a site does not block the
+    // next funded one; it stays where it is in the queue.
+    for (index, level_number) in candidates {
+        let Some(record) = state.settlements.get_mut(id) else {
+            return true;
+        };
+        let Some(mut order) = access::take_order(record, index) else {
+            continue;
+        };
+        order.level = level_number;
+        let cursor = state
             .settlements
-            .get_mut(id)
-            .expect("pending settlement")
-            .pending_order = Some(order);
-        return true;
+            .get(id)
+            .expect("settlement")
+            .construction_cursor;
+        match start_order(state, id, &order, Some(cursor)) {
+            Ok(()) => {
+                notify_owner(state, id, OrderOutcome::Started.message(&order.blueprint));
+                return true;
+            }
+            Err(_) => {
+                let record = state.settlements.get_mut(id).expect("pending settlement");
+                access::insert_order(record, index, order);
+            }
+        }
     }
-    notify_owner(state, id, OrderOutcome::Started.message(&order.blueprint));
+    let _ = first;
     true
+}
+
+/// The level an owner request would start at, if its target still allows one.
+fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Option<u8> {
+    let Some(building) = order.building else {
+        return Some(1);
+    };
+    let record = state.settlements.get(id)?;
+    let target = record.buildings.get(&building)?;
+    blueprints::get(&state.registry, &order.blueprint)
+        .and_then(|blueprint| blueprint.level(target.level + 1))
+        .map(|_| target.level + 1)
 }
 
 fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {
@@ -327,7 +365,7 @@ fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {
 /// An active project retains its FIFO slot, regardless of progress or origin.
 fn claim_slot(state: &TickState, id: SettlementId) -> Result<(), String> {
     let record = state.settlements.get(id).ok_or("Settlement not found.")?;
-    if record.project.is_some() {
+    if access::projects(record).count() >= MAX_PROJECTS {
         Err("Busy.".into())
     } else {
         Ok(())
@@ -343,7 +381,7 @@ fn cancel_project(state: &mut TickState, id: SettlementId, structure: &str) -> R
         .settlements
         .get(id)
         .and_then(|record| access::project_for_structure(record, structure))
-        .map(|project| (project.structure.clone(), project.borrowed_builder))
+        .map(|project| (project.structure.clone(), project.builder))
     else {
         return Ok(());
     };
@@ -353,7 +391,7 @@ fn cancel_project(state: &mut TickState, id: SettlementId, structure: &str) -> R
         release_builder(state, id, borrowed);
     }
     let record = state.settlements.get_mut(id).expect("preempted settlement");
-    record.project = None;
+    access::take_project(record, &handle);
     record.revision = record.revision.saturating_add(1);
     Ok(())
 }
@@ -618,12 +656,11 @@ pub(crate) fn candidate_funded_by_delivery(
         return false;
     }
     let mut images = executor::source_images(state, id);
-    let active_bill = record
-        .project
-        .as_ref()
+    let active_bill = access::projects(record)
+        .next()
         .and_then(|_| active_project_bill(state, id));
     let funded = |images: &[super::inventory::Image]| {
-        if record.project.is_some() {
+        if access::projects(record).next().is_some() {
             active_bill
                 .as_ref()
                 .is_some_and(|bill| super::construction_crafting::can_fund(state, bill, images))
@@ -775,7 +812,7 @@ fn start_upgrade(
         building: Some(building.id),
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
     };
     let (bounds, mut cells) = planned_cells(state, &project, &species, &mut Default::default())
         .map_err(|reason| format!("Construction admission refused: {reason:?}."))?;
@@ -899,9 +936,8 @@ fn priority_house(
     let blueprint = catalog(state, record).find(|bp| bp.kind == BuildingKind::House)?;
     // Admission already proved this house's funding. Its untouched builder
     // may have hauled part of that stock, so do not re-prove the full bill.
-    if record
-        .project
-        .as_ref()
+    if access::projects(record)
+        .next()
         .is_some_and(|project| project.blueprint == blueprint.id)
     {
         return Some(blueprint);
@@ -1251,7 +1287,7 @@ fn begin_cells(
         .settlements
         .get_mut(project.settlement)
         .expect("planned settlement");
-    record.project = Some(project);
+    access::push_project(record, project);
     record.revision = record.revision.saturating_add(1);
     true
 }
@@ -1347,7 +1383,7 @@ fn upgrade_project(
                 building: Some(building.id),
                 structure: String::new(),
                 ordered: false,
-                borrowed_builder: None,
+                builder: None,
             },
             species,
             color,
@@ -1465,7 +1501,7 @@ fn site_project<'a>(
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                borrowed_builder: None,
+                builder: None,
             };
             let Ok((bounds, mut cells)) = planned_cells(state, &project, "oak", &mut clearance)
             else {
@@ -1512,7 +1548,7 @@ fn street_site(
         building: None,
         structure: String::new(),
         ordered: false,
-        borrowed_builder: None,
+        builder: None,
     };
     for tile in &served {
         if let Some(work) = network.road_work(tile)
@@ -1548,7 +1584,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     if state
         .settlements
         .get(id)
-        .is_some_and(|record| record.pending_order.is_some())
+        .is_some_and(|record| access::head_order(record).is_some())
         && founding::plan(state, id)
     {
         return;
@@ -1566,7 +1602,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     let Some(record) = state.settlements.get(id) else {
         return;
     };
-    if record.project.is_some() {
+    if access::projects(record).next().is_some() {
         return;
     }
     let residents = state.settlements.member_count(id);
@@ -1714,7 +1750,7 @@ fn fortification_site(
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                borrowed_builder: None,
+                builder: None,
             },
             bounds: work.bounds,
             cells: work.cells,
@@ -1774,7 +1810,7 @@ fn meadow_site(
             building: None,
             structure: String::new(),
             ordered: false,
-            borrowed_builder: None,
+            builder: None,
         },
         bounds: work.bounds,
         cells: work.cells,
@@ -1887,8 +1923,8 @@ fn release_incumbent(
     let borrowed = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.as_ref())
-        .and_then(|project| project.borrowed_builder)
+        .and_then(|record| access::projects(record).next())
+        .and_then(|project| project.builder)
         .filter(|(uuid, _)| *uuid == state.entities.row(slot).uuid);
     let released = detach(
         state
@@ -1898,17 +1934,19 @@ fn release_incumbent(
             .as_mut()
             .expect("builder incumbent"),
     );
-    if released && let Some((_, profession)) = borrowed {
-        state
-            .entities
-            .row_mut(slot)
-            .villager
-            .as_mut()
-            .unwrap()
-            .data
-            .profession = profession;
+    if released && let Some((uuid, profession)) = borrowed {
+        if let Some(profession) = profession {
+            state
+                .entities
+                .row_mut(slot)
+                .villager
+                .as_mut()
+                .unwrap()
+                .data
+                .profession = profession;
+        }
         let record = state.settlements.get_mut(id).unwrap();
-        record.project.as_mut().unwrap().borrowed_builder = None;
+        access::unbind_builder(record, uuid);
         record.revision = record.revision.saturating_add(1);
     }
     crate::villager::sync_appearance(state, slot);
@@ -1948,7 +1986,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let Some(project) = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.clone())
+        .and_then(|record| access::projects(record).next().cloned())
     else {
         state.settlements.builder_watch.remove(&id);
         return;
@@ -2135,13 +2173,17 @@ pub(crate) fn retry_preparation(
         .settlements
         .get_mut(id)
         .expect("cancelled preparation");
-    let requeued = project.ordered && record.owner.is_some() && record.pending_order.is_none();
+    let requeued =
+        project.ordered && record.owner.is_some() && access::head_order(record).is_none();
     if requeued {
-        record.pending_order = Some(OwnerOrder {
-            blueprint: project.blueprint.clone(),
-            level: project.level,
-            building: project.building,
-        });
+        access::push_order(
+            record,
+            OwnerOrder {
+                blueprint: project.blueprint.clone(),
+                level: project.level,
+                building: project.building,
+            },
+        );
         record.revision = record.revision.saturating_add(1);
     }
     if record.owner.is_some() {
@@ -2192,29 +2234,25 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
     if has_staffed_gatherer(state, id, profession) {
         return;
     }
-    let borrowed = state
+    let binding = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.as_ref())
-        .and_then(|project| project.borrowed_builder);
-    let Some((uuid, original)) = borrowed else {
+        .and_then(|record| access::projects(record).next())
+        .and_then(|project| project.builder);
+    let Some((uuid, original)) = binding else {
         return;
     };
-    release_builder(state, id, borrowed);
+    release_builder(state, id, binding);
     if state.entities.slot_of_uuid(uuid).is_some_and(|slot| {
         state
             .entities
             .row(slot)
             .villager
             .as_ref()
-            .is_some_and(|v| v.data.profession == original)
+            .is_some_and(|v| Some(v.data.profession) == original)
     }) {
         let record = state.settlements.get_mut(id).expect("active settlement");
-        record
-            .project
-            .as_mut()
-            .expect("active project")
-            .borrowed_builder = None;
+        access::unbind_builder(record, uuid);
         record.revision = record.revision.saturating_add(1);
     }
 }
@@ -2225,7 +2263,7 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         return;
     }
     let protected = state.settlements.get(id).and_then(|record| {
-        record.project.as_ref().and_then(|project| {
+        access::projects(record).next().and_then(|project| {
             let images = executor::source_images(state, id);
             active_project_bill(state, id)
                 .and_then(|bill| {
@@ -2323,17 +2361,28 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         .data
         .profession;
     let borrowed = match profession {
-        Profession::Miner | Profession::Lumberjack => {
-            Some((state.entities.row(slot).uuid, profession))
-        }
+        Profession::Miner | Profession::Lumberjack => Some(profession),
         _ => None,
     };
-    if let Some(record) = state.settlements.get_mut(id)
-        && let Some(project) = record.project.as_mut()
-        && project.borrowed_builder != borrowed
-    {
-        project.borrowed_builder = borrowed;
-        record.revision = record.revision.saturating_add(1);
+    let binding = Some((state.entities.row(slot).uuid, borrowed));
+    let handle = state
+        .settlements
+        .get(id)
+        .and_then(|record| access::projects(record).next())
+        .map(|project| project.structure.clone());
+    let rebind = state.settlements.get(id).is_some_and(|record| {
+        access::projects(record)
+            .next()
+            .is_some_and(|project| project.builder != binding)
+    });
+    if let (true, Some(handle)) = (rebind, handle) {
+        let record = state
+            .settlements
+            .get_mut(id)
+            .expect("builder binding settlement");
+        if access::bind_builder(record, &handle, binding) {
+            record.revision = record.revision.saturating_add(1);
+        }
     }
     let v = state
         .entities
@@ -2392,7 +2441,7 @@ pub(crate) fn tick(state: &mut TickState) {
                 state
                     .settlements
                     .get(id)
-                    .and_then(|record| record.project.as_ref()),
+                    .and_then(|record| access::projects(record).next()),
             );
             for slot in residents(state, id) {
                 if let Some(v) = state.entities.row(slot).villager.as_ref() {
@@ -2418,7 +2467,7 @@ pub(crate) fn tick(state: &mut TickState) {
         if state
             .settlements
             .get(id)
-            .is_some_and(|record| record.project.is_some())
+            .is_some_and(|record| access::projects(record).next().is_some())
         {
             assign_builder(state, id);
         }
@@ -2427,7 +2476,7 @@ pub(crate) fn tick(state: &mut TickState) {
         && state
             .settlements
             .get(id)
-            .is_some_and(|record| record.project.is_some())
+            .is_some_and(|record| access::projects(record).next().is_some())
     {
         crate::villager::building::tick(state, id);
     }
@@ -2436,11 +2485,11 @@ pub(crate) fn tick(state: &mut TickState) {
 fn release_builder(
     state: &mut TickState,
     id: SettlementId,
-    borrowed: Option<(uuid::Uuid, Profession)>,
+    binding: Option<(uuid::Uuid, Option<Profession>)>,
 ) {
     let builder = residents(state, id).find(|slot| {
         let row = state.entities.row(*slot);
-        borrowed.is_none_or(|(uuid, _)| row.uuid == uuid)
+        binding.is_none_or(|(uuid, _)| row.uuid == uuid)
             && row.villager.as_ref().is_some_and(|v| {
                 v.settlement == Some(id) && v.data.profession == Profession::Builder
             })
@@ -2449,7 +2498,7 @@ fn release_builder(
         && let Some(v) = state.entities.row_mut(slot).villager.as_mut()
         && detach(v)
     {
-        if let Some((_, profession)) = borrowed {
+        if let Some((_, Some(profession))) = binding {
             v.data.profession = profession;
         }
         crate::villager::sync_appearance(state, slot);
@@ -2479,12 +2528,12 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     }
     if project.blueprint == furnace::NAME || layout::infra(&project.blueprint) {
         // Infrastructure work is temporary employment.
-        release_builder(state, id, project.borrowed_builder);
+        release_builder(state, id, project.builder);
         let record = state.settlements.get_mut(id).expect("finished settlement");
         if project.blueprint == furnace::NAME {
-            record.furnace_workstation = Some(project.structure);
+            record.furnace_workstation = Some(project.structure.clone());
         }
-        record.project = None;
+        access::take_project(record, &project.structure);
         record.revision = record.revision.saturating_add(1);
         return true;
     }
@@ -2512,9 +2561,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         }
         // Outpost POIs stay outside the parent's civil allocator until the
         // whole household can receive all certificates in the daughter.
-        release_builder(state, id, project.borrowed_builder);
+        release_builder(state, id, project.builder);
         let record = state.settlements.get_mut(id).expect("finished outpost");
-        record.project = None;
+        access::take_project(record, &project.structure);
         record.revision = record.revision.saturating_add(1);
         tracing::info!(target: "settlement_audit", settlement = id.0,
             blueprint = %project.blueprint, origin = ?project.origin,
@@ -2535,7 +2584,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         return false;
     }
     let record = state.settlements.get_mut(id).expect("certified settlement");
-    record.project = None;
+    access::take_project(record, &project.structure);
     record.revision = record.revision.saturating_add(1);
     tracing::info!(
         target: "settlement_audit",
@@ -2547,8 +2596,13 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         game_time = state.tick_control.game_ticks(state.tick),
         "settlement_building_completed"
     );
-    if project.borrowed_builder.is_some() {
-        release_builder(state, id, project.borrowed_builder);
+    // Only a borrowed gatherer is released at certification; an ordinary
+    // recruit keeps the builder career it was recruited into.
+    if project
+        .builder
+        .is_some_and(|(_, profession)| profession.is_some())
+    {
+        release_builder(state, id, project.builder);
     }
     true
 }
@@ -2574,7 +2628,7 @@ pub(crate) struct WaitingNeed {
 /// Remaining physical project requirements after subtracting exact items in
 /// builder carry. Ingredients in carry are not craftable until deposited.
 fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u32)>> {
-    let project = state.settlements.get(id)?.project.as_ref()?;
+    let project = access::projects_of(&state.settlements, id).next()?;
     let snapshot = executor::status(state, id, &project.structure).ok()?;
     let mut bill: Vec<_> = snapshot
         .remaining
@@ -2609,7 +2663,7 @@ fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, 
 pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Profession> {
     let record = state.settlements.get(id)?;
     let images = executor::source_images(state, id);
-    if record.project.is_some() {
+    if access::projects(record).next().is_some() {
         let bill = active_project_bill(state, id)?;
         super::construction_crafting::needed_gatherer(state, &bill, &images)
     } else {
@@ -2644,7 +2698,7 @@ fn gatherer_demand(
         let bill = selected_bill(state, record.id, &level.materials, images)?;
         super::construction_crafting::needed_gatherer(state, &bill, images)
     };
-    if let Some(order) = &record.pending_order {
+    if let Some(order) = access::head_order(record) {
         return demand(order.blueprint.as_str(), order.level);
     }
     if let Some(name) = founding::next_blueprint(state, record)
@@ -2705,13 +2759,13 @@ pub(crate) fn iron_demand(
             .fold(0u32, |sum, (_, count)| sum.saturating_add(*count));
         direct.saturating_add(if shears { 2 } else { 0 })
     };
-    if let Some(order) = &record.pending_order {
+    if let Some(order) = access::head_order(record) {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
             .and_then(|level| selected_bed_bill(state, id, &level.materials, &images))
             .map_or(0, |bill| demand(&bill));
     }
-    let active = record.project.as_ref().map_or(0, |project| {
+    let active = access::projects(record).next().map_or(0, |project| {
         executor::status(state, id, &project.structure)
             .ok()
             .map_or(0, |snapshot| {
@@ -2743,7 +2797,7 @@ pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
         return false;
     };
     let images = executor::source_images(state, id);
-    if let Some(project) = &record.project {
+    if let Some(project) = access::projects(record).next() {
         let active_wool = executor::status(state, id, &project.structure)
             .ok()
             .is_some_and(|snapshot| {
@@ -2764,7 +2818,7 @@ pub(crate) fn wool_demand(state: &TickState, id: SettlementId) -> bool {
             return true;
         }
     }
-    if let Some(order) = &record.pending_order {
+    if let Some(order) = access::head_order(record) {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
             .and_then(|level| selected_bed_bill(state, id, &level.materials, &images))
@@ -2798,7 +2852,7 @@ pub(crate) fn wool_color(state: &TickState, id: SettlementId) -> Option<u8> {
                 .map(|index| index as u8)
         })
     };
-    if let Some(project) = &record.project
+    if let Some(project) = access::projects(record).next()
         && let Ok(snapshot) = executor::status(state, id, &project.structure)
     {
         let bill: Vec<_> = snapshot
@@ -2816,7 +2870,7 @@ pub(crate) fn wool_color(state: &TickState, id: SettlementId) -> Option<u8> {
             return Some(color);
         }
     }
-    if let Some(order) = &record.pending_order {
+    if let Some(order) = access::head_order(record) {
         let level = blueprints::get(&state.registry, &order.blueprint)?.level(order.level)?;
         return color_for(&selected_bed_bill(state, id, &level.materials, &images)?);
     }
@@ -2844,7 +2898,7 @@ fn funded_candidate(
     record: &SettlementRecord,
     images: &[super::inventory::Image],
 ) -> bool {
-    if let Some(order) = &record.pending_order {
+    if let Some(order) = access::head_order(record) {
         return blueprints::get(&state.registry, &order.blueprint)
             .and_then(|blueprint| blueprint.level(order.level))
             .is_some_and(|level| {
@@ -2871,12 +2925,11 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
     };
     let images = executor::source_images(state, id);
     let catalog = catalog(state, record);
-    let active = record
-        .project
-        .as_ref()
+    let active = access::projects(record)
+        .next()
         .map(|project| project.blueprint.as_str());
     let mut kinds = Vec::new();
-    let pending = record.pending_order.as_ref();
+    let pending = access::head_order(record);
     let queued = pending.and_then(|order| {
         blueprints::get(&state.registry, &order.blueprint).map(|blueprint| (blueprint, order.level))
     });
@@ -2962,7 +3015,7 @@ pub(crate) fn project_summary(state: &TickState, id: SettlementId) -> Vec<String
     let Some(record) = state.settlements.get(id) else {
         return vec!["Settlement not found.".into()];
     };
-    let Some(project) = record.project.as_ref() else {
+    let Some(project) = access::projects(record).next() else {
         return vec!["No active project. Waiting for residents, materials or a free site.".into()];
     };
     let Ok(snapshot) = executor::status(state, id, &project.structure) else {
@@ -3014,8 +3067,11 @@ pub(crate) fn project_summary(state: &TickState, id: SettlementId) -> Vec<String
 }
 
 pub(super) fn validate_record(record: &SettlementRecord) -> Result<(), &'static str> {
-    if let Some(project) = &record.project
-        && (project.settlement != record.id
+    if record.projects.len() > MAX_PROJECTS || record.orders.len() > MAX_ORDERS {
+        return Err("too many construction projects or orders");
+    }
+    for (index, project) in access::projects(record).enumerate() {
+        if project.settlement != record.id
             || project.blueprint.is_empty()
             || project.blueprint.len() > 128
             || project.structure.is_empty()
@@ -3025,21 +3081,37 @@ pub(super) fn validate_record(record: &SettlementRecord) -> Result<(), &'static 
             || project
                 .building
                 .is_some_and(|id| !record.buildings.contains_key(&id))
-            || (project.level > 1) != project.building.is_some())
-    {
-        return Err("invalid settlement construction project");
+            || (project.level > 1) != project.building.is_some()
+        {
+            return Err("invalid settlement construction project");
+        }
+        // One structure handle and one builder belong to one project.
+        if access::projects(record)
+            .skip(index + 1)
+            .any(|other| other.structure == project.structure)
+        {
+            return Err("duplicate settlement construction structure");
+        }
+        if let Some((builder, _)) = project.builder
+            && access::projects(record)
+                .skip(index + 1)
+                .any(|other| other.builder.is_some_and(|(bound, _)| bound == builder))
+        {
+            return Err("a villager is bound to two construction projects");
+        }
     }
-    if let Some(order) = &record.pending_order
-        && (record.owner.is_none()
+    for order in access::orders(record) {
+        if record.owner.is_none()
             || order.blueprint.is_empty()
             || order.blueprint.len() > 128
             || !(1..=3).contains(&order.level)
             || (order.level > 1) != order.building.is_some()
             || order
                 .building
-                .is_some_and(|id| id.0 >> 32 != record.id.0 || id.0 as u32 == 0))
-    {
-        return Err("invalid pending owner construction order");
+                .is_some_and(|id| id.0 >> 32 != record.id.0 || id.0 as u32 == 0)
+        {
+            return Err("invalid pending owner construction order");
+        }
     }
     Ok(())
 }
@@ -3048,7 +3120,7 @@ pub(super) fn validate_pending(
     registry: &crate::registry::CoreRegistry,
     record: &SettlementRecord,
 ) -> Result<(), &'static str> {
-    let Some(order) = &record.pending_order else {
+    let Some(order) = access::head_order(record) else {
         return Ok(());
     };
     let blueprint = blueprints::get(registry, &order.blueprint)
@@ -3084,6 +3156,10 @@ mod durability_tests;
 #[cfg(test)]
 #[path = "construction_planner_tests.rs"]
 mod planner_tests;
+
+#[cfg(test)]
+#[path = "construction_queue_tests.rs"]
+mod queue_tests;
 
 #[cfg(test)]
 #[path = "construction_site_tests.rs"]

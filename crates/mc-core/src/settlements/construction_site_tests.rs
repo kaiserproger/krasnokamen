@@ -110,7 +110,7 @@ fn owner_order_takes_the_first_free_lot_in_walking_order() {
     let (near, far) = near_and_far(&state, id);
     street_plateau(&mut state, id, &[near, far]);
     request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
         (near.lot.origin, near.lot.rotation),
@@ -179,7 +179,7 @@ fn owner_order_in_a_cluttered_village_finds_the_clearing_at_once() {
     }
     state.world.fold_overlay();
     request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     let size = blueprints::get(&state.registry, "storage")
         .unwrap()
         .footprint(Rotation::from_quarter_turns(project.rotation));
@@ -377,7 +377,14 @@ fn hillside_village_prepares_and_builds_first_storage() {
     state.world.fold_overlay();
     for _ in 0..128 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
@@ -385,8 +392,9 @@ fn hillside_village_prepares_and_builds_first_storage() {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .expect("hillside admits first storage");
     assert!(!project.ordered);
     let snapshot = executor::status(&state, id, &project.structure).unwrap();
@@ -428,14 +436,14 @@ fn hillside_village_prepares_and_builds_first_storage() {
             state.plugin_block_writes.len() - writes_before <= 1,
             "preparation and building must use one-cell admissions"
         );
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
         crate::villager::brain::tick(&mut state, &mut changes);
         state.world.fold_overlay();
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "hillside stalled: {:?}; builder={:?}; villager={:?}",
         project_status(&state, id),
         state.entities.pos(builder),
@@ -518,7 +526,7 @@ fn flat_site_keeps_bill_origin_and_same_site_upgrade() {
     let (mut state, id, builder) = fixture();
     let materials = fund(&mut state, "storage", 1);
     start(&mut state, id, "storage", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let snapshot = executor::status(&state, id, &project.structure).unwrap();
     assert_eq!(snapshot.origin, project.origin);
     assert_eq!(
@@ -633,7 +641,7 @@ fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
         cursor += SITE_ATTEMPTS;
         let record = state.settlements.get(id).unwrap();
         assert!(
-            record.project.is_none(),
+            record.projects.is_empty(),
             "no free funded lot before {cursor}"
         );
         assert_eq!(
@@ -647,17 +655,18 @@ fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
     );
     for _ in 0..32 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
-    let project = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .expect("far funded site");
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
         (far.lot.origin, far.lot.rotation)
@@ -668,7 +677,7 @@ fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
 fn hillside_review_owner_search_skips_unfunded_foundation() {
     let (mut state, id, _, far) = unfunded_near_foundation();
     request_build(&mut state, id, "storage").expect("far funded site");
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
         (far.lot.origin, far.lot.rotation)
@@ -733,11 +742,11 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     }
     state.world.fold_overlay();
     plan(&mut state, id);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 
     fund(&mut state, "storage", 1);
     request_build(&mut state, id, "storage").unwrap();
-    let storage = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let storage = state.settlements.get(id).unwrap().projects[0].clone();
     complete(&mut state, id, slot);
     // The first free lot fronts the avenue south of the plaza across its
     // west verge; the door's road is the avenue column two blocks west.
@@ -745,7 +754,7 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     let mut stretches = 0;
     loop {
         plan(&mut state, id);
-        let Some(project) = state.settlements.get(id).unwrap().project.clone() else {
+        let Some(project) = state.settlements.get(id).unwrap().projects.first().cloned() else {
             break;
         };
         assert_eq!(project.blueprint, layout::ROAD, "free paving comes first");
@@ -774,7 +783,7 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     crate::plugin_structures::validate(&state).expect("committed road reopens");
 
     // The stretch's lamp post waits for its two fences and torch.
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     let item = |name: &str| {
         state
             .registry
@@ -791,8 +800,9 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .expect("funded lamp post");
     assert_eq!(lamp.blueprint, layout::LAMP);
     assert_eq!(
@@ -810,7 +820,7 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     assert_eq!(block_name(&state, 10, 203, 19), "torch");
     crate::plugin_structures::validate(&state).expect("committed lamp post reopens");
     plan(&mut state, id);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     let report = layout::report(&state, state.settlements.get(id).unwrap());
     assert!(report.contains("Lamps: 1 standing"), "{report}");
     assert!(
@@ -868,7 +878,7 @@ fn funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge() {
         state.world.fold_overlay();
         fund(&mut state, name, 1);
         request_build(&mut state, id, name).unwrap();
-        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+        let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, name);
         assert_eq!(project.origin, site.lot.origin);
         assert_eq!(project.rotation, site.lot.rotation);
@@ -900,14 +910,7 @@ fn active_street_fixture() -> (TickState, SettlementId, crate::entities::EntityS
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         layout::ROAD
     );
     (state, id, slot)
@@ -964,14 +967,7 @@ fn street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds() {
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         layout::ROAD
     );
     let seeds = |state: &TickState| -> i32 {
@@ -1042,8 +1038,8 @@ fn a_town_short_of_wheat_seeds_clears_a_meadow_for_its_first_farm() {
             .settlements
             .get(id)
             .unwrap()
-            .project
-            .as_ref()
+            .projects
+            .first()
             .map(|project| project.blueprint.as_str()),
         Some(layout::MEADOW),
         "no building is funded, so the free time gathers seeds"
@@ -1074,8 +1070,8 @@ fn a_town_with_the_farms_wheat_seeds_in_stock_clears_no_meadow() {
             .settlements
             .get(id)
             .unwrap()
-            .project
-            .as_ref()
+            .projects
+            .first()
             .map(|project| project.blueprint.as_str()),
         Some(layout::MEADOW)
     );
@@ -1183,17 +1179,18 @@ fn funded_mine_without_a_site_does_not_starve_a_legal_mason() {
     }
     for _ in 0..256 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .is_some()
+        {
             break;
         }
     }
-    let project = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .expect("later funded kind with a legal site must be admitted");
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "mason");
     assert_eq!(project.origin, site.lot.origin);
 }
