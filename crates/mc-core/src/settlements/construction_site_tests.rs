@@ -99,6 +99,9 @@ fn near_and_far(state: &TickState, id: SettlementId) -> (Site, Site) {
     (near, far)
 }
 
+/// The planner's ranking key: cost, anchor distance, origin, rotation.
+type RankKey = (u32, i64, [i32; 3], u8);
+
 /// The lot the planner must pick: cheapest cut+fill; ties go to the lot whose
 /// origin is nearest the anchor, then to block position and rotation.
 pub(super) fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &str) -> Site {
@@ -111,7 +114,7 @@ pub(super) fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &
             .map(|axis| (i64::from(origin[axis]) - i64::from(record.anchor[axis])).pow(2))
             .sum()
     };
-    let mut best: Option<((u32, i64, [i32; 3], u8), Site)> = None;
+    let mut best: Option<(RankKey, Site)> = None;
     for (front, (at, normal)) in fronts.into_iter().enumerate() {
         let Some(lot) = network.lot(blueprint, at, normal) else {
             continue;
