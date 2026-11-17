@@ -308,15 +308,14 @@ pub struct DataSection {
     /// empty-server pause still checkpoint. Zero counts as one.
     #[serde(default = "default_checkpoint_every_ticks")]
     pub checkpoint_every_ticks: u64,
-    /// Journal directory-fsync window in **already written** batches (ticks):
-    /// it bounds how many published batch directory entries may be disordered
-    /// by a power loss. Every batch file is fsynced at append, so its data is
-    /// never at risk; one (every batch) is the safest, ten is the default.
-    /// This does NOT bound what a crash can lose: a tick is broadcast before
-    /// its batch is even queued, so the real ack-before-WAL window is the
-    /// journal admission queue (up to 128 batches / 256 MiB, about 6.4 s at
-    /// 20 TPS). See docs/architecture/persistence.md "Write errors and
-    /// publication order".
+    /// Journal directory-fsync cadence in published batches (ticks); one is
+    /// the safest, ten is the default. A batch file is fsynced before its
+    /// rename, but the rename is durable only after the next directory fsync,
+    /// so a host power loss can drop up to this many published batches. It
+    /// does not bound the process-crash window: a tick reaches clients once
+    /// its batch is queued, so the queued batches (up to 128 / 256 MiB) and the
+    /// one being written can be lost by any crash. See
+    /// docs/architecture/persistence.md "Write errors and publication order".
     #[serde(default = "default_journal_fsync_every_batches")]
     pub journal_fsync_every_batches: u32,
 }

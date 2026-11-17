@@ -278,25 +278,27 @@ stops the world); the single non-fatal refusal is a **coverage hole**
 (`GateError::Hole`), which skips that checkpoint, refuses its ACK and keeps
 serving with the appended batches intact. A backup copy error stays local to its
 backup job. Publication order stays WAL file fsync, rename, journal directory
-fsync (within `journal_fsync_every_batches`, default 10, and only for batches
-already written), checkpoint gate, `Durability::Immediate` commit, then prune, so
+fsync (every `journal_fsync_every_batches` published batches, default 10),
+checkpoint gate, `Durability::Immediate` commit, then prune, so
 a committed checkpoint never outruns its WAL. The journal directory's own entry
 is persisted through `atomic_file::create_dir_all_durable` when the writer opens
 it. Close errors are not observable through Rust's `File` drop, so durability
 rests on the explicit fsync before the rename, not on close, and the later
 directory fsync publishes the name rather than re-checking that closed file's
-writeback errors. What a crash can lose is the journal admission queue (up to
-128 batches or 256 MiB, about 6.4 s at 20 TPS), not the directory window: a tick
-is broadcast before its batch is queued. Removing covered journal batches is
+writeback errors. A tick reaches clients once its batch is queued, before it is
+published, so any crash can lose the unpublished batches (up to 128 queued, 256
+MiB, plus the one being written), and a host power loss can also drop up to
+`journal_fsync_every_batches` published batches. Removing covered journal batches is
 best effort: a refused removal is warned and counted (dashboard `/metrics` and
 `/stats`) rather than fatal, because batches at or below the committed
 checkpoint are replay-inert and only the WAL grows, while an unwritable journal
 directory still halts the world on the next append. Unpublished
 `batch-*.bin.tmp` leftovers of a failed or interrupted append are removed by the
 next journal open under the exclusive world lease, and a leftover the sweep
-cannot remove is warned about with its path and reason. An unattended redb
-repair is logged at `error!` because it rolls the store back behind a pruned
-checkpoint (Books R4-P1). Policy and drills:
+cannot remove is warned about with its path and reason. Every redb repair is
+logged at `error!` as a possible rollback to an earlier commit (Books R4-P1):
+the repair callback cannot tell an unclean stop from a damaged commit or header slot, and the
+WAL behind an acknowledged checkpoint is already pruned. Policy and drills:
 [persistence](../architecture/persistence.md).
 
 ### Immutable datapack worldgen inputs

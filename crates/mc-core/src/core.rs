@@ -921,17 +921,17 @@ impl Core {
             && !store
                 .has_checkpoint()
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
-        // Books R4-P1 (logging half): redb can roll the store back to its
-        // previous commit when the newest commit slot fails its checksum. The
-        // matching WAL was pruned after that commit, so this is a data-loss
-        // event, not a routine recovery: say so instead of serving silently.
+        // Books R4-P1 (logging half). Every repair is reported as a possible
+        // rollback: redb may have switched to an earlier commit (a damaged
+        // header slot or newest commit) and the store cannot tell which, and
+        // the WAL behind an acknowledged checkpoint is already pruned.
         let repairs = mc_world::native::redb_repairs().saturating_sub(repairs_before);
         if repairs > 0 {
             tracing::error!(
                 repairs,
-                "redb repaired the native store: it was rolled back to its previous \
-                 commit, so state after that checkpoint is gone; restore a backup if \
-                 it mattered"
+                "redb repaired the native store (unclean stop or damaged commit); it may \
+                 have rolled back to an earlier commit. WAL replay restores what the \
+                 journal still covers; a repair after a clean stop points at the disk"
             );
         }
         #[cfg(test)]

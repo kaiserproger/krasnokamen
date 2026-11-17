@@ -14,12 +14,10 @@ ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
 absolute post-images and tombstones. The writer writes
 `batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
 fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
-appends that are **already written** (default 10,
-`[data] journal_fsync_every_batches`); a checkpoint gate and shutdown flush it
-sooner. That window bounds how many published directory entries may be
-disordered by a power loss; it does not bound how much a crash can lose, because
-a tick is broadcast before its batch is queued — see
-[the acknowledgement window](#write-errors-and-publication-order). Readers ignore
+published batches (default 10, `[data] journal_fsync_every_batches`); a
+checkpoint gate and shutdown flush it sooner. Until that directory fsync a host
+power loss can drop the published names; the process-crash window is separate
+— see [the acknowledgement window](#write-errors-and-publication-order). Readers ignore
 unpublished `.tmp` files, and the next `JournalWriter::open` removes them
 (`open_removes_unpublished_batch_leftovers`): the exclusive world lease
 guarantees no other writer owns one, pruning never sweeps them because a live
@@ -117,13 +115,16 @@ another recovery.
   drop, and nothing here re-checks a closed file: the directory fsync that
   follows a rename publishes the *name*, it is not a second look at that file's
   writeback errors.
-- **Acknowledgement window.** A tick is broadcast to clients before its batch is
-  queued, and the queue is admitted before the send, so a crash can lose every
-  batch still queued: up to 128 batches or 256 MiB of post-images, about 6.4 s
-  at 20 TPS (and fewer ticks when batches are large). `journal_fsync_every_batches`
-  does not shrink that window — it only decides how often the directory of
-  already-written batches is fsynced. Each batch file is fsynced before its
-  rename, so a batch the writer has published will not lose its data.
+- **Acknowledgement window.** A tick reaches clients once its batch is queued,
+  before the batch is published (written, fsynced, renamed). Two windows follow.
+  Any crash, SIGKILL included, can lose every batch not yet published: up to
+  128 queued batches or 256 MiB of post-images (about 6.4 s at 20 TPS, fewer
+  ticks when batches are large) and the batch being written if its rename has
+  not happened, so an empty queue does not close it. A host power loss can also
+  drop up to `journal_fsync_every_batches` published batches whose names the
+  directory fsync has not yet made durable, and a lost name before later ones
+  leaves a hole in the tail. Setting the cadence to 1 closes only this second
+  window.
 - A failed prune is warned and counted, never fatal: batches at or below the
   committed checkpoint are ignored on replay, so only the WAL grows. One line
   per failed attempt names the directory, failure count, retained bytes and the

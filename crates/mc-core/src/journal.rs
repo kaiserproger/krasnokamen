@@ -437,11 +437,12 @@ fn wal_stage(stage: &str) {
 
 /// Why a checkpoint's WAL gate refused.
 ///
-/// The two kinds have different consequences: a coverage hole refuses this one
-/// checkpoint and keeps serving (the appended batches stay durable and pruning
-/// removes nothing), while a filesystem failure means the journal can no longer
-/// promise durability and the caller must stop the world instead of retrying the
-/// fsync (CS341/Books review F1).
+/// The two kinds have different consequences: a checkpoint asking past the
+/// writer's known append coverage refuses this one checkpoint and keeps serving
+/// (the appended batches stay durable and pruning removes nothing), while a
+/// filesystem failure means the journal can no longer promise durability and
+/// the caller must stop the world instead of retrying the fsync (CS341/Books
+/// review F1). A hole or damage that tail verification finds on disk is `Io`.
 #[derive(Debug)]
 pub enum GateError {
     /// The WAL does not cover `(prev_tick, through]`; nothing was written.

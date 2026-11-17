@@ -158,13 +158,11 @@ fn read_only_database(
 
 static REDB_REPAIRS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Unattended redb repairs this process performed (`Database` open/create).
-///
-/// An attended repair is a silent rollback to the previous commit; because the
-/// WAL is pruned right after every acknowledged commit, that rollback can
-/// discard an interval no journal covers any more (Books R4-P1). This crate has
-/// no logging dependency, so it counts the event and the serving caller logs it
-/// at `error!` (`mc_core::core::log_redb_repairs`).
+/// redb repairs this process performed (`Database` open/create), one per
+/// repaired open. A repair can include a rollback to an earlier commit that
+/// this crate cannot tell apart (a damaged header slot is switched before the
+/// callback runs), so the serving caller logs every repair as a possible
+/// rollback (Books R4-P1). This crate has no logging dependency.
 #[must_use]
 pub fn redb_repairs() -> u64 {
     REDB_REPAIRS.load(std::sync::atomic::Ordering::Relaxed)
@@ -172,15 +170,18 @@ pub fn redb_repairs() -> u64 {
 
 /// redb builder for every serving and offline path.
 ///
-/// redb repairs a store whose newest commit slot fails its checksum by rolling
-/// back to the previous commit unless a callback says otherwise. The callback
-/// counts the repair (see [`redb_repairs`]); it never aborts, because aborting
-/// would turn every unclean stop into a refusal to serve.
+/// redb calls the repair callback several times per repair with the scan
+/// progress (0.0 first, then 0.3 when the newest commit fails its checksum,
+/// 0.6, 0.9); only the first call of a repair is counted (see
+/// [`redb_repairs`]). It never aborts, because aborting would turn every
+/// unclean stop into a refusal to serve.
 pub(crate) fn database_builder(cache_bytes: usize) -> redb::Builder {
     let mut builder = redb::Builder::new();
     builder.set_cache_size(cache_bytes);
-    builder.set_repair_callback(|_session| {
-        REDB_REPAIRS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    builder.set_repair_callback(|session| {
+        if session.progress() < 0.1 {
+            REDB_REPAIRS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
     });
     builder
 }
