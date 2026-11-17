@@ -958,7 +958,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             next,
             previous,
             Some(bounds),
-            &mut super::super::forestry::Clearance::prepared(),
+            &mut super::super::forestry::Clearance::verify(),
         )
         .unwrap()
         {
@@ -973,10 +973,15 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             "managed-tree drops at {next:?}"
         );
         if next == root {
+            // The root keeps its registration until its trunk column is empty
+            // (its own unfinished crown still uses the column as identity
+            // evidence), then the ordinary retire pass removes it.
+            state.tick = 20;
+            super::super::forestry::retire_missing(&mut state);
             let record = state.settlements.get(id).unwrap();
             assert!(
                 !record.planted_trees.contains(&root),
-                "root retires in the clearing transaction"
+                "root retires once its column is empty"
             );
             assert!(record.revision > revision, "root retirement is journaled");
         }

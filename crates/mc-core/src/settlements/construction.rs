@@ -2087,7 +2087,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
                 .world
                 .physics_block_at(at[0], at[1], at[2])
                 .is_some_and(|block| super::forestry::tree_or_sapling(state, block))
-                && !super::forestry::Clearance::prepared().clearable(state, at, lot)
+                && !super::forestry::Clearance::verify().clearable(state, at, lot)
         });
     let cause = if protected {
         "protected_tree_in_preparation"
