@@ -468,6 +468,8 @@ fail when they rise above their ceiling in
   as declarations; inline modules belong to their physical file, external module
   declarations to their parent file. Comments and whitespace cannot change this
   count. The 2026-11-17 `b58021e61` baseline is 734, 1076, 834 and 924 respectively;
+  the owner-module extraction of the same day (`tick.rs` and `tick/entity_phase.rs`
+  into per-owner submodules, ADR 0021 Step 3) drops the two tick files to 259 each;
 - `.project` and `.pending_order` field expressions outside
   `settlements/construction*.rs` and their module children (including `#[path]`
   children), or the inline `settlements::construction` module and its children.

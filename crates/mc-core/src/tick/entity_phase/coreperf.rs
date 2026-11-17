@@ -12,13 +12,13 @@ struct CorePerfInput {
     productive_crops: Vec<[i32; 3]>,
 }
 
-struct CorePerfIndex {
+pub(in crate::tick) struct CorePerfIndex {
     marker: String,
-    chunks: HashMap<(i32, i32), usize>,
+    pub(in crate::tick) chunks: HashMap<(i32, i32), usize>,
     productive_crops: HashSet<(i32, i32, i32)>,
 }
 
-pub(super) fn coreperf_index() -> Option<&'static CorePerfIndex> {
+pub(in crate::tick) fn coreperf_index() -> Option<&'static CorePerfIndex> {
     static INDEX: std::sync::LazyLock<Option<CorePerfIndex>> = std::sync::LazyLock::new(|| {
         let path = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS")?;
         let input: CorePerfInput = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
@@ -43,7 +43,7 @@ pub(super) fn coreperf_index() -> Option<&'static CorePerfIndex> {
     INDEX.as_ref()
 }
 
-pub(super) fn coreperf_slot_region(
+pub(in crate::tick) fn coreperf_slot_region(
     index: &CorePerfIndex,
     state: &TickState,
     slot: EntitySlot,
@@ -61,7 +61,7 @@ pub(crate) fn coreperf_block_region(x: i32, z: i32) -> Option<usize> {
         .copied()
 }
 
-pub(super) fn coreperf_productive_changes(
+pub(in crate::tick) fn coreperf_productive_changes(
     changes: &[crate::boundary::BlockChange],
     sample: &mut crate::boundary::CorePerfTick,
 ) {
@@ -88,7 +88,7 @@ fn record_productive_changes(
     }
 }
 
-pub(super) fn coreperf_damage_observation(
+pub(in crate::tick) fn coreperf_damage_observation(
     sample: &mut crate::boundary::CorePerfTick,
     state: &TickState,
     slot: EntitySlot,
@@ -119,7 +119,7 @@ fn record_damage_observation(
     }
 }
 
-pub(super) fn coreperf_region(
+pub(in crate::tick) fn coreperf_region(
     counts: &mut HashMap<usize, crate::boundary::CorePerfRegion>,
     region: usize,
 ) -> &mut crate::boundary::CorePerfRegion {
@@ -131,7 +131,7 @@ pub(super) fn coreperf_region(
         })
 }
 
-pub(super) fn coreperf_active_chunks(
+pub(in crate::tick) fn coreperf_active_chunks(
     index: &CorePerfIndex,
     active: impl Iterator<Item = (i32, i32)>,
     counts: &mut HashMap<usize, crate::boundary::CorePerfRegion>,

@@ -7,27 +7,27 @@ use super::*;
 /// Connections registry: connection -> player entity + identity.
 #[derive(Debug, Default)]
 pub struct Connections {
-    by_connection: HashMap<ConnectionId, EntityId>,
-    by_entity: HashMap<EntityId, ConnectionId>,
-    names: HashMap<ConnectionId, String>,
-    uuids: HashMap<ConnectionId, uuid::Uuid>,
+    pub(in crate::tick) by_connection: HashMap<ConnectionId, EntityId>,
+    pub(in crate::tick) by_entity: HashMap<EntityId, ConnectionId>,
+    pub(in crate::tick) names: HashMap<ConnectionId, String>,
+    pub(in crate::tick) uuids: HashMap<ConnectionId, uuid::Uuid>,
     /// Transient negotiated client view radii, keyed by live connection.
     /// Recorded on [`PlayerInput::SetViewDistance`](crate::boundary::PlayerInput::SetViewDistance)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted: unnegotiated callers
     /// fall back to the configured server view.
-    view_distances: HashMap<ConnectionId, u8>,
+    pub(in crate::tick) view_distances: HashMap<ConnectionId, u8>,
     /// Transient client UI locales, keyed by live connection.
     /// Recorded on [`PlayerInput::SetLocale`](crate::boundary::PlayerInput::SetLocale)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted: unnegotiated callers read
     /// English.
-    locales: HashMap<ConnectionId, String>,
+    pub(in crate::tick) locales: HashMap<ConnectionId, String>,
     /// Transient client chat settings, keyed by live connection. Recorded on
     /// [`PlayerInput::SetChatVisibility`](crate::boundary::PlayerInput::SetChatVisibility)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted; absent means `Full`.
-    chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
+    pub(in crate::tick) chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
 }
 
 impl Connections {

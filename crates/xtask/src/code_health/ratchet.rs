@@ -60,10 +60,14 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     merge_block_write_pushes: 17,
     // D9 baseline on b58021e61, 2026-11-17; no spare headroom.
     construction_field_accesses: 31,
+    // Owner-module extraction (ADR 0021 Step 3, D9-EXTRACTION), 2026-11-17 on
+    // de660fabd: the entity-phase coreperf/rest/prepare/step owners move into
+    // `tick/entity_phase/*` and the connection registry, state impl and dimension
+    // driver into `tick/*`, so both hot files measure 259 with no spare headroom.
     hot_files: &[
-        ("tick/entity_phase.rs", 734),
+        ("tick/entity_phase.rs", 259),
         ("settlements/construction.rs", 1_076),
-        ("tick.rs", 834),
+        ("tick.rs", 259),
         ("entities.rs", 924),
     ],
 };

@@ -4,7 +4,7 @@
 
 use super::*;
 
-pub(super) fn unchanged_entity_footprint(
+pub(in crate::tick) fn unchanged_entity_footprint(
     pos: [f64; 3],
     half_width: f64,
     chunk_revision: impl Fn(i32, i32) -> u64,
@@ -23,14 +23,14 @@ pub(super) fn unchanged_entity_footprint(
     })
 }
 
-pub(super) fn motion_thinks(tick: u64, flags: u16, period: u8) -> bool {
+pub(in crate::tick) fn motion_thinks(tick: u64, flags: u16, period: u8) -> bool {
     let phase = ((flags & MOTION_PHASE_MASK) >> MOTION_PHASE_SHIFT) as u8;
     (tick as u8).wrapping_add(phase) & (period - 1) == 0
 }
 
 /// Rest before the wide snapshot. Decision ticks additionally prove that the
 /// final wander branch's complete motion step is bit-identical to the input.
-pub(super) fn early_entity_rest(
+pub(in crate::tick) fn early_entity_rest(
     view: &PrepView,
     slot: EntitySlot,
     period: u8,
@@ -204,12 +204,12 @@ fn idle_rest_proved(view: &PrepView, slot: EntitySlot, flags: u16) -> bool {
 #[cfg(test)]
 thread_local! {
     /// Full physics proofs run on this thread (memo hits do not count).
-    pub(super) static REST_PHYSICS_PROOFS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(in crate::tick) static REST_PHYSICS_PROOFS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Keep the same physics, breathing and effect integration as `step_entity`.
 /// In particular, an imported on-ground flag is not itself a support proof.
-pub(super) fn idle_wander_motion_unchanged(view: &PrepView, slot: EntitySlot) -> bool {
+pub(in crate::tick) fn idle_wander_motion_unchanged(view: &PrepView, slot: EntitySlot) -> bool {
     #[cfg(test)]
     REST_PHYSICS_PROOFS.with(|runs| runs.set(runs.get() + 1));
     let body = &view.bodies[slot.0 as usize];

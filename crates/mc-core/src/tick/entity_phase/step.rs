@@ -4,45 +4,45 @@
 use super::*;
 
 /// Ticks between a mob's melee hits (vanilla `MeleeAttackGoal`).
-pub(super) const MELEE_ATTACK_INTERVAL: u32 = 20;
+pub(in crate::tick) const MELEE_ATTACK_INTERVAL: u32 = 20;
 
 /// Intent without a sequence number (assigned at drain time).
-pub(super) struct RawIntent {
-    pub(super) actor: EntityId,
-    pub(super) kind: IntentKind,
-    pub(super) footprint: Footprint,
+pub(in crate::tick) struct RawIntent {
+    pub(in crate::tick) actor: EntityId,
+    pub(in crate::tick) kind: IntentKind,
+    pub(in crate::tick) footprint: Footprint,
 }
 
 /// Step one entity: returns its movement write plus raw intents.
 /// Shared read-only context for entity stepping (no locks, no copies).
-pub(super) struct StepCtx<'a> {
-    pub(super) rows: &'a [ReadRow],
+pub(in crate::tick) struct StepCtx<'a> {
+    pub(in crate::tick) rows: &'a [ReadRow],
     /// Immutable through the indexed worker join; writes/compaction follow it.
-    pub(super) entities: &'a crate::entities::EntityStore,
-    pub(super) battle: &'a crate::battle::BattleState,
-    pub(super) retained_targets:
+    pub(in crate::tick) entities: &'a crate::entities::EntityStore,
+    pub(in crate::tick) battle: &'a crate::battle::BattleState,
+    pub(in crate::tick) retained_targets:
         &'a rustc_hash::FxHashMap<EntityId, (crate::target_grid::Target, f64)>,
-    pub(super) players: crate::target_grid::TargetGrid<'a>,
-    pub(super) passive: passive_follow::Context<'a>,
-    pub(super) dolphin_toys: &'a [[f64; 3]],
-    pub(super) villagers: crate::target_grid::TargetGrid<'a>,
-    pub(super) golem_targets: crate::target_grid::TargetGrid<'a>,
-    pub(super) piglin_targets: crate::target_grid::TargetGrid<'a>,
-    pub(super) zoglin_targets: crate::target_grid::TargetGrid<'a>,
-    pub(super) cow_cells: &'a HashMap<(i32, i32), Vec<usize>>,
-    pub(super) world: &'a ChunkWorld,
-    pub(super) chunk_loaded: &'a (dyn Fn(i32, i32) -> bool + Sync),
-    pub(super) registry: &'a CoreRegistry,
-    pub(super) tick: u64,
+    pub(in crate::tick) players: crate::target_grid::TargetGrid<'a>,
+    pub(in crate::tick) passive: passive_follow::Context<'a>,
+    pub(in crate::tick) dolphin_toys: &'a [[f64; 3]],
+    pub(in crate::tick) villagers: crate::target_grid::TargetGrid<'a>,
+    pub(in crate::tick) golem_targets: crate::target_grid::TargetGrid<'a>,
+    pub(in crate::tick) piglin_targets: crate::target_grid::TargetGrid<'a>,
+    pub(in crate::tick) zoglin_targets: crate::target_grid::TargetGrid<'a>,
+    pub(in crate::tick) cow_cells: &'a HashMap<(i32, i32), Vec<usize>>,
+    pub(in crate::tick) world: &'a ChunkWorld,
+    pub(in crate::tick) chunk_loaded: &'a (dyn Fn(i32, i32) -> bool + Sync),
+    pub(in crate::tick) registry: &'a CoreRegistry,
+    pub(in crate::tick) tick: u64,
     /// Content revision of a resident chunk (`u64::MAX` when absent).
-    pub(super) chunk_revision: &'a (dyn Fn(i32, i32) -> u64 + Sync),
+    pub(in crate::tick) chunk_revision: &'a (dyn Fn(i32, i32) -> u64 + Sync),
     /// World revision the previous entity phase read.
-    pub(super) unchanged_since: u64,
-    pub(super) difficulty: crate::survival::Difficulty,
-    pub(super) sky_darken: u8,
+    pub(in crate::tick) unchanged_since: u64,
+    pub(in crate::tick) difficulty: crate::survival::Difficulty,
+    pub(in crate::tick) sky_darken: u8,
 }
 
-pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawIntent>) {
+pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawIntent>) {
     let reader = ctx.world.physics_reader();
     let rows = ctx.rows;
     let players = ctx.players.table();
@@ -581,12 +581,12 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
 /// Mob activation rings in chunks around each player (see the entity
 /// phase): every tick within [`MOB_NEAR_CHUNKS`], every 2 ticks within
 /// [`MOB_MID_CHUNKS`], every [`MOB_FAR_PERIOD`] ticks beyond.
-pub(super) const MOB_NEAR_CHUNKS: i32 = 2;
-pub(super) const MOB_MID_CHUNKS: i32 = 4;
-pub(super) const MOB_FAR_PERIOD: u64 = 4;
+pub(in crate::tick) const MOB_NEAR_CHUNKS: i32 = 2;
+pub(in crate::tick) const MOB_MID_CHUNKS: i32 = 4;
+pub(in crate::tick) const MOB_FAR_PERIOD: u64 = 4;
 
 /// Item pickup intents: live players collect mature item entities in reach.
-pub(super) fn collect_pickup_intents(state: &TickState, intents: &mut Vec<Intent>) {
+pub(in crate::tick) fn collect_pickup_intents(state: &TickState, intents: &mut Vec<Intent>) {
     collect_pickup_intents_from(
         state.entities.bodies(),
         state.entities.positions(),
@@ -603,7 +603,7 @@ pub(super) fn collect_pickup_intents(state: &TickState, intents: &mut Vec<Intent
 
 /// Inner pickup matcher over borrowed Body/position slices: exact kind lanes
 /// (players, then items), authoritative maturity and post-move positions.
-pub(super) fn collect_pickup_intents_from(
+pub(in crate::tick) fn collect_pickup_intents_from(
     bodies: &[Body],
     positions: &[[f64; 3]],
     player_slots: impl Iterator<Item = EntitySlot>,

@@ -8,7 +8,9 @@ use super::*;
 /// Live, non-converting resident bodies (villager, wandering trader) in slot
 /// order. The resident index replaces a dense scan; slot order is the
 /// `TargetGrid` tie-break, so it must match the dense order exactly.
-pub(super) fn resident_villager_targets(entities: &EntityStore) -> Vec<(EntityId, [f64; 3])> {
+pub(in crate::tick) fn resident_villager_targets(
+    entities: &EntityStore,
+) -> Vec<(EntityId, [f64; 3])> {
     let mut slots = Vec::new();
     entities.resident_slots_sorted(&mut slots);
     slots
@@ -33,7 +35,7 @@ pub(super) fn resident_villager_targets(entities: &EntityStore) -> Vec<(EntityId
 /// straight into `out.rows` with an indexed parallel collect: no per-chunk row
 /// vectors and no row copy. Rows needing the `TickState`-only helpers are then
 /// rebuilt serially before the combined projection reduction.
-pub(super) fn prepare_rows(
+pub(in crate::tick) fn prepare_rows(
     state: &TickState,
     periods: &[u8],
     env: &PrepEnv,
@@ -153,29 +155,29 @@ pub(super) fn prepare_rows(
 }
 
 /// Slot ranges larger than this admission count prepare rows in parallel.
-pub(super) const PARALLEL_PREP_MIN: usize = 4096;
-pub(super) const PREP_CHUNK: usize = 2048;
+pub(in crate::tick) const PARALLEL_PREP_MIN: usize = 4096;
+pub(in crate::tick) const PREP_CHUNK: usize = 2048;
 
 /// Read-only components row preparation needs. `TickState` owns channel
 /// endpoints and is not `Sync`, so workers borrow only these.
-pub(super) struct PrepView<'a> {
-    pub(super) entities: &'a EntityStore,
-    pub(super) bodies: &'a [Body],
-    pub(super) positions: &'a [[f64; 3]],
-    pub(super) velocities: &'a [[f64; 3]],
-    pub(super) rotations: &'a [[f32; 3]],
-    pub(super) ground: &'a [bool],
-    pub(super) impulses: &'a [[f64; 2]],
-    pub(super) registry: &'a crate::registry::CoreRegistry,
-    pub(super) world: &'a crate::world::ChunkWorld,
-    pub(super) hostile: &'a crate::hostile::HostileState,
-    pub(super) tick: u64,
-    pub(super) has_tempting_items: bool,
-    pub(super) rest_proofs: Option<&'a RestProofs>,
+pub(in crate::tick) struct PrepView<'a> {
+    pub(in crate::tick) entities: &'a EntityStore,
+    pub(in crate::tick) bodies: &'a [Body],
+    pub(in crate::tick) positions: &'a [[f64; 3]],
+    pub(in crate::tick) velocities: &'a [[f64; 3]],
+    pub(in crate::tick) rotations: &'a [[f32; 3]],
+    pub(in crate::tick) ground: &'a [bool],
+    pub(in crate::tick) impulses: &'a [[f64; 2]],
+    pub(in crate::tick) registry: &'a crate::registry::CoreRegistry,
+    pub(in crate::tick) world: &'a crate::world::ChunkWorld,
+    pub(in crate::tick) hostile: &'a crate::hostile::HostileState,
+    pub(in crate::tick) tick: u64,
+    pub(in crate::tick) has_tempting_items: bool,
+    pub(in crate::tick) rest_proofs: Option<&'a RestProofs>,
 }
 
 impl<'a> PrepView<'a> {
-    pub(super) fn of(state: &'a TickState) -> Self {
+    pub(in crate::tick) fn of(state: &'a TickState) -> Self {
         Self {
             entities: &state.entities,
             bodies: state.entities.bodies(),
@@ -209,15 +211,15 @@ impl<'a> PrepView<'a> {
 /// gates in `read_row` ever carry them; workers leave the default and the
 /// serial fix-up pass rebuilds those rows.
 #[derive(Default)]
-pub(super) struct RarePrep {
-    pub(super) observed: bool,
-    pub(super) enderman_target: Option<EntityId>,
-    pub(super) plugin_target: Option<[f64; 3]>,
-    pub(super) gold_target: Option<[f64; 3]>,
+pub(in crate::tick) struct RarePrep {
+    pub(in crate::tick) observed: bool,
+    pub(in crate::tick) enderman_target: Option<EntityId>,
+    pub(in crate::tick) plugin_target: Option<[f64; 3]>,
+    pub(in crate::tick) gold_target: Option<[f64; 3]>,
 }
 
 impl RarePrep {
-    pub(super) fn of(state: &TickState, slot: EntitySlot) -> Self {
+    pub(in crate::tick) fn of(state: &TickState, slot: EntitySlot) -> Self {
         Self {
             observed: crate::creaking::observed(state, slot),
             enderman_target: crate::enderman::target(state, slot),
@@ -230,24 +232,24 @@ impl RarePrep {
 /// Prepared rows, serial special pass entries and resting slots of a slot
 /// range, plus indexes (into `rows`) of rows that need the rare helpers.
 #[derive(Default)]
-pub(super) struct PrepChunk {
-    pub(super) rows: Vec<ReadRow>,
-    pub(super) specials: Vec<(EntityId, crate::hostile::Special)>,
-    pub(super) resting: Vec<EntitySlot>,
-    pub(super) rare: Vec<usize>,
-    pub(super) summary: PrepSummary,
+pub(in crate::tick) struct PrepChunk {
+    pub(in crate::tick) rows: Vec<ReadRow>,
+    pub(in crate::tick) specials: Vec<(EntityId, crate::hostile::Special)>,
+    pub(in crate::tick) resting: Vec<EntitySlot>,
+    pub(in crate::tick) rare: Vec<usize>,
+    pub(in crate::tick) summary: PrepSummary,
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
-pub(super) struct PrepSummary {
-    pub(super) has_dolphin: bool,
-    pub(super) consumers: [usize; 5],
-    pub(super) temptation_consumers: usize,
-    pub(super) cow_cells: HashMap<(i32, i32), Vec<usize>>,
+pub(in crate::tick) struct PrepSummary {
+    pub(in crate::tick) has_dolphin: bool,
+    pub(in crate::tick) consumers: [usize; 5],
+    pub(in crate::tick) temptation_consumers: usize,
+    pub(in crate::tick) cow_cells: HashMap<(i32, i32), Vec<usize>>,
 }
 
 impl PrepSummary {
-    pub(super) fn of(rows: &[ReadRow], base: usize) -> Self {
+    pub(in crate::tick) fn of(rows: &[ReadRow], base: usize) -> Self {
         let mut summary = Self::default();
         for (offset, row) in rows.iter().enumerate() {
             summary.temptation_consumers += usize::from(row.temptable && row.alive && row.think);
@@ -284,18 +286,18 @@ impl PrepSummary {
     }
 }
 
-pub(super) struct PrepEnv<'a> {
-    pub(super) targets_empty: bool,
-    pub(super) villagers_empty: bool,
-    pub(super) unchanged_since: u64,
+pub(in crate::tick) struct PrepEnv<'a> {
+    pub(in crate::tick) targets_empty: bool,
+    pub(in crate::tick) villagers_empty: bool,
+    pub(in crate::tick) unchanged_since: u64,
     /// The rest-proof memo, or `None` to run every proof (tests, reference).
-    pub(super) rest_proofs: Option<&'a RestProofs>,
+    pub(in crate::tick) rest_proofs: Option<&'a RestProofs>,
 }
 
 /// Admit one slot: record its serial special entry and either rest it
 /// (`None`) or return the slot and its motion flags for a worker row.
 /// Reads the immutable store only; the caller owns ordering.
-pub(super) fn admit_slot(
+pub(in crate::tick) fn admit_slot(
     view: &PrepView,
     index: usize,
     period: u8,
@@ -347,7 +349,7 @@ pub(super) fn admit_slot(
 }
 
 /// Serial admission: admit one slot and snapshot its worker row into `out`.
-pub(super) fn prepare_slot(
+pub(in crate::tick) fn prepare_slot(
     view: &PrepView,
     index: usize,
     period: u8,
@@ -374,7 +376,7 @@ pub(super) fn prepare_slot(
 /// The worker snapshot of one admitted slot, and whether the row needs the
 /// `TickState`-only helpers in `RarePrep` (every helper below returns its
 /// default when that is false).
-pub(super) fn read_row(
+pub(in crate::tick) fn read_row(
     view: &PrepView,
     slot: EntitySlot,
     flags: u16,
@@ -557,7 +559,7 @@ pub(super) fn read_row(
 /// and calls `admitted` for each, in slot order. Reads the store only; the
 /// result of a slot depends on nothing but that slot, so disjoint ranges are
 /// independent.
-pub(super) fn dense_period_marks(
+pub(in crate::tick) fn dense_period_marks(
     entities: &EntityStore,
     world: &crate::world::ChunkWorld,
     activation: &HashMap<(i32, i32), u64>,
@@ -608,7 +610,7 @@ pub(super) fn dense_period_marks(
 /// function of its own slot (the per-range chunk cache only skips repeated
 /// lookups), so any partition yields the serial marks and count; the
 /// equivalence test pins it. Removal path: pass `parallel = false`.
-pub(super) fn mark_dense_admission(
+pub(in crate::tick) fn mark_dense_admission(
     entities: &EntityStore,
     world: &crate::world::ChunkWorld,
     activation: &HashMap<(i32, i32), u64>,
@@ -647,7 +649,7 @@ pub(super) fn mark_dense_admission(
 /// which is exactly the case where the writeback does nothing; kept slots are
 /// written serially in slot order. Removal path: write back every resting
 /// slot (identical result).
-pub(super) fn retain_resting_writeback(state: &TickState, resting: &mut Vec<EntitySlot>) {
+pub(in crate::tick) fn retain_resting_writeback(state: &TickState, resting: &mut Vec<EntitySlot>) {
     if resting.len() < PARALLEL_PREP_MIN {
         return;
     }
