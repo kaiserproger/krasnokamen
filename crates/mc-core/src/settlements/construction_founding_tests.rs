@@ -468,6 +468,102 @@ fn incomplete_or_broken_outpost_cannot_partially_publish_a_daughter() {
     assert_eq!(civil_image(&state), before);
 }
 
+fn queue_unfunded_order(state: &mut TickState, parent: SettlementId, blueprint: &str) {
+    state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .fill(mc_data::ItemStack::EMPTY);
+    super::super::request_build(state, parent, blueprint).unwrap();
+    assert!(
+        state
+            .settlements
+            .get(parent)
+            .unwrap()
+            .pending_order
+            .is_some()
+    );
+    assert!(state.settlements.get(parent).unwrap().project.is_none());
+}
+
+#[test]
+fn pending_order_does_not_block_completed_founding_handover() {
+    let (mut state, parent, expedition) = prepared(4);
+    queue_unfunded_order(&mut state, parent, "house");
+    super::super::plan(&mut state, parent);
+    let child = state
+        .settlements
+        .find("colony_2")
+        .expect("completed expedition publishes its daughter")
+        .id;
+    let record = state.settlements.get(parent).unwrap();
+    assert!(record.founding.is_none());
+    assert!(record.project.is_none());
+    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert_eq!(state.settlements.member_count(child), 3);
+    for (name, origin) in expedition.sites() {
+        assert!(!executor::built_at(&state, parent, name, origin));
+        assert!(executor::built_at(&state, child, name, origin));
+    }
+}
+
+#[test]
+fn pending_order_does_not_block_lost_founding_household_cancellation() {
+    let (mut state, parent, expedition) = prepared(0);
+    queue_unfunded_order(&mut state, parent, "house");
+    for member in households::members(&state, parent, &expedition.household)
+        .into_iter()
+        .take(2)
+    {
+        households::detach(&mut state, member);
+    }
+    assert!(state.settlements.get(parent).unwrap().founding.is_some());
+    super::super::plan(&mut state, parent);
+    let record = state.settlements.get(parent).unwrap();
+    assert!(
+        record.founding.is_none(),
+        "lost family releases the expedition claim"
+    );
+    assert!(record.project.is_none());
+    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert_eq!(state.settlements.records().count(), 1);
+}
+
+#[test]
+fn pending_order_still_blocks_new_founding_construction() {
+    let (mut state, parent, expedition) = prepared(0);
+    queue_unfunded_order(&mut state, parent, "farm");
+    let name = expedition.sites()[0].0;
+    fund(&mut state, name, 1);
+    let bill = &blueprints::get(&state.registry, name)
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .materials;
+    assert!(
+        funded_variant(
+            &state,
+            parent,
+            bill,
+            &executor::source_images(&state, parent)
+        )
+        .is_some()
+    );
+    super::super::plan(&mut state, parent);
+    let record = state.settlements.get(parent).unwrap();
+    assert_eq!(
+        record.founding.as_ref().unwrap().destination,
+        expedition.destination
+    );
+    assert!(
+        record.project.is_none(),
+        "even funded new outpost work waits"
+    );
+    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "farm");
+    assert_eq!(state.settlements.records().count(), 1);
+}
+
 #[test]
 fn recovery_refuses_overlapping_or_missing_household_claims_and_retirement_cancels() {
     let (mut state, parent, expedition) = prepared(0);
