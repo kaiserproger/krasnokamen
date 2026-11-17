@@ -328,6 +328,35 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     building::tick(state, id);
 }
 
+/// Fixture-only: the approved upgrade rule vetoes every tree or sapling cell in
+/// an upgrade's work diff, including the building's own authored log beam, before
+/// its authored-state exemption; with block capture disabled a live client within
+/// 32 blocks therefore refuses such an upgrade. A fixture that exercises a plain
+/// upgrade removes those cells here instead of weakening the rule. The refusal
+/// itself stays covered by
+/// `upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff` and the beam
+/// regressions.
+pub(crate) fn clear_work_diff_trees(state: &mut TickState, min: [i32; 3], max: [i32; 3]) -> usize {
+    let air = state.registry.states.air;
+    // The builder's placements may still sit in the chunk overlay; fold it so
+    // both the scan and the removal see the real blocks.
+    state.world.fold_overlay();
+    let mut cleared = 0;
+    for x in min[0]..=max[0] {
+        for z in min[2]..=max[2] {
+            for y in min[1]..=max[1] {
+                if state.world.block_at(x, y, z).is_some_and(|block| {
+                    crate::settlements::forestry::tree_or_sapling(state, block)
+                }) {
+                    state.world.set_block(x, y, z, air);
+                    cleared += 1;
+                }
+            }
+        }
+    }
+    cleared
+}
+
 pub(crate) fn complete(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     for _ in 0..4096 {
         if state.settlements.get(id).unwrap().project.is_none() {

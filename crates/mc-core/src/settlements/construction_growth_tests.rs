@@ -1049,8 +1049,11 @@ fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
         let tree = block(&state, name, &[]);
         state.world.set_block(at[0], at[1], at[2], tree);
         assert!(
-            planned_cells(&state, &project, "oak", &mut Default::default()).is_err(),
-            "{name}"
+            matches!(
+                planned_cells(&state, &project, "oak", &mut Default::default()),
+                Err(site_refusals::Reason::ProtectedObstruction)
+            ),
+            "a natural tree cell in the upgrade work diff is refused as ProtectedObstruction: {name}"
         );
         assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(tree));
         assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);

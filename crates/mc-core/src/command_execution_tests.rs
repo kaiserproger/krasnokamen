@@ -3619,6 +3619,17 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
     complete(&mut state, id, builder);
+    // The approved upgrade rule vetoes tree cells in the work diff before the
+    // building's own authored-state exemption, so this live-client fixture with
+    // block capture disabled drops the L1 log beams before the plain upgrade.
+    assert!(
+        crate::settlements::construction::tests::clear_work_diff_trees(
+            &mut state,
+            [0, 201, 0],
+            [15, 223, 15]
+        ) > 0,
+        "the fixture must hold the beams the upgrade rule would veto"
+    );
     let building = *state
         .settlements
         .get(id)

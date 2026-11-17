@@ -1577,6 +1577,17 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
     click(&mut state, id, "project_cancel_pending", &[]);
 
     // Funded L2 stock starts the upgrade immediately, with no debit.
+    // The approved upgrade rule vetoes tree cells in the work diff before the
+    // building's own authored-state exemption, so this live-client fixture with
+    // block capture disabled drops the L1 log beams before the plain upgrade.
+    assert!(
+        crate::settlements::construction::tests::clear_work_diff_trees(
+            &mut state,
+            [0, 201, 0],
+            [15, 223, 15]
+        ) > 0,
+        "the fixture must hold the beams the upgrade rule would veto"
+    );
     crate::settlements::construction::tests::fund(&mut state, "house", 2);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let started = last_dialog(&click(
