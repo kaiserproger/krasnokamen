@@ -469,6 +469,11 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
     }
 }
 
+/// Half of one wire rotation quantum (a full turn is 256 steps, so one step is
+/// 360/256 = 1.40625 degrees): a turn smaller than this rounds to the same
+/// client-visible rotation, so it cannot be seen and must not cost a step.
+const REST_TURN_QUANTUM: f32 = 0.703_125;
+
 /// Whether a rested battle row's skipped step would still turn it toward its
 /// look target, i.e. whether the rest is not the identity for this row.
 ///
@@ -476,10 +481,16 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
 /// velocity every row that reaches the rest has (`early_entity_rest` checks
 /// ground, velocity and drive first). A row that already faces its target keeps
 /// resting; one whose facing is behind takes the ordinary step until it faces
-/// it (BATTLE-REST-SKIPS-TARGET-FACING). Off-axis targets can need one more
-/// sub-quantum step after the turn, because `rotate` keeps the raw angle
-/// instead of a normalized one; that residue is far below one wire yaw quantum
-/// (1/256 turn = 1.40625 degrees), so it is invisible to a client.
+/// it (BATTLE-REST-SKIPS-TARGET-FACING).
+///
+/// The comparison is a half wire quantum, not exact equality: a battle target
+/// moves almost every tick (`columns.rs` re-projects `target.pos`), and a
+/// measured census of a 300-per-side staged battle found 91% of the refused
+/// turns below one 1.40625-degree quantum and 99.5% caused by that jitter, so
+/// exact equality would spend a whole step on a rotation the client rounds away
+/// (receipts/BattleRest/BOUNDS-REST-TAKES.md). Everything at or above half a
+/// quantum still steps, so a resting row's drawn facing stays within one wire
+/// quantum of its target bearing.
 pub(crate) fn rest_turns_toward_target(
     columns: &Columns,
     slot: crate::entities::EntitySlot,
@@ -489,12 +500,15 @@ pub(crate) fn rest_turns_toward_target(
     let Some(target) = columns.look_by_slot.get(slot.0 as usize).copied().flatten() else {
         return false;
     };
-    crate::entity_motion::look(
+    let turned = crate::entity_motion::look(
         rotation,
         mc_physics::Vec3::new(position[0], position[1], position[2]),
         mc_physics::Vec3::ZERO,
         Some(target),
-    ) != rotation
+    );
+    let yaw = (turned[0] - rotation[0] + 180.0).rem_euclid(360.0) - 180.0;
+    let pitch = turned[1] - rotation[1];
+    yaw.abs() >= REST_TURN_QUANTUM || pitch.abs() >= REST_TURN_QUANTUM
 }
 
 #[cfg(test)]

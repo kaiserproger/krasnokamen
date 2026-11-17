@@ -1071,6 +1071,16 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
                 .set_rot(slot, write.rotation[0], write.rotation[1]);
         };
         let target = [pos[0] + 3.0, pos[1], pos[2] + 7.0];
+        // A turn below half a wire quantum (0.703125 deg) cannot change the
+        // client-visible rotation, so the row keeps resting: 0.0209 blocks of
+        // lateral offset over 4 blocks is 0.3 deg off the +z bearing.
+        state.entities.set_rot(slot, 0.0, 0.0);
+        aim(&mut state, [pos[0] + 0.0209, pos[1], pos[2] + 4.0]);
+        assert!(
+            can_early_rest(&mut state, slot),
+            "{species} rests through a sub-quantum facing error"
+        );
+        state.entities.set_rot(slot, 300.0, 12.0);
         aim(&mut state, target);
         // The guard pin: with a look target and the facing behind it, the rest
         // must be refused (red without the fix, where the row rests).
