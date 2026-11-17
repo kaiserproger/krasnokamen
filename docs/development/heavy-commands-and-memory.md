@@ -53,10 +53,10 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile waits
   only for tokens 1-2, so token 3 stays free for priority work (owner,
   2026-11-12: the battle video gets resources first), and a freed token goes to
-  a waiting normal-lane compile first (owner, 2026-11-18): a normal-lane waiter
-  holds `tokens/priority.gate`, and a background waiter that wins a token while
-  the gate is held gives it back and queues again once the priority compile has
-  won. Main exports the background lane for every agent outside the priority
+  a waiting normal-lane compile first (owner, 2026-11-18): every normal-lane
+  waiter holds a shared lock on `tokens/priority.gate`, and a background waiter
+  that wins a token while the gate is held gives it back and queues again once
+  every waiting priority compile has won. Main exports the background lane for every agent outside the priority
   task. The lock
   stays at fd 9 of the runner and its scope guardian, never the command, so
   the token returns once the scope is empty: on any exit, kill or OOM. The

@@ -335,6 +335,41 @@ class BuildTokenTests(unittest.TestCase):
                 self.finish(cmd)
         self.wait_tokens_free()
 
+    def test_two_waiting_priority_compiles_both_win_before_background(self):
+        running, _ = self.hold_three()
+        background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
+        saved, self.env = self.env, background
+        try:
+            waiter = self.start('cargo', 'build', '-p', 'bg')
+        finally:
+            self.env = saved
+        self.settle([waiter])
+        first = self.start('cargo', 'build', '-p', 's2')
+        self.settle([first])
+        second = self.start('cargo', 'build', '-p', 's4')
+        self.settle([second])
+        self.assertEqual((waiter.state, first.state, second.state), ('queued', 'queued', 'queued'))
+        # Token 3 goes to one priority compile; the next token the background lane
+        # could take still goes to the other one.
+        by_token = {cmd.token: cmd for cmd in running}
+        self.finish(by_token['3'])
+        readable, _, _ = select.select([first.proc.stdout, second.proc.stdout], [], [], BOUND)
+        self.assertTrue(readable, 'no priority compile took token 3')
+        winner = first if first.proc.stdout in readable else second
+        other = second if winner is first else first
+        self.wait_run(winner)
+        self.finish(by_token['1'])
+        self.wait_run(other)
+        self.assertEqual(other.token, '1')
+        readable, _, _ = select.select([waiter.proc.stdout], [], [], 0)
+        self.assertFalse(readable, 'the background compile started while a priority compile waited')
+        self.finish(by_token['2'])
+        self.wait_run(waiter)
+        self.assertEqual(waiter.token, '2')
+        for cmd in (winner, other, waiter):
+            self.finish(cmd)
+        self.wait_tokens_free()
+
 
 if __name__ == '__main__':
     unittest.main()

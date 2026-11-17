@@ -24,11 +24,11 @@ and mem-run.sh (three build tokens) both run through it.
   environment names a pipe fd in VAR_READY_FD (tests), writes b"w" to it once it is
   queued; a caller that won at once gets the fd closed instead.
 - Priority (owner 2026-11-18: the priority slice gets the next freed build token):
-  a waiter with --hold-gate FILE holds an exclusive flock on FILE while it waits; a
-  waiter with --yield-gate FILE that wins a slot while FILE is held gives the slot
-  back at once and sleeps on a shared flock of FILE until the priority waiter has
-  won, then queues again. A --yield-gate caller also skips the at-once take while
-  FILE is held.
+  every waiter with --hold-gate FILE holds a shared flock on FILE while it waits, so
+  any number of priority waiters keep it held together; a waiter with --yield-gate
+  FILE that wins a slot while FILE is held gives the slot back at once, sleeps on an
+  exclusive flock of FILE until the last priority waiter has won, then queues again.
+  A --yield-gate caller also skips the at-once take while FILE is held.
 """
 
 from __future__ import annotations
@@ -112,10 +112,10 @@ def main() -> None:
     yield_gate = opts.get("--yield-gate")
 
     def priority_waiting() -> int | None:
-        """An fd holding a shared lock on the yield gate, or None while a priority waiter holds it."""
+        """An open gate fd while any priority waiter holds the yield gate, else None."""
         gate = os.open(yield_gate, os.O_WRONLY | os.O_CREAT, 0o666)
         try:
-            fcntl.flock(gate, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return gate
         os.close(gate)
@@ -166,9 +166,10 @@ def main() -> None:
                     gate = priority_waiting()
                     if gate is not None:
                         # Hand the slot to the waiting priority compile, sleep until
-                        # it has won (it then releases the gate), and queue again.
+                        # every priority waiter has won (each then releases its
+                        # shared hold), and queue again.
                         os.close(fd)
-                        fcntl.flock(gate, fcntl.LOCK_SH)
+                        fcntl.flock(gate, fcntl.LOCK_EX)
                         os.close(gate)
                         continue
                 with guard:
@@ -181,13 +182,10 @@ def main() -> None:
 
         gate = None
         if "--hold-gate" in opts:
+            # Shared: other priority waiters hold it beside this one. Blocks only
+            # for the instant a yielding waiter tests the gate.
             gate = os.open(opts["--hold-gate"], os.O_WRONLY | os.O_CREAT, 0o666)
-            try:
-                fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                # Another priority compile already holds it; this one waits beside it.
-                os.close(gate)
-                gate = None
+            fcntl.flock(gate, fcntl.LOCK_SH)
         for slot in slots:
             threading.Thread(target=take, args=(slot,), daemon=True).start()
         if ready:
