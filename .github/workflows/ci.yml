@@ -46,6 +46,100 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99
       - uses: Swatinem/rust-cache@v2
       - run: python3 -m tools.harness run code-health
+  fuzz:
+    name: fuzz ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: frame_stream
+          - target: packets_pre_play
+          - target: packets_play
+          - target: loader_wire
+          - target: nbt
+          # mc-core plus wasmtime overruns this runner at opt-level 3 under
+          # coverage instrumentation, so the edge target is a dev-profile build.
+          - target: edge_play
+            extra: "--dev --features edge"
+    env:
+      # cargo-fuzz supplies its own sanitizer/coverage flags; the workflow-level
+      # `-D warnings` must not reach the instrumented build.
+      RUSTFLAGS: ""
+      FUZZ_SECONDS: "60"
+    defaults:
+      run:
+        working-directory: fuzz
+    steps:
+      - uses: actions/checkout@v4
+      # Nightly only for the sanitizer coverage build; the rest of CI and the L2
+      # gate stay on the pinned 1.99 toolchain.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-11-09
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz@0.13.2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz -> target
+      # actions/cache is immutable: each run writes a new key and restore-keys
+      # picks the newest corpus of the same target.
+      - name: Restore this target's corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+      - name: Seed a cold corpus from the real encoders
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(find "corpus/$TARGET" -type f -print -quit 2>/dev/null)" ]; then
+            cargo +nightly-2026-11-09 run --release --example seed_corpus -- corpus
+          fi
+      - name: Run ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+          EXTRA: ${{ matrix.extra }}
+        run: |
+          set -euo pipefail
+          cargo +nightly-2026-11-09 fuzz run $EXTRA "$TARGET" -- \
+            -max_total_time="$FUZZ_SECONDS" \
+            -rss_limit_mb=2048 \
+            -timeout=20 \
+            -max_len=16384 \
+            -print_final_stats=1 \
+            2>&1 | tee "fuzz-$TARGET.log"
+      - name: Publish the run summary
+        if: always()
+        run: |
+          set -euo pipefail
+          log="fuzz-${{ matrix.target }}.log"
+          {
+            echo "### fuzz ${{ matrix.target }} (${FUZZ_SECONDS}s)"
+            echo '```'
+            if [ -f "$log" ]; then
+              tail -n 20 "$log"
+            else
+              echo "no log: the build failed before the fuzzer started"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the crash artifact and log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ matrix.target }}-failure
+          path: |
+            fuzz/artifacts/${{ matrix.target }}
+            fuzz/fuzz-${{ matrix.target }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
   test:
     name: cargo test (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -226,7 +320,7 @@ jobs:
   release-build:
     name: Release binary (${{ matrix.target }})
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [fmt, clippy, code-health, test, build, loader, release-tools]
+    needs: [fmt, clippy, code-health, fuzz, test, build, loader, release-tools]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

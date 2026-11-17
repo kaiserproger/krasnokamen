@@ -1,0 +1,114 @@
+name: Fuzz nightly
+
+# The long decoder-fuzzing run. `ci.yml`'s `fuzz` job is the canonical definition
+# of the steps and flags (60 s per target on every push and pull request); this
+# workflow runs the same legs for 15 minutes from the corpus those runs built.
+# Keep the two in step when a flag changes; docs/AGENT_TOOLING.md#decoder-fuzzing-fuzz
+# documents both.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds per fuzz target
+        required: false
+        default: "900"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  FUZZ_SECONDS: ${{ inputs.seconds || '900' }}
+
+jobs:
+  target:
+    name: fuzz ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: frame_stream
+          - target: packets_pre_play
+          - target: packets_play
+          - target: loader_wire
+          - target: nbt
+          # mc-core plus wasmtime overruns the runner at opt-level 3 under
+          # coverage instrumentation, so the edge target is a dev-profile build.
+          - target: edge_play
+            extra: "--dev --features edge"
+    env:
+      # cargo-fuzz supplies its own sanitizer/coverage flags; never inherit them
+      # from the environment (the same reason ci.yml clears this job's RUSTFLAGS).
+      RUSTFLAGS: ""
+    defaults:
+      run:
+        working-directory: fuzz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-11-09
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz@0.13.2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz -> target
+      - name: Restore this target's corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+      - name: Seed a cold corpus from the real encoders
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(find "corpus/$TARGET" -type f -print -quit 2>/dev/null)" ]; then
+            cargo +nightly-2026-11-09 run --release --example seed_corpus -- corpus
+          fi
+      - name: Run ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+          EXTRA: ${{ matrix.extra }}
+        run: |
+          set -euo pipefail
+          cargo +nightly-2026-11-09 fuzz run $EXTRA "$TARGET" -- \
+            -max_total_time="$FUZZ_SECONDS" \
+            -rss_limit_mb=2048 \
+            -timeout=20 \
+            -max_len=16384 \
+            -print_final_stats=1 \
+            2>&1 | tee "fuzz-$TARGET.log"
+      - name: Publish the run summary
+        if: always()
+        run: |
+          set -euo pipefail
+          log="fuzz-${{ matrix.target }}.log"
+          {
+            echo "### fuzz ${{ matrix.target }} (${FUZZ_SECONDS}s)"
+            echo '```'
+            if [ -f "$log" ]; then
+              grep -E '^(#[0-9]+|stat::|Done )' "$log" | tail -n 25
+            else
+              echo "no log: the build failed before the fuzzer started"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the crash artifact and log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ matrix.target }}-failure
+          path: |
+            fuzz/artifacts/${{ matrix.target }}
+            fuzz/fuzz-${{ matrix.target }}.log
+          if-no-files-found: warn
+          retention-days: 14

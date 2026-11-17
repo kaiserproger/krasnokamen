@@ -697,6 +697,73 @@ the canonical `run` entrypoint sets `KRASNOKAMEN_HARNESS_LOG_STDOUT=1` for its
 subprocesses so readiness events and per-run captured logs stay available
 (`RUST_LOG` controls `logs/debug.log`, not the captured threshold).
 
+## Decoder fuzzing (`fuzz`)
+
+`fuzz/` is its own workspace (`krasnokamen-fuzz`, `cargo-fuzz`) with six targets
+covering the bytes a client can make the server decode; [`fuzz/README.md`](../fuzz/README.md)
+owns the target table and each target's property. Because it is outside the root
+workspace, `run test`/`correctness` and `code-health` never build it. The `fuzz`
+job in `ci.yml` runs it on every push and pull request, and
+`.github/workflows/fuzz-nightly.yml` runs the same legs nightly.
+
+| Trigger | Per target | Notes |
+| --- | --- | --- |
+| push to `main`, tags, pull request | 60 s | `ci.yml` job `fuzz`, one matrix leg per target, `fail-fast: false` |
+| nightly `17 3 * * *` | 15 min | `fuzz-nightly.yml`, from the corpus the short runs built |
+| `workflow_dispatch` of `fuzz-nightly.yml` | input `seconds` | default 900 s, for a one-off longer hunt |
+
+`release-build` needs `fuzz`, so a decoder crash on the tagged commit blocks the
+release build. The nightly workflow duplicates the leg's steps on purpose: it is
+the same command with a longer budget, and `ci.yml` is the canonical copy.
+
+- The fuzz job alone uses the pinned nightly toolchain (`nightly-2026-11-09`,
+  `cargo-fuzz` 0.13.2); the server, L2 and every other CI job stay on the pinned
+  1.99 toolchain. `cargo-fuzz` supplies its own `RUSTFLAGS` (sanitizer +
+  coverage), so the workspace `-D warnings` is not part of the fuzz build.
+- Every run uses `-rss_limit_mb=2048 -timeout=20 -max_len=16384`. A crash, an
+  out-of-memory, a 20-second input or a hang fails that leg and the run, and the
+  artifact directory plus the fuzzer log are uploaded as
+  `fuzz-<target>-failure` (14 days).
+- The corpus is cached per target (`fuzz-corpus-<target>-<sha>`, restored by
+  prefix). `actions/cache` is immutable, so each run writes a new key and the
+  next run restores the newest one. A cold corpus is first seeded by
+  `cargo run --release --example seed_corpus -- corpus`, the structure-aware
+  seeds encoded by the real packet/NBT encoders.
+- `edge_play` is the only leg built with `--dev --features edge`: mc-core plus
+  wasmtime overruns the runner's memory at opt-level 3 under coverage
+  instrumentation.
+
+Reproduce and fix a CI crash:
+
+```sh
+cd fuzz
+# Replay the exact input under libFuzzer, then minimise it.
+cargo +nightly-2026-11-09 fuzz run <target> artifacts/<target>/<crash-file>
+cargo +nightly-2026-11-09 fuzz tmin <target> artifacts/<target>/<crash-file>
+# edge_play adds --dev --features edge to both commands.
+```
+
+Then add the minimised bytes as a regression test in the owning crate
+(`crates/mc-protocol`, `crates/mc-nbt`, `crates/mc-loader`, `crates/mc-edge`)
+that expects an error, and file the row per the [bug ledger](bugs/README.md);
+promotion stays with `ledger promote`. Do not fold a parser fix into a
+fuzzing-tooling change.
+
+On the owner host every heavy command runs through
+`tools/dev/mem-run.sh -m 6G` and release builds are refused outside
+`tools/dev/pin-release`, so local legs use `--dev` (including the seed example):
+
+```sh
+cd fuzz
+/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G \
+  cargo +nightly-2026-11-09 fuzz run --dev nbt -- \
+  -max_total_time=60 -rss_limit_mb=2048 -timeout=20 -max_len=16384 -print_final_stats=1
+```
+
+A dev-profile leg executes fewer inputs per second than the CI release leg, so a
+clean local run is not a substitute for the CI result: it proves the target
+builds and finds nothing in that window, not that CI's window is covered.
+
 ## Code and client tools
 
 The Minecraft client MCP (embedded in the Loader dev client and the native
@@ -746,8 +813,8 @@ installed for occasional questions. Build its ignored `.codegraph/` index with
   [performance windows](development/performance-windows-and-profiling.md)).
 - [`fuzz/README.md`](../fuzz/README.md): `cargo-fuzz` targets for client-controlled
   decoders (protocol frames, packets, Loader wire, NBT, edge play). Outside the
-  root workspace, so L2 and CI never build it; every finding becomes a regression
-  test in the owning crate.
+  root workspace, so L2 never builds it; the [decoder fuzzing](#decoder-fuzzing-fuzz)
+  jobs run it in CI, and every finding becomes a regression test in the owning crate.
 - [`examples/loader-live-gate/README.md`](../examples/loader-live-gate/README.md):
   the retained two-owner Loader plugin fixture.
 
