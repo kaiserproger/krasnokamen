@@ -1715,7 +1715,7 @@ def _wait_building_level(
     artifact: Path,
     capture_name: str,
 ) -> bool:
-    blueprint = next(blueprint for blueprint in _authored_blueprints() if blueprint["kind"] == kind_label.lower())
+    blueprint = next(blueprint for blueprint in _authored_blueprints() if blueprint["id"] == kind_label.lower())
     deadline = time.monotonic() + budget_seconds
     last_check = 0.0
     while time.monotonic() < deadline:

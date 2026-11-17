@@ -44,14 +44,17 @@ class VillageAutonomyQaTests(unittest.TestCase):
         probe.observe.return_value = {
             "recent_chat": ["Buildings: #123 storage level 1 [12, 70, 20]-[18, 75, 26]."]
         }
-        with patch.object(qa, "_observe_blueprint", return_value=True), patch.object(
-            qa.time, "monotonic", side_effect=[0.0, 0.0, 100.0, 100.0, 2.0],
-        ):
+        plaza = {"id": "spanish_plaza", "kind": "storage"}
+        storage = {"id": "storage", "kind": "storage"}
+        with patch.object(qa, "_authored_blueprints", return_value=[plaza, storage]), patch.object(
+            qa, "_observe_blueprint", return_value=True,
+        ) as observe, patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0, 100.0, 100.0, 2.0]):
             completed = qa._wait_building_level(
                 probe, {}, "Storage", 1, 1.0, (1, 2, 3),
                 SimpleNamespace(windowed=False), Path("unused"), "storage",
             )
         self.assertTrue(completed, "CLI reports 'storage level 1', not 'Storage L1'")
+        self.assertIs(observe.call_args.args[3], storage)
 
     def test_blueprint_observation_requires_every_non_air_cell(self) -> None:
         probe = Mock()
