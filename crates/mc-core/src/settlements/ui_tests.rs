@@ -2256,14 +2256,14 @@ pub(super) fn parallel_ui_fixture(count: usize) -> (TickState, SettlementId) {
                 PlannedCell {
                     at: origin,
                     state: stone,
-                    resource: None,
-                    quantity: 0,
+                    resource: Some("minecraft:cobblestone".into()),
+                    quantity: 1,
                 },
                 PlannedCell {
                     at: [origin[0], 202, origin[2]],
                     state: stone,
-                    resource: None,
-                    quantity: 0,
+                    resource: Some("minecraft:cobblestone".into()),
+                    quantity: 1,
                 },
             ],
         )
@@ -2397,4 +2397,26 @@ fn d8_chat_queue_limit_indexed_cancel_default_and_permission_fence() {
         ["No pending construction order."]
     );
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
+}
+
+#[test]
+fn d8_shared_material_detail_names_each_sites_own_shortage() {
+    let (mut state, id) = parallel_ui_fixture(2);
+    let menu = last_dialog(&click(&mut state, id, "project_status", &[]));
+    assert_eq!(
+        menu.icons
+            .iter()
+            .filter(|(slot, _)| (27..45).contains(slot))
+            .count(),
+        2
+    );
+    let detail = last_dialog(&press(&mut state, 28));
+    assert_eq!(detail.body.matches(" ×2").count(), 2, "{}", detail.body);
+    for project in &state.settlements.get(id).unwrap().projects {
+        assert!(
+            detail.body.contains(&corner_text(project.origin)),
+            "{}",
+            detail.body
+        );
+    }
 }

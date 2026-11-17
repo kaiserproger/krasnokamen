@@ -2082,7 +2082,13 @@ fn project_needs(state: &TickState, ctx: &Ctx) -> Result<Vec<ProjectNeed>, Strin
             (
                 item,
                 count,
-                ctx.t(Key::SupplyCauseUnavailable).to_owned(),
+                format!(
+                    "{} L{} · {}: {}",
+                    blueprint_label(ctx, &project.blueprint),
+                    project.level,
+                    corner_text(project.origin),
+                    ctx.t(Key::SupplyCauseUnavailable)
+                ),
                 None,
             )
         }));
@@ -2118,20 +2124,27 @@ fn material_detail(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, i
         ],
     );
     dialog = match project_needs(state, ctx) {
-        Ok(needs) => match needs.into_iter().find(|(name, _, _, _)| name == item) {
-            Some((name, missing, reason, source)) => {
-                let mut detail = dialog
+        Ok(needs) => {
+            let mut found = false;
+            for (name, missing, reason, source) in
+                needs.into_iter().filter(|(name, _, _, _)| name == item)
+            {
+                found = true;
+                dialog = dialog
                     .text(material_text(state, &name, format!(" ×{missing}")))
                     .text(reason);
                 if let Some(source) = source {
-                    detail = detail
+                    dialog = dialog
                         .text(ctx.t(Key::SourceMaterialHint))
                         .text(material_text(state, &source, String::new()));
                 }
-                detail
             }
-            None => dialog.text(ctx.t(Key::StateChanged)),
-        },
+            if found {
+                dialog
+            } else {
+                dialog.text(ctx.t(Key::StateChanged))
+            }
+        }
         Err(error) => dialog.text(error),
     };
     present(state, connection, dialog);
