@@ -8,7 +8,7 @@ const FLOOR: i32 = 200;
 
 /// A seven-by-seven-chunk plateau with the fixture chest kept: the street plan
 /// then has more than one 64-candidate cursor batch of storage lots.
-fn wide_plan(state: &mut TickState) {
+pub(super) fn wide_plan(state: &mut TickState) {
     let chunks = rustc_hash::FxHashMap::from_iter(
         (-3..=3).flat_map(|x| (-3..=3).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))),
     );
@@ -28,7 +28,7 @@ fn wide_plan(state: &mut TickState) {
 }
 
 /// Re-places and registers the fixture's stock container.
-fn restore_stock(state: &mut TickState) {
+pub(super) fn restore_stock(state: &mut TickState) {
     // Loading the extra chunks re-syncs block entities from the fresh chunks,
     // which drops the fixture's container: re-place and register it canonically.
     let chest = block(state, "minecraft:chest", &[]);
@@ -405,8 +405,9 @@ fn cheapest_lot_beyond_the_first_cursor_batch_wins_the_completed_sweep() {
     );
 }
 
-/// The window is bounded on both sides: eight blocks of fill and the authored
-/// top are the limits; a deeper support or a roof block above them is refused.
+/// The window is bounded on both sides: a fill column four blocks deep and the
+/// authored top are the limits; a deeper support or a roof block above them is
+/// refused.
 #[test]
 fn the_terrain_window_is_bounded_below_the_floor_and_above_the_roof() {
     let (mut state, id, _) = fixture();
@@ -820,8 +821,10 @@ fn an_authored_floor_still_refuses_fluid_on_its_own_cell() {
     );
 }
 
-/// Committee ruling: a ranking measured before the world moved is stale. The
-/// sweep restarts instead of admitting the old cheapest lot.
+/// Committee ruling: a ranking measured before the world moved is stale. Lot A
+/// leads the sweep after the first pass; between passes its foundation is dug
+/// out, so lot B, examined later in the same sweep, is now cheaper. The sweep
+/// must admit B, never the stale A.
 #[test]
 fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
     let (mut state, id, _) = fixture();
@@ -833,20 +836,147 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
     let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
         site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
     });
-    let sites = planner_lots(&state, id);
-    let legal: Vec<_> = sites
-        .iter()
-        .filter(|site| lot_cost(&state, &record, blueprint, site).is_ok())
-        .take(2)
-        .cloned()
-        .collect();
-    assert_eq!(legal.len(), 2, "two legal lots");
-    let (cheap, other) = (legal[0].clone(), legal[1].clone());
-    let mut network = layout::Network::for_construction(&state, &record);
     let mut clearance = super::super::forestry::Clearance::default();
     let mut sweeps = site_refusals::Sweeps::default();
     let mut report = site_refusals::Report::default();
-    let mut budget = u32::MAX;
+    // A: the flat plan's winner. The first pass examines A alone.
+    let a = super::site_tests::ranking_lot(&state, id, "storage");
+    assert_eq!(
+        lot_cost(&state, &record, blueprint, &a).map(|cost| cost.total()),
+        Ok(0)
+    );
+    let mut network = layout::Network::for_construction(&state, &record);
+    let mut budget = 1;
+    let first = site_refusals::advance(
+        &state,
+        &record,
+        &mut network,
+        blueprint,
+        &floors,
+        &mut clearance,
+        &mut sweeps,
+        a.front,
+        &mut budget,
+        &mut report,
+    );
+    assert!(
+        matches!(first, site_refusals::Advance::Incomplete(_)),
+        "one candidate cannot finish the sweep: {first:?}"
+    );
+    // Between passes the world moves: one plain interior column of A loses
+    // three blocks of its support, so A now pays for foundation fill.
+    let plain = site_refusals::floor_columns(blueprint, a.lot.rotation);
+    let [x, z] = (1..i32::from(a.size[0]) - 1)
+        .flat_map(|dx| (1..i32::from(a.size[2]) - 1).map(move |dz| [dx, dz]))
+        .find(|column| !plain.contains(column))
+        .map(|[dx, dz]| [a.lot.origin[0] + dx, a.lot.origin[2] + dz])
+        .expect("a plain interior floor column");
+    for y in a.lot.origin[1] - 2..=a.lot.origin[1] {
+        state.world.set_block(x, y, z, state.registry.states.air);
+    }
+    state.world.fold_overlay();
+    let stale = lot_cost(&state, &record, blueprint, &a)
+        .expect("A stays legal")
+        .total();
+    assert!(stale > 0, "A now costs foundation fill");
+    let b = super::site_tests::ranking_lot(&state, id, "storage");
+    assert_ne!(
+        (b.lot.origin, b.lot.rotation),
+        (a.lot.origin, a.lot.rotation)
+    );
+    assert!(
+        lot_cost(&state, &record, blueprint, &b).unwrap().total() < stale,
+        "B is cheaper than A on the current world"
+    );
+    // The remaining passes finish the sweep over the moved world.
+    let mut winner = None;
+    for _ in 0..64 {
+        let mut network = layout::Network::for_construction(&state, &record);
+        let mut budget = SITE_ATTEMPTS;
+        match site_refusals::advance(
+            &state,
+            &record,
+            &mut network,
+            blueprint,
+            &floors,
+            &mut clearance,
+            &mut sweeps,
+            0,
+            &mut budget,
+            &mut report,
+        ) {
+            site_refusals::Advance::Incomplete(_) => {}
+            site_refusals::Advance::Empty => panic!("the plan keeps legal lots"),
+            site_refusals::Advance::Cheapest(origin, rotation) => {
+                winner = Some((origin, rotation));
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        winner,
+        Some((b.lot.origin, b.lot.rotation)),
+        "the stale ranking of A is not admitted; the cheaper B wins"
+    );
+}
+
+/// Committee ruling: the sweep scratch is bound to the ordered frontage list,
+/// not to its length. A plaza hole reorders the walk under a running sweep
+/// without changing its length; the sweep restarts, so the winner the old
+/// cursor would now skip is still found.
+#[test]
+fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
+    let (mut state, id, _) = fixture();
+    wide_plan(&mut state);
+    restore_stock(&mut state);
+    fund(&mut state, "storage", 1);
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let record = state.settlements.get(id).unwrap().clone();
+    let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
+        site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
+    });
+    let winner = super::site_tests::ranking_lot(&state, id, "storage");
+    let fronts = |state: &TickState| layout::Network::for_construction(state, &record).frontage();
+    let before = fronts(&state);
+    let front = before[winner.front as usize];
+    // A hole below the walkable band takes one plaza column out of the walk.
+    let (air, stone) = (state.registry.states.air, state.registry.states.stone);
+    let hole = |world: &mut crate::world::ChunkWorld, [x, z]: [i32; 2], block: u32| {
+        for y in FLOOR - 9..=FLOOR {
+            world.set_block(x, y, z, block);
+        }
+        world.fold_overlay();
+    };
+    let anchor = record.anchor;
+    let mut reorder = None;
+    'search: for dx in -8..=8 {
+        for dz in -8..=8 {
+            let column = [anchor[0] + dx, anchor[2] + dz];
+            if layout::cell(anchor, column[0], column[1]) != layout::Cell::Plaza {
+                continue;
+            }
+            hole(&mut state.world, column, air);
+            let after = fronts(&state);
+            hole(&mut state.world, column, stone);
+            if after.len() == before.len()
+                && after
+                    .iter()
+                    .position(|candidate| *candidate == front)
+                    .is_some_and(|index| index < winner.front as usize)
+            {
+                reorder = Some(column);
+                break 'search;
+            }
+        }
+    }
+    let column = reorder.expect("a plaza hole moves the winner's frontage earlier");
+    assert_eq!(fronts(&state), before, "the plaza is whole again");
+    // The first pass examines every frontage before the winner's.
+    let mut clearance = super::super::forestry::Clearance::default();
+    let mut sweeps = site_refusals::Sweeps::default();
+    let mut report = site_refusals::Report::default();
+    let mut network = layout::Network::for_construction(&state, &record);
+    let mut budget = winner.front;
     let first = site_refusals::advance(
         &state,
         &record,
@@ -859,45 +989,38 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
         &mut budget,
         &mut report,
     );
-    let winner = match first {
-        site_refusals::Advance::Cheapest(origin, rotation) => (origin, rotation),
-        other => panic!("a complete sweep ranks the lots: {other:?}"),
-    };
-    // The world moves under the ranking: dear up the whole cheap lot's floor.
-    let [ox, oy, oz] = cheap.lot.origin;
-    for x in ox..ox + i32::from(cheap.size[0]) {
-        for z in oz..oz + i32::from(cheap.size[2]) {
-            for y in oy - 3..=oy {
-                state.world.set_block(x, y, z, state.registry.states.air);
+    assert!(matches!(first, site_refusals::Advance::Incomplete(_)));
+    // The walk is reordered, same length; the old cursor would skip the winner.
+    hole(&mut state.world, column, air);
+    let mut admitted = None;
+    for _ in 0..64 {
+        let mut network = layout::Network::for_construction(&state, &record);
+        let mut budget = u32::MAX;
+        match site_refusals::advance(
+            &state,
+            &record,
+            &mut network,
+            blueprint,
+            &floors,
+            &mut clearance,
+            &mut sweeps,
+            0,
+            &mut budget,
+            &mut report,
+        ) {
+            site_refusals::Advance::Incomplete(_) => {}
+            site_refusals::Advance::Empty => panic!("the plan keeps legal lots"),
+            site_refusals::Advance::Cheapest(origin, rotation) => {
+                admitted = Some((origin, rotation));
+                break;
             }
         }
     }
-    state.world.fold_overlay();
-    let _ = other;
-    // Same sweep state, current world: the stale ranking must not survive.
-    let mut network = layout::Network::for_construction(&state, &record);
-    let mut budget = u32::MAX;
-    let second = site_refusals::advance(
-        &state,
-        &record,
-        &mut network,
-        blueprint,
-        &floors,
-        &mut clearance,
-        &mut sweeps,
-        0,
-        &mut budget,
-        &mut report,
+    assert_eq!(
+        admitted,
+        Some((winner.lot.origin, winner.lot.rotation)),
+        "the reordered walk restarted the sweep and still found the winner"
     );
-    if winner == (cheap.lot.origin, cheap.lot.rotation) {
-        assert!(
-            matches!(
-                second,
-                site_refusals::Advance::Incomplete(_) | site_refusals::Advance::Empty
-            ),
-            "the stale winner is dropped, not admitted: {second:?}"
-        );
-    }
 }
 
 /// Committee ruling: ties break on the lot's own block position, so a restart
@@ -934,11 +1057,25 @@ fn a_restart_keeps_the_tie_winner() {
             other => panic!("a complete sweep ranks the lots: {other:?}"),
         }
     };
+    // Every legal lot of the flat plan costs the same. A restart resumes from
+    // the persisted cursor, here just past the first legal lot in walking
+    // order: cursor order alone would then crown a different tie.
+    let legal: Vec<_> = planner_lots(&state, id)
+        .into_iter()
+        .filter_map(|site| {
+            let cost = lot_cost(&state, &record, blueprint, &site).ok()?.total();
+            Some((site.front, cost))
+        })
+        .take(2)
+        .collect();
+    assert!(
+        legal.len() == 2 && legal[0].1 == legal[1].1,
+        "two equal-cost lots: {legal:?}"
+    );
     let mut straight = site_refusals::Sweeps::default();
     let direct = winner(0, &mut straight);
-    // A restart walks the same candidates from a later cursor.
     let mut restarted = site_refusals::Sweeps::default();
-    let after = winner(7, &mut restarted);
+    let after = winner(legal[0].0 + 1, &mut restarted);
     assert_eq!(
         direct, after,
         "the tie winner does not depend on the cursor"
@@ -982,4 +1119,150 @@ fn a_cut_credit_block_and_cursor_survive_the_record_round_trip() {
         "the storage slots survive"
     );
     assert_eq!(name_of(&state, cut_at), after_cut, "the cut block survives");
+}
+
+/// Committee item 6: one credited cut survives a real journal reopen. The
+/// native checkpoint holds the admitted project before the cut; only the
+/// published WAL frames of the following real ticks carry the cut, and
+/// production recovery must replay the storage credit, the cleared cell and
+/// the executor's cursor together.
+#[test]
+fn a_credited_cut_survives_a_journal_reopen() {
+    use crate::dimensions::Dimension;
+    use crate::journal::JournalEntry;
+    let (mut state, id, builder) = fixture();
+    let site = only_lot(&mut state, id);
+    // `only_lot` walls every other lot column, the fixture's spawn included:
+    // the builder starts on the avenue beside the bell instead. A player near
+    // the bell keeps the loaded plan simulated, so the builder walks to the
+    // lot through real ticks, never by teleport.
+    state.entities.set_pos(builder, [8.5, 201.0, 8.5]);
+    for x in -1..=1 {
+        for z in -1..=1 {
+            state.tickets.insert(
+                format!("terrain-wal-{x}-{z}"),
+                (crate::boundary::ChunkPos { x, z }, 0),
+            );
+        }
+    }
+    state.refresh_active_chunks(0);
+    let pillar = pillar(&mut state, &site, "sand", "sand", 1);
+    let cut_at = pillar.cells[0];
+    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    let structure = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .unwrap()
+        .structure
+        .clone();
+    // One frozen tick publishes the admission; the checkpoint then holds the
+    // world before any cut, so only the WAL tail can carry it.
+    state.tick_control.set_frozen(true);
+    let (baseline, _, _) = crate::tick::run_tick(&mut state, &[]);
+    crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(directory.path().to_path_buf(), 42);
+    super::founding::tests::checkpoint(&mut state, &config);
+    state.tick_control.set_frozen(false);
+    let checkpointed = state.tick;
+    let sand = stock(&state, pillar.item);
+    assert_eq!(name_of(&state, cut_at), "sand");
+    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    let mut cut_frame = None;
+    for _ in 0..6000 {
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+        writer.append(output.tick, output.tick, &entries).unwrap();
+        if name_of(&state, cut_at) != "sand" {
+            cut_frame = Some(entries);
+            break;
+        }
+    }
+    writer.flush().unwrap();
+    drop(writer);
+    let cut_frame = cut_frame.expect("the builder cuts the pillar through real ticks");
+    assert!(
+        state.tick > checkpointed,
+        "the cut lies after the checkpoint"
+    );
+    assert_eq!(
+        stock(&state, pillar.item),
+        sand + 1,
+        "the cut credits its own drop"
+    );
+    let cleared = state
+        .world
+        .block_at(cut_at[0], cut_at[1], cut_at[2])
+        .unwrap();
+    assert!(
+        cut_frame.iter().any(|entry| matches!(
+            entry,
+            JournalEntry::Block { pos, state } if *pos == cut_at && *state == cleared
+        )),
+        "the cleared cell rides the published cut frame"
+    );
+    assert!(
+        cut_frame.iter().any(|entry| matches!(
+            entry,
+            JournalEntry::BlockEntity { pos, .. } if *pos == [1, 201, 1]
+        )),
+        "the credited storage rides the same frame"
+    );
+    let ledger = |state: &TickState| {
+        state
+            .plugins
+            .get_domain("@native-structures", "ledger")
+            .unwrap()["structures"][&structure]
+            .clone()
+    };
+    let live_ledger = ledger(&state);
+    let live_next = executor::next_cell(&state, id, &structure).unwrap();
+    let live_cursor = state.settlements.get(id).unwrap().construction_cursor;
+    let live_slots = state.block_entities[&(1, 201, 1)].slots.clone();
+    drop(state);
+
+    let mut restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
+    let wanted = [[1, 1], [cut_at[0], cut_at[2]]]
+        .into_iter()
+        .map(|[x, z]| {
+            (
+                crate::boundary::ChunkPos {
+                    x: x.div_euclid(16),
+                    z: z.div_euclid(16),
+                },
+                0,
+            )
+        })
+        .collect();
+    restored.world.ensure_blocking(&wanted);
+    restored.world.fold_overlay();
+    assert_eq!(
+        restored.world.block_at(cut_at[0], cut_at[1], cut_at[2]),
+        Some(cleared),
+        "the cut cell stays cleared after the reopen"
+    );
+    assert_eq!(
+        stock(&restored, pillar.item),
+        sand + 1,
+        "the storage credit survives the reopen"
+    );
+    assert_eq!(restored.block_entities[&(1, 201, 1)].slots, live_slots);
+    assert_eq!(
+        ledger(&restored),
+        live_ledger,
+        "the executor's cursor and receipts survive the reopen"
+    );
+    assert_eq!(
+        executor::next_cell(&restored, id, &structure).unwrap(),
+        live_next,
+        "the reopened build resumes after the cut, not at it"
+    );
+    assert_eq!(
+        restored.settlements.get(id).unwrap().construction_cursor,
+        live_cursor
+    );
+    crate::plugin_structures::validate(&restored).expect("the reopened ledger validates");
 }

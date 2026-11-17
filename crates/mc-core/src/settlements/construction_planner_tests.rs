@@ -2362,6 +2362,11 @@ fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
     v.data.profession = Profession::Lumberjack;
     v.job_site = Some(crate::boundary::BlockPos { x: 2, y: 201, z: 8 });
     v.job_site_dimension = state.dimension.name().into();
+    // The camp is built on the first legal lot in walking order, beside the
+    // simulated plaza chunk; every other lot is refused, so the ranked sweep
+    // takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
+    super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
     request_build(&mut state, id, "lumber_camp").unwrap();
     state.tick = PLAN_CADENCE;
     tick(&mut state);
@@ -2472,6 +2477,11 @@ fn active_wood_shortfall_can_retask_a_borrowed_miner_through_ticks() {
         .unwrap()
         .data
         .profession = Profession::Miner;
+    // The camp is built on the first legal lot in walking order, beside the
+    // simulated plaza chunk; every other lot is refused, so the ranked sweep
+    // takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
+    super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
     request_build(&mut state, id, "lumber_camp").unwrap();
     state.tick = PLAN_CADENCE;
     tick(&mut state);

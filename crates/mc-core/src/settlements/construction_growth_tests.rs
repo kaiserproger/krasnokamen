@@ -796,25 +796,10 @@ fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
 fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);
-    let record = state.settlements.get(id).unwrap();
-    let blueprint = blueprints::get(&state.registry, "spanish_fortress").unwrap();
-    let mut network = super::super::layout::Network::walk(&state, record);
-    let lot = network
-        .frontage()
-        .into_iter()
-        .find_map(|(at, normal)| {
-            let lot = network.lot(blueprint, at, normal)?;
-            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-            site_free(&state, record, lot.origin, size).then_some(lot)
-        })
-        .unwrap();
-    let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-    // The planner ranks every lot and breaks ties on the block position: every
-    // other lot is refused, and the sweep must then return this one.
-    // The litmus lot is the ranked winner: cheapest cut and fill, ties on the
-    // block position. The tree is planted where the planner will look.
-    let lot = super::site_tests::ranking_lot(&state, id, "spanish_fortress").lot;
-    let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+    // The tree grows on the first legal lot in walking order; once the world
+    // is regrown, every other lot is refused, so the ranked sweep takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "spanish_fortress");
+    let (lot, size) = (site.lot, site.size);
     let expected = Project {
         settlement: id,
         blueprint: "spanish_fortress".into(),
@@ -858,6 +843,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .unwrap()
         .planted_trees
         .insert(root);
+    super::site_tests::pin_lot(&mut state, id, "spanish_fortress", &site);
     let bounds = super::super::forestry::lot_bounds(&state, &expected).unwrap();
     assert!(!super::super::forestry::clearable(&state, root));
     assert!(!super::super::forestry::Clearance::default().clearable(&state, root, None));
@@ -1299,7 +1285,9 @@ fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_be
 #[test]
 fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
     let (mut state, id, builder) = fixture();
-    open_plan(&mut state);
+    // A plan wider than one pass's share of candidates.
+    super::terrain_tests::wide_plan(&mut state);
+    super::terrain_tests::restore_stock(&mut state);
     fund(&mut state, "spanish_house", 1);
     start(&mut state, id, "spanish_house", 1, None);
     complete(&mut state, id, builder);
@@ -1311,29 +1299,19 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
         .keys()
         .next()
         .unwrap();
-    // Widen the street walk past one kind's whole per-pass share, then flood
-    // everything outside the standing house: the sweep stays unfinished for
-    // several passes and never finds a legal lot.
-    let chunks = rustc_hash::FxHashMap::from_iter(
-        (-3..=3).flat_map(|x| (-3..=3).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))),
-    );
-    state.world.ensure_blocking(&chunks);
-    let water = block(&state, "minecraft:water", &[("level", "0")]);
+    // Keep the standing house's maximum footprint and dry Builder approaches;
+    // every other lot column is solid through the terrain window. Roads,
+    // verges and the plaza stay walkable, so the sweep still walks every
+    // frontage and refuses each lot.
+    let anchor = state.settlements.get(id).unwrap().anchor;
     for x in -48..64 {
         for z in -48..64 {
-            let inside = (0..17).contains(&x) && (0..14).contains(&z);
-            state.world.set_block(
-                x,
-                201,
-                z,
-                if inside {
-                    state.registry.states.stone
-                } else {
-                    water
-                },
-            );
-            for y in 202..210 {
-                state.world.set_block(x, y, z, state.registry.states.air);
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && !((0..17).contains(&x) && (0..14).contains(&z))
+            {
+                for y in 201..=216 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
             }
         }
     }
@@ -1342,6 +1320,46 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
         &mut state,
         &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
     );
+    // Premise: one planning pass cannot finish the funded Farm's sweep, that
+    // pass finds nothing legal, and the whole sweep has no legal lot either.
+    {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let farm = blueprints::get(&state.registry, "farm").unwrap();
+        assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        let pass = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            record.construction_cursor,
+            SITE_ATTEMPTS,
+            &images,
+        );
+        assert!(
+            pass.site.is_none() && pass.running,
+            "one pass leaves the sweep unfinished"
+        );
+        assert!(
+            !pass.waiting,
+            "that unfinished sweep holds no legal candidate"
+        );
+        let whole = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            0,
+            u32::MAX,
+            &images,
+        );
+        assert!(
+            whole.site.is_none(),
+            "the funded Farm has no legal lot at all"
+        );
+    }
+    assert!(upgrade_available(&state, id, house));
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     plan(&mut state, id);
     let project = state
         .settlements
@@ -1349,8 +1367,10 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
         .unwrap()
         .project
         .as_ref()
-        .expect("the empty sweep left the slot to the upgrade");
+        .expect("the empty unfinished sweep left the slot to the funded upgrade");
     assert_eq!(project.blueprint, "spanish_house");
     assert_eq!(project.building, Some(house));
     assert_eq!(project.level, 2);
+    assert!(!project.ordered, "the autonomous planner admitted it");
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }

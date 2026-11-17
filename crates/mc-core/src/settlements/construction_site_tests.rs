@@ -140,90 +140,88 @@ pub(super) fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &
     best.expect("a legal lot").3
 }
 
-/// Leave only the lot at `keep` legal for `blueprint_name`: every other
-/// frontage lot gets an authored-roof block, which the ranked sweep refuses
-/// (`CutBeyondEnvelope`), so the planner must take the intended lot.
-pub(super) fn only_legal_lot(
-    state: &mut TickState,
-    id: SettlementId,
-    blueprint_name: &str,
-    keep: [i32; 3],
-) {
-    let record = state.settlements.get(id).unwrap().clone();
-    let blueprint = blueprints::get(&state.registry, blueprint_name).unwrap();
-    let mut network = layout::Network::for_construction(state, &record);
-    let lots: Vec<_> = network
-        .frontage()
-        .into_iter()
-        .filter_map(|(at, normal)| network.lot(blueprint, at, normal))
-        .filter(|lot| lot.origin != keep)
-        .collect();
-    let stone = state.registry.states.stone;
-    for lot in lots {
-        let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-        let roof = lot.origin[1] + i32::from(size[1]) - 1;
-        for x in lot.origin[0]..lot.origin[0] + i32::from(size[0]) {
-            for z in lot.origin[2]..lot.origin[2] + i32::from(size[2]) {
-                state.world.set_block(x, roof, z, stone);
-            }
-        }
-    }
-    state.world.fold_overlay();
-}
-
-/// The frontage lot whose footprint contains this column.
-pub(super) fn lot_containing(
-    state: &TickState,
-    id: SettlementId,
-    blueprint_name: &str,
-    column: [i32; 2],
-) -> Option<Site> {
+/// The first legal lot of `blueprint_name` in walking order from the plaza:
+/// the lot a test authored its fixture around before lots were ranked.
+pub(super) fn first_legal_lot(state: &TickState, id: SettlementId, blueprint_name: &str) -> Site {
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, blueprint_name).unwrap();
     let mut network = layout::Network::for_construction(state, record);
     let fronts = network.frontage();
-    for (front, (at, normal)) in fronts.into_iter().enumerate() {
-        let Some(lot) = network.lot(blueprint, at, normal) else {
-            continue;
-        };
-        let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-        let inside = (lot.origin[0]..lot.origin[0] + i32::from(size[0])).contains(&column[0])
-            && (lot.origin[2]..lot.origin[2] + i32::from(size[2])).contains(&column[1]);
-        if inside {
-            return Some(Site {
+    fronts
+        .into_iter()
+        .enumerate()
+        .find_map(|(front, (at, normal))| {
+            let lot = network.lot(blueprint, at, normal)?;
+            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+            site_refusals::check(
+                state,
+                record,
+                lot.origin,
+                size,
+                record.founding.as_ref(),
+                &mut Default::default(),
+                Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+            )
+            .is_ok()
+            .then(|| Site {
                 front: u32::try_from(front).unwrap(),
                 lot,
                 size,
-            });
-        }
-    }
-    None
+            })
+        })
+        .expect("a legal lot in walking order")
 }
 
-/// Make the lot over `column` the only legal one, then prove the ranked sweep
-/// agrees: the planned winner is that lot, not whatever the code happens to
-/// return.
-pub(super) fn pin_only_lot(
-    state: &mut TickState,
-    id: SettlementId,
-    blueprint_name: &str,
-    column: [i32; 2],
-) -> Site {
-    let site = lot_containing(state, id, blueprint_name, column)
-        .expect("a frontage lot over the pinned column");
-    only_legal_lot(state, id, blueprint_name, site.lot.origin);
+/// Leave `keep` the only legal lot of `blueprint_name`: one column of every
+/// other frontage lot, outside `keep`'s footprint and as far from it as that
+/// lot reaches, gets a dirt-path floor the survey refuses as `ProtectedFloor`.
+/// The ground stays walkable and the test's own terrain is untouched; the
+/// ranked sweep must then agree that `keep` is the winner.
+pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &str, keep: &Site) {
+    let record = state.settlements.get(id).unwrap().clone();
+    let blueprint = blueprints::get(&state.registry, blueprint_name).unwrap();
+    let mut network = layout::Network::for_construction(state, &record);
+    let keep_at = (keep.lot.origin, keep.lot.rotation);
+    let [kx, _, kz] = keep.lot.origin;
+    let (kx1, kz1) = (
+        kx + i32::from(keep.size[0]) - 1,
+        kz + i32::from(keep.size[2]) - 1,
+    );
+    let mut marks = Vec::new();
+    for (at, normal) in network.frontage() {
+        let Some(lot) = network.lot(blueprint, at, normal) else {
+            continue;
+        };
+        if (lot.origin, lot.rotation) == keep_at {
+            continue;
+        }
+        let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+        let [ox, floor, oz] = lot.origin;
+        let mark = (ox..ox + i32::from(size[0]))
+            .flat_map(|x| (oz..oz + i32::from(size[2])).map(move |z| (x, z)))
+            .filter(|&(x, z)| !keep.within(x, z))
+            .max_by_key(|&(x, z)| (kx - x).max(x - kx1).max(kz - z).max(z - kz1))
+            .expect("a lot of the same blueprint is never inside the kept one");
+        marks.push([mark.0, floor, mark.1]);
+    }
+    drop(network);
+    let path = crate::settlements::allocator::tests::block(state, "minecraft:dirt_path", &[]);
+    for [x, y, z] in marks {
+        state.world.set_block(x, y, z, path);
+    }
+    state.world.fold_overlay();
     let winner = ranking_lot(state, id, blueprint_name);
     assert_eq!(
         (winner.lot.origin, winner.lot.rotation),
-        (site.lot.origin, site.lot.rotation),
-        "the ranked sweep must return the only legal lot"
+        keep_at,
+        "the ranked sweep must take the pinned lot"
     );
-    site
 }
 
 /// Seed 87122 claim QA: a storage ordered at the anchor was sited 110 blocks
 /// away, and 21 earlier orders were refused. Two free lots exist; the order
-/// takes the one first in walking order from the plaza.
+/// scans the loaded plan once and takes one of them: as both cost nothing, the
+/// one the stable tie key ranks first.
 #[test]
 fn owner_order_takes_the_cheapest_free_lot() {
     let (mut state, id, _) = fixture();
@@ -438,9 +436,9 @@ fn reachable_or_off_shift_builder_keeps_the_slot() {
 }
 
 /// Deterministic terrain, not an operator-built pad: behind a level front
-/// lip, every lot is a 198..=201 diagonal ramp, so each footprint crosses both
-/// low and high columns whichever lot the cheapest-sweep rule picks. Roads,
-/// verges and the plaza stay level stone and dirt at 200.
+/// lip, every lot east of the avenue is a 198..=201 diagonal ramp, so each
+/// footprint there crosses both low and high columns. Roads, verges, the
+/// plaza and the western blocks stay level stone and dirt at 200.
 #[test]
 fn hillside_village_prepares_and_builds_first_storage() {
     use super::tests::complete;
@@ -468,7 +466,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
             .any(|(dx, dz)| layout::cell(anchor, x + dx, z + dz) == layout::Cell::Verge)
     };
     let height = |x: i32, z: i32| {
-        if lot(x, z) && !lip(x, z) {
+        if lot(x, z) && x > anchor[0] && !lip(x, z) {
             198 + (x + z).rem_euclid(4)
         } else {
             200
@@ -498,6 +496,10 @@ fn hillside_village_prepares_and_builds_first_storage() {
         .unwrap();
     state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[26] = ItemStack::new(dirt_item, 64);
     state.world.fold_overlay();
+    // The first ramp lot in walking order is the one this hillside is about;
+    // every other lot is refused, so the ranked sweep has to take it.
+    let site = first_legal_lot(&state, id, "storage");
+    pin_lot(&mut state, id, "storage", &site);
     for _ in 0..128 {
         plan(&mut state, id);
         if state.settlements.get(id).unwrap().project.is_some() {
@@ -511,24 +513,6 @@ fn hillside_village_prepares_and_builds_first_storage() {
         .project
         .clone()
         .expect("hillside admits first storage");
-    // The ranked sweep may pick a lot further out than the bell's neighbours:
-    // keep every chunk its work cells touch simulated, or the builder freezes.
-    let work = super::super::forestry::lot_bounds(&state, &project).unwrap();
-    for chunk_x in work.min[0].div_euclid(16)..=work.max[0].div_euclid(16) {
-        for chunk_z in work.min[2].div_euclid(16)..=work.max[2].div_euclid(16) {
-            state.tickets.insert(
-                format!("hillside-lot-{chunk_x}-{chunk_z}"),
-                (
-                    crate::boundary::ChunkPos {
-                        x: chunk_x,
-                        z: chunk_z,
-                    },
-                    0,
-                ),
-            );
-        }
-    }
-    state.refresh_active_chunks(0);
     assert!(!project.ordered);
     let snapshot = executor::status(&state, id, &project.structure).unwrap();
     let foundation = snapshot
@@ -897,15 +881,17 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     assert!(state.settlements.get(id).unwrap().project.is_none());
 
     fund(&mut state, "storage", 1);
-    let expected = ranking_lot(&state, id, "storage");
+    // The street below is authored around the first free lot in walking
+    // order: it fronts the avenue south of the plaza across its west verge,
+    // and the door's road is the avenue column two blocks west. Every other
+    // lot is refused, so the ranked sweep has to take this one.
+    let site = first_legal_lot(&state, id, "storage");
+    assert_eq!((site.lot.origin, site.lot.rotation), ([11, 200, 13], 1));
+    pin_lot(&mut state, id, "storage", &site);
     request_build(&mut state, id, "storage").unwrap();
     let storage = state.settlements.get(id).unwrap().project.clone().unwrap();
     complete(&mut state, id, slot);
-    // The ranked sweep's choice: cheapest cut and fill, ties on block position.
-    assert_eq!(
-        (storage.origin, storage.rotation),
-        (expected.lot.origin, expected.lot.rotation)
-    );
+    assert_eq!((storage.origin, storage.rotation), ([11, 200, 13], 1));
     let mut stretches = 0;
     loop {
         plan(&mut state, id);

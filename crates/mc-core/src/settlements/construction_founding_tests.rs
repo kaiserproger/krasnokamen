@@ -600,7 +600,9 @@ fn recovery_refuses_overlapping_or_missing_household_claims_and_retirement_cance
     assert!(crate::settlements::validate_record(state.settlements.get(parent).unwrap()).is_err());
 }
 
-fn checkpoint(state: &mut TickState, config: &CoreConfig) {
+/// Commit `state` as the world's durable native checkpoint; later WAL frames
+/// replay on top of it through production recovery.
+pub(in crate::settlements::construction) fn checkpoint(state: &mut TickState, config: &CoreConfig) {
     use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
     use mc_world::native::NativeCheckpoint;
     let store = crate::native_checkpoint::tests::fixture_store(config).unwrap();
