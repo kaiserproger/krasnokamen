@@ -482,8 +482,9 @@ pub(super) fn early_entity_rest(
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
     // A head still settling toward the body is motion the footprint shortcut
-    // cannot see: refuse the rest before it, on every activation period. Battle
-    // rows hold `head = yaw`, so this never wakes a no-target battle row.
+    // cannot see: refuse the rest before it, on every activation period. A body
+    // whose head is on its body (a settled row, or one whose controller keeps it
+    // there) is unaffected, so nothing wakes without a head to settle.
     let rotation = view.rotations[slot.0 as usize];
     if rotation[2] != rotation[0] {
         return false;
