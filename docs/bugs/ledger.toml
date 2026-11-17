@@ -4892,6 +4892,7 @@ source = "Seed 100 (village-autonomy-qa world), seen in the native client approa
 regression = ["cargo:mc-worldgen:overworld_structures::tests::floating_surface_structure_rests_on_a_support_column", "cargo:mc-worldgen:overworld_structures::tests::ruined_portal_support_columns_never_copy_template_material"]
 repro_check = "Stage2X SLICES.md:119,131: support fill is air-only, bounded to four blocks and uses natural ground below or stone, never template material; WORLDGEN_REVISION 33. Original support reversal fails (receipts/XCoreBlocks/nc-support-column.log); restoring the min/last-state template-material bug fails the real 13-template check (receipts/XPortalSupport/nc-template-material.log). The fix spans 81a2b6bb8 and fee158398; a combined forward patch is needed for promotion."
 failing_first = "reported"
+fix_commit = "patch:c5c3a4cdc28d87565e91a1b6ca5297fa685c1c5476dfea24acb28a17c3277b75"
 
 [[bug]]
 id = "CIV-UPGRADE-STALLS-ON-STOCKED-CONTAINER"
@@ -5815,7 +5816,12 @@ severity = "major"
 status = "open"
 source = "Architect review of the battle port plan (receipts/BattlePortPlan/fable-review-v2.md, P3; PLAN-v2.md section 4 row 3). On main crates/mc-core/src/plugin_npcs/orders/deployment.rs retire() sets alive=false, health 0 and death_handled but leaves the row and journals no UUID removal; the battle line fixed it with a deferred pending_removals drain at the commit tail (bv-g2l2 335afd19). Not yet reproduced on main: slice B0 first writes the checkpoint/restart test on main."
 repro = "source"
-regression = []
+regression = [
+  "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item",
+  "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome",
+  "cargo:mc-core:plugin_npcs::tests::deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals",
+]
+fix_commit = "cd0ec2dc2"
 failing_first = "not recorded"
 
 [[bug]]
@@ -5910,7 +5916,12 @@ severity = "major"
 status = "open"
 source = "Stage2Review/terra-edge-events.md finding 1; Stage2X SLICES.md:154-156,161,172"
 repro = "source"
-regression = []
+regression = [
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::explosions_deliver_or_explicitly_close_under_queue_pressure",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::broadcast_lag_closes_only_recipients_of_skipped_knockback",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::six_hundred_explosions_coalesce_knockback_without_disconnect",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
+]
 fix_commit = "40b28f732"
 repro_check = "The fix spans 40b28f732, 60f1d475b and 9a8fd193e on wt/XEdgeEvents, not merged into wt/M3Server at filing. The latter closes a same-tick dimension-transfer gap. Branch checks server::admin_tests::explosion_queue_tests::{explosions_deliver_or_explicitly_close_under_queue_pressure,broadcast_lag_closes_only_recipients_of_skipped_knockback,same_tick_dimension_switch_explicitly_closes_unprojected_knockback,six_hundred_explosions_coalesce_knockback_without_disconnect}; coalescing is a synthetic queue test, not a live TNT burst. Negative controls: receipts/XEdgeEvents/negative-queue.log, round3-lag-red-broadcast_lag_closes_only_recipients_of_skipped_knockback.log and round3-edge-red-same_tick_dimension_switch_explicitly_closes_unprojected_knockback.log. Multi-commit promotion needs a committed fix patch after integration."
 failing_first = "not recorded"
@@ -5923,7 +5934,9 @@ severity = "major"
 status = "open"
 source = "Stage2Review/terra-edge-events.md moderation review; Stage2X SLICES.md:154"
 repro = "source"
-regression = []
+regression = [
+  "cargo:mc-edge:server::admin_tests::moderation_selectors_reauthorize_after_deop_during_resolution",
+]
 fix_commit = "40b28f732"
 repro_check = "Fix is on wt/XEdgeEvents, not merged into wt/M3Server at filing. Branch check cargo:mc-edge:server::admin_tests::moderation_selectors_reauthorize_after_deop_during_resolution; green receipts/XEdgeEvents/green-moderation.log, fix-reverted red receipts/XEdgeEvents/negative-moderation.log."
 failing_first = "not recorded"
@@ -6037,7 +6050,13 @@ severity = "major"
 status = "open"
 source = "Stage2Review/terra-edge-events.md finding 3; Stage2X SLICES.md:172-173"
 repro = "source"
-regression = []
+regression = [
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::captured_rc5_bee_image_requires_migration_and_keeps_strict_current_schema",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_equipment_hive_items_are_owned",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_carried_hive_items_are_owned",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_crafting_hive_items_are_owned",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee",
+]
 fix_commit = "602c20cfd"
 repro_check = "The fix spans 259a078ef and 602c20cfd on wt/XEdgeEvents, not merged into wt/M3Server at filing. Legacy minecraft:bees item components and scalar rider images require typed migration, including player equipment, cursor and crafting custody. The initial normalizer skipped these owned components and the first fixture used a current image, masking RC5 rider incompatibility. The round-3 fixture is synthetic, not a real RC5 save: a test added to an RC5 source checkout builds a bee and serializes its native image with RC5 code (receipts/XEdgeEvents/rc5-capture-source.diff:258-283); the regression embeds that image in a current player export and renames the outer key to solaris:HiveEntity (pre_rename_bee_tests.rs:239-299), then imports, places and releases the bee. Branch check cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee; green receipts/XEdgeEvents/round3-conversion.log, red receipts/XEdgeEvents/round3-image-red-rc5_hive_item_export_import_place_release_preserves_native_bee.log and round3-player-red-exits.log. Real proof pending: import of an actual RC5 world with a hive item in player custody. Multi-commit promotion needs a committed fix patch after integration."
 failing_first = "not recorded"
@@ -6295,13 +6314,14 @@ id = "LZ4-TOKEN-SIZE-LIMIT"
 title = "Anvil preserving writer accepts LZ4 blocks larger than their token permits"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Stage3 ServerSmallFix independent review: a checksum-valid raw LZ4 block with token 0x10 and length 1025 is accepted although vanilla lz4-java 1.10.1 refuses originalLen above 1 << (10 + token low nibble)"
 repro = "cargo"
 regression = ["cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies_to_readers_and_preserved_writer"]
 fix_commit = "24a0eefd4"
 repro_check = "receipts/ServerSmallFix/negative-token-bound-harness/test.log records all three paths (raw reader, exact decoder, preserving writer) accepting the invalid 1025-byte block before the size guard. token-green-anvil-harness/result.json passes 397 Anvil tests; token-green-vanilla-lz4-harness/result.json passes both ignored vanilla fixture tests. Regression covers raw/compressed blocks at and one byte above the token limit for levels 0, 1 and 6, with no destination published on rejection. token-bound-javap.log records the local vanilla bytecode oracle."
 failing_first = "reported"
+promotion = "docs/bugs/promotions/LZ4-TOKEN-SIZE-LIMIT.json"
 
 [[bug]]
 id = "SUMMON-TAGS-REFUSED"
