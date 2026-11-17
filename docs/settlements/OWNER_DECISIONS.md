@@ -162,3 +162,37 @@ claims require the actual pinned-server run, not this design decision.
 - Among candidate lots the one with the least preparation (cut, fill and
   liquids) is chosen, which reduces the risk of the queue head stalling on
   filling a lake.
+
+> 1. Да, но пометить явно missing. 2. Да, но перепроверяйте целостность дорог.
+> Если пересекает участок - восстановить в другом месте, чтобы была целостной
+> 3. а.
+
+- Filling water and lava on lots is **missing** until after the freeze: until
+  then a lot that needs liquid filling is not chosen, and the refusal says so.
+- Village paths and farmland on a needed lot may be removed, but the road
+  network must stay connected: a road crossing the lot is re-laid around it.
+- A grown planted lumberjack tree on a needed lot is felled as a whole tree,
+  found by trunk connectivity from its registered root. Accepted risk: a player
+  log touching that trunk, whose history has expired, is felled too, with its
+  drops conserved.
+
+## Parallel construction — owner, 2026-11-17
+
+> 1. по числу строителей  2. если есть заявка на которую есть ресурсы - поднимаем
+> её вверх. иначе оставляем порядок очереди как есть  3. да
+
+Status: design decided; implementation starts after the 19 November freeze
+(owner, 2026-11-17). Until it lands,
+[construction queue order](#construction-queue-order--owner-2026-11-17) holds.
+
+- A settlement builds as many projects at once as it has available builders.
+- An order whose materials are already in storage moves ahead of unfunded orders;
+  otherwise the queue keeps its entry order.
+- A daughter outpost is built in parallel with its parent's projects.
+- The settlement record changes shape with no adapter: an older world with a
+  settlement refuses to open. Whether a specific world (such as the test server)
+  is kept, and how, is an owner decision before deploy.
+- It is built behind a narrow settlement-construction interface: code outside
+  the construction module does not read or write the record's project or pending
+  order directly (owner, 2026-11-17, with the code-health ratchet that counts
+  such accesses).

@@ -977,6 +977,89 @@ fn full_step_with_period(
     step_entity(row, &ctx)
 }
 
+/// The battle facing rule at the phase (receipts/BattleJitterClient): a moving
+/// battle soldier or horse without a look target holds its rotation on a step
+/// against its previous velocity and turns on one along it. A resting battle
+/// row skips its step without a physics proof, so its full step must keep
+/// every bit of the rest.
+#[test]
+fn battle_rows_hold_facing_on_reversing_steps_and_rest_matches_full_step() {
+    for species in ["minecraft:husk", "minecraft:horse"] {
+        let (mut state, slot) = resting_mob(species);
+        state.entities.set_faction(slot, 1);
+        state.entities.set_rot(slot, 30.0, 12.0);
+        let rotation = state.entities.rot(slot).map(f32::to_bits);
+        let pos = state.entities.pos(slot);
+        assert!(can_early_rest(&mut state, slot), "{species} rests");
+        let (rest, _) = full_step_without_early_rest(&state, slot);
+        assert_eq!(
+            rest.pos.map(f64::to_bits),
+            pos.map(f64::to_bits),
+            "{species}"
+        );
+        assert_eq!(rest.vel.map(f64::to_bits), [0.0_f64; 3].map(f64::to_bits));
+        assert_eq!(rest.rotation.map(f32::to_bits), rotation, "{species}");
+        let len = state.entities.len();
+        let drive = |state: &mut TickState, x: f64| {
+            let columns = &mut state.hostile.battle.columns;
+            columns.drive_by_slot.resize(len, [0.0; 3]);
+            columns.drive_by_slot[slot.0 as usize] = [x, 0.0, 0.0];
+        };
+        // Last tick +x at .04 block/tick; this tick back at .02.
+        state.entities.set_vel(slot, [0.8, 0.0, 0.0]);
+        drive(&mut state, -0.4);
+        let (held, _) = full_step_without_early_rest(&state, slot);
+        assert!(held.pos[0] < pos[0], "{species} steps back");
+        assert_eq!(held.rotation.map(f32::to_bits), rotation, "{species} holds");
+        drive(&mut state, 0.4);
+        let (turned, _) = full_step_without_early_rest(&state, slot);
+        assert!(turned.pos[0] > pos[0], "{species} steps on");
+        assert_eq!(turned.rotation[0], -60.0, "{species} turns toward +x");
+    }
+}
+
+/// A mounted battle rider is not a standing row (`taming::suppress_ai` is
+/// fenced by `!battle`), so the facing rule covers it. Without a target its own
+/// step does not move it sideways; it keeps yaw, pitch and head, where the old
+/// look would pitch it toward its post-step velocity.
+#[test]
+fn battle_rider_without_target_holds_yaw_pitch_and_head() {
+    let (mut state, horse_slot) = resting_mob("minecraft:horse");
+    let pos = state.entities.pos(horse_slot);
+    let horse = state.entities.body(horse_slot).id;
+    let husk = state.registry.entity_type_id("minecraft:husk").unwrap();
+    let rider = state.spawn_mob(husk, pos, 20.0);
+    let rider_slot = state.entities.slot_of(rider).unwrap();
+    state.entities.set_faction(horse_slot, 1);
+    state.entities.set_faction(rider_slot, 1);
+    crate::battle::cavalry::mount(&mut state, rider, horse).unwrap();
+    crate::mounts::tick(&mut state, &mut crate::boundary::ChangeSet::default());
+    assert_eq!(
+        state.entities.row(rider_slot).entity_life.mount.vehicle,
+        Some(horse)
+    );
+    state.entities.set_rot(rider_slot, 30.0, 12.0);
+    let rotation = state.entities.rot(rider_slot);
+    let (write, _) = full_step_without_early_rest(&state, rider_slot);
+    let start = state.entities.pos(rider_slot);
+    assert_eq!(
+        [write.pos[0], write.pos[2]].map(f64::to_bits),
+        [start[0], start[2]].map(f64::to_bits)
+    );
+    assert_eq!(
+        write.rotation.map(f32::to_bits),
+        rotation.map(f32::to_bits),
+        "the rider holds yaw, pitch and head"
+    );
+    let old = crate::entity_motion::look(
+        rotation,
+        mc_physics::Vec3::new(write.pos[0], write.pos[1], write.pos[2]),
+        mc_physics::Vec3::new(write.vel[0], write.vel[1], write.vel[2]),
+        None,
+    );
+    assert_ne!(old[1], rotation[1], "the old look pitches the rider");
+}
+
 #[test]
 fn idle_wander_decision_rest_matches_full_step_for_two_episodes() {
     for (species, creative) in [

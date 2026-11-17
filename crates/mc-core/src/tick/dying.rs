@@ -90,6 +90,7 @@ fn fall(state: &mut TickState, slot: EntitySlot) {
             impulse: state.entities.horizontal_impulse(slot),
             rotation,
             look_target: None,
+            battle_facing: false,
             climbs_walls: false,
             aquatic_control,
             air_supply: body.air_supply,

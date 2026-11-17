@@ -18,9 +18,9 @@ count of the largest cycle (a submodule of its domain host, or a top-level
 module the cycle does not refer to; a submodule's references count as its
 host's, so the count is checked on the integrated tree;
 [how-to](../development/adding-a-feature.md#new-features-are-modules)).
-Moving existing code into modules is a separate goal after the 21 November
-announcement, along this ADR's cycle-cut plan; until then existing code stays
-where it is and only its fixes land there.
+Moving existing code into modules follows this ADR's cycle-cut plan with
+byte-exact moves; it may start before the 21 November announcement only once the
+current release tasks are closed, otherwise after (owner, 2026-11-17).
 **Related:** [0011](0011-core-crate-topology-and-threading.md) (rejected
 one-crate-per-domain without an enforceable boundary),
 [0013](0013-core-model-v2.md) (current crate ownership),

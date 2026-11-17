@@ -253,7 +253,12 @@ fn horse_gap(
 /// if it were the leader shifted by its file/rank offset. One shared point for
 /// every rider piled a whole regiment onto one block wherever it arrived with
 /// no foe in reach, and the pile then rode as one body.
-fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
+/// Only a seated rider takes it: the heading is a displacement in blocks, and
+/// only the mounted pass turns it into a speed. A member whose horse is gone
+/// keeps the foot drive steering gave him; with the raw heading as his drive
+/// (blocks per second) he skated a twentieth of the way to the plan point
+/// every tick, up to 107 blocks per second in the field-1k battle takes.
+fn sweep_drives(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut CombatRuntime) {
     let mut plans = std::mem::take(&mut combat.sweeps);
     plan_sweeps(battle, &mut plans);
     for (r, plan) in battle.formation.regiments.iter().zip(&plans) {
@@ -267,6 +272,12 @@ fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
                 || battle.columns.targets[bi].is_some()
                 || matches!(combat.fighters[bi].action, Action::Wounded)
             {
+                continue;
+            }
+            let seated = m
+                .slot
+                .is_some_and(|slot| frame.entities.row(slot).entity_life.mount.vehicle.is_some());
+            if !seated {
                 continue;
             }
             let slot = super::formation::slot_position(
@@ -375,7 +386,7 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
 }
 
 pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut CombatRuntime) {
-    sweep_drives(battle, combat);
+    sweep_drives(frame, battle, combat);
     for horse in frame.entities.rider_slots() {
         let row = frame.entities.row(horse);
         let Some(rider) = crate::mounts::live_riders(frame.entities, &row.entity_life.mount).next()

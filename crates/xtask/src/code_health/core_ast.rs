@@ -37,14 +37,17 @@ pub(super) enum Counter {
     Panic,
     /// `.push(..)` on a field or variable named `merge_block_writes`.
     MergeBlockWritePush,
+    /// `.project`/`.pending_order` outside the construction owner and its children.
+    ConstructionFieldAccess,
 }
 
 impl Counter {
-    pub(super) const ALL: [Counter; 4] = [
+    pub(super) const ALL: [Counter; 5] = [
         Counter::VanillaIdLiteral,
         Counter::PathEquality,
         Counter::Panic,
         Counter::MergeBlockWritePush,
+        Counter::ConstructionFieldAccess,
     ];
 }
 
@@ -70,6 +73,9 @@ pub(super) struct CoreFacts {
     pub(super) modules: Vec<ModuleFacts>,
     /// `lib.rs` itself: part of the anti-pattern totals, not a graph node.
     pub(super) root: ModuleFacts,
+    /// Production items (including associated items) plus non-item statements,
+    /// keyed by source path. Item statements count once, as declarations.
+    pub(super) files: BTreeMap<PathBuf, usize>,
 }
 
 impl CoreFacts {
@@ -132,10 +138,14 @@ pub(super) fn collect(src: &Path) -> Result<CoreFacts, String> {
         ..ModuleFacts::default()
     });
     let mut errors = Vec::new();
+    let mut files = BTreeMap::new();
     let mut collector = Collector {
         resolver: &resolver,
         current: facts.len() - 1,
         facts: &mut facts,
+        files: &mut files,
+        file_nodes: 0,
+        in_construction: false,
         scope: Vec::new(),
         inline_depth: 0,
         file: PathBuf::new(),
@@ -151,6 +161,7 @@ pub(super) fn collect(src: &Path) -> Result<CoreFacts, String> {
     Ok(CoreFacts {
         modules: facts,
         root,
+        files,
     })
 }
 
@@ -292,6 +303,9 @@ impl Resolver {
 struct Collector<'a> {
     resolver: &'a Resolver,
     facts: &'a mut [ModuleFacts],
+    files: &'a mut BTreeMap<PathBuf, usize>,
+    file_nodes: usize,
+    in_construction: bool,
     /// Index into `facts` the code being visited belongs to.
     current: usize,
     /// Module path below the crate root, e.g. `["tick", "players"]`.
@@ -313,12 +327,24 @@ impl Collector<'_> {
         let dir = std::mem::replace(&mut self.child_dir, child_dir);
         let tests = std::mem::take(&mut self.test_lines);
         let depth = std::mem::take(&mut self.inline_depth);
+        let nodes = std::mem::take(&mut self.file_nodes);
+        let in_construction = self.in_construction;
+        self.in_construction |= path.parent().and_then(Path::file_name).is_some_and(|name| {
+            name == "settlements"
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("construction") && name.ends_with(".rs"))
+        });
         for item in &file.items {
             self.visit_item(item);
         }
         let skipped = covered_lines(&mut self.test_lines);
         self.facts[self.current].lines += lines.saturating_sub(skipped);
-        self.file = file_path;
+        let path = std::mem::replace(&mut self.file, file_path);
+        self.files
+            .insert(path, std::mem::replace(&mut self.file_nodes, nodes));
+        self.in_construction = in_construction;
         self.child_dir = dir;
         self.test_lines = tests;
         self.inline_depth = depth;
@@ -568,6 +594,9 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             self.skip(item.span());
             return;
         }
+        if !matches!(item, Item::Mod(_)) {
+            self.file_nodes += 1;
+        }
         visit::visit_item(self, item);
     }
 
@@ -576,6 +605,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             self.skip(item.span());
             return;
         }
+        self.file_nodes += 1;
         visit::visit_impl_item(self, item);
     }
 
@@ -584,7 +614,24 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             self.skip(item.span());
             return;
         }
+        self.file_nodes += 1;
         visit::visit_trait_item(self, item);
+    }
+
+    fn visit_foreign_item(&mut self, item: &'ast syn::ForeignItem) {
+        let attrs = match item {
+            syn::ForeignItem::Fn(item) => &item.attrs[..],
+            syn::ForeignItem::Static(item) => &item.attrs[..],
+            syn::ForeignItem::Type(item) => &item.attrs[..],
+            syn::ForeignItem::Macro(item) => &item.attrs[..],
+            _ => &[],
+        };
+        if is_test_only(attrs) {
+            self.skip(item.span());
+            return;
+        }
+        self.file_nodes += 1;
+        visit::visit_foreign_item(self, item);
     }
 
     fn visit_field(&mut self, field: &'ast Field) {
@@ -620,11 +667,17 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     }
 
     fn visit_stmt(&mut self, stmt: &'ast Stmt) {
-        if let Stmt::Macro(mac) = stmt
-            && is_test_only(&mac.attrs)
-        {
-            self.skip(mac.span());
+        let attrs = match stmt {
+            Stmt::Local(local) => &local.attrs[..],
+            Stmt::Macro(mac) => &mac.attrs[..],
+            _ => &[],
+        };
+        if is_test_only(attrs) {
+            self.skip(stmt.span());
             return;
+        }
+        if !matches!(stmt, Stmt::Item(_)) {
+            self.file_nodes += 1;
         }
         visit::visit_stmt(self, stmt);
     }
@@ -641,8 +694,12 @@ impl<'ast> Visit<'ast> for Collector<'_> {
                 }
             }
         }
+        let in_construction = self.in_construction;
+        self.in_construction |=
+            self.scope.len() == 1 && self.scope[0] == "settlements" && name == "construction";
         match &module.content {
             Some((_, items)) => {
+                self.file_nodes += 1;
                 self.scope.push(name.clone());
                 self.inline_depth += 1;
                 let dir = self.child_dir.join(&name);
@@ -658,6 +715,9 @@ impl<'ast> Visit<'ast> for Collector<'_> {
                 Ok((path, _)) if is_test_file(&path) => self.skip(module.span()),
                 Ok((path, child_dir)) => match parse(&path) {
                     Ok((file, lines)) => {
+                        if !is_test_only(&file.attrs) {
+                            self.file_nodes += 1;
+                        }
                         self.scope.push(name);
                         self.walk_file(&file, lines, &path, child_dir);
                         self.scope.pop();
@@ -668,6 +728,17 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             },
         }
         self.current = parent;
+        self.in_construction = in_construction;
+    }
+
+    fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
+        if !self.in_construction
+            && matches!(&field.member, syn::Member::Named(name)
+                if name == "project" || name == "pending_order")
+        {
+            self.count(Counter::ConstructionFieldAccess);
+        }
+        visit::visit_expr_field(self, field);
     }
 
     fn visit_item_use(&mut self, item: &'ast ItemUse) {

@@ -45,9 +45,10 @@ worse, so split the function by behaviour instead.
 ## New features are modules
 
 Owner rule, 2026-11-16 (`receipts/Stage3/OWNER-RULE-MODULAR-NEW-FEATURES-20261116.md`):
-every new feature is built as its own module now; existing code is not moved
-during this work (that is a later goal along
-[ADR 0021](../decisions/0021-build-time-and-crate-split.md)). Fixes to existing
+every new feature is built as its own module now. Existing code moves along the
+cycle-cut plan of [ADR 0021](../decisions/0021-build-time-and-crate-split.md)
+with byte-exact moves; before the 21 November announcement only once the current
+release tasks are closed, otherwise after (owner, 2026-11-17). Fixes to existing
 code stay where the code is.
 
 - **Place it.** One module (a file, or a directory with `mod.rs` when it grows)

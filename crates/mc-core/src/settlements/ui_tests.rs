@@ -1439,35 +1439,27 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
 
 #[test]
 fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales() {
+    // One pending order per settlement (construction queue order, owner
+    // 2026-11-17): each pending blueprint gets its own settlement.
     for (locale, level) in [("en_us", "L1"), ("ru_ru", "ур. 1")] {
-        let mut state = joined(0);
-        let id = town(&mut state, PLAYER);
-        set_locale(&mut state, locale);
-        prep_projects_site(&mut state, id);
-        crate::settlements::construction::tests::fund(&mut state, "spanish_plaza", 1);
-        click(
-            &mut state,
-            id,
-            "project_order",
-            &[("blueprint", string("spanish_plaza"))],
-        );
-        assert_eq!(
-            state
-                .settlements
-                .get(id)
-                .unwrap()
-                .project
-                .as_ref()
-                .unwrap()
-                .blueprint,
-            "spanish_plaza"
-        );
-        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
-        let snapshot =
-            crate::plugin_structures::settlement_builds::status(&state, id, &project.structure)
-                .unwrap();
-        let work: u64 = snapshot.stages.iter().map(|stage| stage.work_units).sum();
         for pending in ["spanish_house", "spanish_church", "spanish_fortress"] {
+            let mut state = joined(0);
+            let id = town(&mut state, PLAYER);
+            set_locale(&mut state, locale);
+            prep_projects_site(&mut state, id);
+            crate::settlements::construction::tests::fund(&mut state, "spanish_plaza", 1);
+            click(
+                &mut state,
+                id,
+                "project_order",
+                &[("blueprint", string("spanish_plaza"))],
+            );
+            let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+            assert_eq!(project.blueprint, "spanish_plaza");
+            let snapshot =
+                crate::plugin_structures::settlement_builds::status(&state, id, &project.structure)
+                    .unwrap();
+            let work: u64 = snapshot.stages.iter().map(|stage| stage.work_units).sum();
             click(
                 &mut state,
                 id,

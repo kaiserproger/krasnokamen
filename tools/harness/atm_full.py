@@ -18,7 +18,7 @@ from .backends.atm_structures import SEED, USERNAME, locate_coordinates
 from .backends.chisel import rewrite_config
 from .backends.gameplay import prepare_operator_fixture
 from .profiles import ProfileContext
-from .quirk_parity.anvil import _chunks_of, _regions, parse_nbt, read_world
+from .quirk_parity.anvil import _chunks_of, _regions, parse_nbt, read_region, read_world
 
 OVERWORLD = "moogs_structures:moogs_structures_generic_jigsaw_structure"
 NETHER = "moogs_structures:moogs_structures_generic_nether_jigsaw_structure"
@@ -30,6 +30,9 @@ NON_PROOF_BLOCKS = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air",
 # Vanilla precipitation deposits snow layers in cold exposed locations.
 # Vanilla cold-biome weather freezes exposed source water into ice.
 WEATHER_PRODUCTS = {"minecraft:snow", "minecraft:ice"}
+# Fixed search origins, used in order and recorded; exhaustion is a finding.
+SEARCH_ORIGINS = ((-255.5, -255.5), (2048.5, -255.5), (-255.5, 2048.5),
+                  (-2303.5, -255.5), (-255.5, -2303.5))
 
 
 def resource(pack: Path, identifier: str, kind: str, suffix: str) -> Path:
@@ -179,6 +182,56 @@ def find_site(export: Path, row: dict) -> dict:
     if not starts:
         raise ValueError(f"{row['id']}: no persisted generated start near locate coordinates in {row['dimension']}")
     return min(starts, key=lambda s: abs(s["anchor"][0]-candidate[0]) + abs(s["anchor"][2]-candidate[1]))
+
+
+def index_starts(export: Path) -> list[dict]:
+    """Read all persisted starts in the exported chunks, including other IDs."""
+    starts = []
+    for region in sorted(export.rglob("r.*.*.mca")):
+        if region.parent.name != "region":
+            continue
+        for _, _, chunk in read_region(region):
+            for identifier, start in chunk.get("structures", {}).get("starts", {}).items():
+                if start.get("id") != identifier:
+                    continue
+                box, anchor = start.get("BB"), start.get("KrasnokamenLocatePos")
+                if (not isinstance(box, list) or len(box) != 6 or not isinstance(anchor, list)
+                        or len(anchor) != 3 or any(box[i] > box[i + 3] for i in range(3))
+                        or (start.get("ChunkX"), start.get("ChunkZ")) != (chunk.get("xPos"), chunk.get("zPos"))):
+                    raise ValueError(f"{identifier}: invalid exported start")
+                starts.append({"id": identifier, "anchor": anchor, "bounds": box,
+                               "chunk": [chunk["xPos"], chunk["zPos"]],
+                               "dimension_dir": str(region.parent.parent)})
+    return starts
+
+
+def choose_unobstructed(row: dict, starts: list[dict], control: dict | None = None) -> tuple[dict | None, list[dict]]:
+    """Choose the first located exact-ID start not overlapping another exported start."""
+    dimension = ("dimensions/minecraft/the_nether" if row["dimension"] == "minecraft:the_nether"
+                 else "dimensions/minecraft/overworld")
+    local = [site for site in starts if site["dimension_dir"].endswith(dimension)]
+    rejected = []
+    for attempt in row.get("locate_attempts", []):
+        if "xz" not in attempt:
+            continue
+        x, z = attempt["xz"]
+        candidates = [site for site in local if site["id"] == row["id"]
+                      and abs(site["anchor"][0] - x) <= 32 and abs(site["anchor"][2] - z) <= 32]
+        if control is not None:
+            candidates = [site for site in candidates if site["anchor"] == control["site"]["anchor"]
+                          and site["bounds"] == control["site"]["bounds"]]
+        if not candidates:
+            continue
+        site = min(candidates, key=lambda s: abs(s["anchor"][0] - x) + abs(s["anchor"][2] - z))
+        conflicts = [other for other in local
+                     if (other["id"], other["chunk"]) != (site["id"], site["chunk"])
+                     and all(site["bounds"][i] <= other["bounds"][i + 3]
+                             and other["bounds"][i] <= site["bounds"][i + 3] for i in range(3))]
+        if not conflicts:
+            return site, rejected
+        rejected.append({"anchor": site["anchor"], "bounds": site["bounds"],
+                         "conflicts": [{"id": item["id"], "bounds": item["bounds"]} for item in conflicts]})
+    return None, rejected
 
 
 def expanded_bounds(bounds: list[int], margin: int) -> list[int]:
@@ -380,7 +433,7 @@ def run(ctx: ProfileContext) -> dict:
         control_report = json.loads(control_path.read_text())
         if (not control_report.get("control_subset") or control_report.get("seed") != SEED
                 or control_report.get("manifest_sha256") != digest(manifest_path)
-                or control_report.get("differential_rule") != "discovery-stable-v1"
+                or control_report.get("differential_rule") != "unobstructed-discovery-v2"
                 or not pin_manifest.get("head") or control_report.get("server_pin_head") != pin_manifest["head"]
                 or control_report.get("server_sha256") == pin_manifest["binary_sha256"]
                 or not control_report.get("server_pin_diff_sha256")
@@ -406,7 +459,7 @@ def run(ctx: ProfileContext) -> dict:
     report["control_subset"] = bool(subset)
     report["control_selection"] = subset or None
     report["differential_maximum"] = MAX_DIFFERENTIAL_BLOCKS
-    report["differential_rule"] = "discovery-stable-v1"
+    report["differential_rule"] = "unobstructed-discovery-v2"
     ctx.failure_scenario = report
     write_json(output / "definitions.json", rows)
     write_json(output / "result.json", report)
@@ -422,33 +475,59 @@ def run(ctx: ProfileContext) -> dict:
     config = output / "server.toml"
     config.write_text(rewrite_config(source, port=port, world=str(world), plugins=str(plugins), seed=SEED))
     prepare_operator_fixture(ProfileContext(output), [USERNAME])
+    def locate(client, row, origin, *, first):
+        dimension_teleport(client, row["dimension"], [origin[0], 100, origin[1]])
+        messages = client.command(f"locate structure {row['id']}", row["id"])
+        attempt = {"origin": list(origin), "messages": messages}
+        row.setdefault("locate_attempts", []).append(attempt)
+        try:
+            attempt["xz"] = locate_coordinates([json.dumps(messages)], row["id"])
+        except ValueError:
+            reason = locate_failure(messages, row["id"])
+            if reason is None:
+                raise
+            attempt["reason"] = reason
+            if first:
+                row.update(status="not_found", reason=reason)
+            return
+        dimension_teleport(client, row["dimension"], [attempt["xz"][0], 100, attempt["xz"][1]])
+        row.update(status="located", reason=None)
+
     with session(args, config, port, "discovery", report) as client:
         for row in active:
-            if row.get("status") == "verification_failed":
-                continue
-            dimension_teleport(client, row["dimension"], [-255.5, 100, -255.5])
-            messages = client.command(f"locate structure {row['id']}", row["id"])
-            row["locate_messages"] = messages
-            try:
-                row["xz"] = locate_coordinates([json.dumps(messages)], row["id"])
-            except ValueError:
-                reason = locate_failure(messages, row["id"])
-                if reason is None:
-                    raise
-                row.update(status="not_found", reason=reason)
-                write_json(output / "result.json", report)
-                continue
-            dimension_teleport(client, row["dimension"], [row["xz"][0], 100, row["xz"][1]])
-            row.update(status="located", reason=None)
+            control = controls.get(row["id"])
+            anchor = control["site"]["anchor"] if control else None
+            origin = (anchor[0], anchor[2]) if anchor else SEARCH_ORIGINS[0]
+            locate(client, row, origin, first=True)
             write_json(output / "result.json", report)
     discovery_export = export_world(args, config, world, "discovery-export", report)
-    for row in active:
-        if row["status"] == "located":
-            try:
-                row["initial_site"] = find_site(discovery_export, row)
-            except ValueError as error:
-                row.update(status="verification_failed", reason=str(error))
+    for search_index in range(len(SEARCH_ORIGINS)):
+        starts = index_starts(discovery_export)
+        pending = []
+        for row in active:
+            if row["status"] != "located":
+                continue
+            control = controls.get(row["id"])
+            site, rejected = choose_unobstructed(row, starts, control)
+            row["obstructed_starts"] = rejected
+            if site is None:
+                row.pop("initial_site", None)
+                if control is None and search_index + 1 < len(SEARCH_ORIGINS):
+                    pending.append(row)
+                else:
+                    row.update(status="verification_failed",
+                               reason=f"{row['id']}: no unobstructed matching start; unprovable")
+            else:
+                row["initial_site"] = site
+                row["xz"] = [site["anchor"][0], site["anchor"][2]]
             write_json(output / "result.json", report)
+        if not pending:
+            break
+        with session(args, config, port, f"discovery-retry-{search_index + 1}", report) as client:
+            for row in pending:
+                locate(client, row, SEARCH_ORIGINS[search_index + 1], first=False)
+                write_json(output / "result.json", report)
+        discovery_export = export_world(args, config, world, f"discovery-export-{search_index + 1}", report)
     with session(args, config, port, "coverage", report) as client:
         visit_coverage(client, active)
     export = export_world(args, config, world, "before-export", report)

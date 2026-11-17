@@ -127,6 +127,11 @@ and templates. The fresh-world seed is 20261115; the client uses normal
 `execute in <dimension> run tp` commands, not a portal or placement commands.
 It locates each ID, then generates both pack-present and same-seed pack-absent
 worlds across the expanded start bounds and verifies exported chunk coverage.
+For an overlapping exported start, the control campaign tries up to five
+deterministic locate origins and records rejected IDs and bounds; exhaustion
+is an unprovable finding. A candidate must locate the same selected anchor and
+bounds as its control and must also be unobstructed. Collision checks cover
+persisted starts present in the discovery export, not ungenerated start chunks.
 Only a start-template palette type that differs at the same position, is
 absent from the pack-free vocabulary within 16 blocks of the bounds, and
 already had the identical state in the discovery export counts. Missing

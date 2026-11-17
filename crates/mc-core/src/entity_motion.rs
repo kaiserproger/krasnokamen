@@ -10,6 +10,9 @@ use mc_physics::{Aabb, BlockMaterial, BlockSampler, EntityBody, PhysicsConfig, V
 const EPSILON: f64 = 1.0e-7;
 const WANDER_EPISODE: u64 = 120;
 const WANDER_WALK: u64 = 40;
+/// Shortest step (blocks per tick) a battle body without a look target turns
+/// to face; see [`battle_holds_facing`].
+const BATTLE_HOLD_STEP: f64 = 0.005;
 
 pub(crate) struct MotionInput {
     pub body: EntityBody,
@@ -19,6 +22,9 @@ pub(crate) struct MotionInput {
     pub impulse: [f64; 2],
     pub rotation: [f32; 3],
     pub look_target: Option<[f64; 3]>,
+    /// A moving battle body: without a look target its facing follows
+    /// [`battle_holds_facing`].
+    pub battle_facing: bool,
     pub climbs_walls: bool,
     pub aquatic_control: AquaticControl,
     pub air_supply: i32,
@@ -439,12 +445,19 @@ pub(crate) fn step<S: BlockSampler>(
             impulse[axis] = next;
         }
     }
-    let rotation = look(
-        input.rotation,
-        body.position,
-        body.velocity,
-        input.look_target,
-    );
+    let rotation = if input.battle_facing
+        && input.look_target.is_none()
+        && battle_holds_facing(&input.body, &body)
+    {
+        input.rotation
+    } else {
+        look(
+            input.rotation,
+            body.position,
+            body.velocity,
+            input.look_target,
+        )
+    };
     MotionResult {
         body,
         impulse,
@@ -453,4 +466,22 @@ pub(crate) fn step<S: BlockSampler>(
         drowning,
         wall_climbing,
     }
+}
+
+/// Battle-only facing rule. A battle body without a look target keeps its
+/// rotation (yaw, pitch and head) when this tick's resolved step `after -
+/// before` is no longer than [`BATTLE_HOLD_STEP`] or runs against the velocity
+/// the body left the previous tick with. Collisions and slot dressing step such
+/// bodies back and forth around their place, and facing every step swung them
+/// up to 90 degrees per tick (receipts/BattleJitterClient). A steady walk turns
+/// at any speed above the floor: each step agrees with the previous velocity. A
+/// deliberate turn-around holds for one tick, then turns.
+///
+/// Cavalry residual: horse turns at gallop speed are steering, not
+/// reversals, and this rule leaves them.
+fn battle_holds_facing(before: &EntityBody, after: &EntityBody) -> bool {
+    let dx = after.position.x - before.position.x;
+    let dz = after.position.z - before.position.z;
+    dx * dx + dz * dz <= BATTLE_HOLD_STEP * BATTLE_HOLD_STEP
+        || dx * before.velocity.x + dz * before.velocity.z < 0.0
 }

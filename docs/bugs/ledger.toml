@@ -7256,3 +7256,45 @@ source = "D6 design review 2026-11-17 (receipts/UnitJitter/REVIEW-DESIGN-fable.m
 repro = "source"
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "BATTLE-FOOT-STEERING-REVERSALS"
+title = "Foot soldiers visibly jitter near terrain and in dense combat instead of settling or advancing"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "D6 positional shuffle remains NOT-READY for the freeze (Main decision 2026-11-17); status stays open and no production steering fix landed. Proven visible cause: terrain bypass axis/side alternates across the nearest-cardinal 45-degree boundary, producing opposite full-speed diagonal steps toward an unreachable nominal slot. Work-root receipts/UnitJitter/VISIBLE.md matches member891 (wire943, core-only942; regiment3/file41/rank2) against all600 wire packets within0.001 block:0/1799 reversals before terrain,1799/1799 after; static destination, no rock escape/impulse, physics preserves the post-gap result. Yaw-only fix main02e3867f9 landed separately: rotation only, not a positional fix. Earlier20k attribution and independent reviews remain in receipts/UnitJitter/PHASES.md, REVIEW-BATTLE-DESIGN-fable.md and REVIEW-AXIS-DESIGN-fable.md; final GR admission and residuals are in GR-S0.md and GR-S0-RESULT.json."
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = [
+  "Step-0 diagnostic on base 0c71fb512: receipts/UnitJitter/step0-probe.rs and step0-hooks.patch; native receipt wt/UnitJitter/.analysis/validation/20261117T071139-test-lkkk_ck7. These archived test-only hooks were removed; their diagnostic PASS is not a green regression or gameplay acceptance.",
+  "Raw-foot reversal classes, shares of all reversal events in each window (not final-drive rates): engaged 34,801 events, turn + stationary destination at [probe reach,2] blocks 39.44%, clear-way + stationary destination >2 blocks 20.99%, turn + stationary destination closer than probe reach 15.39%, clear-way + moving destination >2 blocks 10.25%; late 76,326 canonical events (76,328 including two raw-payload auxiliary events), turn + stationary destination at [probe reach,2] blocks 21.93%, clear-way + stationary destination >2 blocks 21.18%, turn + stationary destination closer than probe reach 12.49%, clear-way + stationary destination at [probe reach,2] blocks 12.46%. Probe reach is half_width+LOOKAHEAD; full joint histogram and individual events are in STEP0-RECEIPT.json and its referenced stream. Boxed/cliff classes have zero canonical reversal events in both windows.",
+  "Independent review receipts/UnitJitter/REVIEW-BATTLE-DESIGN-fable.md rejected a durable Member axis: checkpoint/WAL image and deny_unknown_fields make it a storage/rollback change, and axis flips dirty BattlePatch rows. Rejected the 25% axis margin: it does not cure the measured case; the 40-tick counterfactual travels 3.16 blocks and settles into a period-2 shuttle from tick 517 (last 20 ticks: path 1.58 blocks, net 3.55e-14). R1 holds member7508 still but its turn+near+stationary class is only 15.39% engaged and 12.49% late, below the pre-registered >50% in BOTH windows; C4 stops implementation.",
+  "Rejected before freeze: A stateless deadband moves the discontinuity/loop (a 4-degree band covers the old891 headings but conditional closed-loop arithmetic shifts the shuttle to41 degrees). B retained bypass frame has no rest except boxed for an unreachable slot and can trade period2 jitter for a longer shuttle; no new Member/Columns/image/WAL state was implemented. GR boxed rest when a refused probe reaches the own slot, foot/standing-regiment/non-rock only, is also rejected: fixed S0 gives891 path0 over1800 ticks,7508 path0 over200,6/7 original wire archers covered, but13/47 unique eligible members reach the frozen goal within100 baseline ticks:27.66% false stops exceeds the pre-registered5% bound. The smaller323/22746 decision ratio is not the admission denominator. Test-only hooks were removed; native execution receipt wt/UnitJitter/.analysis/validation/20261117T094230-test-cupizsri is not gameplay acceptance.",
+  "Remaining positional baseline, actual-client1k/side windows advance/engaged/mid/late:7 archers each window and1/27/21/31 melee. Whole-take visible positional foot+archer union64, yaw-sway union134, overlap10 (no overlap among the7 positional archers): count yaw separately. Auxiliary S0 strict native fullspeed cohorts, not client-window acceptance: baseline8 archers+10 foot, experimental GR1 archer+0 foot; residual member800 has1781 consecutive reversal edges and142.2 blocks path, excluded because the probe has not reached its target. Full20k first-angular foot attribution engaged/late: first keep_gap11559/32896, terrain23100/41285; separate raw-foot branch cohorts34801/76326 have clear-way12504/40312 and stationary turn goals beyond2 blocks2116/8639. No GR post-fix population/client claim is made; moving goals, routing/pursuit/wounded/close_on, rock escape and mounted units remain outside GR scope.",
+  "Next: a post-freeze design that handles unreachable formation slots explicitly while preserving progress to reachable slots, under the B-backlog review conditions. Keep far/unreachable slots, clear-way, first-gap, moving goals and mounted classes visible; require eventual rest/progress and anti-period-shift metrics, only-fix-reverted controls, real-client evidence and independent battle-core review. Main's fixed S0 stop forbids GR code or another steering mechanism before freeze; yaw02e3867f9 does not close positional shuffle."
+]
+
+[[bug]]
+id = "BATTLE-REST-SKIPS-TARGET-FACING"
+title = "A battle soldier standing still with a look target does not turn to face it while it rests"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Found while implementing the battle facing rule, 2026-11-17 (receipts/BattleYawHold/RESULTS.md). early_entity_rest (crates/mc-core/src/tick/entity_phase.rs:491) keeps a battle row out of the rest only for a non-zero battle drive. A row with zero drive, zero velocity, on the ground, not hurt in the last 100 ticks and with a battle look target (columns.look_by_slot) therefore rests, and the step is skipped. Its full step would turn it toward the target: a scratch test on a resting husk at yaw 30 with a target at +x gave rest = true while the full step returned yaw -60. Battle rows rest without a physics proof, so the rest is not bit-identical to the step in this case. Fix idea, one guard: also refuse the rest for `battle && look_by_slot[slot].is_some()`. Cost: every targeted battle row standing still would run the full step instead of resting; the share of rest hits lost is unmeasured. Deferred until after the 2026-11-19 freeze (Main)."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT"
+title = "A cavalry husk whose horse died skates across the battlefield at 45-107 blocks per second toward its regiment's sweep point"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "BattleJitterClient diagnosis 2026-11-17 (receipts/BattleYawHold/RIDER-FLING.md): wire recordings of six field-1k battle takes, two before and four after the yaw fix, a per-tick server probe and the source. Every wire position step above 2 blocks per 3-tick packet but one horse knockback belongs to a dismounted cavalry husk (3-51 per take, up to 10.9 blocks per packet, 2 entity_position_sync packets in one take); the vanilla client draws them as a 3-tick glide, so the body visibly skates. Cause: battle/cavalry.rs sweep_drives wrote the raw sweep heading, a displacement in blocks, as the drive of every untargeted steady member of a sweeping mounted regiment; only the mounted pass turns it into a horse speed, so a rider whose horse died kept it as his own drive in blocks per second and covered 1/20 of the distance to the plan point every tick (server probe: consecutive-tick step ratio 0.950, up to 5.34 blocks/tick). Fix: only members seated on their own native row take the plan heading; the others keep the steering foot drive (independent design review receipts/BattleYawHold/REVIEW-DESIGN-sweepseat-astra.md). Take acceptance: dismounted steps above 2 blocks per packet = 0 on at least three final-campaign takes with recorded dismounts, with a skip-reverted control that reproduces them (FinalCampaign RUNBOOK 6b)."
+repro = "source"
+regression = ["cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_chase", "cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_flank", "cargo:mc-core:battle::cavalry::tests::a_rider_whose_horse_dies_walks_from_the_next_battle_tick"]
+failing_first = "reported"
+fix_commit = "9176f32745de0bb4933212569efa643f0ec68874"
