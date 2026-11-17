@@ -394,10 +394,10 @@ fn a_stalled_project_warns_once_after_three_work_hours_without_a_builder() {
     let causes = warnings.0.lock().unwrap();
     assert_eq!(
         causes.len(),
-        1,
-        "one bounded warning per no-progress episode: {causes:?}"
+        2,
+        "one initial stall and one failed recovery per no-progress episode: {causes:?}"
     );
-    assert!(causes[0].contains("no_builder"));
+    assert!(causes.iter().all(|cause| cause.contains("no_builder")));
 }
 
 fn protected_preparation() -> (

@@ -63,8 +63,8 @@ fn log_stall(state: &mut TickState, id: SettlementId) -> String {
         .with_writer(move || writer.clone())
         .finish();
     tracing::subscriber::with_default(subscriber, || {
-        // Two windows without progress still emit just one episode.
-        for _ in 0..=300 {
+        // Three windows distinguish the first stall, failed recovery and silence.
+        for _ in 0..=450 {
             state.tick += 20;
             release_stalled_builder(state, id);
         }
@@ -172,4 +172,91 @@ fn a_real_fetch_refusal_is_retained_for_the_stall_report_without_debiting_stock(
             .inventory,
         inventory
     );
+}
+
+#[test]
+fn a_repeated_stall_names_the_failed_action_and_cell_once_without_discarding_work() {
+    let (mut state, id, _) = bed_project();
+    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let before = executor::status(&state, id, &project.structure).unwrap();
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let text = log_stall(&mut state, id);
+    assert_eq!(
+        text.matches("settlement_construction_recovery_failed")
+            .count(),
+        1,
+        "{text}"
+    );
+    let repeated = text
+        .lines()
+        .find(|line| line.contains("settlement_construction_recovery_failed"))
+        .unwrap();
+    for evidence in [
+        "spanish_fortress",
+        "next=Some([10, 202, 10])",
+        "failed_action=\"builder_released\"",
+        "cause=\"no_builder\"",
+        "recovery=\"no_builder\"",
+    ] {
+        assert!(
+            repeated.contains(evidence),
+            "missing {evidence}: {repeated}"
+        );
+    }
+    assert_eq!(
+        state.settlements.get(id).unwrap().project.as_ref().unwrap(),
+        &project
+    );
+    assert_eq!(
+        executor::status(&state, id, &project.structure).unwrap(),
+        before
+    );
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+}
+
+#[test]
+fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
+    let (mut state, id, builder) = fixture();
+    let next = [10, 201, 10];
+    let grass = super::super::allocator::tests::block(&state, "minecraft:short_grass", &[]);
+    state.world.set_block(next[0], next[1], next[2], grass);
+    state.world.fold_overlay();
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [14, 209, 14]).unwrap();
+    let air = state.registry.states.air;
+    let structure = executor::prepare(
+        &mut state,
+        id,
+        layout::MEADOW.into(),
+        bounds,
+        bounds,
+        vec![executor::PlannedCell {
+            at: next,
+            state: air,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    state.settlements.get_mut(id).unwrap().project = Some(Project {
+        settlement: id,
+        blueprint: layout::MEADOW.into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: structure.clone(),
+        ordered: false,
+        borrowed_builder: None,
+    });
+    state.entities.set_pos(builder, [5.5, 201.0, 10.5]);
+    crate::villager::building::tick(&mut state, id);
+    assert!(
+        state.settlements.get(id).unwrap().project.is_none(),
+        "a grass cell in ordinary work reach must not wait for an unrelated felling stand"
+    );
+    assert_eq!(
+        executor::status(&state, id, &structure).unwrap().state,
+        ScriptStructureState::Committed
+    );
+    assert_eq!(state.world.block_at(next[0], next[1], next[2]), Some(air));
 }

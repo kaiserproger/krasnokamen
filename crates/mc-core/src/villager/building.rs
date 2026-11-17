@@ -62,7 +62,11 @@ fn preparation_footing(
     next: [i32; 3],
 ) -> Option<BlockPos> {
     (project.building.is_none()
-        && executor::clearing(state, project.settlement, &project.structure))
+        && executor::clearing(state, project.settlement, &project.structure)
+        && state
+            .world
+            .physics_block_at(next[0], next[1], next[2])
+            .is_some_and(|block| crate::settlements::forestry::tree(state, block)))
     .then(|| crate::settlements::forestry::footing(state, project.settlement, next))
     .flatten()
 }

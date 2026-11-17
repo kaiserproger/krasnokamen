@@ -2023,6 +2023,8 @@ pub(crate) struct BuilderWatch {
     idle: u64,
     reported: bool,
     refusal: Option<&'static str>,
+    /// First action, consumed by the one repeated-stall report for this episode.
+    recovery: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
 }
@@ -2059,6 +2061,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             idle: 0,
             reported: false,
             refusal: None,
+            recovery: None,
             shunned: Vec::new(),
         });
     let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
@@ -2068,6 +2071,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         watch.idle = 0;
         watch.reported = false;
         watch.refusal = None;
+        watch.recovery = None;
         return;
     }
     if !on_shift {
@@ -2081,6 +2085,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let report = !watch.reported;
     watch.reported = true;
     let refusal = watch.refusal;
+    let failed_action = if report { None } else { watch.recovery.take() };
     let incumbent = residents(state, id).find(|&slot| {
         state.entities.body(slot).alive
             && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
@@ -2167,6 +2172,9 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         "no_builder"
     };
     if report {
+        if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+            watch.recovery = Some(recovery);
+        }
         tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
             origin = ?project.origin, stage = snapshot.current_stage_index,
             work = snapshot.completed_work_units, ?next, cause, recovery, ?preparation,
@@ -2175,6 +2183,13 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             required = ?material.map(|(_, count)| count), ?carried, ?pickup,
             last_refusal = ?refusal,
             shift_ticks = BUILDER_STALL_SHIFT_TICKS, "settlement_construction_stalled");
+    }
+    if let Some(failed_action) = failed_action {
+        tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
+            origin = ?project.origin, stage = snapshot.current_stage_index,
+            work = snapshot.completed_work_units, ?next, cause, failed_action, recovery,
+            shift_ticks = BUILDER_STALL_SHIFT_TICKS,
+            "settlement_construction_recovery_failed");
     }
 }
 
