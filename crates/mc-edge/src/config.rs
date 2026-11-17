@@ -51,6 +51,17 @@ pub struct EdgeConfig {
     /// Access lists live beside the explicit config, otherwise in the cwd.
     #[serde(skip, default = "default_server_dir")]
     pub(crate) server_dir: PathBuf,
+    /// File this config was loaded from; `None` for defaults and library use.
+    /// Startup checks read its permissions.
+    #[serde(skip)]
+    pub(crate) config_path: Option<PathBuf>,
+    /// Imported properties file holding a non-empty `rcon.password`, whether
+    /// or not the TOML overrides it; startup checks read its permissions too.
+    #[serde(skip)]
+    pub(crate) secret_properties_path: Option<PathBuf>,
+    /// The effective `rcon.password` came from that file, not the TOML.
+    #[serde(skip)]
+    pub(crate) rcon_password_imported: bool,
     /// Upstream proxy trust: Velocity modern forwarding.
     #[serde(default)]
     pub proxy: ProxySection,
@@ -95,13 +106,29 @@ pub struct PropertiesSection {
     pub file: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct RconSection {
     pub enabled: bool,
     pub bind_address: String,
     pub port: u16,
     pub password: String,
+}
+
+impl std::fmt::Debug for RconSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RconSection")
+            .field("enabled", &self.enabled)
+            .field("bind_address", &self.bind_address)
+            .field("port", &self.port)
+            .field("password", &redacted(&self.password))
+            .finish()
+    }
+}
+
+/// Debug rendering of a secret: its presence, never its value.
+fn redacted(secret: &str) -> &'static str {
+    if secret.is_empty() { "" } else { "<redacted>" }
 }
 
 impl Default for RconSection {
@@ -310,7 +337,7 @@ pub struct AuthSection {
 }
 
 /// `[proxy]`: upstream proxy trust for player-info forwarding.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct ProxySection {
     /// `none` (default) or `velocity` modern forwarding.
     #[serde(default)]
@@ -318,6 +345,15 @@ pub struct ProxySection {
     /// Velocity `forwarding.secret` contents, required in velocity mode.
     #[serde(default)]
     pub secret: String,
+}
+
+impl std::fmt::Debug for ProxySection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxySection")
+            .field("mode", &self.mode)
+            .field("secret", &redacted(&self.secret))
+            .finish()
+    }
 }
 
 /// Which forwarding scheme the listener trusts.
@@ -517,7 +553,7 @@ fn default_block_log_max_records() -> usize {
 }
 
 /// `[dashboard]`: optional operator dashboard and Prometheus scrape endpoint.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct DashboardSection {
     /// Master switch (default off).
     #[serde(default)]
@@ -537,6 +573,21 @@ pub struct DashboardSection {
     pub metrics_bearer_token: Option<String>,
 }
 
+impl std::fmt::Debug for DashboardSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardSection")
+            .field("enabled", &self.enabled)
+            .field("bind_address", &self.bind_address)
+            .field("port", &self.port)
+            .field("allow_remote", &self.allow_remote)
+            .field(
+                "metrics_bearer_token",
+                &self.metrics_bearer_token.as_deref().map(redacted),
+            )
+            .finish()
+    }
+}
+
 impl Default for DashboardSection {
     fn default() -> Self {
         Self {
@@ -550,7 +601,7 @@ impl Default for DashboardSection {
 }
 
 /// `[msmp]`: authenticated JSON-RPC-over-WebSocket management endpoint.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct MsmpSection {
     #[serde(default)]
     pub enabled: bool,
@@ -564,6 +615,18 @@ pub struct MsmpSection {
     pub bearer_token: String,
     #[serde(default)]
     pub allow_remote: bool,
+}
+
+impl std::fmt::Debug for MsmpSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MsmpSection")
+            .field("enabled", &self.enabled)
+            .field("bind_address", &self.bind_address)
+            .field("port", &self.port)
+            .field("bearer_token", &redacted(&self.bearer_token))
+            .field("allow_remote", &self.allow_remote)
+            .finish()
+    }
 }
 
 impl Default for MsmpSection {
@@ -680,9 +743,9 @@ impl EdgeConfig {
             .and_then(Path::parent)
             .filter(|path| !path.as_os_str().is_empty())
             .map_or_else(default_server_dir, Path::to_path_buf);
+        cfg.config_path = origin.map(Path::to_path_buf);
         // Relative data paths resolve against the process working directory.
         // Absolute paths pass through untouched.
-        let _ = origin;
         if cfg.server.view_distance == 0 {
             cfg.server.view_distance = default_view_distance();
         }
@@ -969,6 +1032,34 @@ mod tests {
         assert!(!cfg.auth.online_mode);
         assert!(!cfg.auth.require_plugin_login);
         assert!(!cfg.dashboard.enabled);
+    }
+
+    #[test]
+    fn debug_redacts_every_secret_but_keeps_their_presence() {
+        let cfg = EdgeConfig::from_toml(
+            "[network]\nbind_address = \"0.0.0.0\"\n\
+             [auth]\nonline_mode = false\n\
+             [proxy]\nmode = \"velocity\"\nsecret = \"proxy-hunter2\"\n\
+             [msmp]\nenabled = true\nbearer_token = \"msmp-hunter2\"\n\
+             [dashboard]\nmetrics_bearer_token = \"metrics-hunter2\"\n\
+             [rcon]\nenabled = true\npassword = \"rcon-hunter2\"\n",
+            None,
+        )
+        .unwrap();
+        let debug = format!("{cfg:?}");
+        for secret in [
+            "proxy-hunter2",
+            "msmp-hunter2",
+            "metrics-hunter2",
+            "rcon-hunter2",
+        ] {
+            assert!(!debug.contains(secret), "{secret} leaked in {debug}");
+        }
+        assert_eq!(debug.matches("<redacted>").count(), 4, "{debug}");
+        // The surrounding settings stay readable so the dump is still usable.
+        assert!(debug.contains("RconSection"), "{debug}");
+        assert!(debug.contains("0.0.0.0"), "{debug}");
+        assert!(format!("{:?}", EdgeConfig::default()).contains("secret: \"\""));
     }
 
     #[test]

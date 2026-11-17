@@ -63,6 +63,7 @@ pub mod recorder;
 pub mod server;
 pub(crate) mod settlement_labels;
 pub mod startup_data;
+pub mod startup_warnings;
 pub mod status;
 pub mod translation;
 
