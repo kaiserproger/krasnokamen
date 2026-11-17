@@ -861,6 +861,7 @@ world or a copy restored from backup: several of its effects stay after
   Restore a consistent native backup, not an Anvil export. `battle reset` removes
   the durable battle history, tagged units and ticket together on the next
   published tick; it does not restore the other world/player settings above.
+- Known limit: foot units visibly jitter in dense combat; battle movement remains **not-ready** ([BATTLE-FOOT-STEERING-REVERSALS](bugs/ledger.toml)).
 
 ### Block log and rollback
 
