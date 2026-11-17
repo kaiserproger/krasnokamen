@@ -7286,7 +7286,7 @@ source = "Found while implementing the battle facing rule, 2026-11-17 (receipts/
 repro = "source"
 regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::resting_battle_row_with_a_look_target_faces_it_and_then_rests"]
 failing_first = "reported"
-fix_commit = "75d04c02c4c8b1ad57862358a94cff8142aaf390"
+fix_commit = "patch:61c3fa3b7159241087beb631b5091d48c20c25660a2e64073a6ea557a155a988"
 
 [[bug]]
 id = "BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT"
