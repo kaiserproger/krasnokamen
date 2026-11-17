@@ -272,20 +272,32 @@ save to make an older reader accept it.
 A failed WAL `write`, `sync_all`, `rename` or journal-directory `sync_all` is
 fatal: the journal owner acknowledges nothing, closes its queue and the tick
 owner halts. There is no retry, because the batch sequence cannot be repaired
-after a hole. Publication order stays WAL file fsync, rename, journal directory
-fsync (within `journal_fsync_every_batches`, default 10), checkpoint gate,
-`Durability::Immediate` commit, then prune, so a committed checkpoint never
-outruns its WAL. The journal directory's own entry is fsynced when the writer
-opens it. Close errors are not observable through Rust's `File` drop, so
-durability rests on the explicit fsync before the rename, not on close; a
-deferred writeback error surfaces on the next fsync of that file or directory.
-Removing covered journal batches is best effort: a refused removal is warned and
-counted (dashboard `/metrics` and `/stats`) rather than fatal, because batches at
-or below the committed checkpoint are replay-inert and only the WAL grows, while
-an unwritable journal directory still halts the world on the next append.
-Unpublished `batch-*.bin.tmp` leftovers of a failed or interrupted append are
-removed by the next journal open under the exclusive world lease. Policy and
-drills: [persistence](../architecture/persistence.md).
+after a hole. The checkpoint gate and the pre-backup flush obey the same rule
+for I/O (`GateError::Io`: a failed directory fsync or WAL-tail verification
+stops the world); the single non-fatal refusal is a **coverage hole**
+(`GateError::Hole`), which skips that checkpoint, refuses its ACK and keeps
+serving with the appended batches intact. A backup copy error stays local to its
+backup job. Publication order stays WAL file fsync, rename, journal directory
+fsync (within `journal_fsync_every_batches`, default 10, and only for batches
+already written), checkpoint gate, `Durability::Immediate` commit, then prune, so
+a committed checkpoint never outruns its WAL. The journal directory's own entry
+is persisted through `atomic_file::create_dir_all_durable` when the writer opens
+it. Close errors are not observable through Rust's `File` drop, so durability
+rests on the explicit fsync before the rename, not on close, and the later
+directory fsync publishes the name rather than re-checking that closed file's
+writeback errors. What a crash can lose is the journal admission queue (up to
+128 batches or 256 MiB, about 6.4 s at 20 TPS), not the directory window: a tick
+is broadcast before its batch is queued. Removing covered journal batches is
+best effort: a refused removal is warned and counted (dashboard `/metrics` and
+`/stats`) rather than fatal, because batches at or below the committed
+checkpoint are replay-inert and only the WAL grows, while an unwritable journal
+directory still halts the world on the next append. Unpublished
+`batch-*.bin.tmp` leftovers of a failed or interrupted append are removed by the
+next journal open under the exclusive world lease, and a leftover the sweep
+cannot remove is warned about with its path and reason. An unattended redb
+repair is logged at `error!` because it rolls the store back behind a pruned
+checkpoint (Books R4-P1). Policy and drills:
+[persistence](../architecture/persistence.md).
 
 ### Immutable datapack worldgen inputs
 

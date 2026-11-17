@@ -2005,19 +2005,32 @@ fn prune_reports_and_counts_a_refused_removal() {
     assert_eq!(journal_prune_stats().retained_bytes, 0);
 }
 
-/// The journal directory entry itself must be durable before the first batch
-/// rename claims a durable publication; opening fsyncs the world directory.
+/// Review F3: an unpublished temporary the sweep cannot remove must be
+/// REPORTED with its path and reason (`SweepOutcome`), not silently kept, while
+/// opening still succeeds. A directory named like a `.bin.tmp` fails
+/// `remove_file` for every uid, so no permission bits are involved.
 #[test]
-fn open_persists_the_journal_directory_entry() {
-    use std::sync::atomic::{AtomicU64, Ordering};
+fn open_reports_temporaries_it_cannot_remove() {
     let root = tempfile::tempdir().unwrap();
-    let counter = std::sync::Arc::new(AtomicU64::new(0));
-    *crate::journal::FSYNC_DIR_OBSERVER.lock() =
-        Some((root.path().to_path_buf(), std::sync::Arc::clone(&counter)));
-    drop(JournalWriter::open(root.path(), 1).unwrap());
-    *crate::journal::FSYNC_DIR_OBSERVER.lock() = None;
+    let journal = root.path().join("journal");
+    std::fs::create_dir_all(&journal).unwrap();
+    let blocked = journal.join("batch-00000000000000000009-00000000000000000009.bin.tmp");
+    std::fs::create_dir(&blocked).unwrap();
+    let junk = journal.join("batch-00000000000000000010-00000000000000000010.bin.tmp");
+    std::fs::write(&junk, b"partial frame").unwrap();
+
+    let sweep = crate::journal::sweep_unpublished_batches(&journal);
+
+    assert_eq!(sweep.removed_files, 1, "the removable leftover is removed");
+    assert_eq!(sweep.failed, 1, "the unremovable one is reported");
+    let reason = sweep.first_error.expect("the failure names itself");
+    assert!(reason.contains("0009-00000000000000000009"), "{reason}");
+    assert!(!junk.exists());
     assert!(
-        counter.load(Ordering::Relaxed) > 0,
-        "opening the journal must fsync its parent directory entry"
+        blocked.exists(),
+        "a refused removal leaves the entry in place"
     );
+    // Startup stays non-fatal: the leftover is a warning, not a refusal.
+    drop(JournalWriter::open(root.path(), 1).unwrap());
+    assert!(blocked.exists());
 }

@@ -196,7 +196,9 @@ enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
 # backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
-journal_fsync_every_batches = 10  # journal directory-fsync window, 1..=1200
+journal_fsync_every_batches = 10  # directory fsync of already-written batches
+#                                  # 1..=1200; it does NOT bound the crash
+#                                  # loss window (the journal queue does, ~6.4 s)
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records
@@ -1088,6 +1090,14 @@ the directory, the count and the retained bytes, and shows as
 `/stats`). Covered batches stay replay-inert, so the world stays correct while
 the journal grows; the next failed append is what halts the server.
 
+What a crash can lose is set by the journal queue, not by
+`journal_fsync_every_batches`: a tick reaches clients before its batch is
+queued, and up to 128 batches or 256 MiB (about 6.4 s at 20 TPS) may still be
+queued. Every batch file is fsynced before its rename, so a batch the writer has
+already published never loses its data; the directory-fsync window only decides
+how many published directory entries may be disordered by a power loss. Set it
+to 1 to remove that ordering risk at one fsync per tick.
+
 ### Native backup and restore
 
 Offline commands need the server stopped: they take the exclusive world lease,
@@ -1100,7 +1110,11 @@ krasnokamen --config restored-server.toml
 ```
 
 A backup holds the native database, WAL/journal and other world files with a
-versioned SHA-256 manifest (lease files excluded). Restore verifies the full
+versioned SHA-256 manifest (lease files excluded). Never mix a `journal/`
+directory with a store it was not written by: batches carry no store identity,
+so a foreign tail replays into the wrong world without a refusal. `backup` and
+`restore` always move both together; restoring only `native/state.redb` over an
+existing `journal/` is operator error, not a supported path. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
@@ -1130,6 +1144,10 @@ but the next periodic checkpoint and generated-chunk saves wait until the copy
 finishes (WAL appends continue and dirty state stays resident). The copy is
 assembled in a hidden `.backup-<UTC>.partial` directory and renamed only after
 the manifest is durable, so a failed backup leaves nothing behind. Restore with
+Never open a world with an older binary than the one that last wrote it: newer
+manifests and WAL records are forward-only, and an older reader either defaults
+the newer state away or refuses the tail.
+
 `krasnokamen restore --from <backup> --world-dir <new>`, or point `world_dir` at
 a copy of the backup directory: opening replays the WAL to tick `N`, exactly as
 crash recovery does. It covers world state only.

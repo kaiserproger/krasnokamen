@@ -167,11 +167,12 @@ world_dir = "world"
 # a longer cadence means fewer capture ticks but a longer journal replay after a
 # crash. Stop and the empty-server pause still checkpoint.
 # checkpoint_every_ticks = 1200
-# Journal directory-fsync window in appended batches (ticks), 1..=1200.
-# Every batch file is fsynced at append; this window bounds how many published
-# batches may lose their directory entry in a power loss. 1 is the safest,
-# 10 is the default. See docs/architecture/persistence.md "Write errors and
-# publication order".
+# Directory-fsync window for ALREADY WRITTEN journal batches (ticks), 1..=1200.
+# Every batch file is fsynced at append; this window only bounds how many
+# published directory entries a power loss may disorder. It does not bound what
+# a crash loses: up to 128 queued batches / 256 MiB (~6.4 s) may not be written
+# yet. 1 is the safest, 10 is the default.
+# See docs/architecture/persistence.md "Write errors and publication order".
 # journal_fsync_every_batches = 10
 # Changing the seed requires a fresh world directory.
 seed = 0

@@ -144,8 +144,8 @@ fn read_only_database(
     path: &Path,
     cache_bytes: usize,
 ) -> Result<redb::ReadOnlyDatabase, NativeError> {
-    Database::builder()
-        .set_cache_size(cache_bytes)
+    let mut builder = database_builder(cache_bytes);
+    builder
         .open_read_only(path)
         .map_err(|error| match error {
             redb::DatabaseError::RepairAborted => NativeError::Source(
@@ -154,6 +154,35 @@ fn read_only_database(
             ),
             error => NativeError::Database(error.into()),
         })
+}
+
+static REDB_REPAIRS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Unattended redb repairs this process performed (`Database` open/create).
+///
+/// An attended repair is a silent rollback to the previous commit; because the
+/// WAL is pruned right after every acknowledged commit, that rollback can
+/// discard an interval no journal covers any more (Books R4-P1). This crate has
+/// no logging dependency, so it counts the event and the serving caller logs it
+/// at `error!` (`mc_core::core::log_redb_repairs`).
+#[must_use]
+pub fn redb_repairs() -> u64 {
+    REDB_REPAIRS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// redb builder for every serving and offline path.
+///
+/// redb repairs a store whose newest commit slot fails its checksum by rolling
+/// back to the previous commit unless a callback says otherwise. The callback
+/// counts the repair (see [`redb_repairs`]); it never aborts, because aborting
+/// would turn every unclean stop into a refusal to serve.
+pub(crate) fn database_builder(cache_bytes: usize) -> redb::Builder {
+    let mut builder = redb::Builder::new();
+    builder.set_cache_size(cache_bytes);
+    builder.set_repair_callback(|_session| {
+        REDB_REPAIRS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    });
+    builder
 }
 
 /// A bounded off-thread snapshot, borrowed from the existing world owner.
@@ -479,9 +508,7 @@ impl NativeStore {
             .open(path)?;
         let backend = NativeFile::acquire(file)?;
         let file = std::sync::Arc::clone(&backend.0);
-        let database = db(Database::builder()
-            .set_cache_size(cache_bytes)
-            .create_with_backend(backend))?;
+        let database = db(database_builder(cache_bytes).create_with_backend(backend))?;
         let mut transaction = db(database.begin_write())?;
         db(transaction.set_durability(Durability::Immediate))?;
         {
@@ -529,9 +556,7 @@ impl NativeStore {
             .into());
         }
         let file = std::sync::Arc::clone(&backend.0);
-        let database = db(Database::builder()
-            .set_cache_size(cache_bytes)
-            .create_with_backend(backend))?;
+        let database = db(database_builder(cache_bytes).create_with_backend(backend))?;
         {
             let transaction = db(database.begin_read())?;
             validate_header(&transaction, identity)?;

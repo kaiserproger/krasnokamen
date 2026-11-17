@@ -14,11 +14,18 @@ ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
 absolute post-images and tombstones. The writer writes
 `batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
 fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
-appends (default 10, `[data] journal_fsync_every_batches`); a checkpoint gate and
-shutdown flush it sooner. Readers ignore unpublished `.tmp` files, and the next
-`JournalWriter::open` removes them (`open_removes_unpublished_batch_leftovers`):
-the exclusive world lease guarantees no other writer owns one, and pruning never
-sweeps them because a live append writes its temporary file on another thread.
+appends that are **already written** (default 10,
+`[data] journal_fsync_every_batches`); a checkpoint gate and shutdown flush it
+sooner. That window bounds how many published directory entries may be
+disordered by a power loss; it does not bound how much a crash can lose, because
+a tick is broadcast before its batch is queued — see
+[the acknowledgement window](#write-errors-and-publication-order). Readers ignore
+unpublished `.tmp` files, and the next `JournalWriter::open` removes them
+(`open_removes_unpublished_batch_leftovers`): the exclusive world lease
+guarantees no other writer owns one, pruning never sweeps them because a live
+append writes its temporary file on another thread, and a leftover the sweep
+cannot remove is warned about with its path and reason rather than silently
+kept.
 Entries cover changed state, not a complete copy every tick. A battle image
 journals only its changed parts after its first full record in the tail
 ([battle decision history](#battle-decision-history)). Player state and
@@ -85,23 +92,38 @@ another recovery.
 
 ### Write errors and publication order
 
-- A failed `write`, `sync_all`, `rename` or journal-directory `sync_all` is
+- A failed WAL `write`, `sync_all`, `rename` or journal-directory `sync_all` is
   fatal: the journal owner returns without acknowledging, closes its work queue
   and the tick owner halts (failed closed). No retry, because a hole in the
   batch sequence cannot be filled afterwards.
+- The checkpoint gate and the pre-backup flush follow the same rule for I/O: a
+  failed directory fsync or a failed WAL-tail verification stops the world
+  (`GateError::Io`). A **coverage hole** is the one non-fatal gate refusal
+  (`GateError::Hole`): that checkpoint is skipped, its ACK is negative, the
+  appended batches stay durable and the world keeps serving. A backup *copy*
+  error stays local to that backup job; only its pre-copy flush is fatal.
 - Order is always batch file fsync, rename, journal directory fsync (within the
   window), WAL gate, native `Durability::Immediate` commit, then prune. A
   checkpoint therefore never claims state whose WAL is not durable, and the
   directory entry of a published batch becomes durable no later than the next
   gate.
-- The journal directory's own entry is fsynced when `JournalWriter::open`
-  creates or reopens it (`open_persists_the_journal_directory_entry`), so an
-  interrupted first start cannot leave fsynced batches inside a directory a
-  later recovery cannot find.
+- The journal directory's own entry is made durable when `JournalWriter::open`
+  creates it, through the shared `atomic_file::create_dir_all_durable` helper
+  (which persists every entry it created, including one left unflushed by an
+  interrupted first start), so no batch rename can claim durability inside a
+  directory a later recovery cannot find.
 - Close errors are not observable: Rust drops a `File` without reporting
   `close(2)`. Durability rests on the explicit fsync before the rename, never on
-  drop; a deferred writeback error is reported by the next fsync of that file or
-  of the journal directory.
+  drop, and nothing here re-checks a closed file: the directory fsync that
+  follows a rename publishes the *name*, it is not a second look at that file's
+  writeback errors.
+- **Acknowledgement window.** A tick is broadcast to clients before its batch is
+  queued, and the queue is admitted before the send, so a crash can lose every
+  batch still queued: up to 128 batches or 256 MiB of post-images, about 6.4 s
+  at 20 TPS (and fewer ticks when batches are large). `journal_fsync_every_batches`
+  does not shrink that window — it only decides how often the directory of
+  already-written batches is fsynced. Each batch file is fsynced before its
+  rename, so a batch the writer has published will not lose its data.
 - A failed prune is warned and counted, never fatal: batches at or below the
   committed checkpoint are ignored on replay, so only the WAL grows. One line
   per failed attempt names the directory, failure count, retained bytes and the
@@ -565,7 +587,14 @@ journal coverage gap, so append refuses before reaching the injected ENOSPC.
 Offline `backup` and `restore` require a stopped, exclusively leased world;
 restore verifies the backup inventory and checksums. The running console
 `backup` is a different operation: the native writer makes a consistent copy
-of the committed checkpoint plus its WAL. Use the documented operator commands
+of the committed checkpoint plus its WAL, and it decodes and CRC-checks every
+batch it copies, so a byte-identical copy of a damaged source is refused
+instead of being published as a backup (Books R5 G3). A `journal/` directory
+belongs to the store it was written with: batches carry no store identity, so a
+foreign or mismatched tail replays into the wrong world without a refusal.
+Never mix the two — `backup` and `restore` always move both, and restoring only
+`native/state.redb` over an existing `journal/` is operator error, not a
+supported path (Books R4-P3). Use the documented operator commands
 and check their results; a filesystem copy of a live writer is not equivalent.
 Anvil export is not a native backup: native-only plugin and settlement state
 and block-log history are not represented. See [operations](../OPERATING.md)

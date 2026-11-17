@@ -281,11 +281,15 @@ pub struct DataSection {
     /// empty-server pause still checkpoint. Zero counts as one.
     #[serde(default = "default_checkpoint_every_ticks")]
     pub checkpoint_every_ticks: u64,
-    /// Journal directory-fsync window in appended batches (ticks): the window
-    /// bounds how much already-replied state a power loss can roll back and
-    /// how many batch directory entries may be unordered. Every batch file is
-    /// fsynced at append, so data pages are never at risk; only publication
-    /// order is. One (every batch) is the safest, ten is the default.
+    /// Journal directory-fsync window in **already written** batches (ticks):
+    /// it bounds how many published batch directory entries may be disordered
+    /// by a power loss. Every batch file is fsynced at append, so its data is
+    /// never at risk; one (every batch) is the safest, ten is the default.
+    /// This does NOT bound what a crash can lose: a tick is broadcast before
+    /// its batch is even queued, so the real ack-before-WAL window is the
+    /// journal admission queue (up to 128 batches / 256 MiB, about 6.4 s at
+    /// 20 TPS). See docs/architecture/persistence.md "Write errors and
+    /// publication order".
     #[serde(default = "default_journal_fsync_every_batches")]
     pub journal_fsync_every_batches: u32,
 }
@@ -737,7 +741,7 @@ impl EdgeConfig {
         anyhow::ensure!(
             (1..=1200).contains(&cfg.data.journal_fsync_every_batches),
             "data.journal_fsync_every_batches must be in 1..=1200 batches: one is \
-             every tick, and above one checkpoint interval (1200 ticks) a \
+             every tick, and above the default checkpoint interval (1200 ticks) a \
              checkpoint gate flushes the directory first anyway"
         );
         Ok(cfg)

@@ -17,7 +17,7 @@ fn copy_world(
 fn batch(dir: &std::path::Path, lo: u64, hi: u64) {
     std::fs::write(
         dir.join(format!("batch-{lo:020}-{hi:020}.bin")),
-        format!("{lo}-{hi}"),
+        crate::journal::frame_batch(lo, hi, b"").unwrap(),
     )
     .unwrap();
 }
@@ -220,4 +220,39 @@ fn backup_of_a_running_core_restores_the_state_at_its_tick() {
     assert_eq!(block(&output, before), before_changed);
     assert_eq!(block(&output, after), after_original);
     restored.shutdown();
+}
+
+/// Books R5 G3: the copy must prove the SOURCE is intact, not only that the copy
+/// matches it. A batch whose payload no longer matches its CRC fails the backup
+/// and names the file, instead of being copied into a silently unrestorable
+/// backup.
+#[test]
+fn copy_refuses_a_source_batch_that_fails_its_crc() {
+    let world = fake_world();
+    let journal = world.path().join("journal");
+    batch(&journal, 11, 11);
+    let damaged = journal.join("batch-00000000000000000012-00000000000000000012.bin");
+    let mut frame = crate::journal::frame_batch(12, 12, b"{}\n").unwrap();
+    frame[32] ^= 0xff; // flip one payload byte; the frame's CRC stays the old one
+    std::fs::write(&damaged, frame).unwrap();
+    let out = tempfile::tempdir().unwrap();
+
+    let error = copy_world(world.path(), out.path(), 10, 12).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("batch-00000000000000000012-00000000000000000012"),
+        "the refusal must name the damaged batch: {error}"
+    );
+    assert!(
+        error.to_string().contains("CRC mismatch"),
+        "the refusal must name the failed check: {error}"
+    );
+    assert!(
+        !out.path()
+            .join("journal/batch-00000000000000000012-00000000000000000012.bin")
+            .exists(),
+        "the damaged batch is never published into the backup"
+    );
 }
