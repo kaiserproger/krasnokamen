@@ -1256,7 +1256,10 @@ pub(crate) fn apply_batch_images(
                             if let Some(stuck) = stuck {
                                 projectile.stuck = *stuck;
                             }
-                            crate::journal::apply_delta(grounded_at_age, &mut projectile.grounded_at_age);
+                            crate::journal::apply_delta(
+                                grounded_at_age,
+                                &mut projectile.grounded_at_age,
+                            );
                         }
                     }
                     // The full image's own ground rule for a projectile body.

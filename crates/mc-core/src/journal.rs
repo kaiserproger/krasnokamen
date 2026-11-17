@@ -1500,12 +1500,10 @@ impl EntityAppearanceDelta {
         }
         for (index, value) in &self.extra_changes {
             match value {
-                Some(value) => {
-                    match image.extra.iter_mut().find(|(other, _)| other == index) {
-                        Some(entry) => entry.1 = value.clone(),
-                        None => image.extra.push((*index, value.clone())),
-                    }
-                }
+                Some(value) => match image.extra.iter_mut().find(|(other, _)| other == index) {
+                    Some(entry) => entry.1 = value.clone(),
+                    None => image.extra.push((*index, value.clone())),
+                },
                 None => image.extra.retain(|(other, _)| other != index),
             }
         }

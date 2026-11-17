@@ -92,7 +92,7 @@ fn compactable(state: &TickState, slot: EntitySlot) -> bool {
         && row.tnt.is_none()
         && row.entity_life.vehicle.is_none()
         && !crate::end_fight::is_dragon(state, slot)
-        && crate::piglin::name(body_type_id(&body).unwrap_or(u32::MAX)) != "minecraft:enderman"
+        && !crate::enderman::is_enderman(&body)
 }
 
 /// The image's own type id projection.
@@ -131,8 +131,7 @@ fn projectile_rest_matches(
         && base.fired_from_weapon == live.fired_from_weapon
         && base.crossbow_kills == live.crossbow_kills
         && base.acceleration_power == live.acceleration_power
-        && (!landing
-            || base.stuck == live.stuck && base.grounded_at_age == live.grounded_at_age)
+        && (!landing || base.stuck == live.stuck && base.grounded_at_age == live.grounded_at_age)
 }
 
 /// Journal-side entity caches that live next to the baseline images.
@@ -623,7 +622,11 @@ fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<Journ
             let rest_changed = landing && !projectile_rest_matches(base, projectile, false);
             let (stuck, grounded_at_age, retained) = if rest_changed {
                 // A payload, ledger or custody field changed: keep the state.
-                (None, crate::journal::DeltaValue::Unchanged, Some(projectile.clone()))
+                (
+                    None,
+                    crate::journal::DeltaValue::Unchanged,
+                    Some(projectile.clone()),
+                )
             } else if landing {
                 // Only the landing transition moved: a set now, a clear when the
                 // arrow leaves the ground again.

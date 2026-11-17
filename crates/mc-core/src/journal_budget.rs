@@ -364,30 +364,23 @@ fn appearance_delta_heap(delta: &crate::journal::EntityAppearanceDelta) -> usize
         crate::journal::DeltaValue::Set(stack) => item_heap(stack),
         _ => 0,
     };
-    item + delta
-            .equipment
-            .as_ref()
-            .map_or(0, |equipment| {
-                equipment.capacity() * std::mem::size_of::<Option<mc_data::ItemStack>>()
-                    + equipment.iter().map(opt_item_heap).sum::<usize>()
-            })
-        + match &delta.custom_name {
-            crate::journal::DeltaValue::Set(name) => name.capacity(),
-            _ => 0,
-        }
-        + delta.extra.as_ref().map_or(0, |extra| {
-            extra.capacity() * std::mem::size_of::<(u8, EntityDataValueImage)>()
-                + extra
-                    .iter()
-                    .map(|(_, value)| match value {
-                        EntityDataValueImage::String(text) => text.capacity(),
-                        EntityDataValueImage::Item(stack) => opt_item_heap(stack),
-                        _ => 0,
-                    })
-                    .sum::<usize>()
-        })
-        + delta.extra_changes.capacity()
-            * std::mem::size_of::<(u8, Option<EntityDataValueImage>)>()
+    item + delta.equipment.as_ref().map_or(0, |equipment| {
+        equipment.capacity() * std::mem::size_of::<Option<mc_data::ItemStack>>()
+            + equipment.iter().map(opt_item_heap).sum::<usize>()
+    }) + match &delta.custom_name {
+        crate::journal::DeltaValue::Set(name) => name.capacity(),
+        _ => 0,
+    } + delta.extra.as_ref().map_or(0, |extra| {
+        extra.capacity() * std::mem::size_of::<(u8, EntityDataValueImage)>()
+            + extra
+                .iter()
+                .map(|(_, value)| match value {
+                    EntityDataValueImage::String(text) => text.capacity(),
+                    EntityDataValueImage::Item(stack) => opt_item_heap(stack),
+                    _ => 0,
+                })
+                .sum::<usize>()
+    }) + delta.extra_changes.capacity() * std::mem::size_of::<(u8, Option<EntityDataValueImage>)>()
         + delta
             .extra_changes
             .iter()

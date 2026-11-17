@@ -1268,9 +1268,10 @@ fn compact_entity_records_survive_a_crash_after_the_published_batch() {
     let first = drill.capture_tick(&[]);
     drill.append(&first).unwrap();
     assert!(
-        first.entries.iter().any(
-            |entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0)
-        ),
+        first
+            .entries
+            .iter()
+            .any(|entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0)),
         "the first change after a capture writes the whole image"
     );
     // Later changes are compact.
@@ -1284,9 +1285,12 @@ fn compact_entity_records_survive_a_crash_after_the_published_batch() {
         appearances.contains(&member.0),
         "the toggled body takes a compact record: {appearances:?}"
     );
-    assert!(!compact.entries.iter().any(
-        |entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0)
-    ));
+    assert!(
+        !compact
+            .entries
+            .iter()
+            .any(|entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0))
+    );
     drill.append(&compact).unwrap();
     let durable_tick = drill.state.tick;
     let expected = shield_pose(&drill.state, member);
@@ -1301,8 +1305,7 @@ fn compact_entity_records_survive_a_crash_after_the_published_batch() {
         "the compact record's metadata byte survives the kill"
     );
     assert_eq!(
-        recovered.state.hostile.battle.formation.members[0].id,
-        member,
+        recovered.state.hostile.battle.formation.members[0].id, member,
         "the battle history still names the body the compact record updated"
     );
     // A checkpoint capture drops the bases: the next change is a full image

@@ -59,7 +59,11 @@ fn shield_toggle_journals_a_compact_record_not_the_whole_image() {
 
     shield(&mut state, cow, true);
     let raised = step(&mut state);
-    assert_eq!(images(&raised, cow), 0, "a shield byte must not rewrite the image");
+    assert_eq!(
+        images(&raised, cow),
+        0,
+        "a shield byte must not rewrite the image"
+    );
     let compact = compacts(&raised, cow);
     assert_eq!(compact.len(), 1, "one compact post-image per changed body");
     let JournalEntry::EntityAppearance { appearance, .. } = compact[0] else {
@@ -67,18 +71,18 @@ fn shield_toggle_journals_a_compact_record_not_the_whole_image() {
     };
     let carries = |delta: &crate::journal::EntityAppearanceDelta| {
         let flag = crate::journal::EntityDataValueImage::Byte(3);
-        delta
-            .extra_changes
-            .iter()
-            .any(|(index, value)| *index == crate::battle::LIVING_FLAGS
-                && value.as_ref() == Some(&flag))
-            || delta.extra.as_ref().is_some_and(|extra| {
-                extra
-                    .iter()
-                    .any(|(index, value)| *index == crate::battle::LIVING_FLAGS && *value == flag)
-            })
+        delta.extra_changes.iter().any(|(index, value)| {
+            *index == crate::battle::LIVING_FLAGS && value.as_ref() == Some(&flag)
+        }) || delta.extra.as_ref().is_some_and(|extra| {
+            extra
+                .iter()
+                .any(|(index, value)| *index == crate::battle::LIVING_FLAGS && *value == flag)
+        })
     };
-    assert!(carries(appearance), "the record carries the changed metadata entry");
+    assert!(
+        carries(appearance),
+        "the record carries the changed metadata entry"
+    );
     assert!(appearance.equipment.is_none(), "untouched parts stay out");
     let compact_bytes = entry_bytes(compact[0]);
     let image_bytes = entry_bytes(image);
@@ -146,13 +150,14 @@ fn projectile_flight_journals_a_compact_record_per_tick() {
             break;
         }
         let entries = step(&mut state);
-        assert_eq!(images(&entries, id), 0, "a flight tick must not write the image");
+        assert_eq!(
+            images(&entries, id),
+            0,
+            "a flight tick must not write the image"
+        );
         for entry in compacts(&entries, id) {
             let JournalEntry::ProjectileFlight {
-                stuck,
-                state,
-                pos,
-                ..
+                stuck, state, pos, ..
             } = entry
             else {
                 panic!("a projectile body takes ProjectileFlight, got {entry:?}");
@@ -166,7 +171,10 @@ fn projectile_flight_journals_a_compact_record_per_tick() {
         }
     }
     assert!(records >= 3, "the arrow must journal its flight: {records}");
-    assert_eq!(landings, 1, "the landing transition is the one state-carrying tick");
+    assert_eq!(
+        landings, 1,
+        "the landing transition is the one state-carrying tick"
+    );
     assert!(
         record_bytes / records.max(1) * 2 < image_bytes,
         "flight {} B/record vs one image {image_bytes} B",
@@ -280,7 +288,10 @@ fn canonical(replay: &Replay) -> serde_json::Value {
         // touched-set comparison ignores it, so no WAL record refreshes it and a
         // full image only appears to because it carries the whole state image.
         // Every other field, including each record's clock anchor, must agree.
-        if let Some(state) = record.get_mut("state").and_then(|state| state.as_object_mut()) {
+        if let Some(state) = record
+            .get_mut("state")
+            .and_then(|state| state.as_object_mut())
+        {
             state.remove("no_action_time");
             // `Controls::journal_eq` deliberately ignores a non-zero mid-air
             // accumulator too: it rides the next image and checkpoints, never a
@@ -312,8 +323,10 @@ fn assert_same_state(compact: &serde_json::Value, full: &serde_json::Value) {
         if left == right {
             continue;
         }
-        let (Some(left), Some(right)) = (left.and_then(|v| v.as_object()), right.and_then(|v| v.as_object()))
-        else {
+        let (Some(left), Some(right)) = (
+            left.and_then(|v| v.as_object()),
+            right.and_then(|v| v.as_object()),
+        ) else {
             panic!("id {id}: compact {left:?} vs full {right:?}");
         };
         let mut keys: Vec<&String> = left.keys().chain(right.keys()).collect();
@@ -338,13 +351,15 @@ fn compact_and_full_tails_replay_to_the_same_state() {
     let entries = |batches: &[(u64, u64, Vec<JournalEntry>)]| -> usize {
         batches.iter().map(|(_, _, entries)| bytes(entries)).sum()
     };
-    assert!(!full
-        .iter()
-        .flat_map(|(_, _, entries)| entries)
-        .any(|entry| matches!(
-            entry,
-            JournalEntry::EntityAppearance { .. } | JournalEntry::ProjectileFlight { .. }
-        )));
+    assert!(
+        !full
+            .iter()
+            .flat_map(|(_, _, entries)| entries)
+            .any(|entry| matches!(
+                entry,
+                JournalEntry::EntityAppearance { .. } | JournalEntry::ProjectileFlight { .. }
+            ))
+    );
     let count = |variant: fn(&JournalEntry) -> bool| {
         compact
             .iter()
@@ -356,8 +371,14 @@ fn compact_and_full_tails_replay_to_the_same_state() {
     // so the equality below is not vacuous.
     let appearances = count(|entry| matches!(entry, JournalEntry::EntityAppearance { .. }));
     let images = count(|entry| matches!(entry, JournalEntry::Entity { .. }));
-    assert!(appearances > 0, "shield/equipment changes take the appearance record");
-    assert!(images > 0, "spawns and a post-capture change keep the whole image");
+    assert!(
+        appearances > 0,
+        "shield/equipment changes take the appearance record"
+    );
+    assert!(
+        images > 0,
+        "spawns and a post-capture change keep the whole image"
+    );
     println!("compact tail: {appearances} appearance, {images} image records");
 
     let full_replay = replay_batches(Replay::default(), &full);
@@ -501,7 +522,10 @@ fn delta_values_round_trip_through_a_batch() {
         decoded[1], ungrounded,
         "leaving the ground is a clear, not an absent field"
     );
-    assert_eq!(decoded[2], renamed, "a cleared name and a set item round-trip");
+    assert_eq!(
+        decoded[2], renamed,
+        "a cleared name and a set item round-trip"
+    );
 
     let mut projectile = crate::projectiles::ProjectileState::new(
         crate::projectiles::ProjectileKind::Arrow,
@@ -517,7 +541,10 @@ fn delta_values_round_trip_through_a_batch() {
         panic!("flight record");
     };
     crate::journal::apply_delta(grounded_at_age, &mut projectile.grounded_at_age);
-    assert_eq!(projectile.grounded_at_age, None, "the clear reaches the state");
+    assert_eq!(
+        projectile.grounded_at_age, None,
+        "the clear reaches the state"
+    );
 
     let mut appearance = crate::journal::EntityAppearanceImage::default();
     appearance.custom_name = Some("named".into());
@@ -554,7 +581,10 @@ fn compact_record_on_a_checkpoint_image_refuses_recovery() {
     let replay = replay_batches(replay, &[(2, 2, entries)]);
     let error = crate::journal::validate_replay(&replay)
         .expect_err("a delta must not fold onto a checkpoint image");
-    assert!(format!("{error}").contains("without an earlier full image"), "{error}");
+    assert!(
+        format!("{error}").contains("without an earlier full image"),
+        "{error}"
+    );
 }
 
 /// The same flight journaled both ways must fold to the same projectile state:
@@ -594,10 +624,12 @@ fn projectile_flight_compact_and_full_tails_replay_to_the_same_state() {
         .filter(|entry| matches!(entry, JournalEntry::ProjectileFlight { .. }))
         .count();
     assert!(flights > 0, "the arrow journals its flight compactly");
-    assert!(!full
-        .iter()
-        .flat_map(|(_, _, entries)| entries)
-        .any(|entry| matches!(entry, JournalEntry::ProjectileFlight { .. })));
+    assert!(
+        !full
+            .iter()
+            .flat_map(|(_, _, entries)| entries)
+            .any(|entry| matches!(entry, JournalEntry::ProjectileFlight { .. }))
+    );
     let full_replay = replay_batches(Replay::default(), &full);
     let compact_replay = replay_batches(Replay::default(), &compact);
     assert!(crate::journal::validate_replay(&full_replay).is_ok());
