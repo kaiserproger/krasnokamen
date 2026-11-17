@@ -2289,10 +2289,7 @@ fn project_upgrade(
     let level = super::construction::owner_upgrade_level(state, ctx.id, id);
     let note = match super::construction::request_upgrade(state, ctx.id, id) {
         Ok(outcome) => {
-            let label = if matches!(
-                &outcome,
-                super::construction::OrderOutcome::Queued { .. }
-            ) {
+            let label = if matches!(&outcome, super::construction::OrderOutcome::Queued { .. }) {
                 format!(
                     "{} L{}",
                     blueprint_label(ctx, &blueprint),
