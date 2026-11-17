@@ -1426,27 +1426,13 @@ fn early_rest_refuses_a_settling_head_at_every_activation_period() {
     for period in [1, 2, 4] {
         let view = PrepView::of(&state);
         assert!(
-            early_entity_rest(
-                &view,
-                slot,
-                period,
-                state.entity_phase_revision,
-                true,
-                true
-            ),
+            early_entity_rest(&view, slot, period, state.entity_phase_revision, true, true),
             "settled body rests at period {period}"
         );
         state.entities.set_facing(slot, [40.0, 0.0, 60.0]);
         let view = PrepView::of(&state);
         assert!(
-            !early_entity_rest(
-                &view,
-                slot,
-                period,
-                state.entity_phase_revision,
-                true,
-                true
-            ),
+            !early_entity_rest(&view, slot, period, state.entity_phase_revision, true, true),
             "a settling head wakes the body at period {period}"
         );
         state.entities.set_rot(slot, 40.0, 0.0);

@@ -1227,7 +1227,8 @@ pub(super) fn read_row(
         hunts_living: blueprint.is_some_and(|bp| bp.capabilities.hunts_living),
         is_slime_size_one,
         climbs_walls: blueprint.is_some_and(|blueprint| blueprint.capabilities.climbs_walls),
-        head_follows_body: blueprint.is_some_and(|blueprint| blueprint.capabilities.head_follows_body),
+        head_follows_body: blueprint
+            .is_some_and(|blueprint| blueprint.capabilities.head_follows_body),
         avoids_armadillos: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
         aquatic_control: blueprint.map_or(crate::species::AquaticControl::Other, |blueprint| {
