@@ -29,10 +29,19 @@ a/-side adaptation: kept tests call `structures.support_columns(&mut chunk, &tem
 `let _ = (chunk, template, origin);`. It changes no behaviour of the pre-fix tree, which never placed a column.
 The now-unused fields only produce dead-code warnings.
 
-Proving refs: `overworld_structures::tests::floating_surface_structure_rests_on_a_support_column` (the
-platform over an air gap must rest on a column; with the call and body removed it floats) and
-`overworld_structures::tests::ruined_portal_support_columns_never_copy_template_material` (calls
-`support_columns` on every ruined portal template; with the no-op body nothing is filled). The control receipt is
-in the promote artifact named in `docs/bugs/promotions/WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE.json`. The
-original report was a seed-100 native-client frame; the row's `repro = "source"` and the real-client check of
-seed 100 stays a maintainer follow-up.
+Proving ref: `overworld_structures::tests::floating_surface_structure_rests_on_a_support_column` goes red at
+`crates/mc-worldgen/src/overworld_structures_tests.rs:781` (a footprint column floats above air: the row's
+symptom). It reaches the fix through `structures.paste` -> `visit` -> `support_columns`, so removing the call and
+the body reproduces the floating platform.
+
+Not evidence: `overworld_structures::tests::ruined_portal_support_columns_never_copy_template_material` calls the kept
+`support_columns` API directly (`overworld_structures_tests.rs:877`, `:916`) and goes red only because the
+a/-side adaptation empties that body. It is a regression ref for the material rule, not a control of it.
+
+Per-commit controls recorded when the fix was made (receipts, not re-run here): reversing the support-fill
+hunk of `81a2b6bb8` fails the first ref (`receipts/XCoreBlocks/nc-support-column.log`); restoring the
+last-visited-template-block material that `fee158398` removed fails the template-material check over the real
+13 ruined-portal templates (`receipts/XPortalSupport/nc-template-material.log`). The control receipt of this
+promote is in `docs/bugs/promotions/WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE.json`. The row is `repro = "source"`:
+a worldgen state error reproducible by offline pregeneration, so a Cargo test through the real placement path
+closes it without a client run.
