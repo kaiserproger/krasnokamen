@@ -107,6 +107,8 @@ pub struct Registry {
     /// The active project's work counter per settlement, for replacing a
     /// builder that cannot advance it; runtime only, never persisted.
     pub(super) builder_watch: BTreeMap<SettlementId, super::construction::BuilderWatch>,
+    /// Pending-site refusal sweeps, derived and never persisted.
+    pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,
@@ -638,6 +640,7 @@ impl Registry {
         }
         self.counts.remove(&id);
         self.economic_active.remove(&id);
+        self.site_watch.remove(&id);
         self.resident_settlement.retain(|_, sid| *sid != id);
         self.resident_ids.remove(&id);
         self.household_counts.remove(&id);
@@ -686,6 +689,7 @@ impl Registry {
             self.records.insert(image.id, record);
         } else {
             self.economic_active.remove(&image.id);
+            self.site_watch.remove(&image.id);
             if let Some(record) = self.records.remove(&image.id) {
                 for household in record.households.keys() {
                     self.household_sizes.remove(household);
