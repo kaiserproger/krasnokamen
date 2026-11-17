@@ -428,7 +428,7 @@ fn binary_file_in_a_non_vanilla_directory_is_ignored_without_decoding() {
 #[test]
 fn vanilla_data_directory_list_covers_the_local_vanilla_data() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../data/vanilla/26.3/data/minecraft");
+        .join("../../data/vanilla/data/minecraft");
     for entry in std::fs::read_dir(&root).unwrap() {
         let name = entry.unwrap().file_name().into_string().unwrap();
         assert!(VANILLA_DATA_DIRECTORIES.contains(&name.as_str()), "{name}");

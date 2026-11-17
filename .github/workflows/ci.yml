@@ -191,15 +191,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - name: Import the canonical 26.3 content cache as local test data (never redistributed)
+      - name: Import the canonical content caches as local test data (never redistributed)
         run: |
           set -euo pipefail
           # `content import` verifies Mojang's size/sha1 and derives the same
-          # composite cache operators use (26.3 identity, 26.1.2 gameplay pack).
+          # composite cache operators use (26.3 identity, 26.1.2 gameplay pack);
+          # it also installs every older client version cache and the protocol steps.
           XDG_DATA_HOME="$RUNNER_TEMP/xdg" cargo run --locked -p mc-edge --bin krasnokamen -- content import --version 26.3 --download
-          rm -rf data/vanilla
+          content="$RUNNER_TEMP/xdg/krasnokamen/content"
+          rm -rf data/vanilla data/vanilla-26.1.2 data/vanilla-26.2 data/vanilla-steps
           mkdir -p data
-          cp -a "$RUNNER_TEMP/xdg/krasnokamen/content/26.3" data/vanilla
+          # Same layout as tools/dev/wt-new: 26.3 at data/vanilla, older caches beside it.
+          cp -a "$content/26.3" data/vanilla
+          cp -a "$content/26.1.2" data/vanilla-26.1.2
+          cp -a "$content/26.2" data/vanilla-26.2
+          cp -a "$content/steps" data/vanilla/steps
+          ln -s vanilla/steps data/vanilla-steps
       - name: Run bug regressions
         if: matrix.shard == 1
         run: python3 -m tools.harness run regressions
