@@ -407,7 +407,10 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
                 && super::mining::near(state, slot, point, 2.5)
             {
                 let uuid = state.entities.row(slot).uuid;
-                let _ = executor::fetch(state, uuid, [point.x, point.y, point.z], item);
+                if let Err(reason) = executor::fetch(state, uuid, [point.x, point.y, point.z], item)
+                {
+                    construction::note_build_refusal(state, id, reason);
+                }
             }
             return;
         }
