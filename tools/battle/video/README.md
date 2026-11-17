@@ -2,6 +2,11 @@
 
 Python 3 standard library, ffmpeg with libx264, drawtext, xfade and AAC, and DejaVu Sans Bold at `/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf` are required. No wall-clock is read. Inputs are the E1 `/telemetry.jsonl` export and C3 `shot.frames.jsonl`. The E1 export is produced by the battle runner `tools/battle/run-battle.py`, which is not in this tree (it lives on the pre-rename battle line); in this tree only `synthetic.py` generates a sample `telemetry.jsonl` for tests. One PNG per C3 frame, at 60 fps; exact tick join uses `last_applied_tick` (the last shutter sample when motion blur is enabled). Missing tick fails instead of inventing telemetry. Output directory must not exist.
 
+The panel reports server process RSS from `process_rss_bytes` separately from
+`cgroup_memory_current_bytes` (the cgroup total, including page cache); missing
+samples display `N/A`. The small memory graph plots process RSS, not the cgroup
+total. Neither value is a memory limit.
+
 ```sh
 # N shots of a shots.txt (NAME.mp4 + NAME.frames.jsonl per shot from bv-render), tick map, overlay and encode in one go:
 python3 tools/battle/video/compose.py build --shots-file /work/shots.txt --first-tick 2279 --frames-dir /work/shots --shots-dir /work/shots --telemetry /work/telemetry.jsonl --work /work/montage --title-file /work/title.txt --crossfade-frames 12 --resolution 1080p --output /work/final.mp4

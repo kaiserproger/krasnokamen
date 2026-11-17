@@ -6,6 +6,7 @@ import struct
 import tempfile
 import unittest
 import zlib
+from unittest import mock
 import overlay
 
 
@@ -42,10 +43,25 @@ class OverlayTests(unittest.TestCase):
             p=pathlib.Path(d)/'t.jsonl'
             p.write_text('\n'.join(json.dumps(x) for x in [sample(1,1_000_000_000,host1), sample(2,2_000_000_000,host2), sample(3,3_000_000_000)])+'\n')
             data=overlay.load(p)
-            # Memory is the server process RSS (1 GiB), not the 3 GiB cgroup that also holds the recorder.
+            # RSS and the cgroup total, which includes page cache, are distinct.
             self.assertEqual(data[1][2:5],(None,None,1.0))
             self.assertEqual(data[2][2:5],(50.0,5.0,1.0))
             self.assertEqual(data[3][2:5],(50.0,5.0,1.0))
+
+    def test_memory_labels_use_distinct_sources(self):
+        host = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':2**30,
+                'cgroup_cpu_usage_usec':1000,'cpu_total_ticks':100,'cpu_steal_ticks':10}
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d)/'t.jsonl'
+            p.write_text(json.dumps(sample(1,1_000_000_000,host))+'\n')
+            data = overlay.load(p)[1]
+            self.assertEqual((data[4], data[7]), (1.0, 3.0))
+            with mock.patch.object(overlay, 'text', wraps=overlay.text) as rendered:
+                overlay.render(*data)
+            labels = [call.args[3] for call in rendered.call_args_list]
+            self.assertIn('SERVER RSS 1.0 GIB  CPU N/A%', labels)
+            self.assertIn('CGROUP TOTAL (INCL. PAGE CACHE) 3.0 GIB', labels)
+            self.assertFalse(any('4 GIB' in label or 'LIMIT' in label for label in labels))
 
     def test_memory_never_falls_back_to_cgroup(self):
         host = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':None,
@@ -55,7 +71,17 @@ class OverlayTests(unittest.TestCase):
             p.write_text(json.dumps(sample(1,1_000_000_000,host))+'\n')
             data=overlay.load(p)[1]
             self.assertIsNone(data[4])
+            self.assertEqual(data[7], 3.0)
             self.assertEqual(data[5],((1,None),))
+
+    def test_rss_graph_expires_old_samples_without_new_host_data(self):
+        host = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':2**30,
+                'cgroup_cpu_usage_usec':1000,'cpu_total_ticks':100,'cpu_steal_ticks':10}
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d)/'t.jsonl'
+            p.write_text('\n'.join(json.dumps(x) for x in [
+                sample(1, 1_000_000_000, host), sample(1201, 61_000_000_000)])+'\n')
+            self.assertEqual(overlay.load(p)[1201][5], ())
 
     def test_rss_graph_pixels(self):
         def host(tick, rss):
@@ -77,7 +103,7 @@ class OverlayTests(unittest.TestCase):
                 return raw[o:o+4]
             end_x=12+(41-(41-overlay.RSS_WINDOW_TICKS))*360//overlay.RSS_WINDOW_TICKS
             self.assertEqual(pixel(end_x,overlay.RSS_TOP),bytes((99,220,255,255)))
-            self.assertEqual(overlay.H,304)
+            self.assertEqual(overlay.H,324)
 
     def test_missing_tick_rejected(self):
         import subprocess, sys

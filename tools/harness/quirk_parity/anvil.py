@@ -86,16 +86,32 @@ def read_region(path: Path):
         yield index & 31, index >> 5, parse_nbt(body)
 
 
-def _block_string(entry: dict) -> str:
-    props = entry.get("Properties")
+def _palette_codec(version: int) -> tuple[str, str]:
+    if isinstance(version, int) and 0 <= version <= 4790:
+        return "Name", "Properties"
+    if version == 5023:
+        return "id", "properties"
+    raise ValueError(f"unsupported chunk DataVersion {version!r}")
+
+
+def _block_string(entry: dict | str, codec: tuple[str, str]) -> str:
+    name_key, props_key = codec
+    if isinstance(entry, str) and name_key == "id":
+        return entry
+    if not isinstance(entry, dict):
+        raise ValueError(f"palette entry does not match {name_key}/{props_key} codec: {entry!r}")
+    other_name, other_props = ("id", "properties") if name_key == "Name" else ("Name", "Properties")
+    if name_key not in entry or other_name in entry or other_props in entry:
+        raise ValueError(f"palette entry does not match {name_key}/{props_key} codec: {entry!r}")
+    props = entry.get(props_key)
     if not props:
-        return entry["Name"]
-    return entry["Name"] + "[" + ",".join(f"{k}={props[k]}" for k in sorted(props)) + "]"
+        return entry[name_key]
+    return entry[name_key] + "[" + ",".join(f"{k}={props[k]}" for k in sorted(props)) + "]"
 
 
-def _section_blocks(section: dict):
+def _section_blocks(section: dict, codec: tuple[str, str]):
     states = section.get("block_states") or {}
-    palette = [_block_string(entry) for entry in states.get("palette", [])]
+    palette = [_block_string(entry, codec) for entry in states.get("palette", [])]
     if not palette:
         return
     if len(palette) == 1:
@@ -135,7 +151,7 @@ def _regions(directory: Path, wanted):
                 yield chunk, nbt
 
 
-def read_world(dimension_dir: Path, boxes) -> list[dict]:
+def read_world(dimension_dir: Path, boxes, *, palette_audit: dict | None = None) -> list[dict]:
     """Per-box {"blocks": {"x,y,z": state}, "entities": [raw NBT]}.
 
     Blocks are non-air only; entities are those whose position is inside the box.
@@ -143,6 +159,14 @@ def read_world(dimension_dir: Path, boxes) -> list[dict]:
     cells = [{"blocks": {}, "entities": [], "containers": {}} for _ in boxes]
     wanted = _chunks_of(boxes)
     for (chunk_x, chunk_z), nbt in _regions(dimension_dir / "region", wanted):
+        version = nbt.get("DataVersion")
+        try:
+            codec = _palette_codec(version)
+        except ValueError as error:
+            raise ValueError(f"chunk {chunk_x},{chunk_z}: {error}") from error
+        if palette_audit is not None:
+            entry = palette_audit.setdefault(str(version), {"encoding": "/".join(codec), "chunks": 0})
+            entry["chunks"] += 1
         mine = [i for i, b in enumerate(boxes)
                 if b[0] >> 4 <= chunk_x <= b[3] >> 4 and b[2] >> 4 <= chunk_z <= b[5] >> 4]
         for entity in nbt.get("block_entities", []):
@@ -161,16 +185,19 @@ def read_world(dimension_dir: Path, boxes) -> list[dict]:
             relevant = [i for i in mine if boxes[i][1] <= base_y + 15 and boxes[i][4] >= base_y]
             if not relevant:
                 continue
-            for index, name in _section_blocks(section):
-                if name in ("minecraft:air", "minecraft:cave_air", "minecraft:void_air"):
-                    continue
-                x = chunk_x * 16 + (index & 15)
-                z = chunk_z * 16 + ((index >> 4) & 15)
-                y = base_y + (index >> 8)
-                for i in relevant:
-                    x1, y1, z1, x2, y2, z2 = boxes[i]
-                    if x1 <= x <= x2 and y1 <= y <= y2 and z1 <= z <= z2:
-                        cells[i]["blocks"][f"{x},{y},{z}"] = name
+            try:
+                for index, name in _section_blocks(section, codec):
+                    if name in ("minecraft:air", "minecraft:cave_air", "minecraft:void_air"):
+                        continue
+                    x = chunk_x * 16 + (index & 15)
+                    z = chunk_z * 16 + ((index >> 4) & 15)
+                    y = base_y + (index >> 8)
+                    for i in relevant:
+                        x1, y1, z1, x2, y2, z2 = boxes[i]
+                        if x1 <= x <= x2 and y1 <= y <= y2 and z1 <= z <= z2:
+                            cells[i]["blocks"][f"{x},{y},{z}"] = name
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"chunk {chunk_x},{chunk_z} section {section['Y']}: {error}") from error
     for (chunk_x, chunk_z), nbt in _regions(dimension_dir / "entities", wanted):
         for entity in nbt.get("Entities", []):
             x, y, z = entity.get("Pos", [0.0, 0.0, 0.0])
