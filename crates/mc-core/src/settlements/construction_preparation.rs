@@ -124,12 +124,15 @@ pub(super) fn planned_cells(
         }
     }
     if project.building.is_some() {
-        executor::upgrade_trees_clear(
+        let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
+        let mut cleared = executor::upgrade_trees_clear(
             state,
             project.settlement,
             &project.blueprint,
             project.origin,
             &cells,
+            Some(lot),
+            clearance,
         )
         .map_err(|failure| match failure {
             mc_script::ScriptOperationFailure::Unloaded => site_refusals::Reason::Unloaded,
@@ -139,6 +142,18 @@ pub(super) fn planned_cells(
             }
             _ => Preparation,
         })?;
+        if !cleared.is_empty() {
+            // The same whole-tree evidence a new site uses: a registered root
+            // whose trunk is cut here is felled as a whole tree.
+            clearance.append_whole_trees(state, &mut cleared);
+            let removed: std::collections::BTreeSet<_> =
+                cleared.iter().map(|cell| cell.at).collect();
+            cells.retain(|cell| {
+                cell.state != state.registry.states.air || !removed.contains(&cell.at)
+            });
+            cleared.append(&mut cells);
+            cells = cleared;
+        }
     }
     // Include the whole placement extent (roof crowns/yards) in executor
     // interference fencing; certification uses the narrower authored bounds.
@@ -172,8 +187,40 @@ pub(crate) fn active_lot(
         .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
 }
 
+/// The only stale-certification trigger for a paused clear stage, evaluated
+/// inside the construction owner: the active order keeps its queue slot and a
+/// registered root in the remaining clear cells is no longer a sapling. Natural
+/// decay and foreign edits are not this condition.
+pub(crate) fn stale_tree_certification(
+    state: &TickState,
+    id: SettlementId,
+    handle: &str,
+    remaining: &[[i32; 3]],
+    is_sapling: impl Fn(u32) -> bool,
+) -> bool {
+    let Some(record) = state.settlements.get(id) else {
+        return false;
+    };
+    let keeps_its_place = record
+        .project
+        .as_ref()
+        .filter(|project| project.structure == handle)
+        .is_none_or(|project| project.ordered)
+        && record.pending_order.is_none();
+    keeps_its_place
+        && remaining.iter().any(|at| {
+            record.planted_trees.contains(at)
+                && state
+                    .world
+                    .physics_block_at(at[0], at[1], at[2])
+                    .is_some_and(|block| !is_sapling(block))
+        })
+}
+
 /// Called only after the canonical executor detects an unpaid, paused clear
 /// manifest. Its world image is no longer a certificate of the current tree.
+/// A paid upgrade's clear stage follows the same rule as a new site: cancel and
+/// requeue the owner order rather than resume a stale tree certification.
 pub(crate) fn changed_project(
     state: &TickState,
     id: SettlementId,
@@ -184,11 +231,7 @@ pub(crate) fn changed_project(
         .get(id)?
         .project
         .as_ref()
-        .filter(|project| {
-            project.structure == handle
-                && project.building.is_none()
-                && !layout::infra(&project.blueprint)
-        })
+        .filter(|project| project.structure == handle && !layout::infra(&project.blueprint))
         .cloned()
 }
 

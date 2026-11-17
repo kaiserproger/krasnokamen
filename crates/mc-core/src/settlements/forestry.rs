@@ -61,7 +61,7 @@ impl Clearance {
         })
     }
 
-    fn append_whole_trees(
+    pub(crate) fn append_whole_trees(
         &self,
         state: &TickState,
         cells: &mut Vec<crate::plugin_structures::settlement_builds::PlannedCell>,
@@ -825,7 +825,8 @@ pub(crate) fn cells(
                         .is_some_and(|block| block.block.id.path().ends_with("_sapling"))
                 })
         {
-            cells.swap(first, index);
+            // Stable: keep the corridor cells first and the manifest's own order.
+            cells[first..=index].rotate_right(1);
             first += 1;
         }
     }

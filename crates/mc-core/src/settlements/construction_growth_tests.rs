@@ -1006,6 +1006,88 @@ fn native_grown_registered_tree_is_felled_conserved_and_built() {
 }
 
 #[test]
+fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
+    use crate::settlements::forestry;
+    let (mut state, id, _) = fixture();
+    let root = [8, 201, 8];
+    // The generator itself grows the birch here, so baseline evidence agrees.
+    forestry::tests::grown_world(&mut state, vec![root], "birch");
+    let at = [8, 203, 8];
+    let lot = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
+    let cell = executor::PlannedCell {
+        at,
+        state: state.registry.states.air,
+        resource: None,
+        quantity: 0,
+    };
+    let cleared = executor::upgrade_trees_clear(
+        &state,
+        id,
+        "house",
+        root,
+        std::slice::from_ref(&cell),
+        Some(lot),
+        &mut forestry::Clearance::default(),
+    )
+    .expect("proven natural forest in an upgrade's new cells is clear work");
+    assert_eq!(cleared.len(), 1);
+    assert_eq!(cleared[0].at, at);
+    assert_eq!(cleared[0].state, state.registry.states.air);
+    assert!(cleared[0].resource.is_none());
+
+    // A retained player placement is never natural forest.
+    retain_player_edit(&mut state, at);
+    assert!(matches!(
+        executor::upgrade_trees_clear(
+            &state,
+            id,
+            "house",
+            root,
+            std::slice::from_ref(&cell),
+            Some(lot),
+            &mut forestry::Clearance::default(),
+        ),
+        Err(mc_script::ScriptOperationFailure::Forbidden)
+    ));
+
+    // Persistent leaves are a player-facing veto, not clearance work.
+    state.block_log = Default::default();
+    let persistent = block(&state, "minecraft:birch_leaves", &[("persistent", "true")]);
+    state.world.set_block(at[0], at[1], at[2], persistent);
+    assert!(matches!(
+        executor::upgrade_trees_clear(
+            &state,
+            id,
+            "house",
+            root,
+            std::slice::from_ref(&cell),
+            Some(lot),
+            &mut forestry::Clearance::default(),
+        ),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    ));
+
+    // Without generator evidence a tree cell is unproven and refuses.
+    state
+        .world
+        .set_block(at[0], at[1], at[2], state.registry.states.air);
+    let unproven = block(&state, "minecraft:oak_log", &[]);
+    state.world.set_block(at[0], at[1], at[2], unproven);
+    assert!(matches!(
+        executor::upgrade_trees_clear(
+            &state,
+            id,
+            "house",
+            root,
+            std::slice::from_ref(&cell),
+            Some(lot),
+            &mut forestry::Clearance::default(),
+        ),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    ));
+}
+
+#[test]
 fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
     let (mut state, id, builder) = fixture();
     start(&mut state, id, "house", 1, None);
@@ -1034,12 +1116,8 @@ fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
         .at;
     let original = state.world.block_at(at[0], at[1], at[2]).unwrap();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    state
-        .settlements
-        .get_mut(id)
-        .unwrap()
-        .planted_trees
-        .insert(at);
+    // Unproven cells (no generator evidence, not the building's own authored
+    // state) still refuse; a proven natural cell is clear work instead.
     for name in [
         "minecraft:birch_sapling",
         "minecraft:oak_log",

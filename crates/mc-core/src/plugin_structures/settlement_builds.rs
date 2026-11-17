@@ -246,11 +246,13 @@ pub(crate) fn status(
 }
 
 /// A foreign edit inside a native site pauses the structure as
-/// `footprint_changed`. A clear stage paused before its first debit is cancelled
-/// and requeued for fresh tree certification; a later stage, even before its
-/// first paid cell, re-snapshots the footprint and resumes: a placed cell that
-/// the edit emptied is queued again at completion by [`reopen_emptied`], while a
-/// solid foreign block in a placed cell is left alone.
+/// `footprint_changed`. The clear stage is cancelled and its owner order retried
+/// only for its own stale-tree hazard: nothing has been felled yet, the clear
+/// manifest still holds a registered root that is no longer a sapling, and the
+/// order keeps its place in the queue. Everything else, including natural leaf
+/// decay and any started felling, re-snapshots the footprint and resumes: a
+/// placed cell that the edit emptied is queued again at completion by
+/// [`reopen_emptied`], while a solid foreign block in a placed cell is left alone.
 /// Returns whether recovery resumed or cancelled the structure.
 pub(crate) fn recover(
     state: &mut TickState,
@@ -267,11 +269,42 @@ pub(crate) fn recover(
     }
     let retry = (paused
         && record.snapshot.consumed.is_empty()
+        // Once any clear cell is worked the manifest itself authorizes the
+        // remaining cells; cancelling here could never re-certify a partially
+        // felled tree whose registration the cut already retired.
+        && record.snapshot.completed_work_units == 0
         && record
             .snapshot
             .stages
             .get(record.snapshot.current_stage_index as usize)
-            .is_some_and(|stage| stage.stage == "clear"))
+            .is_some_and(|stage| stage.stage == "clear")
+        // Only a registered root that grew out of its certified sapling, and
+        // only while the order keeps its queue slot, may cancel.
+        && crate::settlements::construction::preparation::stale_tree_certification(
+            state,
+            settlement,
+            handle,
+            &record
+                .cells
+                .get(record.snapshot.current_stage_index as usize)
+                .map(|cells| {
+                    cells
+                        .iter()
+                        .skip(record.snapshot.completed_work_units as usize)
+                        .map(|cell| cell.at)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            |block| {
+                state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .is_some_and(|definition| {
+                        definition.block.id.path().ends_with("_sapling")
+                    })
+            },
+        ))
     .then(|| {
         crate::settlements::construction::preparation::changed_project(state, settlement, handle)
     })
@@ -603,8 +636,9 @@ pub(super) fn debit(
     let project = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.as_ref())
-        .filter(|project| project.building.is_none());
+        .and_then(|record| record.project.as_ref());
+    // A new site and an upgrade both carry clear-stage cells: an upgrade that
+    // clears natural forest or a registered tree must credit the same drops.
     let preparing = project.is_some();
     let lot = project.and_then(|project| crate::settlements::forestry::lot_bounds(state, project));
     let mut drops = Vec::new();
@@ -895,15 +929,20 @@ pub(crate) fn built_at(
     })
 }
 
-/// Only a previous committed building's exact authored state is exempt from
-/// the upgrade tree veto. A new log in a formerly empty cell is not a beam.
+/// Upgrade tree cells follow the same fence as a new site: a player-touched or
+/// persistent cell, unknown generator evidence, a protected root halo or a live
+/// player with capture disabled refuses; a previous committed building's exact
+/// authored state is a beam, not forest; every other tree or sapling cell becomes
+/// clear-stage work, so the executor cuts it with conserved drops.
 pub(crate) fn upgrade_trees_clear(
     state: &TickState,
     id: SettlementId,
     blueprint: &str,
     origin: [i32; 3],
     cells: &[PlannedCell],
-) -> Result<(), Failure> {
+    lot: Option<mc_script::ScriptWorldBounds>,
+    clearance: &mut crate::settlements::forestry::Clearance,
+) -> Result<Vec<PlannedCell>, Failure> {
     let ledger = ledger(state)?;
     let previous = ledger
         .structures
@@ -919,6 +958,7 @@ pub(crate) fn upgrade_trees_clear(
                 && record.snapshot.state == ScriptStructureState::Committed
         })
         .max_by_key(|record| record.snapshot.revision);
+    let mut cleared = Vec::new();
     for cell in cells {
         let block = state
             .world
@@ -932,19 +972,30 @@ pub(crate) fn upgrade_trees_clear(
         if crate::settlements::forestry::vetoed(state, cell.at) {
             return Err(Failure::Forbidden);
         }
-        if crate::settlements::forestry::persistent(state, block)
-            || !previous.is_some_and(|record| {
-                record
-                    .cells
-                    .iter()
-                    .flatten()
-                    .any(|authored| authored.at == cell.at && authored.state == block)
-            })
-        {
+        if crate::settlements::forestry::persistent(state, block) {
             return Err(Failure::Blocked);
         }
+        if previous.is_some_and(|record| {
+            record
+                .cells
+                .iter()
+                .flatten()
+                .any(|authored| authored.at == cell.at && authored.state == block)
+        }) {
+            // The building's own authored beam; the upgrade replaces it.
+            continue;
+        }
+        if !clearance.clearable(state, cell.at, lot) {
+            return Err(Failure::Blocked);
+        }
+        cleared.push(PlannedCell {
+            at: cell.at,
+            state: state.registry.states.air,
+            resource: None,
+            quantity: 0,
+        });
     }
-    Ok(())
+    Ok(cleared)
 }
 
 pub(crate) fn next_material(
