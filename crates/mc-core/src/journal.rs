@@ -4,7 +4,8 @@
 //! Layout under `<world_dir>/`:
 //! - `journal/batch-<first_tick>-<last_tick>.bin`: framed batches. One batch
 //!   holds whole ticks: `[magic u32][version u32][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
-//!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored.
+//!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored
+//!   when reading and removed by the next [`JournalWriter::open`].
 //! - `native/state.redb`: one atomic checkpoint of chunks, entities, players,
 //!   globals and the committed tick across all dimensions.
 //!
@@ -17,6 +18,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -381,18 +383,30 @@ pub fn fsync_file(path: &Path) -> std::io::Result<()> {
     File::open(path)?.sync_all()
 }
 
+/// Test-only observation of [`fsync_dir`] calls, so a test can prove that the
+/// journal directory entry was made durable without special-casing production.
+#[cfg(test)]
+pub(crate) static FSYNC_DIR_OBSERVER: parking_lot::Mutex<Option<(PathBuf, Arc<AtomicU64>)>> =
+    parking_lot::const_mutex(None);
+
 /// Fsync a directory entry. On Linux opening a directory as a `File` and
 /// syncing it fsyncs the directory entry; elsewhere this is a no-op.
 pub fn fsync_dir(path: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
-    {
-        File::open(path)?.sync_all()
-    }
+    let result = File::open(path)?.sync_all();
     #[cfg(not(unix))]
-    {
+    let result = {
         let _ = path;
         Ok(())
+    };
+    #[cfg(test)]
+    if result.is_ok()
+        && let Some((observed, counter)) = FSYNC_DIR_OBSERVER.lock().as_ref()
+        && observed == path
+    {
+        counter.fetch_add(1, Ordering::Relaxed);
     }
+    result
 }
 
 /// Append batches to the journal on the journal thread. Every batch file is
@@ -437,6 +451,23 @@ impl JournalWriter {
     pub fn open(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
         let dir = world_dir.join("journal");
         std::fs::create_dir_all(&dir).map_err(|err| CoreError::Storage(err.to_string()))?;
+        // The directory entry itself must be durable before the first batch
+        // rename can claim a durable publication, and an interrupted earlier
+        // first start may have left it unflushed (ADR 0013 "Durability").
+        fsync_dir(world_dir).map_err(|err| CoreError::Storage(err.to_string()))?;
+        // Safe here and only here: the caller holds the exclusive world lease
+        // and no append exists yet, so every `*.bin.tmp` is a leftover of a
+        // failed or interrupted append. Pruning must not sweep them, because a
+        // live append writes its tmp between create and rename.
+        let (swept_files, swept_bytes) = sweep_unpublished_batches(&dir);
+        if swept_files > 0 {
+            tracing::warn!(
+                dir = %dir.display(),
+                files = swept_files,
+                bytes = swept_bytes,
+                "removed unpublished journal batches left by a failed or interrupted append"
+            );
+        }
         Ok(Self {
             dir,
             pending_fsync: 0,
@@ -978,23 +1009,136 @@ pub struct CheckpointManifest {
     pub gamerules: BTreeMap<String, String>,
 }
 
-/// Prune batches fully at or below `manifest_tick`.
-pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) {
-    let Ok(entries) = std::fs::read_dir(journal_dir) else {
-        return;
+/// Unpublished batch file name (`batch-<lo>-<hi>.bin.tmp`).
+fn is_unpublished_batch(name: &str) -> bool {
+    name.strip_suffix(".tmp")
+        .is_some_and(|name| parse_batch_name(name).is_some())
+}
+
+/// Remove `batch-*.bin.tmp` leftovers of failed or interrupted appends and
+/// report how many files and bytes went away. Nothing else in the directory is
+/// touched: published batches are immutable and unpublished readers ignore `.tmp`.
+fn sweep_unpublished_batches(dir: &Path) -> (u64, u64) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (0, 0);
     };
-    for entry in entries {
-        let Ok(entry) = entry else { continue };
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !(name.starts_with("batch-") && name.ends_with(".bin")) {
+    let mut files = 0;
+    let mut bytes = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !is_unpublished_batch(name) {
             continue;
         }
-        if let Some((_, hi)) = parse_batch_name(&name)
-            && hi <= manifest_tick
-        {
-            let _ = std::fs::remove_file(journal_dir.join(&name));
+        let len = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+        if std::fs::remove_file(dir.join(name)).is_ok() {
+            files += 1;
+            bytes += len;
         }
     }
+    (files, bytes)
+}
+
+/// Outcome of one [`prune_batches_through`] attempt.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PruneReport {
+    /// Published batches removed by this attempt.
+    pub removed: u64,
+    /// Failures in this attempt: an unreadable directory counts once, and so
+    /// does every batch that could not be removed.
+    pub failed: u64,
+    /// Bytes of covered batches that stayed on disk because removal failed.
+    pub retained_bytes: u64,
+    /// First failure of this attempt, for the log line.
+    pub error: Option<String>,
+}
+
+/// Process-wide prune counters. One process serves one world, as with the
+/// component-host counters the dashboard already reads on demand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct JournalPruneStats {
+    /// Failed removals (plus one per unreadable journal directory) since start.
+    pub failures_total: u64,
+    /// Bytes the latest attempt could not remove; zero when it succeeded.
+    pub retained_bytes: u64,
+}
+
+static PRUNE_FAILURES: AtomicU64 = AtomicU64::new(0);
+static PRUNE_RETAINED_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// Read the process-wide prune counters; cheap, no allocation.
+#[must_use]
+pub fn journal_prune_stats() -> JournalPruneStats {
+    JournalPruneStats {
+        failures_total: PRUNE_FAILURES.load(Ordering::Relaxed),
+        retained_bytes: PRUNE_RETAINED_BYTES.load(Ordering::Relaxed),
+    }
+}
+
+/// Record one failed attempt: counted for the dashboard and warned once, so a
+/// read-only or EIO journal directory cannot grow the WAL silently.
+fn record_prune_failure(journal_dir: &Path, report: &PruneReport) {
+    PRUNE_FAILURES.fetch_add(report.failed, Ordering::Relaxed);
+    PRUNE_RETAINED_BYTES.store(report.retained_bytes, Ordering::Relaxed);
+    tracing::warn!(
+        dir = %journal_dir.display(),
+        failed = report.failed,
+        retained_bytes = report.retained_bytes,
+        error = report.error.as_deref().unwrap_or("unknown"),
+        "journal prune failed; covered batches stay on disk and the WAL grows"
+    );
+}
+
+/// Prune batches fully at or below `manifest_tick`.
+///
+/// A failure here is warned and counted, never fatal: batches at or below the
+/// committed checkpoint are ignored on replay, so only the WAL grows. A
+/// directory that cannot be written at all still fails closed on the next
+/// append (`journal append failed; world halting`), which is the fatal path.
+pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) -> PruneReport {
+    let mut report = PruneReport::default();
+    let entries = match std::fs::read_dir(journal_dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            report.failed += 1;
+            report.error = Some(error.to_string());
+            record_prune_failure(journal_dir, &report);
+            return report;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                report.failed += 1;
+                report.error.get_or_insert_with(|| error.to_string());
+                continue;
+            }
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((_, hi)) = parse_batch_name(&name) else {
+            continue;
+        };
+        if hi > manifest_tick {
+            continue;
+        }
+        match std::fs::remove_file(entry.path()) {
+            Ok(()) => report.removed += 1,
+            Err(error) => {
+                report.failed += 1;
+                report.retained_bytes += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+                report
+                    .error
+                    .get_or_insert_with(|| format!("{}: {error}", entry.path().display()));
+            }
+        }
+    }
+    if report.failed == 0 {
+        PRUNE_RETAINED_BYTES.store(0, Ordering::Relaxed);
+    } else {
+        record_prune_failure(journal_dir, &report);
+    }
+    report
 }
 
 /// Compact player post-image shared by the journal and checkpoints.

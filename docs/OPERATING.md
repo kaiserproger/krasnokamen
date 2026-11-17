@@ -196,6 +196,7 @@ enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
 # backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
+journal_fsync_every_batches = 10  # journal directory-fsync window, 1..=1200
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records
@@ -1079,6 +1080,14 @@ checkpoint and removes the journal batches the checkpoint covers, even on a
 cleanly stopped world. Copy a crash image you want to keep as evidence before
 running prune on it. The Nether and the End are not pruned.
 
+Pruning itself never stops the server. A batch it cannot remove (read-only or
+EIO journal directory, changed permissions) is warned once per checkpoint with
+the directory, the count and the retained bytes, and shows as
+`krasnokamen_journal_prune_failures_total` and
+`krasnokamen_journal_prune_retained_bytes` on `/metrics` (and under `journal` in
+`/stats`). Covered batches stay replay-inert, so the world stays correct while
+the journal grows; the next failed append is what halts the server.
+
 ### Native backup and restore
 
 Offline commands need the server stopped: they take the exclusive world lease,
@@ -1145,7 +1154,7 @@ metrics_bearer_token = "replace-with-a-secret"   # optional, /metrics only
 
 The scrape includes TPS, tick p50/p95/p99, the latest per-phase timings, online
 players, loaded chunks, entity count, resident memory, network bytes, reliable
-drops and skipped pump ticks. A token protects only `/metrics`: keep the loopback
+drops, skipped pump ticks and the journal prune counters. A token protects only `/metrics`: keep the loopback
 bind or put the JSON endpoints behind an authenticated reverse proxy. A
 non-loopback address needs `allow_remote = true`; otherwise the dashboard does
 not start and a warning is logged. Operators at level 2 can run `/tps` and

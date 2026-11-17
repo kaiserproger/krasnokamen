@@ -267,6 +267,26 @@ restore a pre-upgrade native checkpoint and its matching WAL with the old binary
 or continue with the compatible binary. Do not strip the field or rewrite the
 save to make an older reader accept it.
 
+### Durability failures and publication order
+
+A failed WAL `write`, `sync_all`, `rename` or journal-directory `sync_all` is
+fatal: the journal owner acknowledges nothing, closes its queue and the tick
+owner halts. There is no retry, because the batch sequence cannot be repaired
+after a hole. Publication order stays WAL file fsync, rename, journal directory
+fsync (within `journal_fsync_every_batches`, default 10), checkpoint gate,
+`Durability::Immediate` commit, then prune, so a committed checkpoint never
+outruns its WAL. The journal directory's own entry is fsynced when the writer
+opens it. Close errors are not observable through Rust's `File` drop, so
+durability rests on the explicit fsync before the rename, not on close; a
+deferred writeback error surfaces on the next fsync of that file or directory.
+Removing covered journal batches is best effort: a refused removal is warned and
+counted (dashboard `/metrics` and `/stats`) rather than fatal, because batches at
+or below the committed checkpoint are replay-inert and only the WAL grows, while
+an unwritable journal directory still halts the world on the next append.
+Unpublished `batch-*.bin.tmp` leftovers of a failed or interrupted append are
+removed by the next journal open under the exclusive world lease. Policy and
+drills: [persistence](../architecture/persistence.md).
+
 ### Immutable datapack worldgen inputs
 
 The startup boundary folds checkpoint and contiguous WAL metadata before it

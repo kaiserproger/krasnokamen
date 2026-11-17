@@ -2,8 +2,8 @@
 //! the unflushed tail, all domains at the same tick. Sibling `*_tests.rs`.
 
 use crate::journal::{
-    JournalEntry, JournalWriter, Replay, SimDebtImage, player_from_tag, player_to_tag,
-    read_complete_batches_after, replay_batches,
+    JournalEntry, JournalWriter, Replay, SimDebtImage, journal_prune_stats, player_from_tag,
+    player_to_tag, prune_batches_through, read_complete_batches_after, replay_batches,
 };
 
 #[test]
@@ -1926,4 +1926,98 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
         panic!("compound")
     };
     assert!(fields.contains(&unknown));
+}
+
+/// JOURNAL-TMP-NEVER-PRUNED: a failed or interrupted append leaves
+/// `batch-<lo>-<hi>.bin.tmp` behind; the next open must remove it and leave
+/// published batches and unrelated files alone.
+#[test]
+fn open_removes_unpublished_batch_leftovers() {
+    let root = tempfile::tempdir().unwrap();
+    let journal = root.path().join("journal");
+    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    // A real partial frame followed by ENOSPC: the append leaves its tmp.
+    crate::journal::WAL_WRITE_FAILURE.set(Some(12));
+    assert!(writer.append(2, 2, &[]).is_err());
+    drop(writer);
+    let leftover = journal.join("batch-00000000000000000002-00000000000000000002.bin.tmp");
+    assert!(leftover.exists(), "the failed append left its temporary");
+    // A stop between create and rename leaves one too.
+    let stale = journal.join("batch-00000000000000000003-00000000000000000003.bin.tmp");
+    std::fs::write(&stale, b"SOLJ-partial").unwrap();
+    let unrelated = journal.join("operator-notes.tmp");
+    std::fs::write(&unrelated, b"keep me").unwrap();
+
+    drop(JournalWriter::open(root.path(), 1).unwrap());
+
+    assert!(
+        !leftover.exists(),
+        "the failed append's temporary is removed"
+    );
+    assert!(!stale.exists(), "a stale unpublished batch is removed");
+    assert!(
+        batch_path(root.path(), 1).exists(),
+        "published batches stay immutable"
+    );
+    assert!(unrelated.exists(), "only batch temporaries are swept");
+    assert_eq!(read_complete_batches_after(&journal, 0).unwrap().len(), 1);
+}
+
+/// JOURNAL-PRUNE-ERRORS-SILENT: a refused removal is reported and counted
+/// instead of swallowed, and the counters clear once pruning succeeds.
+#[test]
+fn prune_reports_and_counts_a_refused_removal() {
+    let root = tempfile::tempdir().unwrap();
+    let journal = root.path().join("journal");
+    std::fs::create_dir_all(&journal).unwrap();
+    let covered = batch_path(root.path(), 4);
+    std::fs::write(&covered, b"covered frame").unwrap();
+    // Parses as a batch name but cannot be removed: a directory. `remove_file`
+    // fails with EISDIR for every uid, so no permission bits are involved.
+    let blocked = journal.join("batch-00000000000000000003-00000000000000000003.bin");
+    std::fs::create_dir(&blocked).unwrap();
+    let before = journal_prune_stats();
+
+    let report = prune_batches_through(&journal, 5);
+
+    assert_eq!(report.removed, 1);
+    assert_eq!(report.failed, 1);
+    assert!(
+        report.error.is_some(),
+        "the refusal must name the directory and error"
+    );
+    assert!(!covered.exists());
+    assert!(
+        blocked.exists(),
+        "a refused removal leaves its entry in place"
+    );
+    assert_eq!(
+        journal_prune_stats().failures_total,
+        before.failures_total + 1,
+        "the dashboard counter sees the failure"
+    );
+
+    std::fs::remove_dir(&blocked).unwrap();
+    let clean = prune_batches_through(&journal, 5);
+    assert_eq!(clean.failed, 0);
+    assert_eq!(journal_prune_stats().retained_bytes, 0);
+}
+
+/// The journal directory entry itself must be durable before the first batch
+/// rename claims a durable publication; opening fsyncs the world directory.
+#[test]
+fn open_persists_the_journal_directory_entry() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let root = tempfile::tempdir().unwrap();
+    let counter = std::sync::Arc::new(AtomicU64::new(0));
+    *crate::journal::FSYNC_DIR_OBSERVER.lock() =
+        Some((root.path().to_path_buf(), std::sync::Arc::clone(&counter)));
+    drop(JournalWriter::open(root.path(), 1).unwrap());
+    *crate::journal::FSYNC_DIR_OBSERVER.lock() = None;
+    assert!(
+        counter.load(Ordering::Relaxed) > 0,
+        "opening the journal must fsync its parent directory entry"
+    );
 }

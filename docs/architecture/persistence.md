@@ -11,8 +11,14 @@ fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
 ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
 [tick_hi u64][length u32][crc32 u32][payload]`; the payload is JSON lines of
-absolute post-images and tombstones. The writer fsyncs a temporary file and
-renames it to publish the batch. Unpublished temporary files are ignored.
+absolute post-images and tombstones. The writer writes
+`batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
+fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
+appends (default 10, `[data] journal_fsync_every_batches`); a checkpoint gate and
+shutdown flush it sooner. Readers ignore unpublished `.tmp` files, and the next
+`JournalWriter::open` removes them (`open_removes_unpublished_batch_leftovers`):
+the exclusive world lease guarantees no other writer owns one, and pruning never
+sweeps them because a live append writes its temporary file on another thread.
 Entries cover changed state, not a complete copy every tick. A battle image
 journals only its changed parts after its first full record in the tail
 ([battle decision history](#battle-decision-history)). Player state and
@@ -76,6 +82,34 @@ A crash between baseline commit and WAL can leave an unused baseline. Retained
 WAL folds over the original base even after adding, changing or removing a pack.
 SIGKILL regressions use real flushed WAL, repeated recovery, checkpoint/prune and
 another recovery.
+
+### Write errors and publication order
+
+- A failed `write`, `sync_all`, `rename` or journal-directory `sync_all` is
+  fatal: the journal owner returns without acknowledging, closes its work queue
+  and the tick owner halts (failed closed). No retry, because a hole in the
+  batch sequence cannot be filled afterwards.
+- Order is always batch file fsync, rename, journal directory fsync (within the
+  window), WAL gate, native `Durability::Immediate` commit, then prune. A
+  checkpoint therefore never claims state whose WAL is not durable, and the
+  directory entry of a published batch becomes durable no later than the next
+  gate.
+- The journal directory's own entry is fsynced when `JournalWriter::open`
+  creates or reopens it (`open_persists_the_journal_directory_entry`), so an
+  interrupted first start cannot leave fsynced batches inside a directory a
+  later recovery cannot find.
+- Close errors are not observable: Rust drops a `File` without reporting
+  `close(2)`. Durability rests on the explicit fsync before the rename, never on
+  drop; a deferred writeback error is reported by the next fsync of that file or
+  of the journal directory.
+- A failed prune is warned and counted, never fatal: batches at or below the
+  committed checkpoint are ignored on replay, so only the WAL grows. One line
+  per failed attempt names the directory, failure count, retained bytes and the
+  first error (`prune_reports_and_counts_a_refused_removal`); the counters
+  `krasnokamen_journal_prune_failures_total` and
+  `krasnokamen_journal_prune_retained_bytes` are on `/metrics` and under
+  `journal` in `/stats`. A directory that cannot be written at all still halts
+  the world on the next append.
 
 ### Recovery evidence and clocks
 
