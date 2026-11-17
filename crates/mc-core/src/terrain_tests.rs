@@ -620,7 +620,11 @@ fn empty_source(
 fn stamp_table_keeps_a_revision_and_never_repeats_a_stamp() {
     let mut table = super::StampTable::default();
     let first = table.stamp(7, 1_000);
-    assert_eq!(table.stamp(7, 5_000), first, "same revision keeps its stamp");
+    assert_eq!(
+        table.stamp(7, 5_000),
+        first,
+        "same revision keeps its stamp"
+    );
     let second = table.stamp(8, 1_000);
     assert!(
         second > first,

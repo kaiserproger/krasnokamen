@@ -2874,9 +2874,7 @@ fn unchanged_knockback_ticks_republish_the_same_map_without_a_copy() {
         "an unchanged tick republishes the same epoch map handle"
     );
     assert_eq!(
-        idle.snapshot
-            .player_knockback_ticks
-            .get(&ConnectionId(1)),
+        idle.snapshot.player_knockback_ticks.get(&ConnectionId(1)),
         Some(&(1, first_tick)),
         "and it is still the earlier impulse"
     );
@@ -2901,6 +2899,8 @@ fn knockback_epoch_clone_cost_is_informative_not_a_gate() {
         }
         let per_clone = started.elapsed().as_nanos() / 1_000;
         assert_eq!(checksum, 1_000 * entries as u64);
-        println!("knockback epoch map clone, K={entries}: {per_clone} ns/clone (debug, shared host, informative)");
+        println!(
+            "knockback epoch map clone, K={entries}: {per_clone} ns/clone (debug, shared host, informative)"
+        );
     }
 }

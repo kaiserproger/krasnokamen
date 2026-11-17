@@ -712,10 +712,7 @@ fn publish_rejects_a_duplicate_id_that_would_free_one_slot_twice() {
     publish_verbatim(&mut views, &birth);
     // The id's slot was captured before this batch's mutations: a second
     // appearance of the same id would free that slot twice.
-    let duplicate = [
-        (1, None),
-        (1, None),
-    ];
+    let duplicate = [(1, None), (1, None)];
     let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         publish_verbatim(&mut views, &duplicate);
     }))
@@ -741,6 +738,9 @@ fn ascending_batch_still_publishes_and_keeps_its_slots() {
     assert_eq!(views.len(), 3);
     assert_eq!(views.changed().len(), 3);
     for id in 1..=3 {
-        assert_eq!(views.get(EntityId(id)).map(|row| row.id), Some(EntityId(id)));
+        assert_eq!(
+            views.get(EntityId(id)).map(|row| row.id),
+            Some(EntityId(id))
+        );
     }
 }
