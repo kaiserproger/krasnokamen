@@ -14,6 +14,13 @@ The primary player is not an operator. In the isolated QA world, spawn protectio
 
 `village-owner-order-qa` uses a fresh seed-100 world and an operator teleport fixture near the generated anchor; it does not prove navigation to the bell. It claims the village and checks an unfunded House L1 order and its waiting-for-materials status before and after restart. The harness then uses bounded console `item replace block` fixtures in the founding chest to fund construction, checks the new start notification and project status, and checks the busy reason and cancellation of a second queued order. This supplied-material scenario is not proof of autonomous material production.
 
+With `D5_QUEUE_CLIENT=1`, the diagnostic instead confirms an active project,
+queues House and checks that a different Farm order receives the fresh queue-full
+chat reply without replacing House. After restart, bounded chest fixtures fund
+the pending House and the client observes it start. This mode is not proof of
+autonomous production. Set `D5_QUEUE_CONTROL=no-second-order` as well to omit
+the refused request and fail at the fresh-refusal assertion.
+
 ## Civilization observation
 
 `civilization-seed-qa` runs seed 24 with village center (136, 70, -216) unless `VILLAGE_AUTONOMY_SEED` or `VILLAGE_AUTONOMY_CENTER` names another world, so a ledger `harness:civilization-seed-qa:<verdict>` ref (which cannot carry env, and refuses these variables) observes seed 24 with a 7200-second timeout.

@@ -172,6 +172,7 @@ _PROFILE_OVERRIDES = {
     'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
     'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE',
                              'VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'),
+    'village-owner-order-qa': ('D5_QUEUE_CLIENT', 'D5_QUEUE_CONTROL'),
 }
 
 
