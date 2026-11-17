@@ -521,11 +521,20 @@ pub(crate) fn step<S: BlockSampler>(
             impulse[axis] = next;
         }
     }
-    let rotation = if input.battle_facing
-        && input.look_target.is_none()
-        && battle_holds_facing(&input.body, &body)
-    {
-        input.rotation
+    // The battle policy is frozen for this freeze (the candidate A/B measured
+    // more rotation and head traffic on the A1 scene): battle rows keep facing
+    // the resolved velocity, the hold above unchanged.
+    let rotation = if input.battle_facing {
+        if input.look_target.is_none() && battle_holds_facing(&input.body, &body) {
+            input.rotation
+        } else {
+            look(
+                input.rotation,
+                body.position,
+                body.velocity,
+                input.look_target,
+            )
+        }
     } else if input.look_target.is_some() {
         look(input.rotation, body.position, Vec3::ZERO, input.look_target)
     } else {

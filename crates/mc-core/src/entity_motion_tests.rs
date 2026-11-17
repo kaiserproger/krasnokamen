@@ -852,11 +852,10 @@ fn battle_facing_holds_against_knockback_without_changing_motion() {
     );
 }
 
-/// CANDIDATE policy for battle rows (decided by the integration A/B): a sliding
-/// step faces the direction the AI wants, while the hold above keeps dressing
-/// steps still. The frozen policy faces the resolved velocity instead.
+/// The battle policy stays frozen: a sliding step faces the resolved velocity
+/// (as `de660fabd` did), while a non-battle body faces the direction it wants.
 #[test]
-fn battle_facing_against_a_wall_faces_the_wanted_direction() {
+fn battle_facing_against_a_wall_follows_the_resolved_velocity() {
     let speed = 0.04 / TICK;
     let rotation = [30.0, 12.0, 30.0];
     let make = |x: f64| {
@@ -867,13 +866,9 @@ fn battle_facing_against_a_wall_faces_the_wanted_direction() {
     let slid = battle_step(make(0.69), true);
     let shared = old_step(make(0.69), true);
     assert_same_motion(&slid, &shared);
-    assert_eq!(slid.rotation[0], -45.0, "faces the diagonal it wants");
-    assert_eq!(
-        shared.rotation[0], -45.0,
-        "the shared rule agrees on a sliding step"
-    );
-    // Head-on at contact the hold still applies: the step is zero, so the body
-    // keeps its facing even though its drive points into the wall.
+    assert_eq!(slid.rotation[0], 0.0, "battle: along the wall");
+    assert_eq!(shared.rotation[0], -45.0, "shared: the wanted diagonal");
+    // Head-on at contact: no step, so both keep the facing.
     let make = || {
         let mut state = battle(rotation, [speed, 0.0], [speed, 0.0]);
         state.body.position.x = 0.7;
@@ -883,15 +878,17 @@ fn battle_facing_against_a_wall_faces_the_wanted_direction() {
     let shared = old_step(make(), true);
     assert_same_motion(&blocked, &shared);
     assert_eq!(bits(blocked.rotation), bits(rotation));
-    assert_eq!(shared.rotation[0], -60.0, "the shared rule faces the wall");
+    assert_eq!(
+        shared.rotation[0], -60.0,
+        "the shared rule faces the wall it keeps pushing"
+    );
 }
 
-/// CANDIDATE policy: the battle rule is the shared facing plus the hold. On every
-/// grid case the motion is identical, and the rotation is either the held input
-/// rotation or exactly the shared rule's yaw and pitch (the head is the only axis
-/// the shared rule splits).
+/// The battle policy is `look` of the resolved body plus the hold: on every grid
+/// case the motion is identical, and the rotation is either the held input
+/// rotation or exactly `look` of the resolved velocity.
 #[test]
-fn battle_facing_deviates_from_the_shared_rule_only_by_holding() {
+fn battle_facing_is_the_previous_look_or_the_hold() {
     let per_tick = [0.0, 0.003, 0.0049, 0.0051, 0.02, 0.07, 0.3];
     let rotations = [[0.0; 3], [30.0, 12.0, 30.0], [-170.0, -45.0, -170.0]];
     let mut held = 0;
@@ -918,19 +915,19 @@ fn battle_facing_deviates_from_the_shared_rule_only_by_holding() {
                                 let on = battle_step(make(), wall);
                                 let shared = old_step(make(), wall);
                                 assert_same_motion(&on, &shared);
-                                let dx = shared.body.position.x - start.position.x;
-                                let dz = shared.body.position.z - start.position.z;
+                                let dx = on.body.position.x - start.position.x;
+                                let dz = on.body.position.z - start.position.z;
                                 let hold = target.is_none()
                                     && (dx * dx + dz * dz <= 0.005 * 0.005
                                         || dx * start.velocity.x + dz * start.velocity.z < 0.0);
-                                let yaw_pitch = |r: [f32; 3]| [r[0].to_bits(), r[1].to_bits()];
-                                if hold {
+                                let expected = if hold {
                                     held += 1;
-                                    assert_eq!(bits(on.rotation), bits(rotation));
+                                    rotation
                                 } else {
                                     followed += 1;
-                                    assert_eq!(yaw_pitch(on.rotation), yaw_pitch(shared.rotation));
-                                }
+                                    look(rotation, on.body.position, on.body.velocity, target)
+                                };
+                                assert_eq!(bits(on.rotation), bits(expected));
                             }
                         }
                     }
