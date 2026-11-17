@@ -53,7 +53,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Drowned joins the `hunts_villagers` capability table next to zombie,
     // zombie_villager and husk (vanilla Drowned targets AbstractVillager),
     // 2026-11-13: 2632.
-    vanilla_id_literals: 2_632,
+    // R6 G1 (CrowdPush, 2026-11-18): the player and falling-block body sizes are
+    // contract lookups by vanilla name, so `blueprint::PLAYER_BODY` and
+    // `FALLING_BLOCK_BODY` each name their type once: 2634. These are the
+    // registry keys the sizes are resolved from, not inline ids at a use site.
+    vanilla_id_literals: 2_634,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,

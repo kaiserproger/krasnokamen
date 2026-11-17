@@ -345,3 +345,59 @@ fn vanilla_capability_tables_name_registered_blueprints() {
         }
     }
 }
+
+/// R6 G1: every simulated body size comes from the vanilla f32 contract, so a
+/// 0.6-wide body is `f64::from(0.6f32) / 2` and a clip can never leave it a
+/// rounding step inside a block. The hand-written `0.3` / `1.95` literals are
+/// gone from the blueprint table and from the player, glider, crouch, dismount
+/// and falling-block bodies.
+#[test]
+fn body_sizes_come_from_the_vanilla_entity_contract() {
+    let registry = CoreRegistry::load(None).expect("registry");
+    for name in [
+        "minecraft:zombie",
+        "minecraft:skeleton",
+        "minecraft:cow",
+        "minecraft:spider",
+        "minecraft:villager",
+        "minecraft:iron_golem",
+        "minecraft:chicken",
+    ] {
+        let id = registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .expect("vanilla type");
+        let blueprint = registry.blueprint(id).expect("blueprint");
+        let dimensions = crate::blueprint::contract_dimensions(name);
+        assert_eq!(blueprint.half_width, dimensions.half_width(), "{name}");
+        assert_eq!(blueprint.height, dimensions.height, "{name}");
+    }
+    let zombie = crate::blueprint::contract_dimensions("minecraft:zombie");
+    assert_eq!(zombie.half_width(), f64::from(0.6_f32) / 2.0);
+    assert_ne!(
+        zombie.half_width(),
+        0.3,
+        "the f64 literal is not the contract width"
+    );
+    assert_eq!(
+        crate::blueprint::PLAYER_BODY.half_width(),
+        f64::from(0.6_f32) / 2.0
+    );
+    assert_eq!(crate::blueprint::PLAYER_BODY.height, f64::from(1.8_f32));
+    assert_eq!(
+        *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT,
+        f64::from(0.6_f32)
+    );
+    assert_eq!(
+        *crate::blueprint::PLAYER_CROUCHING_HEIGHT,
+        f64::from(1.5_f32)
+    );
+    assert_eq!(
+        crate::blueprint::FALLING_BLOCK_BODY.half_width(),
+        f64::from(0.98_f32) / 2.0
+    );
+    assert_eq!(
+        crate::blueprint::FALLING_BLOCK_BODY.height,
+        f64::from(0.98_f32)
+    );
+}

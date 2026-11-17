@@ -9,8 +9,31 @@
 //! field outside its [`limits`].
 
 use std::ops::RangeInclusive;
+use std::sync::LazyLock;
 
 use crate::species::AquaticControl;
+
+/// Vanilla body dimensions of a registered entity type, widened from the f32
+/// contract (R6 G1). One source for every hand-written half width and height in
+/// the core: a 0.6-wide body is exactly `f64::from(0.6f32) / 2.0`, so a clip can
+/// never leave it a rounding step inside a block.
+pub(crate) fn contract_dimensions(name: &str) -> mc_data::entity_types::EntityDimensions {
+    mc_data::entity_types::entity_type_contract_26_1_2_by_name(name)
+        .map(mc_data::entity_types::canonical_dimensions)
+        .expect("the vanilla entity contract carries every simulated type")
+}
+
+pub(crate) static PLAYER_BODY: LazyLock<mc_data::entity_types::EntityDimensions> =
+    LazyLock::new(|| contract_dimensions("minecraft:player"));
+
+/// Vanilla `Pose.FALL_FLYING` body height (`EntityDimensions.scalable(0.6F, 0.6F)`).
+pub(crate) static PLAYER_FALL_FLYING_HEIGHT: LazyLock<f64> = LazyLock::new(|| f64::from(0.6_f32));
+
+/// Vanilla `Pose.CROUCHING` body height (`EntityDimensions.scalable(0.6F, 1.5F)`).
+pub(crate) static PLAYER_CROUCHING_HEIGHT: LazyLock<f64> = LazyLock::new(|| f64::from(1.5_f32));
+
+pub(crate) static FALLING_BLOCK_BODY: LazyLock<mc_data::entity_types::EntityDimensions> =
+    LazyLock::new(|| contract_dimensions("minecraft:falling_block"));
 
 /// How the entity phase moves this mob. Selects a [`mc_physics`]
 /// [`PhysicsConfig`](mc_physics::PhysicsConfig), never a type-name branch.
@@ -827,14 +850,22 @@ pub fn vanilla_blueprints(
                     goals: &'static [Goal],
                     sensors: Sensors,
                     params: MobParams,
-                    half_width: f64,
-                    height: f64,
                     offspring: Option<&'static str>,
                     breed_food: &[&str],
                     wool: bool| {
         let Ok(id) = mc_data::Identifier::parse(name) else {
             return;
         };
+        // Body size comes from the vanilla f32 contract only (R6 G1): one
+        // source, no hand-written table. `canonical_dimensions` widens the
+        // contract's `f32` width, so a 0.6-wide body is exactly
+        // `f64::from(0.6f32) / 2.0` and cannot drift by a rounding step.
+        let Some(dimensions) = mc_data::entity_types::entity_type_contract_26_1_2_by_name(name)
+            .map(mc_data::entity_types::canonical_dimensions)
+        else {
+            return;
+        };
+        let (half_width, height) = (dimensions.half_width(), dimensions.height);
         let offspring = offspring.and_then(|offspring| {
             mc_data::Identifier::parse(offspring)
                 .ok()
@@ -899,8 +930,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.3,
-        1.95,
         None,
         &[],
         false,
@@ -923,8 +952,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.3,
-        1.95,
         None,
         &[],
         false,
@@ -947,8 +974,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.7,
-        2.7,
         None,
         &[],
         false,
@@ -972,8 +997,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.3,
-        1.95,
         None,
         &[],
         false,
@@ -999,8 +1022,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.7,
-        0.9,
         None,
         &[],
         false,
@@ -1025,8 +1046,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.3,
-        1.99,
         None,
         &[],
         false,
@@ -1050,8 +1069,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.3,
-        1.7,
         None,
         &[],
         false,
@@ -1074,8 +1091,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.25,
-        0.5,
         None,
         &[],
         false,
@@ -1098,8 +1113,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.45,
-        1.4,
         Some("minecraft:cow"),
         &["minecraft:wheat"],
         false,
@@ -1122,8 +1135,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.45,
-        0.9,
         Some("minecraft:pig"),
         &["minecraft:carrot", "minecraft:potato", "minecraft:beetroot"],
         false,
@@ -1146,8 +1157,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.45,
-        1.3,
         Some("minecraft:sheep"),
         &["minecraft:wheat"],
         true,
@@ -1170,8 +1179,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.2,
-        0.7,
         Some("minecraft:chicken"),
         &[
             "minecraft:wheat_seeds",
@@ -1201,8 +1208,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.125,
-        0.25,
         None,
         &[],
         false,
@@ -1225,8 +1230,6 @@ pub fn vanilla_blueprints(
             armor: 0.0,
             knockback_resistance: 0.0,
         },
-        0.3,
-        1.8,
         None,
         &[],
         false,

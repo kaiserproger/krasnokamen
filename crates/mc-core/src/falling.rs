@@ -51,7 +51,7 @@ pub(crate) fn configure(state: &mut TickState, id: EntityId) {
     state.entities.set_half_width(slot, 0.49);
     let (body, row) = state.entities.parts_mut(slot);
     body.movement = crate::blueprint::MovementClass::Stationary;
-    body.height = 0.98;
+    body.height = crate::blueprint::FALLING_BLOCK_BODY.height;
     row.speed = 0.0;
     row.persistent = true;
     if let Some(falling) = row.falling {
@@ -283,8 +283,8 @@ pub(crate) fn run(
             &sampler,
             mc_physics::Vec3::new(old[0], old[1], old[2]),
             mc_physics::Aabb {
-                half_width: 0.49,
-                height: 0.98,
+                half_width: crate::blueprint::FALLING_BLOCK_BODY.half_width(),
+                height: crate::blueprint::FALLING_BLOCK_BODY.height,
             },
             desired,
             false,

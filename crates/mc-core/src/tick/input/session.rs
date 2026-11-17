@@ -254,8 +254,12 @@ pub(in crate::tick) fn join(
             item: None,
             appearance,
             movement: crate::blueprint::MovementClass::Player,
-            half_width: 0.3,
-            height: if fall_flying { 0.6 } else { 1.8 },
+            half_width: crate::blueprint::PLAYER_BODY.half_width(),
+            height: if fall_flying {
+                *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+            } else {
+                crate::blueprint::PLAYER_BODY.height
+            },
             speed: 4.3,
             attack_damage: 1.0,
             sight_range: 0.0,
