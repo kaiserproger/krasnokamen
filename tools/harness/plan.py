@@ -362,7 +362,7 @@ RULES: tuple[Rule, ...] = (
          ("@innovation",)),
     Rule("ledger", "core", LEDGER_DOC,
          "ledger edits run the regression gate; a status change goes through `ledger promote`",
-         ("docs/bugs/ledger.toml", "docs/bugs/promotions/**"), ("@ledger",)),
+         ("docs/bugs/rows/*.toml", "docs/bugs/promotions/**"), ("@ledger",)),
     Rule("markdown", "core", AGENTS_VALIDATION,
          "Markdown-only changes need doclinks, not Cargo or harness gates",
          ("**/*.md",), ("python3 tools/doclinks.py",)),
@@ -930,13 +930,29 @@ def _ledger_rows(text: str | None) -> dict[str, dict[str, Any]]:
 def _expand_ledger(ctx: Context, rule: Rule, hits: list[str]) -> None:
     why = f"{rule.source}: {rule.why}"
     ctx.plan.add("python3 -m tools.harness run regressions", why=why, paths=tuple(hits), when="integrate")
-    if "docs/bugs/ledger.toml" not in hits:
+    rows = [hit for hit in hits if hit.startswith("docs/bugs/rows/") and hit.endswith(".toml")]
+    if not rows:
         return
-    try:
-        now = _ledger_rows(ctx.text("docs/bugs/ledger.toml", True))
-        before = _ledger_rows(ctx.text("docs/bugs/ledger.toml", False))
-    except (tomllib.TOMLDecodeError, KeyError) as error:
-        ctx.warnings.append(f"ledger.toml could not be compared with the base: {error}")
+    if "docs/bugs/ledger.toml" in ctx.repo_paths(rule.repo):
+        # The one-time split moves every row from the single file: per-row status comparison
+        # would read every row as newly added, so the split change gets the gate, not promotions.
+        return
+    now: dict[str, dict[str, Any]] = {}
+    before: dict[str, dict[str, Any]] = {}
+    paths: dict[str, str] = {}
+    errors = []
+    for rel in rows:
+        for current, sink in ((True, now), (False, before)):
+            try:
+                parsed = _ledger_rows(ctx.text(rel, current))
+            except (tomllib.TOMLDecodeError, KeyError) as error:
+                errors.append(f"{rel} current={current}: {error}")
+                continue
+            sink.update(parsed)
+            if current:
+                paths.update((ident, rel) for ident in parsed)
+    if errors:
+        ctx.warnings.append("ledger rows could not be compared with the base: " + "; ".join(errors))
         return
     changed = sorted(i for i, row in now.items() if i in before and row.get("status") != before[i].get("status"))
     added_fixed = sorted(i for i, row in now.items() if i not in before and row.get("status") == "fixed")
@@ -946,13 +962,13 @@ def _expand_ledger(ctx: Context, rule: Rule, hits: list[str]) -> None:
         if row.get("status") == "fixed" and not row.get("promotion"):
             ctx.warnings.append(f"{row_id}: status is fixed without a promotion receipt; only `ledger promote` sets it")
         ctx.plan.add(f"python3 -m tools.harness ledger promote {row_id}", why=f"{LEDGER_DOC}: status changed",
-                     paths=("docs/bugs/ledger.toml",), when="integrate",
+                     paths=(paths[row_id],), when="integrate",
                      notes=("promote runs its own automatic negative control and needs the real-client "
                             "receipt for client rows",))
     if any(now[i].get("area") == "client" or now[i].get("repro") in ("manual", "client") for i in promoted):
         ctx.plan.add("python3 -m tools.harness run regressions-client",
                      why="docs/bugs/README.md: run when a client-surface fix is promoted",
-                     paths=("docs/bugs/ledger.toml",), when="integrate")
+                     paths=tuple(paths[i] for i in promoted), when="integrate")
     if len(promoted) >= LEDGER_BATCH_MIN:
         ctx.reviewers.setdefault("ledger-batch", []).append(
             f"{AGENTS_RULE5}: {len(promoted)} rows changed status (batch of {LEDGER_BATCH_MIN} or more)")

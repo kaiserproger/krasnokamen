@@ -1,0 +1,12 @@
+[[bug]]
+id = "QA5-FAST-CLICK"
+title = "Historical fast VNC press/release lost clicks unless the user held mouse down/up as a workaround."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-FAST-CLICK"
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:session::actions::fast_click_tests::press_released_before_the_next_tick_still_starts_the_attack"]
+proving_assertions = { "harness:entities:native-v2-input-menus" = "survival_short_click_exact_pickup" }
+fix_commit = "client:a2d0c81d"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-D-fastclick.log: reversing a2d0c81d's 11 non-test hunks (player.rs, player/interaction.rs, session/actions.rs) turns the ref red (a released press still attacks at the next tick), asserting the symptom; area=client, so candidate: real-client check required. Ref runs in the client checkout after the merge"

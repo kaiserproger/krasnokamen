@@ -1,0 +1,12 @@
+[[bug]]
+id = "POTION-CUSTOM-PAYLOAD"
+title = "Lingering potions ignore custom effects and potion impact color ignores its override."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
+regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_custom_payload_and_impact_color_are_preserved"]
+failing_first = "not recorded"
+fix_commit = "bafcdb6f0"
+repro_check = "candidate: bafcdb6f0's payloads.rs reverse conflicts in 10 blocks after b46ace161 rewrote the cloud code, and reversing b46ace161 leaves the ref green, so no real-hunk control exists; only a synthetic mutation was red and is not counted; client repro, real-client gate pending (stage 3)"

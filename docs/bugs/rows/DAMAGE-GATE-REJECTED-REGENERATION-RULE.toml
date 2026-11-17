@@ -1,0 +1,12 @@
+[[bug]]
+id = "DAMAGE-GATE-REJECTED-REGENERATION-RULE"
+title = "The graphical damage fixture sends an unsupported regeneration gamerule"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Independent graphical damage QA observed rejection of gamerule natural_regeneration, so later health assertions did not have the intended regeneration-off fixture. The owning native P4 fixture now sends natural_health_regeneration false and requires actual command feedback. The corrected full run observes that feedback, but the full graphical gate still fails physical fall readiness and has no acceptance or ledger promotion."
+regression = ["harness:entities:native-v2-p4-damage", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_gamerule_fixture_requires_supported_rule_and_ack"]
+repro_check = "negative control receipts/XHarnessGates/neg-damage-regeneration.log (ack wait removed -> both rule subtests red); candidate: no exact revert - 4a74eaca's hunks conflict on HEAD and the current form comes from b0fa3d298 whose hunks also conflict (native_p4.py:233); the control is fix-lines-only (ack wait removed), receipts/XHarnessGates/neg-damage-regeneration.log"
+failing_first = "reported"
+fix_commit = "4a74eaca"

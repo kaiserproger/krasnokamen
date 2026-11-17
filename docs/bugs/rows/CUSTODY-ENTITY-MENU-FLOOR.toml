@@ -1,0 +1,12 @@
+[[bug]]
+id = "CUSTODY-ENTITY-MENU-FLOOR"
+title = "A player stack reserved by a plugin can be moved into entity cargo below its reservation floor: mount and vehicle handlers directly mutate player/container, bypassing generic planned-transition floor refusal. Same contract gap, not two bugs."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "BUGS.md#CUSTODY-ENTITY-MENU-FLOOR: \"original source-only finding, no demonstrated live duplication/loss\" (Main ruling 2026-11-11: repro is source, not manual)"
+regression = ["cargo:mc-core:plugin_inventories::tests::entity_menu_clicks_preserve_reserved_player_inventory_and_resync"]
+# Fix 2ccf8cc1 (floor check in mounts/menus.rs, vehicles/containers.rs) is spread over a 32-file commit whose reversal does not build; the control neutralises the two floor checks only.
+fix_commit = "patch:93d96cba20ed65cefc6fc3c23b12b8db2bc5d78b241d191458df30bf8f3cc92a"
+promotion = "docs/bugs/promotions/CUSTODY-ENTITY-MENU-FLOOR.json"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "GAP-SCHEMATIC-TREES"
+title = "Accepted residual, FIXED @382da246: wiki-level bending/shape; fungus height nextInt(4..13)+double-on-nextInt(12)==0 per HugeFungusFeature citation."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SCHEMATIC-TREES"
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil", "cargo:mc-core:farming_tests::fungus_plans_include_normal_and_doubled_stems_with_wart_caps"]
+failing_first = "not recorded"

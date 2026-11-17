@@ -1,0 +1,10 @@
+[[bug]]
+id = "RESPAWN-PARTIAL-COLLISION"
+title = "A carpeted two-block-high bedroom loses a valid bed respawn and sends the player to world spawn; charged-anchor rooms share the coarse collision rejection. Both require entire feet/head cells to classify Air rather than fitting the player's AABB above the partial surface."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RESPAWN-PARTIAL-COLLISION"
+regression = ["cargo:mc-core:sleep::tests::respawn_on_carpet_uses_its_collision_height", "cargo:mc-core:dimensions::tests::anchor_respawn_uses_carpet_collision_height"]
+repro_check = "round 2: green with the child-sender routing fix and no test edit; with the routing reversed the ref reports [8.0,150.0,8.0] and 150.0 instead of [8.5,151.0,8.5] and 150.0625. The row's own fix is untouched and its status stays fixed"

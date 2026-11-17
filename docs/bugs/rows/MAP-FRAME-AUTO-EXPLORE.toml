@@ -1,0 +1,12 @@
+[[bug]]
+id = "MAP-FRAME-AUTO-EXPLORE"
+title = "A framed, unlocked map refreshes terrain without any player holding that map or a clone. Merely standing near a wall map can overwrite its captured terrain or reveal unexplored pixels, unlike vanilla's held-map exploration requirement."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-AUTO-EXPLORE"
+regression = ["cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held"]
+failing_first = "reported"
+fix_commit = "33812b466"
+repro_check = "candidate: 33812b466's maps/runtime.rs reverse conflicts inside the explorers/frame_types block and the exploration loop, so no real-hunk control; only a synthetic mutation was red and is not counted; client repro, real-client gate pending (stage 3)"

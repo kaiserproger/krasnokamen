@@ -8,7 +8,9 @@ Subcommands:
                         launch (or check) a real client; replaces the two
                         run-*-client-mcp.sh launchers
   mcp ...               route to the client MCP smoke (tools/harness/mcp.py)
-  ledger probe|promote  classify bug-ledger rows / the only way a row becomes fixed
+  ledger show|list|edit|probe|promote|split
+                        read and edit one row file; classify rows / the only way
+                        a row becomes fixed; convert the single-file ledger
   plan [--base REV] [--paths ...] [--json]
                         print the validation a change requires (tools/harness/plan.py)
 """

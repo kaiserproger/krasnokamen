@@ -1,0 +1,10 @@
+[[bug]]
+id = "P5"
+title = "Native LOD server advertises service but client ignores its hello/program and never requests tiles."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P5"
+regression = []
+repro_check = "candidate: no scoped fix commit to reverse - the stage-0 merge already handles hello/program/tiles in both the dispatch and the far updater, and fe07445f only pins hello->lod/request; area=client, real-client check required"

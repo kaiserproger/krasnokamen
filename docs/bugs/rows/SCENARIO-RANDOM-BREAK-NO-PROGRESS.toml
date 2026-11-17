@@ -1,0 +1,12 @@
+[[bug]]
+id = "SCENARIO-RANDOM-BREAK-NO-PROGRESS"
+title = "Network mining harness sent 26.3 Cancel instead of Finish because it used the older player-action ordinals; the observed failure does not establish a server mining bug."
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
+regression = ["harness:matrix-random:protocol-random-break-seed-4", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_sends_start_then_stop_with_sequence", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_phases_send_exact_actions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_mining_waits_for_exact_ack_including_sequence_zero"]
+fix_commit = "5cbed1e33"
+repro_check = "control receipts/XHarnessJava/NC-R6-reverse-5cbed1e33.log (both non-test files reversed -> 3 red: stop/abort codes and the drop code); live twin in receipts/CheckInvalid3; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+failing_first = "reported"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "SUMMON-AGE"
+title = "Gallery summon with Age:-24000 rejects squid, glow_squid, skeleton_horse and zombie_horse with explicit unsupported-field error; baby fixtures cannot be authored."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
+regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families", "harness:entities:native-v2-summon-age"]
+fix_commit = "patch:c9e6a2f3467c0e78076dea00299c9d6e1693d5eed3a065324d36e1bb3d60636f"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red `squid {Age:-1234}` / `skeleton_horse {Age:-1234}`: `Entity does not support summon NBT field Age`"

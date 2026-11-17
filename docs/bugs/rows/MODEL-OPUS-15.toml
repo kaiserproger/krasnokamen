@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-15"
+title = "Elytra and capes are never drawn."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:170"
+regression = ["client:krasnokamen-client:entities::equipment::tests::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"

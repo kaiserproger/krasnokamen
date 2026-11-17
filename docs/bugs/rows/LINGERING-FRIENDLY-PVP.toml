@@ -1,0 +1,10 @@
+[[bug]]
+id = "LINGERING-FRIENDLY-PVP"
+title = "Disabling PvP also disables beneficial lingering potion effects on other players: player A cannot heal or buff player B with a cloud, although self-use and ordinary splash healing remain allowed. A generic pre-effect PvP gate rejects the entire target, not merely harmful damage."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LINGERING-FRIENDLY-PVP"
+regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_healing_cloud_heals_other_player_with_pvp_off"]
+failing_first = "reported"

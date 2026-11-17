@@ -1,0 +1,11 @@
+[[bug]]
+id = "HS-3"
+title = "Imported unsupported sand/gravel with a saved due gravity tick stays suspended without new edits; distinct from native rendering and setblock observation."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
+regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes"]
+fix_commit = "d3e8d4686"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-hs3-daylight.log: reversing the falling and redstone gravity fix fails the saved-due-tick ref. Manual repro still needs its client gate."

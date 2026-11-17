@@ -11,7 +11,6 @@ import shutil
 import shlex
 import subprocess
 import sys
-import tomllib
 
 from .ledger_base_fixed import BASE_FIXED
 from tools.dev.wtlib import PINS
@@ -514,13 +513,10 @@ def is_graphical_ref(ref):
 
 
 def run(ctx):
+    from . import ledger as ledger_tool
     from . import profiles
 
-    with (REPO_ROOT / 'docs/bugs/ledger.toml').open('rb') as file:
-        ledger = tomllib.load(file)
-    if set(ledger) != {'bug'} or not isinstance(ledger['bug'], list) or not ledger['bug']:
-        raise ValueError('ledger must contain a nonempty [[bug]] array and no other tables')
-    bugs = ledger['bug']
+    bugs = ledger_tool.load_rows(REPO_ROOT)
     ids = set()
     cargo = defaultdict(lambda: defaultdict(set))
     clients = defaultdict(set)
@@ -528,13 +524,7 @@ def run(ctx):
     client_tests = defaultdict(set)
     errors = []
     for bug in bugs:
-        if not isinstance(bug, dict):
-            errors.append('bug entry must be a table')
-            continue
-        ident = bug.get('id')
-        if not isinstance(ident, str) or not ident or ident in ids:
-            errors.append(f'invalid or duplicate bug id: {ident!r}')
-            continue
+        ident = bug['id']
         ids.add(ident)
         errors.extend(_promotion_errors(ident, bug))
         if REQUIRED - bug.keys() or bug.keys() - REQUIRED - OPTIONAL:
@@ -594,7 +584,6 @@ def run(ctx):
     # Refuse before any unit/Cargo gates: a missing pin cannot be repaired by this run.
     binary = _release_server(ctx, profiles) if ctx.include_regression_client and clients else None
     failures = []
-    from . import ledger as ledger_tool
     for refs, execute in ((python_refs, ledger_tool._run_python),
                           (client_tests if ctx.include_regression_client else {}, ledger_tool._run_client)):
         if refs:

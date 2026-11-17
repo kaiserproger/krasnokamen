@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-ENTITY-LEASH"
+title = "Leash rope is never drawn (leash holder tracked; material has no producer)"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
+regression = ["harness:scene-shot:native-entity-visuals"]
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "leash_rope_drawn" }
+repro_check = "26.3 LeashFeatureRenderer needs the holder transform in the emit path; the scene checks rope pixels."

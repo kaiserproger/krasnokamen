@@ -1,0 +1,10 @@
+[[bug]]
+id = "GAP-VINE-TOP-BOTTOM"
+title = "Accepted residual, FIXED @9dd0ee29: ceiling click sets up=true (getStateForPlacement skips DOWN; ceiling via looking direction — CITATIONS.md VineBlock section)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-VINE-TOP-BOTTOM"
+regression = ["cargo:mc-core:farming_tests::placed_vines_attach_to_the_clicked_wall_and_can_spread"]
+failing_first = "not recorded"

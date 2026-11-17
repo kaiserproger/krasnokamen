@@ -1,0 +1,10 @@
+[[bug]]
+id = "AMETHYST-GROWTH"
+title = "Budding amethyst never creates buds or advances them to harvestable clusters, so cleared geodes cannot renew amethyst shards."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AMETHYST-GROWTH"
+regression = ["cargo:mc-core:farming_tests::budding_amethyst_sprouts_buds_that_advance_to_clusters", "cargo:mc-core:farming_tests::amethyst_picks_only_one_random_face_per_tick", "cargo:mc-core:farming_tests::amethyst_advances_waterlogged_buds_to_cluster"]
+failing_first = "reported"

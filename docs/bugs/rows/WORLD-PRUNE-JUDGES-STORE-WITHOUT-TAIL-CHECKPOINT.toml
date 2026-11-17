@@ -1,0 +1,10 @@
+[[bug]]
+id = "WORLD-PRUNE-JUDGES-STORE-WITHOUT-TAIL-CHECKPOINT"
+title = "world prune does not check that its open/shutdown cycle published a checkpoint covering the crash journal tail"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Independent review receipts/ReviewPruneFix/REPORT.md (architect-fable, 2026-11-16), finding 1, inferred from code, not reproduced: prune_world (crates/mc-world-tools/src/world_maintenance.rs:115-131) opens and shuts the world down, then judges chunk rows without checking that a checkpoint covering the journal tail was published (core.rs:1442-1467, core_stop.rs:32-41, core/tick_loop.rs:478-480, core/journal.rs:110-133,188-193). If the final checkpoint is refused or the tick thread panics, prune judges a store without the tail and reports success; a chunk changed only in the WAL could then be pruned and regenerated (its WAL edits replay at the next start). Pre-existing before the WORLD-PRUNE-PANICS-ON-CRASH-IMAGE fix for tails without block writes. Suggested guard: after shutdown and the lease, refuse while journal/ holds a batch above the manifest tick. Announcement backlog."
+repro = "source"
+regression = []
+failing_first = "not recorded"

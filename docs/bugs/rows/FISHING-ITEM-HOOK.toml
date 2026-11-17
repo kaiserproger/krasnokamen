@@ -1,0 +1,10 @@
+[[bug]]
+id = "FISHING-ITEM-HOOK"
+title = "Fishing rods cannot hook/retrieve a dropped item: the shared projectile candidate list excludes every Item entity before the fishing-specific impact handler."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FISHING-ITEM-HOOK"
+regression = ["cargo:mc-core:projectiles::fishing::tests::hooked_item_reels_with_impulse_and_costs_three_durability", "cargo:mc-core:projectiles::flight_tests::arrow_passes_dropped_item_while_fishing_hook_exists"]
+failing_first = "reported"

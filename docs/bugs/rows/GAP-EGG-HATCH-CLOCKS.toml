@@ -1,0 +1,10 @@
+[[bug]]
+id = "GAP-EGG-HATCH-CLOCKS"
+title = "Accepted residual, FIXED @533076b8: sniffer thirds of 24000/12000-moss + frogspawn 3600..12000 scheduled clock (sipush verified here), turtle keeps night random-tick; new eggs.rs scheduled_tick hooked into block-tick clock."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-EGG-HATCH-CLOCKS"
+regression = ["cargo:mc-core:farming_tests::egg_scheduled_clocks_use_vanilla_delays", "cargo:mc-core:farming_tests::turtle_eggs_crack_at_night_into_baby_turtles", "cargo:mc-core:farming_tests::sniffer_eggs_hatch_into_baby_sniffers", "cargo:mc-core:farming_tests::frogspawn_hatches_tadpoles_in_water", "cargo:mc-core:farming_tests::placed_sniffer_egg_cracks_on_each_scheduled_boundary", "cargo:mc-core:farming_tests::frogspawn_gameplay_write_schedules_and_hatches_at_deadline"]
+failing_first = "not recorded"

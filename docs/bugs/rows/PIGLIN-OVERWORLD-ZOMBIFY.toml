@@ -1,0 +1,10 @@
+[[bug]]
+id = "PIGLIN-OVERWORLD-ZOMBIFY"
+title = "Piglins and hoglins never zombify outside the Nether: vanilla tracks `timeInOverworld` and converts after 15s (`AbstractPiglin.CONVERSION_TIME`, pinned bytecode). The candidate has no overworld timer, no conversion path, and no converted-sound hook — piglins persist indefinitely in the Overworld/End. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PIGLIN-OVERWORLD-ZOMBIFY"
+regression = ["cargo:mc-core:piglin::tests::overworld_piglin_family_zombifies_after_fifteen_seconds"]
+failing_first = "reported"

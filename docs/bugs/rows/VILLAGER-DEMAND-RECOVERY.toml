@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-DEMAND-RECOVERY"
+title = "An inflated trade's demand cannot recover when the player stops using that offer and buys another: restock changes demand only for offers whose uses are positive. Unused offers retain their inflated prices indefinitely across otherwise successful work restocks."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-DEMAND-RECOVERY"
+regression = ["cargo:mc-core:villager::trades::tests::unused_offer_demand_recovers_on_work_restock"]
+failing_first = "reported"

@@ -1,0 +1,26 @@
+[[bug]]
+id = "HARNESS-JAVA-ENDPOINT-SELECTORS-DROPPED"
+title = "Exact Java endpoint selectors are dropped before Gradle launches"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "Stage3 S3Scenes: requested 26.1.2 Fabric launches 26.3; runtime.start_client and java_launcher.prepare_fabric_launch"
+repro = "source"
+regression = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_exact_selectors_reach_spawned_gradle_command",
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_legacy_selectors_refuse_composition_change_before_spawn",
+  "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_selectors_never_switch_a_resolved_task",
+]
+fix_commit = "f645ca39a"
+repro_check = """e774598aacd137c2749e6993019a45f221af0499 wired the exact selector helper and its spawned-command test. git log -m -p -S'modded_gradle_arguments(task)' identifies merge 6b76082affa21d5796072958883102565e00d60e (2026-11-14T14:14:57Z), relative to parent b363ba41d, removing that call; the merged test file also lost its endpoint regression. The prepared-Fabric path independently used a bare task. Restored both paths, with explicit refusal rather than silently changing the legacy no-Loader composition. Mocked launch tests isolate sibling discovery from main_checkout's Git subprocess in linked worktrees.
+Post-merge 26.1.2 claim inventory (no reruns; paths relative to the shared work root):
+- wt/S3Scenes/.analysis/validation/20261115T000735-java-battle-functional-_355wo40/result.json: requested 26.1.2, actual Fabric log 26.3, invalid version evidence.
+- wt/S3Scenes/.analysis/validation/20261115T001100-java-battle-functional-w9y6q10t/result.json: requested 26.1.2, PovRed.log:35 actual 26.3, invalid version evidence.
+- wt/S3Scenes/.analysis/validation/20261115T001007-java-battle-functional-09_996pu/result.json: cancelled setup attempt, not endpoint evidence.
+- wt/S3Scenes/.analysis/validation/20261115T001320-java-battle-functional-rbmpp90_/result.json: cancelled setup attempt, not endpoint evidence.
+- wt/S3Scenes/.analysis/validation/20261115T001925-java-battle-functional-illqreor/result.json: explicit GRADLE_OPTS workaround; PovRed.log:34 and CamSpec.log:30 actually identify 26.1.2 Fabric.
+- wt/S3Scenes/.analysis/validation/20261115T002116-java-battle-functional-9ipra4j4/PovRed.log:95: explicit GRADLE_OPTS workaround; actual 26.1.2 NeoForge (log present while result was not yet published at inventory time).
+Search covered wt/*/.analysis/validation result.json and Java logs, plus receipts result.json and Stage3 logs/reports. No post-merge 26.2 Java claim found. The explicit 26.1.2 claims under receipts/JavaGateBreaker, receipts/JavaLoaderGate and receipts/ClientQ02B predate the removal timestamp and are not classified as affected by this merge. Full inventory: receipts/HarnessFix2/java-receipt-inventory.json.
+Isolated helper/dispatch reversal: receipts/HarnessFix2/red-endpoints-clean.log, all four tests red at missing selectors or missing conflict refusal (eight assertion failures across endpoint subtests). Restore: receipts/HarnessFix2/green-final-units.log. No real Java gate rerun or gameplay acceptance claimed."""
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/HARNESS-JAVA-ENDPOINT-SELECTORS-DROPPED.json"

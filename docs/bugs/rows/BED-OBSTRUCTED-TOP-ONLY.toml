@@ -1,0 +1,10 @@
+[[bug]]
+id = "BED-OBSTRUCTED-TOP-ONLY"
+title = "A bed with an obstructing ceiling over a bed half may incorrectly admit sleep."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "ReviewAcceptanceOpus first-promotion-batch; verify vanilla javap"
+regression = ["cargo:mc-core:sleep::tests::obstruction_above_either_bed_half_prevents_sleep_with_clear_exits"]
+failing_first = "reported"

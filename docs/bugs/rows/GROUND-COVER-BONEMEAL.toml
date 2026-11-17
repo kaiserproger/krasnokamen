@@ -1,0 +1,10 @@
+[[bug]]
+id = "GROUND-COVER-BONEMEAL"
+title = "Ordinary moss spreading and Nether ground-cover propagation do nothing: moss cannot convert neighboring stone/dirt, nylium produces no roots/fungi, and netherrack beside nylium cannot convert. These absent ground-cover fertilizer outcomes share the same grass-only fallback."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GROUND-COVER-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::bone_meal_spreads_moss_and_nylium_and_converts_netherrack", "cargo:mc-core:farming_tests::bone_meal_on_nylium_produces_nether_ground_cover"]
+failing_first = "not recorded"

@@ -1,0 +1,16 @@
+[[bug]]
+id = "HARNESS-DROPPED-CLOCK-HUD-ORACLE"
+title = "Dropped-clock scene can accept changing hotbar pixels as a changed clock face"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 S3Scenes: dynamic_context_scene clock is mostly below HUD; scene_shot dark-angle ROI overlaps the hotbar"
+repro = "client"
+regression = [
+  "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock",
+  "python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud",
+  "harness:scene-shot:native-dynamic-context",
+]
+fix_commit = "f645ca39a"
+repro_check = "The dropped fixture is y161.4 with fixed block lighting. Followup fad1cef1e measures blue occupancy in an 8x8 grid inside the gold rim, not total blue area (opposite phases can have equal areas), and excludes HUD/chat. Only the original HUD/dark-angle oracle restored: receipts/HarnessFix2/red-clock-only.log accepts the HUD-only counterexample. Followup unit suite: receipts/HarnessFix2/green-followup-scene-units.log, 72 tests pass. Real-client native-dynamic-context passes 3/3: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. Dropped and held day/night frames of the first run were reviewed; no item-frame coverage or general MODEL-DYNAMIC-CONTEXT promotion is claimed."
+failing_first = "not recorded"

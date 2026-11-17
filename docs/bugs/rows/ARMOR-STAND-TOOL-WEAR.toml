@@ -1,0 +1,10 @@
+[[bug]]
+id = "ARMOR-STAND-TOOL-WEAR"
+title = "Breaking armor stands with an ordinary tool costs no tool durability: the stand-specific melee handler exits before the ordinary held-item attack pipeline and performs no held-stack mutation of its own."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-TOOL-WEAR"
+regression = ["cargo:mc-core:armor_stand::tests::breaking_armor_stand_wears_held_tool"]
+failing_first = "not recorded"

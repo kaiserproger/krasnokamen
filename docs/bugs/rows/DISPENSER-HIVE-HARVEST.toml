@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-HIVE-HARVEST"
+title = "Dispensers cannot harvest full beehives/bee nests: glass bottles and shears are ejected unchanged instead of yielding honey bottles/honeycomb and resetting honey level."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-HIVE-HARVEST"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_hive_harvest", "cargo:mc-core:redstone::containers::tests::automation_regression_hive_releases_occupants"]
+failing_first = "reported"

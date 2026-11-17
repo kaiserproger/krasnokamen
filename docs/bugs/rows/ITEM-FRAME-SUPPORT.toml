@@ -1,0 +1,10 @@
+[[bug]]
+id = "ITEM-FRAME-SUPPORT"
+title = "Normal/glow item frames reject valid partial-block supports because attachment requires an entirely covered collision face; ordinary storage-label/decorative placement on chest/slab/fence sides is unavailable. The same over-strict rule also governs support invalidation."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-SUPPORT"
+regression = ["cargo:mc-core:item_frame::tests::partial_block_supports_hold_normal_and_glow_frames"]
+failing_first = "not recorded"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "ELYTRA-FIREWORK-BOOST"
+title = "Using a firework while gliding fails to boost flight speed."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ELYTRA-FIREWORK-BOOST"
+regression = ["cargo:mc-core:tick_tests::movement_tests::gliding_firework_use_boosts_flight_speed"]
+failing_first = "reported"

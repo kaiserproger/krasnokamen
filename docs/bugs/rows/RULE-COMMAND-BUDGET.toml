@@ -1,0 +1,10 @@
+[[bug]]
+id = "RULE-COMMAND-BUDGET"
+title = "max_command_sequence_length1 does not stop a3-command function; runtime charges constant65536."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RULE-COMMAND-BUDGET"
+regression = ["cargo:mc-core:datapacks::tests::command_parity_configured_sequence_budget_is_per_invocation"]
+failing_first = "reported"

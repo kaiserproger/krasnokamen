@@ -1,0 +1,13 @@
+[[bug]]
+id = "TEST-JAVA-CAPABILITIES"
+title = "Java matrix cumulative chat is unavailable because bounded newest-first GUI recent_chat is not the applied system-chat journal"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts", "harness:scene-shot:java-matrix-system-chat"]
+proving_assertions = { "harness:scene-shot:java-matrix-system-chat" = "system_chat_producer_reaches_matrix_events" }
+repro_check = "Cumulative-chat scope only. Real Java joins once, receives one unique system chat, and exposes it through the actual loader producer and JavaMatrixClient.snapshot. receipts/HarnessFix4Proof/java-producer.red.log removes only MinecraftClientObservation received_system_chat emission and fails system_chat_producer_reaches_matrix_events, not startup or timeout; producer and adapter restore receipts are in REPORT.md. Unit refs retain duplicate/order projection and missing/lost receipt rejection; the one-message live gate does not prove multi-message ordering. Prediction/ACK/target-mod lanes remain in TEST-JAVA-PREDICTION-ACK-LANES. Main must rerun promotion on its merged-tree pin."
+fix_commit = "patch:27496b8944131e3b86385de3ab13027df0766e6bcda7b71adafdf5205728a047"
+failing_first = "reported"

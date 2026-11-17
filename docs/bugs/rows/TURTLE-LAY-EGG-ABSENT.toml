@@ -1,0 +1,10 @@
+[[bug]]
+id = "TURTLE-LAY-EGG-ABSENT"
+title = "Turtles never lay eggs or navigate home: no `lay_egg/LayEgg/home-beach` logic exists anywhere in core — only generic breed goals. Vanilla turtles return to their home beach and lay 1-4 eggs that hatch in stages. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TURTLE-LAY-EGG-ABSENT"
+regression = ["cargo:mc-core:entity_life_tests::turtle_carries_eggs_home_before_laying_on_sand", "cargo:mc-core:farming_tests::turtle_eggs_crack_at_night_into_baby_turtles"]
+failing_first = "reported"

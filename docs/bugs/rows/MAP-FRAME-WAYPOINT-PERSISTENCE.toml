@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-FRAME-WAYPOINT-PERSISTENCE"
+title = "A framed home-map waypoint disappears from the traveler's held clone once every player moves beyond the frame-view radius, although the frame remains inside the map's represented area. It therefore cannot serve as a distant home waypoint."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-WAYPOINT-PERSISTENCE"
+regression = ["cargo:mc-core:tick_tests::maps_tests::framed_waypoints_survive_nbt_roundtrip", "cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held", "harness:entities:native-v2-map-frame-waypoint"]
+failing_first = "reported"

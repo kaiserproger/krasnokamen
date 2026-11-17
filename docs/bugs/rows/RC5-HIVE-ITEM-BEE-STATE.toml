@@ -1,0 +1,19 @@
+[[bug]]
+id = "RC5-HIVE-ITEM-BEE-STATE"
+title = "RC5 hive items in player custody lose legacy native bee state on import"
+area = "gameplay"
+severity = "major"
+status = "fixed"
+source = "Stage2Review/terra-edge-events.md finding 3; Stage2X SLICES.md:172-173"
+repro = "source"
+regression = [
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::captured_rc5_bee_image_requires_migration_and_keeps_strict_current_schema",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_equipment_hive_items_are_owned",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_carried_hive_items_are_owned",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_crafting_hive_items_are_owned",
+  "cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee",
+]
+fix_commit = "patch:f2b02f99a0411b887329667c47078408bce9d513fd36875ecabeab709a7befae"
+repro_check = "The fix spans 259a078ef and 602c20cfd on wt/XEdgeEvents, not merged into wt/M3Server at filing. Legacy minecraft:bees item components and scalar rider images require typed migration, including player equipment, cursor and crafting custody. The initial normalizer skipped these owned components and the first fixture used a current image, masking RC5 rider incompatibility. The round-3 fixture is synthetic, not a real RC5 save: a test added to an RC5 source checkout builds a bee and serializes its native image with RC5 code (receipts/XEdgeEvents/rc5-capture-source.diff:258-283); the regression embeds that image in a current player export and renames the outer key to solaris:HiveEntity (pre_rename_bee_tests.rs:239-299), then imports, places and releases the bee. Branch check cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee; green receipts/XEdgeEvents/round3-conversion.log, red receipts/XEdgeEvents/round3-image-red-rc5_hive_item_export_import_place_release_preserves_native_bee.log and round3-player-red-exits.log. The import of an actual RC5 world is tracked in RC5-HIVE-REAL-WORLD-IMPORT."
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/RC5-HIVE-ITEM-BEE-STATE.json"

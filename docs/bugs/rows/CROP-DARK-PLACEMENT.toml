@@ -1,0 +1,10 @@
+[[bug]]
+id = "CROP-DARK-PLACEMENT"
+title = "Wheat seeds are accepted onto farmland in a completely dark roofed room, despite Java requiring sufficient light to plant; the server only checks farmland support."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CROP-DARK-PLACEMENT"
+regression = ["cargo:mc-core:farming_tests::wheat_seeds_refuse_planting_in_darkness_but_accept_light"]
+failing_first = "not recorded"

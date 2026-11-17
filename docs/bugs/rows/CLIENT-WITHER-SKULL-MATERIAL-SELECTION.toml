@@ -1,0 +1,12 @@
+[[bug]]
+id = "CLIENT-WITHER-SKULL-MATERIAL-SELECTION"
+title = "The native wither skull default material selection remains unresolved"
+area = "client"
+severity = "major"
+status = "open"
+source = "ClientQ04 production material-selection coverage observed selection/minecraft:wither_skull/adult/default return variant material not yet received/resolved despite an authored wither_skull rig. The actual production selector takes the empty family default texture and has no wither-skull material branch. This is source-fixture evidence, not a claimed runtime crash. Client tests: entities::solaris_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag."
+repro = "source"
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag"]
+failing_first = "reported"
+fix_commit = "client:f4bd26d4"
+repro_check = "candidate: real revert (the DATA_DANGEROUS material branch removed) reds the ref on the selected texture (wither vs wither_invulnerable), receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"

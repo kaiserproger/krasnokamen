@@ -1,0 +1,10 @@
+[[bug]]
+id = "POTION-SPLASH-VERTICAL"
+title = "Splash potions affect entities wholly above the permitted vertical volume."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-TARGET-GEOMETRY"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_rejects_targets_above_the_vertical_band"]
+failing_first = "not recorded"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "TICK-FROZEN-GAME-AGE-RESTART"
+title = "Restart loses accumulated held ticks and jumps simulated game age to the recovered WAL frame"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "core/recovery.rs restores the native frame into a new TickState, while TickControl starts with held_ticks=0. The runtime-only held offset is not in checkpoint metadata. Separate from the SET_TIME projection fix; no storage migration was made."
+regression = ["cargo:mc-core:weather::tests::frozen_game_age_survives_checkpoint_and_held_wal_tail", "cargo:mc-core:weather::tests::climate_image_recovers_game_age_in_every_tick_phase"]
+failing_first = "not recorded"
+fix_commit = "c9c13b37505580495a3553eff10e10d1495292d2"
+promotion = "docs/bugs/promotions/TICK-FROZEN-GAME-AGE-RESTART.json"

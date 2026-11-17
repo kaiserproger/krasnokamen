@@ -1,0 +1,11 @@
+[[bug]]
+id = "ENTITY-STYLED-CUSTOM-NAME-REFUSED"
+title = "Summon refuses styled compound entity CustomName components"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "FixBatchB F2 triage: CustomName:{text:'NamedCow',color:'red'} is explicitly refused by command_summon; plain strings and {text:string} work. Needed cutover: structured native appearance/checkpoint name representation plus entity OptionalComponent wire codec, with persistence review."
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Existing command_summon::tests::unsupported_styled_custom_name_is_not_silently_flattened asserts the explicit refusal. Quoted-JSON CustomName strings are literal in vanilla 26.x, not selector defects; preserve command_execution::tests::json_shaped_summon_custom_name_stays_literal_in_vanilla_26."

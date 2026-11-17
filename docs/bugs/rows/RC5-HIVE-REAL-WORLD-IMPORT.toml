@@ -1,0 +1,11 @@
+[[bug]]
+id = "RC5-HIVE-REAL-WORLD-IMPORT"
+title = "An actual RC5 world with a hive item in player custody has not been imported to prove the migrated bee state"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Split from RC5-HIVE-ITEM-BEE-STATE (independent review of the ledger batch): its regressions use a synthetic RC5 bee image captured with RC5 code and embedded in a current player export (pre_rename_bee_tests.rs), not a real RC5 save. Main's decision (Stage2X SLICES.md:184-185): the real RC5 world import stays a stage-3 check."
+repro = "manual"
+regression = []
+failing_first = "not recorded"
+repro_check = "Import an actual RC5 world whose player carries a bee hive or bee nest item (inventory, equipment, cursor and crafting grid), place the item and release the bee; the occupants must survive. Needs a real RC5 save; no unit test closes it."

@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-OPUS-10"
+title = "Hoglin ears and tusks, baby bee limbs, guardian spikes and strider bristles or proportions are missing or malformed"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:135"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts", "client:krasnokamen-client:entities::animation_tests::animation_roleless_named_parts_move_without_erasing_authored_orientation"]
+fix_commit = "client:92dcb25d"
+repro_check = "candidate: same real revert run (red); guardian/elder_guardian blocked on named-part animation; area=client, real-client check required; round 3 adds guardian/elder_guardian (client:92dcb25d) with its real revert control; area=client, candidate: real-client check required"

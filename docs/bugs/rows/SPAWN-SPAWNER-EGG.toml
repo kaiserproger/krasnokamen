@@ -1,0 +1,11 @@
+[[bug]]
+id = "SPAWN-SPAWNER-EGG"
+title = "Using spawn egg on spawner spawns adjacent mob rather than configuring SpawnData."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-EGG"
+regression = ["cargo:mc-core:spawn_egg::tests::fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:3b38fe9cf26516c2f1639bd071dd6b861c688d84c797dffe598be04ffd251125"
+promotion = "docs/bugs/promotions/SPAWN-SPAWNER-EGG.json"

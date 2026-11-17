@@ -1,0 +1,10 @@
+[[bug]]
+id = "CUSTOM-FOOD-CONSUME-EFFECTS"
+title = "Registered custom foods consume/nourish using their selected ItemFacts but silently ignore their declared consume_effects; effects are instead hard-coded by vanilla carrier item name. A bread-carrier food configured to grant Speed yields no effect."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CUSTOM-FOOD-CONSUME-EFFECTS"
+regression = ["cargo:mc-core:effects::tests::custom_food_consumption_applies_declared_effect"]
+failing_first = "not recorded"

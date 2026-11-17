@@ -1,0 +1,10 @@
+[[bug]]
+id = "SNIFFER-SEED-PLACEMENT"
+title = "Torchflower seeds and pitcher pods cannot be planted on farmland: neither item has a planting alias, and neither item name identifies a block. Grouped as one missing seed-to-crop mapping defect."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-SEED-PLACEMENT"
+regression = ["cargo:mc-core:farming_tests::sniffer_seeds_plant_their_crops_on_farmland"]
+failing_first = "not recorded"

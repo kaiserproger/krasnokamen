@@ -1,0 +1,10 @@
+[[bug]]
+id = "DATAPACK-FEATURE-ADMISSION"
+title = "Directory-pack loading accepts metadata that requires a world-disabled feature flag: pack.mcmeta is checked only for an object-valued pack field, so the declared feature requirement is ignored and its functions/resources are loaded."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-FEATURE-ADMISSION"
+regression = ["cargo:mc-core:datapacks::tests::disabled_feature_pack_cannot_load_or_execute_its_function"]
+failing_first = "reported"

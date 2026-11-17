@@ -1,0 +1,12 @@
+[[bug]]
+id = "CIVILIZATION-FUNDED-KIND-SITE-STARVATION"
+title = "A funded Mine with no legal site monopolizes autonomous planning despite a funded Mason with a legal site."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/kind-starvation-baseline.log"
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason"]
+fix_commit = "patch:52f3b7a5c34f1c9772475a9240a6c42e69a0f14a59a0a268e95a3daa9155a793"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/CIVILIZATION-FUNDED-KIND-SITE-STARVATION.patch (patch:52f3b7a5c34f1c97), reverse-ok; supersedes commit 898af472; control red at site_tests.rs:1170 (control2-CIVILIZATION-FUNDED-KIND-*.log)"

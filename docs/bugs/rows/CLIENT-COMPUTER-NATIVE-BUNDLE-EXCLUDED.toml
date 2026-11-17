@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-COMPUTER-NATIVE-BUNDLE-EXCLUDED"
+title = "Native clients cannot load monitor content because the computer bundle excludes their platform"
+area = "client"
+severity = "major"
+status = "open"
+source = "computer/plugin.toml in the plugins repository omitted native from loaders despite current native support for its schema-2 block/item/asset bundle and gray glazed terracotta carrier. Plugins fix 03a38c7 adds only native to that list; the shared live pack and frozen matrix fingerprints follow."
+repro = "client"
+regression = ["harness:screens-voice-qa:native_loads_computer_monitor"]
+failing_first = "reported"
+repro_check = "receipts/ScreensVoiceStart/runs/20261115T032837-screens-voice-qa-mx2sf4ne/private-graph/verdicts.json records native_loads_computer_monitor=false after completed native Loader acknowledgement. With only the deployed manifest changed, 20261115T033229-screens-voice-qa-ua4o96t_/private-graph/verdicts.json records all six screen verdicts true; both natives register computer:monitor and activate the six verified assets. Same server/client pins and harness b7d3c0148."

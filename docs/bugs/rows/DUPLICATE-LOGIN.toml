@@ -1,0 +1,12 @@
+[[bug]]
+id = "DUPLICATE-LOGIN"
+title = "Second same-account connection times out in Join instead of replacing incumbent; no data-loss claim."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DUPLICATE-LOGIN"
+regression = ["cargo:mc-core:dimensions::tests::duplicate_login_kicks_the_old_session_and_hands_over_inventory_without_duplicating", "harness:entities:native-v2-duplicate-login"]
+fix_commit = "e767ee11"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/DUPLICATE-LOGIN.json"

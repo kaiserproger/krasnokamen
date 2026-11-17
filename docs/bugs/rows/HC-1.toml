@@ -1,0 +1,11 @@
+[[bug]]
+id = "HC-1"
+title = "Reconnect retains old voice capability/registration/listening and may reopen microphone on non-voice server."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
+regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server", "client:krasnokamen-client:session::disconnect_forgets_the_previous_server_voice_negotiation"]
+fix_commit = "client:a35187ca"
+repro_check = "real-hunk control red (a35187ca's reset_voice() in disconnect reversed); real gate harness:screens-voice-qa:native_voice_resets_on_non_voice_server, whose profile had no stage-2 run; area=client, candidate"

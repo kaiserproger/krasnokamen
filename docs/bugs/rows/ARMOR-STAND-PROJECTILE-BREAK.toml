@@ -1,0 +1,10 @@
+[[bug]]
+id = "ARMOR-STAND-PROJECTILE-BREAK"
+title = "A low-damage ordinary arrow or unenchanted thrown trident subtracts generic health from an armor stand instead of immediately breaking it, so a fresh stand can survive a projectile that vanilla always destroys it with."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-PROJECTILE-BREAK"
+regression = ["cargo:mc-core:armor_stand::tests::weak_arrow_breaks_stand_outright", "cargo:mc-core:projectiles::flight_tests::weak_arrow_removes_fresh_armor_stand", "cargo:mc-core:projectiles::flight_tests::weak_trident_removes_fresh_armor_stand"]
+failing_first = "not recorded"

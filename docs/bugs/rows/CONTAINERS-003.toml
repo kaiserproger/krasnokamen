@@ -1,0 +1,10 @@
+[[bug]]
+id = "CONTAINERS-003"
+title = "Crafting table closes on first inventory pickup before disconnect; backing10 versus container_size0 guard."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
+regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement"]
+repro_check = "candidate: guard and ref both come from base commit 1ada2ceb9, there is no discrete fix commit; only a synthetic mutation was red and is not counted (receipts/XCoreItems)"

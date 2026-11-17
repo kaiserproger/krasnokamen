@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-SWIM-BOBS-ABOVE-BED-WAYPOINT"
+title = "A swimming villager bobs 0.6-0.7 blocks above a waypoint on the water bed and only advances at the arrival-tolerance edge"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "D6 design review 2026-11-17 (receipts/UnitJitter/REVIEW-DESIGN-fable.md F7): trace of Farmer 45, ticks 111149-111160, on the hash-verified Spain trial copy used by receipts/UnitJitter/CLASSIFY.md; the swimmer stays 0.59-0.73 above a bed waypoint and pops only at the 0.6 tolerance (crates/mc-core/src/villager/brain/motion.rs). Not changed by the horizontal step cap."
+repro = "source"
+regression = []
+failing_first = "not recorded"

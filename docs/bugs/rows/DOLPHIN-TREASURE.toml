@@ -1,0 +1,11 @@
+[[bug]]
+id = "DOLPHIN-TREASURE"
+title = "GotFish never triggered search."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE"
+regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_swims_toward_treasure_chest", "harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory"]
+fix_commit = "patch:76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00"
+promotion = "docs/bugs/promotions/DOLPHIN-TREASURE.json"

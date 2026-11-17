@@ -1,0 +1,12 @@
+[[bug]]
+id = "WINDOWS-CLIENT-BUILD-BROKEN"
+title = "The native client does not compile for Windows: loopback.rs reads a PROPVARIANT field that windows-core 0.58 does not have"
+area = "client"
+severity = "blocker"
+status = "open"
+source = "Stage3 pin-release --client --target x86_64-pc-windows-gnu on client 12e076e9: src/computer/loopback.rs:115 `variant.Anonymous.Anonymous` no field (receipts/Stage3/pin-client-win.log); S3WindowsVM reproduced it on the isolated expression for MSVC"
+repro = "source"
+regression = []
+fix_commit = "client:1ecc7e9060832d3d995ef20ea9e7aa017cff90e0"
+failing_first = "reported"
+repro_check = "Loopback PROPVARIANT is constructed through the raw API. Cross-target compile is not a test ref: cargo check --target x86_64-pc-windows-gnu --workspace --all-targets --locked passes (receipts/WinClientBuild/windows-check-final.log); Windows client release pin pins/c7f4d239982b-client-x86_64-pc-windows-gnu-incr built. Full MSVC build needs a native MSVC C toolchain (not available); runtime on Windows unverified (no Windows host). Not promoted."

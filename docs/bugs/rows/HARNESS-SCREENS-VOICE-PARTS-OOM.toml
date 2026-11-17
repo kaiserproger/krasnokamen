@@ -1,0 +1,11 @@
+[[bug]]
+id = "HARNESS-SCREENS-VOICE-PARTS-OOM"
+title = "Concurrent screen and voice legs exceed a single 12 GiB harness scope"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "Main classified P3: --parts 2 starts both full screen/voice legs concurrently inside one mem-run 12G scope, with no concurrency control. Run 20261115T014627-screens-voice-qa-qu_cps0p on server 8b6fc28e58bb and client ace7a8049bc1 was OOM-killed before verdicts. Main authorized sequential legs at 12G instead; no concurrency fix requested."
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "receipts/ScreensVoiceStart/runs/20261115T014627-screens-voice-qa-qu_cps0p/result.json and both child results record interrupted/SIGTERM after 173 seconds. User journal krasnokamen-mem-run-VLi55VNC.scope at 2026-11-15T01:49:21Z records kernel OOM and 12G memory peak. This is an infrastructure failure, not eleven false product verdicts."

@@ -1,0 +1,12 @@
+[[bug]]
+id = "COPPER-CHEST-OPEN-WEATHERING"
+title = "Copper chest oxidizes while its container menu remains open"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "HzClientQA copper-chest-1 and copper-chest-3-diagnostic.log: open chest becomes exposed while client remains in its container. Distinct from COPPER-WEATHERING family coverage: missing authoritative opener transition guard."
+repro = "client"
+regression = ["cargo:mc-core:copper::tests::copper_weathering_waits_for_last_menu_close_in_its_dimension", "cargo:mc-core:copper::tests::copper_weathering_resumes_after_last_opener_dies_and_respawns"]
+fix_commit = "patch:223a238996cb19e3da9ae0605726f3fae3b06c261356a6e32ecb290facd4d9b3"
+failing_first = "reported"
+repro_check = "Work-root receipts/HzClientQA/REPORT.md: original copper-chest assertion, including unopened oxidation control, must pass on Main's integrated pin. ReviewHzCompatA4 additionally requires real death/respawn to release the last opener; see receipts/HzCompatA4/REPORT.md."

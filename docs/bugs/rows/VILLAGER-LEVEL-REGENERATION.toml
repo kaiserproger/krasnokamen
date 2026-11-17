@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-LEVEL-REGENERATION"
+title = "An injured villager gains a career level and new offers but receives no level-up Regeneration, losing the vanilla trading-based healing route."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-LEVEL-REGENERATION"
+regression = ["cargo:mc-core:tick::merchant::tests::leveling_trade_grants_merchant_regeneration"]
+failing_first = "not recorded"

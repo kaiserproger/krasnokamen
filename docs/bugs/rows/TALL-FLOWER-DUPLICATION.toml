@@ -1,0 +1,10 @@
+[[bug]]
+id = "TALL-FLOWER-DUPLICATION"
+title = "Bone meal does nothing on sunflower, lilac, rose bush or peony, removing their ordinary renewable flower/dye source."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TALL-FLOWER-DUPLICATION"
+regression = ["cargo:mc-core:farming_tests::bone_meal_duplicates_each_tall_flower_from_either_half"]
+failing_first = "reported"

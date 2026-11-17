@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-PUMPKIN-HIDING"
+title = "Wearing a carved pumpkin does not hide the player's marker from other players' cloned maps; all held-map player markers are broadcast without equipment-aware recipient filtering."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-PUMPKIN-HIDING"
+regression = ["cargo:mc-core:tick_tests::maps_tests::carved_pumpkin_hides_carrier_marker_from_other_players", "harness:entities:native-v2-map-pumpkin-hiding"]
+failing_first = "reported"

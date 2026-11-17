@@ -1,0 +1,11 @@
+[[bug]]
+id = "HC-4"
+title = "Native app does not enable/consume IME; CJK composition cannot commit in chat/editors. Main sets minor priority."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-4"
+regression = ["client:krasnokamen-client:ui::dialog::tests::ime_preedit_and_cjk_commit_edit_the_focused_field"]
+fix_commit = "client:7cd21ceb"
+repro_check = "candidate: no control - 7cd21ceb bundles the IME plumbing with 17 files of unrelated rc1 work and its non-test hunks no longer apply, and removing only the UiIntent::Composition arm makes the match non-exhaustive (compile error); the ref (added by c53b0d40) asserts the state-layer symptom (preedit in place, CJK commit as text, no composition without field focus); window-level set_ime_allowed is untested by design; area=client, real-client check required"

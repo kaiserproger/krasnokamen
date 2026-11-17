@@ -1,0 +1,12 @@
+[[bug]]
+id = "JUKEBOX-HYDRATE-PANIC"
+title = "A corrupt jukebox block entity in a loaded chunk crashes the tick thread: `tick.rs:4513` `hydrate_chunk(..).unwrap_or_else(panic!(\"resident jukebox rejected\"))`. Same hydration span (`tick.rs:4454-4524`, duplicated in `redstone/mod.rs:487`) mixes three error policies (reject+retain / ignore / panic) with partial rollback. Verified by Main on 7fe49052."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+fix_commit = "patch:6db29331caff9061527240767fba6fd5da3ba9fa7edc9d04d62bfbedf1efad71"
+promotion = "docs/bugs/promotions/JUKEBOX-HYDRATE-PANIC.json"

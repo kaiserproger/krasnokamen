@@ -1,0 +1,11 @@
+[[bug]]
+id = "P3"
+title = "Same-dimension death/respawn clears active-screen catalog; server does not resend it."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
+regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn", "client:krasnokamen-client:session::packets::same_dimension_respawn_keeps_active_screen_catalog"]
+fix_commit = "client:a35187ca"
+repro_check = "real-hunk control (a35187ca's dimension guard reversed -> catalog cleared); real gate harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn; area=client, candidate"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED"
+title = "Anvil import keeps pre-rename solaris:* entity keys as unread data and reports no gap"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "RC5WorldConversion 2026-11-14 (receipts/RC5WorldConversion-rc5/REPORT.md, export-rc5.json, import-main2.json, export-main2.json): an RC5-line world exported with `world export-anvil` carries solaris:* keys on every entity (solaris:WireId, entity_loot, solaris:PortalTime, ...) and on player data; main 57324da4 `krasnokamen world import-anvil` keeps them as unread extra fields and re-exports them verbatim, reads only krasnokamen:* keys, and reports known_gaps=[] with no warning. The rider case was shown only with an injected solaris:Rider naming a mob, which RC5 itself refuses (RC5 mounts/persistence.rs:270-282), so a lost rider from a valid RC5 world is not demonstrated."
+repro = "source"
+repro_check = "Stage2X SLICES.md:133: the RC5 export/import repro lost legacy keys; reverting 7df454ee1 fails the end-to-end assertion (receipts/XWorldLoader/row1-negctl-import-reverted.log). The test itself was repaired by 6e16ecbb6. This evidence predates the separately running XEdgeEvents normalizer work."
+regression = ["cargo:mc-world-conversion:pre_rename::tests::rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider"]
+fix_commit = "7df454ee1"
+failing_first = "reported"

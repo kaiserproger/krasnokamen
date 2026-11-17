@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-TEST-SIGSEGV"
+title = "Native solaris-client lib test binary SIGSEGVs (signal 11) about every 2nd–3rd full-parallel run on clean winfix eeac43a (stash-verified; clean tree still repros): lifecycle_waits_for_listening / crashed_server_ends_session / crash_while_playing flake run-to-run; single-threaded 651/651 and --test-threads=4 651/651 green; reruns of flaky scopes pass in isolation. Suspect server-process lifecycle race under load (port/tmpdir/signal timing), not client logic — no protocol/content in failing tests."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CLIENT-TEST-SIGSEGV"
+regression = []
+repro_check = "not reproducible in stage 2: three full-parallel `cargo test --lib` runs (1330 tests, default thread count) on wt/XClientSession showed no SIGSEGV and the named tests pass in the suite; if it returns, it needs the failing thread's backtrace"

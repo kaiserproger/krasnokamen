@@ -1,0 +1,16 @@
+[[bug]]
+id = "HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV"
+title = "The correctness roundtrip passes the canonical runner to the Java servers as one string, so its Java legs fail"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "Stage3 HarnessGraphical P1 (receipts/HarnessGraphical/report.md): after 675ec8cd8 the Java server spawns still used str(runner)"
+repro = "source"
+regression = [
+  "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner",
+  "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_run_directly_without_the_owner_host_runner",
+]
+fix_commit = "fc6b53988"
+failing_first = "reported"
+repro_check = "Java server commands now take the runner as an argv prefix. No revert-red receipt recorded at fix time; promotion runs its own control. Not promoted."
+promotion = "docs/bugs/promotions/HARNESS-ROUNDTRIP-JAVA-RUNNER-ARGV.json"

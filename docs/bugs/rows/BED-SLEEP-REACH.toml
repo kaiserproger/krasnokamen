@@ -1,0 +1,10 @@
+[[bug]]
+id = "BED-SLEEP-REACH"
+title = "A player can enter a bed from ordinary interaction range beyond Java's stricter sleeping-distance limit, instead of receiving bed-too-far refusal."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-SLEEP-REACH"
+regression = ["cargo:mc-core:sleep::tests::distant_bed_use_is_too_far"]
+failing_first = "not recorded"

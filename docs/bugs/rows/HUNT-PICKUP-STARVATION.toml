@@ -1,0 +1,10 @@
+[[bug]]
+id = "HUNT-PICKUP-STARVATION"
+title = "An item or player without inventory capacity can starve another pickup, including when capacity is lost before merge."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoBugHunt/pickup-starvation.txt; /run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md"
+regression = ["cargo:mc-core:tick_tests::full_stack_does_not_starve_another_ground_item_that_fits", "cargo:mc-core:tick_tests::full_player_does_not_reserve_pickup_from_nearby_player", "cargo:mc-core:tick_tests::pickup_losing_capacity_before_merge_does_not_block_another_player"]
+failing_first = "reported"

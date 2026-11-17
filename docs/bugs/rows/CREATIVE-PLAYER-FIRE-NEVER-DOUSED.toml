@@ -1,0 +1,12 @@
+[[bug]]
+id = "CREATIVE-PLAYER-FIRE-NEVER-DOUSED"
+title = "A burning player in creative or spectator mode keeps burning: contact_hazards skips the whole fire clock for immune players, so water neither douses it nor does it tick down, and damage resumes in survival"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "native-v2-p4-damage splash row: receipts 20261111T144354-native-v2-p4-damage-uxdbw87g and 20261111T151955-native-v2-p4-damage-wtrafs5z show only minecraft:on_fire wire events after a water fill in creative. Core splash_harming_thrown_at_own_feet passes, so the potion path was not the owner."
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::creative_player_burn_clock_runs_and_water_douses_it", "harness:entities:native-v2-p4-damage"]
+fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/CREATIVE-PLAYER-FIRE-NEVER-DOUSED.json"

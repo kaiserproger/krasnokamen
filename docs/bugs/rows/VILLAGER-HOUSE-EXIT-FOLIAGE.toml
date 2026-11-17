@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-HOUSE-EXIT-FOLIAGE"
+title = "Foliage obstructs a village doorway and prevents residents reaching free beds"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 native checkpoint 125406: oak leaves at (124,73,-276) obstruct the approach to the open house door at (123,72,-276). Removing only that leaf makes four original resident49 bed searches reach the free bed; original identities and the protected world remain unchanged. A later production generation-stage probe locates the obstruction in terrain-decoration foliage after the generated door and step. The Civ worktree candidate reserves doorway headroom through the existing village plans and clips interfering tree placement; three fresh native geometry runs preserve the door, stair and adjacent trunk with clear headroom. This is not completed resident movement, birth or full fresh civilization acceptance, which remains 0/3."
+regression = []
+failing_first = "reported"

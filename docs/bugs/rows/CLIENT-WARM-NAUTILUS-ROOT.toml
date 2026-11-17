@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-WARM-NAUTILUS-ROOT"
+title = "The authored warm zombie nautilus faces backward and its shell floats above its feet"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean 26.3 warm zombie nautilus pair on 2026-11-11, UUID ending 0fa400000014, has actual native received warm selection. Native front shows the green head where Java shows the shell; native side places the head on the opposite end. The short floating shell, roof-only fans and short tentacles also disagree with the paired side outline. Source-facing root, connected ground-reaching shell and fan/tentacle fits are independently authored from both retained views and the supplied PNG, not copied Java model arrays. Client tests: entities::solaris_models::tests::warm_nautilus_shell_and_face_follow_both_matched_views."
+repro = "client"
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::warm_nautilus_shell_and_face_follow_both_matched_views"]
+failing_first = "reported"
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"

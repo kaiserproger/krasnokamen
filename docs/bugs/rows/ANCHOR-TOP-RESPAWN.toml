@@ -1,0 +1,11 @@
+[[bug]]
+id = "ANCHOR-TOP-RESPAWN"
+title = "A charged anchor is falsely rejected when the only valid spawn position is directly on top of it; the candidate only searches eight neighboring columns, omitting the center-top fallback."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-TOP-RESPAWN"
+regression = ["cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded"]
+failing_first = "not recorded"
+repro_check = "round 2: green with the child-sender routing fix and no test edit - the command ran on the root world and the /kill never landed, so the respawn height was read from a stale world. The row's own sleep.rs fix is untouched and its status stays fixed"

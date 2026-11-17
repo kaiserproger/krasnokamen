@@ -1,0 +1,11 @@
+[[bug]]
+id = "ENTITYVIEWS-ASCENDING-ID-DEBUG-ONLY"
+title = "EntityViews::publish documents a strictly ascending unique-id input contract but enforces it only with debug_assert!, while the slot assignment, free-list reuse, page grouping and chunk-move index it protects run in release builds, where an unsorted or duplicated batch silently maps ids to the wrong slots instead of failing."
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "crates/mc-core/src/entity_views.rs:64-66 (the doc contract) and :106 (the only check, a debug_assert!); the serial lifecycle it guards is :108-149 (next_append, free-list pop/push, slot insertion) and the page grouping is :150-201 (entries.sort_by_key by slot after a 'Stable' comment). Found by read-only audit CS341/REPORT-B.md B8; no caller violation known and no failure observed."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+repro_check = "This is a hygiene candidate, not an observed defect: no live caller passes an unsorted batch (candidates come from a sorted changed list), and the documented contract plus a debug_assert is idiomatic Rust. Recorded so Main can decide whether it is backlog at all. If it is admitted, the only mechanically red-able shape without adding API is an always-on invariant in `finish` (for example rows.len() equal to the live page cells, or the sortedness check compiled out of debug builds only via a cfg the test can flip); a plain debug `cargo:` test cannot be the control because `cargo test` builds with debug_assertions on, so the current assert fires and the test would be green before the fix. Do not add an O(n) sortedness scan to the per-tick path to buy that check."

@@ -1,0 +1,10 @@
+[[bug]]
+id = "ITEM-FRAME-ADVENTURE-BREAK"
+title = "Adventure players cannot punch an item out of a frame or break the empty frame, blocking map interactions that vanilla permits. The frame-specific handler explicitly returns before either action for Adventure."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-ADVENTURE-BREAK"
+regression = ["cargo:mc-core:item_frame::tests::adventure_player_pops_then_breaks_frame"]
+failing_first = "not recorded"

@@ -1,0 +1,15 @@
+[[bug]]
+id = "EDGE-JOIN-KNOCKBACK-BASELINE"
+title = "A player hit by an explosion between core join and edge registration is disconnected for a skipped knockback"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 S3Arch (receipts/Stage3/fable-persistence.md F1, verified at crates/mc-edge/src/server/pump.rs:426-433 on c7786910e): first sight of a connection seeded the knockback counter with 0, so impulses published before registration counted as skipped (`skipped-explosion-knockback`)"
+repro = "source"
+regression = [
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::published_knockback_epochs_count_ticks_and_fence_delayed_queue_registration",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::first_processed_output_after_registration_still_closes_a_skipped_impulse",
+]
+fix_commit = "d7d631092caa1dc2f18bab25a70325ea914c8be8"
+failing_first = "reported"
+repro_check = "The knockback baseline is fenced at queue admission from the latest processed publication; 2fe160103 adds both publication/registration orders with explicit synchronization. Red with only the fence reverted: receipts/XEdgeEvents/s3/negative-registration-baseline.log, race-negative-publication-first.log, race-negative-registration-first.log; green: race-explosion.log (8 passed), race-registration.log (11 passed). S3FixBreaker: 4 protocol bots, 3 joining during 40 TNT blasts, 0 pre-join impulses and no doubling (receipts/S3FixBreaker/REPORT.md). Not promoted."

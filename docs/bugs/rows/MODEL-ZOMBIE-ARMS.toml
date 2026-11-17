@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-ZOMBIE-ARMS"
+title = "Zombie-family arms hang down rather than raised"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []

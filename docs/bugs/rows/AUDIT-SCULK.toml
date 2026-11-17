@@ -1,0 +1,10 @@
+[[bug]]
+id = "AUDIT-SCULK"
+title = "DomWorld corrected downward latch043238-4_gyxzcu:74 expected-lit failures,86 passes; root cause unisolated. Earlier horizontal latchzh3y8i9s invalid fixture."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-SCULK"
+regression = ["cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement", "harness:entities:native-v2-automation-storage"]
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/rows.md:27: test is green-first with no identified fix commit; real-client downward-latch proof remains required."

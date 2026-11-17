@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-BANNER-REMOVAL"
+title = "Destroying a marked banner leaves its waypoint on an unlocked map permanently, even after the player revisits with the map and the terrain updates."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-BANNER-REMOVAL"
+regression = ["cargo:mc-core:tick_tests::maps_tests::revisiting_destroyed_banner_removes_its_map_waypoint", "harness:entities:native-v2-map-banner-removal"]
+failing_first = "reported"

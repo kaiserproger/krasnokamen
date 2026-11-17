@@ -1,0 +1,10 @@
+[[bug]]
+id = "SPECIAL-TREE-BONEMEAL"
+title = "Bone meal never grows planted azalea/flowering azalea, mangrove propagules, or crimson/warped fungi into their vanilla tree/huge-fungus forms, even with correct substrate and unobstructed space. Grouped as missing specialized tree-growth dispatch, not one count per species."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-TREE-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::bone_meal_grows_azalea_and_fungi_but_rejects_wrong_soil", "cargo:mc-core:farming_tests::planted_mangrove_propagule_grows_with_bone_meal", "cargo:mc-core:farming_tests::flowering_azalea_and_warped_fungus_grow_with_bone_meal"]
+failing_first = "not recorded"

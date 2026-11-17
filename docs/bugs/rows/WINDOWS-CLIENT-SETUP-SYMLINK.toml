@@ -1,0 +1,19 @@
+[[bug]]
+id = "WINDOWS-CLIENT-SETUP-SYMLINK"
+title = "`krasnokamen-client setup` always fails on Windows: content linking requires Unix symlinks"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 S3WindowsVM F2 (receipts/Stage3/S3WindowsVM/REPORT.md:77-85, static): link() was a #[cfg(unix)] symlink and returned Err(\"setup currently requires Unix symlinks\") elsewhere (src/content_paths.rs:119-123 at 12e076e9), so setup failed on its first directory"
+repro = "source"
+regression = [
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_installs_nested_content_and_paired_index_without_source_dependency",
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_refuses_conflicts_without_overwriting_either_cache",
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_refuses_recursive_destination_and_missing_sources",
+  "client:krasnokamen-client:content_paths::tests::non_unix_copy_does_not_follow_nested_source_or_destination_symlinks",
+  "client:krasnokamen-client:content_paths::tests::setup_uses_platform_installation_and_keeps_the_paired_index",
+  "client:krasnokamen-client:content_paths::tests::setup_validates_inputs_before_creating_destination",
+]
+fix_commit = "client:e7086ab0008856a63fd7e9dd988d6d5dc18b7671"
+failing_first = "reported"
+repro_check = "Non-Unix setup copies the content recursively and refuses conflicts without overwriting either cache. Green: receipts/WinClientBuild/setup-tests.log (6 passed); former-error negative control: setup-negative-control.log. Runtime on Windows unverified (no Windows host). Not promoted."

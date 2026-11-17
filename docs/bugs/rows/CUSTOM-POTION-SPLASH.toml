@@ -1,0 +1,10 @@
+[[bug]]
+id = "CUSTOM-POTION-SPLASH"
+title = "Custom-only and base-plus-custom splash potions fail to apply custom effects."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
+regression = ["cargo:mc-core:projectiles::payloads::tests::custom_only_splash_applies_custom_effect", "cargo:mc-core:projectiles::payloads::tests::base_plus_custom_splash_applies_both_effects"]
+failing_first = "not recorded"

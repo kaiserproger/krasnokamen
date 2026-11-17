@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-ANCHOR-CHARGE"
+title = "A dispenser facing a non-full respawn anchor ejects its glowstone as an item instead of charging the anchor, breaking automatic refueling."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-ANCHOR-CHARGE"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_anchor_charge"]
+failing_first = "reported"

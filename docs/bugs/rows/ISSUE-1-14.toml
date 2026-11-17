@@ -1,0 +1,15 @@
+[[bug]]
+id = "ISSUE-1-14"
+title = "Inventory crafting drag makes item disappear"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced", "harness:entities:native-v2-chest-drag-disconnect"]
+proving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor", "harness:entities:native-v2-craft-drag-paced" = "native_drag_matches_vanilla_cursor", "harness:entities:native-v2-chest-drag-disconnect" = "chest_rejoin_item_exactly_once" }
+failing_first = "reported"
+# Fixed in krasnokamen-client b7c48e1c7de46c34bc6611d438edfec3f37039c5 ("fix(client): keep the cursor
+# across menu drags"); server quick-craft code is unchanged since 1ada2ceb and kept custody with the
+# pre-fix client (receipts/CraftDrag/REPORT.md). fix_commit stays empty until the owner decides how
+# client-repo fixes are promoted (ledger promote resolves fix_commit in this repository only).

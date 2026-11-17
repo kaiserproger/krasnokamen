@@ -1,0 +1,10 @@
+[[bug]]
+id = "BATTLE-REST-SKIPS-TARGET-FACING"
+title = "A battle soldier standing still with a look target does not turn to face it while it rests"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Found while implementing the battle facing rule, 2026-11-17 (receipts/BattleYawHold/RESULTS.md). early_entity_rest (crates/mc-core/src/tick/entity_phase.rs:491) keeps a battle row out of the rest only for a non-zero battle drive. A row with zero drive, zero velocity, on the ground, not hurt in the last 100 ticks and with a battle look target (columns.look_by_slot) therefore rests, and the step is skipped. Its full step would turn it toward the target: a scratch test on a resting husk at yaw 30 with a target at +x gave rest = true while the full step returned yaw -60. Battle rows rest without a physics proof, so the rest is not bit-identical to the step in this case. Fix idea, one guard: also refuse the rest for `battle && look_by_slot[slot].is_some()`. Cost: every targeted battle row standing still would run the full step instead of resting; the share of rest hits lost is unmeasured. Deferred until after the 2026-11-19 freeze (Main)."
+repro = "source"
+regression = []
+failing_first = "not recorded"

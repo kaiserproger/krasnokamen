@@ -1,0 +1,13 @@
+[[bug]]
+id = "QA5-SETBLOCK-SAND"
+title = "QAWin5 setblock sand over air remained visually floating on winfix3; authoritative server/client cause not isolated."
+area = "client"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-SETBLOCK-SAND; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03 (fe28852b, crates/mc-core/src/falling.rs; fix patch docs/bugs/fix-patches/QA5-SETBLOCK-SAND.patch is that hunk)"
+regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand"]
+proving_assertions = { "harness:entities:native-v2-input-sand" = "sand_presents_predicted_descent" }
+fix_commit = "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/QA5-SETBLOCK-SAND.json"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "SEA-PICKLE-BONEMEAL"
+title = "Bone meal cannot increase a waterlogged sea-pickle colony or reproduce it across live coral, breaking the normal renewable sea-pickle/lime-dye farm."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SEA-PICKLE-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::pickle_bonemeal_requires_coral_and_fills_colony", "cargo:mc-core:farming_tests::bone_meal_spreads_full_sea_pickle_colony_over_live_coral"]
+failing_first = "reported"

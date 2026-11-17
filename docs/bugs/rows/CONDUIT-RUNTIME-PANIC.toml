@@ -1,0 +1,12 @@
+[[bug]]
+id = "CONDUIT-RUNTIME-PANIC"
+title = "A corrupt conduit block entity crashes the tick thread at runtime (not load): `conduit.rs:242` `image(state, pos).unwrap_or_else(panic!)` inside `run()`, which executes every 40 ticks over all active conduit positions. Same one-policy hydration root as the jukebox/shelf/crafter rows, but on the per-tick path — `validate_loaded` already fails closed at load, yet a mid-game corrupt write still panics the tick."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+fix_commit = "patch:6f19be18656653f07316721c01d4a22e18141504f6b8c2217281bc0270d903b1"
+promotion = "docs/bugs/promotions/CONDUIT-RUNTIME-PANIC.json"

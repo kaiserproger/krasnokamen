@@ -1,0 +1,14 @@
+[[bug]]
+id = "SNIFFER-DIG-ABSENT"
+title = "Sniffers never dig up seeds: no sniffer dig/sniff/explore logic exists in core (the only `sniff_at` is warden init; sniffer appears only in flag lists and golden-dandelion growth). Vanilla sniffers sniff the ground and dig up torchflower/pitcher seeds. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SNIFFER-DIG-ABSENT"
+regression = [
+  "cargo:mc-core:vanilla_mob_behavior_tests::adult_sniffer_digs_one_seed_on_suitable_ground_then_cools_down",
+  "cargo:mc-core:vanilla_mob_behavior_tests::sniffer_requires_adulthood_ai_and_diggable_ground",
+]
+fix_commit = "patch:9237f03d9ed6d7d6438252fd4b6de93bb2e0bb6b29ec302ae03657143f02f91a"
+promotion = "docs/bugs/promotions/SNIFFER-DIG-ABSENT.json"

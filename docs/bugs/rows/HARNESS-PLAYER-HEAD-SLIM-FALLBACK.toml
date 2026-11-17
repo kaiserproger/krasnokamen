@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-PLAYER-HEAD-SLIM-FALLBACK"
+title = "Authored player-head skin fixture misses the UUID-selected slim Steve fallback"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 followup: native-player-head keeps plain Steve although the authored pack overrides wide Steve; entity default_skins[6] is slim Steve"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window"]
+fix_commit = "fad1cef1e"
+repro_check = "Only slim fallback entry removed: receipts/HarnessFix2/red-slim-default-skin.log fails the skin-pack unit. Both wide and slim entries are authored; no online profile is simulated. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Real placed-head magenta pixels 9822 at .analysis/validation/20261115T010513-native-player-head-93kmva1a; hat-only control zero at 20261115T010623-native-player-head-vwnycn1k."
+failing_first = "reported"

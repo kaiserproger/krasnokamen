@@ -1,0 +1,12 @@
+[[bug]]
+id = "DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER"
+title = "A player killed by a special mob (warden-style attack submitted as a self-owned projectile) receives death.attack.mob with one argument; the native client rejects the system chat with `missing translation argument` and drops the session"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "native-v2-p4-damage rerun 20261111T131605-native-v2-p4-damage-9ys_sijn: `session failed: Play packet 0x7c sequence 14847: missing translation argument`; the same scenario with `gamerule show_death_messages false` (20261111T132303-native-v2-p4-damage-wdwexu3s) passes that point. Cause: statistics::attacker returns None for a projectile the mob owns itself, so death_message built the component without the attacker."
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template", "harness:entities:native-v2-p4-damage"]
+fix_commit = "4efb3ef2b116bfea021f9989dc96292c32ab20b3"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER.json"

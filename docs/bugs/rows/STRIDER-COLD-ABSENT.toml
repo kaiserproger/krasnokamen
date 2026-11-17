@@ -1,0 +1,14 @@
+[[bug]]
+id = "STRIDER-COLD-ABSENT"
+title = "Striders never shiver outside lava: no `shiver/cold` strider logic exists in core. Vanilla striders slow and shiver with a purple tint when out of lava, taking damage in rain/snow. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#STRIDER-COLD-ABSENT"
+regression = [
+  "cargo:mc-core:vanilla_mob_behavior_tests::strider_cold_state_slows_and_lava_restores_it",
+  "cargo:mc-core:vanilla_mob_behavior_tests::cold_strider_rain_damage_obeys_roof_and_clear_weather",
+]
+fix_commit = "patch:c7a40b6afebf99b151ec6ad8effe1fa16c867b7b30f2cc52741323c739eb502a"
+promotion = "docs/bugs/promotions/STRIDER-COLD-ABSENT.json"

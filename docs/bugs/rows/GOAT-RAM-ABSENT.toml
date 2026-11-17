@@ -1,0 +1,11 @@
+[[bug]]
+id = "GOAT-RAM-ABSENT"
+title = "Goats never ram: no `Ram` goal kind exists in `blueprint.rs` GoalKind, no goat module exists in core, and goat appears only as flags (ageable/leashable/milkable) with generic breed/wander goals. Vanilla goats periodically charge and knock back entities, damaging shields and losing a horn. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOAT-RAM-ABSENT"
+regression = ["cargo:mc-core:mob_lanes::tests::goat_rams_a_nearby_living_target", "cargo:mc-core:mob_lanes::tests::goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata", "harness:entities:native-v2-goat-ram"]
+fix_commit = "patch:26f4b8aa95c2742a1ee15df7e88bef9c3d1cd6284af8074bad7950bfb0b9fffb"
+promotion = "docs/bugs/promotions/GOAT-RAM-ABSENT.json"

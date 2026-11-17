@@ -1,0 +1,10 @@
+[[bug]]
+id = "VINE-PLACEMENT-FACES"
+title = "Placing collected vines onto a wall creates a vine state with every attachment face false; these player-planted vines consequently cannot spread through the existing vine-growth routine. This is an authoritative state/growth bug; no unobserved rendering claim is made."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VINE-PLACEMENT-FACES"
+regression = ["cargo:mc-core:farming_tests::placed_vines_attach_to_the_clicked_wall_and_can_spread"]
+failing_first = "not recorded"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "LOADER-GAIT-SIDECAR-EMPTY"
+title = "Java gait capture writes empty render-state sidecars for visible entities, so the gait gate cannot pass"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 HeadBreaker Java 26.3 gait scene against server 8b6fc28e58bb: 109/110 spider sidecars empty with the spider visible (wt/HeadBreaker/.analysis/validation/20261115T031712-scene-shot-19zmhrum, spider-phase-walk.json), retry 98/99 zombie sidecars empty (20261115T031837-scene-shot-fx6igd36, zombie-phase-walk.json)"
+repro = "client"
+regression = ["harness:scene-shot:java-gait-sidecar"]
+failing_first = "reported"
+repro_check = "Proven cause (LoaderGaitFix): the IO completion callback sampled frame 547 for screenshot 541, so render/extract state was not tied to the captured frame. Loader fix 30a39f838 (loader main) captures gait inputs with their rendered frame (VanillaFrameTransformer). Red: fix-only reversal makes VanillaFrameCaptureTest fail and the real Java 26.3 gait scene produce 192/192 empty sidecars (receipts/LoaderGaitFix/red-fix-only-real/20261115T033610-scene-shot-7mruhd0f, harness e5512b2a5). Green: 3/3 real runs pass with 0 empty sidecars (receipts/LoaderGaitFix/green-frozen-real/20261115T033835-scene-shot-sms00brg, 20261115T034012-scene-shot-vyyyv3hh, 20261115T034125-scene-shot-ke3ccriy), accepted frames visually reviewed. Promotion still needs a registered real-client harness ref and candidate receipt."

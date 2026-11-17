@@ -1,0 +1,10 @@
+[[bug]]
+id = "BED-SMALL-SLIME"
+title = "A harmless small slime near a bed incorrectly prevents sleeping."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
+regression = ["cargo:mc-core:sleep::tests::small_slime_does_not_block_sleep"]
+failing_first = "not recorded"

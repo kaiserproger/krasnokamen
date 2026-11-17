@@ -1,0 +1,12 @@
+[[bug]]
+id = "CRAFTER-HYDRATE-PANIC"
+title = "A corrupt crafter block entity in a loaded chunk crashes the tick thread the same way as the jukebox/shelf: `crafter.rs:49` `read_network(..).expect(\"validated crafter NBT\")` + `:52` `decode_crafter(..).expect(\"validated crafter fields\")` inside the infallible `hydrate_chunk` called from the tick hydration span. Same G-SERVER-BLOCKER hydration root (one error policy for the span). Brewing/lectern/campfire/container hydrates audited clean (skip-on-corrupt, no panics)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+fix_commit = "patch:fa0061ac6c30abdb5b093e99bb66ce012856f93f0f68edb6640b49c2d63393d6"
+promotion = "docs/bugs/promotions/CRAFTER-HYDRATE-PANIC.json"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "CAMEL-DASH-ABSENT"
+title = "Camels never dash: no `dash/Dash` logic exists in core; camel appears only in flag lists (ageable/leashable). Vanilla camels sprint-dash with a cooldown, and two players can ride. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMEL-DASH-ABSENT"
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::saddled_camel_admits_two_riders_and_dash_has_cooldown"]
+fix_commit = "patch:94f32f3b264bcb85d8511780a7c0cce3b911095441e8387265a18fd8d29577ea"
+promotion = "docs/bugs/promotions/CAMEL-DASH-ABSENT.json"

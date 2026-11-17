@@ -1,0 +1,10 @@
+[[bug]]
+id = "HUNT-BRUSHABLE-LOOT-PRIVACY"
+title = "Unopened brushable blocks expose loot table, seed or hidden item in client updates."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md#real-client-ab"
+regression = ["cargo:mc-core:command_world::tests::brushable_command_direct_update_hides_unopened_loot", "cargo:mc-edge:chunks::chunks_tests::container_wire_tests::brushable_chunk_update_hides_loot_and_preserves_rendered_item"]
+failing_first = "reported"

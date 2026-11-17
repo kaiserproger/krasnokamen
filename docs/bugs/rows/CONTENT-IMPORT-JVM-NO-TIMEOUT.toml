@@ -1,0 +1,10 @@
+[[bug]]
+id = "CONTENT-IMPORT-JVM-NO-TIMEOUT"
+title = "`content import` waits on the bundle's datagen, javac and the Java extractors with no timeout and no kill on drop, so a stalled JVM blocks the command forever"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G7, read from code and not reproduced: crates/mc-edge/src/content_import.rs:868-875 (bundle datagen via `-DbundlerMainClass`), :923-934 (javac of the in-tree extractors) and :948-954 (extractor run) call `Command::new(java|javac) ... .output()` with no timeout and no kill-on-drop. A JVM that waits on a lock, on stdin or on a full disk blocks `krasnokamen content import --version <version> --download` indefinitely with no progress line and no error, and Ctrl-C leaves the JVM running until it finishes on its own (it stops only because the terminal signals the whole process group). Repro: run content import against a bundle whose datagen stalls, or SIGSTOP the java child while :868-875 is running, and observe the command never returns and prints no diagnostic."
+repro = "command"
+regression = []
+failing_first = "not recorded"

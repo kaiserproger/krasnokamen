@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
+title = "An arrow or trident stuck in a block stays floating when that block is removed instead of falling"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 AbstractArrow javap (.analysis/codex-logs/impact-parity/AbstractArrow.javap tick 165-209, shouldFall 759-780, startFalling 782-815): an in-ground arrow whose AABB(pos,pos).inflate(0.06) no longer collides clears IN_GROUND, scales its zero motion and resets life. crates/mc-core/src/projectiles/flight.rs stuck branch only despawned or picked up, so an arrow that broke a pot, primed TNT or lost its support hung in the air."
+regression = ["cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-STUCK-ARROW-NEVER-FALLS.json"

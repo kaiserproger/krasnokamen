@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED"
+title = "Gait capture shows a dying zombie over the spider"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HarnessGraphical gait scene: zombie and spider approach the same camera on the same lane, and the zombie death animation occludes the spider"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view", "harness:scene-shot:native-gait-spider"]
+fix_commit = "b6f1ac655"
+failing_first = "reported"
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log fails the original fixture's camera-frustum assertion with tests retained. green-restored.log passes. Three native windowed gait runs pass on 3c2279125: real-gait/20261115T012844-scene-shot-j9w3a8qy, 20261115T013328-scene-shot-mgy_ub0y, 20261115T013411-scene-shot-4da3qs2q. All three accepted spider frames and the first zombie frame were visually reviewed: subject unobstructed, no overlapping zombie. Spider capture uses 2, 2 and 3 uniquely named attempts respectively. Server c7786910eaa6 and client 12e076e9c761 pins; report.md retains commands and review."

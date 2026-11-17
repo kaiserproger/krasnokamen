@@ -866,7 +866,7 @@ world or a copy restored from backup: several of its effects stay after
   startup with the new binary. Before swapping binaries, run `battle reset`, wait
   one tick, then `save-all flush` with the old binary, or restore a backup the
   old binary saved without a battle.
-- Known limit: foot units visibly jitter in dense combat; battle movement remains **not-ready** ([BATTLE-FOOT-STEERING-REVERSALS](bugs/ledger.toml)).
+- Known limit: foot units visibly jitter in dense combat; battle movement remains **not-ready** ([BATTLE-FOOT-STEERING-REVERSALS](bugs/rows/BATTLE-FOOT-STEERING-REVERSALS.toml)).
 
 ### Block log and rollback
 

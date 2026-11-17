@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-OFFER-SELECTION"
+title = "Fresh villagers always receive the first two catalog entries at each level instead of choosing from the offer pool; fresh novice farmers can never offer carrots, beetroot or bread despite those entries existing."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-OFFER-SELECTION"
+regression = ["cargo:mc-core:tick::merchant::tests::spawned_farmers_sample_distinct_novice_offers", "cargo:mc-core:villager::trades::tests::offer_sampling_reaches_beyond_first_two_catalog_rows"]
+failing_first = "reported"

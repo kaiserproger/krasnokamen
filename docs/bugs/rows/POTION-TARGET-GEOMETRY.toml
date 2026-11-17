@@ -1,0 +1,10 @@
+[[bug]]
+id = "POTION-TARGET-GEOMETRY"
+title = "Splash and lingering potions miss bodies whose hitboxes overlap their areas while feet lie outside."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-TARGET-GEOMETRY"
+regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_cloud_hits_body_overlapping_from_below", "cargo:mc-core:projectiles::payloads::tests::splash_hits_body_intersecting_below_inflated_impact_box"]
+failing_first = "reported"

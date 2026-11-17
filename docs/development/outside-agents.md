@@ -106,7 +106,7 @@ profiles additionally need Xvfb, JDK 25 and client jars — read
   never repeat an unchanged green check; after a failure, rerun only the
   affected gate after a relevant fix.
 - Bug status follows the [bug regression contract](../bugs/README.md): file a
-  `[[bug]]` row in `docs/bugs/ledger.toml` for anything broken you observed; a
+  row file `docs/bugs/rows/<ID>.toml` for anything broken you observed; a
   fix adds `regression` refs and records `fix_commit`. **Nobody but the owner's
   promotion tooling sets a row to `fixed`** — do not edit `status` or
   `promotion` by hand. A unit test cannot close a known client failure;

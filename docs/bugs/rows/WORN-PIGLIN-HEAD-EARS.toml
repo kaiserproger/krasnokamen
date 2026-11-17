@@ -1,0 +1,11 @@
+[[bug]]
+id = "WORN-PIGLIN-HEAD-EARS"
+title = "A worn piglin head on the native client shows horizontal ears instead of vanilla's downward-angled ears"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Stage3 HeadBreaker paired 26.3 oracle: native client 8a7817c8 piglin head ears horizontal vs vanilla Java angled down (same scenes as WORN-DRAGON-HEAD-GEOMETRY: 20261115T023515-scene-shot-jdztmngj vs 20261115T023735-scene-shot-abxywun8); reproduced 2/2 (20261115T023910-scene-shot-xjj2t0vh)"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Pre-existing: on the pre-fix control client 0a0ed7e4 the piglin skull sat on the torso with horizontal ears (20261115T024001-scene-shot-ln8jjoxn)."

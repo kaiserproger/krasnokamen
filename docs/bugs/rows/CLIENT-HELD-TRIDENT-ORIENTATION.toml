@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-HELD-TRIDENT-ORIENTATION"
+title = "Shared trident geometry uses the wrong shaft and held-grip frame"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 paired actual-window 26.3 third-person frames, native pin 90c4850a282a-db192b2f versus Java, retain UUID ending 0fa400000004 and show the held trident displaced above its Java placement even after the candidate-only extra half-turn was removed. Main explicitly required local TridentModel.createLayer data, retained as ClientQ04Variants/javap-trident-model-create-layer-26.3.txt: neutral pivots, one 1x25x1 shaft at Y=2..27 and four base/spike boxes replace the baseline negative-Y planar approximation. In-hand placement remains owned by the supplied item graph and display transforms, not an eye-fitted offset. Actual baseline-asset reversion fails geometry, held-grip and thrown-axis regressions (2 passed, 3 failed): ClientQ04Variants/trident-layer-baseline-negative.json. The earlier baseline-angle guess stays withdrawn. Client tests: entities::presentation::tests::authored_trident_prongs_join_crossbar_at_shaft_tip, entities::presentation::tests::held_trident_preserves_coordinates_for_the_resource_item_graph, entities::presentation::tests::trident_and_arrow_authored_axes_follow_same_projectile_orientation."
+repro = "client"
+regression = []
+failing_first = "reported"

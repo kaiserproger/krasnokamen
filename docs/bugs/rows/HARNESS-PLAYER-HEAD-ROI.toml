@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-PLAYER-HEAD-ROI"
+title = "Player-head scene measures an empty region instead of the placed head"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 S3Issue1 F2: scene_shot.check_player_head uses x880-1080 rather than the head at x590-690"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels", "harness:scene-shot:native-player-head"]
+fix_commit = "f645ca39a"
+repro_check = "Fixture camera/geometry frames the placed head in x580-700/y520-655. Stored original frame measurement at channel delta >25: old ROI 0, corrected ROI 10750 changed pixels (receipts/HarnessFix2/stored-head-roi.json). Only ROI reverted: receipts/HarnessFix2/red-head-roi.log fails placed_head_renders. Restore: receipts/HarnessFix2/green-final-units.log. Followup real-client placed-head evidence: .analysis/validation/20261115T010513-native-player-head-93kmva1a has 9822 authored hat pixels; 20261115T010623-native-player-head-vwnycn1k hat-only control has zero. Full head acceptance additionally requires the worn attachment fix and tightened worn assertion."
+failing_first = "not recorded"
