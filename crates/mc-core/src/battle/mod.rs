@@ -469,6 +469,39 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
     }
 }
 
+/// Whether a rested battle row's skipped step would still turn it toward its
+/// look target, i.e. whether the rest is not the identity for this row.
+///
+/// `entity_motion::look` is the step's own rotation rule, evaluated at the zero
+/// velocity every row that reaches the rest has (`early_entity_rest` checks
+/// ground, velocity and drive first). A row that already faces its target keeps
+/// resting; one whose facing is behind takes the ordinary step until it faces
+/// it (BATTLE-REST-SKIPS-TARGET-FACING). Off-axis targets can need one more
+/// sub-quantum step after the turn, because `rotate` keeps the raw angle
+/// instead of a normalized one; that residue is far below one wire yaw quantum
+/// (1/256 turn = 1.40625 degrees), so it is invisible to a client.
+pub(crate) fn rest_turns_toward_target(
+    columns: &Columns,
+    slot: crate::entities::EntitySlot,
+    rotation: [f32; 3],
+    position: [f64; 3],
+) -> bool {
+    let Some(target) = columns
+        .look_by_slot
+        .get(slot.0 as usize)
+        .copied()
+        .flatten()
+    else {
+        return false;
+    };
+    crate::entity_motion::look(
+        rotation,
+        mc_physics::Vec3::new(position[0], position[1], position[2]),
+        mc_physics::Vec3::ZERO,
+        Some(target),
+    ) != rotation
+}
+
 #[cfg(test)]
 mod tests;
 

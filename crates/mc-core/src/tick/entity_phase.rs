@@ -522,6 +522,17 @@ pub(super) fn early_entity_rest(
                 .has(crate::effects::EffectId::Levitation))
         || !view.ground[slot.0 as usize]
         || view.velocities[slot.0 as usize] != [0.0; 3]
+        // The skipped step is what turns a battle row toward its look target,
+        // so a targeted row that is not yet facing it must not rest
+        // (BATTLE-REST-SKIPS-TARGET-FACING). Last, because the rule evaluates
+        // the step at the zero velocity every earlier clause has established.
+        || battle
+            && crate::battle::rest_turns_toward_target(
+                &view.hostile.battle.columns,
+                slot,
+                view.rotations[slot.0 as usize],
+                view.positions[slot.0 as usize],
+            )
     {
         return false;
     }

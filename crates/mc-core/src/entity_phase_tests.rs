@@ -1018,6 +1018,113 @@ fn battle_rows_hold_facing_on_reversing_steps_and_rest_matches_full_step() {
     }
 }
 
+/// A resting battle row with a look target must turn to face it
+/// (BATTLE-REST-SKIPS-TARGET-FACING, receipts/BattleYawHold): the rest guard
+/// only looked at the drive, so a targeted row rested and the skipped step
+/// never turned it. Such a row now takes its step while the facing is behind
+/// the target, and rests again once it faces it, so a static target does not
+/// cost a step every tick.
+///
+/// The target is projected into `columns.look_by_slot`, the column the step
+/// reads. `run_entity_phase(_, true)` cannot carry this test: it runs
+/// `battle::step`, which clears an inactive battle's drive and look projections
+/// every tick (`battle/mod.rs:375-377`), so admission would see no target. The
+/// test therefore drives the same two decisions the phase makes per tick:
+/// admission (`early_entity_rest` through `can_early_rest`) and, only when
+/// admitted, the production step (`step_entity` through
+/// `full_step_without_early_rest`) whose rotation write it applies.
+#[test]
+fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
+    let bearing = |target: [f64; 3], pos: [f64; 3]| {
+        -((mc_physics::mth::atan2(target[0] - pos[0], target[2] - pos[2]) as f32)
+            * mc_physics::mth::RAD_TO_DEG)
+    };
+    let error = |yaw: f32, wanted: f32| (yaw - wanted + 180.0).rem_euclid(360.0) - 180.0;
+    for species in ["minecraft:husk", "minecraft:horse"] {
+        let (mut state, slot) = resting_mob(species);
+        state.entities.set_faction(slot, 1);
+        // Off-axis, and a yaw beyond 256 degrees that `look` never normalizes,
+        // so a residue of the raw-angle arithmetic can need one extra step.
+        state.entities.set_rot(slot, 300.0, 12.0);
+        let pos = state.entities.pos(slot);
+        let len = state.entities.len();
+        let aim = |state: &mut TickState, target: [f64; 3]| {
+            let columns = &mut state.hostile.battle.columns;
+            columns.look_by_slot.resize(len, None);
+            columns.look_by_slot[slot.0 as usize] = Some(target);
+        };
+        // Admission plus the step it admits, exactly as the phase orders them.
+        let turn = |state: &mut TickState| {
+            assert!(
+                !can_early_rest(state, slot),
+                "{species} must not rest while its facing is behind the target"
+            );
+            let (write, intents) = full_step_without_early_rest(state, slot);
+            assert!(intents.is_empty(), "{species} emits no intent");
+            assert_eq!(
+                write.pos.map(f64::to_bits),
+                pos.map(f64::to_bits),
+                "{species} does not walk"
+            );
+            state
+                .entities
+                .set_rot(slot, write.rotation[0], write.rotation[1]);
+        };
+        let target = [pos[0] + 3.0, pos[1], pos[2] + 7.0];
+        aim(&mut state, target);
+        // One turn of at most 90 degrees, plus at most one sub-quantum step.
+        let mut steps = 0;
+        while !can_early_rest(&mut state, slot) {
+            turn(&mut state);
+            steps += 1;
+            assert!(
+                steps <= 3,
+                "{species} does not return to rest after {steps} steps"
+            );
+        }
+        let facing = state.entities.rot(slot)[0];
+        let wanted = bearing(target, pos);
+        assert!(
+            error(facing, wanted).abs() < 0.01,
+            "{species} faces the target: yaw {facing} wanted {wanted}"
+        );
+        // Resting again with a still target: no step, so nothing can move.
+        let rotation = state.entities.rot(slot).map(f32::to_bits);
+        for _ in 0..3 {
+            state.tick += 1;
+            assert!(
+                can_early_rest(&mut state, slot),
+                "{species} keeps resting while the target stands"
+            );
+        }
+        assert_eq!(
+            state.entities.rot(slot).map(f32::to_bits),
+            rotation,
+            "{species} holds a still target's facing"
+        );
+        // A new bearing wakes the row and it turns to it, still without walking.
+        let moved = [pos[0], pos[1], pos[2] + 4.0];
+        aim(&mut state, moved);
+        let mut steps = 0;
+        while !can_early_rest(&mut state, slot) {
+            turn(&mut state);
+            steps += 1;
+            assert!(steps <= 3, "{species} does not return to rest: {steps}");
+        }
+        let facing = state.entities.rot(slot)[0];
+        let wanted = bearing(moved, pos);
+        assert!(
+            error(facing, wanted).abs() < 0.01,
+            "{species} faces the new bearing: yaw {facing} wanted {wanted}"
+        );
+        assert_eq!(
+            state.entities.pos(slot),
+            pos,
+            "{species} still does not walk"
+        );
+    }
+}
+
 /// A mounted battle rider is not a standing row (`taming::suppress_ai` is
 /// fenced by `!battle`), so the facing rule covers it. Without a target its own
 /// step does not move it sideways; it keeps yaw, pitch and head, where the old

@@ -139,7 +139,11 @@ zero drive/no look, preserving the ordinary world's sparse fast path.
 
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
-and unaffected by impulse/hurt/effects or changed geometry. Moving rows still use
+and unaffected by impulse/hurt/effects or changed geometry, and only while its
+facing already matches what the skipped step would produce: a look target the
+step would still turn to keeps the row on the ordinary step until it faces it
+(`early_entity_rest`, `crates/mc-core/src/tick/entity_phase.rs`), so a resting
+soldier is never frozen with a stale facing. Moving rows still use
 ordinary block collision, ordered movement writeback and native intent merge.
 No position writer or second physics path is introduced.
 
