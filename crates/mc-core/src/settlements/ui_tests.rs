@@ -256,12 +256,20 @@ fn click(
 ) -> Vec<PlayerChange> {
     let mut entries = vec![("s".to_owned(), Tag::String(id.0.to_string()))];
     entries.extend(extra.iter().map(|(k, v)| ((*k).to_owned(), v.clone())));
-    if matches!(
-        action,
-        "project_order" | "project_upgrade" | "project_cancel_pending"
-    ) && let Some(record) = state.settlements.get(id)
+    if matches!(action, "project_cancel_review" | "project_cancel_pending")
+        && let Some(record) = state.settlements.get(id)
     {
-        let pending = record.orders.first();
+        let index = extra
+            .iter()
+            .find(|(key, _)| *key == "pending_index")
+            .and_then(|(_, value)| text(value).parse::<usize>().ok())
+            .unwrap_or(1);
+        let pending = index
+            .checked_sub(1)
+            .and_then(|index| record.orders.get(index));
+        if !extra.iter().any(|(key, _)| *key == "pending_index") {
+            entries.push(("pending_index".to_owned(), Tag::String(index.to_string())));
+        }
         for (key, value) in [
             (
                 "pending_blueprint",
@@ -1342,7 +1350,7 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         &[("blueprint", string("watch_tower"))],
     ));
     assert!(
-        poor.body.contains("Pending: Watchtower L1"),
+        poor.body.starts_with("Queued Watchtower: "),
         "{}",
         poor.body
     );
@@ -1408,14 +1416,14 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     ));
     assert!(busy.body.contains("House"), "{}", busy.body);
     assert!(busy.has("project_status"));
-    assert!(busy.body.contains("waiting for materials"), "{}", busy.body);
+    assert!(busy.body.contains("not enough:"), "{}", busy.body);
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
-    assert!(status.body.contains("Pending: House L1"), "{}", status.body);
     assert!(
-        status.body.contains("waiting for materials"),
+        status.body.contains("Pending #1: House L1"),
         "{}",
         status.body
     );
+    assert!(status.body.contains("not enough:"), "{}", status.body);
     assert_eq!(
         state
             .settlements
@@ -1437,8 +1445,7 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
 
 #[test]
 fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales() {
-    // One pending order per settlement (construction queue order, owner
-    // 2026-11-17): each pending blueprint gets its own settlement.
+    // Each locale retains the authored cultural names in the full queue view.
     for (locale, level) in [("en_us", "L1"), ("ru_ru", "ур. 1")] {
         for pending in ["spanish_house", "spanish_church", "spanish_fortress"] {
             let mut state = joined(0);
@@ -1557,7 +1564,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
             payload: Some(cached),
         }],
     ));
-    assert!(poor.body.contains("Pending: House L2"), "{}", poor.body);
+    assert!(poor.body.starts_with("Queued House L2: "), "{}", poor.body);
     assert!(poor.has("project_status"));
     assert_eq!(
         state
@@ -1619,7 +1626,11 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         "project_upgrade",
         &[("b", string(&building.0.to_string()))],
     ));
-    assert!(queued.body.contains("Pending: House L3"), "{}", queued.body);
+    assert!(
+        queued.body.starts_with("Queued House L3: "),
+        "{}",
+        queued.body
+    );
 
     // A player-certified building of the same kind is never offered an upgrade.
     let mut state = joined(0);
@@ -1726,7 +1737,7 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
         &[("blueprint", string("watch_tower"))],
     ));
     assert!(
-        receipt.body.contains("Pending: Watchtower L1"),
+        receipt.body.starts_with("Queued Watchtower: "),
         "{}",
         receipt.body
     );
@@ -1739,11 +1750,11 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
     assert!(!needs.is_empty());
     let mut page = last_dialog(&click(&mut state, id, "project_status", &[]));
     assert!(
-        page.body.contains("Pending: Watchtower L1"),
+        page.body.contains("Pending #1: Watchtower L1"),
         "{}",
         page.body
     );
-    assert!(page.body.contains("waiting for materials"), "{}", page.body);
+    assert!(page.body.contains("not enough:"), "{}", page.body);
     assert!(!page.body.contains("House L1"));
     let pages = needs.len().div_ceil(18).max(1);
     let mut material_icons = Vec::new();
@@ -1785,7 +1796,7 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
     assert!(details.has("project_cancel_review"));
     state.settlements.get_mut(id).unwrap().owner = Some("someone-else".into());
     let visitor = last_dialog(&click(&mut state, id, "project_status", &[]));
-    assert!(visitor.body.contains("Pending: Watchtower L1"));
+    assert!(visitor.body.contains("Pending #1: Watchtower L1"));
     let details = last_dialog(&click(&mut state, id, "project_status_details", &[]));
     assert!(!details.has("project_cancel_review"));
     let denied = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
@@ -1794,7 +1805,7 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
     state.settlements.get_mut(id).unwrap().owner = Some(PLAYER.into());
     set_locale(&mut state, "ru_ru");
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
-    assert!(status.body.contains("В очереди: Сторожевая башня ур. 1"));
+    assert!(status.body.contains("В очереди #1: Сторожевая башня ур. 1"));
     assert!(
         status.body.contains("не хватает материалов"),
         "{}",
@@ -1831,7 +1842,7 @@ fn pending_funded_order_shows_localized_waiting_for_site() {
         &[("blueprint", string("watch_tower"))],
     ));
     assert!(
-        queued.body.contains("Pending: Watchtower L1"),
+        queued.body.starts_with("Queued Watchtower: "),
         "{}",
         queued.body
     );
@@ -1959,36 +1970,27 @@ fn project_status_active_shows_readable_progress() {
         "{}",
         status.body
     );
-    let bar = status
-        .icons
-        .iter()
-        .filter(|(slot, _)| (18..27).contains(slot))
-        .collect::<Vec<_>>();
-    assert_eq!(bar.len(), 9);
-    for (segment, (_, icon)) in bar.iter().enumerate() {
-        let full = total > 0 && u128::from(done) * 9 >= u128::from(total) * (segment + 1) as u128;
-        let expected = if full {
-            "minecraft:lime_stained_glass_pane"
-        } else {
-            "minecraft:gray_stained_glass_pane"
-        };
-        assert_eq!(
-            icon.item_id,
-            state
-                .registry
-                .items
-                .id_of(&Identifier::parse(expected).unwrap())
-                .unwrap()
-        );
-        assert!(icon_text(icon).contains(&format!("{done}/{total}")));
-    }
     let site = &status
         .icons
         .iter()
-        .find(|(slot, _)| *slot == 14)
-        .expect("actual site icon")
+        .find(|(slot, _)| *slot == 0)
+        .expect("one independently listed project")
         .1;
-    assert!(icon_text(site).contains(&corner_text(project.origin)));
+    let facts = icon_text(site);
+    assert!(facts.contains("Watchtower L1 ·"), "{facts}");
+    assert!(facts.contains(&format!("{done}/{total}")), "{facts}");
+    assert!(facts.contains(&corner_text(project.origin)), "{facts}");
+    let builder = project
+        .builder
+        .map_or_else(|| "unbound".to_owned(), |(uuid, _)| uuid.to_string());
+    assert!(facts.contains(&format!("Builder: {builder}")), "{facts}");
+    let map = &status
+        .icons
+        .iter()
+        .find(|(slot, _)| *slot == 14)
+        .expect("whole-set map action")
+        .1;
+    assert!(icon_text(map).contains("Map"));
 }
 
 #[test]
@@ -2141,7 +2143,7 @@ fn locale_is_recorded_before_join_and_cleared_on_leave() {
 }
 
 #[test]
-fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spectators() {
+fn reviews_append_orders_but_cancel_requires_the_same_indexed_intent() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
     prep_projects_site(&mut state, id);
@@ -2152,9 +2154,10 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
         &[("blueprint", string("house"))],
     );
     let cached = confirmation_payload(&changes, "krasnokamen:settlement/project_order");
-    assert_eq!(text(field(&cached, "pending_blueprint").unwrap()), "");
-    assert_eq!(text(field(&cached, "pending_level").unwrap()), "0");
-    assert_eq!(text(field(&cached, "pending_building").unwrap()), "0");
+    assert!(
+        field(&cached, "pending_blueprint").is_none(),
+        "adding does not replace the head"
+    );
     state.settlements.get_mut(id).unwrap().revision += 1;
     let queued = last_dialog(&run(
         &mut state,
@@ -2164,37 +2167,234 @@ fn reviews_ignore_simulation_revisions_but_refuse_changed_pending_orders_and_spe
             payload: Some(cached.clone()),
         }],
     ));
-    assert!(queued.body.contains("Pending: House L1"), "{}", queued.body);
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
-    for payload in [
-        cached,
-        Tag::Compound(vec![
-            ("s".into(), string(&id.0.to_string())),
-            ("blueprint".into(), string("house")),
-        ]),
-    ] {
-        let refused = last_dialog(&run(
-            &mut state,
-            &[PlayerInput::DialogClick {
-                connection: CONN,
-                id: "krasnokamen:settlement/project_order".into(),
-                payload: Some(payload),
-            }],
-        ));
-        assert!(refused.body.contains("changed"), "{}", refused.body);
-        let record = state.settlements.get(id).unwrap();
-        assert!(record.projects.is_empty() && record.orders.first().is_some());
-    }
+    assert!(queued.body.starts_with("Queued House: "), "{}", queued.body);
+    let again = last_dialog(&run(
+        &mut state,
+        &[PlayerInput::DialogClick {
+            connection: CONN,
+            id: "krasnokamen:settlement/project_order".into(),
+            payload: Some(cached),
+        }],
+    ));
+    assert!(again.body.starts_with("Queued House: "), "{}", again.body);
     click(
         &mut state,
         id,
         "project_order",
-        &[("blueprint", string("house"))],
+        &[("blueprint", string("farm"))],
     );
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
+    let orders = &state.settlements.get(id).unwrap().orders;
+    assert_eq!(
+        orders
+            .iter()
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["house", "house", "farm"]
+    );
+    let review = click(
+        &mut state,
+        id,
+        "project_cancel_review",
+        &[("pending_index", string("3"))],
+    );
+    let cached = confirmation_payload(&review, "krasnokamen:settlement/project_cancel_pending");
+    assert_eq!(text(field(&cached, "pending_index").unwrap()), "3");
+    state.settlements.get_mut(id).unwrap().revision += 1;
+    let cancelled = last_dialog(&run(
+        &mut state,
+        &[PlayerInput::DialogClick {
+            connection: CONN,
+            id: "krasnokamen:settlement/project_cancel_pending".into(),
+            payload: Some(cached.clone()),
+        }],
+    ));
+    assert!(cancelled.body.contains("Pending order cancelled."));
+    click(
+        &mut state,
+        id,
+        "project_order",
+        &[("blueprint", string("mine"))],
+    );
+    let refused = last_dialog(&run(
+        &mut state,
+        &[PlayerInput::DialogClick {
+            connection: CONN,
+            id: "krasnokamen:settlement/project_cancel_pending".into(),
+            payload: Some(cached),
+        }],
+    ));
+    assert!(refused.body.contains("changed"), "{}", refused.body);
+    assert_eq!(
+        state.settlements.get(id).unwrap().orders[2].blueprint,
+        "mine"
+    );
     let entity = state.connections.entity_of(CONN).unwrap();
     state.players.get_mut(&entity).unwrap().game_mode = crate::commands::GameMode::Spectator;
     let refused = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
     assert!(refused.body.contains("Only the owner or an operator"));
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 3);
+}
+
+/// Small real structure-ledger plans isolate presentation from planner admission.
+pub(super) fn parallel_ui_fixture(count: usize) -> (TickState, SettlementId) {
+    use crate::plugin_structures::settlement_builds::{PlannedCell, prepare};
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    crate::settlements::construction::tests::open_plan(&mut state);
+    state.day_time = 18000;
+    for index in 0..count {
+        let origin = [12 + index as i32, 201, 13];
+        let bounds = ScriptWorldBounds::new(origin, [origin[0], 202, origin[2]]).unwrap();
+        let stone = state.registry.states.stone;
+        let structure = prepare(
+            &mut state,
+            id,
+            "storage".into(),
+            bounds,
+            bounds,
+            vec![
+                PlannedCell {
+                    at: origin,
+                    state: stone,
+                    resource: None,
+                    quantity: 0,
+                },
+                PlannedCell {
+                    at: [origin[0], 202, origin[2]],
+                    state: stone,
+                    resource: None,
+                    quantity: 0,
+                },
+            ],
+        )
+        .unwrap();
+        let slot = villager(&mut state, [1.5, 201.0, 2.5 + index as f64]);
+        let entity = state.entities.body(slot).id;
+        crate::settlements::bind(&mut state, id, entity).unwrap();
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .data
+            .profession = Profession::Builder;
+        let uuid = state.entities.row(slot).uuid;
+        state
+            .settlements
+            .get_mut(id)
+            .unwrap()
+            .projects
+            .push(super::super::construction::Project {
+                settlement: id,
+                blueprint: "storage".into(),
+                level: 1,
+                origin,
+                rotation: 0,
+                building: None,
+                structure,
+                ordered: true,
+                builder: Some((uuid, None)),
+            });
+    }
+    (state, id)
+}
+
+#[test]
+fn d8_status_lists_every_project_binding_corner_and_pending_reason() {
+    let (mut state, id) = parallel_ui_fixture(8);
+    for blueprint in ["house", "farm"] {
+        click(
+            &mut state,
+            id,
+            "project_order",
+            &[("blueprint", string(blueprint))],
+        );
+    }
+    let status = last_dialog(&click(&mut state, id, "project_status_details", &[]));
+    assert!(
+        status.body.contains("Active projects: 8/8"),
+        "{}",
+        status.body
+    );
+    assert!(
+        status.body.contains("Pending orders: 2/8\nHead: House L1"),
+        "{}",
+        status.body
+    );
+    assert!(
+        status.body.contains("Pending #1: House L1 · not enough:"),
+        "{}",
+        status.body
+    );
+    assert!(
+        status.body.contains("Pending #2: Farm L1 · not enough:"),
+        "{}",
+        status.body
+    );
+    assert_eq!(status.body.matches("Builder: ").count(), 8);
+    for project in &state.settlements.get(id).unwrap().projects {
+        assert!(
+            status.body.contains(&format!(
+                "0/2\n{}\nBuilder: {}",
+                corner_text(project.origin),
+                project.builder.unwrap().0
+            )),
+            "{}",
+            status.body
+        );
+    }
+    let details = click(&mut state, id, "project_status_details", &[]);
+    let payload = confirmation_payload(&details, "krasnokamen:settlement/project_cancel_review");
+    assert_eq!(text(field(&payload, "pending_index").unwrap()), "1");
+}
+
+#[test]
+fn d8_chat_queue_limit_indexed_cancel_default_and_permission_fence() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    prep_projects_site(&mut state, id);
+    state.day_time = 18000;
+    let entity = state.connections.entity_of(CONN).unwrap();
+    let slot = state.entities.slot_of(entity).unwrap();
+    state.entities.set_pos(slot, [8.5, 201.0, 8.5]);
+    assert!(chat(&command(&mut state, "settlement build house"))[0].starts_with("Queued house: "));
+    assert!(chat(&command(&mut state, "settlement build farm"))[0].starts_with("Queued farm: "));
+    let cancelled = command(&mut state, "settlement build cancel 2");
+    assert_eq!(chat(&cancelled), ["Cancelled pending construction order."]);
+    assert_eq!(
+        state.settlements.get(id).unwrap().orders[0].blueprint,
+        "house"
+    );
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 1);
+    assert_eq!(
+        chat(&command(&mut state, "settlement build cancel 8")),
+        ["No pending construction order #8."]
+    );
+    for _ in 1..8 {
+        command(&mut state, "settlement build house");
+    }
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 8);
+    assert_eq!(
+        chat(&command(&mut state, "settlement build farm")),
+        ["Construction queue is full: MAX_ORDERS=8."]
+    );
+    state.settlements.get_mut(id).unwrap().owner = Some("another-owner".into());
+    assert_eq!(
+        chat(&command(&mut state, "settlement build cancel 2")),
+        ["Only the owner or an operator orders construction."]
+    );
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 8);
+    state.settlements.get_mut(id).unwrap().owner = Some(PLAYER.into());
+    for _ in 0..8 {
+        assert_eq!(
+            chat(&command(&mut state, "settlement build cancel")),
+            ["Cancelled pending construction order."]
+        );
+    }
+    assert_eq!(
+        chat(&command(&mut state, "settlement build cancel")),
+        ["No pending construction order."]
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }

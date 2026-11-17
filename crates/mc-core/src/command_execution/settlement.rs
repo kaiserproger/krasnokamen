@@ -409,6 +409,16 @@ pub(super) fn settlement(
                 blueprint,
             );
         }
+        SettlementCommand::BuildCancel { index } => {
+            build_cancel_command(
+                state,
+                connection,
+                executor,
+                actor.as_deref(),
+                operator,
+                *index,
+            );
+        }
         SettlementCommand::BuildUpgrade { id } => {
             build_upgrade_command(state, connection, executor, actor.as_deref(), operator, *id);
         }
@@ -423,8 +433,8 @@ pub(super) fn settlement(
 /// building/army commands). Both variants need an authenticated actor and
 /// `can_manage`, which also refuses ownerless settlements; operators of an
 /// owned settlement pass per existing semantics. Orders start immediately when
-/// funded and free, or replace the single pending owner order. `build cancel`
-/// cancels only that pending order; active work and real stock stay unchanged.
+/// funded and free, or append to the bounded owner queue. Cancellation targets
+/// one pending order; active work and real stock stay unchanged.
 pub(super) fn build_command(
     state: &mut TickState,
     connection: ConnectionId,
@@ -433,35 +443,63 @@ pub(super) fn build_command(
     operator: bool,
     blueprint: &str,
 ) {
+    let id = match build_target(state, executor, actor, operator) {
+        Ok(id) => id,
+        Err(message) => return error(state, connection, message),
+    };
+    match crate::settlements::construction::request_build(state, id, blueprint) {
+        Ok(outcome) => error(state, connection, outcome.message(blueprint)),
+        Err(message) => error(state, connection, message),
+    }
+}
+
+fn build_target(
+    state: &TickState,
+    executor: EntityId,
+    actor: Option<&str>,
+    operator: bool,
+) -> Result<crate::settlements::SettlementId, &'static str> {
     use crate::settlements::building_commands;
-    let Some(id) = building_commands::containing(state, executor) else {
-        return error(state, connection, building_commands::NO_SETTLEMENT);
-    };
-    let Some(actor) = actor else {
-        return error(state, connection, building_commands::ADMISSION_UNAVAILABLE);
-    };
+    let id =
+        building_commands::containing(state, executor).ok_or(building_commands::NO_SETTLEMENT)?;
+    let actor = actor.ok_or(building_commands::ADMISSION_UNAVAILABLE)?;
     if state
         .settlements
         .get(id)
         .is_none_or(|record| !record.can_manage(actor, operator))
     {
-        return error(
-            state,
-            connection,
-            "Only the owner or an operator orders construction.",
-        );
+        return Err("Only the owner or an operator orders construction.");
     }
-    if blueprint == "cancel" {
-        let message = crate::settlements::construction::cancel_pending(state, id).map_or_else(
+    Ok(id)
+}
+
+fn build_cancel_command(
+    state: &mut TickState,
+    connection: ConnectionId,
+    executor: EntityId,
+    actor: Option<&str>,
+    operator: bool,
+    index: Option<usize>,
+) {
+    let id = match build_target(state, executor, actor, operator) {
+        Ok(id) => id,
+        Err(message) => return error(state, connection, message),
+    };
+    let result = match index {
+        None => crate::settlements::construction::cancel_pending(state, id),
+        Some(index) => match index.checked_sub(1) {
+            Some(index) => crate::settlements::construction::cancel_pending_at(state, id, index),
+            None => Err("No pending construction order #0.".to_owned()),
+        },
+    };
+    error(
+        state,
+        connection,
+        result.map_or_else(
             |message| message,
             |()| "Cancelled pending construction order.".into(),
-        );
-        return error(state, connection, message);
-    }
-    match crate::settlements::construction::request_build(state, id, blueprint) {
-        Ok(outcome) => error(state, connection, outcome.message(blueprint)),
-        Err(message) => error(state, connection, message),
-    }
+        ),
+    );
 }
 
 /// Native `/settlement build upgrade <buildingId>` execution. The building id
@@ -478,25 +516,11 @@ pub(super) fn build_upgrade_command(
     operator: bool,
     id: u64,
 ) {
-    use crate::settlements::building_commands;
     use crate::settlements::buildings::BuildingId;
-    let Some(enclosing) = building_commands::containing(state, executor) else {
-        return error(state, connection, building_commands::NO_SETTLEMENT);
+    let enclosing = match build_target(state, executor, actor, operator) {
+        Ok(id) => id,
+        Err(message) => return error(state, connection, message),
     };
-    let Some(actor) = actor else {
-        return error(state, connection, building_commands::ADMISSION_UNAVAILABLE);
-    };
-    if state
-        .settlements
-        .get(enclosing)
-        .is_none_or(|record| !record.can_manage(actor, operator))
-    {
-        return error(
-            state,
-            connection,
-            "Only the owner or an operator orders construction.",
-        );
-    }
     let building = BuildingId(id);
     let home = crate::settlements::SettlementId(id >> 32);
     if home != enclosing {
@@ -512,14 +536,18 @@ pub(super) fn build_upgrade_command(
                 .find(|bp| bp.kind == target.kind)
         })
         .map(|bp| bp.id.clone());
+    let requested_level =
+        crate::settlements::construction::owner_upgrade_level(state, enclosing, building);
     match crate::settlements::construction::request_upgrade(state, enclosing, building) {
         Ok(outcome) => {
             let mut label = blueprint.expect("accepted blueprint");
-            if let Some(order) =
-                crate::settlements::construction::head_order_of(&state.settlements, enclosing)
-            {
+            if matches!(
+                &outcome,
+                crate::settlements::construction::OrderOutcome::Queued { .. }
+            ) {
+                let level = requested_level.expect("admitted upgrade level");
                 use std::fmt::Write;
-                write!(label, " L{}", order.level).expect("string write");
+                write!(label, " L{level}").expect("string write");
             }
             error(state, connection, outcome.message(&label));
         }

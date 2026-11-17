@@ -271,6 +271,10 @@ enum Target {
         building: BuildingId,
     },
     Blueprint(String),
+    Pending {
+        index: usize,
+        order: crate::settlements::construction::OwnerOrder,
+    },
     Material(String),
     StockDetail(ItemStack),
     MapAt([i32; 3]),
@@ -752,6 +756,31 @@ fn click(
         return show(state, connection, &ctx, view);
     }
     match target {
+        Target::Pending { index, order } => {
+            close(state, connection, entity, true);
+            let payload = Tag::Compound(vec![
+                (
+                    "pending_index".to_owned(),
+                    Tag::String((index + 1).to_string()),
+                ),
+                ("pending_blueprint".to_owned(), Tag::String(order.blueprint)),
+                (
+                    "pending_level".to_owned(),
+                    Tag::String(order.level.to_string()),
+                ),
+                (
+                    "pending_building".to_owned(),
+                    Tag::String(order.building.map_or(0, |id| id.0).to_string()),
+                ),
+            ]);
+            super::dispatch(
+                state,
+                connection,
+                &ctx,
+                "project_cancel_review",
+                ClickPayload(Some(&payload)),
+            );
+        }
         Target::MapView { centre, scale } => {
             close(state, connection, entity, true);
             let payload = Tag::Compound(Origin::Map { centre, scale }.fields());
@@ -2178,136 +2207,47 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
     let Some(record) = state.settlements.get(ctx.id) else {
         return screen;
     };
-    let mut status = super::pending_order_text(state, ctx).unwrap_or_else(|| {
-        if crate::settlements::construction::projects(record)
-            .next()
-            .is_some()
-        {
-            tr(ctx, "No queued order", "Нет заказа в очереди")
-        } else {
-            tr(
-                ctx,
-                "No active project; no queued order",
-                "Нет активной стройки и заказа в очереди",
-            )
-        }
-        .to_owned()
-    });
-    if let Some(project) = crate::settlements::construction::projects(record).next() {
+    let mut status = super::construction_summary(state, ctx);
+    if crate::settlements::construction::idle(record) {
+        status.push('\n');
+        status.push_str(tr(
+            ctx,
+            "No active project; no queued order",
+            "Нет активной стройки и заказа в очереди",
+        ));
+    }
+    for (slot, project) in crate::settlements::construction::projects(record).enumerate() {
+        let facts = super::project_text(state, ctx, project).unwrap_or_else(|error| error);
+        let mut lines = facts.lines();
+        let name = lines.next().unwrap_or("").to_owned();
+        let lore = lines.map(str::to_owned).collect::<Vec<_>>();
         screen.put(
-            4,
+            slot,
             icon(
                 state,
                 super::super::blueprints::get(&state.registry, &project.blueprint)
                     .map_or(Icon::IronPickaxe, |bp| kind_item(bp.kind)),
                 1,
-                text(format!(
-                    "{} L{}",
-                    super::blueprint_label(ctx, &project.blueprint),
-                    project.level
-                )),
-                &[],
-            ),
-            Target::Refresh,
-        );
-        let builder = project
-            .builder
-            .map(|(worker, _)| super::super::presentation::villager_name(worker).to_owned())
-            .unwrap_or_else(|| {
-                tr(
-                    ctx,
-                    "Builder cause unavailable",
-                    "Причина состояния строителя недоступна",
-                )
-                .to_owned()
-            });
-        screen.put(
-            12,
-            icon(state, Icon::IronPickaxe, 1, text(builder), &[]),
-            Target::Dialog("residents"),
-        );
-        screen.put(
-            14,
-            icon(
-                state,
-                Icon::FilledMap,
-                1,
-                text(ctx.t(Key::Map)),
-                &[super::corner_text(project.origin)],
+                text(name),
+                &lore,
             ),
             Target::MapAt(project.origin),
         );
-        match crate::plugin_structures::settlement_builds::status(state, ctx.id, &project.structure)
-        {
-            Ok(snapshot) => {
-                let total: u64 = snapshot.stages.iter().map(|stage| stage.work_units).sum();
-                let done = snapshot
-                    .stages
-                    .iter()
-                    .take(snapshot.current_stage_index as usize)
-                    .map(|stage| stage.work_units)
-                    .sum::<u64>()
-                    .saturating_add(snapshot.completed_work_units);
-                let phase = super::project_phase(ctx, snapshot.state.as_str());
-                status = format!("{phase} · {done}/{total}\n{status}");
-                if let Some(reason) = &snapshot.pause_reason {
-                    status.push('\n');
-                    status.push_str(reason);
-                }
-                for segment in 0..9 {
-                    let full = total > 0
-                        && u128::from(done) * 9 >= u128::from(total) * (segment + 1) as u128;
-                    screen.put(
-                        18 + segment,
-                        icon(
-                            state,
-                            if full {
-                                Icon::LimeStainedGlassPane
-                            } else {
-                                Icon::GrayStainedGlassPane
-                            },
-                            1,
-                            text(format!("{done}/{total}")),
-                            &[],
-                        ),
-                        Target::Refresh,
-                    );
-                }
-            }
-            Err(_) => {
-                status = tr(
-                    ctx,
-                    "Project records unavailable; cause unknown.",
-                    "Данные стройки недоступны; причина неизвестна.",
-                )
-                .to_owned()
-            }
-        }
-    } else if let Some(order) = crate::settlements::construction::head_order(record) {
+    }
+    for (index, order) in crate::settlements::construction::orders(record).enumerate() {
+        let label = super::pending_order_text(state, ctx, index)
+            .unwrap_or_else(|| ctx.t(Key::StateChanged).to_owned());
         screen.put(
-            4,
-            icon(
-                state,
-                super::super::blueprints::get(&state.registry, &order.blueprint)
-                    .map_or(Icon::IronPickaxe, |bp| kind_item(bp.kind)),
-                1,
-                text(format!(
-                    "{} L{}",
-                    super::blueprint_label(ctx, &order.blueprint),
-                    order.level
-                )),
-                &[],
-            ),
-            Target::Refresh,
-        );
-        status = format!(
-            "{}\n{}",
-            tr(
-                ctx,
-                "Queued — site not assigned",
-                "В очереди — место не назначено"
-            ),
-            status
+            18 + index,
+            icon(state, Icon::Book, 1, text(label), &[]),
+            if ctx.manage {
+                Target::Pending {
+                    index,
+                    order: order.clone(),
+                }
+            } else {
+                Target::Dialog("project_status_details")
+            },
         );
     }
     screen.put(
@@ -2320,11 +2260,14 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
         Target::Dialog("storage"),
     );
-    let mut known = true;
+    screen.put(
+        14,
+        icon(state, Icon::FilledMap, 1, text(ctx.t(Key::Map)), &[]),
+        Target::Dialog("map"),
+    );
     let needs = match super::project_needs(state, ctx) {
         Ok(needs) => needs,
         Err(error) => {
-            known = false;
             screen.put(
                 27,
                 icon(
@@ -2362,31 +2305,10 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         icon(state, Icon::Book, 1, text(ctx.t(Key::Status)), &[]),
         Target::Dialog("project_status_details"),
     );
-    let funded = known
-        && needs.is_empty()
-        && crate::settlements::construction::projects(record)
-            .next()
-            .is_some();
     screen.put(
         ACTION,
-        icon(
-            state,
-            if funded { Icon::FilledMap } else { Icon::Chest },
-            1,
-            text(if funded {
-                ctx.t(Key::Map)
-            } else {
-                storage_label(ctx)
-            }),
-            &[],
-        ),
-        if funded {
-            crate::settlements::construction::projects(record)
-                .next()
-                .map_or(Target::Refresh, |project| Target::MapAt(project.origin))
-        } else {
-            Target::Dialog("storage")
-        },
+        icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
+        Target::Dialog("storage"),
     );
     screen.put(
         LIST,

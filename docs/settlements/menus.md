@@ -79,7 +79,7 @@ English chat replies (blueprint identifiers, not display names):
   one-based index shown on screen; omitted index means 1 (the head).
   Success remains `Cancelled pending construction order.` No pending order:
   `No pending construction order.` Invalid index:
-  `No pending construction order at index <index>.`
+  `No pending construction order #<index>.`
 
 The **Construction** screen and its status dialog list **all** active projects
 and pending orders, never just the first. The status body starts with
@@ -97,7 +97,7 @@ Builder: <uuid or unbound>
 The phase is the live preparation/build phase, not a constant; progress is the
 structure ledger's completed/total cells. Each pending order has one line:
 `Pending #<index>: <display name> L<level> · <reason>`, with indices 1..count.
-Shortage details remain below their order. For example,
+Existing material icons remain below the project and order lists. For example,
 `Pending #1: House L1 · not enough: minecraft:white_wool x3` and
 `Pending #2: Farm L1 · busy`. Existing funding/site reasons retain their spelling.
 The map gives each active site a hover naming its blueprint, level and corner;
@@ -105,6 +105,10 @@ overlapping map cells retain all site descriptions. Its legend also lists each
 site as `Active site: <display name> L<level> · <x> <y> <z>`.
 Clicking any active site opens the complete Construction status. The summary
 count/head does not replace the project list.
+The Construction chest has one icon per active site (facts in its lore, click
+for its map) and one icon per pending order (click to review cancelling that
+exact indexed intent). The clock opens the complete status dialog; material
+icons remain paged below the lists. A visitor can inspect but cannot cancel.
 
 The `village-owner-order-qa` gate observes two waiting orders, a funded later
 order lifting over an unfunded head, the head fencing autonomous admission, two
