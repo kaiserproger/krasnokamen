@@ -6036,7 +6036,10 @@ fn unsneak_under_low_ceiling_stays_crouched_until_standing_fits() {
         }],
     );
     assert_eq!(state.entities.pos(slot), pos);
-    assert_eq!(state.entities.body(slot).height, 1.8);
+    assert_eq!(
+        state.entities.body(slot).height,
+        crate::blueprint::PLAYER_BODY.height
+    );
     assert_eq!(state.entities.row(slot).appearance.pose, 0);
 }
 

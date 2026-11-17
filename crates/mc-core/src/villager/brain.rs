@@ -294,7 +294,15 @@ fn roofed(state: &TickState, pos: BlockPos) -> bool {
 /// Vanilla `stopSleeping`: the woken body takes its standing size on a free
 /// cell beside the bed.
 fn stand_up(state: &mut TickState, slot: EntitySlot, baby: bool) {
-    let (width, height) = if baby { (0.15, 0.975) } else { (0.3, 1.95) };
+    // Vanilla `LivingEntity#getDefaultDimensions` from the type's own blueprint
+    // (a baby is exactly half), the same source summon and recovery write.
+    let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+        return;
+    };
+    let Some(blueprint) = state.registry.blueprint(type_id) else {
+        return;
+    };
+    let (width, height) = crate::blueprint::blueprint_dimensions(blueprint, baby, false);
     state.entities.set_half_width(slot, width);
     state.entities.body_mut(slot).height = height;
     let cell = at(state.entities.pos(slot));

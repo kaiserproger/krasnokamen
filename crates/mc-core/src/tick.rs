@@ -75,6 +75,10 @@ pub(crate) mod mining_tests;
 #[path = "auth_gate_tests.rs"]
 mod auth_gate_tests;
 
+#[cfg(test)]
+#[path = "crowd_pen_tests.rs"]
+mod crowd_pen_tests;
+
 /// Fixed worker count: derived once from the machine.
 #[must_use]
 pub fn worker_threads() -> usize {

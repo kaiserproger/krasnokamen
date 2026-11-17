@@ -472,7 +472,13 @@ fn native_falling_checkpoint_restores_block_state_and_stationary_control() {
     let row = state.entities.row(slot);
     assert_eq!(row.falling, Some(falling));
     assert_eq!(body.movement, crate::blueprint::MovementClass::Stationary);
-    assert_eq!((body.half_width, body.height), (0.49, 0.98));
+    assert_eq!(
+        (body.half_width, body.height),
+        (
+            crate::blueprint::FALLING_BLOCK_BODY.half_width(),
+            crate::blueprint::FALLING_BLOCK_BODY.height
+        )
+    );
     assert_eq!(row.appearance.spawn_data, sand as i32);
     let (_, checkpoint, _) = checkpoint_data_for(&state, 1);
     let native = &checkpoint[&(0, 0)].entities[0];

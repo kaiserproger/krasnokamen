@@ -728,8 +728,8 @@ fn leave_vehicle(state: &mut TickState, slot: EntitySlot, actor: EntityId) {
             &sampler,
             mc_physics::Vec3::new(pos[0], pos[1], pos[2]),
             mc_physics::Aabb {
-                half_width: 0.3,
-                height: 1.8,
+                half_width: crate::blueprint::PLAYER_BODY.half_width(),
+                height: crate::blueprint::PLAYER_BODY.height,
             },
             mc_physics::Vec3::new(width, 0.0, 0.0),
             state.entities.ground(slot),

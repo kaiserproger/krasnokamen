@@ -818,7 +818,10 @@ fn using_a_bed_a_villager_sleeps_in_only_wakes_the_villager() {
             .sleeping
     );
     assert_eq!(rig.pose(villager), 0);
-    assert_eq!(rig.state.entities.body(slot).height, 1.95);
+    assert_eq!(
+        rig.state.entities.body(slot).height,
+        crate::blueprint::contract_dimensions("minecraft:villager").height
+    );
     assert_eq!(rig.state.entities.pos(slot)[1], f64::from(head.y));
 
     // The woken villager stays up through its brain's decisions beside the
@@ -1053,6 +1056,36 @@ fn sleeping_percentage_above_hundred_disables_skip_and_zero_still_needs_a_sleepe
     );
 }
 
+/// R6 G1: the lying player takes the vanilla sleeping square and the woken
+/// player takes `PLAYER_BODY`, not the hand-written 0.3 / 1.8 the wake path
+/// used to restore.
+#[test]
+fn a_woken_player_carries_the_player_contract_body() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    crate::sleep::use_bed(&mut rig.state, rig.player, ConnectionId(1), rig.foot);
+    let slot = rig.state.entities.slot_of(rig.player).expect("slot");
+    assert_eq!(
+        rig.state.entities.body(slot).half_width,
+        crate::blueprint::SLEEPING_POSE_SIZE / 2.0
+    );
+    assert_eq!(
+        rig.state.entities.body(slot).height,
+        crate::blueprint::SLEEPING_POSE_SIZE
+    );
+    crate::sleep::wake(&mut rig.state, rig.player);
+    assert_eq!(
+        rig.state.entities.body(slot).half_width,
+        crate::blueprint::PLAYER_BODY.half_width(),
+        "the woken player must carry the contract half width"
+    );
+    assert_eq!(
+        rig.state.entities.body(slot).height,
+        crate::blueprint::PLAYER_BODY.height,
+        "the woken player must carry the contract height"
+    );
+}
+
 #[test]
 fn sleep_statistics_only_award_accepted_entry_and_reset_rest_timer() {
     use mc_data::statistics::CustomStat;
@@ -1122,13 +1155,19 @@ fn weather_gap_sleeping_fits_low_ceiling_and_wakes_at_safe_exit() {
         .set_block(rig.head.x, rig.head.y + 2, rig.head.z, stone);
     rig.use_bed(1);
     let slot = rig.state.entities.slot_of(rig.player).unwrap();
-    assert_eq!(rig.state.entities.body(slot).height, 0.2);
+    assert_eq!(
+        rig.state.entities.body(slot).height,
+        crate::blueprint::SLEEPING_POSE_SIZE
+    );
     rig.run(20);
     assert!(rig.state.sleepers.contains_key(&rig.player));
     let exit = crate::sleep::respawn_position(&rig.state, rig.player).unwrap();
     crate::sleep::wake(&mut rig.state, rig.player);
     assert_eq!(rig.state.entities.pos(slot), exit);
-    assert_eq!(rig.state.entities.body(slot).height, 1.8);
+    assert_eq!(
+        rig.state.entities.body(slot).height,
+        crate::blueprint::PLAYER_BODY.height
+    );
 }
 
 #[test]
