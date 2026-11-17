@@ -333,3 +333,9 @@ distance six on a supported, dry cell; an immersed resident still follows
 its ordinary shore route. Both route admission and already committed movement
 honour that arrival distance, including ticks without a new brain decision. Other work,
 food, household and military destinations keep their own arrival contracts.
+
+Resident motion bounds each horizontal walking step by the remaining distance to
+its committed waypoint. A lower waypoint stays committed until vertical arrival,
+but the resident stops at its horizontal centre instead of stepping across it
+and reversing while falling or stepping back onto the ledge. Route selection,
+arrival tolerances, gravity, jumping and external impulses are unchanged.
