@@ -973,20 +973,24 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             "managed-tree drops at {next:?}"
         );
         if next == root {
-            // The root keeps its registration until its trunk column is empty
-            // (its own unfinished crown still uses the column as identity
-            // evidence), then the ordinary retire pass removes it.
-            state.tick = 20;
-            super::super::forestry::retire_missing(&mut state);
+            // The root keeps its registration until its whole trunk column is
+            // empty; the retire pass after the loop removes it.
             let record = state.settlements.get(id).unwrap();
             assert!(
-                !record.planted_trees.contains(&root),
-                "root retires once its column is empty"
+                record.planted_trees.contains(&root),
+                "a partially felled trunk keeps its registered root"
             );
-            assert!(record.revision > revision, "root retirement is journaled");
         }
     }
     assert!(!executor::clearing(&state, id, &project.structure));
+    // The root keeps its registration until its whole trunk column is empty;
+    // then the ordinary retire pass removes it.
+    state.tick = 20;
+    super::super::forestry::retire_missing(&mut state);
+    assert!(
+        state.settlements.get(id).unwrap().revision > revision,
+        "root retirement is journaled"
+    );
     assert!(
         !state
             .settlements
