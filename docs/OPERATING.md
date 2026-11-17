@@ -861,6 +861,11 @@ world or a copy restored from backup: several of its effects stay after
   Restore a consistent native backup, not an Anvil export. `battle reset` removes
   the durable battle history, tagged units and ticket together on the next
   published tick; it does not restore the other world/player settings above.
+- Upgrading past the battle WAL-patch format (fighter fight-loop clock): a world
+  whose battle history an older binary wrote after its first battle tick refuses
+  startup with the new binary. Before swapping binaries, run `battle reset`, wait
+  one tick, then `save-all flush` with the old binary, or restore a backup the
+  old binary saved without a battle.
 
 ### Block log and rollback
 
