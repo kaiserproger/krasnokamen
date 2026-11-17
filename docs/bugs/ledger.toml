@@ -7298,3 +7298,82 @@ repro = "client"
 regression = ["cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_chase", "cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_flank", "cargo:mc-core:battle::cavalry::tests::a_rider_whose_horse_dies_walks_from_the_next_battle_tick"]
 failing_first = "reported"
 fix_commit = "9176f32745de0bb4933212569efa643f0ec68874"
+
+[[bug]]
+id = "HARNESS-RESERVE-CPUS-STALE-RESERVATION"
+title = "A stale CPU reservation left by a killed `reserve-cpus` silently pins every later `mem-run` scope away from those CPUs, or drops the restriction entirely when the stale list covers a whole lane pool"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G4, read from code and not reproduced: tools/dev/reserve-cpus:20-30 creates /tmp/solaris-mem-slots/reserved-cpus with only the CPU list (`printf '%s\n' \"$cpus\" > \"$file\"`, noclobber) and releases it from `trap release EXIT`; a SIGKILL (agent cancel, OOM) or a wrapper kill leaves the file behind, and tools/dev/mem-run.sh:365-373 then excludes those CPUs from every new scope, including the perf lane's own pool (`pool=$perf_cpus`), so -p A/B numbers shrink with no line in the log saying why; when the stale list covers a whole pool, `allowed` is empty and mem-run.sh:371-372 skips `cpu_pin`, so the scope runs on the reserved CPUs and the reservation is ignored instead. tools/dev/README.md:17 states the file is removed when the command ends. Nothing records a pid or checks freshness; /tmp is tmpfs, so only a reboot clears it. Repro: `tools/dev/reserve-cpus 6,7 -- sleep 60` and SIGKILL the script's pid, then run `tools/dev/mem-run.sh -m 1G sh -c 'grep Cpus_allowed_list /proc/self/status'` and see the reserved CPUs excluded with no reservation owner alive."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY"
+title = "`mem-run` forwards a stop signal to its direct child only, so a descendant that ignores it keeps the wrapper, the scope and the build token held until the wrapper is SIGKILLed"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G5, read from code and not reproduced: tools/dev/mem-run.sh:410-411 background the command (`\"$@\" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!`) and install `trap \"kill -TERM $c\" TERM INT HUP`; the only whole-scope cleanup is tools/dev/mem-run-guard.py:63-84, which fires when the wrapper or its caller dies. A targeted `kill -TERM <mem-run pid>` (an agent cancelling one job by pid) with a command whose children ignore TERM leaves the wrapper blocked in `wait` forever, so the guardian sees a live wrapper, the scope is never killed and the build token it holds is not released until someone SIGKILLs the wrapper. Ctrl-C at a terminal hides this because the kernel signals the whole foreground process group. Repro: `tools/dev/mem-run.sh -m 1G sh -c 'trap \"\" TERM; sleep 600' &`, `kill -TERM` the mem-run pid, then check the scope stays populated and the token is still held in tools/dev/fleet-status."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "CONTENT-IMPORT-JVM-NO-TIMEOUT"
+title = "`content import` waits on the bundle's datagen, javac and the Java extractors with no timeout and no kill on drop, so a stalled JVM blocks the command forever"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G7, read from code and not reproduced: crates/mc-edge/src/content_import.rs:868-875 (bundle datagen via `-DbundlerMainClass`), :923-934 (javac of the in-tree extractors) and :948-954 (extractor run) call `Command::new(java|javac) ... .output()` with no timeout and no kill-on-drop. A JVM that waits on a lock, on stdin or on a full disk blocks `krasnokamen content import --version <version> --download` indefinitely with no progress line and no error, and Ctrl-C leaves the JVM running until it finishes on its own (it stops only because the terminal signals the whole process group). Repro: run content import against a bundle whose datagen stalls, or SIGSTOP the java child while :868-875 is running, and observe the command never returns and prints no diagnostic."
+repro = "command"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "KNOCKBACK-EPOCH-MAP-COPY"
+title = "The knockback epoch observer assumes the tick output's snapshot Arc is unique: with any retained clone it panics the tick owner on `Arc::get_mut(..).expect(..)`, and because every published WorldSnapshot also holds the epoch map, its `Arc::make_mut` deep-copies the whole ConnectionId->(count, tick) map on every tick that carries an explosion knockback for anyone."
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "crates/mc-core/src/core.rs:52-91 (observe_explosion_knockback): `Arc::make_mut(knockback_ticks)` at :79 and `Arc::get_mut(&mut output.snapshot).expect(\"tick output is not shared before publication\")` at :87; the shared map is WorldSnapshot.player_knockback_ticks (crates/mc-core/src/boundary.rs:666) and the broadcast retains up to broadcast_cap=32 outputs (crates/mc-core/src/config.rs:137) while the tick seeds its handle at crates/mc-core/src/core/tick_loop.rs:66. Found by read-only audit CS341/REPORT-B.md B6, no failure observed."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+repro_check = "No red reproducer exists yet; the panic needs a shared snapshot, which no live caller produces today. Test idea for the fix, through the real observer: a mc-core unit test that calls `crate::core::observe_explosion_knockback` (pub(crate)) with an Output whose `snapshot` Arc is also held by the test, plus one explosion knockback entry for a live player; today the call panics at core.rs:87, after a fallback that clones the snapshot instead of expecting uniqueness it must return and publish an epoch map that still reads correctly through the retained clone. Suggested name: `cargo:mc-core:core::knockback_epochs_shared_snapshot_does_not_panic_the_observer`. The second symptom (a full map copy per explosion tick, because make_mut is never unique) is the same code path and is measured, not asserted: `perf stat` allocations or a test-only allocation counter on a two-player explosion fixture at 20 TPS. Keep it in one row; split only if a fix lands for the panic and not the copy."
+
+[[bug]]
+id = "ENTITYVIEWS-ASCENDING-ID-DEBUG-ONLY"
+title = "EntityViews::publish documents a strictly ascending unique-id input contract but enforces it only with debug_assert!, while the slot assignment, free-list reuse, page grouping and chunk-move index it protects run in release builds, where an unsorted or duplicated batch silently maps ids to the wrong slots instead of failing."
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "crates/mc-core/src/entity_views.rs:64-66 (the doc contract) and :106 (the only check, a debug_assert!); the serial lifecycle it guards is :108-149 (next_append, free-list pop/push, slot insertion) and the page grouping is :150-201 (entries.sort_by_key by slot after a 'Stable' comment). Found by read-only audit CS341/REPORT-B.md B8; no caller violation known and no failure observed."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+repro_check = "This is a hygiene candidate, not an observed defect: no live caller passes an unsorted batch (candidates come from a sorted changed list), and the documented contract plus a debug_assert is idiomatic Rust. Recorded so Main can decide whether it is backlog at all. If it is admitted, the only mechanically red-able shape without adding API is an always-on invariant in `finish` (for example rows.len() equal to the live page cells, or the sortedness check compiled out of debug builds only via a cfg the test can flip); a plain debug `cargo:` test cannot be the control because `cargo test` builds with debug_assertions on, so the current assert fires and the test would be green before the fix. Do not add an O(n) sortedness scan to the per-tick path to buy that check."
+
+[[bug]]
+id = "JOURNAL-TMP-NEVER-PRUNED"
+title = "Unpublished journal batches (`batch-<lo>-<hi>.bin.tmp`) are never removed: every failed or interrupted append leaves a file nothing prunes, so the world grows silently until an append hits ENOSPC and the core fail-stops."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Auditor C, D19 CS341 audit, /var/tmp/w/receipts/CS341/REPORT-C.md finding G-5 (books rule ch. 12.2.4 p. 270 'free up resources in every possible code path', ch. 18.7 p. 374 'clean up files'). Evidence: crates/mc-core/src/journal.rs:576-579 builds `self.dir.join(format!(\"{name}.tmp\"))` and :579-607 writes, sync_all's and renames it; a write/sync error (ENOSPC/EIO) or a stop between create and rename leaves the tmp file; prune_batches_through (journal.rs:982-997) deletes only names that start 'batch-' and end '.bin', and JournalWriter::open (journal.rs:437-448) only calls create_dir_all, so no path ever removes or reports a stale '*.tmp' (journal.rs:7,648 only documents that they are ignored). Not reproduced as a failure; read from source. Repro/test idea: a cargo test in mc-core (a `journal_tests::` fn; note crates/mc-core/src/journal_tests.rs:1364 already pins the current 'tmp is ignored' behaviour, which is what this row changes) that arms the existing WAL_WRITE_FAILURE hook (journal.rs:420-424,590-597, one-shot partial write + injected ENOSPC) for one append, reopens the world (JournalWriter::open) and asserts the journal directory holds no '*.tmp'; plus a second case that leaves a hand-written 'batch-00000000000000000099-00000000000000000099.bin.tmp' and asserts open removes it. Suggested fix: sweep 'journal/*.tmp' in JournalWriter::open and log one line with count and bytes."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "JOURNAL-PRUNE-ERRORS-SILENT"
+title = "WAL pruning swallows every failure (`read_dir` error, per-entry error, `remove_file` result), so a read-only or EIO journal directory grows the WAL without bound and without one log line until an append fails with ENOSPC and halt."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Auditor C, D19 CS341 audit, /var/tmp/w/receipts/CS341/REPORT-C.md finding G-6 (book rules ch. 12.2.4 p. 270, ch. 12.6 p. 286 'handle failures', ch. 18.7 p. 374). Evidence: crates/mc-core/src/journal.rs:982-997 - `let Ok(entries) = std::fs::read_dir(journal_dir) else { return }`, `let Ok(entry) = entry else { continue }`, `let _ = std::fs::remove_file(...)`; the only caller is the checkpoint completion path crates/mc-core/src/core/journal.rs:1008-1009, which logs nothing about pruning, so a filesystem refusal (remount-ro after a disk error, an overlay/NFS volume turning read-only, a changed directory mode) makes every checkpoint commit while nothing is deleted. Correctness is unaffected (batches at or below the committed checkpoint are ignored by replay), so the observable symptom is pure growth until ENOSPC. Not reproduced as a failure; read from source. Repro/test idea: a cargo test in mc-core that runs a real checkpoint through journal_loop on a temp world, makes the journal directory non-writable (chmod 0555 / a read-only overlay in a drill), then asserts the checkpoint still commits and that a warning is emitted naming the directory, the failing entry count and the errno; the same test must keep the existing green prune test unchanged. Suggested fix: count failures and emit one rate-limited warn per checkpoint with errno and unpruned count/bytes."
+regression = []
+failing_first = "not recorded"
