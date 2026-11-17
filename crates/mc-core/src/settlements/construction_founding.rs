@@ -349,7 +349,12 @@ pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId
 /// Returns true only while this expedition owns the planning turn. Material
 /// shortages leave ordinary native extraction and crafting active.
 pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
-    if state.settlements.get(parent).unwrap().founding.is_none() {
+    let record = state.settlements.get(parent).unwrap();
+    let pending = record.pending_order.is_some();
+    if record.founding.is_none() {
+        if pending {
+            return false;
+        }
         admit(state, parent);
     }
     let Some(expedition) = state.settlements.get(parent).unwrap().founding.clone() else {
@@ -365,6 +370,9 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
     for (name, origin) in expedition.sites() {
         if executor::built_at(state, parent, name, origin) {
             continue;
+        }
+        if pending {
+            return false;
         }
         let blueprint = blueprints::get(&state.registry, name).expect("authored outpost");
         let images = executor::source_images(state, parent);

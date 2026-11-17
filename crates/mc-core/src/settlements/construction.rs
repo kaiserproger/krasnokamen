@@ -1687,10 +1687,21 @@ fn street_site(
 }
 
 fn plan(state: &mut TickState, id: SettlementId) {
-    if plan_order(state, id) {
+    // Pending orders permit an existing expedition's handover or cancellation,
+    // never admission or construction of another outpost.
+    if state
+        .settlements
+        .get(id)
+        .is_some_and(|record| record.pending_order.is_some())
+        && founding::plan(state, id)
+    {
         return;
     }
+    // With a pending order, iron_demand considers only that order's bill.
     if furnace::plan(state, id) {
+        return;
+    }
+    if plan_order(state, id) {
         return;
     }
     if founding::plan(state, id) {

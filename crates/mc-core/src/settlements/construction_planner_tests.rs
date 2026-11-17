@@ -453,6 +453,101 @@ fn iron_demand_tracks_open_house_and_real_shears_or_wool() {
     );
 }
 
+fn smelting_house_stock() -> (TickState, SettlementId, crate::entities::EntitySlot) {
+    let (mut state, id, builder) = fixture();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    state.registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(Some(&root)).unwrap());
+    open_plan(&mut state);
+    fund(&mut state, "house", 1);
+    for (name, count) in [("raw_iron", 8), ("coal", 8), ("cobblestone", 8)] {
+        let item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+            .unwrap();
+        let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+        let index = slots.iter().position(mc_data::ItemStack::is_empty).unwrap();
+        slots[index] = mc_data::ItemStack::new(item, count);
+    }
+    (state, id, builder)
+}
+
+#[test]
+fn pending_house_allows_only_its_own_furnace_prerequisite() {
+    let (mut state, id, builder) = smelting_house_stock();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if state
+            .registry
+            .items
+            .name_of(stack.item_id)
+            .is_some_and(|name| name.path().ends_with("_bed") || name.path().ends_with("_wool"))
+        {
+            *stack = mc_data::ItemStack::EMPTY;
+        }
+    }
+    request_build(&mut state, id, "house").unwrap();
+    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert_eq!(iron_demand(&state, id, None), 2);
+    let before = state.block_entities[&(1, 201, 1)].slots.clone();
+    plan(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        record
+            .project
+            .as_ref()
+            .expect("furnace prerequisite")
+            .blueprint,
+        furnace::NAME
+    );
+    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert_eq!(
+        state.block_entities[&(1, 201, 1)].slots,
+        before,
+        "admission does not debit stock"
+    );
+    complete(&mut state, id, builder);
+    assert_eq!(
+        crate::villager::smelting::owned_furnaces(&state, id).count(),
+        1
+    );
+    plan(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    assert!(
+        record.project.is_none(),
+        "no unrelated building or second furnace"
+    );
+    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+}
+
+#[test]
+fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
+    let (mut state, id, _) = smelting_house_stock();
+    let bill = &blueprints::get(&state.registry, "house")
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .materials;
+    assert!(funded_variant(&state, id, bill, &executor::source_images(&state, id)).is_some());
+    request_build(&mut state, id, "farm").unwrap();
+    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert_eq!(
+        iron_demand(&state, id, None),
+        0,
+        "only the pending bill contributes demand"
+    );
+    for _ in 0..4 {
+        plan(&mut state, id);
+    }
+    let record = state.settlements.get(id).unwrap();
+    assert!(record.project.is_none());
+    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "farm");
+    assert_eq!(
+        crate::villager::smelting::owned_furnaces(&state, id).count(),
+        0
+    );
+}
+
 #[test]
 fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
     let (mut state, id, _) = fixture();
