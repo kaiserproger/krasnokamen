@@ -77,3 +77,20 @@ This is not an approved war/faction model and must not be described as one.
 
 Implementation and gate evidence belong to the SpainCulture report. Public
 claims require the actual pinned-server run, not this design decision.
+
+## Food in loaded settlements — owner, 2026-11-17
+
+> Оставить
+
+- Loaded settlements keep eating bread from storage, like unloaded ones: one
+  food point per resident per day, bread worth four points.
+
+## Lumber replanting near access — owner approved 2026-11-17
+
+> Согласен
+
+- Planted lumberjack trees stay protected (2026-11-08 above).
+- A lumberjack does not plant where the root or future canopy would block
+  access to streets, plots or reserved sites.
+- Only settlements the canopy can reach are checked; an unrelated settlement
+  never vetoes a planting.
