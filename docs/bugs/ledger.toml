@@ -5946,12 +5946,13 @@ id = "EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE"
 title = "Under world queue pressure an explosion's knockback impulse is silently dropped instead of delivered or explicitly closed"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Split from EDGE-ONESHOT-WORLD-PRESSURE (independent review of the ledger batch): the queue-pressure part is the single commit 40b28f732; lag detection and coalescing (60f1d475b) remain on the original row."
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::explosion_queue_tests::explosions_deliver_or_explicitly_close_under_queue_pressure"]
 fix_commit = "40b28f732"
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE.json"
 
 [[bug]]
 id = "MODERATION-SELECTOR-DEOP-RACE"
@@ -6075,7 +6076,7 @@ id = "RC5-HIVE-ITEM-BEE-STATE"
 title = "RC5 hive items in player custody lose legacy native bee state on import"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage2Review/terra-edge-events.md finding 3; Stage2X SLICES.md:172-173"
 repro = "source"
 regression = [
@@ -6088,6 +6089,7 @@ regression = [
 fix_commit = "patch:f2b02f99a0411b887329667c47078408bce9d513fd36875ecabeab709a7befae"
 repro_check = "The fix spans 259a078ef and 602c20cfd on wt/XEdgeEvents, not merged into wt/M3Server at filing. Legacy minecraft:bees item components and scalar rider images require typed migration, including player equipment, cursor and crafting custody. The initial normalizer skipped these owned components and the first fixture used a current image, masking RC5 rider incompatibility. The round-3 fixture is synthetic, not a real RC5 save: a test added to an RC5 source checkout builds a bee and serializes its native image with RC5 code (receipts/XEdgeEvents/rc5-capture-source.diff:258-283); the regression embeds that image in a current player export and renames the outer key to solaris:HiveEntity (pre_rename_bee_tests.rs:239-299), then imports, places and releases the bee. Branch check cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee; green receipts/XEdgeEvents/round3-conversion.log, red receipts/XEdgeEvents/round3-image-red-rc5_hive_item_export_import_place_release_preserves_native_bee.log and round3-player-red-exits.log. The import of an actual RC5 world is tracked in RC5-HIVE-REAL-WORLD-IMPORT."
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/RC5-HIVE-ITEM-BEE-STATE.json"
 
 [[bug]]
 id = "MOUNT-PORTAL-DROPS-CHEST-CARGO"
