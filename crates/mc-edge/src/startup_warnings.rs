@@ -7,7 +7,6 @@
 //! users. Both are warnings, never refusals: LAN offline play is a supported
 //! setup (owner decision, 2026-11-17).
 
-#[cfg(unix)]
 use std::path::Path;
 
 use mc_core::boundary::ConnectionId;
@@ -30,7 +29,6 @@ pub fn warn_unsafe_startup(cfg: &EdgeConfig, core: &mc_core::Core) {
              network.bind_address to 127.0.0.1"
         );
     }
-    #[cfg(unix)]
     for path in secret_files(cfg) {
         if let Some(mode) = loose_file_mode(path) {
             let mode = format!("{mode:03o}");
@@ -89,7 +87,6 @@ fn carries_secret(cfg: &EdgeConfig) -> bool {
 
 /// Every loaded file holding a secret: the TOML when it carries one itself,
 /// and an imported properties file with a non-empty `rcon.password`.
-#[cfg(unix)]
 fn secret_files(cfg: &EdgeConfig) -> impl Iterator<Item = &Path> {
     cfg.config_path
         .as_deref()
@@ -98,12 +95,20 @@ fn secret_files(cfg: &EdgeConfig) -> impl Iterator<Item = &Path> {
         .chain(cfg.secret_properties_path.as_deref())
 }
 
-/// The file's permission bits when group or other may read or write it.
-#[cfg(unix)]
+/// The file's permission bits when group or other may read or write it;
+/// always `None` off Unix, which has no such bits.
 fn loose_file_mode(path: &Path) -> Option<u32> {
-    use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(path).ok()?.permissions().mode() & 0o777;
-    (mode & 0o077 != 0).then_some(mode)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(path).ok()?.permissions().mode() & 0o777;
+        (mode & 0o077 != 0).then_some(mode)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
 }
 
 #[cfg(test)]
