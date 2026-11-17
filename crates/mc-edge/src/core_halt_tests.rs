@@ -167,17 +167,20 @@ async fn a_wedged_pump_halt_uses_the_core_reason_not_a_queued_disconnect() {
     let mut ticks = core.subscribe();
     let uuid = uuid::Uuid::new_v4();
     let second = server.connections.joining_id();
-    for connection in [first, second] {
-        assert!(core.submit(mc_core::boundary::PlayerInput::Join {
-            connection,
-            uuid,
-            name: "halt".to_owned(),
-            permission_level: 0,
-        }));
-    }
-    // The second login displaces the first (a queued DUPLICATE_LOGIN
-    // Disconnect), then leaves: no live connection remains for the halt.
-    assert!(core.submit(mc_core::boundary::PlayerInput::Leave { connection: second }));
+    assert!(core.submit(mc_core::boundary::PlayerInput::Join {
+        connection: first,
+        uuid,
+        name: "halt".to_owned(),
+        permission_level: 0,
+    }));
+    // A newer login of the same profile displaces the first (a queued
+    // DUPLICATE_LOGIN Disconnect) and never reaches Play: no live connection
+    // remains for the halt, so the only queued Disconnect is not the halt's.
+    // (A second `Join` would be refused instead and leave the first in Play.)
+    assert!(core.submit(mc_core::boundary::PlayerInput::ProfileLogin {
+        connection: second,
+        uuid,
+    }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let pump = tokio::spawn(std::future::pending::<()>());
     let serve = tokio::spawn(crate::server::serve_with_wedged_pump(
@@ -185,8 +188,8 @@ async fn a_wedged_pump_halt_uses_the_core_reason_not_a_queued_disconnect() {
         Arc::clone(&server),
         pump,
     ));
-    // Inputs submitted before a tick starts are consumed by it: three ticks
-    // after submission all three have been applied.
+    // Inputs submitted before a tick starts are consumed by it: after three
+    // ticks both inputs have been applied.
     for _ in 0..3 {
         tokio::time::timeout(std::time::Duration::from_secs(60), ticks.recv())
             .await
