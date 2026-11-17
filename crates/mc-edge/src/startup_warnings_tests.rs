@@ -80,7 +80,7 @@ mod unix {
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
-    use crate::startup_warnings::loose_file_mode;
+    use crate::startup_warnings::{loose_file_mode, secret_files};
 
     fn file_with_mode(mode: u32) -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().expect("temp dir");
@@ -120,6 +120,39 @@ mod unix {
             EdgeConfig::from_toml("", None).unwrap().config_path,
             None,
             "defaults and library callers have no file"
+        );
+    }
+
+    #[test]
+    fn an_imported_rcon_password_checks_the_properties_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let toml = dir.path().join("server.toml");
+        let properties = dir.path().join("server.properties");
+        std::fs::write(&toml, "[network]\nbind_address = \"0.0.0.0\"\n").expect("write config");
+        std::fs::write(&properties, "rcon.password=s\n").expect("write properties");
+        std::fs::set_permissions(&toml, std::fs::Permissions::from_mode(0o600)).expect("set mode");
+        std::fs::set_permissions(&properties, std::fs::Permissions::from_mode(0o644))
+            .expect("set mode");
+        let cfg = EdgeConfig::load(&toml).expect("loads");
+        assert_eq!(
+            secret_files(&cfg).collect::<Vec<_>>(),
+            [properties.as_path()],
+            "the imported file holds the secret, the TOML none"
+        );
+        assert_eq!(loose_file_mode(&properties), Some(0o644));
+        std::fs::write(&toml, "[rcon]\npassword = \"s\"\n").expect("write config");
+        let cfg = EdgeConfig::load(&toml).expect("loads");
+        assert_eq!(
+            secret_files(&cfg).collect::<Vec<_>>(),
+            [toml.as_path(), properties.as_path()],
+            "a TOML password wins, yet the imported file still holds a password"
+        );
+        std::fs::write(&properties, "rcon.password=\n").expect("write properties");
+        let cfg = EdgeConfig::load(&toml).expect("loads");
+        assert_eq!(
+            secret_files(&cfg).collect::<Vec<_>>(),
+            [toml.as_path()],
+            "an empty imported password is no secret"
         );
     }
 }

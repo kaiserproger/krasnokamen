@@ -31,18 +31,17 @@ pub fn warn_unsafe_startup(cfg: &EdgeConfig, core: &mc_core::Core) {
         );
     }
     #[cfg(unix)]
-    if let Some(path) = &cfg.config_path
-        && carries_secret(cfg)
-        && let Some(mode) = loose_file_mode(path)
-    {
-        let mode = format!("{mode:03o}");
-        warn!(
-            config = %path.display(),
-            mode = %mode,
-            "config file holds a secret (proxy.secret, msmp.bearer_token, \
-             dashboard.metrics_bearer_token or rcon.password) and is readable or writable \
-             by group/other; restrict it with chmod 600"
-        );
+    for path in secret_files(cfg) {
+        if let Some(mode) = loose_file_mode(path) {
+            let mode = format!("{mode:03o}");
+            warn!(
+                file = %path.display(),
+                mode = %mode,
+                "file holds a secret (proxy.secret, msmp.bearer_token, \
+                 dashboard.metrics_bearer_token or rcon.password) and is readable or writable \
+                 by group/other; restrict it with chmod 600"
+            );
+        }
     }
 }
 
@@ -75,7 +74,8 @@ fn is_loopback_host(host: &str) -> bool {
             .is_ok_and(|address| address.is_loopback())
 }
 
-/// Any secret the config file may carry; the values are never logged.
+/// Any secret the TOML file itself carries; the values are never logged. An
+/// effective `rcon.password` imported from a properties file is not the TOML's.
 fn carries_secret(cfg: &EdgeConfig) -> bool {
     !cfg.proxy.secret.is_empty()
         || !cfg.msmp.bearer_token.is_empty()
@@ -84,7 +84,18 @@ fn carries_secret(cfg: &EdgeConfig) -> bool {
             .metrics_bearer_token
             .as_deref()
             .is_some_and(|token| !token.is_empty())
-        || !cfg.rcon.password.is_empty()
+        || (!cfg.rcon.password.is_empty() && !cfg.rcon_password_imported)
+}
+
+/// Every loaded file holding a secret: the TOML when it carries one itself,
+/// and an imported properties file with a non-empty `rcon.password`.
+#[cfg(unix)]
+fn secret_files(cfg: &EdgeConfig) -> impl Iterator<Item = &Path> {
+    cfg.config_path
+        .as_deref()
+        .filter(|_| carries_secret(cfg))
+        .into_iter()
+        .chain(cfg.secret_properties_path.as_deref())
 }
 
 /// The file's permission bits when group or other may read or write it.

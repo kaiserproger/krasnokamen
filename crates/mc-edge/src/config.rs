@@ -55,6 +55,13 @@ pub struct EdgeConfig {
     /// Startup checks read its permissions.
     #[serde(skip)]
     pub(crate) config_path: Option<PathBuf>,
+    /// Imported properties file holding a non-empty `rcon.password`, whether
+    /// or not the TOML overrides it; startup checks read its permissions too.
+    #[serde(skip)]
+    pub(crate) secret_properties_path: Option<PathBuf>,
+    /// The effective `rcon.password` came from that file, not the TOML.
+    #[serde(skip)]
+    pub(crate) rcon_password_imported: bool,
     /// Upstream proxy trust: Velocity modern forwarding.
     #[serde(default)]
     pub proxy: ProxySection,

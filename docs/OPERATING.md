@@ -958,13 +958,16 @@ configuration, back up before changing binaries or world identity, and never
 bypass identity validation by hand-editing saved metadata. Anvil is a
 compatibility format, not a live fallback or dual-write store.
 
-The WAL window is bounded and fixed: each batch file is fsynced when written,
-but the journal directory is fsynced every `journal_fsync_every_batches`
-appends — 10 acknowledged batches by default. A host power loss can therefore
-roll back up to those 10 acknowledged batches, and not only the writes since
-the last checkpoint. The cadence is a core default
-(`CoreConfig::journal_fsync_every_batches`) with no edge config key; a clean
-stop flushes it.
+What a crash can lose beyond the last checkpoint comes from two windows. First,
+a tick is shown to clients once its journal batch is queued, before the batch is
+published: the batch the journal thread is writing plus up to 128 queued behind
+it (6.4 s of ticks, at most 256 MiB of estimated payload). Any crash, SIGKILL
+included, loses those; the batch being written is lost even when the queue is
+empty, because an unpublished batch file is ignored on recovery. Second, each
+published batch file is fsynced, but the journal directory is fsynced only every
+`journal_fsync_every_batches` published batches (10 by default), so a host power
+loss can also drop up to that many published batch files. A clean stop flushes
+both.
 
 When upgrading from a build with the old scalar rider format, stop it cleanly
 before deploying: an old unclean WAL tail containing `rider` is refused at
