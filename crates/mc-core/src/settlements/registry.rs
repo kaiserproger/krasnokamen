@@ -283,13 +283,7 @@ impl SettlementRecord {
             + opt(&self.village_source)
             + opt(&self.owner_name)
             + opt(&self.furnace_workstation)
-            + self.project.as_ref().map_or(0, |project| {
-                project.blueprint.capacity() + project.structure.capacity()
-            })
-            + self
-                .pending_order
-                .as_ref()
-                .map_or(0, |order| order.blueprint.capacity())
+            + super::construction::record_heap_bytes(self)
             + self
                 .founding
                 .as_ref()

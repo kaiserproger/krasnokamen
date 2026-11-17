@@ -2179,7 +2179,10 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         return screen;
     };
     let mut status = super::pending_order_text(state, ctx).unwrap_or_else(|| {
-        if record.project.is_some() {
+        if crate::settlements::construction::projects(record)
+            .next()
+            .is_some()
+        {
             tr(ctx, "No queued order", "Нет заказа в очереди")
         } else {
             tr(
@@ -2190,7 +2193,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         }
         .to_owned()
     });
-    if let Some(project) = &record.project {
+    if let Some(project) = crate::settlements::construction::projects(record).next() {
         screen.put(
             4,
             icon(
@@ -2280,7 +2283,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
                 .to_owned()
             }
         }
-    } else if let Some(order) = &record.pending_order {
+    } else if let Some(order) = crate::settlements::construction::head_order(record) {
         screen.put(
             4,
             icon(
@@ -2359,7 +2362,11 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         icon(state, Icon::Book, 1, text(ctx.t(Key::Status)), &[]),
         Target::Dialog("project_status_details"),
     );
-    let funded = known && needs.is_empty() && record.project.is_some();
+    let funded = known
+        && needs.is_empty()
+        && crate::settlements::construction::projects(record)
+            .next()
+            .is_some();
     screen.put(
         ACTION,
         icon(
@@ -2374,9 +2381,8 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
             &[],
         ),
         if funded {
-            record
-                .project
-                .as_ref()
+            crate::settlements::construction::projects(record)
+                .next()
                 .map_or(Target::Refresh, |project| Target::MapAt(project.origin))
         } else {
             Target::Dialog("storage")

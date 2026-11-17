@@ -515,10 +515,8 @@ pub(super) fn build_upgrade_command(
     match crate::settlements::construction::request_upgrade(state, enclosing, building) {
         Ok(outcome) => {
             let mut label = blueprint.expect("accepted blueprint");
-            if let Some(order) = state
-                .settlements
-                .get(enclosing)
-                .and_then(|record| record.pending_order.as_ref())
+            if let Some(order) =
+                crate::settlements::construction::head_order_of(&state.settlements, enclosing)
             {
                 use std::fmt::Write;
                 write!(label, " L{}", order.level).expect("string write");

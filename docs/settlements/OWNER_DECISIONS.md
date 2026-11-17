@@ -181,8 +181,13 @@ claims require the actual pinned-server run, not this design decision.
 > 1. по числу строителей  2. если есть заявка на которую есть ресурсы - поднимаем
 > её вверх. иначе оставляем порядок очереди как есть  3. да
 
-Status: design decided; implementation starts after the 19 November freeze
-(owner, 2026-11-17). Until it lands,
+Status: design decided; implementation is pulled before the freeze by D21
+(2026-11-17 ~22:30, superseding the first "after the freeze" answer). The
+narrow interface lands first: code outside the construction module reads the
+record's projects and pending orders only through
+`crates/mc-core/src/settlements/construction_access.rs`, and the code-health
+ratchet ceiling for direct field accesses is 0 (owner D9.3, 2026-11-17). Until
+the parallel behaviour lands,
 [construction queue order](#construction-queue-order--owner-2026-11-17) holds.
 
 - A settlement builds as many projects at once as it has available builders.

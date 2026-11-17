@@ -328,13 +328,7 @@ fn admit(
             return Err("a member is converting, wandering or smelting");
         }
         if v.data.profession == crate::villager::VillagerProfession::Builder
-            || state.settlements.records().any(|settlement| {
-                settlement
-                    .project
-                    .as_ref()
-                    .and_then(|project| project.borrowed_builder)
-                    .is_some_and(|(builder, _)| builder == row.uuid)
-            })
+            || super::construction::bound_builder(&state.settlements, row.uuid)
         {
             return Err("member has construction work; finish or release it first");
         }

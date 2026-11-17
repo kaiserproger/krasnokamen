@@ -586,11 +586,13 @@ pub(super) fn authorized(state: &TickState, record: &Structure) -> bool {
     record.settlement.is_some_and(|id| {
         record.owner == owner(id)
             && record.snapshot.dimension == state.dimension.name()
-            && state
-                .settlements
-                .get(id)
-                .and_then(|record| record.project.as_ref())
-                .is_some_and(|project| project.structure == record.snapshot.structure_id)
+            && state.settlements.get(id).is_some_and(|settlement| {
+                crate::settlements::construction::project_for_structure(
+                    settlement,
+                    &record.snapshot.structure_id,
+                )
+                .is_some()
+            })
     })
 }
 
@@ -636,7 +638,7 @@ pub(super) fn debit(
     let project = state
         .settlements
         .get(id)
-        .and_then(|record| record.project.as_ref());
+        .and_then(|record| crate::settlements::construction::projects(record).next());
     // A new site and an upgrade both carry clear-stage cells: an upgrade that
     // clears natural forest or a registered tree must credit the same drops.
     let preparing = project.is_some();
@@ -1116,7 +1118,7 @@ pub(crate) fn fetch(
         let project = state
             .settlements
             .get(id)
-            .and_then(|record| record.project.as_ref())
+            .and_then(|record| crate::settlements::construction::projects(record).next())
             .ok_or(Failure::Forbidden)?;
         let record = structure(&ledger, &owner(id), &project.structure)?;
         let mut bill = remaining(record)

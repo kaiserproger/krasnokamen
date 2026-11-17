@@ -233,7 +233,7 @@ pub(super) fn screen_at(
     let mut dialog = Dialog::multi_action(title, buttons)
         .columns(6)
         .text(cells_component(&grid, ctx.id));
-    if let Some(project) = &record.project {
+    if let Some(project) = crate::settlements::construction::projects(record).next() {
         let caption = match crate::plugin_structures::settlement_builds::status(
             state,
             ctx.id,
@@ -385,21 +385,14 @@ pub(super) fn pick(
     if streets.is_empty()
         && ids.is_empty()
         && !site.is_empty()
-        && record
-            .project
-            .as_ref()
-            .is_some_and(|project| project.structure == site)
+        && crate::settlements::construction::project_for_structure(record, &site).is_some()
     {
         super::menus::project(state, connection, ctx);
         return;
     }
     let mut choices = Vec::new();
     if !site.is_empty() {
-        if record
-            .project
-            .as_ref()
-            .is_some_and(|project| project.structure == site)
-        {
+        if crate::settlements::construction::project_for_structure(record, &site).is_some() {
             choices.push(button(ctx.t(Key::Status), "project_status", ctx.id));
         } else {
             choices.push(view_button(
@@ -653,7 +646,7 @@ fn features(ctx: &Ctx, state: &TickState, record: &SettlementRecord) -> Vec<Feat
         _ => 1,
     });
     let mut out = Vec::with_capacity(record.buildings.len() + planned.len() + 1);
-    if let Some(project) = &record.project
+    if let Some(project) = crate::settlements::construction::projects(record).next()
         && let Some(bounds) = layout::project_bounds(state, project)
     {
         let status = crate::plugin_structures::settlement_builds::status(

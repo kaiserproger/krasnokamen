@@ -14,6 +14,10 @@ All paths below are under `crates/mc-core/src/settlements/` unless noted:
   `crates/mc-core/src/villager/` owns resident brains and state.
 - `buildings.rs`, `construction.rs`, `autonomy.rs`, `blueprints.rs`: certified
   buildings, construction and generated-village adoption.
+- `construction_access.rs`: the construction module's narrow surface (owner
+  D9.3). Code outside `construction*.rs` reads the record's projects and
+  pending orders only through it; the `code-health` ratchet counts direct field
+  accesses and its ceiling is zero.
 - `households.rs`, `districts.rs`, `production.rs`, `economy.rs`, `commerce.rs`,
   `caravan.rs`, `army.rs`: native domain policy and execution.
 - `inventory.rs`: physical container custody; `commands.rs`, `ui.rs` and

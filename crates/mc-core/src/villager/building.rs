@@ -248,7 +248,7 @@ pub(crate) fn work(
         return None;
     }
     let id = v.settlement?;
-    let project = state.settlements.get(id)?.project.as_ref()?;
+    let project = crate::settlements::construction::projects_of(&state.settlements, id).next()?;
     let next = executor::next_cell(state, id, &project.structure).ok()??;
     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
         && !carried(v, item, count)
@@ -361,10 +361,9 @@ pub(crate) fn wait_reason(
 /// Called once per construction admission, before the brain detaches carry.
 /// One transfer OR budgeted canonical cell advances, never both in an attempt.
 pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
-    let Some(project) = state
-        .settlements
-        .get(id)
-        .and_then(|record| record.project.clone())
+    let Some(project) = crate::settlements::construction::projects_of(&state.settlements, id)
+        .next()
+        .cloned()
     else {
         return;
     };

@@ -820,11 +820,11 @@ pub(super) fn work(
         } else {
             bounds
         },
-        state
-            .settlements
-            .get(building.settlement)
-            .and_then(|record| record.project.as_ref())
-            .is_some_and(|project| project.building == Some(building.id)),
+        crate::settlements::construction::upgrading(
+            &state.settlements,
+            building.settlement,
+            building.id,
+        ),
     );
     let entrance = v.job_site?;
     if v.mining_progress.building != id || v.mining_progress.bounds != Some(bounds) {

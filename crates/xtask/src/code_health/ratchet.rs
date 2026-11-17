@@ -60,11 +60,17 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     path_equality: 113,
     panics: 5,
     merge_block_write_pushes: 17,
-    // D9 baseline on b58021e61, 2026-11-17; no spare headroom.
-    construction_field_accesses: 31,
+    // D9 baseline on b58021e61, 2026-11-17, was 31; D8 moved every read outside
+    // the construction module behind `settlements/construction_access.rs`, so
+    // the interface is the only place that names these fields: 0 on the D8
+    // branch. Any new access outside `settlements/construction*.rs` fails.
+    construction_field_accesses: 0,
     hot_files: &[
         ("tick/entity_phase.rs", 734),
-        ("settlements/construction.rs", 1_076),
+        // D8 moved the record's construction fields behind
+        // `settlements/construction_access.rs`; 1028 after the split, measured
+        // on the D8 branch, 2026-11-17.
+        ("settlements/construction.rs", 1_028),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

@@ -220,7 +220,7 @@ fn dispatch(
             };
             if record.owner.is_none() {
                 claim_screen(state, connection, ctx);
-            } else if record.project.is_some() || record.pending_order.is_some() {
+            } else if !super::construction::idle(record) {
                 dispatch(state, connection, ctx, "project_status", ClickPayload(None));
             } else if record.buildings.is_empty() {
                 dispatch(state, connection, ctx, "buildings", ClickPayload(None));
@@ -644,7 +644,7 @@ fn pending_order_matches(state: &TickState, ctx: &Ctx, payload: ClickPayload<'_>
     let Some(record) = state.settlements.get(ctx.id) else {
         return false;
     };
-    let pending = record.pending_order.as_ref();
+    let pending = super::construction::head_order(record);
     payload.string("pending_blueprint")
         == Some(pending.map_or("", |order| order.blueprint.as_str()))
         && payload
@@ -662,10 +662,7 @@ fn pending_order_matches(state: &TickState, ctx: &Ctx, payload: ClickPayload<'_>
 }
 
 fn with_pending_order(button: Button, state: &TickState, ctx: &Ctx) -> Button {
-    let pending = state
-        .settlements
-        .get(ctx.id)
-        .and_then(|record| record.pending_order.as_ref());
+    let pending = super::construction::head_order_of(&state.settlements, ctx.id);
     button
         .with(
             "pending_blueprint",
@@ -1872,7 +1869,7 @@ fn projects_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, n
 }
 
 fn pending_order_text(state: &TickState, ctx: &Ctx) -> Option<String> {
-    let order = state.settlements.get(ctx.id)?.pending_order.as_ref()?;
+    let order = super::construction::head_order_of(&state.settlements, ctx.id)?;
     let raw_reason = super::construction::pending_reason(state, ctx.id).unwrap_or_default();
     let reason = if raw_reason == "busy" {
         ctx.t(Key::PendingBusy)
@@ -1917,7 +1914,7 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
         button(menus::storage_label(ctx), "storage", ctx.id),
         button(ctx.t(Key::Back), "project_status", ctx.id),
     ];
-    if ctx.manage && record.pending_order.is_some() {
+    if ctx.manage && super::construction::head_order(record).is_some() {
         buttons.push(button(
             ctx.t(Key::CancelPending),
             "project_cancel_review",
@@ -1928,7 +1925,7 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
     if let Some(pending) = pending_order_text(state, ctx) {
         dialog = dialog.text(pending);
     }
-    if let Some(project) = &record.project {
+    if let Some(project) = super::construction::projects(record).next() {
         match crate::plugin_structures::settlement_builds::status(state, ctx.id, &project.structure)
         {
             Ok(snapshot) => {
@@ -1958,7 +1955,7 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
                 })
             }
         }
-    } else if record.pending_order.is_none() {
+    } else if super::construction::head_order(record).is_none() {
         dialog = dialog.text(match ctx.lang {
             Lang::En => "No active project; no queued order.",
             Lang::Ru => "Нет активной стройки и заказа в очереди.",
@@ -1981,7 +1978,7 @@ fn project_needs(state: &TickState, ctx: &Ctx) -> Result<Vec<ProjectNeed>, Strin
         .settlements
         .get(ctx.id)
         .ok_or(ctx.t(Key::SettlementGone))?;
-    if let Some(project) = &record.project {
+    if let Some(project) = super::construction::projects(record).next() {
         return crate::plugin_structures::settlement_builds::missing(
             state,
             ctx.id,
@@ -2002,7 +1999,7 @@ fn project_needs(state: &TickState, ctx: &Ctx) -> Result<Vec<ProjectNeed>, Strin
         })
         .map_err(|error| format!("{error:?}"));
     }
-    let Some(pending) = &record.pending_order else {
+    let Some(pending) = super::construction::head_order(record) else {
         return Ok(Vec::new());
     };
     Ok(super::construction::waiting(state, ctx.id)
@@ -2213,12 +2210,13 @@ fn project_upgrade(
     let note = match super::construction::request_upgrade(state, ctx.id, id) {
         Ok(outcome) => {
             let label = match &outcome {
-                super::construction::OrderOutcome::Queued { .. } => state
-                    .settlements
-                    .get(ctx.id)
-                    .and_then(|record| record.pending_order.as_ref())
-                    .map(|order| format!("{} L{}", blueprint_label(ctx, &blueprint), order.level))
-                    .unwrap_or_else(|| blueprint_label(ctx, &blueprint).to_owned()),
+                super::construction::OrderOutcome::Queued { .. } => {
+                    super::construction::head_order_of(&state.settlements, ctx.id)
+                        .map(|order| {
+                            format!("{} L{}", blueprint_label(ctx, &blueprint), order.level)
+                        })
+                        .unwrap_or_else(|| blueprint_label(ctx, &blueprint).to_owned())
+                }
                 super::construction::OrderOutcome::Started => {
                     blueprint_label(ctx, &blueprint).to_owned()
                 }

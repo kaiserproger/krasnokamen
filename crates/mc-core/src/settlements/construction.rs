@@ -15,6 +15,13 @@ mod availability;
 pub(crate) use availability::SourceReason;
 pub(crate) use availability::gatherer_for_item;
 
+#[path = "construction_access.rs"]
+mod access;
+pub(crate) use access::{
+    bound_builder, head_order, idle, project_for_structure, projects, record_heap_bytes, upgrading,
+};
+pub(crate) use access::{head_order_of, projects_of};
+
 #[path = "construction_furnace.rs"]
 pub(crate) mod furnace;
 
