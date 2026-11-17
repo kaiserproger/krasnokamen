@@ -4,6 +4,23 @@ use crate::settlements::construction::tests::{attempt, complete, fixture, fund, 
 use crate::settlements::{SettlementId, blueprints, construction, layout};
 use std::sync::Arc;
 
+fn clearable_on_lot(
+    state: &TickState,
+    at: [i32; 3],
+    lot: Option<mc_script::ScriptWorldBounds>,
+) -> bool {
+    Clearance::default().clearable(state, at, lot)
+}
+
+fn drops(
+    state: &TickState,
+    at: [i32; 3],
+    block: u32,
+    lot: Option<mc_script::ScriptWorldBounds>,
+) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
+    super::drops(state, at, block, lot, &mut Clearance::default())
+}
+
 struct ForestGenerator {
     air: u32,
     stone: u32,
@@ -104,6 +121,19 @@ pub(crate) fn forest() -> (
 /// A grown-tree image whose own deterministic generator agrees with it, so
 /// the planted-root veto (not a generator mismatch) must provide protection.
 pub(crate) fn grown_world(state: &mut TickState, roots: Vec<[i32; 3]>, stem: &str) {
+    // The lightweight registry intentionally contains client tags only. These
+    // tests exercise the real server log/soil tags used by whole-tree proof.
+    static SERVER: std::sync::LazyLock<crate::registry::CoreRegistry> =
+        std::sync::LazyLock::new(|| {
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .expect("vanilla server registry")
+        });
+    let registry = Arc::make_mut(&mut state.registry);
+    registry.tags = Arc::clone(&SERVER.tags);
+    registry.tree_logs = Arc::clone(&SERVER.tree_logs);
+    registry.tree_soil = Arc::clone(&SERVER.tree_soil);
     let generator = Arc::new(ForestGenerator {
         air: state.registry.states.air,
         stone: state.registry.states.stone,
@@ -810,6 +840,13 @@ fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
             }
         })
         .expect("the clearance contains a log with guaranteed vanilla loot");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(next);
+    let root_revision = state.settlements.get(id).unwrap().revision;
     let stone = state
         .registry
         .items
@@ -828,6 +865,15 @@ fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
         Err(mc_script::ScriptOperationFailure::InsufficientItems)
     );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, before);
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&next)
+    );
+    assert_eq!(state.settlements.get(id).unwrap().revision, root_revision);
     assert_eq!(
         state.world.block_at(next[0], next[1], next[2]),
         Some(previous)
@@ -839,6 +885,18 @@ fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
         Some(state.registry.states.air)
     );
     assert_eq!(count(&state, "minecraft:birch_log"), 1);
+    assert!(
+        !state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&next)
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().revision,
+        root_revision + 1
+    );
 }
 
 #[test]
@@ -903,7 +961,7 @@ fn disabled_block_history_protects_natural_forest_near_a_live_player() {
     assert!(clearable(&state, root));
 }
 
-fn lot_around(root: [i32; 3]) -> mc_script::ScriptWorldBounds {
+pub(super) fn lot_around(root: [i32; 3]) -> mc_script::ScriptWorldBounds {
     mc_script::ScriptWorldBounds::new(
         [root[0] - 4, root[1] - 1, root[2] - 4],
         [root[0] + 4, root[1] + 64, root[2] + 4],
@@ -911,7 +969,7 @@ fn lot_around(root: [i32; 3]) -> mc_script::ScriptWorldBounds {
     .unwrap()
 }
 
-fn player_history(
+pub(crate) fn player_history(
     state: &TickState,
     at: [i32; 3],
     retention_secs: u64,
@@ -941,7 +999,7 @@ fn player_history(
 }
 
 #[test]
-fn planted_halo_never_authorizes_foreign_logs_with_empty_or_expired_history() {
+fn planted_halo_keeps_disconnected_logs_but_accepts_historyless_touching_logs() {
     let (mut state, id, _, _, root, _) = forest();
     state
         .settlements
@@ -955,15 +1013,20 @@ fn planted_halo_never_authorizes_foreign_logs_with_empty_or_expired_history() {
         let at = [root[0] + dx, root[1] + 3, root[2]];
         state.world.set_block(at[0], at[1], at[2], log);
         state.block_log = Default::default();
-        assert!(!clearable_on_lot(&state, at, lot), "empty history: {at:?}");
+        assert_eq!(
+            clearable_on_lot(&state, at, lot),
+            dx == 1,
+            "empty history: {at:?}"
+        );
         state.block_log = player_history(&state, at, 1);
         state.block_log.evict(u64::MAX);
         assert!(!state.block_log.player_touched(at));
-        assert!(
-            !clearable_on_lot(&state, at, lot),
+        assert_eq!(
+            clearable_on_lot(&state, at, lot),
+            dx == 1,
             "expired history: {at:?}"
         );
-        assert!(drops(&state, at, log, lot).is_err());
+        assert_eq!(drops(&state, at, log, lot).is_ok(), dx == 1);
         assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
     }
 }

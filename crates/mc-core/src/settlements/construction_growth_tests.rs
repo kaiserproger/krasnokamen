@@ -580,7 +580,7 @@ fn planted_sapling_before_admission(corridor: bool) {
             }
         }
     }
-    assert!(planned_cells(&state, &project, "oak").is_some());
+    assert!(planned_cells(&state, &project, "oak").is_ok());
     let dirt = block(&state, "minecraft:dirt", &[]);
     let sapling = block(&state, "minecraft:oak_sapling", &[("stage", "1")]);
     state.world.set_block(root[0], root[1] - 1, root[2], dirt);
@@ -593,7 +593,7 @@ fn planted_sapling_before_admission(corridor: bool) {
         .insert(root);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     assert!(
-        planned_cells(&state, &project, "oak").is_none(),
+        planned_cells(&state, &project, "oak").is_err(),
         "future planted crown must exclude this site/corridor before it grows"
     );
     assert_eq!(
@@ -662,7 +662,7 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
                 ordered: true,
                 borrowed_builder: None,
             };
-            let (bounds, _) = planned_cells(&state, &project, "oak")?;
+            let (bounds, _) = planned_cells(&state, &project, "oak").ok()?;
             let route = network.construction_access(&project)?;
             let crown = super::super::forestry::PLANTED_CROWN_RADIUS as i32;
             let root = (bounds.min[0]..=bounds.max[0]).find_map(|x| {
@@ -704,7 +704,15 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
         project.origin,
         size
     ));
-    assert!(super::super::forestry::cells(&state, &project, size).is_some());
+    assert!(
+        super::super::forestry::cells(
+            &state,
+            &project,
+            size,
+            &mut super::super::forestry::Clearance::default()
+        )
+        .is_some()
+    );
     let (bounds, cells) = planned_cells(&state, &project, "oak")
         .expect("a crown outside the lot and actual access walk must not veto their envelope");
     fund(&mut state, "spanish_house", 1);
@@ -760,7 +768,7 @@ fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
     );
 }
 
-fn proven_lot_is_felled_and_built(sapling: bool) {
+fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);
     let record = state.settlements.get(id).unwrap();
@@ -793,7 +801,10 @@ fn proven_lot_is_felled_and_built(sapling: bool) {
         lot.origin[2] + i32::from(size[2]) / 2,
     ];
     super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
-    if sapling {
+    if native {
+        super::super::forestry::tests::grown_world(&mut state, Vec::new(), "birch");
+        super::super::forestry::native_tree_tests::grow(&mut state, root, 5);
+    } else if sapling {
         for x in root[0] - 1..=root[0] + 1 {
             for z in root[2] - 1..=root[2] + 1 {
                 for y in root[1]..=root[1] + 4 {
@@ -818,16 +829,17 @@ fn proven_lot_is_felled_and_built(sapling: bool) {
         .insert(root);
     let bounds = super::super::forestry::lot_bounds(&state, &expected).unwrap();
     assert!(!super::super::forestry::clearable(&state, root));
-    assert!(!super::super::forestry::clearable_on_lot(
-        &state, root, None
-    ));
-    assert!(super::super::forestry::clearable_on_lot(
-        &state,
-        root,
-        Some(bounds)
-    ));
+    assert!(!super::super::forestry::Clearance::default().clearable(&state, root, None));
+    assert!(super::super::forestry::Clearance::default().clearable(&state, root, Some(bounds)));
     assert_eq!(
-        surface_y_for_lot(&state, 200, root[0], root[2], Some(bounds)),
+        surface_y_for_lot(
+            &state,
+            200,
+            root[0],
+            root[2],
+            Some(bounds),
+            &mut super::super::forestry::Clearance::default()
+        ),
         Some(200)
     );
     assert!(site_free(
@@ -837,11 +849,7 @@ fn proven_lot_is_felled_and_built(sapling: bool) {
         size
     ));
     retain_player_edit(&mut state, root);
-    assert!(!super::super::forestry::clearable_on_lot(
-        &state,
-        root,
-        Some(bounds)
-    ));
+    assert!(!super::super::forestry::Clearance::default().clearable(&state, root, Some(bounds)));
     assert!(!site_free(
         &state,
         state.settlements.get(id).unwrap(),
@@ -928,18 +936,43 @@ fn proven_lot_is_felled_and_built(sapling: bool) {
         };
         let mut expected_stock = counts(&state);
         state.tick += 20;
-        for stack in super::super::forestry::drops(&state, next, previous, Some(bounds)).unwrap() {
+        for stack in super::super::forestry::drops(
+            &state,
+            next,
+            previous,
+            Some(bounds),
+            &mut super::super::forestry::Clearance::prepared(),
+        )
+        .unwrap()
+        {
             *expected_stock.entry(stack.item_id).or_default() += stack.count;
         }
         state.tick -= 20;
+        let revision = state.settlements.get(id).unwrap().revision;
         attempt(&mut state, id, builder);
         assert_eq!(
             counts(&state),
             expected_stock,
             "managed-tree drops at {next:?}"
         );
+        if next == root {
+            let record = state.settlements.get(id).unwrap();
+            assert!(
+                !record.planted_trees.contains(&root),
+                "root retires in the clearing transaction"
+            );
+            assert!(record.revision > revision, "root retirement is journaled");
+        }
     }
     assert!(!executor::clearing(&state, id, &project.structure));
+    assert!(
+        !state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&root)
+    );
     complete(&mut state, id, builder);
     assert!(state.settlements.get(id).unwrap().project.is_none());
     assert!(
@@ -958,10 +991,189 @@ fn proven_lot_is_felled_and_built(sapling: bool) {
 
 #[test]
 fn natural_baseline_tree_in_planted_halo_is_felled_conserved_and_built() {
-    proven_lot_is_felled_and_built(false);
+    proven_lot_is_felled_and_built(false, false);
 }
 
 #[test]
 fn managed_sapling_on_needed_lot_is_felled_conserved_and_built() {
-    proven_lot_is_felled_and_built(true);
+    proven_lot_is_felled_and_built(true, false);
+}
+
+#[test]
+fn native_grown_registered_tree_is_felled_conserved_and_built() {
+    proven_lot_is_felled_and_built(false, true);
+}
+
+#[test]
+fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
+    let (mut state, id, builder) = fixture();
+    start(&mut state, id, "house", 1, None);
+    fund(&mut state, "house", 1);
+    complete(&mut state, id, builder);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    start(&mut state, id, "house", 2, Some(building));
+    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let at = planned
+        .iter()
+        .find(|cell| {
+            state
+                .world
+                .block_at(cell.at[0], cell.at[1], cell.at[2])
+                .is_some_and(|current| !super::super::forestry::tree_or_sapling(&state, current))
+        })
+        .expect("upgrade has a cell that was not an authored beam")
+        .at;
+    let original = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(at);
+    for name in [
+        "minecraft:birch_sapling",
+        "minecraft:oak_log",
+        "minecraft:birch_log",
+        "minecraft:birch_leaves",
+    ] {
+        let tree = block(&state, name, &[]);
+        state.world.set_block(at[0], at[1], at[2], tree);
+        assert!(planned_cells(&state, &project, "oak").is_err(), "{name}");
+        assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(tree));
+        assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    }
+    state.world.set_block(at[0], at[1], at[2], original);
+    assert!(planned_cells(&state, &project, "oak").is_ok());
+}
+
+fn upgrade_beam() -> (
+    TickState,
+    SettlementId,
+    crate::entities::EntitySlot,
+    Project,
+    [i32; 3],
+) {
+    let (mut state, id, builder) = fixture();
+    start(&mut state, id, "house", 1, None);
+    let original = state.settlements.get(id).unwrap().project.clone().unwrap();
+    fund(&mut state, "house", 1);
+    complete(&mut state, id, builder);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    let project = Project {
+        level: 2,
+        building: Some(building),
+        structure: String::new(),
+        ..original
+    };
+    // L1's horizontal oak beam is replaced by L2 cobblestone.
+    let beam = [
+        project.origin[0] + 5,
+        project.origin[1] + 4,
+        project.origin[2],
+    ];
+    let current = state.world.block_at(beam[0], beam[1], beam[2]).unwrap();
+    assert_eq!(
+        crate::farming::prop(&state.registry.blocks, current, "axis"),
+        Some("x")
+    );
+    assert_eq!(
+        state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .unwrap()
+            .block
+            .id
+            .path(),
+        "oak_log"
+    );
+    let (_, cells) = planned_cells(&state, &project, "oak").unwrap();
+    assert!(cells.iter().any(|cell| {
+        cell.at == beam
+            && state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(cell.state))
+                .unwrap()
+                .block
+                .id
+                .path()
+                == "cobblestone"
+    }));
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert([beam[0] + 1, beam[1], beam[2] + 1]);
+    (state, id, builder, project, beam)
+}
+
+#[test]
+fn retained_identical_player_beam_refuses_upgrade_before_the_authored_exemption() {
+    let (mut state, id, _, project, beam) = upgrade_beam();
+    retain_player_edit(&mut state, beam);
+    assert!(matches!(
+        planned_cells(&state, &project, "oak"),
+        Err(site_refusals::Reason::ProtectedObstruction)
+    ));
+    fund(&mut state, "house", 2);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert_eq!(
+        start_upgrade(&mut state, id, project.building.unwrap()),
+        Err("Construction admission refused: ProtectedObstruction.".into())
+    );
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    // Main's explicit upgrade contract: an indistinguishable authored-state
+    // replacement may upgrade once its player attribution is no longer live.
+    state.block_log = super::super::forestry::tests::player_history(&state, beam, 1);
+    state.block_log.evict(u64::MAX);
+    assert!(!state.block_log.player_touched(beam));
+    assert!(planned_cells(&state, &project, "oak").is_ok());
+}
+
+#[test]
+fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_beam() {
+    let (mut state, _, slot, project, beam) = upgrade_beam();
+    let entity = state.entities.body(slot).id;
+    let connection = crate::boundary::ConnectionId(999);
+    state
+        .entities
+        .set_kind(slot, crate::entities::EntityKind::Player { connection });
+    state.entities.row_mut(slot).villager = None;
+    state.players.insert(
+        entity,
+        crate::player::PlayerState::new(connection, crate::commands::GameMode::Survival),
+    );
+    state.entities.set_pos(slot, beam.map(f64::from));
+    assert!(!state.block_log.enabled());
+    assert!(matches!(
+        planned_cells(&state, &project, "oak"),
+        Err(site_refusals::Reason::ProtectedObstruction)
+    ));
+    state.entities.set_pos(
+        slot,
+        [
+            f64::from(beam[0]) + 33.0,
+            f64::from(beam[1]),
+            f64::from(beam[2]),
+        ],
+    );
+    assert!(planned_cells(&state, &project, "oak").is_ok());
 }

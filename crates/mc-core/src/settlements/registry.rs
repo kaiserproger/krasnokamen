@@ -36,8 +36,8 @@ pub struct SettlementRecord {
     pub building_sequence: u64,
     #[serde(default)]
     pub buildings: BTreeMap<super::buildings::BuildingId, super::buildings::Building>,
-    /// Lumberjack sapling roots survive growth and restart; site preparation
-    /// never clears a tree growing from one of these positions.
+    /// Lumberjack roots survive growth and restart. Felling their exact root
+    /// cell retires the planting in the same transaction as conserved drops.
     #[serde(default)]
     pub planted_trees: std::collections::BTreeSet<[i32; 3]>,
     #[serde(default)]

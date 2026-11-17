@@ -50,7 +50,9 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Drowned joins the `hunts_villagers` capability table next to zombie,
     // zombie_villager and husk (vanilla Drowned targets AbstractVillager),
     // 2026-11-13: 2632.
-    vanilla_id_literals: 2_632,
+    // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
+    // reuse and the already-resolved dirt state remove one net literal, 2026-11-17.
+    vanilla_id_literals: 2_631,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,

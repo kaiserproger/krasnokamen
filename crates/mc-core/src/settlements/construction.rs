@@ -767,7 +767,10 @@ fn start_upgrade(
         ordered: true,
         borrowed_builder: None,
     };
-    if !begin(state, project, &species, color) {
+    let (bounds, mut cells) = planned_cells(state, &project, &species)
+        .map_err(|reason| format!("Construction admission refused: {reason:?}."))?;
+    apply_bed_color(state, &mut cells, color).ok_or("Construction bed color unavailable.")?;
+    if !begin_cells(state, project, bounds, cells) {
         return Err("Construction admission failed.".into());
     }
     Ok(())
@@ -1103,9 +1106,10 @@ fn planned_cells(
     state: &TickState,
     project: &Project,
     species: &str,
-) -> Option<(ScriptWorldBounds, Vec<executor::PlannedCell>)> {
-    let blueprint = blueprints::get(&state.registry, &project.blueprint)?;
-    let level = blueprint.level(project.level)?;
+) -> Result<(ScriptWorldBounds, Vec<executor::PlannedCell>), site_refusals::Reason> {
+    use site_refusals::Reason::Preparation;
+    let blueprint = blueprints::get(&state.registry, &project.blueprint).ok_or(Preparation)?;
+    let level = blueprint.level(project.level).ok_or(Preparation)?;
     let rotated = level.rotated(Rotation::from_quarter_turns(project.rotation));
     let mut quota = level.materials.clone();
     let mut cells: Vec<_> = rotated
@@ -1119,19 +1123,17 @@ fn planned_cells(
         })
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
-    let lot = super::forestry::lot_bounds(state, project)?;
+    let lot = super::forestry::lot_bounds(state, project).ok_or(Preparation)?;
     let mut bottom = project.origin[1];
     let mut corridor = None;
+    let mut clearance = super::forestry::Clearance::default();
     if project.building.is_none() {
-        let dirt = state
-            .registry
-            .blocks
-            .block(&mc_data::Identifier::parse("minecraft:dirt").ok()?)?
-            .default
-            .0;
+        let dirt = state.registry.states.dirt;
         for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-                let ground = surface_y_for_lot(state, project.origin[1], x, z, Some(lot))?;
+                let ground =
+                    surface_y_for_lot(state, project.origin[1], x, z, Some(lot), &mut clearance)
+                        .ok_or(Preparation)?;
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
                     if y == project.origin[1]
@@ -1156,7 +1158,7 @@ fn planned_cells(
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
             for y in project.origin[1] + 1..project.origin[1] + i32::from(size[1]) {
-                let block = state.world.physics_block_at(x, y, z)?;
+                let block = state.world.physics_block_at(x, y, z).ok_or(Preparation)?;
                 if block != state.registry.states.air
                     && (clearable(state, block)
                         || (project.building.is_none() && excavatable(state, block)))
@@ -1176,10 +1178,20 @@ fn planned_cells(
         let placed = *block;
         let (resource, quantity) =
             if let Some((item, quantity)) = blueprints::material_for(&state.registry, *block) {
-                let (_, remaining) = quota.iter_mut().find(|(id, _)| *id == item)?;
-                *remaining = remaining.checked_sub(quantity)?;
+                let (_, remaining) = quota
+                    .iter_mut()
+                    .find(|(id, _)| *id == item)
+                    .ok_or(Preparation)?;
+                *remaining = remaining.checked_sub(quantity).ok_or(Preparation)?;
                 (
-                    Some(state.registry.items.name_of(item)?.to_string()),
+                    Some(
+                        state
+                            .registry
+                            .items
+                            .name_of(item)
+                            .ok_or(Preparation)?
+                            .to_string(),
+                    ),
                     quantity,
                 )
             } else {
@@ -1195,11 +1207,12 @@ fn planned_cells(
     // Catalog materials must map exactly to physical cells; never build free
     // blocks because a blueprint cannot be funded by its declared stock.
     if quota.iter().any(|(_, count)| *count != 0) {
-        return None;
+        return Err(Preparation);
     }
-    apply_species(state, &mut cells, species)?;
+    apply_species(state, &mut cells, species).ok_or(Preparation)?;
     if project.building.is_none() {
-        let preparation = super::forestry::cells(state, project, size)?;
+        let preparation =
+            super::forestry::cells(state, project, size, &mut clearance).ok_or(Preparation)?;
         corridor = preparation.corridor;
         let mut preparation = preparation.cells;
         if !preparation.is_empty() {
@@ -1211,6 +1224,23 @@ fn planned_cells(
             preparation.append(&mut cells);
             cells = preparation;
         }
+    }
+    if project.building.is_some() {
+        executor::upgrade_trees_clear(
+            state,
+            project.settlement,
+            &project.blueprint,
+            project.origin,
+            &cells,
+        )
+        .map_err(|failure| match failure {
+            mc_script::ScriptOperationFailure::Unloaded => site_refusals::Reason::Unloaded,
+            mc_script::ScriptOperationFailure::Forbidden
+            | mc_script::ScriptOperationFailure::Blocked => {
+                site_refusals::Reason::ProtectedObstruction
+            }
+            _ => Preparation,
+        })?;
     }
     // Include the whole placement extent (roof crowns/yards) in executor
     // interference fencing; certification uses the narrower authored bounds.
@@ -1230,8 +1260,8 @@ fn planned_cells(
             max[axis] = max[axis].max(corridor.max[axis]);
         }
     }
-    let bounds = ScriptWorldBounds::new(min, max).ok()?;
-    Some((bounds, cells))
+    let bounds = ScriptWorldBounds::new(min, max).map_err(|_| Preparation)?;
+    Ok((bounds, cells))
 }
 
 /// Rewrite the already-funded authored cells, not the stored project later.
@@ -1317,7 +1347,7 @@ fn cell_bill(state: &TickState, cells: &[executor::PlannedCell]) -> Option<Vec<(
 }
 
 fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> bool {
-    let Some((bounds, mut cells)) = planned_cells(state, &project, species) else {
+    let Ok((bounds, mut cells)) = planned_cells(state, &project, species) else {
         return false;
     };
     if apply_bed_color(state, &mut cells, color).is_none() {
@@ -1475,7 +1505,14 @@ pub(super) const SITE_BAND: i32 = 8;
 /// block with clearable space directly above it. Hillside villages have no
 /// flat ground at the bell's own elevation, so sites follow the terrain.
 pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<i32> {
-    surface_y_for_lot(state, anchor_y, x, z, None)
+    surface_y_for_lot(
+        state,
+        anchor_y,
+        x,
+        z,
+        None,
+        &mut super::forestry::Clearance::prepared(),
+    )
 }
 
 pub(super) fn surface_y_for_lot(
@@ -1484,6 +1521,7 @@ pub(super) fn surface_y_for_lot(
     x: i32,
     z: i32,
     lot: Option<ScriptWorldBounds>,
+    clearance: &mut super::forestry::Clearance,
 ) -> Option<i32> {
     (anchor_y - SITE_BAND..=anchor_y + SITE_BAND)
         .rev()
@@ -1499,8 +1537,7 @@ pub(super) fn surface_y_for_lot(
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above)
-                        || super::forestry::clearable_on_lot(state, [x, y + 1, z], lot)
+                    clearable(state, above) || clearance.clearable(state, [x, y + 1, z], lot)
                 })
         })
 }
@@ -1564,7 +1601,7 @@ fn site_project<'a>(
                 ordered: false,
                 borrowed_builder: None,
             };
-            let Some((bounds, mut cells)) = planned_cells(state, &project, "oak") else {
+            let Ok((bounds, mut cells)) = planned_cells(state, &project, "oak") else {
                 report.reject(site_refusals::Reason::Preparation, lot.origin);
                 continue;
             };
@@ -2116,7 +2153,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
                 .world
                 .physics_block_at(at[0], at[1], at[2])
                 .is_some_and(|block| super::forestry::tree_or_sapling(state, block))
-                && !super::forestry::clearable_on_lot(state, at, lot)
+                && !super::forestry::Clearance::prepared().clearable(state, at, lot)
         });
     let cause = if protected {
         "protected_tree_in_preparation"

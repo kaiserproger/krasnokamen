@@ -167,6 +167,10 @@ pub struct RegistryTables {
     /// (kelp, kelp_plant, seagrass, tall_seagrass refuse a fluid; waterloggable
     /// blocks only take a source, never a flow). Empty without that tag.
     pub(crate) washed_by_fluids: Arc<[bool]>,
+    /// Dense vanilla log/soil tag membership for bounded whole-tree proof.
+    /// Shared immutable startup tables; no tag lookup or copy during selection.
+    pub(crate) tree_logs: Arc<[bool]>,
+    pub(crate) tree_soil: Arc<[bool]>,
     /// Native world-fire state, attachment, support and ignition tables.
     pub(crate) fire_states: crate::fire::FireStates,
     /// Per-state blast resistance (`reports/block_explosion.json`); absent
@@ -479,7 +483,10 @@ impl CoreRegistry {
             .max()
             .unwrap_or(0);
         let washed_away: std::collections::HashSet<i32> = tags
-            .raw_ids("minecraft:block", "minecraft:washed_away_by_fluids")
+            .raw_ids(
+                mc_data::tags::BLOCK_REGISTRY,
+                "minecraft:washed_away_by_fluids",
+            )
             .unwrap_or_default()
             .iter()
             .copied()
@@ -488,8 +495,19 @@ impl CoreRegistry {
         let mut hazard_flags = vec![0u8; state_count];
         let mut mob_interactable_doors = vec![false; state_count];
         let door_blocks = tags
-            .raw_ids("minecraft:block", "minecraft:mob_interactable_doors")
+            .raw_ids(
+                mc_data::tags::BLOCK_REGISTRY,
+                "minecraft:mob_interactable_doors",
+            )
             .unwrap_or(&[]);
+        let log_blocks = tags
+            .raw_ids(mc_data::tags::BLOCK_REGISTRY, "minecraft:logs")
+            .unwrap_or(&[]);
+        let soil_blocks = tags
+            .raw_ids(mc_data::tags::BLOCK_REGISTRY, "minecraft:dirt")
+            .unwrap_or(&[]);
+        let mut tree_logs = vec![false; state_count];
+        let mut tree_soil = vec![false; state_count];
         for state in blocks.states() {
             let name = state.block.id.as_str();
             let mut flags = 0u8;
@@ -524,6 +542,9 @@ impl CoreRegistry {
             }
             hazard_flags[state.id.0 as usize] = flags;
             mob_interactable_doors[state.id.0 as usize] = door_blocks.contains(&state.block.raw_id);
+            tree_logs[state.id.0 as usize] = log_blocks.contains(&state.block.raw_id);
+            tree_soil[state.id.0 as usize] =
+                soil_blocks.contains(&state.block.raw_id) || farming.is_farmland(state.id.0);
             washed_by_fluids[state.id.0 as usize] = washed_away.contains(&state.block.raw_id)
                 && !matches!(
                     state.block.id.path(),
@@ -533,6 +554,8 @@ impl CoreRegistry {
         }
         let mob_interactable_doors: Arc<[bool]> = mob_interactable_doors.into();
         let washed_by_fluids: Arc<[bool]> = washed_by_fluids.into();
+        let tree_logs: Arc<[bool]> = tree_logs.into();
+        let tree_soil: Arc<[bool]> = tree_soil.into();
         let mut collision_boxes = vec![Box::default(); state_count];
         let outline_shapes = mc_data::outline_shapes::vanilla_outline_shapes();
         let mut outlines = vec![crate::pov_ray::OutlineState::default(); state_count];
@@ -652,6 +675,8 @@ impl CoreRegistry {
                 hazard_flags,
                 mob_interactable_doors,
                 washed_by_fluids,
+                tree_logs,
+                tree_soil,
                 fire_states,
                 plugin_rules: None,
                 plugin_ore_profile: None,

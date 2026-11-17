@@ -16,11 +16,12 @@ pub(super) enum Reason {
     Unloaded,
     PlantingProvenance,
     ProtectedObstruction,
+    AmbiguousFoliage,
     ExecutorReservation,
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 14] = [
+const REASONS: [Reason; 15] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -32,6 +33,7 @@ const REASONS: [Reason; 14] = [
     Reason::Unloaded,
     Reason::PlantingProvenance,
     Reason::ProtectedObstruction,
+    Reason::AmbiguousFoliage,
     Reason::ExecutorReservation,
     Reason::Preparation,
     Reason::MaterialBill,
@@ -127,16 +129,30 @@ pub(super) fn observe(state: &mut TickState, id: SettlementId, blueprint: &str, 
     }
 }
 
-fn unproven_planting(state: &TickState, at: [i32; 3], lot: ScriptWorldBounds) -> bool {
-    state
-        .world
-        .physics_block_at(at[0], at[1], at[2])
-        .is_some_and(|block| super::super::forestry::tree_or_sapling(state, block))
-        && super::super::forestry::planted_crown_overlaps(
-            state,
-            ScriptWorldBounds::new(at, at).expect("single cell"),
-        )
-        && !super::super::forestry::clearable_on_lot(state, at, Some(lot))
+fn tree_refusal(state: &TickState, at: [i32; 3]) -> Reason {
+    let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
+        return Reason::Unloaded;
+    };
+    if state.block_log.player_touched(at) || super::super::forestry::persistent(state, block) {
+        return Reason::ProtectedObstruction;
+    }
+    if super::super::forestry::planted_crown_overlaps(
+        state,
+        ScriptWorldBounds::new(at, at).expect("cell"),
+    ) {
+        if state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .is_some_and(|b| b.block.id.path().ends_with("_leaves"))
+        {
+            Reason::AmbiguousFoliage
+        } else {
+            Reason::PlantingProvenance
+        }
+    } else {
+        Reason::ProtectedObstruction
+    }
 }
 
 pub(super) fn check(
@@ -161,6 +177,10 @@ pub(super) fn check(
     }) {
         return Err(Reason::BuildingBuffer);
     }
+    if super::super::forestry::off_lot_sapling_overlaps(state, lot) {
+        return Err(Reason::PlantingProvenance);
+    }
+    let mut clearance = super::super::forestry::Clearance::default();
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
             if [x, max[1], z]
@@ -178,15 +198,19 @@ pub(super) fn check(
             } else {
                 record.anchor[1]
             };
-            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot)).ok_or_else(|| {
-                if (anchor_y - SITE_BAND + 1..=anchor_y + SITE_BAND + 1)
-                    .any(|y| unproven_planting(state, [x, y, z], lot))
-                {
-                    Reason::PlantingProvenance
-                } else {
-                    Reason::SurfaceUnavailable
-                }
-            })?;
+            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot), &mut clearance)
+                .ok_or_else(|| {
+                    (anchor_y - SITE_BAND + 1..=anchor_y + SITE_BAND + 1)
+                        .find(|&y| {
+                            state.world.physics_block_at(x, y, z).is_some_and(|block| {
+                                super::super::forestry::tree_or_sapling(state, block)
+                                    && !clearance.clearable(state, [x, y, z], Some(lot))
+                            })
+                        })
+                        .map_or(Reason::SurfaceUnavailable, |y| {
+                            tree_refusal(state, [x, y, z])
+                        })
+                })?;
             minimum = minimum.min(height);
             maximum = maximum.max(height);
             if maximum - minimum > SITE_VARIANCE {
@@ -204,26 +228,18 @@ pub(super) fn check(
                     .world
                     .physics_block_at(x, y, z)
                     .ok_or(Reason::Unloaded)?;
+                let tree_clearable = super::super::forestry::tree_or_sapling(state, block)
+                    && clearance.clearable(state, [x, y, z], Some(lot));
                 if state.block_entities.contains_key(&(x, y, z))
-                    || (super::super::forestry::tree_or_sapling(state, block)
-                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
-                    || (y == origin[1]
-                        && !floor_replaceable(state, block)
-                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
+                    || (super::super::forestry::tree_or_sapling(state, block) && !tree_clearable)
+                    || (y == origin[1] && !floor_replaceable(state, block) && !tree_clearable)
                     || (y > origin[1]
                         && !clearable(state, block)
                         && !excavatable(state, block)
-                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
-                    || (y > height
-                        && y <= origin[1]
-                        && !clearable(state, block)
-                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
+                        && !tree_clearable)
+                    || (y > height && y <= origin[1] && !clearable(state, block) && !tree_clearable)
                 {
-                    return Err(if unproven_planting(state, [x, y, z], lot) {
-                        Reason::PlantingProvenance
-                    } else {
-                        Reason::ProtectedObstruction
-                    });
+                    return Err(tree_refusal(state, [x, y, z]));
                 }
             }
         }

@@ -140,7 +140,7 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
 }
 
 #[test]
-fn native_grown_planted_cells_without_natural_baseline_have_named_refusal() {
+fn native_grown_planted_cells_are_clearable_by_the_owner_whole_tree_rule() {
     let (mut state, id, _, project, root, _) = super::super::super::forestry::tests::forest();
     super::super::super::forestry::tests::grown_world(&mut state, Vec::new(), "birch");
     state
@@ -175,22 +175,101 @@ fn native_grown_planted_cells_without_natural_baseline_have_named_refusal() {
         state.world.set_block(at.x, at.y, at.z, block);
     }
     let lot = super::super::super::forestry::lot_bounds(&state, &project).unwrap();
-    assert!(!super::super::super::forestry::clearable_on_lot(
+    assert!(super::super::super::forestry::Clearance::default().clearable(&state, root, Some(lot)));
+}
+
+#[test]
+fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
+    let (mut state, id, _, _, root, _) = super::super::super::forestry::tests::forest();
+    super::super::super::forestry::tests::grown_world(&mut state, Vec::new(), "birch");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let sapling = crate::settlements::allocator::tests::block(
         &state,
-        root,
-        Some(lot)
-    ));
-    let blueprint = blueprints::get(&state.registry, &project.blueprint).unwrap();
-    let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
+        "minecraft:birch_sapling",
+        &[("stage", "1")],
+    );
+    state.world.set_block(root[0], root[1], root[2], sapling);
+    let origin = [root[0] + 2, 200, root[2] + 2];
     assert_eq!(
         check(
             &state,
             state.settlements.get(id).unwrap(),
-            project.origin,
-            size,
+            origin,
+            [1, 12, 1],
             None
         ),
-        Err(Reason::PlantingProvenance),
+        Err(Reason::PlantingProvenance)
     );
-    assert!(planned_cells(&state, &project, "oak").is_none());
+    super::super::super::forestry::native_tree_tests::grow(&mut state, root, 5);
+    assert_eq!(
+        check(
+            &state,
+            state.settlements.get(id).unwrap(),
+            origin,
+            [1, 12, 1],
+            None
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn native_overlapping_crowns_report_ambiguous_foliage_not_a_clearable_site() {
+    for connected in [false, true] {
+        let (state, id, _, witness) =
+            super::super::super::forestry::native_tree_tests::overlapping(connected);
+        assert_eq!(
+            check(
+                &state,
+                state.settlements.get(id).unwrap(),
+                [witness[0], 200, witness[2]],
+                [1, 12, 1],
+                None
+            ),
+            Err(Reason::AmbiguousFoliage),
+            "touching trunks: {connected}"
+        );
+    }
+}
+
+#[test]
+fn persistent_and_retained_player_foliage_report_protected_obstruction() {
+    let (mut state, id, _, _, root, _) = super::super::super::forestry::tests::forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0] + 1, root[1] + 4, root[2]];
+    let origin = [at[0], 200, at[2]];
+    for retained in [false, true] {
+        let leaf = crate::settlements::allocator::tests::block(
+            &state,
+            "minecraft:birch_leaves",
+            &[("persistent", if retained { "false" } else { "true" })],
+        );
+        state.world.set_block(at[0], at[1], at[2], leaf);
+        state.block_log = if retained {
+            super::super::super::forestry::tests::player_history(&state, at, 0)
+        } else {
+            Default::default()
+        };
+        assert_eq!(
+            check(
+                &state,
+                state.settlements.get(id).unwrap(),
+                origin,
+                [1, 12, 1],
+                None
+            ),
+            Err(Reason::ProtectedObstruction),
+            "retained edit: {retained}"
+        );
+    }
 }

@@ -592,6 +592,7 @@ pub(super) fn debit(
     let lot = project.and_then(|project| crate::settlements::forestry::lot_bounds(state, project));
     let mut drops = Vec::new();
     let mut loot = Vec::new();
+    let mut clearance = crate::settlements::forestry::Clearance::prepared();
     if preparing {
         for cell in cells
             .iter()
@@ -603,7 +604,11 @@ pub(super) fn debit(
                 .ok_or(Failure::Unloaded)?;
             if crate::settlements::forestry::tree_or_sapling(state, block) {
                 drops.extend(crate::settlements::forestry::drops(
-                    state, cell.at, block, lot,
+                    state,
+                    cell.at,
+                    block,
+                    lot,
+                    &mut clearance,
                 )?);
             } else {
                 loot.extend(
@@ -615,6 +620,9 @@ pub(super) fn debit(
         }
     }
     if required.is_empty() && drops.is_empty() && loot.is_empty() {
+        if preparing {
+            retire_cleared_roots(state, cells);
+        }
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -672,6 +680,9 @@ pub(super) fn debit(
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
     inventory::commit(state, changes)?;
+    if preparing {
+        retire_cleared_roots(state, cells);
+    }
     for (at, stack) in spilled {
         crate::tick::spawn_item_entity(
             state,
@@ -684,6 +695,26 @@ pub(super) fn debit(
         );
     }
     Ok(())
+}
+
+fn retire_cleared_roots(state: &mut TickState, cells: &[super::Cell]) {
+    let air = state.registry.states.air;
+    for cell in cells.iter().filter(|cell| cell.state == air) {
+        loop {
+            let owner = state
+                .settlements
+                .records()
+                .find(|record| record.planted_trees.contains(&cell.at))
+                .map(|record| record.id);
+            let Some(id) = owner else { break };
+            let record = state
+                .settlements
+                .get_mut(id)
+                .expect("registered planting owner");
+            record.planted_trees.remove(&cell.at);
+            record.revision = record.revision.saturating_add(1);
+        }
+    }
 }
 
 pub(crate) fn missing(
@@ -840,6 +871,58 @@ pub(crate) fn built_at(
                 && record.snapshot.state == ScriptStructureState::Committed
         })
     })
+}
+
+/// Only a previous committed building's exact authored state is exempt from
+/// the upgrade tree veto. A new log in a formerly empty cell is not a beam.
+pub(crate) fn upgrade_trees_clear(
+    state: &TickState,
+    id: SettlementId,
+    blueprint: &str,
+    origin: [i32; 3],
+    cells: &[PlannedCell],
+) -> Result<(), Failure> {
+    let ledger = ledger(state)?;
+    let previous = ledger
+        .structures
+        .values()
+        .filter(|record| {
+            record.settlement == Some(id)
+                && record
+                    .snapshot
+                    .blueprint_id
+                    .strip_prefix("krasnokamen-settlements:")
+                    == Some(blueprint)
+                && same_site(state, record, origin)
+                && record.snapshot.state == ScriptStructureState::Committed
+        })
+        .max_by_key(|record| record.snapshot.revision);
+    for cell in cells {
+        let block = state
+            .world
+            .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        if !crate::settlements::forestry::tree_or_sapling(state, block) {
+            continue;
+        }
+        // Attribution and the disabled-history/live-player veto precede even
+        // an exact match with a building's own previous authored beam.
+        if crate::settlements::forestry::vetoed(state, cell.at) {
+            return Err(Failure::Forbidden);
+        }
+        if crate::settlements::forestry::persistent(state, block)
+            || !previous.is_some_and(|record| {
+                record
+                    .cells
+                    .iter()
+                    .flatten()
+                    .any(|authored| authored.at == cell.at && authored.state == block)
+            })
+        {
+            return Err(Failure::Blocked);
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn next_material(

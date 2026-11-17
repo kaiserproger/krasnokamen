@@ -312,7 +312,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
             },
             "oak",
         )
-        .is_some()
+        .is_ok()
     }) {
         return;
     }
