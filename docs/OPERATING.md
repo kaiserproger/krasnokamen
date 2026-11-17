@@ -133,8 +133,10 @@ below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
 batch larger than the whole cap is admitted alone into an empty queue, and a
 halt's terminal disconnect batch is admitted past it so every player still learns
 why. A backlog that reaches the cap, or that consumes no batch for 10 s, stops the
-server fail-closed with one explicit disconnect reason per player; the next start
-replays the retained WAL
+server fail-closed with one explicit disconnect reason per player — even when the
+edge pump is the wedged part: the edge watches the core's own closing signal,
+kicks every connection with the halt reason when the pump does not deliver it in
+time, and the process exits; the next start replays the retained WAL
 ([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
 warning's byte count before raising the cap. The queued and peak byte counters
 exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in
