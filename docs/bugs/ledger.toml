@@ -7273,3 +7273,14 @@ repro_check = [
   "Independent review receipts/UnitJitter/REVIEW-BATTLE-DESIGN-fable.md rejected a durable Member axis: checkpoint/WAL image and deny_unknown_fields make it a storage/rollback change, and axis flips dirty BattlePatch rows. Rejected the 25% axis margin: it does not cure the measured case; the 40-tick counterfactual travels 3.16 blocks and settles into a period-2 shuttle from tick 517 (last 20 ticks: path 1.58 blocks, net 3.55e-14). R1 holds member7508 still but its turn+near+stationary class is only 15.39% engaged and 12.49% late, below the pre-registered >50% in BOTH windows; C4 stops implementation.",
   "Next: per-class steering design after the freeze, retaining far/unreachable slots, clear-way overshoot, mounted units and moving goals as explicit residuals. No second mechanism or risky steering change before the freeze; require an eventual rest/progress regression, real-client evidence and independent battle-core review before promotion."
 ]
+
+[[bug]]
+id = "BATTLE-REST-SKIPS-TARGET-FACING"
+title = "A battle soldier standing still with a look target does not turn to face it while it rests"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Found while implementing the battle facing rule, 2026-11-17 (receipts/BattleYawHold/RESULTS.md). early_entity_rest (crates/mc-core/src/tick/entity_phase.rs:491) keeps a battle row out of the rest only for a non-zero battle drive. A row with zero drive, zero velocity, on the ground, not hurt in the last 100 ticks and with a battle look target (columns.look_by_slot) therefore rests, and the step is skipped. Its full step would turn it toward the target: a scratch test on a resting husk at yaw 30 with a target at +x gave rest = true while the full step returned yaw -60. Battle rows rest without a physics proof, so the rest is not bit-identical to the step in this case. Fix idea, one guard: also refuse the rest for `battle && look_by_slot[slot].is_some()`. Cost: every targeted battle row standing still would run the full step instead of resting; the share of rest hits lost is unmeasured. Deferred until after the 2026-11-19 freeze (Main)."
+repro = "source"
+regression = []
+failing_first = "not recorded"
