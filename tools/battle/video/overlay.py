@@ -8,8 +8,9 @@ import struct
 import zlib
 from collections import deque
 
-W, H = 480, 304
+W, H = 480, 324
 RSS_WINDOW_TICKS = 1200
+RSS_TOP, RSS_HEIGHT = 280, 36
 # Five-by-seven uppercase glyphs, rows encoded as bits.
 FONT = {
  '0':['01110','10001','10011','10101','11001','10001','01110'], '1':['00100','01100','00100','00100','00100','00100','01110'], '2':['01110','10001','00001','00010','00100','01000','11111'], '3':['11110','00001','00001','01110','00001','00001','11110'], '4':['00010','00110','01010','10010','11111','00010','00010'], '5':['11111','10000','10000','11110','00001','00001','11110'], '6':['01110','10000','10000','11110','10001','10001','01110'], '7':['11111','00001','00010','00100','01000','01000','01000'], '8':['01110','10001','10001','01110','10001','10001','01110'], '9':['01110','10001','10001','01111','00001','00001','01110'],
@@ -66,7 +67,11 @@ def line(p, x0, y0, x1, y1, color):
 def graph_y(value, maximum):
     return 172-round(min(max(value, 0), maximum)*100/maximum)
 
-def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_label=None, alive_total=False):
+def rss_y(value, maximum):
+    return RSS_TOP + RSS_HEIGHT - round(min(max(value, 0), maximum)*RSS_HEIGHT/maximum)
+
+
+def render(sample, history, cpu, steal, memory, rss_samples, axis, cgroup_memory, label='REPLAY TELEMETRY', units_label=None, alive_total=False):
     # units_label: names what UNITS counts (e.g. 'SOLDIERS + HORSES'); it needs a second line, so the panel is 20 px taller.
     h = H if units_label is None else H + 20
     p = bytearray(W*h*4)
@@ -89,8 +94,9 @@ def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_
             line(p, x0, graph_y(data[index-1][1],20), x1, graph_y(data[index][1],20), (99,165,255,255))
     text(p, 12, 182, 'GREEN MSPT  BLUE TPS', scale=2)
     fmt = lambda x: 'N/A' if x is None else f'{x:.1f}'
-    text(p, 12, 201, f'SRV RSS {fmt(memory)} GIB  CPU {fmt(cpu)}%', scale=2)
-    text(p, 12, 220, f'STEAL {fmt(steal)}%', scale=2)
+    text(p, 12, 201, f'SERVER RSS {fmt(memory)} GIB  CPU {fmt(cpu)}%', scale=2)
+    text(p, 12, 220, f'CGROUP TOTAL (INCL. PAGE CACHE) {fmt(cgroup_memory)} GIB', scale=2)
+    text(p, 12, 239, f'STEAL {fmt(steal)}%', scale=2)
     battle = sample.get('battle') or {}
     alive = battle.get('alive') or {}
     factions = sorted(alive, key=int)
@@ -98,20 +104,33 @@ def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_
         raise ValueError('overlay supports two factions; telemetry contains more')
     sides = '  '.join(f'SIDE {key} {alive[key]}' for key in factions) or 'SIDES N/A'
     if units_label is None:
-        text(p, 12, 239, f"UNITS {battle.get('units', 'N/A')}  {sides}", scale=2)
+        text(p, 12, 258, f"UNITS {battle.get('units', 'N/A')}  {sides}", scale=2)
     else:
         if alive_total:  # sum of the SIDE numbers of this sample; `units` also counts fallen bodies not yet removed
-            text(p, 12, 239, f"ALIVE ({units_label}) {sum(alive.values()) if alive else 'N/A'}", scale=2)
+            text(p, 12, 258, f"ALIVE ({units_label}) {sum(alive.values()) if alive else 'N/A'}", scale=2)
         else:
-            text(p, 12, 239, f"UNITS ({units_label}) {battle.get('units', 'N/A')}", scale=2)
-        text(p, 12, 258, sides, scale=2)
+            text(p, 12, 258, f"UNITS ({units_label}) {battle.get('units', 'N/A')}", scale=2)
+        text(p, 12, 277, sides, scale=2)
+    graph_offset = 0 if units_label is None else 20
+    previous_point = None
+    for tick, rss in rss_samples:
+        if rss is None:
+            previous_point = None
+            continue
+        x = 12 + (tick - sample['tick'] + RSS_WINDOW_TICKS)*360//RSS_WINDOW_TICKS
+        y = rss_y(rss/1024**3, axis) + graph_offset
+        if previous_point is not None:
+            line(p, *previous_point, x, y, (99,220,255,255))
+        else:
+            rect(p, x, y, 1, 1, (99,220,255,255))
+        previous_point = (x, y)
     return png(p)
 
 def load(telemetry):
     result = {}
     history = deque(maxlen=180)
     previous = previous_host = None
-    memory = cpu = steal = None
+    memory = cgroup_memory = cpu = steal = None
     rss_samples = deque()
     rows_list = list(rows(telemetry))
     # Axis top: whole-file maximum rounded up to a whole GiB, so it is constant across the edit and needs no per-frame look-ahead.
@@ -127,11 +146,12 @@ def load(telemetry):
         history.append((s['wall_us']/1000, tps, tick))
         host = s['host']
         if host is not None:
-            # Server process RSS only. cgroup memory also counts the recorder and other scope members, so it is never a fallback.
+            # RSS is the server process; cgroup memory also includes page cache and descendants.
             mem = host.get('process_rss_bytes')
             memory = None if mem is None else mem/1024**3
+            cgroup = host.get('cgroup_memory_current_bytes')
+            cgroup_memory = None if cgroup is None else cgroup/1024**3
             rss_samples.append((tick, mem))
-            while rss_samples[0][0] <= tick-RSS_WINDOW_TICKS: rss_samples.popleft()
             cpu = steal = None
             if previous_host:
                 dt = (host['sampled_unix_ns']-previous_host['sampled_unix_ns'])/1000
@@ -141,7 +161,9 @@ def load(telemetry):
                 c, d = host['cpu_total_ticks'], previous_host['cpu_total_ticks']
                 if None not in (a,b,c,d) and c > d and a >= b: steal = (a-b)/(c-d)*100
             previous_host = host
-        result[tick] = (s, tuple(history), cpu, steal, memory, tuple(rss_samples), axis)
+        while rss_samples and rss_samples[0][0] <= tick-RSS_WINDOW_TICKS:
+            rss_samples.popleft()
+        result[tick] = (s, tuple(history), cpu, steal, memory, tuple(rss_samples), axis, cgroup_memory)
         previous = s
     return result
 
