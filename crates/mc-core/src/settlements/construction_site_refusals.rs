@@ -204,13 +204,22 @@ fn topology(fronts: &[([i32; 3], [i32; 2])]) -> u64 {
     hash
 }
 
+/// Squared distance between two block positions.
+fn distance_sq(a: [i32; 3], b: [i32; 3]) -> i64 {
+    a.into_iter()
+        .zip(b)
+        .map(|(a, b)| (i64::from(a) - i64::from(b)).pow(2))
+        .sum()
+}
+
 #[derive(Debug)]
 pub(super) enum Advance {
     /// The sweep is unfinished; nothing may be admitted from it yet.
     Incomplete(u32),
     /// A complete sweep found no legal lot.
     Empty,
-    /// The complete sweep's cheapest legal lot, in cursor order on ties.
+    /// The complete sweep's cheapest legal lot; equal costs go to the lot
+    /// nearest the anchor, then to the lower block position and rotation.
     Cheapest([i32; 3], u8),
 }
 
@@ -291,7 +300,7 @@ pub(super) fn floor_columns(blueprint: &blueprints::Blueprint, rotation: u8) -> 
 
 /// Examine up to `budget` further candidates of this blueprint's sweep. An
 /// incomplete sweep admits nothing; a completed one returns its cheapest lot
-/// and forgets its scratch. Equal costs keep the earlier cursor position.
+/// and forgets its scratch. Equal costs go to the lot nearest the anchor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn advance(
     state: &TickState,
@@ -345,13 +354,19 @@ pub(super) fn advance(
             Err(reason) => report.reject(reason, lot.origin),
             Ok(cost) => {
                 let cost = cost.total();
-                // Ties break on the lot's own block position, never on sweep
-                // start or cursor order: a restart cannot change the winner.
-                let key = (cost, lot.origin, rotation);
-                if sweep
-                    .best
-                    .is_none_or(|(origin, rotation, known)| key < (known, origin, rotation))
-                {
+                // Ties go to the lot nearest the settlement's anchor, then to
+                // its own block position: both are functions of the lot alone,
+                // so a restart cannot change the winner, and flat ground grows
+                // the village from its bell rather than from a plan edge.
+                let key = (
+                    cost,
+                    distance_sq(lot.origin, record.anchor),
+                    lot.origin,
+                    rotation,
+                );
+                if sweep.best.is_none_or(|(origin, rotation, known)| {
+                    key < (known, distance_sq(origin, record.anchor), origin, rotation)
+                }) {
                     sweep.best = Some((lot.origin, rotation, cost));
                 }
             }
@@ -369,16 +384,16 @@ pub(super) fn advance(
         return Advance::Empty;
     };
     // The world may have moved since that candidate was ranked: re-check it
-    // now and restart this sweep when its cost changed.
+    // now and restart this sweep when its cost changed. The pass's clearance
+    // already describes this world, so a registered root is proved once.
     let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
-    let mut fresh = super::super::forestry::Clearance::default();
     match check(
         state,
         record,
         origin,
         size,
         record.founding.as_ref(),
-        &mut fresh,
+        clearance,
         Some(&floors[usize::from(rotation) % 4]),
     ) {
         Ok(cost) if cost.total() == stored => Advance::Cheapest(origin, rotation),
@@ -485,12 +500,7 @@ pub(super) fn check(
     }
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
-            if [x, max[1], z]
-                .into_iter()
-                .zip(record.anchor)
-                .map(|(value, anchor)| (i64::from(value) - i64::from(anchor)).pow(2))
-                .sum::<i64>()
-                > i64::from(record.radius).pow(2)
+            if distance_sq([x, max[1], z], record.anchor) > i64::from(record.radius).pow(2)
                 && !expedition.is_some_and(|site| site.contains([x, max[1], z]))
             {
                 return Err(Reason::Territory);

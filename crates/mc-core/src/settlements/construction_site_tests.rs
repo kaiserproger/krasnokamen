@@ -99,13 +99,19 @@ fn near_and_far(state: &TickState, id: SettlementId) -> (Site, Site) {
     (near, far)
 }
 
-/// The lot the planner must pick: cheapest cut+fill, ties on block position.
+/// The lot the planner must pick: cheapest cut+fill; ties go to the lot whose
+/// origin is nearest the anchor, then to block position and rotation.
 pub(super) fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &str) -> Site {
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, blueprint_name).unwrap();
     let mut network = layout::Network::for_construction(state, record);
     let fronts = network.frontage();
-    let mut best: Option<(u32, [i32; 3], u8, Site)> = None;
+    let near = |origin: [i32; 3]| -> i64 {
+        (0..3)
+            .map(|axis| (i64::from(origin[axis]) - i64::from(record.anchor[axis])).pow(2))
+            .sum()
+    };
+    let mut best: Option<((u32, i64, [i32; 3], u8), Site)> = None;
     for (front, (at, normal)) in fronts.into_iter().enumerate() {
         let Some(lot) = network.lot(blueprint, at, normal) else {
             continue;
@@ -123,12 +129,10 @@ pub(super) fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &
         ) else {
             continue;
         };
-        let key = (cost.total(), lot.origin, lot.rotation);
-        if best.as_ref().is_none_or(|(c, o, r, _)| key < (*c, *o, *r)) {
+        let key = (cost.total(), near(lot.origin), lot.origin, lot.rotation);
+        if best.as_ref().is_none_or(|(known, _)| key < *known) {
             best = Some((
-                cost.total(),
-                lot.origin,
-                lot.rotation,
+                key,
                 Site {
                     front: u32::try_from(front).unwrap(),
                     lot,
@@ -137,7 +141,7 @@ pub(super) fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &
             ));
         }
     }
-    best.expect("a legal lot").3
+    best.expect("a legal lot").1
 }
 
 /// The first legal lot of `blueprint_name` in walking order from the plaza:

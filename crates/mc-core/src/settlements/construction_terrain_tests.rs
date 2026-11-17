@@ -930,6 +930,19 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
     wide_plan(&mut state);
     restore_stock(&mut state);
     fund(&mut state, "storage", 1);
+    // The winner must lie late in the walk, where a plaza hole can move its
+    // frontage earlier: keep the westmost legal lot, the one this walk was
+    // authored around, and refuse every other lot.
+    let target = {
+        let record = state.settlements.get(id).unwrap();
+        let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+        planner_lots(&state, id)
+            .into_iter()
+            .filter(|site| lot_cost(&state, record, blueprint, site).is_ok())
+            .min_by_key(|site| (site.lot.origin, site.lot.rotation))
+            .expect("a legal storage lot")
+    };
+    super::site_tests::pin_lot(&mut state, id, "storage", &target);
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let record = state.settlements.get(id).unwrap().clone();
     let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
@@ -1023,8 +1036,9 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
     );
 }
 
-/// Committee ruling: ties break on the lot's own block position, so a restart
-/// in the middle of the sweep cannot change the winner.
+/// Committee ruling: ties break on the lot alone (its distance to the anchor,
+/// then its block position), so a restart in the middle of the sweep cannot
+/// change the winner.
 #[test]
 fn a_restart_keeps_the_tie_winner() {
     let (mut state, id, _) = fixture();
@@ -1079,6 +1093,56 @@ fn a_restart_keeps_the_tie_winner() {
     assert_eq!(
         direct, after,
         "the tie winner does not depend on the cursor"
+    );
+}
+
+/// Main's ruling (2026-11-18): on flat ground every legal lot costs the same,
+/// and the tie goes to the lot nearest the settlement's anchor. Block position
+/// alone would site the first storage at the west edge of the loaded plan.
+#[test]
+fn a_flat_tie_goes_to_the_lot_nearest_the_anchor() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    let record = state.settlements.get(id).unwrap().clone();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let near = |origin: [i32; 3]| -> i64 {
+        (0..3)
+            .map(|axis| (i64::from(origin[axis]) - i64::from(record.anchor[axis])).pow(2))
+            .sum()
+    };
+    let legal: Vec<(u32, [i32; 3], u8)> = planner_lots(&state, id)
+        .into_iter()
+        .filter_map(|site| {
+            let cost = lot_cost(&state, &record, blueprint, &site).ok()?.total();
+            Some((cost, site.lot.origin, site.lot.rotation))
+        })
+        .collect();
+    assert!(
+        legal.len() > 1 && legal.iter().all(|(cost, ..)| *cost == legal[0].0),
+        "flat ground: every legal lot costs the same: {legal:?}"
+    );
+    let westmost = legal
+        .iter()
+        .map(|&(_, origin, rotation)| (origin, rotation))
+        .min()
+        .unwrap();
+    let (distance, origin, rotation) = legal
+        .iter()
+        .map(|&(_, origin, rotation)| (near(origin), origin, rotation))
+        .min()
+        .unwrap();
+    assert!(
+        distance < near(westmost.0),
+        "premise: the westmost tie {westmost:?} is not the nearest {origin:?}"
+    );
+    request_build(&mut state, id, "storage").expect("a legal storage lot");
+    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    assert_eq!(
+        (project.origin, project.rotation),
+        (origin, rotation),
+        "the tie goes to the lot nearest the anchor {:?}, not to {westmost:?}",
+        record.anchor
     );
 }
 
