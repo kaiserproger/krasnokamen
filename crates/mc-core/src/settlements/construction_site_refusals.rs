@@ -207,6 +207,7 @@ pub(super) fn materialize(
     winner: Winner<'_>,
     floors: &BTreeSet<[i32; 2]>,
     clearance: &mut super::super::forestry::Clearance,
+    images: &[super::super::inventory::Image],
     report: &mut Report,
 ) -> Option<super::FundedSite> {
     let size = winner
@@ -239,6 +240,9 @@ pub(super) fn materialize(
         report.reject(Reason::Preparation, winner.origin);
         return None;
     };
+    // The filler identity is chosen before the bill is fixed: after the authored
+    // bill and its crafting chain are reserved (item 2).
+    super::filler::apply_filler(state, &project, &mut cells, images);
     if apply_bed_color(state, &mut cells, winner.color).is_none() {
         report.reject(Reason::MaterialBill, winner.origin);
         return None;
@@ -548,6 +552,21 @@ pub(super) fn check(
                 }
             }
         }
+    }
+    // A certified natural zone is terrain, not a building: it keeps only its own
+    // columns and is tested against the whole preparation volume — the authored
+    // footprint and the fill down to the lowest discovered ground. A zone below
+    // the floor that the fill would cross still refuses (owner D10, review 1.1).
+    let prepared_min = lowest;
+    if record.buildings.values().any(|building| {
+        building.natural_zone
+            && [0, 2].into_iter().all(|axis| {
+                origin[axis] <= building.bounds.max[axis] && building.bounds.min[axis] <= max[axis]
+            })
+            && building.bounds.min[1] <= max[1]
+            && prepared_min <= building.bounds.max[1]
+    }) {
+        return Err(Reason::BuildingBuffer);
     }
     let volume = ScriptWorldBounds::new([origin[0], lowest, origin[2]], max).expect("work volume");
     if lava_shell(state, volume) {

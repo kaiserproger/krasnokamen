@@ -1213,6 +1213,8 @@ fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> b
     else {
         return false;
     };
+    let images = executor::source_images(state, project.settlement);
+    filler::apply_filler(state, &project, &mut cells, &images);
     if apply_bed_color(state, &mut cells, color).is_none() {
         return false;
     }
@@ -1502,6 +1504,7 @@ fn site_project<'a>(
                     },
                     &floors[usize::from(rotation) % 4],
                     &mut clearance,
+                    images,
                     &mut report,
                 );
                 return SitePass {
@@ -3162,6 +3165,9 @@ mod fortification_tests;
 #[cfg(test)]
 #[path = "construction_growth_tests.rs"]
 mod growth_tests;
+
+#[path = "construction_filler.rs"]
+pub(super) mod filler;
 
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;
