@@ -1,0 +1,209 @@
+diff --git a/crates/mc-core/src/battle/mod.rs b/crates/mc-core/src/battle/mod.rs
+index 57aa7a5a9..f8de95fba 100644
+--- a/crates/mc-core/src/battle/mod.rs
++++ b/crates/mc-core/src/battle/mod.rs
+@@ -469,6 +469,48 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
+     }
+ }
+ 
++/// Half of one wire rotation quantum (a full turn is 256 steps, so one step is
++/// 360/256 = 1.40625 degrees): a turn smaller than this rounds to the same
++/// client-visible rotation, so it cannot be seen and must not cost a step.
++const REST_TURN_QUANTUM: f32 = 0.703_125;
++
++/// Whether a rested battle row's skipped step would still turn it toward its
++/// look target, i.e. whether the rest is not the identity for this row.
++///
++/// `entity_motion::look` is the step's own rotation rule, evaluated at the zero
++/// velocity every row that reaches the rest has (`early_entity_rest` checks
++/// ground, velocity and drive first). A row that already faces its target keeps
++/// resting; one whose facing is behind takes the ordinary step until it faces
++/// it (BATTLE-REST-SKIPS-TARGET-FACING).
++///
++/// The comparison is a half wire quantum, not exact equality: a battle target
++/// moves almost every tick (`columns.rs` re-projects `target.pos`), and a
++/// measured census of a 300-per-side staged battle found 91% of the refused
++/// turns below one 1.40625-degree quantum and 99.5% caused by that jitter, so
++/// exact equality would spend a whole step on a rotation the client rounds away
++/// (receipts/BattleRest/BOUNDS-REST-TAKES.md). Everything at or above half a
++/// quantum still steps, so a resting row's drawn facing stays within one wire
++/// quantum of its target bearing.
++pub(crate) fn rest_turns_toward_target(
++    columns: &Columns,
++    slot: crate::entities::EntitySlot,
++    rotation: [f32; 3],
++    position: [f64; 3],
++) -> bool {
++    let Some(target) = columns.look_by_slot.get(slot.0 as usize).copied().flatten() else {
++        return false;
++    };
++    let turned = crate::entity_motion::look(
++        rotation,
++        mc_physics::Vec3::new(position[0], position[1], position[2]),
++        mc_physics::Vec3::ZERO,
++        Some(target),
++    );
++    let yaw = (turned[0] - rotation[0] + 180.0).rem_euclid(360.0) - 180.0;
++    let pitch = turned[1] - rotation[1];
++    yaw.abs() >= REST_TURN_QUANTUM || pitch.abs() >= REST_TURN_QUANTUM
++}
++
+ #[cfg(test)]
+ mod tests;
+ 
+diff --git a/crates/mc-core/src/entity_phase_tests.rs b/crates/mc-core/src/entity_phase_tests.rs
+index 3d9c63efd..ff935839f 100644
+--- a/crates/mc-core/src/entity_phase_tests.rs
++++ b/crates/mc-core/src/entity_phase_tests.rs
+@@ -1018,6 +1018,129 @@ fn battle_rows_hold_facing_on_reversing_steps_and_rest_matches_full_step() {
+     }
+ }
+ 
++/// A resting battle row with a look target must turn to face it
++/// (BATTLE-REST-SKIPS-TARGET-FACING, receipts/BattleYawHold): the rest guard
++/// only looked at the drive, so a targeted row rested and the skipped step
++/// never turned it. Such a row now takes its step while the facing is behind
++/// the target, and rests again once it faces it, so a static target does not
++/// cost a step every tick.
++///
++/// The target is projected into `columns.look_by_slot`, the column the step
++/// reads. `run_entity_phase(_, true)` cannot carry this test: it runs
++/// `battle::step`, which clears an inactive battle's drive and look projections
++/// every tick (`battle/mod.rs:375-377`), so admission would see no target. The
++/// test therefore drives the same two decisions the phase makes per tick:
++/// admission (`early_entity_rest` through `can_early_rest`) and, only when
++/// admitted, the production step (`step_entity` through
++/// `full_step_without_early_rest`) whose rotation write it applies.
++#[test]
++fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
++    let bearing = |target: [f64; 3], pos: [f64; 3]| {
++        -((mc_physics::mth::atan2(target[0] - pos[0], target[2] - pos[2]) as f32)
++            * mc_physics::mth::RAD_TO_DEG)
++    };
++    let error = |yaw: f32, wanted: f32| (yaw - wanted + 180.0).rem_euclid(360.0) - 180.0;
++    for species in ["minecraft:husk", "minecraft:horse"] {
++        let (mut state, slot) = resting_mob(species);
++        state.entities.set_faction(slot, 1);
++        // Off-axis, and a yaw beyond 256 degrees that `look` never normalizes,
++        // so a residue of the raw-angle arithmetic can need one extra step.
++        state.entities.set_rot(slot, 300.0, 12.0);
++        let pos = state.entities.pos(slot);
++        let len = state.entities.len();
++        let aim = |state: &mut TickState, target: [f64; 3]| {
++            let columns = &mut state.hostile.battle.columns;
++            columns.look_by_slot.resize(len, None);
++            columns.look_by_slot[slot.0 as usize] = Some(target);
++        };
++        // Admission plus the step it admits, exactly as the phase orders them.
++        let turn = |state: &mut TickState| {
++            assert!(
++                !can_early_rest(state, slot),
++                "{species} must not rest while its facing is behind the target"
++            );
++            let (write, intents) = full_step_without_early_rest(state, slot);
++            assert!(intents.is_empty(), "{species} emits no intent");
++            assert_eq!(
++                write.pos.map(f64::to_bits),
++                pos.map(f64::to_bits),
++                "{species} does not walk"
++            );
++            state
++                .entities
++                .set_rot(slot, write.rotation[0], write.rotation[1]);
++        };
++        let target = [pos[0] + 3.0, pos[1], pos[2] + 7.0];
++        // A turn below half a wire quantum (0.703125 deg) cannot change the
++        // client-visible rotation, so the row keeps resting: 0.0209 blocks of
++        // lateral offset over 4 blocks is 0.3 deg off the +z bearing.
++        state.entities.set_rot(slot, 0.0, 0.0);
++        aim(&mut state, [pos[0] + 0.0209, pos[1], pos[2] + 4.0]);
++        assert!(
++            can_early_rest(&mut state, slot),
++            "{species} rests through a sub-quantum facing error"
++        );
++        state.entities.set_rot(slot, 300.0, 12.0);
++        aim(&mut state, target);
++        // The guard pin: with a look target and the facing behind it, the rest
++        // must be refused (red without the fix, where the row rests).
++        assert!(
++            !can_early_rest(&mut state, slot),
++            "{species} must not rest while its facing is behind the target"
++        );
++        // One turn of at most 90 degrees, plus at most one sub-quantum step.
++        let mut steps = 0;
++        while !can_early_rest(&mut state, slot) {
++            turn(&mut state);
++            steps += 1;
++            assert!(
++                steps <= 3,
++                "{species} does not return to rest after {steps} steps"
++            );
++        }
++        let facing = state.entities.rot(slot)[0];
++        let wanted = bearing(target, pos);
++        assert!(
++            error(facing, wanted).abs() < 0.01,
++            "{species} faces the target: yaw {facing} wanted {wanted}"
++        );
++        // Resting again with a still target: no step, so nothing can move.
++        let rotation = state.entities.rot(slot).map(f32::to_bits);
++        for _ in 0..3 {
++            state.tick += 1;
++            assert!(
++                can_early_rest(&mut state, slot),
++                "{species} keeps resting while the target stands"
++            );
++        }
++        assert_eq!(
++            state.entities.rot(slot).map(f32::to_bits),
++            rotation,
++            "{species} holds a still target's facing"
++        );
++        // A new bearing wakes the row and it turns to it, still without walking.
++        let moved = [pos[0], pos[1], pos[2] + 4.0];
++        aim(&mut state, moved);
++        let mut steps = 0;
++        while !can_early_rest(&mut state, slot) {
++            turn(&mut state);
++            steps += 1;
++            assert!(steps <= 3, "{species} does not return to rest: {steps}");
++        }
++        let facing = state.entities.rot(slot)[0];
++        let wanted = bearing(moved, pos);
++        assert!(
++            error(facing, wanted).abs() < 0.01,
++            "{species} faces the new bearing: yaw {facing} wanted {wanted}"
++        );
++        assert_eq!(
++            state.entities.pos(slot),
++            pos,
++            "{species} still does not walk"
++        );
++    }
++}
++
+ /// A mounted battle rider is not a standing row (`taming::suppress_ai` is
+ /// fenced by `!battle`), so the facing rule covers it. Without a target its own
+ /// step does not move it sideways; it keeps yaw, pitch and head, where the old
+diff --git a/crates/mc-core/src/tick/entity_phase.rs b/crates/mc-core/src/tick/entity_phase.rs
+index b26c51aa1..af5ffab67 100644
+--- a/crates/mc-core/src/tick/entity_phase.rs
++++ b/crates/mc-core/src/tick/entity_phase.rs
+@@ -522,6 +522,17 @@ pub(super) fn early_entity_rest(
+                 .has(crate::effects::EffectId::Levitation))
+         || !view.ground[slot.0 as usize]
+         || view.velocities[slot.0 as usize] != [0.0; 3]
++        // The skipped step is what turns a battle row toward its look target,
++        // so a targeted row that is not yet facing it must not rest
++        // (BATTLE-REST-SKIPS-TARGET-FACING). Last, because the rule evaluates
++        // the step at the zero velocity every earlier clause has established.
++        || battle
++            && crate::battle::rest_turns_toward_target(
++                &view.hostile.battle.columns,
++                slot,
++                view.rotations[slot.0 as usize],
++                view.positions[slot.0 as usize],
++            )
+     {
+         return false;
+     }
