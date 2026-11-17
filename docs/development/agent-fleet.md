@@ -174,14 +174,12 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Commits    none (leave the diff and its SHA-256) | local commits on the branch
 # Limits     only what differs from the standing rules: wall budget, whether
 #            subagents are allowed
-# Waiting    waiting only for your own background job or another agent: end the
-#            turn without `wait` and without a tool call; the job result or the
-#            message wakes you. Call `wait` only for the answer to a question
-#            you sent another agent. Never poll; never run sleep loops in eval
-#            or bash. (owner, 2026-11-13: `wait` returns empty turns at
-#            5 s/10 s/30 s/1 min/5 min steps; two workers burnt 38 and 41 empty
-#            turns, about 12 M tokens each, in one hour; an ended turn stays
-#            idle with zero turns until the wake-up)
+# Waiting    never end your turn while a background job you started is still
+#            running: a subagent that ends its turn is disposed and the job dies
+#            with it (owner, 2026-11-18: Perf1M's pin build, CutTick's L0 and
+#            CutEdgePlan's re-check died this way). With nothing else to do,
+#            call `wait` on that job. Never poll; never run sleep loops in eval
+#            or bash.
 # Turns      batch independent relevant reads into one turn when there are
 #            several; a dependent read may follow (owner, 2026-11-15: LLM time
 #            was 22% of 90 agents' day)
