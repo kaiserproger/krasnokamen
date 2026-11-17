@@ -2023,7 +2023,7 @@ pub(crate) struct BuilderWatch {
     idle: u64,
     reported: bool,
     refusal: Option<&'static str>,
-    /// First action, consumed by the one repeated-stall report for this episode.
+    /// First recovery outcome, consumed by this episode's repeated-stall report.
     recovery: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
@@ -2085,7 +2085,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let report = !watch.reported;
     watch.reported = true;
     let refusal = watch.refusal;
-    let failed_action = if report { None } else { watch.recovery.take() };
+    let first_recovery = if report { None } else { watch.recovery.take() };
     let incumbent = residents(state, id).find(|&slot| {
         state.entities.body(slot).alive
             && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
@@ -2160,9 +2160,10 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         if release_incumbent(state, id, slot) {
             if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
                 watch.shunned.retain(|&(_, until)| tick < until);
-                watch
-                    .shunned
-                    .push((builder.unwrap(), tick.saturating_add(BUILDER_SHUN_TICKS)));
+                watch.shunned.push((
+                    state.entities.row(slot).uuid,
+                    tick.saturating_add(BUILDER_SHUN_TICKS),
+                ));
             }
             "builder_released"
         } else {
@@ -2184,10 +2185,10 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             last_refusal = ?refusal,
             shift_ticks = BUILDER_STALL_SHIFT_TICKS, "settlement_construction_stalled");
     }
-    if let Some(failed_action) = failed_action {
+    if let Some(first_recovery) = first_recovery {
         tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
             origin = ?project.origin, stage = snapshot.current_stage_index,
-            work = snapshot.completed_work_units, ?next, cause, failed_action, recovery,
+            work = snapshot.completed_work_units, ?next, cause, first_recovery, recovery,
             shift_ticks = BUILDER_STALL_SHIFT_TICKS,
             "settlement_construction_recovery_failed");
     }
