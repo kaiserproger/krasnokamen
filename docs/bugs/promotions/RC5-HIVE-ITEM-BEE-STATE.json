@@ -1,0 +1,62 @@
+{
+  "id": "RC5-HIVE-ITEM-BEE-STATE",
+  "verdict": "promoted",
+  "fix_commit": "patch:f2b02f99a0411b887329667c47078408bce9d513fd36875ecabeab709a7befae",
+  "fix_commit_full": "patch:f2b02f99a0411b887329667c47078408bce9d513fd36875ecabeab709a7befae",
+  "promoted_at": "2026-11-17T01:33:10+00:00",
+  "tree_head": "d16abcd82eca03449b2e91228a77ab3b337c4f48",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f2b02f99a0411b887329667c47078408bce9d513fd36875ecabeab709a7befae",
+  "reversed_files": [
+    "crates/mc-world-conversion/src/pre_rename.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_crafting_hive_items_are_owned": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_carried_hive_items_are_owned": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_equipment_hive_items_are_owned": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::captured_rc5_bee_image_requires_migration_and_keeps_strict_current_schema": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_crafting_hive_items_are_owned": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_carried_hive_items_are_owned": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::player_equipment_hive_items_are_owned": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:pre_rename::tests::bee_items::captured_rc5_bee_image_requires_migration_and_keeps_strict_current_schema": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A12IssueCheck/.analysis/validation/20261117T012735-ledger-promote-stw_ztza"
+}
