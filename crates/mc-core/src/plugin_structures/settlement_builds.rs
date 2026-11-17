@@ -246,10 +246,11 @@ pub(crate) fn status(
 }
 
 /// A foreign edit inside a native site pauses the structure as
-/// `footprint_changed`. An unpaid preparation is cancelled and requeued for
-/// fresh tree certification. Paid work re-snapshots the footprint and resumes:
-/// a placed cell that the edit emptied is queued again at completion by
-/// [`reopen_emptied`], while a solid foreign block in a placed cell is left alone.
+/// `footprint_changed`. A clear stage paused before its first debit is cancelled
+/// and requeued for fresh tree certification; a later stage, even before its
+/// first paid cell, re-snapshots the footprint and resumes: a placed cell that
+/// the edit emptied is queued again at completion by [`reopen_emptied`], while a
+/// solid foreign block in a placed cell is left alone.
 /// Returns whether recovery resumed or cancelled the structure.
 pub(crate) fn recover(
     state: &mut TickState,
@@ -269,8 +270,8 @@ pub(crate) fn recover(
         && record
             .snapshot
             .stages
-            .iter()
-            .any(|stage| stage.stage == "clear"))
+            .get(record.snapshot.current_stage_index as usize)
+            .is_some_and(|stage| stage.stage == "clear"))
     .then(|| {
         crate::settlements::construction::preparation::changed_project(state, settlement, handle)
     })

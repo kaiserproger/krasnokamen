@@ -158,6 +158,43 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
 }
 
 #[test]
+fn registered_sapling_precedes_a_natural_tree_in_the_clear_manifest() {
+    let (mut state, id, _, expected, _, _) = forestry::tests::forest();
+    let size = blueprints::get(&state.registry, &expected.blueprint)
+        .unwrap()
+        .footprint(Rotation::from_quarter_turns(expected.rotation));
+    let natural = [expected.origin[0], 201, expected.origin[2]];
+    let sapling_at = [
+        expected.origin[0] + i32::from(size[0]) - 1,
+        201,
+        expected.origin[2] + i32::from(size[2]) - 1,
+    ];
+    forestry::tests::grown_world(&mut state, vec![natural], "birch");
+    let sapling = block(&state, "minecraft:birch_sapling", &[("stage", "1")]);
+    state
+        .world
+        .set_block(sapling_at[0], sapling_at[1], sapling_at[2], sapling);
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(sapling_at);
+    let project = expected.clone();
+    let preparation =
+        forestry::cells(&state, &project, size, &mut forestry::Clearance::default()).unwrap();
+    assert!(
+        preparation.cells.iter().any(|cell| cell.at == natural),
+        "the natural tree is clearable preparation"
+    );
+    assert_eq!(
+        preparation.cells.first().map(|cell| cell.at),
+        Some(sapling_at),
+        "a registered sapling is certified before the natural tree it will not outgrow"
+    );
+}
+
+#[test]
 fn one_owner_scan_shares_a_registered_root_proof_across_candidate_lots() {
     let (mut state, id, _, _, root, _) = forestry::tests::forest();
     forestry::tests::grown_world(&mut state, vec![root], "birch");
@@ -170,8 +207,16 @@ fn one_owner_scan_shares_a_registered_root_proof_across_candidate_lots() {
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let before = forestry::proof_builds();
-    let (site, _, report) =
-        site_project(&state, record, std::iter::once(blueprint), 0, u32::MAX, &[]);
+    // The same funded kind twice forces two full passes over the same
+    // candidates: one scan-wide Clearance must prove the root only once.
+    let (site, _, report) = site_project(
+        &state,
+        record,
+        [blueprint, blueprint].into_iter(),
+        0,
+        u32::MAX,
+        &[],
+    );
     assert!(
         site.is_none(),
         "empty funding images force the whole owner scan"

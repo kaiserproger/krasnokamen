@@ -162,7 +162,10 @@ pub(super) fn planned_cells(
     Ok((bounds, cells))
 }
 
-pub(crate) fn active_lot(state: &TickState, record: &SettlementRecord) -> Option<ScriptWorldBounds> {
+pub(crate) fn active_lot(
+    state: &TickState,
+    record: &SettlementRecord,
+) -> Option<ScriptWorldBounds> {
     record
         .project
         .as_ref()
