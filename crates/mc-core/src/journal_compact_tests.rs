@@ -314,9 +314,15 @@ fn compact_and_full_tails_replay_to_the_same_state() {
             .filter(|entry| variant(entry))
             .count()
     };
+    // Three changes before the mid-scenario reseed and one after it: the record
+    // that follows a checkpoint capture is the whole image again.
     assert!(
-        count(|entry| matches!(entry, JournalEntry::EntityAppearance { .. })) >= 5,
-        "shield, equipment and health changes take the appearance record"
+        count(|entry| matches!(entry, JournalEntry::EntityAppearance { .. })) >= 4,
+        "shield and equipment changes take the appearance record"
+    );
+    assert!(
+        count(|entry| matches!(entry, JournalEntry::Entity { .. })) >= 3,
+        "spawns and the post-capture change keep the whole image"
     );
     assert!(
         count(|entry| matches!(entry, JournalEntry::ProjectileFlight { .. })) >= 5,
@@ -457,7 +463,8 @@ fn delta_values_round_trip_through_a_batch() {
     writer.append(5, 6, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&directory.join("journal"), 0).unwrap();
+    // The tail starts at the checkpoint tick: 5..6 follows 4.
+    let batches = read_complete_batches_after(&directory.join("journal"), 4).unwrap();
     let decoded = &batches[0].2;
     assert_eq!(decoded.len(), 3);
     assert_eq!(decoded[0], landed, "landing keeps an absolute ground age");
