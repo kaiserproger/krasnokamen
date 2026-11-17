@@ -13,7 +13,9 @@ ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
 [tick_hi u64][length u32][crc32 u32][payload]`; the payload is JSON lines of
 absolute post-images and tombstones. The writer fsyncs a temporary file and
 renames it to publish the batch. Unpublished temporary files are ignored.
-Entries cover changed state, not a complete copy every tick. Player state and
+Entries cover changed state, not a complete copy every tick. A battle image
+journals only its changed parts after its first full record in the tail
+([battle decision history](#battle-decision-history)). Player state and
 meaningful entity changes are journaled; ordinary non-projectile mob motion and
 idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
@@ -306,8 +308,32 @@ retained targets and escape plans, action/ammunition/weapon-swap history,
 retaliation windows, live holds/kits and named spectator bindings.
 They share the entity capture's WAL coverage gate and atomic native transaction.
 A reset publishes an empty post-image, not an absent update.
-Recovery installs the recovered image as the journal baseline, so even a reset
-on the first live tick publishes the empty image before any new checkpoint.
+Recovery installs a journal baseline, so even a reset on the first live tick
+publishes the empty image before any new checkpoint.
+
+The checkpoint row and a `Battle` record carry the whole image. Within one WAL
+tail a changed tick journals `BattlePatch` instead: the image without its six
+index-aligned lists (roster members, regiments, fighters, fighter IDs,
+execution columns, removed IDs) when it changed, plus each changed list
+element and list length as absolute values. Unchanged ticks journal nothing.
+The first battle record of a dimension after every checkpoint capture and after
+recovery is a whole `Battle` image, so a patch never builds on a checkpoint
+row. Replay applies patches in one place (`battle::persistence::fold_patch`)
+and refuses a patch without a `Battle` earlier in the tail, a missing list, a
+length beyond capacity or an index past the length; an element left unset by a
+longer length stays `null`, which decoding refuses. A WAL mixing records from
+binaries before and after this format is unsupported. A fighter's fight-loop
+clock (the `fighting` telemetry window) changes only when he enters or leaves
+his fight loop, so a steady fight does not rewrite every fighter. That clock
+changed the image schema while the row stays version 1: a world whose battle
+row or WAL tail was written by an older binary after its first battle tick
+refuses to open (fail closed). Before upgrading, run `battle reset` and then
+`save-all flush` with the old binary (or reset the world). The harness gates
+read the same chain (`battle_recovery.py` `fold_battle`, the same refusals).
+Regressions:
+`battle_wal_journals_changed_parts_not_the_whole_image_each_tick`,
+`battle_wal_patches_changed_parts_and_replays_the_live_image` and
+`battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements`.
 
 Native entity custody remains sole authority for life, pose, equipment in hand
 and mounts. Live battle bodies additionally journal changed intra-chunk poses through

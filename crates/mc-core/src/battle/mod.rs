@@ -71,7 +71,7 @@ pub(crate) struct BattleState {
     /// Soldiers answering an enemy who hurt them or a friend (retaliation.rs).
     pub retaliation: retaliation::Retaliation,
     #[serde(skip)]
-    pub(crate) journaled: Option<std::sync::Arc<String>>,
+    pub(crate) journaled: Option<persistence::Journaled>,
     #[cfg(test)]
     #[serde(skip)]
     trace: Option<trace_tests::FrameTrace>,

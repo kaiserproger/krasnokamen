@@ -233,7 +233,12 @@ caches: phase and battle-local clock, regiment/member identity and rank history,
 orders/targets, morale/rout/action/weapon timers, live holds and spectator
 bindings share their entities' checkpoint transaction and tick-WAL frame.
 Changed battle-body poses are WAL-durable even within a chunk, without changing
-the existing age/chunk-clock anchor. Recovery rebuilds only derived execution
+the existing age/chunk-clock anchor. The WAL journals a battle's whole image
+only as its first record after each checkpoint capture or recovery and
+otherwise patches its changed parts; replay refuses a patch without that full
+image. The fighter fight-loop clock changed the version-1 image schema: a battle
+image written by an older binary after its first battle tick refuses to open
+(fail closed, no migration). Recovery rebuilds only derived execution
 columns and connection state. Running battles resume automatically; downtime
 does not advance combat. Removed roster/execution IDs remain historical
 tombstones, while a missing live member or an inconsistent/unsupported image

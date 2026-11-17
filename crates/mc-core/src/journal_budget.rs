@@ -496,6 +496,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
                     .map_or(0, crate::settlements::SettlementRecord::heap_estimate)
         }
         E::Battle { value } => std::mem::size_of::<String>() + value.capacity(),
+        E::BattlePatch { value } => value_heap(value),
         E::Transit { record, .. } => record
             .as_ref()
             .map_or(0, |value| std::mem::size_of::<String>() + value.capacity()),

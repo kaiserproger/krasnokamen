@@ -53,7 +53,10 @@ pub struct Replay {
     /// Migration transit custody post-images (`None` = tombstone), ADR 0023,
     /// in the transit module's own codec.
     pub transits: BTreeMap<uuid::Uuid, Option<Arc<String>>>,
-    pub battle: Option<Arc<String>>,
+    /// Checkpoint row or latest full WAL image; read it through
+    /// `battle::persistence::image`, which applies the later patches.
+    pub(crate) battle: Option<Arc<String>>,
+    pub(crate) battle_tail: crate::battle::persistence::Tail,
     pub(crate) battle_fault: Option<String>,
     /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
@@ -1100,7 +1103,10 @@ pub(crate) fn apply_batch_images(
                     replay.transits.insert(*id, record.clone());
                 }
                 JournalEntry::Battle { value } => {
-                    replay.battle = Some(Arc::clone(value));
+                    crate::battle::persistence::fold_full(&mut replay, value);
+                }
+                JournalEntry::BattlePatch { value } => {
+                    crate::battle::persistence::fold_patch(&mut replay, value);
                 }
                 JournalEntry::EntityMotion {
                     id,

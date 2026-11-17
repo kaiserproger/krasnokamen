@@ -671,6 +671,79 @@ def _visit(entry: dict[str, Any], dimension: str | None = None):
     yield dimension or "minecraft:overworld", entry
 
 
+# Index-aligned lists of the battle image that a WAL `BattlePatch` carries element by element
+# (core `battle::persistence::List`), and the capacity above which a patch length refuses.
+BATTLE_LISTS = {
+    "members": ("battle", "formation", "members"),
+    "regiments": ("battle", "formation", "regiments"),
+    "fighters": ("battle", "combat", "fighters"),
+    "ids": ("battle", "combat", "ids"),
+    "columns": ("columns",),
+    "removed": ("removed",),
+}
+BATTLE_LIST_CAPACITY = 40_000
+
+
+def _battle_list(image: Any, name: str) -> tuple[dict[str, Any], str]:
+    *parents, leaf = BATTLE_LISTS[name]
+    node = image
+    for key in parents:
+        node = node.get(key) if isinstance(node, dict) else None
+    if not isinstance(node, dict) or not isinstance(node.get(leaf), list):
+        raise Incomplete(f"battle image lacks {name}")
+    return node, leaf
+
+
+def apply_battle_patch(image: dict[str, Any] | None, patch: Any) -> dict[str, Any]:
+    """Mirror of core `battle::persistence::Patch::apply` with the same refusals: a patch needs a full image
+    earlier in the tail; a new header takes over the image's six lists; then each list gets its new length and
+    its changed elements. A missing list, an unknown field or list, a length above capacity, an index past the
+    length or an element left unset by a longer length refuses. Mutates and returns the image."""
+    if image is None:
+        raise Incomplete("battle patch without a full image earlier in the WAL tail")
+    if not isinstance(patch, dict) or set(patch) - {"header", "lists"}:
+        raise Incomplete(f"malformed battle patch: {patch!r:.200}")
+    header = patch.get("header")
+    if header is not None:
+        for name in BATTLE_LISTS:
+            parent, leaf = _battle_list(header, name)
+            old_parent, old_leaf = _battle_list(image, name)
+            parent[leaf] = old_parent[old_leaf]
+        image = header
+    for change in patch.get("lists", []):
+        if not isinstance(change, dict) or set(change) != {"list", "len", "set"} \
+                or change["list"] not in BATTLE_LISTS or not isinstance(change["len"], int) \
+                or not isinstance(change["set"], list):
+            raise Incomplete(f"malformed battle patch list: {change!r:.200}")
+        name, length = change["list"], change["len"]
+        if not 0 <= length <= BATTLE_LIST_CAPACITY:
+            raise Incomplete(f"battle patch {name} length {length} exceeds capacity")
+        parent, leaf = _battle_list(image, name)
+        elements = parent[leaf]
+        del elements[length:]
+        elements.extend([None] * (length - len(elements)))
+        for pair in change["set"]:
+            if not isinstance(pair, list) or len(pair) != 2 or not isinstance(pair[0], int):
+                raise Incomplete(f"malformed battle patch {name} element: {pair!r:.200}")
+            index, element = pair
+            if not 0 <= index < length:
+                raise Incomplete(f"battle patch {name} index {index} past length {length}")
+            elements[index] = element
+        if None in elements:
+            raise Incomplete(f"battle patch left a {name} element unset")
+    return image
+
+
+def fold_battle(image: dict[str, Any] | None, entry: dict[str, Any]) -> dict[str, Any] | None:
+    """The durable battle image after one WAL entry: a full `Battle` replaces it, a `BattlePatch` folds into it
+    (in place), anything else leaves it."""
+    if "Battle" in entry:
+        return json.loads(entry["Battle"]["value"])
+    if "BattlePatch" in entry:
+        return apply_battle_patch(image, entry["BattlePatch"]["value"])
+    return image
+
+
 def read_batches(directories: list[Path]) -> dict[tuple[int, int], Path]:
     """Complete WAL batches of one server epoch; equal names in two sources must be byte-equal."""
     batches: dict[tuple[int, int], Path] = {}
@@ -1338,13 +1411,15 @@ def _phase_census(console: Any, items: list[str], phase: str, aux: dict[str, Any
 
 
 class WindupObserver:
-    """Consume published WAL images and retain horse identities and the latest battle frame."""
+    """Consume published WAL images and retain horse identities and the latest battle frame. The frame's image is
+    the observer's live fold of full images and patches: read it before the next update."""
 
     def __init__(self, archive: Path, horse_type: int):
         self.archive, self.horse_type = archive, horse_type
         self.last_tick = -1
         self.horses: dict[int, str] = {}
         self.image: dict[str, Any] | None = None
+        self.fold: dict[str, Any] | None = None
 
     def update(self) -> None:
         for path in sorted(self.archive.glob("batch-*.bin")):
@@ -1360,7 +1435,7 @@ class WindupObserver:
                     or len(body) != length or zlib.crc32(body) != crc:
                 break
             for line in body.splitlines():
-                if b'"Entity"' not in line and b'"Battle"' not in line:
+                if b'"Entity"' not in line and b'"Battle' not in line:
                     continue
                 for dimension, entry in _visit(json.loads(line)):
                     if dimension != "minecraft:overworld":
@@ -1368,8 +1443,9 @@ class WindupObserver:
                     entity = entry.get("Entity")
                     if entity is not None and entity["type_id"] == self.horse_type:
                         self.horses[entity["id"]] = entity["uuid"]
-                    if "Battle" in entry:
-                        self.image = {"tick": high, "image": json.loads(entry["Battle"]["value"])}
+                    if "Battle" in entry or "BattlePatch" in entry:
+                        self.fold = fold_battle(self.fold, entry)
+                        self.image = {"tick": high, "image": self.fold}
             self.last_tick = high
 
     def wait_after(self, elapsed: int, timeout: float = 600) -> dict[str, Any]:
@@ -1664,17 +1740,19 @@ def _authenticate(client: Horizon, password: str, register: bool) -> None:
 
 
 def battle_image(history_batches: dict[tuple[int, int], Path], until: int) -> dict[str, Any] | None:
-    """The last durable battle history image at or before `until` (the WAL `Battle` entry)."""
-    for (low, high), path in sorted(history_batches.items(), reverse=True):
+    """The durable overworld battle image at `until`: the last full WAL `Battle` image at or before it with every
+    later `BattlePatch` through `until` folded in, stamped with the tick of the last battle record folded."""
+    image, tick = None, None
+    for (low, high), path in sorted(history_batches.items()):
         if high > until:
-            continue
-        for line in reversed(path.read_bytes()[32:].splitlines()):
-            if b'"Battle"' not in line:
+            break
+        for line in path.read_bytes()[32:].splitlines():
+            if b'"Battle' not in line:
                 continue
-            for _, entry in _visit(json.loads(line)):
-                if "Battle" in entry:
-                    return {"tick": high, "image": json.loads(entry["Battle"]["value"])}
-    return None
+            for dimension, entry in _visit(json.loads(line)):
+                if dimension == "minecraft:overworld" and ("Battle" in entry or "BattlePatch" in entry):
+                    image, tick = fold_battle(image, entry), high
+    return None if image is None else {"tick": tick, "image": image}
 
 
 def _kit_counts(counts: dict[str, int], items: list[str]) -> dict[str, int]:

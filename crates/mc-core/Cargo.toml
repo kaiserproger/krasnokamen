@@ -25,7 +25,8 @@ mc-melee-range = { path = "../mc-melee-range" }
 uuid = { workspace = true, features = ["v4"] }
 tokio.workspace = true
 serde = { workspace = true, features = ["rc"] }
-serde_json.workspace = true
+# WAL battle patches pass floats through `serde_json::Value`: parsing must be exact.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 zip.workspace = true
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 crc32fast.workspace = true

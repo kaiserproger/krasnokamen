@@ -315,6 +315,8 @@ pub enum JournalEntry {
         value: crate::commands::GameMode,
     },
     /// Absolute battle decision history at the same boundary as native effects.
+    /// The first battle record of a dimension after a checkpoint capture or
+    /// recovery; later changed ticks carry `BattlePatch`.
     Battle {
         value: Arc<String>,
     },
@@ -335,6 +337,13 @@ pub enum JournalEntry {
         id: uuid::Uuid,
         record: Option<Arc<String>>,
         tick: u64,
+    },
+    /// The battle image's parts changed since the previous `Battle` or
+    /// `BattlePatch` of this dimension, in the battle module's codec. Replay
+    /// refuses one without a `Battle` earlier in the WAL tail. Appended to
+    /// preserve variant order; mixed-version WALs are unsupported.
+    BattlePatch {
+        value: serde_json::Value,
     },
 }
 
