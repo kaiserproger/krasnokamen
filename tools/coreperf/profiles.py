@@ -38,6 +38,22 @@ SCALE_PROFILES = {
     for mix in ("all-active", "mostly-resting", "sparse-active")
 }
 
+SCALE_RESIDENTS_MAX = 2_000_000
+
+
+def scale_residents(profile: str, smoke_residents: int | None, override: int | None) -> int:
+    """Resident cohort of a scale profile: smoke cap, explicit override, else the ladder point."""
+    if smoke_residents is not None and override is not None:
+        raise ValueError("--smoke-residents and --scale-residents are exclusive")
+    if override is not None and not 10 <= override <= SCALE_RESIDENTS_MAX:
+        raise ValueError(f"--scale-residents must be within 10..{SCALE_RESIDENTS_MAX}")
+    if smoke_residents is not None:
+        return smoke_residents
+    if override is not None:
+        return override
+    return SCALE_PROFILES[profile][0]
+
+
 PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
 
 # items-heavy geometry: a sky platform at y=199 so no natural terrain, cave or mob interferes.
@@ -1745,6 +1761,10 @@ def main() -> int:
                         help="2s warmup + 5s measurement at full population; lifecycle only, never publication evidence")
     parser.add_argument("--smoke-residents", type=int,
                         help="smaller noncanonical resident cohort for --smoke only")
+    parser.add_argument("--scale-residents", type=int,
+                        help="scale profiles only: override the ladder point (10..%d residents); "
+                             "the observer count, pen coverage and recipe name follow the override"
+                             % SCALE_RESIDENTS_MAX)
     stress = parser.add_mutually_exclusive_group()
     stress.add_argument("--projectiles", type=int,
                         help="noncanonical exact projectile cohort: 0, 100 or 1000 (smoke may use smaller counts)")
@@ -1781,8 +1801,11 @@ def main() -> int:
             parser.error("scale telemetry requires a local server")
         if args.smoke_residents is not None and not args.smoke:
             parser.error("--smoke-residents requires --smoke")
-        args.clients, args.mobs, args.villagers, args.view_distance = (
-            0, args.smoke_residents if args.smoke_residents is not None else SCALE_PROFILES[args.profile][0], 0, 6)
+        try:
+            residents = scale_residents(args.profile, args.smoke_residents, args.scale_residents)
+        except ValueError as error:
+            parser.error(str(error))
+        args.clients, args.mobs, args.villagers, args.view_distance = 0, residents, 0, 6
         if args.mobs < 10:
             parser.error("scale population must be at least 10")
         if args.projectiles is not None and (
@@ -1825,6 +1848,8 @@ def main() -> int:
             parser.error("spawn-rule controls require a scale profile")
         if args.smoke_residents is not None:
             parser.error("--smoke-residents requires a scale profile")
+        if args.scale_residents is not None:
+            parser.error("--scale-residents requires a scale profile")
         if any(value is not None for value in (args.projectiles, args.xp_orbs, args.containers,
                                                 args.productive_npcs, args.damage_victims, args.map_frames,
                                                 args.churn_percent, args.daylight_zombies, args.wool_sheep,

@@ -404,6 +404,37 @@ fi
             self.assertFalse(any("NoAI" in c or "Invulnerable" in c
                                  for r in recipe["regions"] for c in r["commands"]))
 
+    def test_scale_residents_override_parameterises_the_ladder_point(self):
+        self.assertEqual(profiles.scale_residents("scale-1m-all-active", None, None), 1_000_000)
+        self.assertEqual(profiles.scale_residents("scale-1m-all-active", None, 250_000), 250_000)
+        self.assertEqual(profiles.scale_residents("scale-1m-all-active", 80, None), 80)
+        for bad in ((80, 250_000), (None, 9), (None, profiles.SCALE_RESIDENTS_MAX + 1)):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                profiles.scale_residents("scale-1m-all-active", *bad)
+
+    def test_arbitrary_scale_rung_is_exact_and_has_its_own_cache_key(self):
+        """A non-ladder rung (8,192) is a first-class fixture, not a ladder alias.
+
+        Two things break silently if the override is only wired into the ladder lookup:
+        the cohort stops matching the requested population, or the fixture cache hands a
+        rung the world built for a canonical one.
+        """
+        recipe = profiles.scale_fixture(8192, "all-active")
+        self.assertEqual(sum(recipe["expected"].values()), 8192)
+        self.assertEqual(set(recipe["expected"].values()), {1024})
+        self.assertEqual(recipe["population"]["resident_requested"], 8192)
+        self.assertEqual(recipe["variant"], "noncanonical-scale-8192-all-active")
+        for kind, count in recipe["expected"].items():
+            self.assertEqual(sum(command.startswith(f"summon {kind} ")
+                                 for region in recipe["regions"] for command in region["commands"]), count)
+        ladder = profiles.scale_fixture(100_000, "all-active")
+        self.assertNotEqual(profiles.load.digest(recipe), profiles.load.digest(ladder))
+        args = argparse.Namespace(mobs=8192, villagers=0, seed=42, view_distance=6)
+        rung_key = profiles.compare.fixture_cache_key(args, recipe, "registry")
+        ladder_key = profiles.compare.fixture_cache_key(
+            argparse.Namespace(mobs=100_000, villagers=0, seed=42, view_distance=6), ladder, "registry")
+        self.assertNotEqual(rung_key, ladder_key)
+
     def test_scale_spawn_bodies_clear_pen_walls_at_full_region_capacity(self):
         recipe = profiles.scale_fixture(8192, "all-active")
         for region in recipe["regions"]:
