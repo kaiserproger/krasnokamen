@@ -892,6 +892,7 @@ fn stocked_storage_upgrades_around_its_level_one_containers() {
 #[test]
 fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
     for _ in 0..5 {
@@ -900,6 +901,14 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
     let snapshot = executor::status(&state, id, &project.structure).unwrap();
     assert!(snapshot.completed_work_units > 0);
+    assert!(matches!(
+        request_build(&mut state, id, "watch_tower").unwrap(),
+        OrderOutcome::Queued { reason } if reason == "busy"
+    ));
+    assert_eq!(
+        request_build(&mut state, id, "farm").unwrap_err(),
+        "Construction queue is full: watch_tower is already pending. Cancel it before another order."
+    );
     let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
     let ledger = serde_json::to_vec(
         state
@@ -910,6 +919,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     .unwrap();
     let carry = serde_json::to_vec(state.entities.row(slot).villager.as_ref().unwrap()).unwrap();
     let (mut restored, restored_id, restored_slot) = fixture();
+    open_plan(&mut restored);
     assert_eq!(restored_id, id);
     restored.settlements = super::super::Registry::default();
     super::super::persistence::hydrate_dimension(
@@ -938,6 +948,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
         executor::status(&restored, id, &project.structure).unwrap(),
         snapshot
     );
+    assert_eq!(restored.settlements.get(id), state.settlements.get(id));
     complete(&mut restored, id, restored_slot);
     assert!(restored.settlements.get(id).unwrap().project.is_none());
     assert!(
@@ -946,6 +957,21 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
             .iter()
             .all(ItemStack::is_empty)
     );
+    fund(&mut restored, "watch_tower", 1);
+    for _ in 0..128 {
+        plan(&mut restored, id);
+        if restored.settlements.get(id).unwrap().project.is_some() {
+            break;
+        }
+    }
+    let record = restored.settlements.get(id).unwrap();
+    assert!(record.pending_order.is_none());
+    let next = record
+        .project
+        .as_ref()
+        .expect("the restored FIFO order starts first");
+    assert_eq!(next.blueprint, "watch_tower");
+    assert!(next.ordered);
 }
 
 #[test]

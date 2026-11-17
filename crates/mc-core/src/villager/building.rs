@@ -153,6 +153,7 @@ fn site_target(
     project: &construction::Project,
     next: [i32; 3],
     slot: EntitySlot,
+    committed: Option<BlockPos>,
 ) -> Option<BlockPos> {
     // With no stand in felling reach, the cell is placed from the perimeter
     // like any blueprint cell instead of holding the only project slot.
@@ -207,6 +208,12 @@ fn site_target(
         if placement_distance > (REACH - super::brain::WAYPOINT_REACH).powi(2) {
             continue;
         }
+        // Keep a still-valid destination while walking around terrain. Picking
+        // the nearest stand anew can alternate adjacent goals whose routes
+        // begin in opposite directions, so neither route ever advances.
+        if committed == Some(at) {
+            return Some(at);
+        }
         let distance = (0..3).map(|axis| (here[axis] - stand[axis]).powi(2)).sum();
         if best.as_ref().is_none_or(|(known, _)| distance < *known) {
             best = Some((distance, at));
@@ -253,7 +260,13 @@ pub(crate) fn work(
         });
     }
     Some(WorkTarget {
-        pos: site_target(state, project, next, slot)?,
+        pos: site_target(
+            state,
+            project,
+            next,
+            slot,
+            v.navigation_target.filter(|_| !v.navigation_search_failed),
+        )?,
         exact: true,
     })
 }

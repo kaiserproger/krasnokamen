@@ -3483,7 +3483,7 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
     command(&mut state, bob, "settlement build house");
     assert_eq!(
         build_last_chat(&state, ConnectionId(2)),
-        "Queued house: busy (replaced previous order)"
+        "Construction queue is full: house is already pending. Cancel it before another order."
     );
     // Execution outside every settlement radius selects nothing.
     state.entities.set_pos(bob_slot, [200.0, 80.0, 0.0]);
