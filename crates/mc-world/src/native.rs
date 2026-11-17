@@ -144,8 +144,7 @@ fn read_only_database(
     path: &Path,
     cache_bytes: usize,
 ) -> Result<redb::ReadOnlyDatabase, NativeError> {
-    let mut builder = database_builder(cache_bytes);
-    builder
+    database_builder(cache_bytes)
         .open_read_only(path)
         .map_err(|error| match error {
             redb::DatabaseError::RepairAborted => NativeError::Source(

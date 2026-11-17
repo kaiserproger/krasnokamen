@@ -193,7 +193,10 @@ slice=solaris-heavy.slice
 # solaris-agents.scope) run in that parent too, so the heavy cap OOM-kills inside the
 # slice before the parent throttles the agents and every heavy command at once.
 ncpu=$(nproc --all)
-slice_gib=$(( $(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo) - 16 ))
+total_gib=$(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo)
+slice_gib=$(( total_gib - 16 ))
+# A small host (a 16 GiB CI runner) keeps half its memory, never a negative cap.
+[ "$slice_gib" -ge $(( total_gib / 2 )) ] || slice_gib=$(( total_gib / 2 ))
 parent_high=$(systemctl --user show solaris.slice -p MemoryHigh --value 2>/dev/null || true)
 if [[ "$parent_high" =~ ^[0-9]+$ ]] && [ $(( parent_high / 1073741824 - 8 )) -lt "$slice_gib" ]; then
   slice_gib=$(( parent_high / 1073741824 - 8 ))
