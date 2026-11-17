@@ -294,7 +294,9 @@ mod tests {
     #[tokio::test]
     async fn loader_configuration_enters_play_and_acknowledges_chunk_batches() -> Result<()> {
         use mc_protocol::frame::{Compression, encode_frame, try_decode_frame};
-        use mc_protocol::packets::play::{ClientboundChunkBatchFinished, ServerboundChunkBatchReceived};
+        use mc_protocol::packets::play::{
+            ClientboundChunkBatchFinished, ServerboundChunkBatchReceived,
+        };
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -302,10 +304,18 @@ mod tests {
         let (mut peer, _) = listener.accept().await?;
         let mut body = Vec::new();
         ClientboundKnownPacks { packs: Vec::new() }.encode(&mut body)?;
-        peer.write_all(&encode_frame(ClientboundKnownPacks::ID, &body, Compression::Disabled)?)
-            .await?;
-        peer.write_all(&encode_frame(FinishConfiguration::ID, &[], Compression::Disabled)?)
-            .await?;
+        peer.write_all(&encode_frame(
+            ClientboundKnownPacks::ID,
+            &body,
+            Compression::Disabled,
+        )?)
+        .await?;
+        peer.write_all(&encode_frame(
+            FinishConfiguration::ID,
+            &[],
+            Compression::Disabled,
+        )?)
+        .await?;
         let cache = tempfile::tempdir()?;
         tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -321,11 +331,8 @@ mod tests {
             Compression::Disabled,
         )?)
         .await?;
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            client.read_frame(),
-        )
-        .await??;
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_secs(5), client.read_frame()).await??;
         // Configuration acks may still be in flight ahead of the batch ack.
         let mut received = bytes::BytesMut::new();
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
