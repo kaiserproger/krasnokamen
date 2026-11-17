@@ -13,6 +13,16 @@ const WANDER_WALK: u64 = 40;
 /// Shortest step (blocks per tick) a battle body without a look target turns
 /// to face; see [`battle_holds_facing`].
 const BATTLE_HOLD_STEP: f64 = 0.005;
+/// A step-length threshold, not vanilla's wanted-distance test: the horizontal
+/// distance the AI asks to travel this tick, in blocks per tick (vanilla
+/// `MoveControl.MIN_SPEED`). Below it a body keeps its yaw; vanilla compares the
+/// distance to the *wanted point* (`MIN_SPEED_SQR` 2.5e-7 on the square), which
+/// this executor does not carry — it carries a drive velocity.
+const MIN_WANTED_STEP: f64 = 5.0e-4;
+/// Vanilla `LookControl`'s head turn rate toward the body, degrees per tick.
+const HEAD_TURN: f32 = 10.0;
+/// Vanilla `Mob.getMaxHeadYRot`: a head never looks further off the body.
+const MAX_HEAD_YAW: f32 = 75.0;
 
 pub(crate) struct MotionInput {
     pub body: EntityBody,
@@ -25,6 +35,9 @@ pub(crate) struct MotionInput {
     /// A moving battle body: without a look target its facing follows
     /// [`battle_holds_facing`].
     pub battle_facing: bool,
+    /// The mob's own body controller keeps the head on the body
+    /// ([`Capabilities::head_follows_body`]); no head lag applies.
+    pub head_follows_body: bool,
     pub climbs_walls: bool,
     pub aquatic_control: AquaticControl,
     pub air_supply: i32,
@@ -245,6 +258,44 @@ fn rotate(current: f32, wanted: f32, limit: f32) -> f32 {
     current + difference.clamp(-limit, limit)
 }
 
+/// Body yaw toward `direction`, at MoveControl's 90 deg/tick; a direction with
+/// no horizontal part cannot steer a body.
+fn yaw_toward(current: f32, direction: Vec3) -> f32 {
+    let horizontal = mth::length2(direction.x, direction.z);
+    if horizontal <= EPSILON {
+        return current;
+    }
+    rotate(
+        current,
+        -(mth::atan2(direction.x, direction.z) as f32) * mth::RAD_TO_DEG,
+        90.0,
+    )
+}
+
+/// Pitch toward `direction`, at 40 deg/tick. `look`'s pitch axis, shared with
+/// [`move_look`] so both feed the same presentation.
+fn pitch_toward(current: f32, direction: Vec3) -> f32 {
+    let horizontal = mth::length2(direction.x, direction.z);
+    if horizontal <= EPSILON && direction.y.abs() <= EPSILON {
+        return current;
+    }
+    rotate(
+        current,
+        -(mth::atan2(direction.y, horizontal) as f32) * mth::RAD_TO_DEG,
+        40.0,
+    )
+    .clamp(-90.0, 90.0)
+}
+
+/// Vanilla `LookControl`/`BodyRotationControl`: a head with nothing to look at
+/// turns back toward the body at [`HEAD_TURN`] degrees per tick and never leaves
+/// a [`MAX_HEAD_YAW`] cone around it.
+fn follow_head(head: f32, yaw: f32) -> f32 {
+    let turned = rotate(head, yaw, HEAD_TURN);
+    let off = (turned - yaw + 180.0).rem_euclid(360.0) - 180.0;
+    yaw + off.clamp(-MAX_HEAD_YAW, MAX_HEAD_YAW)
+}
+
 pub(crate) fn look(
     rotation: [f32; 3],
     position: Vec3,
@@ -262,22 +313,33 @@ pub(crate) fn look(
     if horizontal <= EPSILON && direction.y.abs() <= EPSILON {
         return rotation;
     }
-    let yaw = if horizontal > EPSILON {
-        rotate(
-            rotation[0],
-            -(mth::atan2(direction.x, direction.z) as f32) * mth::RAD_TO_DEG,
-            90.0,
-        )
-    } else {
+    let yaw = yaw_toward(rotation[0], direction);
+    [yaw, pitch_toward(rotation[1], direction), yaw]
+}
+
+/// The facing of a mob with nothing to look at. Approximation of vanilla's three
+/// controls, not parity: the body yaw follows `wanted` — the direction this
+/// tick's AI asked to travel, never a knockback — at 90 deg/tick and holds under
+/// [`MIN_WANTED_STEP`]; `resolved` still sets the pitch, so a vertical hop or a
+/// fall keeps updating it; the head follows the body at [`HEAD_TURN`] inside the
+/// [`MAX_HEAD_YAW`] cone.
+fn move_look(
+    rotation: [f32; 3],
+    wanted: Vec3,
+    resolved: Vec3,
+    head_follows_body: bool,
+) -> [f32; 3] {
+    let yaw = if mth::length2(wanted.x, wanted.z) * mc_physics::TICK_SECONDS < MIN_WANTED_STEP {
         rotation[0]
+    } else {
+        yaw_toward(rotation[0], wanted)
     };
-    let pitch = rotate(
-        rotation[1],
-        -(mth::atan2(direction.y, horizontal) as f32) * mth::RAD_TO_DEG,
-        40.0,
-    )
-    .clamp(-90.0, 90.0);
-    [yaw, pitch, yaw]
+    let head = if head_follows_body {
+        yaw
+    } else {
+        follow_head(rotation[2], yaw)
+    };
+    [yaw, pitch_toward(rotation[1], resolved), head]
 }
 
 pub(crate) fn step<S: BlockSampler>(
@@ -318,10 +380,20 @@ pub(crate) fn step<S: BlockSampler>(
     };
     if input.movement == MovementClass::Stationary {
         body.velocity = Vec3::ZERO;
+        let rotation = if input.look_target.is_some() {
+            look(input.rotation, body.position, Vec3::ZERO, input.look_target)
+        } else {
+            move_look(
+                input.rotation,
+                Vec3::ZERO,
+                Vec3::ZERO,
+                input.head_follows_body,
+            )
+        };
         return MotionResult {
             body,
             impulse: [0.0; 2],
-            rotation: look(input.rotation, body.position, Vec3::ZERO, input.look_target),
+            rotation,
             air_supply,
             drowning,
             wall_climbing: false,
@@ -337,6 +409,10 @@ pub(crate) fn step<S: BlockSampler>(
     }
     body.velocity.x = input.drive[0] + impulse[0];
     body.velocity.z = input.drive[2] + impulse[1];
+    // The direction this tick's AI wants to travel: vanilla `MoveControl` turns
+    // toward the wanted position, which a combat impulse never moves. It is the
+    // drive alone, so no movement-class branch can leak an impulse into it.
+    let wanted = Vec3::new(input.drive[0], 0.0, input.drive[2]);
     if input.movement == MovementClass::Flyer
         || water
         || (input.aquatic_control == AquaticControl::Dolphin
@@ -421,11 +497,11 @@ pub(crate) fn step<S: BlockSampler>(
         }
     }
     body = resolved.body;
-    for (axis, wanted, actual) in [
+    for (axis, asked, actual) in [
         (0, requested.x, body.velocity.x),
         (1, requested.z, body.velocity.z),
     ] {
-        if actual.abs() < EPSILON && wanted.abs() > EPSILON {
+        if actual.abs() < EPSILON && asked.abs() > EPSILON {
             impulse[axis] = 0.0;
         } else {
             let drag = if water {
@@ -450,12 +526,14 @@ pub(crate) fn step<S: BlockSampler>(
         && battle_holds_facing(&input.body, &body)
     {
         input.rotation
+    } else if input.look_target.is_some() {
+        look(input.rotation, body.position, Vec3::ZERO, input.look_target)
     } else {
-        look(
+        move_look(
             input.rotation,
-            body.position,
+            wanted,
             body.velocity,
-            input.look_target,
+            input.head_follows_body,
         )
     };
     MotionResult {

@@ -136,6 +136,11 @@ pub struct Capabilities {
     pub fall_damage_immune: bool,
     /// Climbs a horizontal obstacle at 0.2 blocks per tick (vanilla spiders).
     pub climbs_walls: bool,
+    /// Keeps the head on the body: the vanilla body controller of this mob
+    /// overrides `BodyRotationControl` and never lags the head (Shulker's empty
+    /// `clientTick`, `Phantom$PhantomBodyRotationControl`,
+    /// `HappyGhast$HappyGhastBodyRotationControl`, 26.1.2 javap).
+    pub head_follows_body: bool,
     /// Avoids unrolled armadillos within six blocks (Spider.registerGoals).
     pub avoids_armadillos: bool,
     /// Instant health harms and instant damage heals (vanilla undead).
@@ -1346,6 +1351,10 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         hurt_by_water: matches!(name, "minecraft:enderman" | "minecraft:strider"),
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
+        head_follows_body: matches!(
+            name,
+            "minecraft:shulker" | "minecraft:phantom" | "minecraft:happy_ghast"
+        ),
         avoids_armadillos: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         inverted_healing: ZOMBIE_FAMILY.contains(&name)
             || matches!(

@@ -7377,3 +7377,25 @@ status = "open"
 source = "Auditor C, D19 CS341 audit, /var/tmp/w/receipts/CS341/REPORT-C.md finding G-6 (book rules ch. 12.2.4 p. 270, ch. 12.6 p. 286 'handle failures', ch. 18.7 p. 374). Evidence: crates/mc-core/src/journal.rs:982-997 - `let Ok(entries) = std::fs::read_dir(journal_dir) else { return }`, `let Ok(entry) = entry else { continue }`, `let _ = std::fs::remove_file(...)`; the only caller is the checkpoint completion path crates/mc-core/src/core/journal.rs:1008-1009, which logs nothing about pruning, so a filesystem refusal (remount-ro after a disk error, an overlay/NFS volume turning read-only, a changed directory mode) makes every checkpoint commit while nothing is deleted. Correctness is unaffected (batches at or below the committed checkpoint are ignored by replay), so the observable symptom is pure growth until ENOSPC. Not reproduced as a failure; read from source. Repro/test idea: a cargo test in mc-core that runs a real checkpoint through journal_loop on a temp world, makes the journal directory non-writable (chmod 0555 / a read-only overlay in a drill), then asserts the checkpoint still commits and that a warning is emitted naming the directory, the failing entry count and the errno; the same test must keep the existing green prune test unchanged. Suggested fix: count failures and emit one rate-limited warn per checkpoint with errno and unpruned count/bytes."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "MOB-YAW-FACES-POST-COLLISION-VELOCITY"
+title = "A mob with nothing to look at turns toward the velocity physics left it with instead of the direction it wants to travel, so a clipped, blocked or knocked-back step swings its body by up to 90 degrees a tick"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "BattleJitterClient/Main 2026-11-17 (receipts/BattleJitterClient/FIX-PROPOSAL.md:5-14: the freeze fix was battle-only; receipts/Stage3/D20-INVENTORY.md row 'Global MoveControl yaw parity'; receipts/MotionYaw/DESIGN.md). Before this change crates/mc-core/src/entity_motion.rs:448-460 called look() with the post-physics body.velocity, and look() at :248-282 turned the body yaw toward whatever direction it was handed at 90 deg/tick; the head was returned as the body yaw. Vanilla MoveControl turns the body toward the wanted position (local javap constants: MAX_TURN 90, MIN_SPEED 5.0E-4 blocks/tick, MIN_SPEED_SQR 2.5000003E-7, MOVE_TO with no turn under the dead zone), never toward the resolved velocity, and a knockback does not move the wanted position. Fix in receipts/MotionYaw: the body turns toward the tick's wanted drive with the vanilla dead zone, and the head follows the body at LookControl's 10 deg/tick inside the 75 deg cone of BodyRotationControl. Battle rows keep battle_holds_facing (BATTLE-HOLD rows above) unchanged."
+repro = "client"
+regression = ["cargo:mc-core:entity_motion::tests::move_facing_faces_the_wanted_direction_not_the_resolved_step", "cargo:mc-core:entity_motion::tests::move_facing_holds_below_the_vanilla_dead_zone", "cargo:mc-core:entity_motion::tests::move_facing_ignores_a_knockback", "cargo:mc-core:entity_motion::tests::move_facing_steady_walk_keeps_the_old_yaw_and_pitch", "cargo:mc-core:entity_motion::tests::move_facing_head_follows_the_body_at_the_vanilla_rate", "cargo:mc-core:entity_motion::tests::stationary_body_holds_its_facing_while_the_head_settles", "cargo:mc-core:entities::tests::apply_motion_result_keeps_the_head_separate_from_the_body"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "BATTLE-CAVALRY-HORSE-YAW-SWAY"
+title = "Cavalry horses swing their body yaw in alternating steps of 45 degrees or more at gallop speed while their path continues"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "BattleYawHold residual 2026-11-17 (receipts/BattleYawHold/RESULTS.md:44 'Cavalry is not claimed fixed'; BOUNDS.md:21-28 C1; receipts/Stage3/D20-INVENTORY.md row 'Cavalry yaw residual'). The sway is measured on the wire (strict runs, C1 time share); its cause is NOT attributed yet. The first attribution attempt (receipts/MotionYaw/replay.py, replay_windows.py over receipts/BattleJitterClient/hook2-yaw-probe.bin) was rejected by the design reviewer: that probe logs state.entities.vel(slot) before the writeback, i.e. the stored velocity of the previous step instead of the current drive, and it merged horse and foot bodies; its numbers (horse strict runs 10,634 -> 4,683 with a proxy arm, horse sway body-ticks engaged .2749 -> .2351, mid .2365 -> .1991, late .1691 -> .1359) are a previous-velocity proxy, diagnostic only, no causal claim. The real attribution and any cavalry yaw change are queued in receipts/MotionYaw/HANDOFF.md: a drive probe (receipts/MotionYaw/motion_probe.patch) logging the current drive, impulse, resolved step and yaw/head per horse tick, then a pre-registered no-regression A/B on an integration candidate pin. Steering itself (BATTLE-FOOT-STEERING-REVERSALS) is out of scope."
+repro = "client"
+regression = []
+failing_first = "not recorded"

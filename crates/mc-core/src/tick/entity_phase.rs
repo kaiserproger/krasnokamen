@@ -48,6 +48,7 @@ pub(super) struct ReadRow {
     pub(super) is_slime_size_one: bool,
     /// Blueprint locomotion capabilities read by the motion step.
     pub(super) climbs_walls: bool,
+    pub(super) head_follows_body: bool,
     pub(super) avoids_armadillos: bool,
     pub(super) aquatic_control: crate::species::AquaticControl,
     /// Resolved from the blueprint's goal set (data, not type names).
@@ -480,6 +481,13 @@ pub(super) fn early_entity_rest(
     targets_empty: bool,
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
+    // A head still settling toward the body is motion the footprint shortcut
+    // cannot see: refuse the rest before it, on every activation period. Battle
+    // rows hold `head = yaw`, so this never wakes a no-target battle row.
+    let rotation = view.rotations[slot.0 as usize];
+    if rotation[2] != rotation[0] {
+        return false;
+    }
     let battle = crate::battle::battle_row(view.bodies[slot.0 as usize].faction);
     let battle_thrust = view
         .hostile
@@ -694,6 +702,7 @@ pub(super) fn idle_wander_motion_unchanged(view: &PrepView, slot: EntitySlot) ->
             rotation,
             look_target: None,
             battle_facing: false,
+            head_follows_body: capabilities.head_follows_body,
             climbs_walls: capabilities.climbs_walls,
             aquatic_control: capabilities.aquatic,
             air_supply: body.air_supply,
@@ -1217,6 +1226,7 @@ pub(super) fn read_row(
         hunts_living: blueprint.is_some_and(|bp| bp.capabilities.hunts_living),
         is_slime_size_one,
         climbs_walls: blueprint.is_some_and(|blueprint| blueprint.capabilities.climbs_walls),
+        head_follows_body: blueprint.is_some_and(|blueprint| blueprint.capabilities.head_follows_body),
         avoids_armadillos: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
         aquatic_control: blueprint.map_or(crate::species::AquaticControl::Other, |blueprint| {
@@ -1889,6 +1899,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 vel: write.vel,
                 yaw: write.rotation[0],
                 pitch: write.rotation[1],
+                head_yaw: write.rotation[2],
                 ground: write.ground,
                 horizontal_impulse: write.horizontal_impulse,
                 air_supply: write.air_supply,
@@ -2558,6 +2569,7 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             rotation: row.rotation,
             look_target,
             battle_facing: row.battle && !row.standing,
+            head_follows_body: row.head_follows_body,
             climbs_walls: row.climbs_walls,
             aquatic_control: row.aquatic_control,
             air_supply: row.air_supply,
