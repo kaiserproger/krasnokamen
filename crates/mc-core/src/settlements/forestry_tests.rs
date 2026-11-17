@@ -215,7 +215,7 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
         }
         if tree(&state, previous) {
             state.tick += 20;
-            for stack in drops(&state, next, previous).unwrap() {
+            for stack in drops(&state, next, previous, None).unwrap() {
                 *expected_stock.entry(stack.item_id).or_default() += stack.count;
             }
             state.tick -= 20;

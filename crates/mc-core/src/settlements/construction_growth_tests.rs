@@ -1,4 +1,4 @@
-use super::tests::{complete, fixture, fund, open_plan, start};
+use super::tests::{attempt, complete, fixture, fund, open_plan, start};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use std::sync::{Arc, Mutex};
@@ -452,6 +452,10 @@ fn stall_preparation(state: &mut TickState, id: SettlementId) -> Warnings {
 #[test]
 fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() {
     let (mut state, id, builder, project, root) = protected_preparation();
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    retain_player_edit(&mut state, next);
     let tree = state.world.block_at(root[0], root[1], root[2]);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     // A rotated builder may still carry an older load during preparation.
@@ -502,6 +506,10 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
 #[test]
 fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
     let (mut state, id, _, project, root) = protected_preparation();
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    retain_player_edit(&mut state, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
     // using the canonical persisted ledger image, without changing its stage.
     let mut ledger = state
@@ -725,4 +733,229 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
             .planted_trees
             .contains(&root)
     );
+}
+
+fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
+    state.block_log = crate::block_log::BlockLog::restore(
+        crate::config::BlockLogSettings {
+            retention_secs: 0,
+            ..Default::default()
+        },
+        vec![crate::block_log::Delta {
+            records: vec![crate::block_log::Record {
+                seq: 0,
+                tick: Some(1),
+                time: 0,
+                actor: Arc::from("player"),
+                pos: at,
+                change: crate::block_log::Change::Block {
+                    before: state.registry.states.air,
+                    after: state.world.block_at(at[0], at[1], at[2]).unwrap(),
+                    entity: None,
+                },
+                rolled_back: false,
+            }],
+            marks: Vec::new(),
+        }],
+    );
+}
+
+fn managed_lot_is_felled_and_built(sapling: bool) {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    let record = state.settlements.get(id).unwrap();
+    let blueprint = blueprints::get(&state.registry, "spanish_fortress").unwrap();
+    let mut network = super::super::layout::Network::walk(&state, record);
+    let lot = network
+        .frontage()
+        .into_iter()
+        .find_map(|(at, normal)| {
+            let lot = network.lot(blueprint, at, normal)?;
+            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+            site_free(&state, record, lot.origin, size).then_some(lot)
+        })
+        .unwrap();
+    let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+    let expected = Project {
+        settlement: id,
+        blueprint: "spanish_fortress".into(),
+        level: 1,
+        origin: lot.origin,
+        rotation: lot.rotation,
+        building: None,
+        structure: String::new(),
+        ordered: true,
+        borrowed_builder: None,
+    };
+    let root = [
+        lot.origin[0] + i32::from(size[0]) / 2,
+        201,
+        lot.origin[2] + i32::from(size[2]) / 2,
+    ];
+    super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
+    if sapling {
+        for x in root[0] - 1..=root[0] + 1 {
+            for z in root[2] - 1..=root[2] + 1 {
+                for y in root[1]..=root[1] + 4 {
+                    state.world.set_block(x, y, z, state.registry.states.air);
+                }
+            }
+        }
+        let block = block(&state, "minecraft:birch_sapling", &[]);
+        state.world.set_block(root[0], root[1], root[2], block);
+    }
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let bounds = super::super::forestry::lot_bounds(&state, &expected).unwrap();
+    assert!(!super::super::forestry::clearable(&state, root));
+    assert!(!super::super::forestry::clearable_on_lot(
+        &state, root, None
+    ));
+    assert!(super::super::forestry::clearable_on_lot(
+        &state,
+        root,
+        Some(bounds)
+    ));
+    assert_eq!(
+        surface_y_for_lot(&state, 200, root[0], root[2], Some(bounds)),
+        Some(200)
+    );
+    assert!(site_free(
+        &state,
+        state.settlements.get(id).unwrap(),
+        lot.origin,
+        size
+    ));
+    retain_player_edit(&mut state, root);
+    assert!(!super::super::forestry::clearable_on_lot(
+        &state,
+        root,
+        Some(bounds)
+    ));
+    assert!(!site_free(
+        &state,
+        state.settlements.get(id).unwrap(),
+        lot.origin,
+        size
+    ));
+    state.block_log = Default::default();
+    fund(&mut state, "spanish_fortress", 1);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let original = state.world.block_at(root[0], root[1], root[2]);
+    request_build(&mut state, id, "spanish_fortress").unwrap();
+    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    assert_eq!(
+        (project.origin, project.rotation),
+        (expected.origin, expected.rotation)
+    );
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    assert_eq!(state.world.block_at(root[0], root[1], root[2]), original);
+    assert!(executor::clearing(&state, id, &project.structure));
+
+    // A managed tree must not trigger the protected-tree cancellation path,
+    // even when there is no adult available to make preparation advance.
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .age = -1;
+    let warnings = stall_preparation(&mut state, id);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .structure,
+        project.structure
+    );
+    assert!(
+        !warnings
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event.contains("protected_tree_in_preparation"))
+    );
+    let villager = state.entities.row_mut(builder).villager.as_mut().unwrap();
+    villager.age = 0;
+    villager.data.profession = Profession::Builder;
+
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    let previous = state.world.block_at(next[0], next[1], next[2]);
+    retain_player_edit(&mut state, next);
+    let uuid = state.entities.row(builder).uuid;
+    assert_eq!(
+        executor::advance(&mut state, id, &project.structure, uuid),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+    assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    state.block_log = Default::default();
+
+    for _ in 0..4096 {
+        if !executor::clearing(&state, id, &project.structure) {
+            break;
+        }
+        let next = executor::next_cell(&state, id, &project.structure)
+            .unwrap()
+            .unwrap();
+        let previous = state.world.block_at(next[0], next[1], next[2]).unwrap();
+        let counts = |state: &TickState| {
+            let mut counts = std::collections::BTreeMap::<u32, i32>::new();
+            for stack in &state.block_entities[&(1, 201, 1)].slots {
+                if !stack.is_empty() {
+                    *counts.entry(stack.item_id).or_default() += stack.count;
+                }
+            }
+            counts
+        };
+        let mut expected_stock = counts(&state);
+        state.tick += 20;
+        for stack in super::super::forestry::drops(&state, next, previous, Some(bounds)).unwrap() {
+            *expected_stock.entry(stack.item_id).or_default() += stack.count;
+        }
+        state.tick -= 20;
+        attempt(&mut state, id, builder);
+        assert_eq!(
+            counts(&state),
+            expected_stock,
+            "managed-tree drops at {next:?}"
+        );
+    }
+    assert!(!executor::clearing(&state, id, &project.structure));
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .any(|building| {
+                placement(&state, id, building)
+                    .is_some_and(|(blueprint, _, _)| blueprint.id == "spanish_fortress")
+            })
+    );
+}
+
+#[test]
+fn managed_tree_on_needed_lot_is_felled_conserved_and_built() {
+    managed_lot_is_felled_and_built(false);
+}
+
+#[test]
+fn managed_sapling_on_needed_lot_is_felled_conserved_and_built() {
+    managed_lot_is_felled_and_built(true);
 }

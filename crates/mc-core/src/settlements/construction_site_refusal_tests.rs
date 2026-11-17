@@ -33,19 +33,19 @@ fn complete_sweeps_report_reason_changes_not_cursor_batches() {
     let mut watch = Watch::default();
     assert!(!reported(&mut watch, Reason::BuildingBuffer, 128));
     let first = watch
-        .record("storage", batch(Reason::PlantedCrown, 128))
+        .record("storage", batch(Reason::ProtectedObstruction, 128))
         .unwrap();
     assert_eq!(first.examined, 128);
     assert_eq!(first.counts[Reason::BuildingBuffer as usize], 1);
     assert_eq!(
-        first.examples[Reason::PlantedCrown as usize],
+        first.examples[Reason::ProtectedObstruction as usize],
         Some([10, 200, 20])
     );
-    assert!(!reported(&mut watch, Reason::PlantedCrown, 128));
+    assert!(!reported(&mut watch, Reason::ProtectedObstruction, 128));
     assert!(!reported(&mut watch, Reason::BuildingBuffer, 128));
     assert!(!reported(&mut watch, Reason::HeightVariance, 128));
     assert!(reported(&mut watch, Reason::HeightVariance, 128));
-    assert!(!reported(&mut watch, Reason::PlantedCrown, 128));
+    assert!(!reported(&mut watch, Reason::ProtectedObstruction, 128));
     assert!(
         reported(&mut watch, Reason::BuildingBuffer, 128),
         "a previous reason returning is another change"
@@ -107,7 +107,7 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
             1,
             "{text}"
         );
-        assert!(text.contains("PlantedCrown"), "{text}");
+        assert!(text.contains("ProtectedObstruction"), "{text}");
         assert!(text.contains("storage"), "{text}");
         cancel_pending(&mut state, id).unwrap();
         assert!(!state.settlements.site_watch.contains_key(&id));

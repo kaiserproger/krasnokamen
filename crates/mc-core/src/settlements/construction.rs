@@ -1119,6 +1119,7 @@ fn planned_cells(
         })
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
+    let lot = super::forestry::lot_bounds(state, project)?;
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {
@@ -1130,7 +1131,7 @@ fn planned_cells(
             .0;
         for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-                let ground = surface_y(state, project.origin[1], x, z)?;
+                let ground = surface_y_for_lot(state, project.origin[1], x, z, Some(lot))?;
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
                     if y == project.origin[1]
@@ -1215,12 +1216,8 @@ fn planned_cells(
     // interference fencing; certification uses the narrower authored bounds.
     let mut min = [project.origin[0], bottom, project.origin[2]];
     let mut max = std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1);
-    // A winding access walk can enclose unrelated managed trees. Protect
-    // the actual lot here and the walk's columns in forestry::cells, not
-    // the empty space inside their combined executor envelope.
-    if super::forestry::planted_crown_overlaps(state, ScriptWorldBounds::new(min, max).ok()?) {
-        return None;
-    }
+    // Lot cells use the shared managed-tree exception; access outside the lot
+    // remains protected in forestry::cells, not the enclosing empty rectangle.
     for cell in &cells {
         for axis in 0..3 {
             min[axis] = min[axis].min(cell.at[axis]);
@@ -1478,6 +1475,16 @@ pub(super) const SITE_BAND: i32 = 8;
 /// block with clearable space directly above it. Hillside villages have no
 /// flat ground at the bell's own elevation, so sites follow the terrain.
 pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<i32> {
+    surface_y_for_lot(state, anchor_y, x, z, None)
+}
+
+pub(super) fn surface_y_for_lot(
+    state: &TickState,
+    anchor_y: i32,
+    x: i32,
+    z: i32,
+    lot: Option<ScriptWorldBounds>,
+) -> Option<i32> {
     (anchor_y - SITE_BAND..=anchor_y + SITE_BAND)
         .rev()
         .find(|&y| {
@@ -1492,7 +1499,8 @@ pub(super) fn surface_y(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Opt
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above) || super::forestry::clearable(state, [x, y + 1, z])
+                    clearable(state, above)
+                        || super::forestry::clearable_on_lot(state, [x, y + 1, z], lot)
                 })
         })
 }
@@ -2098,6 +2106,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
+    let lot = super::forestry::lot_bounds(state, &project);
     let protected = snapshot
         .stages
         .get(snapshot.current_stage_index as usize)
@@ -2106,8 +2115,8 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             state
                 .world
                 .physics_block_at(at[0], at[1], at[2])
-                .is_some_and(|block| super::forestry::tree(state, block))
-                && super::forestry::protected_tree(state, at)
+                .is_some_and(|block| super::forestry::tree_or_sapling(state, block))
+                && !super::forestry::clearable_on_lot(state, at, lot)
         });
     let cause = if protected {
         "protected_tree_in_preparation"

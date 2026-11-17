@@ -583,11 +583,13 @@ pub(super) fn debit(
     }) {
         return Err(Failure::Forbidden);
     }
-    let preparing = state
+    let project = state
         .settlements
         .get(id)
         .and_then(|record| record.project.as_ref())
-        .is_some_and(|project| project.building.is_none());
+        .filter(|project| project.building.is_none());
+    let preparing = project.is_some();
+    let lot = project.and_then(|project| crate::settlements::forestry::lot_bounds(state, project));
     let mut drops = Vec::new();
     let mut loot = Vec::new();
     if preparing {
@@ -599,8 +601,10 @@ pub(super) fn debit(
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
                 .ok_or(Failure::Unloaded)?;
-            if crate::settlements::forestry::tree(state, block) {
-                drops.extend(crate::settlements::forestry::drops(state, cell.at, block)?);
+            if crate::settlements::forestry::tree_or_sapling(state, block) {
+                drops.extend(crate::settlements::forestry::drops(
+                    state, cell.at, block, lot,
+                )?);
             } else {
                 loot.extend(
                     crate::settlements::forestry::plant_drops(state, cell.at, block)?

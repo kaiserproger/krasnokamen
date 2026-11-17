@@ -8,7 +8,6 @@ pub(super) enum Reason {
     NoFrontage,
     LotGeometry,
     OutpostClaim,
-    PlantedCrown,
     BuildingBuffer,
     Territory,
     SurfaceUnavailable,
@@ -20,11 +19,10 @@ pub(super) enum Reason {
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 14] = [
+const REASONS: [Reason; 13] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
-    Reason::PlantedCrown,
     Reason::BuildingBuffer,
     Reason::Territory,
     Reason::SurfaceUnavailable,
@@ -138,12 +136,7 @@ pub(super) fn check(
         return Err(Reason::OutpostClaim);
     }
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
-    if super::super::forestry::planted_crown_overlaps(
-        state,
-        ScriptWorldBounds::new(origin, max).expect("blueprint bounds"),
-    ) {
-        return Err(Reason::PlantedCrown);
-    }
+    let lot = ScriptWorldBounds::new(origin, max).expect("blueprint bounds");
     let mut minimum = origin[1];
     let mut maximum = origin[1];
     if record.buildings.values().any(|building| {
@@ -171,7 +164,8 @@ pub(super) fn check(
             } else {
                 record.anchor[1]
             };
-            let height = surface_y(state, anchor_y, x, z).ok_or(Reason::SurfaceUnavailable)?;
+            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot))
+                .ok_or(Reason::SurfaceUnavailable)?;
             minimum = minimum.min(height);
             maximum = maximum.max(height);
             if maximum - minimum > SITE_VARIANCE {
@@ -190,17 +184,19 @@ pub(super) fn check(
                     .physics_block_at(x, y, z)
                     .ok_or(Reason::Unloaded)?;
                 if state.block_entities.contains_key(&(x, y, z))
-                    || (super::super::forestry::tree(state, block)
-                        && !super::super::forestry::clearable(state, [x, y, z]))
-                    || (y == origin[1] && !floor_replaceable(state, block))
+                    || (super::super::forestry::tree_or_sapling(state, block)
+                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
+                    || (y == origin[1]
+                        && !floor_replaceable(state, block)
+                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
                     || (y > origin[1]
                         && !clearable(state, block)
                         && !excavatable(state, block)
-                        && !super::super::forestry::clearable(state, [x, y, z]))
+                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
                     || (y > height
                         && y <= origin[1]
                         && !clearable(state, block)
-                        && !super::super::forestry::clearable(state, [x, y, z]))
+                        && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
                 {
                     return Err(Reason::ProtectedObstruction);
                 }

@@ -413,12 +413,66 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
         })
 }
 
+pub(crate) fn tree_or_sapling(state: &TickState, block: u32) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(BlockStateId(block))
+        .is_some_and(|definition| {
+            let name = definition.block.id.path();
+            tree_name(name) || name.ends_with("_sapling")
+        })
+}
+
+pub(crate) fn lot_bounds(
+    state: &TickState,
+    project: &super::construction::Project,
+) -> Option<mc_script::ScriptWorldBounds> {
+    let blueprint = super::blueprints::get(&state.registry, &project.blueprint)?;
+    let size = blueprint.footprint(super::blueprints::Rotation::from_quarter_turns(
+        project.rotation,
+    ));
+    mc_script::ScriptWorldBounds::new(
+        project.origin,
+        std::array::from_fn(|axis| project.origin[axis] + i32::from(size[axis]) - 1),
+    )
+    .ok()
+}
+
+/// Construction may fell managed plantings only on its needed lot. All other
+/// cells retain natural-tree evidence and player-edit protection.
+pub(crate) fn clearable_on_lot(
+    state: &TickState,
+    at: [i32; 3],
+    lot: Option<mc_script::ScriptWorldBounds>,
+) -> bool {
+    if state.block_log.player_touched(at) {
+        return false;
+    }
+    let on_lot = lot.is_some_and(|bounds| {
+        [0, 2]
+            .into_iter()
+            .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&at[axis]))
+    });
+    if on_lot
+        && state
+            .world
+            .physics_block_at(at[0], at[1], at[2])
+            .is_some_and(|block| tree_or_sapling(state, block))
+        && planted(state, at)
+    {
+        return true;
+    }
+    clearable(state, at)
+}
+
 pub(crate) fn drops(
     state: &TickState,
     at: [i32; 3],
     block: u32,
+    lot: Option<mc_script::ScriptWorldBounds>,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
-    if !clearable(state, at) {
+    if !clearable_on_lot(state, at, lot) {
         return Err(mc_script::ScriptOperationFailure::Blocked);
     }
     roll(state, at, block)
@@ -477,16 +531,23 @@ pub(crate) fn cells(
 ) -> Option<Preparation> {
     use crate::plugin_structures::settlement_builds::PlannedCell;
     let record = state.settlements.get(project.settlement)?;
+    let bounds = lot_bounds(state, project)?;
     let mut lot = Vec::new();
     let mut lot_has_tree = false;
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-            let y = super::construction::surface_y(state, record.anchor[1], x, z)?;
+            let y = super::construction::surface_y_for_lot(
+                state,
+                record.anchor[1],
+                x,
+                z,
+                Some(bounds),
+            )?;
             lot_has_tree |= (y + 1..project.origin[1] + i32::from(size[1])).any(|above| {
                 state
                     .world
                     .physics_block_at(x, above, z)
-                    .is_some_and(|block| tree(state, block))
+                    .is_some_and(|block| tree_or_sapling(state, block))
             });
             lot.push([x, y, z]);
         }
@@ -495,7 +556,7 @@ pub(crate) fn cells(
         super::layout::Network::for_construction(state, record).construction_access(project);
     let mut columns = match route {
         Some(route) => route,
-        None if !lot_has_tree => {
+        None if !lot_has_tree && !planted_crown_overlaps(state, bounds) => {
             return Some(Preparation {
                 cells: Vec::new(),
                 corridor: None,
@@ -504,10 +565,15 @@ pub(crate) fn cells(
         None => return None,
     };
     for &[x, y, z] in &columns {
-        if planted_crown_overlaps(
-            state,
-            mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
-        ) {
+        let on_lot = [0, 2]
+            .into_iter()
+            .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&[x, y, z][axis]));
+        if !on_lot
+            && planted_crown_overlaps(
+                state,
+                mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
+            )
+        {
             return None;
         }
     }
@@ -538,10 +604,10 @@ pub(crate) fn cells(
             let Some(block) = state.world.physics_block_at(x, y, z) else {
                 break;
             };
-            if !tree(state, block) {
+            if !tree_or_sapling(state, block) {
                 continue;
             }
-            if !clearable(state, [x, y, z]) {
+            if !clearable_on_lot(state, [x, y, z], Some(bounds)) {
                 // A protected crown above the actual work volume stays there.
                 if y <= floor + 2 || (on_lot && y < project.origin[1] + i32::from(size[1])) {
                     return None;
@@ -565,7 +631,11 @@ pub(crate) fn footing(
     at: [i32; 3],
 ) -> Option<crate::boundary::BlockPos> {
     let record = state.settlements.get(settlement)?;
-    let y = super::construction::surface_y(state, record.anchor[1], at[0], at[2])?;
+    let lot = record
+        .project
+        .as_ref()
+        .and_then(|project| lot_bounds(state, project));
+    let y = super::construction::surface_y_for_lot(state, record.anchor[1], at[0], at[2], lot)?;
     Some(crate::boundary::BlockPos {
         x: at[0],
         y: y + 1,
