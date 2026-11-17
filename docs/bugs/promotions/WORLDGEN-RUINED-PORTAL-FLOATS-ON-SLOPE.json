@@ -1,0 +1,39 @@
+{
+  "id": "WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE",
+  "verdict": "promoted",
+  "fix_commit": "patch:f68a0a8f9e5b90a4363af71ee49751983a1cf167224a58a2553f7c19134b103c",
+  "fix_commit_full": "patch:f68a0a8f9e5b90a4363af71ee49751983a1cf167224a58a2553f7c19134b103c",
+  "promoted_at": "2026-11-17T01:15:20+00:00",
+  "tree_head": "51d8e7a244130f17feb9ab7cdd4bcd5a5138428f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f68a0a8f9e5b90a4363af71ee49751983a1cf167224a58a2553f7c19134b103c",
+  "reversed_files": [
+    "crates/mc-worldgen/src/lib.rs",
+    "crates/mc-worldgen/src/overworld_structures.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-worldgen:overworld_structures::tests::ruined_portal_support_columns_never_copy_template_material": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-worldgen:overworld_structures::tests::floating_surface_structure_rests_on_a_support_column": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-worldgen:overworld_structures::tests::ruined_portal_support_columns_never_copy_template_material": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-worldgen:overworld_structures::tests::floating_surface_structure_rests_on_a_support_column": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A12IssueCheck/.analysis/validation/20261117T011358-ledger-promote-unm4any7"
+}

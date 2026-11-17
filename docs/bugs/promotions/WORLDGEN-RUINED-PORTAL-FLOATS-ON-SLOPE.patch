@@ -1,0 +1,103 @@
+diff --git a/crates/mc-worldgen/src/lib.rs b/crates/mc-worldgen/src/lib.rs
+index 5305f48..050ebed 100644
+--- a/crates/mc-worldgen/src/lib.rs
++++ b/crates/mc-worldgen/src/lib.rs
+@@ -131,7 +131,19 @@ pub use terrain::{HeightContextStats, height_context_stats, reset_height_context
+ /// water, lava and solid pressure barriers on both CPU and GPU density paths;
+ /// place shipwrecks and ocean ruins on the seabed, cap the monument below sea
+ /// level, and generate mineshaft loot as chest minecarts.
+-pub const WORLDGEN_REVISION: u32 = 31;
++///
++/// 32: a `Height::Surface` template that hangs over air gets a support column of
++/// its own column's ground material above the first non-air block, because
++/// vanilla's descent (`RuinedPortalStructure.findSuitableY`) cannot run before
++/// this generator's villages. Ruined portals no longer float over a slope.
++///
++/// 33: that support column is filled with the column's terrain material, never
++/// the template's own block: revision 32 copied the last visited template block,
++/// so `portal_6` grew gold blocks under its netherrack platform and other
++/// columns copied chests or lava. Revision-33 chunks continue the natural ground
++/// the gap lands on and fall back to stone when it is a structure block, a fluid
++/// or a village farm cell.
++pub const WORLDGEN_REVISION: u32 = 33;
+ 
+ /// Crate version, exposed so other crates and the binary can report it.
+ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+diff --git a/crates/mc-worldgen/src/overworld_structures.rs b/crates/mc-worldgen/src/overworld_structures.rs
+index 7603e0b..2879fa8 100644
+--- a/crates/mc-worldgen/src/overworld_structures.rs
++++ b/crates/mc-worldgen/src/overworld_structures.rs
+@@ -299,6 +299,12 @@ impl OverworldStructures {
+         })
+     }
+ 
++    fn is_surface_family(&self, structure: &Identifier) -> bool {
++        self.families
++            .iter()
++            .any(|family| &family.id == structure && matches!(family.height, Height::Surface))
++    }
++
+     /// Rest a `Height::Surface` template on the ground under its own footprint.
+     ///
+     /// Vanilla descends the start until three of the template bounding box's
+@@ -319,7 +325,49 @@ impl OverworldStructures {
+     /// them is in `ground`. Air only, and bounded so a ruin over a chasm does
+     /// not grow a pillar.
+     fn support_columns(&self, chunk: &mut Chunk, template: &StructureTemplate, origin: BlockPos) {
+-        let _ = (chunk, template, origin);
++        const DEPTH: i32 = 4;
++        let chunk_pos = chunk.pos;
++        let mut lowest: BTreeMap<(i32, i32), i32> = BTreeMap::new();
++        for block in template.blocks() {
++            if self.air.contains(&block.state) {
++                continue;
++            }
++            lowest
++                .entry((block.pos[0], block.pos[2]))
++                .and_modify(|base| *base = (*base).min(block.pos[1]))
++                .or_insert(block.pos[1]);
++        }
++        for ((local_x, local_z), base) in lowest {
++            let x = origin.x + local_x - chunk_pos.x * 16;
++            let z = origin.z + local_z - chunk_pos.z * 16;
++            if !(0..16).contains(&x) || !(0..16).contains(&z) {
++                continue;
++            }
++            let (x, z) = (x as u8, z as u8);
++            let base_y = origin.y + base;
++            // Descend the gap without material: the block that stops the walk
++            // (or the first one past the depth bound) is what the fill continues.
++            let mut floor_y = base_y - 1;
++            let mut depth = 0;
++            while depth < DEPTH
++                && chunk
++                    .get_block(x, floor_y, z)
++                    .is_some_and(|id| self.air.contains(&id))
++            {
++                floor_y -= 1;
++                depth += 1;
++            }
++            if depth == 0 {
++                continue;
++            }
++            let material = chunk
++                .get_block(x, floor_y, z)
++                .filter(|id| self.ground.contains(id))
++                .unwrap_or(self.filler);
++            for y in floor_y + 1..base_y {
++                chunk.set_block(x, y, z, material);
++            }
++        }
+     }
+ 
+     fn visit(
+@@ -526,6 +574,9 @@ impl OverworldStructures {
+                 );
+                 let eyes = (structure.path() == "stronghold")
+                     .then_some((&self.stronghold_eye_states, self.stronghold_portal));
++                if self.is_surface_family(structure) {
++                    self.support_columns(chunk, template, origin);
++                }
+                 let changed = paste_template_with_eyes(chunk, template, origin, self.seed, eyes);
+                 for (t, c) in touched.iter_mut().zip(changed) {
+                     *t |= c;

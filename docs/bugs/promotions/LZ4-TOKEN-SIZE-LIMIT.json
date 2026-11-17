@@ -1,0 +1,32 @@
+{
+  "id": "LZ4-TOKEN-SIZE-LIMIT",
+  "verdict": "promoted",
+  "fix_commit": "24a0eefd4",
+  "fix_commit_full": "24a0eefd48fc9d5a155ab40d10313d0c7370a1d3",
+  "promoted_at": "2026-11-17T00:33:29+00:00",
+  "tree_head": "a0c73ca265daca97522e877bc1f97d30220f58cb",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-world/src/anvil/region.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-world/src/anvil/region_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies_to_readers_and_preserved_writer": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies_to_readers_and_preserved_writer": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A12IssueCheck/.analysis/validation/20261117T003245-ledger-promote-a5lm049m"
+}

@@ -1,0 +1,35 @@
+{
+  "id": "EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE",
+  "verdict": "promoted",
+  "fix_commit": "40b28f732",
+  "fix_commit_full": "40b28f73240e94aeb118672edab0c95d56c42299",
+  "promoted_at": "2026-11-17T01:43:30+00:00",
+  "tree_head": "d16abcd82eca03449b2e91228a77ab3b337c4f48",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-edge/src/plan.rs",
+    "crates/mc-edge/src/server.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-edge/src/admin_tests.rs",
+    "crates/mc-edge/src/explosion_queue_tests.rs",
+    "crates/mc-edge/src/plan_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::explosions_deliver_or_explicitly_close_under_queue_pressure": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::explosions_deliver_or_explicitly_close_under_queue_pressure": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/A12IssueCheck/.analysis/validation/20261117T013315-ledger-promote-bgon7gnm"
+}
