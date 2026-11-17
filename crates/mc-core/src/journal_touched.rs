@@ -70,7 +70,69 @@ struct FieldBaseline {
     /// The image carried a villager post-image (a converted or cured body
     /// changes that presence, which only a full image can express).
     villager: bool,
+    /// The image carried this pickup delay; `EntityAppearance` does not carry it.
+    pickup_delay: u32,
+    /// The image carried the retained projectile, in the persisted shape: the
+    /// runtime-only attachment is not serialized, so replay never has it.
     projectile: Option<Box<crate::projectiles::ProjectileState>>,
+}
+
+/// Whether a body can take a compact record instead of the whole image at all:
+/// a live non-player body whose pose is either not journaled (ordinary mobs) or
+/// journaled by `EntityMotion` (battle bodies). Items, falling bodies, TNT,
+/// vehicles, dragons and endermen have their pose in the image only, and a corpse
+/// image is a removal on replay.
+fn compactable(state: &TickState, slot: EntitySlot) -> bool {
+    let body = *state.entities.body(slot);
+    let row = state.entities.row(slot);
+    body.alive
+        && !matches!(body.kind, EntityKind::Player { .. })
+        && row.item.is_none()
+        && row.falling.is_none()
+        && row.tnt.is_none()
+        && row.entity_life.vehicle.is_none()
+        && !crate::end_fight::is_dragon(state, slot)
+        && crate::piglin::name(body_type_id(&body).unwrap_or(u32::MAX)) != "minecraft:enderman"
+}
+
+/// The image's own type id projection.
+fn body_type_id(body: &crate::entities::Body) -> Option<u32> {
+    match body.kind {
+        EntityKind::Mob { type_id }
+        | EntityKind::Item { type_id }
+        | EntityKind::ExperienceOrb { type_id } => Some(type_id),
+        EntityKind::Player { .. } => None,
+    }
+}
+
+/// Whether `live` matches `base` in every projectile field a compact record can
+/// leave out. `age` always rides the record; `landing` also skips the landing
+/// transition.
+fn projectile_rest_matches(
+    base: &crate::projectiles::ProjectileState,
+    live: &crate::projectiles::ProjectileState,
+    landing: bool,
+) -> bool {
+    base.owner == live.owner
+        && base.kind == live.kind
+        && base.ground_lifetime == live.ground_lifetime
+        && base.pickup == live.pickup
+        && base.stack == live.stack
+        && base.damage == live.damage
+        && base.punch == live.punch
+        && base.flame == live.flame
+        && base.piercing == live.piercing
+        && base.hit == live.hit
+        && base.data == live.data
+        && base.critical == live.critical
+        && base.mob_damage == live.mob_damage
+        && base.returning == live.returning
+        && base.shot_at_angle == live.shot_at_angle
+        && base.fired_from_weapon == live.fired_from_weapon
+        && base.crossbow_kills == live.crossbow_kills
+        && base.acceleration_power == live.acceleration_power
+        && (!landing
+            || base.stuck == live.stuck && base.grounded_at_age == live.grounded_at_age)
 }
 
 /// Journal-side entity caches that live next to the baseline images.
@@ -154,7 +216,18 @@ pub(crate) fn entity_images(
             (!matches!(body.kind, EntityKind::Player { .. })).then_some(body.id)
         }));
     }
+    // A full image used to carry the live state image and villager image of
+    // every appearance-marked body. Keep those exact comparisons for those ids so
+    // the compact record may rely on them (committee F3).
+    let mut marked: Vec<EntityId> = output.changes.entities_appearance_changed.clone();
+    marked.sort_unstable();
+    marked.dedup();
     let owner_count = touched.len();
+    let mut needs_sort = false;
+    if !marked.is_empty() {
+        touched.extend(marked.iter().copied());
+        needs_sort = true;
+    }
     for chunk in state.world.simulation_clock_changes() {
         touched.extend(
             state
@@ -175,7 +248,8 @@ pub(crate) fn entity_images(
                 .copied(),
         );
     }
-    if touched.len() != owner_count {
+    needs_sort |= touched.len() != owner_count;
+    if needs_sort {
         #[cfg(test)]
         let sort_start = crate::horde_bench::merge_cost_tests::start();
         touched.sort_unstable();
@@ -377,16 +451,27 @@ pub(crate) fn entity_images(
             projectile: row.projectile.clone(),
             tick: output.tick,
         });
-        state.journal_scan.fields.insert(
-            body.id,
-            FieldBaseline {
-                appearance: Arc::clone(&row.appearance),
-                uuid: row.uuid,
-                type_id,
-                villager: row.villager.is_some(),
-                projectile: row.projectile.clone(),
-            },
-        );
+        if compactable(state, slot) {
+            state.journal_scan.fields.insert(
+                body.id,
+                FieldBaseline {
+                    appearance: Arc::clone(&row.appearance),
+                    uuid: row.uuid,
+                    type_id,
+                    villager: row.villager.is_some(),
+                    pickup_delay: body.pickup_delay,
+                    projectile: row.projectile.clone().map(|mut state| {
+                        // Runtime-only, never serialized: replay cannot hold it.
+                        state.attached_to = None;
+                        state
+                    }),
+                },
+            );
+        } else {
+            // Bodies the compact path cannot serve carry no base (documents the
+            // invariant instead of relying on the guards alone).
+            state.journal_scan.fields.remove(&body.id);
+        }
         if let Some(previous) = state.journal_scan.motion.get_mut(id) {
             let [yaw, pitch, _] = state.entities.rot(slot);
             let pose = MotionPose {
@@ -477,96 +562,78 @@ pub(crate) fn force_full_images(state: &mut TickState) {
 }
 
 /// One compact post-image for an appearance-only mark, or `None` when the body
-/// needs the full `Entity` image instead (spawn, death, crossing, item, a pose
-/// only the image journals, a changed identity, or no image in this tail).
+/// needs the full `Entity` image instead (spawn, death, crossing, an item or a
+/// pose only the image journals, a changed identity, custody or pickup delay, or
+/// no image in this tail).
 fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<JournalEntry> {
     #[cfg(test)]
     if state.journal_scan.force_full {
         return None;
     }
     let slot = state.entities.slot_of_any(id)?;
+    if !compactable(state, slot) {
+        return None;
+    }
     let body = *state.entities.body(slot);
-    let row = state.entities.row(slot);
-    if !body.alive {
-        // A dying image folds as a removal on replay; keep that on the image path.
-        return None;
-    }
-    let type_id = match body.kind {
-        EntityKind::Mob { type_id }
-        | EntityKind::Item { type_id }
-        | EntityKind::ExperienceOrb { type_id } => type_id,
-        EntityKind::Player { .. } => return None,
-    };
+    let type_id = body_type_id(&body)?;
     let chunk = chunk_position(state, slot);
-    if state
-        .journaled_entity_state
-        .get(&id)
-        .is_some_and(|(_, old_chunk, _)| *old_chunk != chunk)
-    {
-        // The crossing image is the only record that advances a replayed pose
-        // across chunk-clock authority; a compact record carries no pose for a
-        // non-projectile body.
-        return None;
-    }
-    if row.projectile.is_none()
-        && (row.item.is_some()
-            || row.falling.is_some()
-            || row.tnt.is_some()
-            || row.entity_life.vehicle.is_some()
-            || crate::end_fight::is_dragon(state, slot)
-            || crate::piglin::name(type_id) == "minecraft:enderman")
-    {
-        // Replay takes these poses from the full image alone.
-        return None;
-    }
-    let (base_appearance, base_uuid, base_type_id, base_villager, base_projectile) = {
+    let (base_appearance, base_uuid, base_type_id, base_villager, base_pickup, base_projectile) = {
         let baseline = state.journal_scan.fields.get(&id)?;
+        if state
+            .journaled_entity_state
+            .get(&id)
+            .is_some_and(|(_, old_chunk, _)| *old_chunk != chunk)
+        {
+            // A crossing image is the only record that advances a replayed pose
+            // across chunk-clock authority.
+            return None;
+        }
+        if baseline.uuid != state.entities.row(slot).uuid || baseline.type_id != type_id {
+            // A changed identity retires the old record on replay.
+            return None;
+        }
         (
             Arc::clone(&baseline.appearance),
             baseline.uuid,
             baseline.type_id,
             baseline.villager,
+            baseline.pickup_delay,
             baseline.projectile.clone(),
         )
     };
-    if base_uuid != row.uuid || base_type_id != type_id {
-        // A changed identity retires the old record on replay; that is an image.
+    let row = state.entities.row(slot);
+    if base_uuid != row.uuid
+        || base_type_id != type_id
+        || base_villager != row.villager.is_some()
+        || base_pickup != body.pickup_delay
+        || base_projectile.is_some() != row.projectile.is_some()
+    {
+        // Villager custody, the pickup delay, a gained or lost projectile and a
+        // changed identity are whole-image changes.
         return None;
     }
-    if base_villager != row.villager.is_some() {
-        // A gain or loss of villager custody is an image change.
-        return None;
-    }
-    let image = crate::journal::EntityAppearanceImage::from(&*row.appearance);
     let base_image = crate::journal::EntityAppearanceImage::from(&*base_appearance);
-    let appearance = crate::journal::EntityAppearanceDelta::diff(&base_image, &image);
-    if row.projectile.is_some() != base_projectile.is_some() {
-        // Attaching or dropping the retained projectile state is a whole-image
-        // change: neither record can express the other side of the transition.
-        return None;
-    }
+    let appearance = crate::journal::EntityAppearanceDelta::diff(&base_image, &row.appearance);
     let entry = match &row.projectile {
         Some(projectile) => {
-            // A flight record is the pose and the age; the whole state rides
-            // only when a payload, ledger or custody field changed.
+            // The pose and the age ride every flight tick; the landing rides the
+            // tick it happens; anything else keeps the whole retained state.
             let base = base_projectile.as_deref()?;
-            let mut expected = base.clone();
-            expected.age = projectile.age;
-            let (stuck, grounded_at_age, retained) = if expected == **projectile {
-                (None, None, None)
+            let landing = !projectile_rest_matches(base, projectile, true);
+            let rest_changed = landing && !projectile_rest_matches(base, projectile, false);
+            let (stuck, grounded_at_age, retained) = if rest_changed {
+                // A payload, ledger or custody field changed: keep the state.
+                (None, crate::journal::DeltaValue::Unchanged, Some(projectile.clone()))
+            } else if landing {
+                // Only the landing transition moved: a set now, a clear when the
+                // arrow leaves the ground again.
+                let grounded_at_age = match projectile.grounded_at_age {
+                    Some(age) => crate::journal::DeltaValue::Set(age),
+                    None => crate::journal::DeltaValue::Clear,
+                };
+                (Some(projectile.stuck), grounded_at_age, None)
             } else {
-                let mut landed = expected.clone();
-                landed.stuck = projectile.stuck;
-                landed.grounded_at_age = projectile.grounded_at_age;
-                if landed == **projectile {
-                    (
-                        Some(projectile.stuck),
-                        Some(projectile.grounded_at_age),
-                        None,
-                    )
-                } else {
-                    (None, None, Some(projectile.clone()))
-                }
+                (None, crate::journal::DeltaValue::Unchanged, None)
             };
             JournalEntry::ProjectileFlight {
                 id: entity_id_int(body.id),
@@ -604,7 +671,12 @@ fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<Journ
             uuid: row.uuid,
             type_id,
             villager: row.villager.is_some(),
-            projectile: row.projectile.clone(),
+            pickup_delay: body.pickup_delay,
+            projectile: row.projectile.clone().map(|mut state| {
+                // Runtime-only, never serialized: replay cannot hold it.
+                state.attached_to = None;
+                state
+            }),
         },
     );
     Some(entry)

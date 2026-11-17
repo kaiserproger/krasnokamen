@@ -360,19 +360,21 @@ fn effects_heap(effects: &crate::effects::ActiveEffects) -> usize {
 }
 
 fn appearance_delta_heap(delta: &crate::journal::EntityAppearanceDelta) -> usize {
-    delta.item.as_ref().map_or(0, opt_item_heap)
-        + delta
+    let item = match &delta.item {
+        crate::journal::DeltaValue::Set(stack) => item_heap(stack),
+        _ => 0,
+    };
+    item + delta
             .equipment
             .as_ref()
             .map_or(0, |equipment| {
                 equipment.capacity() * std::mem::size_of::<Option<mc_data::ItemStack>>()
                     + equipment.iter().map(opt_item_heap).sum::<usize>()
             })
-        + delta
-            .custom_name
-            .as_ref()
-            .and_then(Option::as_ref)
-            .map_or(0, String::capacity)
+        + match &delta.custom_name {
+            crate::journal::DeltaValue::Set(name) => name.capacity(),
+            _ => 0,
+        }
         + delta.extra.as_ref().map_or(0, |extra| {
             extra.capacity() * std::mem::size_of::<(u8, EntityDataValueImage)>()
                 + extra

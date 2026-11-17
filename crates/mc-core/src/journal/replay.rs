@@ -62,6 +62,10 @@ pub struct Replay {
     /// without the full image it is a delta of. Recovery reports it before
     /// applying anything: a tail that lost its base must not be served.
     pub(crate) entity_fault: Option<String>,
+    /// Ids with an `Entity` image in this fold, i.e. the records a compact
+    /// record may be a delta of. A checkpoint populates `entities` without
+    /// proving an image, so existence there is not enough (committee F1).
+    pub(crate) tail_images: std::collections::HashSet<i32>,
     /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
     /// Recovered WAL tail, which must be persisted before the WAL is pruned.
@@ -964,6 +968,8 @@ pub(crate) fn apply_batch_images(
                             replay.entity_removals.push(previous.uuid);
                         }
                         replay.entity_changes.insert(*id);
+                        // The base a later compact record may be a delta of.
+                        replay.tail_images.insert(*id);
                     } else {
                         remove_replay_entity(&mut replay, *id);
                     }
@@ -1145,7 +1151,12 @@ pub(crate) fn apply_batch_images(
                     active_effects,
                     appearance,
                 } => {
-                    // A delta without its base is a lost tail, not a no-op.
+                    // A delta needs an image in this tail, not merely a record
+                    // (a checkpoint fills `entities` without one).
+                    if !replay.tail_images.contains(id) {
+                        compact_fault(&mut replay, *id);
+                        continue;
+                    }
                     let Some(record) = replay.entities.get_mut(id) else {
                         compact_fault(&mut replay, *id);
                         continue;
@@ -1153,10 +1164,14 @@ pub(crate) fn apply_batch_images(
                     if *tick < record.tick {
                         continue;
                     }
+                    appearance.apply(&mut record.appearance);
+                    record.health = *health;
+                    record.alive = *alive;
+                    record.active_effects = active_effects.clone();
                     // The full image bakes the live state/villager clocks and
                     // the lifetime age into the record; a delta carries the age
-                    // and must land the same projection before moving the
-                    // anchor forward.
+                    // and lands the same projection before the anchor moves.
+                    // Apply first: the projection reads the record's `baby`.
                     let clock = replay
                         .simulation_clocks
                         .get(&replay_entity_chunk(record.pos));
@@ -1172,10 +1187,6 @@ pub(crate) fn apply_batch_images(
                     record.breed_cooldown = record.state.breed_cooldown;
                     record.age = *age;
                     record.state.age = *age;
-                    record.health = *health;
-                    record.alive = *alive;
-                    record.active_effects = active_effects.clone();
-                    appearance.apply(&mut record.appearance);
                     record.tick = *tick;
                     replay.entity_changes.insert(*id);
                 }
@@ -1197,12 +1208,13 @@ pub(crate) fn apply_batch_images(
                     grounded_at_age,
                     state,
                 } => {
-                    // A delta without its base (or without the retained
-                    // projectile the base carried) is a lost tail, not a no-op.
-                    if !replay
-                        .entities
-                        .get(id)
-                        .is_some_and(|record| record.projectile.is_some())
+                    // A delta needs an image in this tail, a record, and the
+                    // retained projectile that image carried.
+                    if !replay.tail_images.contains(id)
+                        || !replay
+                            .entities
+                            .get(id)
+                            .is_some_and(|record| record.projectile.is_some())
                     {
                         compact_fault(&mut replay, *id);
                         continue;
@@ -1211,7 +1223,16 @@ pub(crate) fn apply_batch_images(
                     if *tick < record.tick {
                         continue;
                     }
-                    // Same projection the image would bake in (see above).
+                    appearance.apply(&mut record.appearance);
+                    record.health = *health;
+                    record.alive = *alive;
+                    record.pickup_delay = *pickup_delay;
+                    record.active_effects = active_effects.clone();
+                    record.pos = *pos;
+                    record.vel = *vel;
+                    record.yaw = *yaw;
+                    record.pitch = *pitch;
+                    // Same projection the image would bake in, after the delta.
                     let clock = replay
                         .simulation_clocks
                         .get(&replay_entity_chunk(record.pos));
@@ -1227,15 +1248,6 @@ pub(crate) fn apply_batch_images(
                     record.breed_cooldown = record.state.breed_cooldown;
                     record.age = *age;
                     record.state.age = *age;
-                    record.health = *health;
-                    record.alive = *alive;
-                    record.pickup_delay = *pickup_delay;
-                    record.active_effects = active_effects.clone();
-                    appearance.apply(&mut record.appearance);
-                    record.pos = *pos;
-                    record.vel = *vel;
-                    record.yaw = *yaw;
-                    record.pitch = *pitch;
                     let projectile = record.projectile.as_mut().expect("checked");
                     match state {
                         Some(state) => **projectile = (**state).clone(),
@@ -1244,9 +1256,7 @@ pub(crate) fn apply_batch_images(
                             if let Some(stuck) = stuck {
                                 projectile.stuck = *stuck;
                             }
-                            if let Some(grounded_at_age) = grounded_at_age {
-                                projectile.grounded_at_age = *grounded_at_age;
-                            }
+                            crate::journal::apply_delta(grounded_at_age, &mut projectile.grounded_at_age);
                         }
                     }
                     // The full image's own ground rule for a projectile body.
@@ -1269,6 +1279,7 @@ pub(crate) fn apply_batch_images(
 
 /// Drop one record and log its UUID, so recovery can tombstone its stored row.
 fn remove_replay_entity(replay: &mut Replay, id: i32) {
+    replay.tail_images.remove(&id);
     if let Some(record) = replay.entities.remove(&id) {
         replay.entity_changes.remove(&id);
         replay.entity_removals.push(record.uuid);

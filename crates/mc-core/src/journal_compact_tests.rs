@@ -275,6 +275,11 @@ fn scenario(force_full: bool) -> Vec<(u64, u64, Vec<JournalEntry>)> {
             state.appearance_changed.push(arrow);
         }
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        if index == 7 {
+            // A checkpoint capture between batches: the tail restarts with full
+            // images, and the byte accounting includes that reseed.
+            crate::journal_touched::clear_field_baselines(&mut state);
+        }
         let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         crate::journal_touched::assert_baselines_complete(&state, output.tick);
         batches.push((output.tick, output.tick, entries));
@@ -377,7 +382,7 @@ fn compact_record_without_its_base_refuses_recovery() {
             pitch: 0.0,
             projectile_age: 3,
             stuck: None,
-            grounded_at_age: None,
+            grounded_at_age: crate::journal::DeltaValue::Unchanged,
             state: None,
         }],
     )];
@@ -400,4 +405,118 @@ fn checkpoint_baseline_reset_forces_the_next_full_image() {
     let entries = step(&mut state);
     assert_eq!(images(&entries, cow), 1, "the capture reseeds the base");
     assert!(compacts(&entries, cow).is_empty());
+}
+
+/// Tri-state fields must survive a real batch encode/decode: `null` decodes to
+/// the outer `None` with plain serde, which would silently keep a cleared value.
+#[test]
+fn delta_values_round_trip_through_a_batch() {
+    fn flight(
+        tick: u64,
+        stuck: Option<bool>,
+        grounded_at_age: crate::journal::DeltaValue<u32>,
+    ) -> JournalEntry {
+        JournalEntry::ProjectileFlight {
+            id: 3,
+            tick,
+            age: 7,
+            health: 1.0,
+            alive: true,
+            pickup_delay: 0,
+            active_effects: Default::default(),
+            appearance: Default::default(),
+            pos: [1.0, 2.0, 3.0],
+            vel: [0.0; 3],
+            yaw: 0.0,
+            pitch: 0.0,
+            projectile_age: 9,
+            stuck,
+            grounded_at_age,
+            state: None,
+        }
+    }
+    let directory =
+        std::env::temp_dir().join(format!("mc-core-compact-codec-{}", uuid::Uuid::new_v4()));
+    let landed = flight(5, Some(true), crate::journal::DeltaValue::Set(9));
+    let ungrounded = flight(6, Some(false), crate::journal::DeltaValue::Clear);
+    let renamed = JournalEntry::EntityAppearance {
+        id: 4,
+        tick: 6,
+        age: 0,
+        health: 20.0,
+        alive: true,
+        active_effects: Default::default(),
+        appearance: crate::journal::EntityAppearanceDelta {
+            custom_name: crate::journal::DeltaValue::Clear,
+            item: crate::journal::DeltaValue::Set(mc_data::ItemStack::EMPTY),
+            ..Default::default()
+        },
+    };
+    let entries = vec![landed.clone(), ungrounded.clone(), renamed.clone()];
+    let mut writer = JournalWriter::open(&directory, 1).unwrap();
+    writer.append(5, 6, &entries).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let batches = read_complete_batches_after(&directory.join("journal"), 0).unwrap();
+    let decoded = &batches[0].2;
+    assert_eq!(decoded.len(), 3);
+    assert_eq!(decoded[0], landed, "landing keeps an absolute ground age");
+    assert_eq!(
+        decoded[1], ungrounded,
+        "leaving the ground is a clear, not an absent field"
+    );
+    assert_eq!(decoded[2], renamed, "a cleared name and a set item round-trip");
+
+    let mut projectile = crate::projectiles::ProjectileState::new(
+        crate::projectiles::ProjectileKind::Arrow,
+        None,
+        mc_data::ItemStack::EMPTY,
+    );
+    projectile.stuck = true;
+    projectile.grounded_at_age = Some(9);
+    let JournalEntry::ProjectileFlight {
+        grounded_at_age, ..
+    } = &decoded[1]
+    else {
+        panic!("flight record");
+    };
+    crate::journal::apply_delta(grounded_at_age, &mut projectile.grounded_at_age);
+    assert_eq!(projectile.grounded_at_age, None, "the clear reaches the state");
+
+    let mut appearance = crate::journal::EntityAppearanceImage::default();
+    appearance.custom_name = Some("named".into());
+    let JournalEntry::EntityAppearance {
+        appearance: delta, ..
+    } = &decoded[2]
+    else {
+        panic!("appearance record");
+    };
+    delta.apply(&mut appearance);
+    assert_eq!(
+        appearance.custom_name, None,
+        "the cleared name reaches the state"
+    );
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+/// A checkpoint populates `Replay.entities` without a WAL image; a compact record
+/// must not fold onto it (committee F1).
+#[test]
+fn compact_record_on_a_checkpoint_image_refuses_recovery() {
+    let mut state = fixture();
+    let cow = spawn_idle_cow(&mut state, 8.5);
+    state.appearance_changed.push(cow);
+    let spawn = step(&mut state);
+    assert_eq!(images(&spawn, cow), 1, "the spawn image seeds the tail");
+    let mut replay = replay_batches(Replay::default(), &[(1, 1, spawn)]);
+    assert!(replay.tail_images.contains(&cow.0));
+    // A checkpoint boundary drops the tail: the record survives, the proof does not.
+    replay.tail_images.clear();
+    shield(&mut state, cow, true);
+    let entries = step(&mut state);
+    assert_eq!(compacts(&entries, cow).len(), 1);
+    let replay = replay_batches(replay, &[(2, 2, entries)]);
+    let error = crate::journal::validate_replay(&replay)
+        .expect_err("a delta must not fold onto a checkpoint image");
+    assert!(format!("{error}").contains("without an earlier full image"), "{error}");
 }
