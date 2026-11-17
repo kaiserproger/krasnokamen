@@ -54,9 +54,12 @@ oversized batch is admitted alone into an empty queue. Two documented exceptions
 exceed the cap: that oversized batch, and the halt's own terminal `Disconnect`
 batch. A push that does not fit, or a non-empty queue whose drain has consumed
 nothing for 10 s, halts the core exactly like a failed journal append: one error
-naming the cause, an explicit `Disconnect` batch for every live connection
-(delivered by the edge pump, so a wedged pump delivers nothing and the process
-keeps running until restarted), no publish and no checkpoint. The tick's
+naming the cause, an explicit `Disconnect` batch for every live connection, no
+publish and no checkpoint. That terminal batch reaches players even when the edge
+pump itself is wedged: `serve` watches the tick owner's own closing signal, gives
+a healthy pump a bounded chance to route the batch, then kicks every connection
+with the halt reason itself and exits the process (`shutdown_background`, so a
+worker parked in a synchronous section cannot keep it alive). The tick's
 `Append` for that tick was already accepted
 by the journal queue — the handoff is asynchronous and the tick does not wait for
 the write — so recovery uses the published contiguous tail: everything before the

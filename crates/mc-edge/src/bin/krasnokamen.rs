@@ -19,12 +19,10 @@ fn main() -> anyhow::Result<()> {
         .init();
     let cli = Cli::parse();
     let cfg = mc_edge::operator_cli::load_config(&cli)?;
-    let result = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        // Chunk frames are encoded on runtime workers; keep bounded stack headroom.
-        .thread_stack_size(16 * 1024 * 1024)
-        .build()?
-        .block_on(run(cli, cfg));
+    // A halt shuts the runtime down in the background: a worker parked in a
+    // synchronous section (the fanout pool, a held lock) must not keep the
+    // process alive after every player has been disconnected.
+    let result = mc_edge::run_on_edge_runtime(run(cli, cfg));
     if let Err(error) = &result {
         tracing::error!(error = %format_args!("{error:#}"), "server stopped with error");
     }

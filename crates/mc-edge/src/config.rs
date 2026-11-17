@@ -321,9 +321,9 @@ pub struct DataSection {
     /// Hard cap on reliable presentation bytes queued between the core tick and
     /// the edge pump, in bytes (default 256 MiB). The tick never blocks on a
     /// slow edge: exceeding this cap, or leaving the queue undrained for 10 s,
-    /// halts the core fail-closed; players get the disconnect reason only while
-    /// the edge pump still drains. The
-    /// warning mark is 8 MiB. See `docs/architecture/persistence.md`.
+    /// halts the server fail-closed with an explicit disconnect reason. The
+    /// halt reaches players and ends the process even when the pump is wedged;
+    /// the warning mark is 8 MiB. See `docs/architecture/persistence.md`.
     #[serde(default = "default_outbox_queue_bytes")]
     pub outbox_queue_bytes: usize,
 }

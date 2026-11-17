@@ -1561,15 +1561,41 @@ pub async fn serve_with_console(
     server: EdgeServer,
     console: bool,
 ) -> anyhow::Result<()> {
-    let server = Arc::new(server);
+    serve_with_pump(listener, Arc::new(server), console, None).await
+}
+
+/// Test seam: serve with a caller-owned pump task, so a test can wedge the pump
+/// and prove the halt path does not depend on it.
+#[cfg(test)]
+pub(crate) async fn serve_with_wedged_pump(
+    listener: TcpListener,
+    server: Arc<EdgeServer>,
+    pump: tokio::task::JoinHandle<()>,
+) -> anyhow::Result<()> {
+    serve_with_pump(listener, server, false, Some(pump)).await
+}
+
+async fn serve_with_pump(
+    listener: TcpListener,
+    server: Arc<EdgeServer>,
+    console: bool,
+    pump: Option<tokio::task::JoinHandle<()>>,
+) -> anyhow::Result<()> {
     let _remote_admin = crate::remote_admin::start(Arc::clone(&server)).await?;
-    let mut pump = spawn_pump(Arc::clone(&server))?;
+    let mut pump = match pump {
+        Some(pump) => pump,
+        None => spawn_pump(Arc::clone(&server))?,
+    };
     server.console_state.running.store(true, Ordering::Relaxed);
     let screen_ticks = crate::screen_service::spawn_tick_task(Arc::clone(&server));
     let voice_ticks = crate::voice_service::spawn_tick_task(Arc::clone(&server));
     let svc_udp = crate::svc_service::spawn(Arc::clone(&server)).await;
     let load_metrics = spawn_load_metrics(&server);
     let mut stop = server.stop.subscribe();
+    // The tick owner's own closing signal, independent of the pump: the
+    // broadcast closes when the tick thread exits, whether it halted or the
+    // handle stopped it.
+    let mut core_closed = server.hub.subscribe();
     let addresses = std::sync::Arc::new(crate::conn_limit::AddressLimiter::new(
         server.cfg.network.connection_throttle_ms,
         server.cfg.network.max_connections_per_ip,
@@ -1673,6 +1699,79 @@ pub async fn serve_with_console(
                         addresses.release(address);
                     }
                 });
+            }
+            // The core stopped without a shutdown request: it halted, and its
+            // terminal Disconnects ride the reliable outbox that only the pump
+            // drains. A wedged pump would leave every client frozen and this
+            // task alive forever, so the halt path never waits for it.
+            _ = async {
+                loop {
+                    match core_closed.recv().await {
+                        Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+            }, if !server.hub.shutdown_requested() => {
+                // A shutdown that started meanwhile owns the cleanup: its
+                // branch returns once the core has stopped.
+                if server.hub.shutdown_requested() {
+                    continue;
+                }
+                // A healthy pump gets the bounded chance the `ended` branch
+                // gives: route the terminal batch and let writers flush.
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    while tasks.join_next().await.is_some() {}
+                })
+                .await;
+                pump.abort();
+                // The halt reason travels with the terminal batch. Draining
+                // takes the outbox mutex the wedged pump may hold, so it runs on
+                // a blocking thread with its own bound: a held lock leaves the
+                // generic reason instead of stalling the halt.
+                let reason = {
+                    let hub = Arc::clone(&server.hub);
+                    let find = tokio::task::spawn_blocking(move || {
+                        let mut halt = None;
+                        for (_, changes) in hub.try_drain_outbox() {
+                            for change in changes {
+                                if let mc_core::boundary::PlayerChange::Disconnect {
+                                    reason,
+                                } = change
+                                {
+                                    halt = Some(reason);
+                                }
+                            }
+                        }
+                        halt
+                    });
+                    match tokio::time::timeout(std::time::Duration::from_secs(5), find).await {
+                        Ok(Ok(Some(halt))) => halt,
+                        _ => "the core halted".to_owned(),
+                    }
+                };
+                // The kicks take the registry lock the wedged pump may hold: run
+                // them on a blocking thread and bound them, so a pump parked in a
+                // synchronous section cannot stall the halt either.
+                let kicking = {
+                    let server = Arc::clone(&server);
+                    let reason = reason.clone();
+                    tokio::task::spawn_blocking(move || {
+                        for (id, _) in server.connections.snapshot() {
+                            if let Err(error) =
+                                server.kick(id, serde_json::json!({"text": &reason}))
+                            {
+                                warn!(%error, connection = id.0, "halt kick delivery failed");
+                            }
+                        }
+                    })
+                };
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(10), kicking).await;
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                    while tasks.join_next().await.is_some() {}
+                })
+                .await;
+                tasks.abort_all();
+                anyhow::bail!("core halted: {reason}")
             }
             // Without its pump the server never delivers another tick.
             ended = &mut pump => match ended {
