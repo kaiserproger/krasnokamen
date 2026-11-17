@@ -977,6 +977,47 @@ fn full_step_with_period(
     step_entity(row, &ctx)
 }
 
+/// The battle facing rule at the phase (receipts/BattleJitterClient): a moving
+/// battle soldier or horse without a look target holds its rotation on a step
+/// against its previous velocity and turns on one along it. A resting battle
+/// row skips its step without a physics proof, so its full step must keep
+/// every bit of the rest.
+#[test]
+fn battle_rows_hold_facing_on_reversing_steps_and_rest_matches_full_step() {
+    for species in ["minecraft:husk", "minecraft:horse"] {
+        let (mut state, slot) = resting_mob(species);
+        state.entities.set_faction(slot, 1);
+        state.entities.set_rot(slot, 30.0, 12.0);
+        let rotation = state.entities.rot(slot).map(f32::to_bits);
+        let pos = state.entities.pos(slot);
+        assert!(can_early_rest(&mut state, slot), "{species} rests");
+        let (rest, _) = full_step_without_early_rest(&state, slot);
+        assert_eq!(
+            rest.pos.map(f64::to_bits),
+            pos.map(f64::to_bits),
+            "{species}"
+        );
+        assert_eq!(rest.vel.map(f64::to_bits), [0.0_f64; 3].map(f64::to_bits));
+        assert_eq!(rest.rotation.map(f32::to_bits), rotation, "{species}");
+        let len = state.entities.len();
+        let drive = |state: &mut TickState, x: f64| {
+            let columns = &mut state.hostile.battle.columns;
+            columns.drive_by_slot.resize(len, [0.0; 3]);
+            columns.drive_by_slot[slot.0 as usize] = [x, 0.0, 0.0];
+        };
+        // Last tick +x at .04 block/tick; this tick back at .02.
+        state.entities.set_vel(slot, [0.8, 0.0, 0.0]);
+        drive(&mut state, -0.4);
+        let (held, _) = full_step_without_early_rest(&state, slot);
+        assert!(held.pos[0] < pos[0], "{species} steps back");
+        assert_eq!(held.rotation.map(f32::to_bits), rotation, "{species} holds");
+        drive(&mut state, 0.4);
+        let (turned, _) = full_step_without_early_rest(&state, slot);
+        assert!(turned.pos[0] > pos[0], "{species} steps on");
+        assert_eq!(turned.rotation[0], -60.0, "{species} turns toward +x");
+    }
+}
+
 #[test]
 fn idle_wander_decision_rest_matches_full_step_for_two_episodes() {
     for (species, creative) in [

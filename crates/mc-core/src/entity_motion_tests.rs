@@ -1,6 +1,6 @@
 //! Behavior tests for the production native movement/control kernels.
 use crate::blueprint::MovementClass;
-use crate::entity_motion::{MotionInput, breathe, look, panic, steer, step, wander};
+use crate::entity_motion::{MotionInput, MotionResult, breathe, look, panic, steer, step, wander};
 use crate::species::AquaticControl;
 use mc_physics::{Aabb, BlockMaterial, BlockSampler, EntityBody, Vec3};
 
@@ -27,6 +27,7 @@ fn input(movement: MovementClass, position: Vec3) -> MotionInput {
         impulse: [0.0; 2],
         rotation: [0.0; 3],
         look_target: None,
+        battle_facing: false,
         climbs_walls: false,
         aquatic_control: AquaticControl::Other,
         air_supply: 300,
@@ -401,6 +402,300 @@ fn look_and_move_controls_use_target_height_and_bound_turn_rate() {
     assert_eq!(rotation[0], -90.0);
     assert_eq!(rotation[1], -40.0);
     assert_eq!(rotation[2], rotation[0]);
+}
+
+const TICK: f64 = mc_physics::TICK_SECONDS;
+
+/// A battle body standing at (0.5, 0, 0.5) on flat ground: `previous` is the
+/// velocity (blocks/s) it left the last tick with, `drive` (blocks/s) this
+/// tick's standing velocity.
+fn battle(rotation: [f32; 3], previous: [f64; 2], drive: [f64; 2]) -> MotionInput {
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    state.body.velocity = Vec3::new(previous[0], 0.0, previous[1]);
+    state.drive = [drive[0], 0.0, drive[1]];
+    state.rotation = rotation;
+    state.battle_facing = true;
+    state
+}
+
+fn battle_step(input: MotionInput, wall: bool) -> MotionResult {
+    let world = Habitat(move |x, y, _| {
+        if y < 0 || (wall && x == 1) {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    step(input, &world, |_, _| true)
+}
+
+/// The same input with the battle rule off: the old `look` facing.
+fn old_step(mut input: MotionInput, wall: bool) -> MotionResult {
+    input.battle_facing = false;
+    battle_step(input, wall)
+}
+
+fn bits(rotation: [f32; 3]) -> [u32; 3] {
+    rotation.map(f32::to_bits)
+}
+
+/// Everything but the rotation is bit-identical: the rule never moves a body.
+fn assert_same_motion(a: &MotionResult, b: &MotionResult) {
+    let body = |r: &MotionResult| {
+        [
+            r.body.position.x,
+            r.body.position.y,
+            r.body.position.z,
+            r.body.velocity.x,
+            r.body.velocity.y,
+            r.body.velocity.z,
+            r.impulse[0],
+            r.impulse[1],
+        ]
+        .map(f64::to_bits)
+    };
+    assert_eq!(body(a), body(b));
+    assert_eq!(a.body.on_ground, b.body.on_ground);
+    assert_eq!(a.air_supply, b.air_supply);
+    assert_eq!(a.wall_climbing, b.wall_climbing);
+}
+
+fn turn(from: f32, to: f32) -> f32 {
+    (to - from + 180.0).rem_euclid(360.0) - 180.0
+}
+
+/// Regression for the battle jitter (receipts/BattleJitterClient): a soldier
+/// stepping back and forth around its place swung its facing up to 90 degrees
+/// a tick with every step. Reverting the gate in `step` fails this test.
+#[test]
+fn battle_facing_holds_through_slot_oscillation_that_old_look_swings() {
+    let rotation = [30.0, 12.0, 30.0];
+    for per_tick in [0.007, 0.02, 0.07] {
+        let speed = per_tick / TICK;
+        let mut body = battle(rotation, [speed, 0.0], [0.0; 2]).body;
+        let mut old_rotation = rotation;
+        let mut widest_old_turn = 0.0_f32;
+        for tick in 0..8 {
+            let drive = [if tick % 2 == 0 { -speed } else { speed }, 0.0];
+            let mut state = battle(rotation, [0.0; 2], drive);
+            state.body = body;
+            let held = battle_step(state, false);
+            assert_eq!(
+                bits(held.rotation),
+                bits(rotation),
+                "{per_tick} tick {tick}"
+            );
+            let mut state = battle(old_rotation, [0.0; 2], drive);
+            state.body = body;
+            let old = old_step(state, false);
+            assert_same_motion(&held, &old);
+            widest_old_turn = widest_old_turn.max(turn(old_rotation[0], old.rotation[0]).abs());
+            (body, old_rotation) = (held.body, old.rotation);
+        }
+        assert_eq!(widest_old_turn, 90.0, "the old facing swings at {per_tick}");
+    }
+}
+
+#[test]
+fn battle_facing_turns_on_steady_walks_from_rest_exactly_like_old_look() {
+    let rotation = [180.0, 12.0, 180.0];
+    for per_tick in [0.0051, 0.02, 0.04, 0.1] {
+        let speed = per_tick / TICK;
+        let (mut body, mut facing) = (battle(rotation, [0.0; 2], [0.0; 2]).body, rotation);
+        for tick in 0..4 {
+            let mut state = battle(facing, [0.0; 2], [speed, 0.0]);
+            state.body = body;
+            let moved = battle_step(state, false);
+            let mut state = battle(facing, [0.0; 2], [speed, 0.0]);
+            state.body = body;
+            let old = old_step(state, false);
+            assert_same_motion(&moved, &old);
+            assert_eq!(
+                bits(moved.rotation),
+                bits(old.rotation),
+                "{per_tick} tick {tick}"
+            );
+            assert_ne!(moved.rotation[0], facing[0], "{per_tick} tick {tick} turns");
+            (body, facing) = (moved.body, moved.rotation);
+            if facing[0].rem_euclid(360.0) == 270.0 {
+                break;
+            }
+        }
+        assert_eq!(facing[0].rem_euclid(360.0), 270.0, "{per_tick} faces +x");
+    }
+}
+
+#[test]
+fn battle_facing_holds_a_turn_around_for_one_tick_then_turns() {
+    let speed = 0.04 / TICK;
+    let walking = [-90.0, 0.0, -90.0];
+    let first = battle_step(battle(walking, [speed, 0.0], [-speed, 0.0]), false);
+    assert!(first.body.position.x < 0.5);
+    assert_eq!(
+        bits(first.rotation),
+        bits(walking),
+        "the reversing step holds"
+    );
+    let mut state = battle(first.rotation, [0.0; 2], [-speed, 0.0]);
+    state.body = first.body;
+    let second = battle_step(state, false);
+    assert_eq!(second.rotation[0], -180.0, "the continuing step turns");
+    let mut state = battle(second.rotation, [0.0; 2], [-speed, 0.0]);
+    state.body = second.body;
+    let third = battle_step(state, false);
+    assert_eq!(third.rotation[0].rem_euclid(360.0), 90.0, "faces -x");
+}
+
+#[test]
+fn battle_facing_floor_and_reversal_boundaries() {
+    let rotation = [30.0, 12.0, 30.0];
+    let holds = |previous: [f64; 2], per_tick: [f64; 2]| {
+        let drive = per_tick.map(|v| v / TICK);
+        let previous = previous.map(|v| v / TICK);
+        bits(battle_step(battle(rotation, previous, drive), false).rotation) == bits(rotation)
+    };
+    assert!(holds([0.0; 2], [0.0; 2]), "still");
+    assert!(holds([0.0; 2], [0.0049, 0.0]), "below the floor");
+    assert!(
+        !holds([0.0; 2], [0.0051, 0.0]),
+        "above the floor, from rest"
+    );
+    assert!(
+        holds([0.04, 0.0], [0.0049, 0.0]),
+        "below the floor, continuing"
+    );
+    assert!(
+        !holds([0.0, 0.04], [0.02, 0.0]),
+        "perpendicular to the last step"
+    );
+    assert!(
+        holds([-0.04, 0.04], [0.02, 0.0199]),
+        "just against the last step"
+    );
+    assert!(
+        !holds([-0.04, 0.04], [0.02, 0.0201]),
+        "just along the last step"
+    );
+}
+
+#[test]
+fn battle_facing_with_a_target_turns_like_old_look_even_without_a_step() {
+    let rotation = [180.0, 12.0, 180.0];
+    let make = || {
+        let mut state = battle(rotation, [0.8, 0.0], [0.0; 2]);
+        state.look_target = Some([5.5, 1.0, 0.5]);
+        state
+    };
+    let with_rule = battle_step(make(), false);
+    let old = old_step(make(), false);
+    assert_same_motion(&with_rule, &old);
+    assert_eq!(bits(with_rule.rotation), bits(old.rotation));
+    assert_eq!(with_rule.rotation[0].rem_euclid(360.0), 270.0);
+}
+
+#[test]
+fn battle_facing_holds_against_knockback_without_changing_motion() {
+    let speed = 0.04 / TICK;
+    let walking = [-90.0, 0.0, -90.0];
+    let make = || {
+        let mut state = battle(walking, [speed, 0.0], [speed, 0.0]);
+        state.impulse = [-8.0, 0.0];
+        state
+    };
+    let held = battle_step(make(), false);
+    let old = old_step(make(), false);
+    assert!(held.body.position.x < 0.5, "knocked back");
+    assert_same_motion(&held, &old);
+    assert_eq!(bits(held.rotation), bits(walking));
+    assert_eq!(
+        old.rotation[0], -180.0,
+        "the old facing turns to the knockback"
+    );
+}
+
+#[test]
+fn battle_facing_against_a_wall_follows_the_resolved_velocity() {
+    let speed = 0.04 / TICK;
+    let rotation = [30.0, 12.0, 30.0];
+    // Sliding along the wall: the step continues the last one and turns
+    // exactly like the old facing, toward the post-collision velocity.
+    let make = |x: f64| {
+        let mut state = battle(rotation, [speed, speed], [speed, speed]);
+        state.body.position.x = x;
+        state
+    };
+    let slid = battle_step(make(0.69), true);
+    let old = old_step(make(0.69), true);
+    assert_same_motion(&slid, &old);
+    assert_eq!(bits(slid.rotation), bits(old.rotation));
+    assert_eq!(slid.rotation[0], 0.0, "faces along the wall");
+    // Head-on at contact: no step, so both keep the facing.
+    let make = || {
+        let mut state = battle(rotation, [speed, 0.0], [speed, 0.0]);
+        state.body.position.x = 0.7;
+        state
+    };
+    let blocked = battle_step(make(), true);
+    let old = old_step(make(), true);
+    assert_same_motion(&blocked, &old);
+    assert_eq!(bits(blocked.rotation), bits(rotation));
+    assert_eq!(bits(old.rotation), bits(rotation));
+}
+
+/// With the rule off the facing is the old `look` of the resolved body; with
+/// it on, only the rotation may change, and only to the held input rotation.
+#[test]
+fn battle_facing_changes_only_rotation_and_off_is_the_old_look() {
+    let per_tick = [0.0, 0.003, 0.0049, 0.0051, 0.02, 0.07, 0.3];
+    let rotations = [[0.0; 3], [30.0, 12.0, 30.0], [-170.0, -45.0, -170.0]];
+    let mut held = 0;
+    for wall in [false, true] {
+        for rotation in rotations {
+            for &p in &per_tick {
+                for previous in [[0.0, 0.0], [p, 0.0], [-p, 0.5 * p]] {
+                    for d in [[0.0, 0.0], [p, 0.0], [-p, 0.0], [0.6 * p, -0.8 * p]] {
+                        for impulse in [[0.0, 0.0], [-8.0, 3.0]] {
+                            for target in [None, Some([2.5, 1.0, -3.5])] {
+                                let make = || {
+                                    let mut state = battle(
+                                        rotation,
+                                        previous.map(|v| v / TICK),
+                                        d.map(|v| v / TICK),
+                                    );
+                                    state.body.position.x = if wall { 0.68 } else { 0.5 };
+                                    state.impulse = impulse;
+                                    state.look_target = target;
+                                    state
+                                };
+                                let start = make().body;
+                                let on = battle_step(make(), wall);
+                                let off = old_step(make(), wall);
+                                assert_same_motion(&on, &off);
+                                assert_eq!(
+                                    bits(off.rotation),
+                                    bits(look(
+                                        rotation,
+                                        off.body.position,
+                                        off.body.velocity,
+                                        target
+                                    ))
+                                );
+                                let dx = off.body.position.x - start.position.x;
+                                let dz = off.body.position.z - start.position.z;
+                                let hold = target.is_none()
+                                    && (dx * dx + dz * dz <= 0.005 * 0.005
+                                        || dx * start.velocity.x + dz * start.velocity.z < 0.0);
+                                held += usize::from(hold);
+                                let expected = if hold { rotation } else { off.rotation };
+                                assert_eq!(bits(on.rotation), bits(expected));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(held > 0);
 }
 
 #[test]
