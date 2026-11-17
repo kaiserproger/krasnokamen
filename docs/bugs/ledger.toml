@@ -4616,6 +4616,17 @@ regression = [
 fix_commit = "2b8219d1"
 
 [[bug]]
+id = "SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4"
+title = "A settlement road project stays Running with no progress for 78,000 ticks and holds the only construction slot, so no other project is ever admitted"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "UpgradeProof D18 harness on the retained trial-4 world (receipts/UpgradeProof/HANDOFF.md, logs/after-final.log), trees d7fd00e64 and 94968fcc6a alike: road level 1 at state=Running stage=0 work=34 consumed=0 pause=None from tick 304153 to 382153, so a funded owner upgrade order waits Queued{busy} forever. Same symptom family as CIV-SEED24-ROAD-CLEAR-STALL (fix_commit 2b8219d1, fence-post stand); whether that fix is in these trees and covers this cell is not yet checked. Cause not located."
+regression = []
+failing_first = "reported"
+
+[[bug]]
 id = "CIV-SEED24-FARM-SEEDS-NEED-A-FARM"
 title = "A settlement without a farm can never fund its first Farm: the Farm's wheat cells cost 12 wheat seeds whose only source is a farm, so stored bread runs out and births stop"
 area = "gameplay"
