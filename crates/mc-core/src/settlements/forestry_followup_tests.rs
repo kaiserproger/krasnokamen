@@ -110,12 +110,14 @@ fn touching_registered_grove_is_certified_and_felled_whole() {
     }
     let mut cells: Vec<_> = tree_cells(&state, &[left])
         .into_iter()
-        .map(|at| crate::plugin_structures::settlement_builds::PlannedCell {
-            at,
-            state: state.registry.states.air,
-            resource: None,
-            quantity: 0,
-        })
+        .map(
+            |at| crate::plugin_structures::settlement_builds::PlannedCell {
+                at,
+                state: state.registry.states.air,
+                resource: None,
+                quantity: 0,
+            },
+        )
         .collect();
     clearance.append_whole_trees(&state, &mut cells);
     let mut manifested: Vec<_> = cells.iter().map(|cell| cell.at).collect();

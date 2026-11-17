@@ -124,8 +124,10 @@ impl Clearance {
                 continue;
             }
             let within = self.grove.component(state, other).is_some_and(|logs| {
-                logs.iter()
-                    .any(|log| (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs() <= tree_proof::RANGE)
+                logs.iter().any(|log| {
+                    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
+                        <= tree_proof::RANGE
+                })
             });
             if within {
                 self.needed.insert(other);
@@ -173,9 +175,7 @@ impl Clearance {
                     .blocks
                     .by_id(BlockStateId(block))
                     .is_some_and(|b| b.block.id.path().ends_with("_leaves"));
-                if leaf
-                    && !self.crown_is_this_trees(root, &proof.contributors, state, at)
-                {
+                if leaf && !self.crown_is_this_trees(root, &proof.contributors, state, at) {
                     continue;
                 }
                 if !(proof.owns_log(at) || (leaf && proof.permits(at)))

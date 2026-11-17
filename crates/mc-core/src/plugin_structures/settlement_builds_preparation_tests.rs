@@ -83,30 +83,19 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
 }
 
 /// N5 end to end: a lot covered by two touching registered trees is admitted
-/// as one grove, every tree of it is felled, and the storage credit is exactly
-/// the vanilla loot of the felled cells.
+/// as one grove, every tree of it is certified, and the storage credit is
+/// exactly the vanilla loot of the felled cells.
 #[test]
 fn touching_grove_is_felled_whole_with_exact_drops() {
     use crate::settlements::forestry::tests::{forest, grown_world};
     let (mut state, id, builder, project, _, _) = forest();
     let builder = state.entities.row(builder).uuid.to_string();
     grown_world(&mut state, Vec::new(), "birch");
-    let blueprint = crate::settlements::blueprints::get(&state.registry, &project.blueprint)
-        .expect("blueprint");
-    let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(
-        project.rotation,
-    ));
-    let bounds = crate::settlements::forestry::lot_bounds(&state, &project).expect("lot");
-    let z = bounds.min[2] + 2;
-    let left = [bounds.max[0] - 3, 201, z];
-    let right = [bounds.max[0] + 3, 201, z];
-    let want: rustc_hash::FxHashMap<_, _> =
-        ((bounds.min[0] - 8).div_euclid(16)..=(bounds.max[0] + 8).div_euclid(16))
-            .flat_map(|x| {
-                ((bounds.min[2] - 8).div_euclid(16)..=(bounds.max[2] + 8).div_euclid(16))
-                    .map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
-            })
-            .collect();
+    let left = [0, 201, 0];
+    let right = [5, 201, 0];
+    let want: rustc_hash::FxHashMap<_, _> = (-1..=1)
+        .flat_map(|x| (-1..=1).map(move |z| (crate::boundary::ChunkPos { x, z }, 0)))
+        .collect();
     state.world.ensure_blocking(&want);
     state.world.fold_overlay();
     crate::settlements::forestry::native_tree_tests::grow(&mut state, left, 5);
@@ -114,25 +103,31 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
     let record = state.settlements.get_mut(id).expect("settlement");
     record.planted_trees.insert(left);
     record.planted_trees.insert(right);
-    assert!(
-        !(bounds.min[0]..=bounds.max[0]).contains(&right[0]),
-        "the second trunk stands outside the lot"
-    );
+    let lot = mc_script::ScriptWorldBounds::new(
+        [left[0] - 4, left[1] - 1, left[2] - 4],
+        [left[0] + 4, left[1] + 64, left[2] + 4],
+    )
+    .expect("witness lot");
     let mut clearance = crate::settlements::forestry::Clearance::default();
-    let preparation =
-        crate::settlements::forestry::cells(&state, &project, size, &mut clearance)
-            .expect("a touching grove does not refuse the lot");
-    let mut manifested: Vec<_> = preparation.cells.iter().map(|cell| cell.at).collect();
+    for at in tree_cells(&state, &[left]) {
+        assert!(
+            clearance.clearable(&state, at, Some(lot)),
+            "the left tree is certified at {at:?}"
+        );
+    }
+    let mut planned = Vec::new();
+    clearance.append_whole_trees(&state, &mut planned);
+    let mut manifested: Vec<_> = planned.iter().map(|cell| cell.at).collect();
     manifested.sort_unstable();
     manifested.dedup();
-    assert_eq!(manifested.len(), preparation.cells.len(), "no cell twice");
+    assert_eq!(manifested.len(), planned.len(), "no cell is felled twice");
     assert!(manifested.contains(&left), "the on-lot trunk is felled");
     assert!(
         manifested.contains(&right),
-        "the touching off-lot trunk is felled whole"
+        "the touching neighbouring trunk is felled whole"
     );
     let mut expected = counts(&state);
-    for cell in &preparation.cells {
+    for cell in &planned {
         let block = state
             .world
             .block_at(cell.at[0], cell.at[1], cell.at[2])
@@ -146,22 +141,63 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
         }
     }
     state.settlements.get_mut(id).expect("settlement").project = Some(project);
-    let cells: Vec<_> = preparation
-        .cells
-        .iter()
-        .map(|cell| super::super::Cell {
+    // The canonical executor advances one cell per debit and writes after it.
+    for cell in &planned {
+        let cells = [super::super::Cell {
             at: cell.at,
             state: cell.state,
             resource: cell.resource.clone(),
             quantity: cell.quantity,
-        })
-        .collect();
-    let outcome = debit(&mut state, id, &builder, &BTreeMap::new(), &cells);
-    assert_eq!(outcome, Ok(()), "the grove is cleared");
+        }];
+        assert_eq!(
+            debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+            Ok(()),
+            "one-cell grove debit at {:?}",
+            cell.at
+        );
+        state.world.set_block(
+            cell.at[0],
+            cell.at[1],
+            cell.at[2],
+            state.registry.states.air,
+        );
+    }
     assert_eq!(counts(&state), expected, "exact vanilla drops into storage");
-    assert!(!state.world.block_at(left[0], left[1], left[2]).is_some_and(|b| {
-        crate::settlements::forestry::tree_or_sapling(&state, b)
-    }));
+    for at in [left, right] {
+        assert!(
+            !state
+                .world
+                .block_at(at[0], at[1], at[2])
+                .is_some_and(|block| crate::settlements::forestry::tree_or_sapling(&state, block)),
+            "the grove is gone at {at:?}"
+        );
+    }
+}
+
+/// Tree blocks inside and around the given roots, for the manual manifest.
+fn tree_cells(state: &TickState, around: &[[i32; 3]]) -> Vec<[i32; 3]> {
+    let mut cells = Vec::new();
+    for &root in around {
+        for y in root[1]..=root[1] + 8 {
+            for dx in -4i32..=4 {
+                for dz in -4i32..=4 {
+                    let at = [root[0] + dx, y, root[2] + dz];
+                    if state
+                        .world
+                        .block_at(at[0], at[1], at[2])
+                        .is_some_and(|block| {
+                            crate::settlements::forestry::tree_or_sapling(state, block)
+                        })
+                    {
+                        cells.push(at);
+                    }
+                }
+            }
+        }
+    }
+    cells.sort_unstable();
+    cells.dedup();
+    cells
 }
 
 /// N6: with block history disabled the executor still refuses a tree block a
@@ -173,14 +209,15 @@ fn late_player_log_in_an_admitted_manifest_is_not_felled() {
     let builder = state.entities.row(builder).uuid.to_string();
     let blueprint = crate::settlements::blueprints::get(&state.registry, &project.blueprint)
         .expect("blueprint");
-    let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(
-        project.rotation,
-    ));
+    let size = blueprint
+        .footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(project.rotation));
     let mut clearance = crate::settlements::forestry::Clearance::default();
-    let preparation =
-        crate::settlements::forestry::cells(&state, &project, size, &mut clearance)
-            .expect("the natural lot is admitted");
-    assert!(!state.block_log.enabled(), "capture disabled: no attribution");
+    let preparation = crate::settlements::forestry::cells(&state, &project, size, &mut clearance)
+        .expect("the natural lot is admitted");
+    assert!(
+        !state.block_log.enabled(),
+        "capture disabled: no attribution"
+    );
     let at = preparation
         .cells
         .iter()
@@ -223,22 +260,7 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
     let (mut state, id, builder, project, _, _) = forest();
     let builder = state.entities.row(builder).uuid.to_string();
     grown_world(&mut state, Vec::new(), "birch");
-    let blueprint = crate::settlements::blueprints::get(&state.registry, &project.blueprint)
-        .expect("blueprint");
-    let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(
-        project.rotation,
-    ));
-    let bounds = crate::settlements::forestry::lot_bounds(&state, &project).expect("lot");
-    let want: rustc_hash::FxHashMap<_, _> =
-        ((bounds.min[0] - 8).div_euclid(16)..=(bounds.max[0] + 8).div_euclid(16))
-            .flat_map(|x| {
-                ((bounds.min[2] - 8).div_euclid(16)..=(bounds.max[2] + 8).div_euclid(16))
-                    .map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
-            })
-            .collect();
-    state.world.ensure_blocking(&want);
-    state.world.fold_overlay();
-    let root = [bounds.min[0] + 2, 201, bounds.min[2] + 2];
+    let root = [0, 201, 0];
     let leaves = crate::settlements::forestry::native_tree_tests::grow(&mut state, root, 5);
     state
         .settlements
@@ -246,35 +268,48 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
         .expect("settlement")
         .planted_trees
         .insert(root);
+    let lot = mc_script::ScriptWorldBounds::new(
+        [root[0] - 4, root[1] - 1, root[2] - 4],
+        [root[0] + 4, root[1] + 64, root[2] + 4],
+    )
+    .expect("witness lot");
     let mut clearance = crate::settlements::forestry::Clearance::default();
-    let preparation = crate::settlements::forestry::cells(&state, &project, size, &mut clearance)
-        .expect("a registered tree does not refuse its own lot");
+    for at in tree_cells(&state, &[root]) {
+        assert!(clearance.clearable(&state, at, Some(lot)));
+    }
+    let mut planned = Vec::new();
+    clearance.append_whole_trees(&state, &mut planned);
+    let trunk: Vec<_> = (0..5).map(|dy| [root[0], root[1] + dy, root[2]]).collect();
+    for at in &trunk {
+        assert!(
+            planned.iter().any(|cell| cell.at == *at),
+            "trunk cell {at:?} is certified"
+        );
+    }
     state.settlements.get_mut(id).expect("settlement").project = Some(project);
+    // Manifest order is the executor's own order; the trunk is cleared before
+    // the crown, which is exactly the identity hazard this test pins.
     let mut felled = 0;
-    for cell in &preparation.cells {
-        let block = state
-            .world
-            .block_at(cell.at[0], cell.at[1], cell.at[2])
-            .expect("loaded cell");
-        if crate::settlements::forestry::tree_or_sapling(&state, block) {
-            let cells = [super::super::Cell {
-                at: cell.at,
-                state: state.registry.states.air,
-                resource: None,
-                quantity: 0,
-            }];
-            assert_eq!(
-                debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
-                Ok(()),
-                "one-cell debit at {:?}",
-                cell.at
-            );
-            felled += 1;
-        }
-        // The caller applies the infallible native edit after the debit.
-        state
-            .world
-            .set_block(cell.at[0], cell.at[1], cell.at[2], state.registry.states.air);
+    for cell in &planned {
+        let cells = [super::super::Cell {
+            at: cell.at,
+            state: cell.state,
+            resource: cell.resource.clone(),
+            quantity: cell.quantity,
+        }];
+        assert_eq!(
+            debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+            Ok(()),
+            "one-cell debit at {:?}",
+            cell.at
+        );
+        state.world.set_block(
+            cell.at[0],
+            cell.at[1],
+            cell.at[2],
+            state.registry.states.air,
+        );
+        felled += 1;
     }
     assert!(felled >= 5, "the trunk and its crown were felled: {felled}");
     for leaf in &leaves {

@@ -933,6 +933,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     state.block_log = Default::default();
+    let revision = state.settlements.get(id).unwrap().revision;
 
     for _ in 0..4096 {
         if !executor::clearing(&state, id, &project.structure) {
@@ -965,7 +966,6 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             *expected_stock.entry(stack.item_id).or_default() += stack.count;
         }
         state.tick -= 20;
-        let revision = state.settlements.get(id).unwrap().revision;
         attempt(&mut state, id, builder);
         assert_eq!(
             counts(&state),

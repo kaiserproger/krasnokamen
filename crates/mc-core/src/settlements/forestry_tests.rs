@@ -885,18 +885,20 @@ fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
         Some(state.registry.states.air)
     );
     assert_eq!(count(&state, "minecraft:birch_log"), 1);
+    // The debit credited the log; the registered root stays while its own trunk
+    // column still holds logs and retires only once that column is empty.
+    state.tick = 20;
+    crate::settlements::forestry::retire_missing(&mut state);
     assert!(
-        !state
+        state
             .settlements
             .get(id)
             .unwrap()
             .planted_trees
-            .contains(&next)
+            .contains(&next),
+        "a root whose column still holds logs stays registered"
     );
-    assert_eq!(
-        state.settlements.get(id).unwrap().revision,
-        root_revision + 1
-    );
+    assert_eq!(state.settlements.get(id).unwrap().revision, root_revision);
 }
 
 #[test]
