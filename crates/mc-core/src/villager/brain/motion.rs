@@ -665,6 +665,9 @@ pub(super) fn resolve_body_motion(
         let dz = next[2] - pos[2];
         let length = mth::length2(dx, dz);
         if length > 1e-6 {
+            // A lower waypoint remains committed until the body has landed.
+            // Stop at its horizontal centre instead of stepping across it.
+            let speed = speed.min(length / dt);
             horizontal = [dx / length * speed, dz / length * speed];
         }
         if next[1] > pos[1] + mc_physics::STEP_HEIGHT && state.entities.ground(slot) {
@@ -787,3 +790,7 @@ pub(super) fn apply_body_motion(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "motion_tests.rs"]
+mod tests;
