@@ -76,6 +76,13 @@ pub(crate) fn observe_explosion_knockback(
         worlds().any(|world| world.connections.entity_of(*connection).is_some())
     };
     if !affected.is_empty() || knockback_ticks.keys().any(|id| !live(id)) {
+        // `Arc::make_mut` walks the tree once (O(K) nodes, K = tracked
+        // connections) because every published snapshot of the retained
+        // broadcast window holds this map. It runs only on a tick that carries
+        // an impulse or prunes a dead connection; an unchanged tick keeps the
+        // same `Arc` (same pointer, same content). Measured and kept: the
+        // alternative (a private map cloned only on change) copies on exactly
+        // the same ticks.
         let epochs = Arc::make_mut(knockback_ticks);
         epochs.retain(|id, _| live(id));
         for connection in affected {
@@ -84,9 +91,24 @@ pub(crate) fn observe_explosion_knockback(
             epoch.1 = output.tick;
         }
     }
-    Arc::get_mut(&mut output.snapshot)
-        .expect("tick output is not shared before publication")
-        .player_knockback_ticks = Arc::clone(knockback_ticks);
+    // Publish the epoch map into this tick's snapshot. Unconditionally: a
+    // fresh `run_tick` snapshot starts with an empty map, so an unchanged tick
+    // must still carry the current (non-empty) one.
+    let epochs = Arc::clone(knockback_ticks);
+    match Arc::get_mut(&mut output.snapshot) {
+        // The tick loop's own snapshot is unique here.
+        Some(snapshot) => snapshot.player_knockback_ticks = epochs,
+        // A second holder exists (a reader that cloned this tick's snapshot
+        // before publication, or a caller outside the tick loop). Never panic
+        // the tick owner and never mutate a snapshot a reader holds: rebuild
+        // this tick's snapshot with the current map and leave the held one as
+        // it was.
+        None => {
+            let mut snapshot = (*output.snapshot).clone();
+            snapshot.player_knockback_ticks = epochs;
+            output.snapshot = Arc::new(snapshot);
+        }
+    }
 }
 
 #[path = "core_session.rs"]
