@@ -75,6 +75,7 @@ mod connection;
 use connection::*;
 mod pump;
 use pump::*;
+mod halt_watchdog;
 
 /// Next-connection-id counter start (1-based; 0 is reserved as "none").
 const FIRST_CONNECTION_ID: u64 = 1;
@@ -1596,6 +1597,9 @@ async fn serve_with_pump(
     // broadcast closes when the tick thread exits, whether it halted or the
     // handle stopped it.
     let mut core_closed = server.hub.subscribe();
+    // The halt path below runs on runtime timers; this OS thread ends the
+    // process when no runtime worker is left to drive them.
+    let _halt_watchdog = halt_watchdog::spawn_halt_watchdog(Arc::clone(&server.hub))?;
     let addresses = std::sync::Arc::new(crate::conn_limit::AddressLimiter::new(
         server.cfg.network.connection_throttle_ms,
         server.cfg.network.max_connections_per_ip,
@@ -1705,12 +1709,10 @@ async fn serve_with_pump(
             // drains. A wedged pump would leave every client frozen and this
             // task alive forever, so the halt path never waits for it.
             _ = async {
-                loop {
-                    match core_closed.recv().await {
-                        Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
-                }
+                // Ticks and lag are not the signal; only `Closed` ends this.
+                while let Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) =
+                    core_closed.recv().await
+                {}
             }, if !server.hub.shutdown_requested() => {
                 // A shutdown that started meanwhile owns the cleanup: its
                 // branch returns once the core has stopped.
@@ -1718,37 +1720,20 @@ async fn serve_with_pump(
                     continue;
                 }
                 // A healthy pump gets the bounded chance the `ended` branch
-                // gives: route the terminal batch and let writers flush.
+                // gives: up to 5 s for the connections to close once it routed
+                // the terminal batch and their writers flushed.
                 let _ = tokio::time::timeout(std::time::Duration::from_secs(5), async {
                     while tasks.join_next().await.is_some() {}
                 })
                 .await;
                 pump.abort();
-                // The halt reason travels with the terminal batch. Draining
-                // takes the outbox mutex the wedged pump may hold, so it runs on
-                // a blocking thread with its own bound: a held lock leaves the
-                // generic reason instead of stalling the halt.
-                let reason = {
-                    let hub = Arc::clone(&server.hub);
-                    let find = tokio::task::spawn_blocking(move || {
-                        let mut halt = None;
-                        for (_, changes) in hub.try_drain_outbox() {
-                            for change in changes {
-                                if let mc_core::boundary::PlayerChange::Disconnect {
-                                    reason,
-                                } = change
-                                {
-                                    halt = Some(reason);
-                                }
-                            }
-                        }
-                        halt
-                    });
-                    match tokio::time::timeout(std::time::Duration::from_secs(5), find).await {
-                        Ok(Ok(Some(halt))) => halt,
-                        _ => "the core halted".to_owned(),
-                    }
-                };
+                // The tick owner recorded its reason before the broadcast
+                // closed; reading it takes no lock a wedged pump could hold.
+                // `None` only when the tick thread died without a halt.
+                let reason = server
+                    .hub
+                    .halt_reason()
+                    .unwrap_or_else(|| "the core halted".to_owned());
                 // The kicks take the registry lock the wedged pump may hold: run
                 // them on a blocking thread and bound them, so a pump parked in a
                 // synchronous section cannot stall the halt either.
@@ -1771,6 +1756,18 @@ async fn serve_with_pump(
                 })
                 .await;
                 tasks.abort_all();
+                if let Some(console) = &console {
+                    console.abort();
+                }
+                screen_ticks.abort();
+                voice_ticks.abort();
+                if let Some(svc_udp) = &svc_udp {
+                    svc_udp.abort();
+                }
+                load_metrics.abort();
+                if let Some(msmp) = &msmp {
+                    msmp.abort();
+                }
                 anyhow::bail!("core halted: {reason}")
             }
             // Without its pump the server never delivers another tick.

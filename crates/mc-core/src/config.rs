@@ -31,9 +31,9 @@ pub struct CoreConfig {
     /// (see `core/outbox.rs`). The tick never blocks on the edge: a batch that
     /// does not fit, or a non-empty queue that stops draining for
     /// `OUTBOX_STALL_LIMIT`, halts the core fail-closed with one explicit
-    /// disconnect reason per live connection. The halt reaches players and ends
-    /// the process even when the edge pump is the wedged part (the edge watches
-    /// this core's own closing signal).
+    /// disconnect reason per live connection. The process exits even when the
+    /// edge pump is the wedged part (the edge watches this core's own closing
+    /// signal); the reason reaches players best effort.
     pub outbox_queue_bytes: usize,
     /// How long the tick→edge reliable handoff may hold queued batches with no
     /// completed drain before the core halts fail-closed (`core/outbox.rs`).

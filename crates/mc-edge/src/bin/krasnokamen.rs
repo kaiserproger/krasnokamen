@@ -96,6 +96,12 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
             info!(cause, "shutdown requested; stopping core");
             shutdown_core.shutdown();
             info!(cause, "shutdown requested; core stopped");
+            // A signal that arrives while `serve` handles a halt drops that
+            // future: keep the halt as the outcome, so the runtime is shut down
+            // in the background instead of joining a wedged pump.
+            if let Some(reason) = shutdown_core.halt_reason() {
+                anyhow::bail!("core halted: {reason}");
+            }
             Ok(())
         }
     }

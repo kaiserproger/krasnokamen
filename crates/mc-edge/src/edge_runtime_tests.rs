@@ -58,7 +58,7 @@ fn a_parked_task_does_not_keep_the_shutdown_alive() {
         ])
         .env(CHILD_ENV, "1")
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
         .spawn()
         .expect("spawn the parked-task child");
     let mut stdout = child.stdout.take().expect("child stdout");

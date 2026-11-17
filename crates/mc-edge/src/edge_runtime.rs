@@ -4,8 +4,8 @@
 //! A halted core can leave an edge task inside a synchronous section that no
 //! abort can preempt (the fanout pool's `install`, a held registry lock). The
 //! ordinary [`Runtime`] drop joins every worker, so the process would stay alive
-//! with every player already disconnected. The halt path has delivered their
-//! reason by then; this shutdown lets the process exit.
+//! with every connection already kicked or abandoned. This shutdown lets the
+//! process exit.
 
 use anyhow::Result;
 use std::future::Future;
@@ -13,9 +13,12 @@ use std::future::Future;
 /// Build the edge runtime and run `future` on it.
 ///
 /// Success drops the runtime normally (the server stopped its owners and every
-/// worker is idle). An error — the core halted — shuts the runtime down in the
-/// background: workers stuck in a synchronous section are abandoned instead of
-/// joined, so the process exits with the error.
+/// worker is idle). Any error (a core halt, a failed bind, a dead pump) shuts the
+/// runtime down in the background: workers stuck in a synchronous section are
+/// abandoned instead of joined, so the process exits with the error. Nothing
+/// abandoned here writes the world: the WAL and checkpoints belong to the core's
+/// own tick and journal threads, which the serve path joins through
+/// `Core::shutdown` before `future` returns.
 pub fn run_on_edge_runtime<F>(future: F) -> Result<()>
 where
     F: Future<Output = Result<()>>,

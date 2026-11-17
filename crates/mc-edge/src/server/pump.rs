@@ -7,19 +7,19 @@ use std::collections::BTreeMap;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
+/// A test's pump gate callback.
+#[cfg(test)]
+type PumpGate = std::sync::Arc<dyn Fn() + Send + Sync>;
+
 /// Test-only pump gate: set by a test for one server, called by that server's
 /// pump after recording a tick and before it takes the registry lock.
 #[cfg(test)]
-static PUMP_GATE: std::sync::LazyLock<
-    std::sync::Mutex<Option<(usize, std::sync::Arc<dyn Fn() + Send + Sync>)>>,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+static PUMP_GATE: std::sync::LazyLock<std::sync::Mutex<Option<(usize, PumpGate)>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
 
 /// Park this server's pump in the gate until the test's gate returns.
 #[cfg(test)]
-pub(crate) fn arm_pump_gate(
-    server: &Arc<EdgeServer>,
-    gate: std::sync::Arc<dyn Fn() + Send + Sync>,
-) {
+pub(crate) fn arm_pump_gate(server: &Arc<EdgeServer>, gate: PumpGate) {
     *PUMP_GATE.lock().expect("pump gate") = Some((Arc::as_ptr(server) as usize, gate));
 }
 
