@@ -108,16 +108,18 @@ impl StartupOwners {
             let _ = shutdown.send(());
         }
         // A started tick owner took the queue with it and its `Shutdown` item
-        // ends the journal owner. Without one (the tick never started, or its
-        // spawn failed and dropped `channels`), closing our sender is what makes
-        // the journal owner's `recv` fail so it exits.
-        if self.tick.is_none() {
-            self.work.take();
+        // ends the journal owner; unpark it like `Core::shutdown` does, so a tick
+        // parked between ticks cannot delay the join. Without a tick, closing our
+        // sender is what makes the journal owner's `recv` fail so it exits.
+        match self.tick.take() {
+            Some(tick) => {
+                tick.thread().unpark();
+                join(tick);
+            }
+            None => {
+                self.work.take();
+            }
         }
-        if let Some(tick) = self.tick.take() {
-            join(tick);
-        }
-        self.work.take();
         if let Some(journal) = self.journal.take() {
             join(journal);
         }

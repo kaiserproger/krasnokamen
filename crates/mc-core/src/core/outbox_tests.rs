@@ -123,7 +123,9 @@ fn draining_releases_exactly_the_bytes_it_consumed() {
     assert_eq!(sender.budget().peak_bytes(), queued);
     let progress = sender.budget().drains();
     assert!(!outbox.drain(2).is_empty());
-    assert_eq!(sender.budget().drains(), progress + 1);
+    // Two batches consumed: one progress epoch each (see
+    // `every_consumed_batch_advances_the_progress_epoch`).
+    assert_eq!(sender.budget().drains(), progress + 2);
     // Only the third batch is still queued, and it is still charged.
     assert_eq!(
         sender.queued_bytes(),
@@ -138,16 +140,24 @@ fn draining_releases_exactly_the_bytes_it_consumed() {
 fn the_stall_watch_fires_only_after_the_limit_without_consuming_a_batch() {
     use std::time::{Duration, Instant};
     let (sender, outbox) = sender_pair(1 << 20);
-    let mut watch = StallWatch::new(Duration::from_secs(10));
+    let limit = Duration::from_secs(10);
+    let mut watch = StallWatch::new(limit);
+    let at = |offset: u64| Instant::now() + Duration::from_secs(offset);
     let t0 = Instant::now();
     // An empty outbox is never a stall.
     assert!(watch.stalled_at(sender.budget(), t0).is_none());
     sender.push(1, batch(1, vec![chat("q")])).unwrap();
-    // The first observation only starts the clock.
+    // The first observation only starts the clock. Steps stay under half the
+    // limit: a longer gap would be a stopped owner, not a stalled pump.
     assert!(watch.stalled_at(sender.budget(), t0).is_none());
     assert!(
         watch
-            .stalled_at(sender.budget(), t0 + Duration::from_secs(9))
+            .stalled_at(sender.budget(), t0 + Duration::from_secs(4))
+            .is_none()
+    );
+    assert!(
+        watch
+            .stalled_at(sender.budget(), t0 + Duration::from_secs(8))
             .is_none()
     );
     // Drains that consume nothing — the queued batch is newer than `through` —
@@ -157,20 +167,25 @@ fn the_stall_watch_fires_only_after_the_limit_without_consuming_a_batch() {
     assert!(sender.budget().queued_bytes() > 0);
     assert_eq!(sender.budget().drains(), 0);
     assert_eq!(
-        watch.stalled_at(sender.budget(), t0 + Duration::from_secs(10)),
-        Some(Duration::from_secs(10))
+        watch.stalled_at(sender.budget(), t0 + Duration::from_secs(11)),
+        Some(Duration::from_secs(11))
     );
     // Consuming a batch is progress: the clock restarts from the next look.
     sender.push(2, batch(1, vec![chat("r")])).unwrap();
     assert!(!outbox.drain(1).is_empty());
     assert_eq!(sender.budget().drains(), 1);
-    assert!(
-        watch
-            .stalled_at(sender.budget(), t0 + Duration::from_secs(30))
-            .is_none()
-    );
+    let restart = t0 + Duration::from_secs(12);
+    assert!(watch.stalled_at(sender.budget(), restart).is_none());
+    for step in 1..=2 {
+        assert!(
+            watch
+                .stalled_at(sender.budget(), restart + Duration::from_secs(4 * step))
+                .is_none(),
+            "step {step}"
+        );
+    }
     assert_eq!(
-        watch.stalled_at(sender.budget(), t0 + Duration::from_secs(40)),
+        watch.stalled_at(sender.budget(), restart + Duration::from_secs(10)),
         Some(Duration::from_secs(10))
     );
 }
@@ -351,6 +366,16 @@ fn the_cap_and_the_watchdog_fire_on_a_large_payload_stream_with_a_stalled_consum
     let mut watch = StallWatch::new(Duration::from_secs(10));
     let t0 = Instant::now();
     assert!(watch.stalled_at(sender.budget(), t0).is_none());
+    assert!(
+        watch
+            .stalled_at(sender.budget(), t0 + Duration::from_secs(4))
+            .is_none()
+    );
+    assert!(
+        watch
+            .stalled_at(sender.budget(), t0 + Duration::from_secs(8))
+            .is_none()
+    );
     assert!(outbox.drain(0).is_empty());
     assert_eq!(
         watch.stalled_at(sender.budget(), t0 + Duration::from_secs(10)),
@@ -551,12 +576,12 @@ fn retained_roster_snapshots_are_accounted_by_the_queued_bytes() {
 /// book behind the same few bytes.
 #[test]
 fn accounting_grows_with_the_owned_payload() {
-    let small = batch_bytes(&batch(1, vec![chat("tiny")]));
+    let empty = batch_bytes(&batch(1, vec![chat("")]));
     let large_text = "x".repeat(1 << 16);
     let large = batch_bytes(&batch(1, vec![chat(&large_text)]));
     assert!(
-        large >= small + large_text.capacity(),
-        "a 64 KiB chat line was not priced: {large} vs {small}"
+        large >= empty + large_text.capacity(),
+        "a 64 KiB chat line was not priced: {large} vs {empty}"
     );
 
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
@@ -567,14 +592,14 @@ fn accounting_grows_with_the_owned_payload() {
             .collect(),
         replace: true,
     };
-    let few = batch_bytes(&batch(1, vec![recipes(1)]));
+    let none = batch_bytes(&batch(1, vec![recipes(0)]));
     let many = batch_bytes(&batch(1, vec![recipes(512)]));
     let recipe_bytes: usize = (0..512usize)
         .map(|index| format!("minecraft:recipe_with_a_name_{index}").len())
         .sum();
     assert!(
-        many >= few + recipe_bytes,
-        "a 512-entry recipe book was not priced: {many} vs {few} (+{recipe_bytes})"
+        many >= none + recipe_bytes,
+        "a 512-entry recipe book was not priced: {many} vs {none} (+{recipe_bytes})"
     );
 }
 
@@ -610,6 +635,89 @@ fn a_full_outbox_halts_the_tick_and_keeps_the_terminal_disconnect() {
     Core::open(config)
         .expect("reopen after the outbox halt")
         .shutdown();
+}
+
+#[test]
+fn every_consumed_batch_advances_the_progress_epoch() {
+    let (sender, outbox) = sender_pair(1 << 20);
+    for connection in 1..=3u32 {
+        sender
+            .push(u64::from(connection), batch(connection, vec![chat("q")]))
+            .unwrap();
+    }
+    assert_eq!(sender.budget().drains(), 0);
+    let drained = outbox.drain(u64::MAX);
+    assert_eq!(drained.len(), 3);
+    // One epoch step per consumed batch. A pump that stops after batch 1 of 3
+    // has already recorded progress: its epoch moved at that batch, so the tick
+    // cannot charge it with a stale epoch, and the next observation restarts
+    // the stall clock instead of halting a pump that is merely late.
+    assert_eq!(sender.budget().drains(), 3);
+}
+
+/// A paused world has no other stall check: without the check inside the paused
+/// branch, a wedged pump would hold the queue until an unrelated join woke the
+/// world.
+#[test]
+fn a_paused_world_halts_when_the_pump_stops_consuming() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.checkpoint_every_ticks = u64::MAX;
+    config.pause_when_empty_seconds = 1;
+    config.outbox_stall_ms = 2_000;
+    let core = Core::open(config).expect("open");
+    core.submit(join(1, "leaver"));
+    assert_eq!(
+        drive(&core, std::time::Duration::from_secs(60), Some(1), |_| {})
+            .expect("the join tick publishes"),
+        Stopped::AfterTicks(1)
+    );
+    core.submit(PlayerInput::Leave {
+        connection: ConnectionId(1),
+    });
+    // Never drain: the world empties and pauses after one second, and the
+    // queued batch then outlives the 2 s stall limit with the world paused.
+    assert_eq!(
+        drive(&core, std::time::Duration::from_secs(20), None, |_| {})
+            .expect("a paused world halts when the pump stops consuming"),
+        Stopped::Halted
+    );
+    core.shutdown();
+}
+
+/// The pause refusal is a reliable message to its sender: with a full queue the
+/// tick must halt (fail closed) rather than drop the refusal. The stall limit is
+/// far out, so only the refusal path can stop this tick owner.
+#[test]
+fn a_refused_pause_answer_halts_instead_of_dropping_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.checkpoint_every_ticks = u64::MAX;
+    // Any push after the single admitted batch is refused.
+    config.outbox_queue_bytes = 1;
+    config.outbox_stall_ms = 60_000;
+    let core = Core::open(config).expect("open");
+    core.submit(join(1, "operator"));
+    assert_eq!(
+        drive(&core, std::time::Duration::from_secs(60), Some(1), |_| {})
+            .expect("the join tick publishes"),
+        Stopped::AfterTicks(1)
+    );
+    // One level-0 player: the pause is refused, and the refusal cannot be
+    // queued, so the tick stops instead of losing the message.
+    core.submit(PlayerInput::Command {
+        connection: ConnectionId(1),
+        command: "krasnokamen_pause on".into(),
+        permission_level: 0,
+    });
+    assert_eq!(
+        drive(&core, std::time::Duration::from_secs(20), None, |_| {})
+            .expect("a refused reliable pause answer stops the tick owner"),
+        Stopped::Halted
+    );
+    // The admitted join batch is still drainable; nothing was lost by the halt.
+    assert!(!core.try_drain_outbox().is_empty());
+    core.shutdown();
 }
 
 #[test]

@@ -6,23 +6,31 @@ fn chat(message: &str) -> PlayerChange {
     }
 }
 
+/// Batches enter through [`OutboxSender::push`], like the tick's: a batch that
+/// skipped the charge would release bytes it never queued (the budget's
+/// underflow assertion catches exactly that).
+fn pair() -> (OutboxSender, ReliableOutbox) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let budget = Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES));
+    (
+        OutboxSender::new(sender, Arc::clone(&budget)),
+        ReliableOutbox::new(receiver, budget),
+    )
+}
+
 #[test]
 fn reliable_handoff_coalesces_fifo_batches_and_keeps_disconnect_last() {
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let outbox = ReliableOutbox::new(
-        receiver,
-        Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
-    );
+    let (sender, outbox) = pair();
     let first = ConnectionId(1);
     let second = ConnectionId(2);
     sender
-        .send((
+        .push(
             1,
             vec![(first, vec![chat("one")]), (second, vec![chat("other")])],
-        ))
+        )
         .unwrap();
     sender
-        .send((
+        .push(
             2,
             vec![(
                 first,
@@ -33,10 +41,10 @@ fn reliable_handoff_coalesces_fifo_batches_and_keeps_disconnect_last() {
                     },
                 ],
             )],
-        ))
+        )
         .unwrap();
     sender
-        .send((3, vec![(first, vec![chat("not delivered")])]))
+        .push(3, vec![(first, vec![chat("not delivered")])])
         .unwrap();
     // A stopped authority leaves its terminal batch available to the edge.
     drop(sender);
@@ -57,18 +65,14 @@ fn reliable_handoff_coalesces_fifo_batches_and_keeps_disconnect_last() {
 
 #[test]
 fn draining_does_not_consume_later_batches() {
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let outbox = ReliableOutbox::new(
-        receiver,
-        Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
-    );
+    let (sender, outbox) = pair();
     let connection = ConnectionId(1);
     sender
-        .send((1, vec![(connection, vec![chat("first")])]))
+        .push(1, vec![(connection, vec![chat("first")])])
         .unwrap();
     assert_eq!(outbox.drain(1), vec![(connection, vec![chat("first")])]);
     sender
-        .send((3, vec![(connection, vec![chat("later")])]))
+        .push(3, vec![(connection, vec![chat("later")])])
         .unwrap();
     assert!(outbox.drain(2).is_empty());
     assert_eq!(outbox.drain(3), vec![(connection, vec![chat("later")])]);
@@ -76,15 +80,11 @@ fn draining_does_not_consume_later_batches() {
 
 #[test]
 fn snapshot_watermark_drains_covered_batches_but_not_future_batches() {
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let outbox = ReliableOutbox::new(
-        receiver,
-        Arc::new(OutboxBudget::new(crate::config::OUTBOX_QUEUE_BYTES)),
-    );
+    let (sender, outbox) = pair();
     let connection = ConnectionId(1);
     for (tick, text) in [(1, "one"), (2, "two"), (3, "three")] {
         sender
-            .send((tick, vec![(connection, vec![chat(text)])]))
+            .push(tick, vec![(connection, vec![chat(text)])])
             .unwrap();
     }
     assert_eq!(

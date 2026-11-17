@@ -814,6 +814,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "vanilla_data_dir",
                 "backup_dir",
                 "checkpoint_every_ticks",
+                "outbox_queue_bytes",
             ],
         ),
         ("auth", &["online_mode", "require_plugin_login"]),
@@ -1002,6 +1003,26 @@ mod tests {
         let negative =
             EdgeConfig::from_toml("[server]\npause_when_empty_seconds = -1\n", None).unwrap();
         assert_eq!(negative.server.pause_when_empty_seconds, -1);
+    }
+
+    #[test]
+    fn outbox_queue_bytes_is_a_known_data_key_and_validates() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(
+            default.data.outbox_queue_bytes,
+            mc_core::config::OUTBOX_QUEUE_BYTES
+        );
+        let configured =
+            EdgeConfig::from_toml("[data]\noutbox_queue_bytes = 4194304\n", None).unwrap();
+        assert_eq!(configured.data.outbox_queue_bytes, 4 << 20);
+        // A configured value must not be reported as an unknown key.
+        let table: toml::Table = toml::from_str("[data]\noutbox_queue_bytes = 4194304\n").unwrap();
+        assert_eq!(
+            unknown_leaves(&table),
+            Vec::<String>::new(),
+            "outbox_queue_bytes must be a known data key"
+        );
+        assert!(EdgeConfig::from_toml("[data]\noutbox_queue_bytes = 0\n", None).is_err());
     }
 
     #[test]

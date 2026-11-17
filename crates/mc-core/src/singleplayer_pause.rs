@@ -18,12 +18,15 @@ pub(crate) fn online_players(state: &TickState) -> usize {
 
 impl SingleplayerPause {
     /// Consume pause requests and return whether a whole world tick should run.
+    ///
+    /// A refused pause answer is a reliable message: the sender's refusal is
+    /// returned so the tick owner halts instead of dropping it.
     pub(crate) fn filter_inputs(
         &mut self,
         state: &TickState,
         inputs: &mut Vec<PlayerInput>,
         outbox: &crate::core::OutboxSender,
-    ) -> bool {
+    ) -> Result<bool, crate::core::OutboxRefusal> {
         // A login (ProfileLogin precedes Join in its own batch) ends the pause like Join, so a
         // reconnecting owner's duplicate-login kick is never dropped while paused.
         let joining = inputs.iter().any(|input| {
@@ -44,6 +47,7 @@ impl SingleplayerPause {
         {
             self.owner = None;
         }
+        let mut refusal_here = None;
         inputs.retain(|input| {
             let PlayerInput::Command {
                 connection,
@@ -73,10 +77,9 @@ impl SingleplayerPause {
             if allowed {
                 self.owner = requested.then_some(*connection);
             } else {
-                // A refused budget is the stall watchdog's/hard cap's business:
-                // the next tick halts fail-closed, so this reply is not dropped
-                // into a healthy queue's void.
-                let _ = outbox.push(
+                // A refusal from the outbox is returned, never swallowed: the
+                // tick owner halts on it (see `halt_authority`).
+                if let Err(refusal) = outbox.push(
                     state.tick,
                     vec![(
                         *connection,
@@ -84,15 +87,20 @@ impl SingleplayerPause {
                             message: "Cannot pause: one online operator is required.".into(),
                         }],
                     )],
-                );
+                ) {
+                    refusal_here.get_or_insert(refusal);
+                }
             }
             false
         });
+        if let Some(refusal) = refusal_here {
+            return Err(refusal);
+        }
         if self.owner.is_some() {
             // The edge handles keepalives independently of world ticks.
             inputs.clear();
         }
-        self.owner.is_none()
+        Ok(self.owner.is_none())
     }
 }
 

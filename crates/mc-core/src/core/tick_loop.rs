@@ -93,7 +93,15 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             inputs.push(input);
         }
         let singleplayer_runs =
-            singleplayer_pause.filter_inputs(&state, &mut inputs, &channels.outbox);
+            match singleplayer_pause.filter_inputs(&state, &mut inputs, &channels.outbox) {
+                Ok(runs) => runs,
+                Err(refusal) => {
+                    // A refused reliable pause answer is a halt, never a silent
+                    // drop: the same fail-closed path as the tick's own push.
+                    halt_authority(&mut state, &channels, &refusal.reason());
+                    break;
+                }
+            };
         let mut activity = !inputs.is_empty();
         while let Ok(request) = channels.moderation_selector_rx.try_recv() {
             moderation_selector::answer(&state, request);
@@ -173,6 +181,24 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             true
         });
         if pause_world {
+            // A paused world still owns a charged outbox: check the stall here,
+            // before any new checkpoint admission, or a wedged pump could hold
+            // the queue forever while simulation is stopped.
+            if let Some(stalled) = channels
+                .outbox_stall
+                .stalled_at(channels.outbox.budget(), std::time::Instant::now())
+            {
+                halt_authority(
+                    &mut state,
+                    &channels,
+                    &format!(
+                        "edge pump not draining for {} s, {} bytes queued while the world is paused (fail closed)",
+                        stalled.as_secs(),
+                        channels.outbox.queued_bytes()
+                    ),
+                );
+                break;
+            }
             if !checkpoint_in_flight && let Ok(reply) = channels.checkpoint_rx.try_recv() {
                 checkpoint_in_flight = start_checkpoint_with_reply(
                     &mut state,
@@ -740,6 +766,14 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
             tick = state.tick,
             cause = %refusal.reason(),
             "terminal disconnect could not be queued"
+        );
+    }
+    // Flush what the journal already accepted (file and directory fsync, no
+    // checkpoint); the halt itself is still the fail-stop, not a commit.
+    if channels.work_tx.send(JournalWork::Shutdown).is_err() {
+        tracing::error!(
+            tick = state.tick,
+            "halt could not ask the journal for its final flush"
         );
     }
 }

@@ -336,12 +336,18 @@ Raw command, pin provenance and logs are retained in the executor's
    tests and old multi-journal recovery receipts do not prove native v2 behavior.
 8. Every cross-thread queue is bounded in bytes or items, or it has a written
    reason and a counter. The tick→edge reliable handoff is the one the audit
-   caught unbounded: it now charges `outbox_queue_bytes` (256 MiB, warning at
-   8 MiB) with a 10 s watchdog that fires only while queued bytes exist and no
-   drain has consumed a batch, a push that does not fit never blocks and never
-   drops, and the halt's terminal `Disconnect` batch is admitted past the cap
+   caught unbounded: it now charges `outbox_queue_bytes` (256 MiB; two documented
+   exceptions — an oversized batch alone in an empty queue, and the halt's
+   terminal `Disconnect` batch), warns once per 8 MiB crossing (re-armed below
+   4 MiB), and a non-empty queue that consumes no batch for 10 s halts the tick
+   fail-closed. A refused push never blocks and never drops a reliable message
    (`crates/mc-core/src/core/outbox.rs`,
    [persistence](persistence.md#hazards-and-defense-layers)).
+   The same rule's other channels are bounded elsewhere or by construction: the
+   journal work queue by `JOURNAL_QUEUE_BYTES` and 128 slots, the per-connection
+   reliable queue by 512 frames, and the handle's request channels
+   (`checkpoint_tx`, `backup_tx`) carry one request per caller that is blocked on
+   its reply, so their depth is the number of concurrent waiting callers.
 
 ## Entity wire publication optimization
 

@@ -128,12 +128,19 @@ a different name.
 The 8 GiB shape also needs the one queue between the simulation and the network
 layer bounded, because the tick never waits for a slow edge:
 `[data] outbox_queue_bytes` (256 MiB by default) caps the queued reliable
-backlog and warns once at 8 MiB with the queued bytes. A backlog that reaches the
-cap, or that no drain touches for 10 s, stops the server fail-closed with one
-explicit disconnect reason per player; the next start replays the retained WAL
-([persistence](architecture/persistence.md#hazards-and-defense-layers)). A
-lagging player shows up there and in the dashboard's `reliable_drops` long before
-the host would OOM; raise the cap only after reading the warning's byte count.
+backlog and warns once per crossing at 8 MiB (re-armed only after the queue falls
+below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
+batch larger than the whole cap is admitted alone into an empty queue, and a
+halt's terminal disconnect batch is admitted past it so every player still learns
+why. A backlog that reaches the cap, or that consumes no batch for 10 s, stops the
+server fail-closed with one explicit disconnect reason per player; the next start
+replays the retained WAL
+([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
+warning's byte count before raising the cap. The queued and peak byte counters
+exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in
+the tick's own logs, not on the dashboard; the dashboard's `reliable_drops` counts
+a different thing — frames dropped by one connection's edge-side reliable queue,
+which is where an individual slow client shows up.
 
 ### Singleplayer with software Vulkan
 

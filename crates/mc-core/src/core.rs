@@ -1379,9 +1379,12 @@ impl Core {
 
     /// Estimated bytes queued in the tick→edge reliable handoff right now.
     ///
-    /// Worst case is the configured hard cap (`outbox_queue_bytes`); a
-    /// non-empty queue that stops draining for `OUTBOX_STALL_LIMIT` halts the
-    /// tick fail-closed instead of growing further.
+    /// The configured hard cap (`outbox_queue_bytes`) bounds normal pushes. Two
+    /// exceptions can exceed it briefly: a single batch larger than the whole
+    /// cap is admitted alone into an empty queue, and a halt's terminal
+    /// `Disconnect` batch is admitted past the cap so every live connection
+    /// still learns why. A non-empty queue that consumes no batch for
+    /// `outbox_stall_ms` halts the tick fail-closed instead of growing further.
     #[must_use]
     pub fn outbox_queued_bytes(&self) -> usize {
         self.inner.outbox.budget().queued_bytes()

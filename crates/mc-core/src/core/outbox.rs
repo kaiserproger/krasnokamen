@@ -46,8 +46,6 @@ pub(crate) const OUTBOX_WARN_BYTES: usize = 8 << 20;
 
 /// Flat per-connection allowance for the merged map entry the edge builds.
 const CONNECTION_ALLOWANCE: usize = 64;
-/// Per-element allowance for ordered map/set node bookkeeping.
-const NODE_ALLOWANCE: usize = 64;
 
 /// Element storage of a vector, by capacity (never under the allocation).
 fn vec_heap<T>(items: &Vec<T>) -> usize {
@@ -103,7 +101,11 @@ fn json_heap(value: &serde_json::Value) -> usize {
             vec_heap(items) + items.iter().map(json_heap).sum::<usize>()
         }
         serde_json::Value::Object(fields) => {
-            fields.len() * (std::mem::size_of::<(String, serde_json::Value)>() + NODE_ALLOWANCE)
+            // BTree slot slack and the always-allocated root, like the journal
+            // budget: an occupied entry is not the whole node.
+            let inline = std::mem::size_of::<(String, serde_json::Value)>();
+            fields.len() * crate::journal_budget::tree_slot(inline)
+                + crate::journal_budget::tree_root(fields.len(), inline)
                 + fields
                     .iter()
                     .map(|(key, value)| key.capacity() + json_heap(value))
@@ -220,10 +222,12 @@ fn map_update_heap(update: &crate::maps::MapUpdate) -> usize {
 }
 
 fn team_heap(team: &crate::scoreboard::Team) -> usize {
+    let inline = std::mem::size_of::<String>();
     team.display_name.capacity()
         + team.prefix.capacity()
         + team.suffix.capacity()
-        + team.members.len() * (std::mem::size_of::<String>() + NODE_ALLOWANCE)
+        + team.members.len() * crate::journal_budget::tree_slot(inline)
+        + crate::journal_budget::tree_root(team.members.len(), inline)
         + team.members.iter().map(String::capacity).sum::<usize>()
 }
 
@@ -439,11 +443,12 @@ impl PlayerChange {
 /// ([`PlayerChange::heap_bytes`]), plus a flat merged-map allowance. The same
 /// batch is priced identically when the tick charges it and when the edge
 /// releases it, because nothing mutates a queued batch.
-pub(crate) fn batch_bytes(batch: &[(ConnectionId, Vec<PlayerChange>)]) -> usize {
+pub(crate) fn batch_bytes(batch: &OutboxBatch) -> usize {
     // One `seen` set for the whole batch: a snapshot every recipient receives is
     // charged once, while a batch that retains two generations pays for both.
+    // The outer vector is priced by capacity: spare slots are resident too.
     let mut seen = Seen::new();
-    std::mem::size_of_val(batch)
+    batch.capacity() * std::mem::size_of::<(ConnectionId, Vec<PlayerChange>)>()
         + batch
             .iter()
             .map(|(_, changes)| {
@@ -535,6 +540,10 @@ impl OutboxBudget {
     /// Release a batch the edge consumed.
     fn release(&self, bytes: usize) {
         let after = self.queued.fetch_sub(bytes, Ordering::AcqRel);
+        debug_assert!(
+            after >= bytes,
+            "outbox release of {bytes} exceeds the {after} queued bytes"
+        );
         let remaining = after.saturating_sub(bytes);
         // Re-arm the one-shot warning only after the queue falls back well
         // below the mark, so a hovering queue cannot log on every batch.
@@ -637,6 +646,7 @@ pub(crate) struct StallWatch {
     limit: std::time::Duration,
     epoch: u64,
     since: Option<std::time::Instant>,
+    last: Option<std::time::Instant>,
 }
 
 impl StallWatch {
@@ -645,6 +655,7 @@ impl StallWatch {
             limit,
             epoch: 0,
             since: None,
+            last: None,
         }
     }
 
@@ -655,6 +666,19 @@ impl StallWatch {
         budget: &OutboxBudget,
         now: std::time::Instant,
     ) -> Option<std::time::Duration> {
+        // A gap no schedule produces means this owner did not run (process stop, a
+        // VM pause, SIGSTOP during a build): restart the clock instead of calling
+        // the pump stalled for a stop we caused. Half the limit, but never under a
+        // second, so a short configured limit (tests drive 50 ms against a 50 ms
+        // tick cadence) is still observable.
+        let stopped_gap = (self.limit / 2).max(std::time::Duration::from_secs(1));
+        if self
+            .last
+            .is_some_and(|last| now.saturating_duration_since(last) > stopped_gap)
+        {
+            self.since = None;
+        }
+        self.last = Some(now);
         if budget.queued_bytes() == 0 {
             self.since = None;
             return None;
@@ -710,7 +734,6 @@ impl ReliableOutbox {
     pub(crate) fn drain(&self, through: u64) -> OutboxBatch {
         let mut receiver = self.inner.lock();
         let mut store: HashMap<ConnectionId, Vec<PlayerChange>> = HashMap::new();
-        let mut consumed = 0usize;
         while let Some((tick, batch)) = receiver
             .pending
             .take()
@@ -731,13 +754,12 @@ impl ReliableOutbox {
                 }
             }
             self.budget.release(charged);
-            consumed += 1;
-        }
-        // Only a consumed batch is progress: a pump that keeps calling `drain`
-        // while holding a newer batch back must not reset the stall watchdog.
-        if consumed > 0 {
+            // Progress is the consumed batch itself, not the end of the drain: a
+            // consumer stopped after this batch must not look stalled, and a
+            // pump that drains without consuming never advances it.
             self.budget.drained();
         }
+        // Nothing consumed (empty drain, or a newer batch held back): no progress.
         store
             .into_iter()
             .filter(|(_, queue)| !queue.is_empty())
