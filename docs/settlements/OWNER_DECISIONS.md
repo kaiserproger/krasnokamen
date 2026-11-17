@@ -45,7 +45,9 @@ The supply recipes from the same decision (saddle, hay block) are implemented; s
 - Funded construction may physically clear natural forest from its lot and access path; admission itself changes no blocks.
 - Logs, saplings and other vanilla drops go to settlement storage without loss or duplication.
 - A block must match this world's deterministic generator and have no retained player placement record. Imported/unknown generator identities and persisted lumberjack sapling roots are protected after restart.
-- Water, lava, steep terrain and other existing terrain refusals remain refusals.
+- Water, lava, steep terrain and other existing terrain refusals remain refusals
+  outside the settlement. Inside the settlement this is superseded by
+  [lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17).
 - An identical player replacement at a former natural coordinate after history expiry may be felled with its drops conserved; see [the construction policy](construction.md#planning-and-streets).
 
 ## Daughter founding — owner approved 2026-11-15
@@ -110,7 +112,8 @@ claims require the actual pinned-server run, not this design decision.
 
 > Согласен
 
-- Planted lumberjack trees stay protected (2026-11-08 above).
+- Planted lumberjack trees stay protected (2026-11-08 above), except on a lot that
+  construction needs ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17)).
 - A lumberjack does not plant where the root or future canopy would block
   access to streets, plots or reserved sites.
 - Only settlements the canopy can reach are checked; an unrelated settlement
@@ -124,3 +127,20 @@ claims require the actual pinned-server run, not this design decision.
   jumps ahead because of housing.
 - When the active slot frees, the earliest-queued project takes it. A house the
   planner chooses later enters the queue behind what is already queued.
+
+## Lots and terrain inside the settlement — owner, 2026-11-17
+
+> 1. б, забивать хуй на них, если нужно место под участок расчистить. в пределах
+> поселения вообще игнорировать трудности ландшафта, строитель их может
+> разравнять, вскопать, закопать или срубить
+
+- Lumberjack planting rules stay as they are; there is no new restriction on
+  planting along planned streets.
+- A tree on a lot that construction needs is felled, including a planted
+  lumberjack tree. Its drops go to settlement storage as for natural forest.
+- Inside the settlement terrain is not a reason to refuse a lot: the builder
+  levels, digs, fills or fells. This replaces the terrain refusals and the
+  bell-elevation, frontage-step and footprint-height limits there.
+- Unchanged: item conservation (excavated material goes to storage, fill uses
+  real material), protection of player-placed blocks, and every rule outside the
+  settlement.
