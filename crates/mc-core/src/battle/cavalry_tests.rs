@@ -801,6 +801,323 @@ fn chasing_riders_hold_their_frontage_on_open_ground() {
     );
 }
 
+/// One battle tick's steering and cavalry passes on a local fixture (open
+/// stone floor, no bounds) for [`sweep_pass`].
+struct SweepPass {
+    plan: Option<Sweep>,
+    /// The rider's drive after steering (his foot drive) and after cavalry.
+    foot: [f64; 3],
+    rider: [f64; 3],
+    /// The horse's drive after cavalry.
+    horse: [f64; 3],
+    /// What the mounted pass makes of the plan for a seated, steady, untargeted
+    /// rider alone on open ground: the heading from his leader point at 4.6
+    /// blocks per second.
+    ridden: [f64; 3],
+    rider_pos: [f64; 3],
+}
+
+/// A mounted regiment of one rider at its slot (x -6, z -8) and enemy foot
+/// whose leader line is about 40 blocks away (x 0, z 32): broken (a Chase) or,
+/// with `flank`, unbroken and closing with the riders' own foot (a Flank).
+/// With `dismounted` the rider is first mounted and then taken off his horse;
+/// `leave_vehicle` sets him 1.5 blocks beside it, so his own destination, his
+/// slot, is not where he stands.
+fn sweep_pass(flank: bool, dismounted: bool) -> SweepPass {
+    use super::super::formation::{Order, RegimentSpec, slot_position};
+    let (mut state, _, pos) = fixture();
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    let (px, py, pz) = (pos[0] as i32, pos[1] as i32, pos[2] as i32);
+    for x in px - 12..=px + 12 {
+        for z in pz - 14..=pz + 32 {
+            state.world.set_block(x, py - 1, z, stone);
+            for dy in 0..6 {
+                state.world.set_block(x, py + dy, z, air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let at = |dx: f64, dz: f64| [pos[0] + dx, pos[1], pos[2] + dz];
+    let mut battle = BattleState::default();
+    for (id, faction, origin, facing) in [
+        (1, 2, at(0.0, 32.0), [0.0, -1.0]),
+        (2, 1, at(10.0, 20.0), [0.0, 1.0]),
+    ] {
+        let soldier = spawn(&mut state, "husk", origin);
+        state.entities.set_faction(slot(&state, soldier), faction);
+        let spec = RegimentSpec {
+            id,
+            faction,
+            origin,
+            facing,
+            files: 1,
+            frontage: 1.0,
+            order: Order::Hold,
+        };
+        battle.formation.add_regiment(spec, &[soldier]).unwrap();
+    }
+    let cavalry = RegimentSpec {
+        id: 3,
+        faction: 1,
+        origin: at(-6.0, -8.0),
+        facing: [0.0, 1.0],
+        files: 1,
+        frontage: 2.0,
+        order: Order::Hold,
+    };
+    let (origin, place) = (cavalry.origin, slot_position(&cavalry, 0));
+    let horse = spawn(&mut state, "horse", place);
+    let rider = spawn(&mut state, "husk", place);
+    state.entities.set_faction(slot(&state, rider), 1);
+    mount(&mut state, rider, horse).unwrap();
+    battle.formation.add_regiment(cavalry, &[rider]).unwrap();
+    if dismounted {
+        crate::mounts::dismount(&mut state, rider);
+    }
+    let seat = state
+        .entities
+        .row(slot(&state, rider))
+        .entity_life
+        .mount
+        .vehicle;
+    assert_eq!(seat.is_some(), !dismounted);
+    prepare(&state, &mut battle, 0);
+    if flank {
+        // The riders' own foot closes with the enemy foot.
+        battle.formation.regiments[1].enemy = Some(at(0.0, 32.0));
+        battle.formation.regiments[1].gap = 4.0;
+    } else {
+        battle.formation.regiments[0].morale.broken = true;
+    }
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: 0,
+    };
+    let rider_bi = index(&state, &battle, rider);
+    let horse_bi = index(&state, &battle, horse);
+    let m = &battle.formation.members[rider_bi];
+    assert!(m.alive && !m.wounded && !m.routing);
+    assert!(battle.columns.active[rider_bi] && battle.columns.targets[rider_bi].is_none());
+    super::super::steering::step(&frame, &mut battle, &mut super::super::Output::default());
+    let foot = battle.columns.drive[rider_bi];
+    let mut combat = CombatRuntime::default();
+    combat.prepare(&battle.columns.ids);
+    step(&frame, &mut battle, &mut combat);
+    let plan = combat.sweeps[2];
+    let rider_pos = battle.columns.positions[rider_bi];
+    let ridden = plan.map_or([0.0; 3], |plan| {
+        let heading = plan.heading([
+            rider_pos[0] - (place[0] - origin[0]),
+            rider_pos[1],
+            rider_pos[2] - (place[2] - origin[2]),
+        ]);
+        let length = mth::length2(heading[0], heading[1]);
+        [heading[0] / length * 4.6, 0.0, heading[1] / length * 4.6]
+    });
+    SweepPass {
+        plan,
+        foot,
+        rider: battle.columns.drive[rider_bi],
+        horse: battle.columns.drive[horse_bi],
+        ridden,
+        rider_pos,
+    }
+}
+
+/// A rider whose horse is gone stays in his mounted regiment. The sweep
+/// heading is a displacement in blocks that only the mounted pass turns into a
+/// horse speed; as the dismounted rider's own drive (blocks per second) it
+/// skated him a twentieth of the way to the plan point every tick, 45 to 107
+/// blocks per second in the field-1k battle takes. He keeps exactly the foot
+/// drive steering gave him (an upper bound alone would pass a zeroed drive);
+/// on the same fixture a seated rider still rides the plan.
+fn assert_walker_keeps_his_foot_drive(walk: &SweepPass, ride: &SweepPass) {
+    assert!(
+        mth::length2(walk.foot[0], walk.foot[2]) > 0.5,
+        "the walker's slot is 1.5 blocks off: steering must give him a foot drive: {:?}",
+        walk.foot
+    );
+    assert_eq!(
+        walk.rider.map(f64::to_bits),
+        walk.foot.map(f64::to_bits),
+        "the cavalry pass must keep the walker's foot drive: {:?} -> {:?}",
+        walk.foot,
+        walk.rider
+    );
+    assert!(mth::length2(walk.rider[0], walk.rider[2]) <= 5.6);
+    assert_eq!(
+        ride.rider, [0.0; 3],
+        "a seated rider's drive goes to his horse"
+    );
+    assert!(
+        (0..3).all(|k| (ride.horse[k] - ride.ridden[k]).abs() < 1.0e-9),
+        "the horse must ride the plan at the steady 4.6 blocks/s: {:?} vs {:?}",
+        ride.horse,
+        ride.ridden
+    );
+}
+
+#[test]
+fn a_dismounted_rider_keeps_his_foot_drive_under_a_chase() {
+    let (walk, ride) = (sweep_pass(false, true), sweep_pass(false, false));
+    for pass in [&walk, &ride] {
+        assert!(
+            matches!(pass.plan, Some(Sweep::Chase(point))
+                if (mth::length2(point[0] - pass.rider_pos[0], point[2] - pass.rider_pos[2])
+                    - 40.0)
+                    .abs()
+                    < 1.0),
+            "a chase 40 blocks away: {:?} from {:?}",
+            pass.plan,
+            pass.rider_pos
+        );
+    }
+    assert_walker_keeps_his_foot_drive(&walk, &ride);
+}
+
+#[test]
+fn a_dismounted_rider_keeps_his_foot_drive_under_a_flank() {
+    let (walk, ride) = (sweep_pass(true, true), sweep_pass(true, false));
+    for pass in [&walk, &ride] {
+        assert!(
+            matches!(pass.plan, Some(Sweep::Flank(_))),
+            "{:?}",
+            pass.plan
+        );
+    }
+    assert_walker_keeps_his_foot_drive(&walk, &ride);
+}
+
+/// A horse dies under its rider while his regiment chases a broken foot
+/// regiment about 40 blocks ahead. From the next battle tick on, the rider walks
+/// back to his slot at foot speed; he never skates on toward the chase point.
+#[test]
+fn a_rider_whose_horse_dies_walks_from_the_next_battle_tick() {
+    use super::super::formation::{Order, RegimentSpec, slot_position};
+    const FOOT_CAP: f64 = 5.6 * mc_physics::TICK_SECONDS;
+    let (mut state, player, pos) = fixture();
+    // The joined player stands aside, out of the riders' way.
+    let player_slot = slot(&state, player);
+    state
+        .entities
+        .set_pos(player_slot, [pos[0] + 8.0, pos[1], pos[2]]);
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    let (px, py, pz) = (pos[0] as i32, pos[1] as i32, pos[2] as i32);
+    for x in px - 12..=px + 12 {
+        for z in pz - 14..=pz + 32 {
+            state.world.set_block(x, py - 1, z, stone);
+            for dy in 0..6 {
+                state.world.set_block(x, py + dy, z, air);
+            }
+        }
+    }
+    // The one fugitive stands boxed in, out of every reach.
+    for dx in -1..=1 {
+        for dz in -1..=1 {
+            if (dx, dz) != (0, 0) {
+                for dy in 0..3 {
+                    state.world.set_block(px + dx, py + dy, pz + 30 + dz, stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let at = |dx: f64, dz: f64| [pos[0] + dx, pos[1], pos[2] + dz];
+    let fugitive = spawn(&mut state, "husk", at(0.0, 30.0));
+    state.entities.set_faction(slot(&state, fugitive), 2);
+    let enemy = RegimentSpec {
+        id: 1,
+        faction: 2,
+        origin: at(0.0, 30.0),
+        facing: [0.0, -1.0],
+        files: 1,
+        frontage: 1.0,
+        order: Order::Hold,
+    };
+    let battle = &mut state.hostile.battle;
+    battle.formation.add_regiment(enemy, &[fugitive]).unwrap();
+    battle.formation.regiments[0].morale.broken = true;
+    let cavalry = RegimentSpec {
+        id: 2,
+        faction: 1,
+        origin: at(-6.0, -10.0),
+        facing: [0.0, 1.0],
+        files: 1,
+        frontage: 2.0,
+        order: Order::Hold,
+    };
+    let place = slot_position(&cavalry, 0);
+    let horse = spawn(&mut state, "horse", place);
+    let rider = spawn(&mut state, "husk", place);
+    state.entities.set_faction(slot(&state, rider), 1);
+    mount(&mut state, rider, horse).unwrap();
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(cavalry, &[rider])
+        .unwrap();
+    state.hostile.battle.running = true;
+    let chasing = |state: &TickState| {
+        let plan = state.hostile.battle.combat.sweeps.get(1).copied().flatten();
+        assert!(
+            matches!(plan, Some(Sweep::Chase(point))
+                if mth::length2(point[0] - pos[0], point[2] - pos[2] - 30.0) < 2.0),
+            "the regiment must ride a chase: {plan:?}"
+        );
+    };
+    for _ in 0..10 {
+        crate::tick::run_tick(&mut state, &[]);
+        chasing(&state);
+        assert_pair(&state, rider, horse);
+    }
+    let horse_slot = slot(&state, horse);
+    assert!(state.entities.pos(horse_slot)[2] > place[2] + 1.5);
+    state.merge_damage.push((
+        horse_slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    assert!(!state.entities.body(horse_slot).alive);
+    let gap = |state: &TickState| {
+        let p = state.entities.pos(slot(state, rider));
+        mth::length2(p[0] - place[0], p[2] - place[2])
+    };
+    let start = gap(&state);
+    for tick in 0..30 {
+        let before = state.entities.pos(slot(&state, rider));
+        crate::tick::run_tick(&mut state, &[]);
+        chasing(&state);
+        let rider_slot = slot(&state, rider);
+        let row = state.entities.row(rider_slot);
+        assert_eq!(
+            row.entity_life.mount.vehicle, None,
+            "tick {tick}: still seated"
+        );
+        assert!(state.hostile.battle.columns.target(rider_slot).is_none());
+        let after = state.entities.pos(rider_slot);
+        let step = mth::length2(after[0] - before[0], after[2] - before[2]);
+        assert!(
+            step <= FOOT_CAP + 1.0e-9,
+            "tick {tick} after the horse died: the rider moved {step:.3} blocks, more than \
+             the foot cap {FOOT_CAP}: {before:?} -> {after:?}"
+        );
+    }
+    assert!(
+        gap(&state) < start - 1.0,
+        "the rider must walk back toward his slot: {start:.2} -> {:.2}",
+        gap(&state)
+    );
+}
+
 /// Riders that chose the same foe close on their own places round it, so a
 /// pile of riders attacking one man gets drives that fan out. Riding at the
 /// foe itself gave every rider of a pile the same drive: in the G1 rehearsal
