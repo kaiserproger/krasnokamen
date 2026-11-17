@@ -125,14 +125,40 @@ converted MVS manifest in `KRASNOKAMEN_ATM_MANIFEST`, vanilla cache in
 Overworld and three Nether structure definitions and records their start pools
 and templates. The fresh-world seed is 20261115; the client uses normal
 `execute in <dimension> run tp` commands, not a portal or placement commands.
-It locates each ID, preserves generated-start and template-block evidence, and
-photographs a visible template block from a grounded survival position within
-4.5 blocks. After restart it checks every recorded start and sampled blocks
-offline and revisits every tenth sorted Overworld ID starting at zero plus all
-three Nether IDs with the client. Missing locate results remain per-ID findings,
-not silently removed successes; infrastructure failures leave unrun rows.
-Screenshots still require visual review, and palette samples do not prove whole
-template fidelity or mod compatibility.
+It locates each ID, then generates both pack-present and same-seed pack-absent
+worlds across the expanded start bounds and verifies exported chunk coverage.
+Only a start-template palette type that differs at the same position, is
+absent from the pack-free vocabulary within 16 blocks of the bounds, and
+already had the identical state in the discovery export counts. Missing
+discovery chunks fail closed.
+Snow layers and ice are also treated as natural everywhere because weather can
+create them before discovery; snow blocks and other ice variants remain eligible.
+Each ID needs `min(8, K)` such blocks, where K is the smallest selected start
+template's cell count after excluding air, structure voids, structure blocks,
+jigsaws, natural-vocabulary types and the weather exclusions. K and the
+threshold are recorded per ID; K=0 is unprovable. Natural-only or otherwise insufficient
+starts remain findings, not passes. The pack-absent self-diff must be zero.
+Candidate runs also require `KRASNOKAMEN_ATM_CONTROL_REPORT`, a matching
+placement-disabled report with a measured control count for each ID; the
+count must be below that ID's threshold. A visible differential block is
+photographed from a grounded survival position within 4.5 blocks.
+The per-ID palette audit records chunk counts by DataVersion and encoding for
+each discovery, candidate and baseline read. The Anvil reader requires `Name`/`Properties`
+through DataVersion 4790 and `id`/`properties` or a bare identifier at 5023;
+unknown versions and mixed or mismatched encodings fail closed.
+
+After restart it checks every recorded start and sampled blocks offline and
+revisits every tenth sorted Overworld ID starting at zero plus all three Nether
+IDs with the client. Missing locate results remain per-ID findings, not silently
+removed successes; infrastructure failures leave unrun rows. For a separate
+placement-disabled negative-control pin, `KRASNOKAMEN_ATM_CONTROL_SUBSET=1`
+limits execution to that same deterministic subset; `all` measures every ID.
+A subset never accepts the full target; inspect each differential count before
+calling the control successful.
+Screenshots still require visual review; other time-dependent changes can occur
+before discovery, and start metadata does not identify individual piece poses,
+so this differential does not prove exact piece attribution, complete template
+fidelity or mod compatibility.
 
 ## Fresh world, real client, generated starts
 
