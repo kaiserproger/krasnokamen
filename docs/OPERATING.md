@@ -960,14 +960,14 @@ compatibility format, not a live fallback or dual-write store.
 
 What a crash can lose beyond the last checkpoint comes from two windows. First,
 a tick is shown to clients once its journal batch is queued, before the batch is
-published: the batch the journal thread is writing plus up to 128 queued behind
-it (6.4 s of ticks, at most 256 MiB of estimated payload). Any crash, SIGKILL
-included, loses those; the batch being written is lost even when the queue is
-empty, because an unpublished batch file is ignored on recovery. Second, each
-published batch file is fsynced, but the journal directory is fsynced only every
-`journal_fsync_every_batches` published batches (10 by default), so a host power
-loss can also drop up to that many published batch files. A clean stop flushes
-both.
+published (written, fsynced and renamed into place): up to 128 batches (6.4 s of
+ticks, at most 256 MiB of estimated payload) can wait behind the one the journal
+thread is handling. Any crash, SIGKILL included, can lose every batch not yet
+published: the queued ones, and the current one if its rename has not happened,
+so an empty queue does not close this window. Second, the journal directory is
+fsynced only every `journal_fsync_every_batches` published batches (10 by
+default), so a host power loss can also drop up to that many published batches.
+A clean stop flushes both.
 
 When upgrading from a build with the old scalar rider format, stop it cleanly
 before deploying: an old unclean WAL tail containing `rider` is refused at
