@@ -152,7 +152,11 @@ claims require the actual pinned-server run, not this design decision.
 > (нету - крафтит сам, нет припасов - ну пиздец тогда, закапываем блоками),
 > очищаем, всё. главное не утонуть в лаве случайно нахуй
 
-- Water or lava on a needed lot is scooped with buckets: from storage, otherwise
-  the builder crafts them from real iron. Filled buckets go to storage. With
-  neither buckets nor iron, the liquid is buried under real blocks.
-- A builder never stands in, walks through or falls into lava.
+> епта ну засыпать блоками тогда
+
+- Water and lava on a needed lot are filled with real blocks (excavated soil or
+  storage) from a safe stand; there are no bucket orders or bucket crafting.
+- A builder never stands in, walks through or falls into lava, and never digs a
+  cell next to lava beside its stand.
+- Among candidate lots the one with the least preparation (cut, fill and
+  liquids) is chosen, so the queue head never stalls on filling a lake.
