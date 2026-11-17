@@ -423,10 +423,11 @@ pub(super) fn check(
     let mut lowest = floor;
     let mut cost = Cost::default();
     if record.buildings.values().any(|building| {
-        [0, 2].into_iter().all(|axis| {
-            origin[axis] <= building.bounds.max[axis] + 1
-                && building.bounds.min[axis] <= max[axis] + 1
-        })
+        !building.natural_zone
+            && [0, 2].into_iter().all(|axis| {
+                origin[axis] <= building.bounds.max[axis] + 1
+                    && building.bounds.min[axis] <= max[axis] + 1
+            })
     }) {
         return Err(Reason::BuildingBuffer);
     }
