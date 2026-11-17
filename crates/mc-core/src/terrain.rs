@@ -113,7 +113,7 @@ pub(crate) struct TerrainSource {
     publication: AtomicU64,
     /// Timestamps pinned per section revision: revision -> modified ms,
     /// bounded (spurious eviction only causes a conservative re-stamp).
-    stamps: parking_lot::Mutex<std::collections::HashMap<u64, i64>>,
+    stamps: parking_lot::Mutex<StampTable>,
     /// Stable opaque world identity (random hex, not seed-derived).
     epoch: String,
 }
@@ -127,6 +127,77 @@ struct PublishedTerrain {
     snapshot: Option<Arc<crate::boundary::WorldSnapshot>>,
     /// Committed-but-unflushed supplement at the same publication point.
     supplement: Arc<DirtySupplement>,
+}
+
+/// Bounded `revision -> modified ms` table with the allocation-order lower
+/// bound the section timestamp contract needs.
+///
+/// One hash probe answers a repeat revision; a miss takes one ordered-index
+/// pop plus two inserts. Nothing ever scans the table: the eviction order is
+/// the ordered index (`by_stamp`, oldest first), and the "strictly greater
+/// than every stamp issued before" bound is a monotone counter (`last`). Both
+/// used to be `O(n)` scans of the whole map under one per-dimension mutex
+/// (`values().max()` and `min_by_key`), which serialized every LOD worker of
+/// the dimension on each new revision.
+#[derive(Debug, Default)]
+struct StampTable {
+    /// Lookup side: revision -> modified ms.
+    by_revision: std::collections::HashMap<u64, i64>,
+    /// Eviction side: modified ms -> revision, oldest first. Stamps are
+    /// strictly increasing by construction, so one stamp names one revision.
+    by_stamp: std::collections::BTreeMap<i64, u64>,
+    /// Greatest stamp ever issued here; `0` for an empty (fresh) table, like
+    /// the old `values().max().unwrap_or(0)`.
+    last: i64,
+    /// Stored entries read by the most recent [`StampTable::stamp`] call.
+    /// Test-only cost probe behind the "no scan under the lock" check: the
+    /// pointer chase and the inserts are `O(1)`/`O(log n)`, so a call may read
+    /// the probed entry and at most the one it evicts, never the table.
+    #[cfg(test)]
+    visited: usize,
+}
+
+impl StampTable {
+    /// Capacity of the table. Bounded so a long-lived world cannot grow it
+    /// without limit; eviction only costs a conservative re-stamp.
+    const CAP: usize = 1024;
+
+    /// Pin `revision` to a stamp, or return the stamp it already has.
+    ///
+    /// `now_ms` is the wall clock sampled by the caller outside the lock.
+    /// `O(1)` on a repeat revision and `O(log n)` on a miss (one ordered pop
+    /// plus two inserts); no call ever reads the whole table.
+    fn stamp(&mut self, revision: u64, now_ms: i64) -> i64 {
+        #[cfg(test)]
+        {
+            self.visited = 1;
+        }
+        if let Some(&modified) = self.by_revision.get(&revision) {
+            return modified;
+        }
+        // Strictly greater than every stamp issued before this call, whatever
+        // the wall clock did, then the wall clock, then 1.
+        let modified = now_ms.max(self.last.saturating_add(1)).max(1);
+        self.last = modified;
+        if self.by_revision.len() >= Self::CAP
+            && let Some((_, oldest)) = self.by_stamp.pop_first()
+        {
+            #[cfg(test)]
+            {
+                self.visited += 1;
+            }
+            self.by_revision.remove(&oldest);
+        }
+        self.by_revision.insert(revision, modified);
+        self.by_stamp.insert(modified, revision);
+        modified
+    }
+
+    /// Entries the last call read; test-only cost probe.
+    #[cfg(test)]
+    fn visited(&self) -> usize {
+        self.visited
+    }
 }
 
 impl std::fmt::Debug for TerrainSource {
@@ -146,7 +217,7 @@ impl TerrainSource {
             source: Arc::downgrade(&source),
             bundle: parking_lot::RwLock::new(PublishedTerrain::default()),
             publication: AtomicU64::new(0),
-            stamps: parking_lot::Mutex::new(std::collections::HashMap::new()),
+            stamps: parking_lot::Mutex::new(StampTable::default()),
             epoch,
         }
     }
@@ -231,27 +302,10 @@ impl TerrainSource {
     /// itself); callers needing a persistent revision->timestamp mapping
     /// must durably record the stamp the first time a revision is encoded.
     fn stamp(&self, revision: u64) -> i64 {
-        const STAMP_CAP: usize = 1024;
-        let mut stamps = self.stamps.lock();
-        if let Some(&modified) = stamps.get(&revision) {
-            return modified;
-        }
+        // The clock read stays outside the critical section: the tick-owner
+        // and every LOD worker of this dimension share this one mutex.
         let now = unix_ms();
-        let max = stamps.values().copied().max().unwrap_or(0);
-        let modified = now.max(max.saturating_add(1)).max(1);
-        if stamps.len() >= STAMP_CAP {
-            // Evict the oldest stamp by value (arbitrary but bounded); a
-            // re-stamp is conservative, never stale.
-            if let Some(oldest) = stamps
-                .iter()
-                .min_by_key(|&(_, &ms)| ms)
-                .map(|(&rev, _)| rev)
-            {
-                stamps.remove(&oldest);
-            }
-        }
-        stamps.insert(revision, modified);
-        modified
+        self.stamps.lock().stamp(revision, now)
     }
 
     /// Committed-but-unflushed supplement published by the tick owner:

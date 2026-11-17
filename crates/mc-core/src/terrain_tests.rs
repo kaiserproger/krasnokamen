@@ -609,3 +609,80 @@ fn empty_source(
     });
     probe_source(registry, dimension, generator)
 }
+
+// B5 (CS341 REPORT-B.md): the section-stamp table is bounded and pinned to
+// section revisions, and a miss used to walk all 1024 entries twice
+// (`values().max()` then `min_by_key`) under the one per-dimension mutex every
+// LOD worker shares. These four checks pin the semantics the rewrite must
+// keep and the work shape it must have.
+
+#[test]
+fn stamp_table_keeps_a_revision_and_never_repeats_a_stamp() {
+    let mut table = super::StampTable::default();
+    let first = table.stamp(7, 1_000);
+    assert_eq!(table.stamp(7, 5_000), first, "same revision keeps its stamp");
+    let second = table.stamp(8, 1_000);
+    assert!(
+        second > first,
+        "a new revision outranks every stamp issued before it even inside \
+         one wall-clock millisecond: {second} after {first}"
+    );
+    let backwards = table.stamp(9, 10);
+    assert!(
+        backwards > second,
+        "a backwards wall clock must not reorder revisions: {backwards} after {second}"
+    );
+}
+
+#[test]
+fn stamp_table_stays_bounded_and_evicts_the_oldest_stamp() {
+    let mut table = super::StampTable::default();
+    let cap = super::StampTable::CAP;
+    let mut stamps = Vec::with_capacity(cap + 8);
+    for revision in 0..cap as u64 {
+        stamps.push(table.stamp(revision, 1_000));
+    }
+    // One more revision than capacity: the oldest-stamped entry leaves and the
+    // table never grows past it.
+    let last = table.stamp(cap as u64, 1_000);
+    assert_eq!(table.by_revision.len(), cap, "bounded at capacity");
+    assert_eq!(table.by_stamp.len(), cap, "eviction side stays in step");
+    assert!(
+        stamps.windows(2).all(|pair| pair[0] < pair[1]),
+        "allocation order is monotone"
+    );
+    assert!(last > stamps[cap - 1], "new stamp outranks the old maximum");
+    assert_eq!(
+        table.stamp(0, 1_000),
+        last + 1,
+        "the evicted oldest revision is re-stamped above the newest stamp, \
+         never stale"
+    );
+    assert_eq!(table.by_revision.len(), cap, "re-stamp keeps the bound");
+}
+
+#[test]
+fn stamp_table_miss_reads_at_most_the_evicted_entry() {
+    // Cost shape, not timing: a miss on a full table touches the probe and the
+    // one entry it evicts. The pre-fix shape read every entry twice per miss
+    // (`values().max()` and `min_by_key`), 2048 reads at capacity, all under
+    // the per-dimension mutex.
+    let mut table = super::StampTable::default();
+    let cap = super::StampTable::CAP;
+    for revision in 0..cap as u64 {
+        table.stamp(revision, 1_000);
+    }
+    let mut worst = 0;
+    for revision in cap as u64..cap as u64 + 512 {
+        table.stamp(revision, 1_000);
+        worst = worst.max(table.visited());
+    }
+    assert!(
+        worst <= 2,
+        "a miss must not scan the bounded table: read {worst} entries of {cap}"
+    );
+    // A repeat revision is a single probe as well.
+    table.stamp(u64::MAX, 1_000);
+    table.stamp(u64::MAX, 9_999);
+    assert_eq!(table.visited(), 1, "a repeat revision costs one probe");
+}
