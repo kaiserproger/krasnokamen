@@ -59,19 +59,19 @@ pub(crate) use chunk_frames::find_chunk;
 use chunk_frames::{CHUNKS_PER_TICK, spiral_square};
 pub use chunk_frames::{ChunkPacketCache, fill_chunk_packets};
 pub(crate) use credit::{WorldCredit, push_best_effort, push_reliable, try_push};
-use entities::{
-    EntityUpdate, UNDELIVERED_TYPE, entity_movement_due, entity_trackable, is_undelivered,
-    plan_entities,
-};
+#[cfg(test)]
+use entities::entity_movement_due;
+use entities::{EntityUpdate, UNDELIVERED_TYPE, entity_trackable, is_undelivered, plan_entities};
+#[cfg(test)]
 pub(crate) use entity_appearance::push_appearance_for;
-use entity_appearance::{
-    has_living_metadata, map_extra, player_entity_type_id, pose_of, push_appearance,
-    push_appearance_with,
-};
+#[cfg(test)]
+use entity_appearance::{has_living_metadata, map_extra, pose_of};
+use entity_appearance::{player_entity_type_id, push_appearance, push_appearance_with};
 use entity_events::{EXPLOSION_RANGE_SQ, explode_packet, push_entity_event};
+#[cfg(test)]
+use entity_motion::floor_f32_i32;
 use entity_motion::{
-    MovePacket, entity_movement, entity_spawn_position, floor_f32_i32, floor_i32, pack_degrees,
-    per_tick,
+    MovePacket, entity_movement, entity_spawn_position, floor_i32, pack_degrees, per_tick,
 };
 use scratch::{PlanScratch, ViewWindow};
 use seats::{clear_seats, plan_seats};
@@ -81,7 +81,9 @@ pub(crate) use viewer::TrackedEntity;
 pub use viewer::ViewerState;
 use viewer::{forget_everything, relink_passengers};
 use viewer_plan::own_entity;
-pub(crate) use viewer_plan::{plan_viewer, plan_viewer_indexed};
+#[cfg(test)]
+pub(crate) use viewer_plan::plan_viewer;
+pub(crate) use viewer_plan::plan_viewer_indexed;
 
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::sync::Arc;

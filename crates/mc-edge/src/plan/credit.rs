@@ -31,7 +31,7 @@ impl WorldCredit {
         self.frames == 0 || self.bytes == 0
     }
 
-    fn charge(&mut self, packets: &[PlannedPacket]) {
+    pub(super) fn charge(&mut self, packets: &[PlannedPacket]) {
         self.frames -= packets.len();
         self.bytes = self
             .bytes
