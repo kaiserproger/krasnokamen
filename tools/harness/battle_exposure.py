@@ -235,10 +235,11 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             default=0,
         ),
     }
-    # Fail-closed completeness: the numbers are only a count when the run wrote one summary, the
-    # summary agrees with the lines in the log, nothing was suppressed, and no episode is left
-    # without a close (a run that ended between ticks still writes a summary; a truncated or
-    # filtered log does not).
+    # Fail-closed completeness is about the LOG: one summary, the summary agreeing with the lines
+    # in it, nothing suppressed or capped, and no episode from a run the summary does not cover.
+    # Wire coverage (a body that left the view, a recorder that stopped before the last battle
+    # ticks) is reported per episode instead: it cannot turn a complete log into a count, but it
+    # also cannot be allowed to read as "no exposure".
     reasons = []
     if not summaries:
         reasons.append('no summary line')
@@ -255,19 +256,27 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
     if wire is not None:
         last_wire = max((tick for rows in wire.values() for tick, *_ in rows), default=None)
         last_window = max((episode['motion'][1] for episode in episodes), default=None)
-        if last_window is not None and (last_wire is None or last_wire < last_window):
-            reasons.append(f'uncovered wire tail: last packet tick {last_wire} < episode window end {last_window}')
+        take['coverage'] = {
+            'last_recorded_tick': last_wire,
+            'last_motion_window_end': last_window,
+            'tail_uncovered_ticks': max(0, (last_window or 0) - (last_wire or 0)),
+        }
+        if not wire:
+            reasons.append('the take carries no wire positions at all')
     take['incomplete'] = reasons
     take['complete'] = not reasons
     # A take that suppressed episodes cannot support a bound: the missing ids and windows cannot be
     # recovered from the counters. Say it, do not average over it.
     take['usable_for_d1'] = take['complete']
     if wire is not None:
-        rows, d1_bodies, d1_steps, uncorrelated = [], set(), 0, []
+        rows, d1_bodies, d1_steps, uncorrelated, tail = [], set(), 0, [], 0
         for episode in episodes:
             steps = episode_wire_steps(episode, wire.get(episode['id'], ()))
             if not steps:
                 uncorrelated.append(episode['id'])
+            last_wire = take['coverage']['last_recorded_tick']
+            if last_wire is not None and episode['motion'][1] > last_wire:
+                tail += 1
             fired = [step for step in steps if step['d1_step']]
             d1_steps += len(fired)
             if fired:
@@ -277,11 +286,14 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             'bodies_with_d1_step': len(d1_bodies),
             'd1_steps': d1_steps,
             'episodes_without_wire_step': len(uncorrelated),
+            'episodes_past_the_last_packet': tail,
             'episode_rows': rows,
         }
     if dismounts is not None:
         exposed = {episode['id'] for episode in episodes}
-        phantom = sorted(exposed - set(dismounts))
+        without = sorted(exposed - set(dismounts))
+        known = set(wire) if wire is not None else set()
+        absent = [ident for ident in without if wire is not None and ident not in known]
         early = [
             episode for episode in episodes
             if episode['id'] in dismounts and episode['motion'][0] < dismounts[episode['id']]
@@ -290,12 +302,15 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             'real_dismounts': len(dismounts),
             'exposed_bodies': len(exposed),
             'exposed_of_dismounted': len(exposed & set(dismounts)),
-            'exposure_without_wire_dismount': phantom,
+            'exposure_without_wire_dismount': without,
+            'exposure_absent_from_wire': absent,
             'episodes_starting_before_dismount': len(early),
         }
-        if phantom or early:
+        # An id the wire never carried is a real disagreement; an id whose dismount happened
+        # before the recording began is a coverage note, not a phantom.
+        if absent or early:
             take['usable_for_d1'] = False
-            take['incomplete'].append('exposure and wire dismounts disagree')
+            take['incomplete'].append('exposure and wire disagree')
     if fling_take is not None:
         # D1 is a wire bound over ALL dismounted steps of the take; the exposure filter never
         # hides one. `fling_analysis.py` counts them, so carry its number as it stands.

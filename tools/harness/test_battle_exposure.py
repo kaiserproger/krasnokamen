@@ -193,12 +193,22 @@ class TakeTest(unittest.TestCase):
             self.assertFalse(take['usable_for_d1'])
             self.assertTrue(any('suppressed' in reason for reason in take['incomplete']))
 
-    def test_an_uncovered_wire_tail_is_incomplete(self):
+    def test_a_wire_tail_past_the_last_packet_is_reported_not_fatal(self):
         positions = {'battle_start_tick': 5000, 'ids': {'1076': [[5140, 0, 0, 0], [5144, round(1 * 4096), 0, 0]]}}
         with tempfile.TemporaryDirectory() as root:
             take = self.complete_take(root, '\n'.join([episode_line(), summary_line()]), positions)
+            # the log is complete; the recorder simply stopped before the last battle ticks
+            self.assertTrue(take['complete'])
+            self.assertEqual(take['coverage']['last_recorded_tick'], 5144)
+            self.assertEqual(take['coverage']['tail_uncovered_ticks'], 5)
+            self.assertEqual(take['wire']['episodes_past_the_last_packet'], 1)
+
+    def test_a_take_with_no_wire_positions_at_all_is_incomplete(self):
+        with tempfile.TemporaryDirectory() as root:
+            take = self.complete_take(root, '\n'.join([episode_line(), summary_line()]),
+                                      {'battle_start_tick': 5000, 'ids': {}})
             self.assertFalse(take['complete'])
-            self.assertTrue(any('uncovered wire tail' in reason for reason in take['incomplete']))
+            self.assertTrue(any('no wire positions' in reason for reason in take['incomplete']))
 
     def test_the_join_reports_a_flinging_at_risk_body(self):
         positions = {'battle_start_tick': 5000, 'ids': {
@@ -221,13 +231,27 @@ class TakeTest(unittest.TestCase):
                                                               [900, '1077', 'left_view']]))
             self.assertEqual(table['take'], {1076: 5142})
 
-    def test_a_phantom_exposure_without_a_wire_dismount_is_named(self):
+    def test_an_exposure_id_the_wire_never_carried_is_a_disagreement(self):
+        # an id the wire truly never carried: no positions, no dismount
         with tempfile.TemporaryDirectory() as root:
             take = self.complete_take(root, '\n'.join([episode_line(), summary_line()]),
-                                      dismounts=[[142, '9999', 'other']])
+                                      {'battle_start_tick': 5000, 'ids': {'2000': [[5140, 0, 0, 0], [5144, 4096, 0, 0]]}},
+                                      dismounts=[[900, '2000', 'left_view']])
             self.assertEqual(take['wire_dismounts']['exposure_without_wire_dismount'], [1076])
-            self.assertEqual(take['wire_dismounts']['exposed_of_dismounted'], 0)
+            self.assertEqual(take['wire_dismounts']['exposure_absent_from_wire'], [1076])
             self.assertFalse(take['usable_for_d1'])
+
+    def test_a_body_present_on_the_wire_without_a_recorded_dismount_is_a_coverage_note(self):
+        # both bodies are on the wire, but only 1077's dismount was recorded: 1076's happened
+        # before the recorder's view, which is a coverage note, not a phantom
+        with tempfile.TemporaryDirectory() as root:
+            take = self.complete_take(root, '\n'.join([episode_line(), summary_line()]),
+                                      {'battle_start_tick': 5000, 'ids': {
+                                          '1076': [[5140, 0, 0, 0], [5144, round(1 * 4096), 0, 0]]}},
+                                      dismounts=[[900, '1076', 'left_view']])
+            self.assertEqual(take['wire_dismounts']['exposure_without_wire_dismount'], [1076])
+            self.assertEqual(take['wire_dismounts']['exposure_absent_from_wire'], [])
+            self.assertTrue(take['usable_for_d1'])
 
     def test_an_episode_starting_before_its_dismount_means_a_phase_mismatch(self):
         with tempfile.TemporaryDirectory() as root:
