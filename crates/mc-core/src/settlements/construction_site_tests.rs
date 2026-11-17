@@ -1192,3 +1192,86 @@ fn funded_mine_without_a_site_does_not_starve_a_legal_mason() {
     assert_eq!(project.blueprint, "mason");
     assert_eq!(project.origin, site.lot.origin);
 }
+
+#[test]
+fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor() {
+    use crate::settlements::forestry;
+    let (mut state, a, _) = fixture();
+    forestry::tests::grown_world(&mut state, vec![[168, 201, 8]], "oak");
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter((9..=11).flat_map(|x| {
+            (-1..=1).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
+        })));
+    let b = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "neighbour".into(),
+            "other".into(),
+            [168, 201, 8],
+            12,
+        )
+        .unwrap();
+    let root = [-8, 201, 8];
+    let radius = forestry::PLANTED_CROWN_RADIUS as i32;
+    let crown = ScriptWorldBounds::new(
+        [root[0] - radius, root[1], root[2] - radius],
+        [root[0] + radius, root[1] + 64, root[2] + radius],
+    )
+    .unwrap();
+    let misses = state.settlements.forest.lock().unwrap().misses();
+    assert!(
+        !replant_conflicts(&state, root),
+        "far B cannot veto A's safe renewal"
+    );
+    assert_eq!(
+        state.settlements.forest.lock().unwrap().misses(),
+        misses,
+        "A's admission must not request evidence for B's cold grove"
+    );
+    // Prove the cold foreign town would refuse this unrelated planting if
+    // queried: it has no proved house lot and needs fresh forest evidence.
+    assert!(layout::planting_blocks_access(
+        &state,
+        state.settlements.get(b).unwrap(),
+        crown
+    ));
+    assert!(state.settlements.forest.lock().unwrap().misses() > misses);
+
+    let town = state.settlements.get_mut(b).unwrap();
+    town.anchor = root;
+    let building = BuildingId((b.0 << 32) | 1);
+    town.buildings.insert(
+        building,
+        buildings::Building {
+            id: building,
+            settlement: b,
+            kind: BuildingKind::Storage,
+            level: 1,
+            bounds: ScriptWorldBounds::new([-2, 200, 7], [0, 204, 9]).unwrap(),
+            work_points: vec![[-1, 201, 8]],
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+    assert!(
+        !layout::Network::walk(&state, state.settlements.get(b).unwrap())
+            .served()
+            .is_empty(),
+        "B has a reachable standing-building corridor before the proposed crown"
+    );
+    assert!(!layout::planting_blocks_access(
+        &state,
+        state.settlements.get(a).unwrap(),
+        crown
+    ));
+    assert!(
+        layout::planting_blocks_access(&state, state.settlements.get(b).unwrap(), crown),
+        "the adjacent crown covers B's plaza and cuts its building off"
+    );
+    assert!(
+        replant_conflicts(&state, root),
+        "nearby B's access still vetoes A's planting"
+    );
+}

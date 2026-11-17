@@ -201,7 +201,16 @@ async fn run_connection(
             warn!(%peer, connection = id.0, stage = "login", "login rejected (disconnect packet sent); connection closed");
             return Ok(None);
         };
-
+        let version = handshake
+            .status_version
+            .unwrap_or(mc_data::protocol_versions::Version {
+                release: mc_protocol::TARGET_RELEASE,
+                protocol: mc_protocol::PROTOCOL_VERSION,
+            });
+        tracing::info!(
+            %peer, connection = id.0, name = %outcome.name, protocol = version.protocol,
+            release = version.release, "login admitted"
+        );
         Ok(Some(outcome))
     };
     let Some(outcome) = tokio::time::timeout(crate::connection::PRE_PLAY_TOTAL_TIMEOUT, pre_play)

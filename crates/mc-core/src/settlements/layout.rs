@@ -22,7 +22,7 @@ use mc_script::ScriptWorldBounds;
 
 use super::SettlementRecord;
 use super::blueprints::{self, Blueprint, Rotation};
-use super::buildings::Building;
+use super::buildings::{Building, BuildingKind};
 use super::construction::{self, Project};
 use crate::plugin_structures::settlement_builds::{self as executor, PlannedCell};
 use crate::tick::TickState;
@@ -405,8 +405,8 @@ fn sample(
     }
 }
 
-/// Keep new managed crowns out of loaded, potentially walkable street and
-/// frontage strips, even before a building reserves its access envelope.
+/// A new crown may change the preferred route or lot, but must not remove
+/// existing building access or the last feasible lot of a housing blueprint.
 pub(super) fn planting_blocks_access(
     state: &TickState,
     record: &SettlementRecord,
@@ -418,32 +418,42 @@ pub(super) fn planting_blocks_access(
         .lock()
         .expect("forest cache poisoned")
         .misses();
-    for x in crown.min[0]..=crown.max[0] {
-        for z in crown.min[2]..=crown.max[2] {
-            if !level_inside(record, x, z)
-                || !matches!(
-                    cell(record.anchor, x, z),
-                    Cell::Road | Cell::Plaza | Cell::Verge
-                )
-            {
-                continue;
-            }
-            match sample(state, record, x, z, true) {
-                Column::Ground { y, .. } if y <= crown.max[1] && y + 2 >= crown.min[1] => {
-                    return true;
-                }
-                Column::Unloaded => return true,
-                _ => {}
-            }
+    let mut before = None;
+    let mut after = Network::build(state, record, true, Some(crown));
+    if record.buildings.values().any(|building| {
+        !building.natural_zone
+            && after.access(building).is_none()
+            && before
+                .get_or_insert_with(|| Network::for_construction(state, record))
+                .access(building)
+                .is_some()
+    }) {
+        return true;
+    }
+    for blueprint in blueprints::all(&state.registry)
+        .iter()
+        .filter(|blueprint| blueprint.kind == BuildingKind::House)
+    {
+        if !construction::has_house_lot(state, record, &mut after, blueprint)
+            && (construction::has_house_lot(
+                state,
+                record,
+                before.get_or_insert_with(|| Network::for_construction(state, record)),
+                blueprint,
+            ) || state
+                .settlements
+                .forest
+                .lock()
+                .expect("forest cache poisoned")
+                .misses()
+                != misses)
+        {
+            return true;
         }
     }
-    state
-        .settlements
-        .forest
-        .lock()
-        .expect("forest cache poisoned")
-        .misses()
-        != misses
+    // A proved remaining lot and its loaded access are enough. Unrelated
+    // cache misses elsewhere must not discard this grove's renewal.
+    false
 }
 
 fn vacant(state: &TickState, block: u32) -> bool {
@@ -548,6 +558,7 @@ pub(crate) struct Network<'a> {
     parents: Vec<usize>,
     index: HashMap<(i32, i32), usize>,
     prepare_forest: bool,
+    planting: Option<ScriptWorldBounds>,
 }
 
 impl<'a> Network<'a> {
@@ -555,20 +566,26 @@ impl<'a> Network<'a> {
     /// steps of at most one block, inside the territory, on loaded ground.
     /// An existing village obstacle may block the road without its shoulder.
     pub(crate) fn walk(state: &'a TickState, record: &'a SettlementRecord) -> Self {
-        Self::build(state, record, false)
+        Self::build(state, record, false, None)
     }
 
     /// Forecast only: every obstructing natural tree must become paid-project
     /// removal work before this corridor is actually walkable.
     pub(crate) fn for_construction(state: &'a TickState, record: &'a SettlementRecord) -> Self {
-        Self::build(state, record, true)
+        Self::build(state, record, true, None)
     }
 
-    fn build(state: &'a TickState, record: &'a SettlementRecord, prepare_forest: bool) -> Self {
+    fn build(
+        state: &'a TickState,
+        record: &'a SettlementRecord,
+        prepare_forest: bool,
+        planting: Option<ScriptWorldBounds>,
+    ) -> Self {
         let mut network = Self {
             state,
             record,
             prepare_forest,
+            planting,
             columns: HashMap::new(),
             cells: Vec::new(),
             parents: Vec::new(),
@@ -621,11 +638,23 @@ impl<'a> Network<'a> {
     }
 
     fn column(&mut self, x: i32, z: i32) -> Column {
-        let (state, record, prepare_forest) = (self.state, self.record, self.prepare_forest);
-        *self
-            .columns
-            .entry((x, z))
-            .or_insert_with(|| sample(state, record, x, z, prepare_forest))
+        let (state, record, prepare_forest, planting) =
+            (self.state, self.record, self.prepare_forest, self.planting);
+        *self.columns.entry((x, z)).or_insert_with(|| {
+            let column = sample(state, record, x, z, prepare_forest);
+            if let Column::Ground { y, .. } = column
+                && planting.is_some_and(|crown| {
+                    (crown.min[0]..=crown.max[0]).contains(&x)
+                        && (crown.min[2]..=crown.max[2]).contains(&z)
+                        && y <= crown.max[1]
+                        && y + 2 >= crown.min[1]
+                })
+            {
+                Column::Occupied
+            } else {
+                column
+            }
+        })
     }
 
     /// Lot candidates in walking order: a reached road edge column and the
@@ -668,7 +697,7 @@ impl<'a> Network<'a> {
         let rotation = facing(blueprint, normal)?;
         let turn = Rotation::from_quarter_turns(rotation);
         let entrance = blueprint.level(1)?.rotated(turn).entrance.map(i32::from);
-        let [sx, _, sz] = blueprint.footprint(turn).map(i32::from);
+        let [sx, sy, sz] = blueprint.footprint(turn).map(i32::from);
         let [ox, oz] = match normal {
             [0, -1] => [door[0] - entrance[0], door[1] - (sz - 1)],
             [0, _] => [door[0] - entrance[0], door[1]],
@@ -684,6 +713,13 @@ impl<'a> Network<'a> {
         let Column::Ground { y: floor, .. } = self.column(door[0], door[1]) else {
             return None;
         };
+        if self.planting.is_some_and(|crown| {
+            let min = [ox, floor, oz];
+            let max = [ox + sx - 1, floor + sy - 1, oz + sz - 1];
+            (0..3).all(|axis| crown.min[axis] <= max[axis] && min[axis] <= crown.max[axis])
+        }) {
+            return None;
+        }
         ((verge_y - front[1]).abs() <= 1 && (floor - verge_y).abs() <= 1).then_some(Lot {
             origin: [ox, floor, oz],
             rotation,

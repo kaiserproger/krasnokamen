@@ -7,7 +7,7 @@ fn replanting_respects_the_future_crown_around_an_active_house() {
     for (dx, dz, planted) in [
         (-1, 2, false),
         (-4, 2, false),
-        (-5, 2, false),
+        (-5, 2, true),
         (-11, -11, true),
     ] {
         let (mut state, _, mut worker) =
@@ -26,6 +26,23 @@ fn replanting_respects_the_future_crown_around_an_active_house() {
         // The retained Spanish house was blocked by a replanted root one cell
         // outside its west boundary: the protected crown grew into the site.
         let base = [origin[0] + dx, 201, origin[2] + dz];
+        if matches!(dx, -4 | -5) {
+            let crown = mc_script::ScriptWorldBounds::new(
+                [base[0] - 4, base[1], base[2] - 4],
+                [base[0] + 4, base[1] + 64, base[2] + 4],
+            )
+            .unwrap();
+            assert_eq!(
+                crown.max[0],
+                origin[0] - i32::from(dx == -5),
+                "radius-four crown touches the west face at -4, ends one column short at -5"
+            );
+            assert_eq!(
+                crate::plugin_structures::settlement_builds::area_held(&state, crown),
+                dx == -4,
+                "touching the held site/corridor rejects; the next crown is disjoint"
+            );
+        }
         let dirt = block(&state, "minecraft:dirt", &[]);
         let sapling = block(&state, "minecraft:oak_sapling", &[]);
         state.world.set_block(base[0], base[1] - 1, base[2], dirt);
@@ -169,4 +186,44 @@ fn repeated_lumber_replants_leave_a_reachable_funded_house_lot() {
         );
     }
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+}
+
+#[test]
+fn unused_street_does_not_discard_renewable_timber_or_the_last_house_lot() {
+    use crate::settlements::construction;
+    let (mut state, slot, mut worker) =
+        crate::villager::mining_tests::fixture(buildings::BuildingKind::LumberCamp);
+    open_plan(&mut state);
+    let id = worker.settlement.unwrap();
+    state.settlements.get_mut(id).unwrap().radius = 48;
+    crate::villager::mining_tests::storage(&mut state, &worker, [1, 201, 1]);
+    construction::tests::fund(&mut state, "spanish_house", 1);
+    // This loaded avenue is on the grid, but other streets still serve the
+    // standing buildings and a funded Spanish home remains buildable.
+    let root = [-8, 201, 8];
+    let dirt = block(&state, "minecraft:dirt", &[]);
+    let sapling = block(&state, "minecraft:oak_sapling", &[]);
+    state.world.set_block(root[0], root[1] - 1, root[2], dirt);
+    worker.lumber_progress.base = root;
+    worker.lumber_progress.sapling = sapling;
+    worker.lumber_progress.has_target = true;
+    let mut changes = ChangeSet::default();
+    replant(&mut state, &mut changes, &mut worker);
+    assert_eq!(
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(sapling)
+    );
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&root)
+    );
+    state.entities.row_mut(slot).villager = Some(worker);
+    assert_eq!(
+        construction::request_build(&mut state, id, "spanish_house").unwrap(),
+        construction::OrderOutcome::Started,
+    );
 }
