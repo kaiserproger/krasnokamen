@@ -809,6 +809,12 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         })
         .unwrap();
     let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+    // The planner ranks every lot and breaks ties on the block position: every
+    // other lot is refused, and the sweep must then return this one.
+    // The litmus lot is the ranked winner: cheapest cut and fill, ties on the
+    // block position. The tree is planted where the planner will look.
+    let lot = super::site_tests::ranking_lot(&state, id, "spanish_fortress").lot;
+    let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
     let expected = Project {
         settlement: id,
         blueprint: "spanish_fortress".into(),

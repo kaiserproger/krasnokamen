@@ -944,3 +944,42 @@ fn a_restart_keeps_the_tie_winner() {
         "the tie winner does not depend on the cursor"
     );
 }
+
+/// The credited cut survives the persistence boundary: the storage stack, the
+/// changed block and the construction cursor all come back through the
+/// settlement record images the journal writes.
+#[test]
+fn a_cut_credit_block_and_cursor_survive_the_record_round_trip() {
+    let (mut state, id, builder) = fixture();
+    let site = only_lot(&mut state, id);
+    let pillar = pillar(&mut state, &site, "sand", "sand", 1);
+    let cuts = pillar.cells.len();
+    let sand = stock(&state, pillar.item);
+    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    complete(&mut state, id, builder);
+    assert_eq!(stock(&state, pillar.item), sand + cuts as i64);
+    let credited = stock(&state, pillar.item);
+    let cursor = state.settlements.get(id).unwrap().construction_cursor;
+    let cut_at = pillar.cells[0];
+    let after_cut = name_of(&state, cut_at).to_string();
+    assert_ne!(after_cut, "sand", "the column is really cut");
+    let slots = state.block_entities[&(1, 201, 1)].slots.clone();
+    // Every settlement row the journal writes goes out and comes back.
+    let images = state.settlements.take_images();
+    assert!(!images.is_empty(), "the settlement row is imaged");
+    for image in images {
+        state.settlements.apply_image(image);
+    }
+    assert_eq!(
+        state.settlements.get(id).unwrap().construction_cursor,
+        cursor,
+        "the cursor survives the record round trip"
+    );
+    assert_eq!(stock(&state, pillar.item), credited, "the credit survives");
+    assert_eq!(
+        &state.block_entities[&(1, 201, 1)].slots,
+        &slots,
+        "the storage slots survive"
+    );
+    assert_eq!(name_of(&state, cut_at), after_cut, "the cut block survives");
+}
