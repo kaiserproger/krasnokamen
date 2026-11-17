@@ -1352,6 +1352,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             if args.mobs or recipe.get("observer_anchors"):
                 anchors = (recipe["observer_anchors"] if recipe.get("observer_anchors") else
                            recipe["stress"]["anchors"] if recipe.get("stress", {}).get("kind") == "xp-orbs" else
+                           getattr(args, "observed_anchors", None) or
                            [region["anchor"] for index, region in enumerate(recipe["regions"])
                             if "coverage" not in recipe or recipe["coverage"][index]["active"]])
                 load.scale.dump(directory / "anchors.json", [anchors[n % len(anchors)] for n in range(args.clients)])
@@ -1617,8 +1618,15 @@ async def run(args: argparse.Namespace) -> int:
             recipe["regions"][-1]["commands"].extend(
                 f"gamerule minecraft:{name} {str(value).lower()}" for name, value in spawn_rules.items())
         if "coverage" in recipe:
+            stride = max(1, int(getattr(args, "observer_stride", 1) or 1))
+            active_regions = [index for index, row in enumerate(recipe["coverage"]) if row["active"]]
+            stride = min(stride, max(1, len(active_regions)))
+            observed = active_regions[::stride]
+            args.observed_anchors = ([recipe["regions"][index]["anchor"] for index in observed]
+                                     if stride > 1 else None)
             args.clients = (recipe["stress"]["players"] if args.xp_orbs is not None
-                            else sum(row["active"] for row in recipe["coverage"]))
+                            else len(observed))
+            result["conditions"]["observer_stride"] = stride
             result["conditions"]["clients"] = args.clients
             result["noncanonical"] = True
             result["variant"] = recipe["variant"]
@@ -1752,6 +1760,9 @@ def main() -> int:
                         help="saved filled-map frames: 0, 10000 or 100000 (smoke may use smaller counts)")
     parser.add_argument("--xp-players", type=int, choices=(0, 1, 100, 1000))
     parser.add_argument("--xp-locality", choices=("compact", "spread"))
+    parser.add_argument("--observer-stride", type=int, default=1,
+                        help="scale profiles only: keep one observer anchor per N active regions "
+                             "(cohort and pen coverage unchanged); for measuring the per-client slope")
     parser.add_argument("--spawn-mobs", choices=("on", "off"))
     parser.add_argument("--spawn-monsters", choices=("on", "off"))
     stress.add_argument("--churn-percent", type=int, choices=(0, 1, 10))
