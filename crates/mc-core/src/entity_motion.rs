@@ -474,8 +474,8 @@ pub(crate) fn step<S: BlockSampler>(
 /// the body left the previous tick with. Collisions and slot dressing step such
 /// bodies back and forth around their place, and facing every step swung them
 /// up to 90 degrees per tick (receipts/BattleJitterClient). A steady walk turns
-/// whatever its speed: each step agrees with the previous velocity. A deliberate
-/// turn-around holds for one tick, then turns.
+/// at any speed above the floor: each step agrees with the previous velocity. A
+/// deliberate turn-around holds for one tick, then turns.
 ///
 /// Cavalry residual: horse turns at gallop speed are steering, not
 /// reversals, and this rule leaves them.

@@ -4,8 +4,9 @@
 //! Facing is one exception: a moving battle body without a look target holds
 //! its rotation on a tiny or reversing step (`entity_motion::step`, the
 //! battle-only `battle_holds_facing` rule), so soldiers dressing their slot do
-//! not swing. Remaining cavalry residual: horse turns at gallop speed are
-//! steering and still swing.
+//! not swing. It covers every battle row that is not standing: foot soldiers,
+//! horses and mounted riders. Remaining cavalry residual: horse turns at
+//! gallop speed are steering and still swing.
 
 pub(crate) mod archery;
 pub(crate) mod cavalry;

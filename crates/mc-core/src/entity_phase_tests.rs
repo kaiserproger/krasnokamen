@@ -1018,6 +1018,48 @@ fn battle_rows_hold_facing_on_reversing_steps_and_rest_matches_full_step() {
     }
 }
 
+/// A mounted battle rider is not a standing row (`taming::suppress_ai` is
+/// fenced by `!battle`), so the facing rule covers it. Without a target its own
+/// step does not move it sideways; it keeps yaw, pitch and head, where the old
+/// look would pitch it toward its post-step velocity.
+#[test]
+fn battle_rider_without_target_holds_yaw_pitch_and_head() {
+    let (mut state, horse_slot) = resting_mob("minecraft:horse");
+    let pos = state.entities.pos(horse_slot);
+    let horse = state.entities.body(horse_slot).id;
+    let husk = state.registry.entity_type_id("minecraft:husk").unwrap();
+    let rider = state.spawn_mob(husk, pos, 20.0);
+    let rider_slot = state.entities.slot_of(rider).unwrap();
+    state.entities.set_faction(horse_slot, 1);
+    state.entities.set_faction(rider_slot, 1);
+    crate::battle::cavalry::mount(&mut state, rider, horse).unwrap();
+    crate::mounts::tick(&mut state, &mut crate::boundary::ChangeSet::default());
+    assert_eq!(
+        state.entities.row(rider_slot).entity_life.mount.vehicle,
+        Some(horse)
+    );
+    state.entities.set_rot(rider_slot, 30.0, 12.0);
+    let rotation = state.entities.rot(rider_slot);
+    let (write, _) = full_step_without_early_rest(&state, rider_slot);
+    let start = state.entities.pos(rider_slot);
+    assert_eq!(
+        [write.pos[0], write.pos[2]].map(f64::to_bits),
+        [start[0], start[2]].map(f64::to_bits)
+    );
+    assert_eq!(
+        write.rotation.map(f32::to_bits),
+        rotation.map(f32::to_bits),
+        "the rider holds yaw, pitch and head"
+    );
+    let old = crate::entity_motion::look(
+        rotation,
+        mc_physics::Vec3::new(write.pos[0], write.pos[1], write.pos[2]),
+        mc_physics::Vec3::new(write.vel[0], write.vel[1], write.vel[2]),
+        None,
+    );
+    assert_ne!(old[1], rotation[1], "the old look pitches the rider");
+}
+
 #[test]
 fn idle_wander_decision_rest_matches_full_step_for_two_episodes() {
     for (species, creative) in [
