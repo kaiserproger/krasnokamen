@@ -1,0 +1,13 @@
+diff --git a/crates/mc-world-tools/src/world_maintenance.rs b/crates/mc-world-tools/src/world_maintenance.rs
+index 29c743c9e..9fe71c4b2 100644
+--- a/crates/mc-world-tools/src/world_maintenance.rs
++++ b/crates/mc-world-tools/src/world_maintenance.rs
+@@ -139,7 +139,7 @@ fn prune_stopped(
+         let reader = store.checkpoint_reader().map_err(storage)?;
+         mc_core::native_checkpoint::published_manifest(config, &reader)?.tick
+     };
+-    let _ = manifest_tick;
++    mc_core::native_checkpoint::require_checkpointed_tail(config, manifest_tick)?;
+     let (keep_min, keep_max) = rectangle(center, request.keep_radius);
+     let chunks = store
+         .prune_pristine(&NativePruneRequest {
