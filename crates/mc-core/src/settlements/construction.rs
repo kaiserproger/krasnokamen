@@ -2023,6 +2023,8 @@ pub(crate) struct BuilderWatch {
     idle: u64,
     reported: bool,
     refusal: Option<&'static str>,
+    /// First action, consumed by the one repeated-stall report for this episode.
+    recovery: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
 }
@@ -2059,6 +2061,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             idle: 0,
             reported: false,
             refusal: None,
+            recovery: None,
             shunned: Vec::new(),
         });
     let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
@@ -2068,6 +2071,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         watch.idle = 0;
         watch.reported = false;
         watch.refusal = None;
+        watch.recovery = None;
         return;
     }
     if !on_shift {
@@ -2081,6 +2085,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let report = !watch.reported;
     watch.reported = true;
     let refusal = watch.refusal;
+    let failed_action = if report { None } else { watch.recovery.take() };
     let incumbent = residents(state, id).find(|&slot| {
         state.entities.body(slot).alive
             && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
@@ -2120,31 +2125,71 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     } else {
         "no_builder"
     };
-    let recovery =
+    // Capture the stalled incumbent before recovery clears its navigation and
+    // profession. Material diagnostics use the same source selection as work.
+    let material = report
+        .then(|| {
+            executor::next_material(state, id, &project.structure)
+                .ok()
+                .flatten()
+        })
+        .flatten();
+    let builder = incumbent.map(|slot| state.entities.row(slot).uuid);
+    let position = incumbent.map(|slot| state.entities.pos(slot));
+    let villager = incumbent.and_then(|slot| state.entities.row(slot).villager.as_deref());
+    let carried = material.zip(villager).map(|((item, _), v)| {
+        v.inventory
+            .iter()
+            .flatten()
+            .filter(|stack| stack.item_id == item && stack.count > 0)
+            .map(|stack| stack.count as u32)
+            .sum::<u32>()
+    });
+    let pickup = material
+        .zip(position)
+        .and_then(|((item, _), pos)| executor::pickup_point(state, id, item, pos));
+    let navigation = villager.and_then(|v| v.navigation_target);
+    let navigation_failed = villager.map(|v| v.navigation_search_failed);
+    let preparation =
         (protected && snapshot.consumed.is_empty()).then(|| retry_preparation(state, id, &project));
+    let recovery = if preparation.as_ref().is_some_and(|result| result.is_ok()) {
+        "preparation_cancelled"
+    } else if snapshot.pause_reason.is_some() {
+        "project_paused"
+    } else if let Some(slot) = incumbent {
+        if release_incumbent(state, id, slot) {
+            if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+                watch.shunned.retain(|&(_, until)| tick < until);
+                watch
+                    .shunned
+                    .push((builder.unwrap(), tick.saturating_add(BUILDER_SHUN_TICKS)));
+            }
+            "builder_released"
+        } else {
+            "builder_retained"
+        }
+    } else {
+        "no_builder"
+    };
     if report {
+        if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+            watch.recovery = Some(recovery);
+        }
         tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
             origin = ?project.origin, stage = snapshot.current_stage_index,
-            work = snapshot.completed_work_units, ?next, cause, ?recovery,
+            work = snapshot.completed_work_units, ?next, cause, recovery, ?preparation,
+            ?builder, ?position, ?navigation, ?navigation_failed,
+            material = ?material.and_then(|(item, _)| state.registry.items.name_of(item)),
+            required = ?material.map(|(_, count)| count), ?carried, ?pickup,
+            last_refusal = ?refusal,
             shift_ticks = BUILDER_STALL_SHIFT_TICKS, "settlement_construction_stalled");
     }
-    if recovery.is_some_and(|result| result.is_ok()) {
-        return;
-    }
-    if snapshot.pause_reason.is_some() {
-        return;
-    }
-    let Some(slot) = incumbent else {
-        return;
-    };
-    let uuid = state.entities.row(slot).uuid;
-    if release_incumbent(state, id, slot)
-        && let Some(watch) = state.settlements.builder_watch.get_mut(&id)
-    {
-        watch.shunned.retain(|&(_, until)| tick < until);
-        watch
-            .shunned
-            .push((uuid, tick.saturating_add(BUILDER_SHUN_TICKS)));
+    if let Some(failed_action) = failed_action {
+        tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
+            origin = ?project.origin, stage = snapshot.current_stage_index,
+            work = snapshot.completed_work_units, ?next, cause, failed_action, recovery,
+            shift_ticks = BUILDER_STALL_SHIFT_TICKS,
+            "settlement_construction_recovery_failed");
     }
 }
 
@@ -2158,6 +2203,7 @@ pub(crate) fn note_build_refusal(
             mc_script::ScriptOperationFailure::Blocked => "executor_blocked",
             mc_script::ScriptOperationFailure::Busy => "reserved_worker",
             mc_script::ScriptOperationFailure::InsufficientItems => "insufficient_carry_or_storage",
+            mc_script::ScriptOperationFailure::Capacity => "executor_capacity",
             mc_script::ScriptOperationFailure::Unloaded => "unloaded_worksite",
             _ => "executor_refused",
         });
@@ -3125,6 +3171,10 @@ mod planner_tests;
 #[cfg(test)]
 #[path = "construction_site_tests.rs"]
 mod site_tests;
+
+#[cfg(test)]
+#[path = "construction_stall_tests.rs"]
+mod stall_tests;
 
 #[cfg(test)]
 #[path = "construction_fortification_tests.rs"]
