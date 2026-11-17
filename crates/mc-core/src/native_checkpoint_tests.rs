@@ -1474,3 +1474,48 @@ fn pre_rename_world_is_refused_with_its_conversion_path() {
     assert!(error.contains("identity mismatch"), "{error}");
     assert!(!error.contains("Krasnokamen rename"), "{error}");
 }
+
+/// The tail guard reads published batch names only: `.tmp` files, foreign names
+/// and batches the checkpoint covers are not a tail, while any published range
+/// above the manifest is refused; enumeration failures fail closed.
+#[test]
+fn checkpointed_tail_guard_reads_published_batch_names() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let journal = directory.path().join("journal");
+    // No journal directory at all: nothing is above the manifest.
+    require_checkpointed_tail(&config, 7).expect("missing journal");
+
+    std::fs::create_dir_all(&journal).unwrap();
+    // Unpublished temp files and foreign names are not published batches.
+    std::fs::write(
+        journal.join("batch-00000000000000000008-00000000000000000009.bin.tmp"),
+        b"",
+    )
+    .unwrap();
+    std::fs::write(journal.join("notes.txt"), b"").unwrap();
+    std::fs::write(journal.join("batch-garbage.bin"), b"").unwrap();
+    require_checkpointed_tail(&config, 7).expect("no published batch above tick 7");
+
+    // A published batch the checkpoint already covers is not a tail.
+    std::fs::write(
+        journal.join("batch-00000000000000000003-00000000000000000007.bin"),
+        b"",
+    )
+    .unwrap();
+    require_checkpointed_tail(&config, 7).expect("covered batch");
+
+    // A gapped or foreign range above the manifest is refused conservatively,
+    // and the range reported spans every published batch above it.
+    for (lo, hi) in [(9_u64, 11_u64), (13, 13)] {
+        std::fs::write(journal.join(format!("batch-{lo:020}-{hi:020}.bin")), b"").unwrap();
+    }
+    let error = require_checkpointed_tail(&config, 7).expect_err("tail above the manifest");
+    assert!(error.to_string().contains(UNCHECKPOINTED_TAIL), "{error}");
+    assert!(error.to_string().contains("9..=13"), "{error}");
+
+    // Enumeration failures fail closed instead of reading as "no tail".
+    std::fs::remove_dir_all(&journal).unwrap();
+    std::fs::write(&journal, b"not a directory").unwrap();
+    require_checkpointed_tail(&config, 7).expect_err("enumeration error");
+}

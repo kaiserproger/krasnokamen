@@ -165,6 +165,11 @@ tick, acknowledge captured revisions and prune wholly covered WAL batches.
 A pre-commit failure publishes and prunes nothing; a post-commit lost ACK or
 failed prune leaves a recoverable checkpoint and possibly redundant WAL. Dirty
 captured chunk revisions remain pinned until the matching acknowledgement.
+Offline `world prune` therefore refuses a store whose last shutdown left a
+published tail above the manifest tick
+(`the last shutdown did not checkpoint the published journal tail`) instead of
+judging chunks only the WAL changed; the journal is kept and replays on the next
+start, and a start and stop whose final checkpoint commits clears the refusal.
 Explicit saves queue behind the current checkpoint. Shutdown requests a final
 checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)
 for the entity checkpoint design.

@@ -628,6 +628,93 @@ pub(crate) fn read_refusal(config: &CoreConfig, error: mc_world::native::NativeE
     }
 }
 
+/// Marker of [`require_checkpointed_tail`]'s refusal: the published WAL tail is
+/// not covered by the store's checkpoint. Named so tests, docs and the operator
+/// message cannot drift apart.
+pub const UNCHECKPOINTED_TAIL: &str =
+    "the last shutdown did not checkpoint the published journal tail";
+
+/// The manifest a store publishes, without materialising chunks or entities.
+pub fn published_manifest(
+    config: &CoreConfig,
+    reader: &NativeCheckpointReader,
+) -> Result<CheckpointManifest, CoreError> {
+    let checkpoint = reader
+        .read_checkpoint_metadata()
+        .map_err(|e| read_refusal(config, e))?;
+    manifest_of(&checkpoint.globals)
+}
+
+/// Decode the checkpoint manifest from the store's `checkpoint` global record.
+fn manifest_of(
+    globals: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
+) -> Result<CheckpointManifest, CoreError> {
+    let record = globals
+        .get("checkpoint")
+        .ok_or_else(|| CoreError::Storage("native checkpoint: missing checkpoint record".into()))?;
+    serde_json::from_slice(&record.payload)
+        .map_err(|e| CoreError::Storage(format!("native checkpoint: {e}")))
+}
+
+/// Refuse a store whose published journal batches end above its checkpoint
+/// manifest: the shutdown that should have folded them in did not publish.
+///
+/// The scan reads batch names only, which is enough right after a successful
+/// [`Core::open`](crate::core::Core::open): recovery already refused gaps, torn
+/// frames and batches it could not replay (`crate::journal`), so a surviving
+/// batch is a real published part of this world. A batch ending at or below the
+/// manifest is covered or waiting for a best-effort unlink and is ignored, the
+/// same predicate [`crate::journal::prune_batches_through`] deletes by; what
+/// remains is the tail, `hi > manifest_tick`. Foreign or gapped names above the
+/// manifest are refused conservatively.
+///
+/// The guard writes nothing; the caller must not classify or delete chunks when
+/// it refuses.
+pub fn require_checkpointed_tail(config: &CoreConfig, manifest_tick: u64) -> Result<(), CoreError> {
+    let journal = config.world_dir.join("journal");
+    let entries = match std::fs::read_dir(&journal) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(CoreError::Storage(format!(
+                "journal {}: {error}",
+                journal.display()
+            )));
+        }
+    };
+    let mut tail: Option<(u64, u64)> = None;
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            CoreError::Storage(format!("journal {}: {error}", journal.display()))
+        })?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        // Unpublished `.bin.tmp` files and foreign names are not batches.
+        let Some((lo, hi)) = crate::journal::parse_batch_name(name) else {
+            continue;
+        };
+        if hi <= manifest_tick {
+            continue;
+        }
+        tail = Some(match tail {
+            Some((low, high)) => (low.min(lo), high.max(hi)),
+            None => (lo, hi),
+        });
+    }
+    let Some((lo, hi)) = tail else {
+        return Ok(());
+    };
+    Err(CoreError::Storage(format!(
+        "{UNCHECKPOINTED_TAIL}: journal ticks {lo}..={hi} are above the store checkpoint at tick \
+         {manifest_tick} (the shutdown during this prune did not checkpoint them; see the \
+         checkpoint error logged above). Nothing was pruned; the journal is kept and replays on the \
+         next start. Fix the logged cause, start the server and stop it until the stop logs \
+         \"checkpoint committed\", then rerun prune."
+    )))
+}
+
 /// Validate and hydrate one stored native entity exactly as recovery does,
 /// with the identifying context (dimension, store path, chunk, wire-id, UUID,
 /// type) on every refusal. Shared by recovery and the read-only census.
@@ -708,9 +795,7 @@ pub fn recover_with_reader(
     let checkpoint = reader
         .read_checkpoint_metadata()
         .map_err(|e| read_refusal(config, e))?;
-    let manifest: CheckpointManifest =
-        serde_json::from_slice(&checkpoint.globals["checkpoint"].payload)
-            .map_err(|e| CoreError::Storage(format!("native checkpoint: {e}")))?;
+    let manifest = manifest_of(&checkpoint.globals)?;
     validate_manifest(&manifest)?;
     let expected = generation_records(config)?;
     for key in ["generation", "dimensions"] {
