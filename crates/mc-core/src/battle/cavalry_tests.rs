@@ -815,6 +815,14 @@ struct SweepPass {
     /// blocks per second.
     ridden: [f64; 3],
     rider_pos: [f64; 3],
+    /// The rider's identity and whether the cavalry pass recorded him as an
+    /// at-risk exposure (an unseated member of a planned regiment that passed
+    /// every other `sweep_drives` guard).
+    rider_id: EntityId,
+    exposed: bool,
+    /// The `Battle exposure` lines the recorded episode produced (episode, then
+    /// summary), captured after the fixture's halt.
+    exposure: Vec<String>,
 }
 
 /// A mounted regiment of one rider at its slot (x -6, z -8) and enemy foot
@@ -824,6 +832,22 @@ struct SweepPass {
 /// `leave_vehicle` sets him 1.5 blocks beside it, so his own destination, his
 /// slot, is not where he stands.
 fn sweep_pass(flank: bool, dismounted: bool) -> SweepPass {
+    sweep_pass_ticks(flank, dismounted, false)
+}
+
+/// The same pass with the exposure tracker disabled, for the equality control.
+fn sweep_pass_unrecorded(flank: bool, dismounted: bool, closing: bool) -> SweepPass {
+    sweep_pass_with(flank, dismounted, closing, false)
+}
+
+/// With `closing`, a second battle tick: the body moves 3 blocks (the movement
+/// its exposed tick causes) and a target ends the episode, which is what makes
+/// the episode's closing sample observable.
+fn sweep_pass_ticks(flank: bool, dismounted: bool, closing: bool) -> SweepPass {
+    sweep_pass_with(flank, dismounted, closing, true)
+}
+
+fn sweep_pass_with(flank: bool, dismounted: bool, closing: bool, record: bool) -> SweepPass {
     use super::super::formation::{Order, RegimentSpec, slot_position};
     let (mut state, _, pos) = fixture();
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
@@ -900,6 +924,9 @@ fn sweep_pass(flank: bool, dismounted: bool) -> SweepPass {
     let m = &battle.formation.members[rider_bi];
     assert!(m.alive && !m.wounded && !m.routing);
     assert!(battle.columns.active[rider_bi] && battle.columns.targets[rider_bi].is_none());
+    // The battle step of a tick is what feeds the tracker its condition tick.
+    battle.exposure.set_enabled(record);
+    battle.exposure.begin(100);
     super::super::steering::step(&frame, &mut battle, &mut super::super::Output::default());
     let foot = battle.columns.drive[rider_bi];
     let mut combat = CombatRuntime::default();
@@ -916,6 +943,33 @@ fn sweep_pass(flank: bool, dismounted: bool) -> SweepPass {
         let length = mth::length2(heading[0], heading[1]);
         [heading[0] / length * 4.6, 0.0, heading[1] / length * 4.6]
     });
+    let exposed = battle.exposure.is_exposed(rider);
+    if closing {
+        // The exposed tick's own movement, then a guard that ends the episode:
+        // the wire would carry this step under the next published tick.
+        let rider_slot = slot(&state, rider);
+        let start = state.entities.pos(rider_slot);
+        let moved = [start[0] + 3.0, start[1], start[2]];
+        state.entities.set_pos(rider_slot, moved);
+        prepare(&state, &mut battle, 1);
+        let rider_bi = index(&state, &battle, rider);
+        battle.columns.targets[rider_bi] = Some(super::super::targeting::EnemyTarget {
+            id: EntityId(-2),
+            pos: [moved[0] + 2.0, moved[1], moved[2]],
+            distance: 2.0,
+        });
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick: 1,
+        };
+        battle.exposure.begin(101);
+        super::super::steering::step(&frame, &mut battle, &mut super::super::Output::default());
+        step(&frame, &mut battle, &mut combat);
+    }
+    battle.exposure.halt(None);
+    let exposure = battle.exposure.lines().to_vec();
     SweepPass {
         plan,
         foot,
@@ -923,6 +977,9 @@ fn sweep_pass(flank: bool, dismounted: bool) -> SweepPass {
         horse: battle.columns.drive[horse_bi],
         ridden,
         rider_pos,
+        rider_id: rider,
+        exposed,
+        exposure,
     }
 }
 
@@ -990,7 +1047,139 @@ fn a_dismounted_rider_keeps_his_foot_drive_under_a_flank() {
     assert_walker_keeps_his_foot_drive(&walk, &ride);
 }
 
-/// A horse dies under its rider while his regiment chases a broken foot
+/// The campaign's D1 bound needs server-truth exposure, not a wire proxy: the
+/// dismounted rider of a chase or a flank is recorded (he is the member the
+/// pre-fix code would have driven), the seated rider who takes the plan is not.
+/// The recorded line names the body, the plan and the episode's duration.
+#[test]
+fn a_dismounted_sweep_member_is_recorded_exposure_and_a_seated_one_is_not() {
+    for flank in [false, true] {
+        let walk = sweep_pass(flank, true);
+        let ride = sweep_pass(flank, false);
+        assert!(
+            walk.exposed,
+            "a dismounted rider of a planned regiment (flank={flank}) is the pre-fix skate case"
+        );
+        assert!(
+            !ride.exposed,
+            "a seated rider takes the plan, so he is not exposed (flank={flank})"
+        );
+        let episode = walk
+            .exposure
+            .first()
+            .unwrap_or_else(|| panic!("an exposure episode is logged at halt (flank={flank})"));
+        assert!(
+            episode.starts_with(&format!("Battle exposure: id={} ", walk.rider_id.0)),
+            "the line names the exposed body: {episode}"
+        );
+        let plan = if flank {
+            " plan=flank "
+        } else {
+            " plan=chase "
+        };
+        assert!(episode.contains(plan), "the line names the plan: {episode}");
+        assert!(
+            episode.contains(" tick=100 ticks=1 motion=101-101 "),
+            "the condition tick and the tick the motion is published under: {episode}"
+        );
+        assert!(
+            episode.ends_with("outcome=stopped"),
+            "halt closes it: {episode}"
+        );
+        assert!(
+            walk.exposure
+                .iter()
+                .any(|line| line
+                    .starts_with("Battle exposure summary: start=100 episodes=1 bodies=1")),
+            "the halt summary counts the one at-risk body: {:?}",
+            walk.exposure
+        );
+    }
+}
+
+/// The guard set is evaluated before the tick's motion, so the episode's
+/// closing sample is what carries the movement of its last exposed tick. One
+/// exposed tick, a 3-block move, then a target: the line must show that 3
+/// blocks, not zero, and close as `targeted`.
+#[test]
+fn an_episode_carries_the_movement_of_its_last_exposed_tick() {
+    let pass = sweep_pass_ticks(false, true, true);
+    assert!(pass.exposed, "the first tick is an exposure");
+    let episode = pass
+        .exposure
+        .iter()
+        .find(|line| line.starts_with("Battle exposure: "))
+        .unwrap_or_else(|| panic!("the closed episode is logged: {:?}", pass.exposure));
+    assert!(episode.ends_with("outcome=targeted"), "{episode}");
+    assert!(
+        episode.contains(" tick=100 ticks=1 motion=101-101 "),
+        "{episode}"
+    );
+    let field = |name: &str| -> f64 {
+        let start = episode
+            .find(name)
+            .unwrap_or_else(|| panic!("{name} in {episode}"))
+            + name.len();
+        let rest = &episode[start..];
+        let end = rest.find(' ').unwrap_or(rest.len());
+        rest[..end]
+            .parse()
+            .unwrap_or_else(|_| panic!("{name} parses in {episode}"))
+    };
+    assert!(
+        field("travel=") > 2.0,
+        "the last exposed tick's movement is in the episode: {episode}"
+    );
+    assert!(
+        field("peak=") > 2.0,
+        "the server's own excess flag sees the pre-fix skate: {episode}"
+    );
+}
+
+/// Recording moves nothing: the same fixture, run with the tracker enabled and
+/// disabled, produces identical plans, drives and positions. This is the
+/// telemetry-mutation control's counterpart — the mutation must change the log
+/// and nothing else.
+#[test]
+fn exposure_recording_changes_no_drive_plan_or_position() {
+    for flank in [false, true] {
+        for closing in [false, true] {
+            let recorded = sweep_pass_ticks(flank, true, closing);
+            let silent = sweep_pass_unrecorded(flank, true, closing);
+            assert!(recorded.exposed, "the enabled tracker records the exposure");
+            assert!(
+                !silent.exposed && silent.exposure.is_empty(),
+                "the disabled one records nothing"
+            );
+            assert_eq!(
+                recorded.plan, silent.plan,
+                "the plan is unchanged (flank={flank})"
+            );
+            assert_eq!(
+                recorded.foot.map(f64::to_bits),
+                silent.foot.map(f64::to_bits),
+                "the foot drive is unchanged (flank={flank}, closing={closing})"
+            );
+            assert_eq!(
+                recorded.rider.map(f64::to_bits),
+                silent.rider.map(f64::to_bits),
+                "the rider's drive is unchanged (flank={flank}, closing={closing})"
+            );
+            assert_eq!(
+                recorded.horse.map(f64::to_bits),
+                silent.horse.map(f64::to_bits),
+                "the horse's drive is unchanged (flank={flank}, closing={closing})"
+            );
+            assert_eq!(
+                recorded.rider_pos.map(f64::to_bits),
+                silent.rider_pos.map(f64::to_bits),
+                "the body's position is unchanged (flank={flank}, closing={closing})"
+            );
+        }
+    }
+}
+
+/// A horse dies under his rider while his regiment chases a broken foot
 /// regiment about 40 blocks ahead. From the next battle tick on, the rider walks
 /// back to his slot at foot speed; he never skates on toward the chase point.
 #[test]
