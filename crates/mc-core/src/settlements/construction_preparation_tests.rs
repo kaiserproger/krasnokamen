@@ -224,3 +224,315 @@ fn one_owner_scan_shares_a_registered_root_proof_across_candidate_lots() {
     assert!(pass.report.examined > 1);
     assert_eq!(forestry::proof_builds() - before, 1);
 }
+
+/// Add `count` of `name` to the first free slot of the bootstrap chest.
+fn add_stock(state: &mut TickState, name: &str, count: i32) {
+    let item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse(name).unwrap())
+        .unwrap();
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    let slot = slots
+        .iter_mut()
+        .find(|slot| slot.is_empty())
+        .expect("free chest slot");
+    *slot = mc_data::ItemStack::new(item, count);
+}
+
+fn raised_lot(id: super::super::SettlementId) -> Project {
+    Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        // Three blocks above the plateau: two fill rows below the authored
+        // floor, and still inside the site's height variance.
+        origin: [10, 203, 10],
+        rotation: 0,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+        borrowed_builder: None,
+    }
+}
+
+/// Item path of a planned cell's bill, e.g. `dirt`, without an inline id.
+fn resource_path(cell: &executor::PlannedCell) -> &str {
+    cell.resource
+        .as_deref()
+        .and_then(|resource| resource.split_once(':'))
+        .map_or("", |(_, path)| path)
+}
+
+/// The plan's fill cells: billed dirt at or below the authored floor. Authored
+/// cells are excluded because their material is the blueprint's own bill.
+fn fill_coords(cells: &[executor::PlannedCell], floor: i32) -> Vec<[i32; 3]> {
+    cells
+        .iter()
+        .filter(|cell| cell.at[1] <= floor && resource_path(cell) == "dirt")
+        .map(|cell| cell.at)
+        .collect()
+}
+
+/// The authored bill is reserved before the fill is chosen: a chest holding
+/// exactly the walls' cobblestone and no dirt leaves the fill cells as dirt, so
+/// the walls can never be starved by the floor's substrate.
+#[test]
+fn fill_does_not_eat_the_authored_bill() {
+    let (mut state, id, _) = super::super::tests::fixture();
+    super::super::tests::open_plan(&mut state);
+    let project = raised_lot(id);
+    super::super::tests::fund(&mut state, "storage", 1);
+    let (_, mut cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let fill = fill_coords(&cells, project.origin[1]);
+    assert!(!fill.is_empty(), "a raised floor needs fill");
+    let images = executor::source_images(&state, id);
+    super::super::filler::apply_filler(&state, &project, &mut cells, &images);
+    for at in &fill {
+        let cell = cells.iter().find(|cell| cell.at == *at).unwrap();
+        assert_eq!(
+            resource_path(cell),
+            "dirt",
+            "the walls' material never becomes fill: {at:?}"
+        );
+    }
+}
+
+/// Stock beyond the authored bill is the only fill candidate: the same lot then
+/// charges cobblestone for exactly that remainder, top layer first.
+#[test]
+fn fill_takes_only_the_remainder_after_the_bill() {
+    let (mut state, id, _) = super::super::tests::fixture();
+    super::super::tests::open_plan(&mut state);
+    let project = raised_lot(id);
+    super::super::tests::fund(&mut state, "storage", 1);
+    add_stock(&mut state, "cobblestone", 48);
+    let (_, mut cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let fill = fill_coords(&cells, project.origin[1]);
+    assert!(fill.len() > 48, "the extra stock fits in the fill");
+    let images = executor::source_images(&state, id);
+    super::super::filler::apply_filler(&state, &project, &mut cells, &images);
+    let filled: Vec<_> = fill
+        .iter()
+        .filter(|at| {
+            cells
+                .iter()
+                .any(|cell| cell.at == **at && resource_path(cell) == "cobblestone")
+        })
+        .collect();
+    assert_eq!(filled.len(), 48, "only the stock beyond the bill is spent");
+    let top = fill.iter().map(|at| at[1]).max().unwrap();
+    assert!(
+        fill.iter()
+            .filter(|at| at[1] == top)
+            .all(|at| filled.contains(&at)),
+        "the remainder fills from the top layer down"
+    );
+}
+
+/// Stock, for the filler-relevant materials only, exactly what the authored
+/// bill's crafting chain reserves: the stone its bricks and stairs consume.
+/// Other bill items cannot become fill, so they are not stocked here.
+fn stock_reserved_fillers(state: &mut TickState, blueprint: &str) -> Vec<(u32, u32)> {
+    let materials = blueprints::get(&state.registry, blueprint)
+        .expect("catalogue blueprint")
+        .level(1)
+        .expect("level one")
+        .materials
+        .clone();
+    let reserve = super::super::filler::plan_reserve(state, &materials);
+    let mut stocked = Vec::new();
+    for name in ["stone", "cobblestone"] {
+        let Some(item) = mc_data::Identifier::parse(name)
+            .ok()
+            .and_then(|id| state.registry.items.id_of(&id))
+        else {
+            continue;
+        };
+        let count = reserve.get(&item).copied().unwrap_or(0);
+        let mut quantity = i32::try_from(count).expect("fits an inventory");
+        stocked.push((item, u32::try_from(quantity).unwrap()));
+        let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+        let mut index = slots.iter().position(|slot| slot.is_empty()).unwrap_or(0);
+        while quantity > 0 {
+            let take = quantity.min(64);
+            slots[index] = mc_data::ItemStack::new(item, take);
+            index += 1;
+            quantity -= take;
+        }
+    }
+    stocked
+}
+
+/// A Spanish fortress needs stone for its bricks and brick stairs. With the whole
+/// brick stone stocked and cobblestone but no dirt, the fill must spend
+/// cobblestone and leave that stone alone.
+#[test]
+fn fortress_fill_spends_cobblestone_and_keeps_the_brick_stone() {
+    let (mut state, id, _) = super::super::tests::fixture();
+    super::super::tests::open_plan(&mut state);
+    let mut project = raised_lot(id);
+    project.blueprint = "spanish_fortress".into();
+    let stocked = stock_reserved_fillers(&mut state, "spanish_fortress");
+    let stone = stocked
+        .iter()
+        .find(|(item, _)| {
+            state
+                .registry
+                .items
+                .name_of(*item)
+                .is_some_and(|name| name.path() == "stone")
+        })
+        .map(|(item, count)| (*item, *count))
+        .expect("the brick chain reserves stone");
+    assert!(stone.1 > 0, "the chain's stone is not empty");
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let fill = fill_coords(&cells, project.origin[1]);
+    assert!(!fill.is_empty(), "an authored house floor needs fill");
+    for _ in 0..fill.len().div_ceil(64) {
+        add_stock(&mut state, "cobblestone", 64);
+    }
+    let images = executor::source_images(&state, id);
+    let (_, mut cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    super::super::filler::apply_filler(&state, &project, &mut cells, &images);
+    for at in &fill {
+        let cell = cells.iter().find(|cell| cell.at == *at).unwrap();
+        assert_eq!(
+            resource_path(cell),
+            "cobblestone",
+            "the fill spends the cut's own cobblestone: {at:?}"
+        );
+    }
+    assert!(
+        super::super::super::construction_crafting::can_fund(
+            &state,
+            &[(stone.0, stone.1)],
+            &images
+        ),
+        "every unit of the brick chain's stone is still in storage"
+    );
+}
+
+/// The reservation, not the material order, is what keeps a short fill off the
+/// walls' stone: with half the cobblestone and no dirt the fill stops at dirt —
+/// the honest wait — and never bills the brick stone.
+#[test]
+fn fortress_fill_stops_at_dirt_rather_than_billing_the_brick_stone() {
+    let (mut state, id, _) = super::super::tests::fixture();
+    super::super::tests::open_plan(&mut state);
+    let mut project = raised_lot(id);
+    project.blueprint = "spanish_fortress".into();
+    // The chain's own stone, and nothing else the reserve would stock.
+    let stocked = stock_reserved_fillers(&mut state, "spanish_fortress");
+    let stone = stocked
+        .iter()
+        .find(|(item, _)| {
+            state
+                .registry
+                .items
+                .name_of(*item)
+                .is_some_and(|name| name.path() == "stone")
+        })
+        .map(|(item, count)| (*item, *count))
+        .expect("the brick chain reserves stone");
+    assert!(stone.1 > 0, "the chain's stone is not empty");
+    let cobble = mc_data::Identifier::parse("cobblestone")
+        .ok()
+        .and_then(|id| state.registry.items.id_of(&id))
+        .expect("cobblestone item");
+    for slot in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if !slot.is_empty() && slot.item_id == cobble {
+            *slot = mc_data::ItemStack::EMPTY;
+        }
+    }
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let fill = fill_coords(&cells, project.origin[1]);
+    let half = fill.len() / 2;
+    let mut left = half;
+    while left > 0 {
+        let take = left.min(64);
+        add_stock(&mut state, "cobblestone", i32::try_from(take).unwrap());
+        left -= take;
+    }
+    let images = executor::source_images(&state, id);
+    let (_, mut cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    super::super::filler::apply_filler(&state, &project, &mut cells, &images);
+    let mut cobbled = 0;
+    for at in &fill {
+        let cell = cells.iter().find(|cell| cell.at == *at).unwrap();
+        let path = resource_path(cell);
+        assert_ne!(
+            path, "stone",
+            "the fill never bills the brick stone: {at:?}"
+        );
+        if path == "cobblestone" {
+            cobbled += 1;
+        }
+    }
+    assert_eq!(
+        cobbled, half,
+        "the fill spends exactly the cobblestone rate"
+    );
+    let bill = super::super::cell_bill(&state, &cells).expect("bill");
+    assert!(
+        bill.iter().all(|(item, _)| *item != stone.0),
+        "no planned cell bills stone: the brick chain keeps it"
+    );
+    assert!(
+        bill.iter().any(|(item, _)| {
+            state
+                .registry
+                .items
+                .name_of(*item)
+                .is_some_and(|name| name.path() == "dirt")
+        }),
+        "the shortfall waits as dirt instead of spending the walls' stone"
+    );
+}
+
+/// The outpost path (`begin`, which founding calls) reserves the same chain, so
+/// an outpost lot cannot spend its own walls' stone either.
+#[test]
+fn outpost_begin_reserves_the_brick_chain_for_its_fill() {
+    let (mut state, id, _) = super::super::tests::fixture();
+    super::super::tests::open_plan(&mut state);
+    let mut project = raised_lot(id);
+    project.blueprint = "spanish_fortress".into();
+    let stocked = stock_reserved_fillers(&mut state, "spanish_fortress");
+    let stone = stocked
+        .iter()
+        .find(|(item, _)| {
+            state
+                .registry
+                .items
+                .name_of(*item)
+                .is_some_and(|name| name.path() == "stone")
+        })
+        .map(|(item, count)| (*item, *count))
+        .expect("the brick chain reserves stone");
+    assert!(
+        super::super::super::construction_crafting::can_fund(
+            &state,
+            &[(stone.0, stone.1)],
+            &executor::source_images(&state, id)
+        ),
+        "the chain's stone is stocked before admission"
+    );
+    assert!(super::super::begin(&mut state, project, "oak", 0));
+    let bill = super::super::active_project_bill(&state, id).expect("active bill");
+    let stone_left = bill
+        .iter()
+        .find(|(item, _)| {
+            state
+                .registry
+                .items
+                .name_of(*item)
+                .is_some_and(|name| name.path() == "stone")
+        })
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+    assert_eq!(
+        stone_left, 0,
+        "the admitted outpost bill never asks for stone: the fill kept cobblestone"
+    );
+}

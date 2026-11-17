@@ -308,6 +308,45 @@ impl Index {
         count_scan(|stats| stats.index_queries += 1);
         self.by_result.get(&item).map_or(&[], Vec::as_slice)
     }
+
+    /// Every item the canonical crafters consume to produce `quantity` of
+    /// `item`, transitively through the same recipe choice the funding planner
+    /// takes (registry order, so `stone_bricks -> stone` for stairs and walls),
+    /// bounded by [`MAX_DEPTH`]. Tag alternatives are all included:
+    /// over-reserving keeps a caller conservative, never short.
+    pub(crate) fn craft_chain(&self, item: u32, quantity: u64) -> Vec<(u32, u64)> {
+        let mut out: std::collections::BTreeMap<u32, u64> = std::collections::BTreeMap::new();
+        let mut frontier = vec![(item, quantity, 0u8)];
+        while let Some((target, need, depth)) = frontier.pop() {
+            if need == 0 {
+                continue;
+            }
+            let entry = out.entry(target).or_insert(0);
+            let already = *entry;
+            if already >= need {
+                continue;
+            }
+            *entry = need;
+            if depth >= MAX_DEPTH || frontier.len() > MAX_WORK {
+                continue;
+            }
+            let Some(&candidate) = self.for_item(target).first() else {
+                continue;
+            };
+            let plan = &self.recipes[candidate];
+            let Some(ingredients) = &plan.ingredients else {
+                continue;
+            };
+            let count = u64::try_from(plan.count).unwrap_or(1).max(1);
+            let batches = need.div_ceil(count);
+            for &ingredient in ingredients {
+                for &alternative in &self.ingredients[ingredient].items {
+                    frontier.push((alternative, batches, depth + 1));
+                }
+            }
+        }
+        out.into_iter().collect()
+    }
 }
 
 /// Per-proof counts derived from the slot images. Slots still determine which
