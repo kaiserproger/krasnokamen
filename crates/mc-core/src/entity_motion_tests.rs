@@ -578,6 +578,25 @@ fn battle_facing_floor_and_reversal_boundaries() {
     );
 }
 
+/// A step of exactly the floor holds; this pins `<=` against `<`.
+#[test]
+fn battle_facing_holds_a_step_exactly_on_the_floor() {
+    let rotation = [30.0, 12.0, 30.0];
+    // From x = 0 the resolved step is the new position itself; some speed
+    // within a few ulps of .005 block/tick lands on exactly 0.005.
+    let speed = (0.005 / TICK).to_bits();
+    let exact = (speed - 32..speed + 32)
+        .map(f64::from_bits)
+        .find_map(|speed| {
+            let mut state = battle(rotation, [0.0; 2], [speed, 0.0]);
+            state.body.position.x = 0.0;
+            let moved = battle_step(state, false);
+            (moved.body.position.x == 0.005 && moved.body.position.z == 0.5).then_some(moved)
+        })
+        .expect("a speed whose step is exactly the floor");
+    assert_eq!(bits(exact.rotation), bits(rotation));
+}
+
 #[test]
 fn battle_facing_with_a_target_turns_like_old_look_even_without_a_step() {
     let rotation = [180.0, 12.0, 180.0];
