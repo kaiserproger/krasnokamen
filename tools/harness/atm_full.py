@@ -26,7 +26,10 @@ DIMENSIONS = {OVERWORLD: "minecraft:overworld", NETHER: "minecraft:the_nether"}
 # Cap the size-aware threshold at eight; smaller start templates use their size.
 MAX_DIFFERENTIAL_BLOCKS = 8
 NON_PROOF_BLOCKS = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air",
-                    "minecraft:structure_void", "minecraft:jigsaw"}
+                    "minecraft:structure_void", "minecraft:structure_block", "minecraft:jigsaw"}
+# Vanilla precipitation deposits snow layers in cold exposed locations.
+# Vanilla cold-biome weather freezes exposed source water into ice.
+WEATHER_PRODUCTS = {"minecraft:snow", "minecraft:ice"}
 
 
 def resource(pack: Path, identifier: str, kind: str, suffix: str) -> Path:
@@ -189,13 +192,15 @@ def require_chunks(dimension_dir: Path, bounds: list[int]) -> None:
         raise ValueError(f"missing exported chunks in {dimension_dir}: {sorted(missing)}")
 
 
-def differential_candidates(blocks: dict, baseline: dict, natural: set[str], palette: set[str]) -> list[dict]:
-    """Only count different palette types absent from the local pack-free vocabulary."""
+def differential_candidates(blocks: dict, baseline: dict, discovery: dict,
+                            natural: set[str], palette: set[str]) -> list[dict]:
+    """Count palette differences already present unchanged at discovery."""
     matches = []
     for xyz, state in sorted(blocks.items()):
         kind = state.split("[", 1)[0]
         prior = baseline.get(xyz, "minecraft:air").split("[", 1)[0]
-        if kind in palette and kind not in natural and kind != prior:
+        if (kind in palette and kind not in natural and kind not in WEATHER_PRODUCTS
+                and kind != prior and discovery.get(xyz) == state):
             matches.append({"position": [int(v) for v in xyz.split(",")], "state": state})
     return matches
 
@@ -210,25 +215,30 @@ def placement_control_count(row: dict, controls: dict) -> int | None:
         return None
     return control["count"]
 
-def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase: str,
-               *, control_mode: bool = False, control_count: int | None = None) -> dict:
+
+def site_proof(export: Path, baseline_export: Path, discovery_export: Path, pack: Path,
+               row: dict, phase: str, *, control_mode: bool = False, control_count: int | None = None) -> dict:
     site = find_site(export, row)
     dimension_dir = Path(site["dimension_dir"])
     baseline_dir = baseline_export / dimension_dir.relative_to(export)
+    discovery_dir = discovery_export / dimension_dir.relative_to(export)
     bounds = site["bounds"]
     baseline_bounds = expanded_bounds(bounds, 16)
     require_chunks(dimension_dir, expanded_bounds(bounds, 6))
     require_chunks(baseline_dir, baseline_bounds)
+    require_chunks(discovery_dir, bounds)
     palette = set(row["template_palette"])
     variants = row["template_variant_counts"]
-    audit = row.setdefault("palette_audit", {}).setdefault(phase, {"candidate": {}, "baseline": {}})
+    audit = row.setdefault("palette_audit", {}).setdefault(
+        phase, {"candidate": {}, "baseline": {}, "discovery": {}})
     blocks = read_world(dimension_dir, [bounds], palette_audit=audit["candidate"])[0]["blocks"]
     baseline = read_world(baseline_dir, [baseline_bounds], palette_audit=audit["baseline"])[0]["blocks"]
-    natural = {state.split("[", 1)[0] for state in baseline.values()} | {"minecraft:air"}
+    discovery = read_world(discovery_dir, [bounds], palette_audit=audit["discovery"])[0]["blocks"]
+    natural = {state.split("[", 1)[0] for state in baseline.values()} | {"minecraft:air"} | WEATHER_PRODUCTS
     count = min(sum(value for name, value in variant.items() if name not in natural) for variant in variants)
     minimum = min(MAX_DIFFERENTIAL_BLOCKS, count)
-    matches = differential_candidates(blocks, baseline, natural, palette)
-    self_control = differential_candidates(baseline, baseline, natural, palette)
+    matches = differential_candidates(blocks, baseline, discovery, natural, palette)
+    self_control = differential_candidates(baseline, baseline, baseline, natural, palette)
     row.setdefault("differential", {})[phase] = {
         "eligible_blocks": len(matches), "minimum": minimum, "start_template_blocks": count,
         "control_eligible_blocks": control_count,
@@ -240,7 +250,7 @@ def site_proof(export: Path, baseline_export: Path, pack: Path, row: dict, phase
     if minimum == 0:
         raise ValueError(f"{row['id']}: start template has zero non-natural proof blocks; unprovable")
     if not control_mode and (control_count is None or control_count >= minimum):
-        raise ValueError(f"{row['id']}: placement control {control_count!r} does not establish threshold {minimum}")
+        raise ValueError(f"{row['id']}: placement control {control_count!r} does not establish threshold {minimum}; unprovable")
     if len(matches) < minimum:
         raise ValueError(f"{row['id']}: only {len(matches)} non-natural differential template blocks "
                          f"(minimum {minimum})")
@@ -370,6 +380,7 @@ def run(ctx: ProfileContext) -> dict:
         control_report = json.loads(control_path.read_text())
         if (not control_report.get("control_subset") or control_report.get("seed") != SEED
                 or control_report.get("manifest_sha256") != digest(manifest_path)
+                or control_report.get("differential_rule") != "discovery-stable-v1"
                 or not pin_manifest.get("head") or control_report.get("server_pin_head") != pin_manifest["head"]
                 or control_report.get("server_sha256") == pin_manifest["binary_sha256"]
                 or not control_report.get("server_pin_diff_sha256")
@@ -395,6 +406,7 @@ def run(ctx: ProfileContext) -> dict:
     report["control_subset"] = bool(subset)
     report["control_selection"] = subset or None
     report["differential_maximum"] = MAX_DIFFERENTIAL_BLOCKS
+    report["differential_rule"] = "discovery-stable-v1"
     ctx.failure_scenario = report
     write_json(output / "definitions.json", rows)
     write_json(output / "result.json", report)
@@ -451,7 +463,7 @@ def run(ctx: ProfileContext) -> dict:
     for row in active:
         if row["status"] == "located":
             try:
-                row["before"] = site_proof(export, baseline_export, pack, row, "before",
+                row["before"] = site_proof(export, baseline_export, discovery_export, pack, row, "before",
                                            control_mode=bool(subset), control_count=placement_control_count(row, controls))
             except ValueError as error:
                 row.update(status="verification_failed", reason=str(error))
@@ -472,7 +484,7 @@ def run(ctx: ProfileContext) -> dict:
     for row in active:
         if row["status"] == "visited":
             try:
-                proof = site_proof(after, baseline_export, pack, row, "after",
+                proof = site_proof(after, baseline_export, discovery_export, pack, row, "after",
                                    control_mode=bool(subset), control_count=placement_control_count(row, controls))
                 if (proof["anchor"], proof["bounds"], proof["chunk"]) != (row["before"]["anchor"], row["before"]["bounds"], row["before"]["chunk"]):
                     raise ValueError(f"{row['id']}: start changed across restart")

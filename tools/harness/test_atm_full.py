@@ -64,12 +64,21 @@ class FullSelectionTests(unittest.TestCase):
         baseline = {"0,0,0": "minecraft:stone", "1,0,0": "minecraft:dirt"}
         natural = {"minecraft:air", "minecraft:stone", "minecraft:dirt"}
         palette = {"minecraft:stone", "minecraft:dirt", "minecraft:stone_bricks"}
-        self.assertEqual(atm_full.differential_candidates(baseline, baseline, natural, palette), [])
+        self.assertEqual(atm_full.differential_candidates(baseline, baseline, baseline, natural, palette), [])
         beard = {"0,0,0": "minecraft:dirt", "1,0,0": "minecraft:stone"}
-        self.assertEqual(atm_full.differential_candidates(beard, baseline, natural, palette), [])
+        self.assertEqual(atm_full.differential_candidates(beard, baseline, beard, natural, palette), [])
         placed = {**beard, "2,0,0": "minecraft:stone_bricks[axis=x]"}
-        matches = atm_full.differential_candidates(placed, baseline, natural, palette)
+        matches = atm_full.differential_candidates(placed, baseline, placed, natural, palette)
         self.assertEqual(matches, [{"position": [2, 0, 0], "state": "minecraft:stone_bricks[axis=x]"}])
+        later = {"0,0,0": "minecraft:snow[layers=1]", "1,0,0": "minecraft:stone_bricks",
+                 "2,0,0": "minecraft:diamond_block", "3,0,0": "minecraft:cobblestone",
+                 "4,0,0": "minecraft:ice", "5,0,0": "minecraft:snow_block"}
+        discovery = {key: value for key, value in later.items() if key != "3,0,0"}
+        self.assertEqual(atm_full.differential_candidates(
+            later, {}, discovery, {"minecraft:air"},
+            {"minecraft:snow", "minecraft:ice", "minecraft:stone_bricks", "minecraft:cobblestone", "minecraft:snow_block"}),
+            [{"position": [1, 0, 0], "state": "minecraft:stone_bricks"},
+             {"position": [5, 0, 0], "state": "minecraft:snow_block"}])
 
     def test_template_size_controls_differential_threshold(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -99,23 +108,24 @@ class FullSelectionTests(unittest.TestCase):
                             mock.patch.object(atm_full, "require_chunks"), \
                             mock.patch.object(atm_full, "stand_positions", return_value=[[0, 1, 0]]), \
                             mock.patch.object(atm_full, "read_world", side_effect=[
-                                [{"blocks": blocks}], [{"blocks": {}}], [{"blocks": blocks}]]):
+                                [{"blocks": blocks}], [{"blocks": {}}], [{"blocks": blocks}], [{"blocks": blocks}]]):
                         if expected:
-                            atm_full.site_proof(export, baseline, root, row, "before", control_count=0)
+                            atm_full.site_proof(export, baseline, root / "discovery", root, row, "before", control_count=0)
                             self.assertEqual(row["differential"]["before"]["minimum"], min(8, count))
                         else:
                             with self.assertRaisesRegex(ValueError, "unprovable" if count == 0 else "only 5"):
-                                atm_full.site_proof(export, baseline, root, row, "before", control_count=0)
+                                atm_full.site_proof(export, baseline, root / "discovery", root, row, "before", control_count=0)
 
     def test_natural_types_and_control_set_effective_threshold(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "data/mvs/structure/start.nbt"
             path.parent.mkdir(parents=True)
-            palette = [[("Name", (nbt.STRING, name))] for name in ("minecraft:stone", "minecraft:stone_bricks")]
+            palette = [[("Name", (nbt.STRING, name))] for name in
+                       ("minecraft:stone", "minecraft:stone_bricks", "minecraft:snow", "minecraft:ice")]
             raw = nbt.serialize("", (nbt.COMPOUND, [
                 ("palette", (nbt.LIST, (nbt.COMPOUND, palette))),
-                ("blocks", (nbt.LIST, (nbt.COMPOUND, [[("state", (nbt.INT, i))] for i in [0, 1, 1, 1, 1]]))),
+                ("blocks", (nbt.LIST, (nbt.COMPOUND, [[("state", (nbt.INT, i))] for i in [0, 1, 1, 1, 1, 2, 3]]))),
             ]))
             path.write_bytes(gzip.compress(raw))
             row = {"id": "mvs:rock", "templates": ["mvs:start"], "xz": [0, 0],
@@ -135,12 +145,12 @@ class FullSelectionTests(unittest.TestCase):
                             mock.patch.object(atm_full, "require_chunks"), \
                             mock.patch.object(atm_full, "stand_positions", return_value=[[0, 1, 0]]), \
                             mock.patch.object(atm_full, "read_world", side_effect=[
-                                [{"blocks": blocks}], [{"blocks": natural}], [{"blocks": blocks}]]):
+                                [{"blocks": blocks}], [{"blocks": natural}], [{"blocks": blocks}], [{"blocks": blocks}]]):
                         if error:
                             with self.assertRaisesRegex(ValueError, error):
-                                atm_full.site_proof(export, baseline, root, row, "before", control_count=control)
+                                atm_full.site_proof(export, baseline, root / "discovery", root, row, "before", control_count=control)
                         else:
-                            atm_full.site_proof(export, baseline, root, row, "before", control_count=control)
+                            atm_full.site_proof(export, baseline, root / "discovery", root, row, "before", control_count=control)
                             self.assertEqual(row["differential"]["before"]["start_template_blocks"], 4)
                             self.assertEqual(row["differential"]["before"]["minimum"], 4)
                             self.assertEqual(row["differential"]["before"]["control_eligible_blocks"], 0)
@@ -160,8 +170,9 @@ class FullSelectionTests(unittest.TestCase):
             path = root / "data/mvs/structure"
             path.mkdir(parents=True)
             palette = [[("Name", (nbt.STRING, name))] for name in
-                       ("minecraft:stone", "minecraft:air", "minecraft:jigsaw", "minecraft:structure_void")]
-            for name, indices in (("small", [0, 0, 1, 2, 3]), ("large", [0] * 10)):
+                       ("minecraft:stone", "minecraft:air", "minecraft:jigsaw",
+                        "minecraft:structure_void", "minecraft:structure_block")]
+            for name, indices in (("small", [0, 0, 1, 2, 3, 4]), ("large", [0] * 10)):
                 blocks = [[("state", (nbt.INT, index))] for index in indices]
                 raw = nbt.serialize("", (nbt.COMPOUND, [
                     ("palette", (nbt.LIST, (nbt.COMPOUND, palette))),
@@ -189,18 +200,23 @@ class FullSelectionTests(unittest.TestCase):
                     mock.patch.object(atm_full, "require_chunks"), \
                     mock.patch.object(atm_full, "stand_positions", return_value=[[0, 1, 0]]), \
                     mock.patch.object(atm_full, "read_world", side_effect=[
-                        [{"blocks": blocks}], [{"blocks": natural}], [{"blocks": blocks}]]):
-                result = atm_full.site_proof(export, baseline, root, row, "before", control_count=0)
+                        [{"blocks": blocks}], [{"blocks": natural}], [{"blocks": blocks}], [{"blocks": blocks}]]):
+                result = atm_full.site_proof(export, baseline, root / "discovery", root, row, "before", control_count=0)
             self.assertEqual(row["differential"]["before"]["eligible_blocks"], 8)
             self.assertEqual(row["differential"]["before"]["baseline_self_control_blocks"], 0)
             self.assertEqual(len(result["samples"]), 8)
             with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
                     mock.patch.object(atm_full, "require_chunks"), \
                     mock.patch.object(atm_full, "read_world", side_effect=[
-                        [{"blocks": natural}], [{"blocks": natural}]]):
+                        [{"blocks": natural}], [{"blocks": natural}], [{"blocks": natural}]]):
                 with self.assertRaisesRegex(ValueError, "only 0 non-natural"):
-                    atm_full.site_proof(export, baseline, root, row, "control", control_count=0)
+                    atm_full.site_proof(export, baseline, root / "discovery", root, row, "control", control_count=0)
             self.assertEqual(row["differential"]["control"]["eligible_blocks"], 0)
+            with mock.patch.object(atm_full, "generated_starts", return_value=[site]), \
+                    mock.patch.object(atm_full, "require_chunks", side_effect=[
+                        None, None, ValueError("missing discovery chunks")]):
+                with self.assertRaisesRegex(ValueError, "missing discovery chunks"):
+                    atm_full.site_proof(export, baseline, root / "discovery", root, row, "before", control_count=0)
             with self.assertRaisesRegex(ValueError, "missing exported chunks"):
                 atm_full.require_chunks(root, [0, 0, 0, 0, 0, 0])
 
@@ -225,6 +241,7 @@ class FullSelectionTests(unittest.TestCase):
             control_report = root / "control.json"
             control_report.write_text(json.dumps({
                 "control_subset": True, "seed": atm_full.SEED,
+                "differential_rule": "discovery-stable-v1",
                 "manifest_sha256": atm_full.digest(manifest), "server_pin_head": "test-head",
                 "server_sha256": "control-binary", "server_pin_diff_sha256": "control-diff",
                 "definitions": []}))
