@@ -345,6 +345,7 @@ impl EdgeServer {
     ) -> anyhow::Result<Self> {
         cfg.computer.validate()?;
         cfg.voice.validate()?;
+        crate::startup_warnings::warn_unsafe_startup(&cfg, hub.as_ref());
         let voice = crate::voice_service::Service::new(&cfg.voice);
         let dashboard = dashboard_state(&cfg);
         let loader_manifest = loader_manifest(&hub.registry().plugin_client_bundles)?;

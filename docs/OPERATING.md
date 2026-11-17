@@ -223,6 +223,17 @@ beside the selected config. The old `[admin]`, `[simulation]`, `[autoscale]`,
 are not supported; the key list in `crates/mc-edge/src/config.rs` is the
 authority when in doubt.
 
+The config file can hold secrets: `proxy.secret` (Velocity forwarding),
+`msmp.bearer_token`, `dashboard.metrics_bearer_token` and `rcon.password`. The
+edge's debug formatting prints them redacted, and on Unix startup warns when the
+file carries any of them and has a group or other permission bit set. Keep it
+readable by the service user alone:
+
+```sh
+chown krasnokamen: server.toml
+chmod 600 server.toml
+```
+
 Behavior worth knowing:
 
 - `view_distance` is the server's upper bound; each connection uses the smaller
@@ -290,6 +301,12 @@ port independently: authentication does not change listener exposure. Offline
 identities can be impersonated, operator names included; restrict offline
 servers to trusted players or a correctly authenticated network boundary
 (`auth.online_mode = true`, or a Velocity proxy).
+
+Startup logs a warning when that exposure has no identity check at all: offline
+mode, a non-loopback bind, `proxy.mode = "none"` and no plugin login gate
+(`auth.require_plugin_login`, or an auth-capable plugin package, which turns the
+gate on by itself). It is a warning, not a refusal — LAN offline play is
+supported — and it names the bind address it found.
 
 Connection admission:
 
@@ -940,6 +957,14 @@ state fails closed. Keep the same seed, content cache and deployment
 configuration, back up before changing binaries or world identity, and never
 bypass identity validation by hand-editing saved metadata. Anvil is a
 compatibility format, not a live fallback or dual-write store.
+
+The WAL window is bounded and fixed: each batch file is fsynced when written,
+but the journal directory is fsynced every `journal_fsync_every_batches`
+appends — 10 acknowledged batches by default. A host power loss can therefore
+roll back up to those 10 acknowledged batches, and not only the writes since
+the last checkpoint. The cadence is a core default
+(`CoreConfig::journal_fsync_every_batches`) with no edge config key; a clean
+stop flushes it.
 
 When upgrading from a build with the old scalar rider format, stop it cleanly
 before deploying: an old unclean WAL tail containing `rider` is refused at
