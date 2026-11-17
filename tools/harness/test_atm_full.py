@@ -164,6 +164,45 @@ class FullSelectionTests(unittest.TestCase):
         self.assertIsNone(atm_full.placement_control_count(row, controls))
         self.assertIsNone(atm_full.placement_control_count(row, {}))
 
+    def test_unobstructed_alternative_and_control_anchor(self):
+        dimension = "/world/dimensions/minecraft/overworld"
+        pile = {"id": "mvs:pile", "anchor": [0, 64, 0], "bounds": [0, 63, 0, 6, 66, 4],
+                "chunk": [0, 0], "dimension_dir": dimension}
+        farm = {"id": "mvs:farm", "anchor": [6, 63, 6], "bounds": [-5, 62, -5, 11, 66, 11],
+                "chunk": [0, 0], "dimension_dir": dimension}
+        alternative = {"id": "mvs:pile", "anchor": [100, 64, 100], "bounds": [100, 63, 100, 106, 66, 104],
+                       "chunk": [6, 6], "dimension_dir": dimension}
+        row = {"id": "mvs:pile", "dimension": "minecraft:overworld",
+               "locate_attempts": [{"xz": [0, 0]}, {"xz": [100, 100]}]}
+        site, rejected = atm_full.choose_unobstructed(row, [pile, farm, alternative])
+        self.assertEqual(site, alternative)
+        self.assertEqual(rejected[0]["conflicts"][0]["id"], "mvs:farm")
+        self.assertIsNone(atm_full.choose_unobstructed(row, [pile, farm])[0])
+        control = {"site": alternative}
+        self.assertEqual(atm_full.choose_unobstructed(row, [pile, farm, alternative], control)[0], alternative)
+        control["site"] = {**alternative, "bounds": [99, 63, 100, 106, 66, 104]}
+        self.assertIsNone(atm_full.choose_unobstructed(row, [pile, farm, alternative], control)[0])
+
+    def test_start_index_preserves_other_ids_and_rejects_bad_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            region = Path(directory) / "dimensions/minecraft/overworld/region"
+            region.mkdir(parents=True)
+            (region / "r.0.0.mca").touch()
+            def start(identifier, bounds):
+                return {"id": identifier, "ChunkX": 0, "ChunkZ": 0,
+                        "BB": bounds, "KrasnokamenLocatePos": [0, 64, 0]}
+            chunk = {"xPos": 0, "zPos": 0, "structures": {"starts": {
+                "mvs:pile": start("mvs:pile", [0, 63, 0, 6, 66, 4]),
+                "mvs:farm": start("mvs:farm", [-5, 62, -5, 11, 66, 11]),
+            }}}
+            with mock.patch.object(atm_full, "read_region", return_value=iter([(0, 0, chunk)])):
+                found = atm_full.index_starts(Path(directory))
+            self.assertEqual({item["id"] for item in found}, {"mvs:pile", "mvs:farm"})
+            chunk["structures"]["starts"]["mvs:farm"]["BB"] = [9, 0, 0, 0, 1, 1]
+            with mock.patch.object(atm_full, "read_region", return_value=iter([(0, 0, chunk)])):
+                with self.assertRaisesRegex(ValueError, "mvs:farm: invalid exported start"):
+                    atm_full.index_starts(Path(directory))
+
     def test_template_metadata_uses_smallest_and_excludes_nonproof_blocks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -241,7 +280,7 @@ class FullSelectionTests(unittest.TestCase):
             control_report = root / "control.json"
             control_report.write_text(json.dumps({
                 "control_subset": True, "seed": atm_full.SEED,
-                "differential_rule": "discovery-stable-v1",
+                "differential_rule": "unobstructed-discovery-v2",
                 "manifest_sha256": atm_full.digest(manifest), "server_pin_head": "test-head",
                 "server_sha256": "control-binary", "server_pin_diff_sha256": "control-diff",
                 "definitions": []}))
@@ -260,6 +299,13 @@ class FullSelectionTests(unittest.TestCase):
             def fake_session(args, config, port, label, report):
                 (args.output / label).mkdir()
                 return contextlib.nullcontext(client)
+            def choose(row, starts, control):
+                rejected = [{"anchor": [0, 0, 0], "bounds": [0, 0, 0, 1, 1, 1],
+                             "conflicts": [{"id": "mvs:farm", "bounds": [0, 0, 0, 2, 2, 2]}]}]
+                if row["id"] == "mvs:s001":
+                    return (None if len(row["locate_attempts"]) == 1 else proof, rejected)
+                return proof, []
+
 
             with mock.patch.dict(atm_full.os.environ, env), \
                     mock.patch.object(cli, "ARTIFACT_ROOT", root / "receipts"), \
@@ -271,10 +317,12 @@ class FullSelectionTests(unittest.TestCase):
                     mock.patch.object(atm_full, "prepare_operator_fixture"), \
                     mock.patch.object(atm_full, "session", side_effect=fake_session), \
                     mock.patch.object(atm_full, "dimension_teleport"), \
-                    mock.patch.object(atm_full, "locate_coordinates", side_effect=[ValueError("missing")] + [[0, 0]] * 129), \
+                    mock.patch.object(atm_full, "locate_coordinates", side_effect=[ValueError("missing")] + [[0, 0]] * 130), \
                     mock.patch.object(atm_full, "locate_failure", return_value="not found"), \
                     mock.patch.object(atm_full, "export_world", return_value=root), \
                     mock.patch.object(atm_full, "find_site", return_value=proof), \
+                    mock.patch.object(atm_full, "index_starts", return_value=[]), \
+                    mock.patch.object(atm_full, "choose_unobstructed", side_effect=choose), \
                     mock.patch.object(atm_full, "site_proof", return_value=proof), \
                     mock.patch.object(atm_full, "read_world", return_value=[{"blocks": {}}]), \
                     mock.patch.object(atm_full, "photograph", return_value={}):
@@ -290,7 +338,9 @@ class FullSelectionTests(unittest.TestCase):
             self.assertEqual(len(report["definitions"]), 130)
             self.assertEqual(report["definitions"][0]["reason"], "not found")
             self.assertTrue(all(row["status"] == "verified" for row in report["definitions"][1:]))
-            self.assertEqual(client.command.call_count, 130)
+            self.assertEqual(len(report["definitions"][1]["locate_attempts"]), 2)
+            self.assertEqual(report["definitions"][1]["obstructed_starts"][0]["conflicts"][0]["id"], "mvs:farm")
+            self.assertEqual(client.command.call_count, 131)
 
 
 if __name__ == "__main__":
