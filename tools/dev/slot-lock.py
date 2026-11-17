@@ -5,7 +5,8 @@ The one slot mechanism on the owner host: scene-slot.sh (six graphical-gate slot
 and mem-run.sh (three build tokens) both run through it.
 
     slot-lock.py --dir DIR --name FMT --slots a,b,c --env VAR [--fd N]
-                 [--wait-dir DIR] [--wait-message TEXT] -- COMMAND [ARGS...]
+                 [--wait-dir DIR] [--wait-message TEXT]
+                 [--hold-gate FILE | --yield-gate FILE] -- COMMAND [ARGS...]
 
 - Slot <s> is an exclusive flock on DIR/(FMT % s). A free slot is taken at once, in
   --slots order. Otherwise the waiter blocks on every slot at once (one thread per
@@ -22,6 +23,12 @@ and mem-run.sh (three build tokens) both run through it.
   wins (stale records of dead waiters are dropped by the next waiter), and, when the
   environment names a pipe fd in VAR_READY_FD (tests), writes b"w" to it once it is
   queued; a caller that won at once gets the fd closed instead.
+- Priority (owner 2026-11-18: the priority slice gets the next freed build token):
+  a waiter with --hold-gate FILE holds an exclusive flock on FILE while it waits; a
+  waiter with --yield-gate FILE that wins a slot while FILE is held gives the slot
+  back at once and sleeps on a shared flock of FILE until the priority waiter has
+  won, then queues again. A --yield-gate caller also skips the at-once take while
+  FILE is held.
 """
 
 from __future__ import annotations
@@ -38,7 +45,8 @@ from pathlib import Path
 
 def usage(message: str) -> None:
     sys.exit(f"slot-lock.py: {message}\nusage: slot-lock.py --dir DIR --name FMT --slots a,b,c --env VAR "
-             "[--fd N] [--wait-dir DIR] [--wait-message TEXT] -- COMMAND [ARGS...]")
+             "[--fd N] [--wait-dir DIR] [--wait-message TEXT] [--hold-gate FILE | --yield-gate FILE] "
+             "-- COMMAND [ARGS...]")
 
 
 def parse(argv: list[str]) -> tuple[dict[str, str], list[str]]:
@@ -46,7 +54,8 @@ def parse(argv: list[str]) -> tuple[dict[str, str], list[str]]:
         usage("missing -- before the command")
     split = argv.index("--")
     options, command = argv[:split], argv[split + 1:]
-    known = {"--dir", "--name", "--slots", "--env", "--fd", "--wait-dir", "--wait-message"}
+    known = {"--dir", "--name", "--slots", "--env", "--fd", "--wait-dir", "--wait-message",
+             "--hold-gate", "--yield-gate"}
     opts: dict[str, str] = {}
     for i in range(0, len(options), 2):
         if options[i] not in known or i + 1 >= len(options):
@@ -100,10 +109,28 @@ def main() -> None:
         # Non-inheritable (PEP 446): a losing slot is released at exec at the latest.
         return os.open(lock_dir / (opts["--name"] % slot), os.O_WRONLY | os.O_CREAT, 0o666)
 
+    yield_gate = opts.get("--yield-gate")
+
+    def priority_waiting() -> int | None:
+        """An fd holding a shared lock on the yield gate, or None while a priority waiter holds it."""
+        gate = os.open(yield_gate, os.O_WRONLY | os.O_CREAT, 0o666)
+        try:
+            fcntl.flock(gate, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return gate
+        os.close(gate)
+        return None
+
     chosen: list[tuple[int, str]] = []
+    skip_at_once = False
+    if yield_gate:
+        held = priority_waiting()
+        if held is not None:
+            os.close(held)
+            skip_at_once = True
     for slot in slots:  # every slot file exists, so readers can count free slots
         fd = open_slot(slot)
-        if not chosen:
+        if not chosen and not skip_at_once:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 chosen.append((fd, slot))
@@ -132,21 +159,43 @@ def main() -> None:
         guard, won = threading.Lock(), threading.Event()
 
         def take(slot: str) -> None:
-            fd = open_slot(slot)
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            with guard:
-                if chosen:
-                    os.close(fd)
-                    return
-                chosen.append((fd, slot))
-            won.set()
+            while True:
+                fd = open_slot(slot)
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                if yield_gate:
+                    gate = priority_waiting()
+                    if gate is not None:
+                        # Hand the slot to the waiting priority compile, sleep until
+                        # it has won (it then releases the gate), and queue again.
+                        os.close(fd)
+                        fcntl.flock(gate, fcntl.LOCK_SH)
+                        os.close(gate)
+                        continue
+                with guard:
+                    if chosen:
+                        os.close(fd)
+                        return
+                    chosen.append((fd, slot))
+                won.set()
+                return
 
+        gate = None
+        if "--hold-gate" in opts:
+            gate = os.open(opts["--hold-gate"], os.O_WRONLY | os.O_CREAT, 0o666)
+            try:
+                fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                # Another priority compile already holds it; this one waits beside it.
+                os.close(gate)
+                gate = None
         for slot in slots:
             threading.Thread(target=take, args=(slot,), daemon=True).start()
         if ready:
             os.write(int(ready), b"w")
             os.close(int(ready))
         won.wait()
+        if gate is not None:
+            os.close(gate)  # yielding waiters queue again behind this won slot
     fd, slot = chosen[0]
     os.ftruncate(fd, 0)
     os.pwrite(fd, record, 0)

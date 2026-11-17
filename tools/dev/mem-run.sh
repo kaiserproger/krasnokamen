@@ -124,10 +124,16 @@ fi
 # lock: a queued compile never delays a -x window, and a -x window never waits for a
 # token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
 # KRASNOKAMEN_BUILD_LANE=background (owner 2026-11-12: the battle video gets resources first):
-# such compiles wait only for tokens 1-2, so token 3 stays free for priority work.
+# such compiles wait only for tokens 1-2, so token 3 stays free for priority work, and
+# (owner 2026-11-18) they give any freed token to a waiting normal-lane compile first:
+# a normal-lane waiter holds tokens/priority.gate, a background waiter yields to it.
 build_tokens=3
 token_slots=$(seq -s, "$build_tokens")
-[ "${KRASNOKAMEN_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
+token_gate=(--hold-gate "$dir/tokens/priority.gate")
+if [ "${KRASNOKAMEN_BUILD_LANE:-}" = background ]; then
+  token_slots=$(seq -s, $((build_tokens - 1)))
+  token_gate=(--yield-gate "$dir/tokens/priority.gate")
+fi
 tool=("${cmd[@]}")
 while :; do
   # screen_audio_graph.sh (tools/harness) runs its argv inside a private PipeWire graph: look through it too,
@@ -180,7 +186,7 @@ if [ "$compile" = 1 ]; then
     token="${KRASNOKAMEN_BUILD_TOKEN:-?}(reused)"
   else
     exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$token_slots" \
-      --env KRASNOKAMEN_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" \
+      --env KRASNOKAMEN_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" "${token_gate[@]}" \
       --wait-message "mem-run: build tokens $token_slots are in use; waiting for one (holders: $here/fleet-status)" \
       -- bash "$here/${BASH_SOURCE[0]##*/}" "${args[@]}"
   fi

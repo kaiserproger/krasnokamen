@@ -303,6 +303,38 @@ class BuildTokenTests(unittest.TestCase):
             self.finish(cmd)
         self.wait_tokens_free()
 
+    def test_a_waiting_priority_compile_gets_the_next_freed_token_before_background(self):
+        running, _ = self.hold_three()
+        background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
+        saved, self.env = self.env, background
+        try:
+            waiter = self.start('cargo', 'build', '-p', 'bg')
+        finally:
+            self.env = saved
+        self.settle([waiter])
+        self.assertEqual(waiter.state, 'queued')
+        # Queued after the background compile, the priority compile still wins the
+        # next token the background lane could take.
+        priority = self.start('cargo', 'build', '-p', 'd8')
+        self.settle([priority])
+        self.assertEqual(priority.state, 'queued')
+        freed = next(cmd for cmd in running if cmd.token in ('1', '2'))
+        self.finish(freed)
+        self.wait_run(priority)
+        self.assertEqual(priority.token, freed.token)
+        readable, _, _ = select.select([waiter.proc.stdout], [], [], 0)
+        self.assertFalse(readable, 'the background compile started while a priority compile waited')
+        # With no priority compile waiting, the background compile takes the next one.
+        running.remove(freed)
+        other = next(cmd for cmd in running if cmd.token in ('1', '2'))
+        self.finish(other)
+        self.wait_run(waiter)
+        self.assertEqual(waiter.token, other.token)
+        for cmd in [*running, priority, waiter]:
+            if cmd is not other:
+                self.finish(cmd)
+        self.wait_tokens_free()
+
 
 if __name__ == '__main__':
     unittest.main()
