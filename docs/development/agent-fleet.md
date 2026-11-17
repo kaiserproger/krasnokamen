@@ -173,7 +173,10 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 #            review-only
 # Commits    none (leave the diff and its SHA-256) | local commits on the branch
 # Limits     only what differs from the standing rules: wall budget, whether
-#            subagents are allowed
+#            subagents are allowed. Standing: one build token per agent at a
+#            time (the next compile starts after the previous one finished);
+#            `env KRASNOKAMEN_BUILD_LANE=background` unless Main names this
+#            slice the priority slice (owner, 2026-11-18)
 # Waiting    never end your turn while a background job you started is still
 #            running: a subagent that ends its turn is disposed and the job dies
 #            with it (owner, 2026-11-18: Perf1M's pin build, CutTick's L0 and

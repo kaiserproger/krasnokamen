@@ -154,7 +154,12 @@ python3 -m tools.harness list
   (`-m 12G` for full `test`/`correctness`; at most 12G each), never a worktree's
   or sibling repo's copy. There are no memory slots: a compile command waits for
   one of three host-wide build tokens (a nested compile reuses its parent's),
-  every other command starts at once; the heavy-watchdog pauses plain cargo
+  every other command starts at once. One agent holds at most one token: it
+  starts its next compile command only after the previous one finished (owner,
+  2026-11-18: one agent with two parallel runs held two thirds of the build
+  capacity). The priority slice named by Main keeps the normal lane; every other
+  agent compiles with `env KRASNOKAMEN_BUILD_LANE=background` (tokens 1-2 only),
+  so token 3 stays free for it. The heavy-watchdog pauses plain cargo
   builds under real memory pressure and resumes them, never tests, servers or
   harness runs. The runner points
   `RUSTC_WRAPPER` at `tools/dev/sccache.sh` (shared sccache; empty when its daemon is
