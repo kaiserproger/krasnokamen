@@ -22,6 +22,20 @@ fn env_or(name: &str, default: usize) -> usize {
     std::env::var(name).map_or(default, |value| value.parse().unwrap())
 }
 
+/// Report line: stderr for a failing run, and always into `GUARD_REPORT`.
+fn emit(text: String) {
+    eprintln!("{text}");
+    if let Some(path) = std::env::var_os("GUARD_REPORT") {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .expect("report opens");
+        writeln!(file, "{text}").expect("report writes");
+    }
+}
+
 fn record_bytes(entry: &JournalEntry) -> usize {
     serde_json::to_string(entry).expect("journal entry encodes").len() + 1
 }
@@ -136,7 +150,7 @@ impl Window {
 
     fn report(&self) {
         let ticks = self.ticks.max(1) as f64;
-        eprintln!(
+        emit(format!(
             "GUARD window={} ticks={} battle_B_per_tick={:.0} guard_only_B_per_tick={:.0} guard_share_of_battle={:.1}% fighters_per_tick={:.1} guard_only_per_tick={:.1} routing_per_tick={:.1} broken_per_tick={:.2} journal_us_per_tick={:.0} total_us_per_tick={:.0} wal_B_per_tick={:.0}",
             self.label,
             self.ticks,
@@ -150,7 +164,7 @@ impl Window {
             self.journal_us as f64 / ticks,
             self.total_us as f64 / ticks,
             self.wal_bytes as f64 / ticks,
-        );
+        ));
     }
 }
 
@@ -184,7 +198,10 @@ fn guard_churn_measure() {
         crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     }
     execute(&mut state, &mut changes, origin, &BattleCommand::Start).unwrap();
-    eprintln!("GUARD scene side={side} rows={}", state.entities.slots().count());
+    emit(format!(
+        "GUARD scene side={side} rows={} ticks={ticks} break_at={break_at}",
+        state.entities.slots().count()
+    ));
 
     let mut mirror: Vec<Value> = Vec::new();
     let mut windows = [
@@ -200,7 +217,7 @@ fn guard_churn_measure() {
                     regiment.morale.broken = true;
                 }
             }
-            eprintln!("GUARD forced rout at tick={break_at}");
+            emit(format!("GUARD forced rout at tick={break_at}"));
         }
         let start = std::time::Instant::now();
         let (output, _, _times) = run_tick(&mut state, &[]);
@@ -301,9 +318,9 @@ fn guard_churn_measure() {
             }
         }
         if standard_probe(&state) {
-            eprintln!(
+            emit(format!(
                 "GUARD tick={tick} routing={routing} broken={broken} running={running} fighters={fighters} guard_only={guard} guard_B={guard_bytes} battle_B={battle_total} wal_B={wal_bytes}"
-            );
+            ));
         }
     }
     for window in &windows {
