@@ -351,6 +351,42 @@ fn vanilla_capability_tables_name_registered_blueprints() {
 /// rounding step inside a block. The hand-written `0.3` / `1.95` literals are
 /// gone from the blueprint table and from the player, glider, crouch, dismount
 /// and falling-block bodies.
+/// R6 G1 on the live path: a summoned villager keeps the f32 contract body
+/// through `sync_appearance`, for an adult and a baby (exactly half). The refresh
+/// used to overwrite it with a hand-written 0.3 / 1.95 / 0.15 / 0.975 table,
+/// which a comparison of registry rows could not see.
+#[test]
+fn a_summoned_villager_keeps_the_contract_body_through_the_appearance_refresh() {
+    let (mut state, _player, centre) = setup(0.0);
+    let villager_type = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
+        .unwrap();
+    let contract = crate::blueprint::contract_dimensions("minecraft:villager");
+    for age in [0_i32, -200] {
+        let villager = state.spawn_mob(villager_type, centre, 20.0);
+        let slot = state.entities.slot_of(villager).unwrap();
+        state.entities.row_mut(slot).villager = Some(Box::new(crate::villager::VillagerState {
+            age,
+            ..Default::default()
+        }));
+        crate::villager::sync_appearance(&mut state, slot);
+        let body = state.entities.body(slot);
+        let scale = if age < 0 { 0.5 } else { 1.0 };
+        assert_eq!(
+            body.half_width,
+            contract.half_width() * scale,
+            "age {age}: the refresh must carry the contract half width"
+        );
+        assert_eq!(
+            body.height,
+            contract.height * scale,
+            "age {age}: the refresh must carry the contract height"
+        );
+    }
+}
+
 #[test]
 fn body_sizes_come_from_the_vanilla_entity_contract() {
     let registry = CoreRegistry::load(None).expect("registry");
@@ -371,6 +407,11 @@ fn body_sizes_come_from_the_vanilla_entity_contract() {
         let dimensions = crate::blueprint::contract_dimensions(name);
         assert_eq!(blueprint.half_width, dimensions.half_width(), "{name}");
         assert_eq!(blueprint.height, dimensions.height, "{name}");
+        // Independent oracle: the literal f32 contract value, not a second call.
+        if name == "minecraft:zombie" {
+            assert_eq!(blueprint.half_width, 0.6_f32 as f64 / 2.0, "{name}");
+            assert_eq!(blueprint.height, 1.95_f32 as f64, "{name}");
+        }
     }
     let zombie = crate::blueprint::contract_dimensions("minecraft:zombie");
     assert_eq!(zombie.half_width(), f64::from(0.6_f32) / 2.0);
@@ -385,11 +426,11 @@ fn body_sizes_come_from_the_vanilla_entity_contract() {
     );
     assert_eq!(crate::blueprint::PLAYER_BODY.height, f64::from(1.8_f32));
     assert_eq!(
-        *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT,
+        crate::blueprint::PLAYER_FALL_FLYING_HEIGHT,
         f64::from(0.6_f32)
     );
     assert_eq!(
-        *crate::blueprint::PLAYER_CROUCHING_HEIGHT,
+        crate::blueprint::PLAYER_CROUCHING_HEIGHT,
         f64::from(1.5_f32)
     );
     assert_eq!(

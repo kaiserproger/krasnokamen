@@ -86,7 +86,7 @@ fn set(state: &mut TickState, entity: EntityId, slot: EntitySlot, flying: bool) 
     let (body, row) = state.entities.parts_mut(slot);
     if flying || row.appearance.pose == 1 {
         body.height = if flying {
-            *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+            crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
         } else {
             crate::blueprint::PLAYER_BODY.height
         };

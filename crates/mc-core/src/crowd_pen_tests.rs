@@ -123,6 +123,12 @@ fn summon_row(state: &mut TickState, kind: &str, count: usize, z: f64) -> Vec<En
 fn crowded_pen_bodies_never_enter_the_wall() {
     let mut state = pen_world();
     let mobs = summon_row(&mut state, "minecraft:zombie", 32, f64::from(PEN_Z0) + 1.0);
+    // Physics control (R6 G6): the summoned zombies keep the hand-written f64
+    // width the wall report came from, so this test stands on the movement
+    // kernel alone and fails when only the physics hunk is reverted.
+    for &slot in &mobs {
+        state.entities.set_half_width(slot, 0.3);
+    }
     // Chase target behind the `-z` wall, inside a loaded chunk (z 500.5 is in
     // chunk 31, the wall's own chunk) so the crowd presses the wall every tick.
     let _target = join_target(&mut state, [32.5, 64.0, f64::from(PEN_Z0) - 11.5]);

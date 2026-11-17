@@ -147,7 +147,7 @@ fn elytra_start_checks_airborne_equipment_fluid_riding_and_levitation() {
         if condition == "valid" {
             assert_eq!(
                 state.entities.body(slot).height,
-                *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+                crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
             );
             start(&mut state);
             assert_eq!(
@@ -420,7 +420,7 @@ fn elytra_rejoin_restores_flight_pose_and_worn_equipment() {
     );
     assert_eq!(
         state.entities.body(slot).height,
-        *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+        crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
     );
     assert_eq!(state.players[&restored].inventory.slots[38].damage, Some(1));
 }

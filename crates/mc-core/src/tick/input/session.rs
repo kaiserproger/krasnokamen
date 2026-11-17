@@ -256,7 +256,7 @@ pub(in crate::tick) fn join(
             movement: crate::blueprint::MovementClass::Player,
             half_width: crate::blueprint::PLAYER_BODY.half_width(),
             height: if fall_flying {
-                *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+                crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
             } else {
                 crate::blueprint::PLAYER_BODY.height
             },

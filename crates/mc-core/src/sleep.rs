@@ -116,10 +116,15 @@ fn set_lying(state: &mut TickState, entity: EntityId, bed: Option<BlockPos>) {
     let Some(slot) = state.entities.slot_of_any(entity) else {
         return;
     };
-    state
-        .entities
-        .set_half_width(slot, if bed.is_some() { 0.1 } else { 0.3 });
-    state.entities.body_mut(slot).height = if bed.is_some() { 0.2 } else { 1.8 };
+    // Vanilla `LivingEntity#getDefaultDimensions`: the sleeping pose's square
+    // body while lying, the player contract body after waking.
+    let (half_width, height) = crate::blueprint::living_dimensions(
+        crate::blueprint::PLAYER_TYPE_NAME,
+        false,
+        bed.is_some(),
+    );
+    state.entities.set_half_width(slot, half_width);
+    state.entities.body_mut(slot).height = height;
     let row = state.entities.row_mut(slot);
     let appearance = Arc::make_mut(&mut row.appearance);
     appearance.pose = if bed.is_some() { SLEEPING_POSE } else { 0 };

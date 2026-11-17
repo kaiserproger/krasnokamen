@@ -32,7 +32,7 @@ pub(super) fn update_player_crouching(
                 mc_physics::Vec3::new(position[0], position[1], position[2]),
                 mc_physics::Aabb {
                     half_width,
-                    height: *crate::blueprint::PLAYER_CROUCHING_HEIGHT,
+                    height: crate::blueprint::PLAYER_CROUCHING_HEIGHT,
                 },
                 mc_physics::Vec3::new(0.0, 0.3, 0.0),
                 false,
@@ -41,7 +41,7 @@ pub(super) fn update_player_crouching(
             .is_some_and(|resolved| (resolved.delta.y - 0.3).abs() < 1e-7));
     let (body, row) = state.entities.parts_mut(slot);
     body.height = if crouching {
-        *crate::blueprint::PLAYER_CROUCHING_HEIGHT
+        crate::blueprint::PLAYER_CROUCHING_HEIGHT
     } else {
         crate::blueprint::PLAYER_BODY.height
     };

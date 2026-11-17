@@ -167,7 +167,7 @@ pub(crate) fn unlock_session(state: &mut TickState, connection: ConnectionId) {
         let (body, row) = state.entities.parts_mut(slot);
         body.alive = record.health > 0.0;
         body.height = if record.fall_flying {
-            *crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+            crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
         } else {
             crate::blueprint::PLAYER_BODY.height
         };

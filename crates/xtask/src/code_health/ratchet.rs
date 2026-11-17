@@ -54,10 +54,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // zombie_villager and husk (vanilla Drowned targets AbstractVillager),
     // 2026-11-13: 2632.
     // R6 G1 (CrowdPush, 2026-11-18): the player and falling-block body sizes are
-    // contract lookups by vanilla name, so `blueprint::PLAYER_BODY` and
-    // `FALLING_BLOCK_BODY` each name their type once: 2634. These are the
-    // registry keys the sizes are resolved from, not inline ids at a use site.
-    vanilla_id_literals: 2_634,
+    // contract lookups, and their type names live once as
+    // `blueprint::PLAYER_TYPE_NAME` / `FALLING_BLOCK_TYPE_NAME`, which the
+    // existing loot and falling-block sites reuse: 2632, no headroom taken.
+    vanilla_id_literals: 2_632,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,

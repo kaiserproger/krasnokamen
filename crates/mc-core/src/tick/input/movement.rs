@@ -245,26 +245,22 @@ pub(in crate::tick) fn move_input(
         .players
         .get(&entity)
         .is_some_and(|player| player.spectator());
-    let resolved = if spectator {
-        None
-    } else {
-        mc_physics::resolve_collision_displacement(
-            &sampler,
-            mc_physics::Vec3::new(old[0], old[1], old[2]),
-            mc_physics::Aabb { half_width, height },
-            mc_physics::Vec3::new(displacement[0], displacement[1], displacement[2]),
-            *on_ground,
-            mc_physics::STEP_HEIGHT,
-        )
-    };
     let new_pos = if spectator {
         // Spectators are not collision-checked at all (vanilla skips
-        // `collide` for them), so the reported move is accepted as-is.
+        // `collide` for them), so the reported move is accepted as-is and the
+        // solver never runs for them.
         state.entities.set_pos(slot, *position);
         state.entities.set_rot(slot, *yaw, *pitch);
         state.entities.set_ground(slot, *on_ground);
         *position
-    } else if let Some(fixed) = resolved {
+    } else if let Some(fixed) = mc_physics::resolve_collision_displacement(
+        &sampler,
+        mc_physics::Vec3::new(old[0], old[1], old[2]),
+        mc_physics::Aabb { half_width, height },
+        mc_physics::Vec3::new(displacement[0], displacement[1], displacement[2]),
+        *on_ground,
+        mc_physics::STEP_HEIGHT,
+    ) {
         let fixed_pos = [
             old[0] + fixed.delta.x,
             old[1] + fixed.delta.y,

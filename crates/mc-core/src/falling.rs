@@ -22,7 +22,7 @@ pub struct FallingState {
 /// falling body must never checkpoint as an unrecoverable nonliving Walker.
 pub(crate) fn initialize(state: &mut TickState, slot: crate::entities::EntitySlot, type_id: u32) {
     if mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
-        .is_none_or(|contract| contract.name != "minecraft:falling_block")
+        .is_none_or(|contract| contract.name != crate::blueprint::FALLING_BLOCK_TYPE_NAME)
     {
         return;
     }

@@ -2206,8 +2206,10 @@ impl GridPos {
 }
 
 /// A body within the collision tolerance of a block face is touching that block.
-/// `VoxelShape.collideX` (26.1.2) snaps it to the face with `d >= -1.0E-7` /
-/// `d <= 1.0E-7`; the entity step must never resolve it *through* the block.
+/// `VoxelShape.collideX` (26.1.2) treats `d >= -1.0E-7` / `d <= 1.0E-7` as a
+/// contact and `Shapes.collide` returns `0.0` for it; the entity step must never
+/// advance it *through* the block, and it stays at most `COLLISION_EPSILON`
+/// inside the face (the contact clamp blocks without pushing the body out).
 ///
 /// The offset below is what an ordinary clip writes: at the pen's coordinates
 /// `512.3 + (512.0 - (512.3 - 0.3)) - 0.3` is `-5.68e-14` below the face, and the
@@ -2251,14 +2253,14 @@ fn wall_face_snap_never_lets_a_body_cross_the_face() {
             let penetration = face - (body.position.z - half_width);
             deepest = deepest.max(penetration);
             assert!(
-                penetration <= 0.0 + 1.0e-9,
-                "offset {round_ulp:e} tick {tick}: body crossed the wall face by {penetration:e} \
+                penetration <= COLLISION_EPSILON,
+                "offset {round_ulp:e} tick {tick}: body is {penetration:e} behind the wall face \
                  (pos z {})",
                 body.position.z
             );
         }
         assert!(
-            deepest <= 1.0e-9,
+            deepest <= COLLISION_EPSILON,
             "offset {round_ulp:e}: deepest penetration {deepest:e}"
         );
         // The production state (prep11-125000 pen 64) is a body standing at
@@ -2313,49 +2315,103 @@ fn deeply_embedded_body_keeps_moving_without_a_push_out() {
     );
 }
 
-/// The contact gate must use the clip's own magnitude, not its distance from the
-/// request: an outward snap of `5.68e-14` against a `0.0115` step differs from
-/// the request by the whole step, and the sweep drops a contact whose entry time
-/// is in the past (`first_sweep_hit`), so a `(clip - desired).abs()` gate would
-/// leave the body walking into the wall.
+/// The clamp in the unit it is stated in: the signed face gap in blocks, tested
+/// before the division. Both movement directions clamp at the boundary
+/// (`-COLLISION_EPSILON`), a gap one step deeper than the tolerance keeps its
+/// own entry time, and a non-negative gap is an approach, not a contact.
 #[test]
-fn wall_face_snap_uses_the_clip_result_not_its_distance_from_the_request() {
+fn contact_entry_clamps_the_face_gap_within_the_tolerance_for_both_directions() {
+    let step = 0.0115;
+    for movement in [step, -step] {
+        assert_eq!(contact_entry(0.0, movement), 0.0, "{movement}");
+        assert_eq!(contact_entry(-5.684_341_886_080_802e-14, movement), 0.0);
+        assert_eq!(contact_entry(-COLLISION_EPSILON, movement), 0.0);
+        assert!(
+            contact_entry(-2.0 * COLLISION_EPSILON, movement) < 0.0,
+            "a body deeper than the tolerance keeps its contact in the past"
+        );
+        assert_eq!(contact_entry(step, movement).abs(), 1.0, "{movement}");
+    }
+}
+
+/// The invariant behind the contact clamp: over repeated ticks, on all four
+/// horizontal faces, a body that starts at or within the contact tolerance of a
+/// face never ends deeper than the tolerance behind it. Measured on the body the
+/// resolver returns, not on the delta it chose, so any implementation that keeps
+/// the face contact may satisfy it (`sweep_axis_interval` returns `entry = 0.0`
+/// for a near-face penetration up to `COLLISION_EPSILON`).
+#[test]
+fn a_contact_never_grows_deeper_than_the_tolerance_behind_a_face() {
     let wall = WorldAabb {
         min_x: 10.0,
         min_y: 64.0,
-        min_z: 511.0,
-        max_x: 12.0,
-        max_y: 71.0,
-        max_z: 512.0,
+        min_z: 512.0,
+        max_x: 11.0,
+        max_y: 65.0,
+        max_z: 513.0,
     };
-    // Body face one rounding step inside the wall's interior face (512.0).
-    let body = WorldAabb {
-        min_x: 10.2,
-        min_y: 64.0,
-        min_z: 511.99999999999994,
-        max_x: 10.8,
-        max_y: 65.95,
-        max_z: 512.59999999999994,
+    let half = 0.3;
+    let depth = |body: &WorldAabb, axis: usize, face: f64, side: f64| {
+        let (min, max) = if axis == 0 {
+            (body.min_x, body.max_x)
+        } else {
+            (body.min_z, body.max_z)
+        };
+        if side > 0.0 { max - face } else { face - min }
     };
-    let requested = -0.0115;
-    let snap = clip_z(body, requested, &[wall]);
-    assert!(
-        (snap - 5.684_341_886_080_802e-14).abs() <= 1.0e-18,
-        "the clip must snap the face back out to 512.0: {snap:e}"
-    );
-    assert!(
-        (snap - requested).abs() > COLLISION_EPSILON,
-        "the snap is a whole step away from the request, which is why the gate \
-         cannot compare the two"
-    );
-    let swept = resolve_horizontal_sweep(body, Vec3::new(0.0, 0.0, requested), &[wall]);
-    assert!(
-        swept.z > 0.0 && swept.z <= COLLISION_EPSILON,
-        "the contact must apply the snap outward instead of being skipped: {swept:?}"
-    );
-    assert!(
-        body.min_z + swept.z >= 512.0 - 1.0e-12,
-        "the body must end flush with the face, not inside it: min_z {}",
-        body.min_z + swept.z
-    );
+    for axis in [0_usize, 2] {
+        let (wall_lo, wall_hi) = if axis == 0 {
+            (wall.min_x, wall.max_x)
+        } else {
+            (wall.min_z, wall.max_z)
+        };
+        for side in [1.0_f64, -1.0] {
+            let face = if side > 0.0 { wall_lo } else { wall_hi };
+            // Flush against the face, one rounding step inside, and halfway
+            // into the tolerance.
+            for start in [0.0, 5.684_341_886_080_802e-14, 5.0e-8] {
+                let lo = if side > 0.0 {
+                    face - 2.0 * half + start
+                } else {
+                    face - start
+                };
+                let hi = lo + 2.0 * half;
+                let mut body = if axis == 0 {
+                    WorldAabb {
+                        min_x: lo,
+                        max_x: hi,
+                        min_y: 64.0,
+                        max_y: 65.95,
+                        min_z: 512.2,
+                        max_z: 512.8,
+                    }
+                } else {
+                    WorldAabb {
+                        min_z: lo,
+                        max_z: hi,
+                        min_y: 64.0,
+                        max_y: 65.95,
+                        min_x: 10.2,
+                        max_x: 10.8,
+                    }
+                };
+                let step = if side > 0.0 { 0.0115 } else { -0.0115 };
+                let desired = if axis == 0 {
+                    Vec3::new(step, 0.0, 0.0)
+                } else {
+                    Vec3::new(0.0, 0.0, step)
+                };
+                for tick in 0..40 {
+                    let moved = resolve_horizontal_sweep(body, desired, &[wall]);
+                    body = body.moved(moved);
+                    let behind = depth(&body, axis, face, side);
+                    assert!(
+                        behind <= COLLISION_EPSILON,
+                        "axis {axis} face {face} side {side} start {start:e}: \
+                         tick {tick} ended {behind:e} behind the face"
+                    );
+                }
+            }
+        }
+    }
 }

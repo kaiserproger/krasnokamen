@@ -93,7 +93,7 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
     let body = state.entities.body(slot);
     let row = state.entities.row(slot);
     let name = match body.kind {
-        EntityKind::Player { .. } => "minecraft:player",
+        EntityKind::Player { .. } => crate::blueprint::PLAYER_TYPE_NAME,
         EntityKind::Mob { type_id } => state.registry.blueprint(type_id)?.name.as_str(),
         _ => return None,
     };

@@ -978,7 +978,10 @@ fn rest_sleeps_in_owned_bed_and_morning_wakes_metadata() {
     step(&mut state);
     assert!(!state.entities.row(slot).villager.as_ref().unwrap().sleeping);
     assert_eq!(state.entities.row(slot).appearance.pose, 0);
-    assert_eq!(state.entities.body(slot).height, 1.95);
+    assert_eq!(
+        state.entities.body(slot).height,
+        crate::blueprint::contract_dimensions("minecraft:villager").height
+    );
 }
 
 #[test]
