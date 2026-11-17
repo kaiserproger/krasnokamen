@@ -4622,9 +4622,35 @@ area = "gameplay"
 repro = "source"
 severity = "major"
 status = "open"
-source = "UpgradeProof D18 harness on the retained trial-4 world (receipts/UpgradeProof/HANDOFF.md, logs/after-final.log), trees d7fd00e64 and 94968fcc6a alike: road level 1 at state=Running stage=0 work=34 consumed=0 pause=None from tick 304153 to 382153, so a funded owner upgrade order remains Queued{busy} for the observation. Same symptom family as CIV-SEED24-ROAD-CLEAR-STALL, but that row's fix 2b8219d1 (fence-post stand) is an ancestor of 94968fcc6a, so it does not cover this stall. Cause not located."
-regression = []
+source = "UpgradeProof D18 harness on the retained trial-4 world (receipts/UpgradeProof/HANDOFF.md, logs/after-final.log), trees d7fd00e64 and 94968fcc6a alike: road level 1 at state=Running stage=0 work=34 consumed=0 pause=None from tick 304153 to 382153, so a funded owner upgrade order remains Queued{busy} for the observation. Same symptom family as CIV-SEED24-ROAD-CLEAR-STALL, but that row's fix 2b8219d1 (fence-post stand) is an ancestor of 94968fcc6a, so it does not cover this stall. Cause (SlotStall, receipts/SlotStall/README.md, native retained-world probe on copies at ab2d945c9): the construction stall watch only rotated Builders and reached retry_preparation only for a protected tree in a clear stage, so a rotation that kept picking residents who could not reach the worksite held the only slot forever. Shape A, trial-4: road Running work=34/42 consumed=0 for 24,000 ticks, settlement_construction_stalled cause=worksite_unreached recovery=builder_released at tick 308521, then recovery_failed at 311521 and nothing more; 7 of 8 residents float in the one-cell water basin beside the bell (SETTLEMENT-RESIDENTS-TRAPPED-IN-PLAZA-BASIN), so every rotation picks a trapped Builder. Shape B, growth-03ef2e297a72-laptop-2: perimeter Prepared work=0/24 the same way; its Builders carry the cobblestone but get no worksite target (SETTLEMENT-WALL-STRETCH-WITHOUT-STAND). The other Prepared scan hits never stall when ticked: fast-ab/pin, fast-ab/frames12 and LedgerSplit base-tail start at the morning shift, PreparedLaunchFix real-gait has a frozen clock (day_time 18000). Fix: at the repeated-stall window unpaid work (nothing consumed) is cancelled through retry_preparation (owner order requeued when no newer order is pending); on the fixed tree both copies log recovery=preparation_cancelled and the slot frees, so a queued owner order is admitted at the next planning pass. Paid work keeps rotating Builders."
+regression = [
+  "cargo:mc-core:settlements::construction::stall_tests::an_unpaid_road_that_stops_running_gives_back_the_slot_after_a_failed_rotation",
+  "cargo:mc-core:settlements::construction::stall_tests::an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order",
+]
 failing_first = "reported"
+fix_commit = "85e10283e4b29cfa9854a79d39fc5eeef4993161"
+
+[[bug]]
+id = "SETTLEMENT-RESIDENTS-TRAPPED-IN-PLAZA-BASIN"
+title = "Seven of trial-4's eight residents stay in the one-cell water basin beside the bell for 24,000 ticks under a tree crown, so no Builder ever reaches a worksite"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "SlotStall native probe on a copy of SpainCulture trial-4 at ab2d945c9 (receipts/SlotStall/README.md, logs/before-trial4.log, logs/dump-trial4.log): residents at (116.3-116.7, 69.6, 7.5) float in water (116,69,7), rimmed by acacia_wood at y=69, with acacia_leaves at (116,72,7) and its neighbours and an acacia trunk at (116,70..73,9); they hold navigation targets and 40-130-node paths but do not move from tick 304106 to 328106. mc-physics step_entity lets a body jump out of fluid only when a 0.6 rise is free of collision; from y=69.6 the 1.95-high body would reach 72.15 and meets the crown at y=72. Not established: whether vanilla frees villagers here, and how the crown came to stand over the basin (lumber replant or natural growth)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "SETTLEMENT-WALL-STRETCH-WITHOUT-STAND"
+title = "A perimeter wall stretch planned on a lakeshore house roof has no Builder stand, so it never starts and is admitted again after each cancellation"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "SlotStall native probe on a copy of SpainCulture growth-03ef2e297a72-laptop-2 at ab2d945c9 (receipts/SlotStall/README.md, logs/after-growth03ef-l2.log PROBE_COLUMN lines): the next wall cell [91,69,-25] stands on acacia_stairs at y=68 of a house roof; layout::stand's inward columns (91,-24) and (91,-23) are open water up to y=62, below the surface band 63..79 of anchor y 71, so stand is None, villager::building::work gives the Builder no target (navigation=None) and the stretch stays Prepared work=0/24 while the Builders carry 24 cobblestone. With SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4's fix the stretch is cancelled after one failed rotation, and with no pending order the planner admits the same stretch 20 ticks later. A similar worksite_unreached stall hits fast-ab/pin's stretch at origin [102,72,35] on cell [107,77,35] (logs/before-fastab-pin.log)."
+regression = []
+failing_first = "not recorded"
 
 [[bug]]
 id = "CIV-SEED24-FARM-SEEDS-NEED-A-FARM"
