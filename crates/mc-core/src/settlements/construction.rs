@@ -1830,7 +1830,11 @@ fn plan(state: &mut TickState, id: SettlementId) {
             begin_cells(state, site.project, site.bounds, site.cells);
             return;
         }
-    } else if let Some((project, species, color)) = upgrade_project(state, record, &images)
+    }
+    // A funded new building may have no legal lot. Existing houses must still
+    // be able to gain beds through their reserved upgrade footprint.
+    let record = state.settlements.get(id).expect("planned settlement");
+    if let Some((project, species, color)) = upgrade_project(state, record, &images)
         && begin(state, project, &species, color)
     {
         return;

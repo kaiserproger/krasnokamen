@@ -42,16 +42,16 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
         "the resident must actually claim its bed"
     );
     assert!(state.settlements.get(id).unwrap().project.is_none());
-    stock_buildings(&mut state, &["spanish_house", "spanish_church"]);
+    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_church", 1)]);
     (state, id)
 }
 
-fn stock_buildings(state: &mut TickState, names: &[&str]) {
+fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
     let mut bill = std::collections::BTreeMap::<u32, u32>::new();
-    for name in names {
+    for &(name, level) in levels {
         for &(item, count) in &blueprints::get(&state.registry, name)
             .unwrap()
-            .level(1)
+            .level(level)
             .unwrap()
             .materials
         {
@@ -123,7 +123,7 @@ fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
 
 fn house_without_site() -> (TickState, SettlementId) {
     let (mut state, id) = housing_fixture(false);
-    stock_buildings(&mut state, &["spanish_house", "farm"]);
+    stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
     // The Farm fits below this fluid ceiling; the taller House cannot.
     let water = block(&state, "minecraft:water", &[("level", "0")]);
     for x in -16..32 {
@@ -195,6 +195,105 @@ fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.project.as_ref().unwrap().blueprint, "farm");
     assert!(record.pending_order.is_none());
+}
+
+fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
+    let mut beds = 0;
+    for house in state.settlements.get(id).unwrap().buildings.values() {
+        if house.kind != BuildingKind::House {
+            continue;
+        }
+        for x in house.bounds.min[0]..=house.bounds.max[0] {
+            for y in house.bounds.min[1]..=house.bounds.max[1] {
+                for z in house.bounds.min[2]..=house.bounds.max[2] {
+                    let pos = crate::boundary::BlockPos { x, y, z };
+                    beds += usize::from(
+                        super::super::allocator::bed_pair(&state.world, &state.registry, pos)
+                            .is_some()
+                            && super::super::allocator::roofed(&state.world, &state.registry, pos),
+                    );
+                }
+            }
+        }
+    }
+    beds
+}
+
+#[test]
+fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
+    for level in 1..=2 {
+        let (mut state, id, builder) = fixture();
+        open_plan(&mut state);
+        fund(&mut state, "spanish_house", 1);
+        start(&mut state, id, "spanish_house", 1, None);
+        complete(&mut state, id, builder);
+        let house = *state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .keys()
+            .next()
+            .unwrap();
+        if level == 2 {
+            fund(&mut state, "spanish_house", 2);
+            start(&mut state, id, "spanish_house", 2, Some(house));
+            complete(&mut state, id, builder);
+            let resident = super::super::allocator::tests::villager(&mut state, [1.5, 201.0, 3.5]);
+            let entity = state.entities.body(resident).id;
+            super::super::bind(&mut state, id, entity).unwrap();
+        }
+        assert_eq!(roofed_house_beds(&state, id), usize::from(level));
+        assert_eq!(state.settlements.member_count(id), usize::from(level));
+
+        // Retain the standing house's maximum footprint and dry Builder
+        // approaches, but surround it with water: no new lot can fit.
+        let water = block(&state, "minecraft:water", &[("level", "0")]);
+        for x in -16..32 {
+            for z in -16..32 {
+                if !(0..17).contains(&x) || !(0..14).contains(&z) {
+                    state.world.set_block(x, 201, z, water);
+                }
+            }
+        }
+        state.world.fold_overlay();
+        stock_buildings(
+            &mut state,
+            &[
+                ("spanish_house", 1),
+                ("spanish_house", level + 1),
+                ("farm", 1),
+            ],
+        );
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let farm = blueprints::get(&state.registry, "farm").unwrap();
+        assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        assert!(
+            site_project(&state, record, std::iter::once(farm), 0, u32::MAX, &images)
+                .0
+                .is_none(),
+            "the funded missing kind has no legal lot"
+        );
+        let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+        plan(&mut state, id);
+        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+        assert_eq!(project.blueprint, "spanish_house");
+        assert_eq!(project.building, Some(house));
+        assert_eq!(project.level, level + 1);
+        assert!(
+            !project.ordered,
+            "the real autonomous planner admitted the upgrade"
+        );
+        assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+        complete(&mut state, id, builder);
+        assert_eq!(
+            state.settlements.get(id).unwrap().buildings[&house].level,
+            level + 1
+        );
+        assert_eq!(roofed_house_beds(&state, id), usize::from(level + 1));
+        assert!(roofed_house_beds(&state, id) > state.settlements.member_count(id));
+    }
 }
 
 #[derive(Clone, Default)]
