@@ -125,6 +125,23 @@ server CPU affinity and its memory cap do not include the graphical client.
 `explore-3` means three exploring players, not the twenty-player workload under
 a different name.
 
+The 8 GiB shape also needs the one queue between the simulation and the network
+layer bounded, because the tick never waits for a slow edge:
+`[data] outbox_queue_bytes` (256 MiB by default) caps the queued reliable
+backlog and warns once per crossing at 8 MiB (re-armed only after the queue falls
+below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
+batch larger than the whole cap is admitted alone into an empty queue, and a
+halt's terminal disconnect batch is admitted past it so every player still learns
+why. A backlog that reaches the cap, or that consumes no batch for 10 s, stops the
+server fail-closed with one explicit disconnect reason per player; the next start
+replays the retained WAL
+([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
+warning's byte count before raising the cap. The queued and peak byte counters
+exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in
+the tick's own logs, not on the dashboard; the dashboard's `reliable_drops` counts
+a different thing — frames dropped by one connection's edge-side reliable queue,
+which is where an individual slow client shows up.
+
 ### Singleplayer with software Vulkan
 
 On 2026-11-07, fresh seed 42, installed 26.3 content, 1280×720 Low preset,
@@ -199,6 +216,7 @@ enable_command_block = false     # command-block execution gate
 # journal_fsync_every_batches = 10  # 1..=1200 published batches between
 #                                    # directory fsyncs; power loss can drop
 #                                    # up to this many (see "What a crash can lose")
+# outbox_queue_bytes = 268435456  # tick→edge reliable backlog cap (256 MiB)
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records

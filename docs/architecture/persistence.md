@@ -46,6 +46,22 @@ tick, not discard or reorder accepted work. A failed writer halts the core.
 Append acknowledgement is not a promise that the directory has been fsynced;
 a crash can consistently roll back an unflushed tail, even after a reply.
 
+The tick→edge reliable handoff (presentation `PlayerChange`s) is bounded too,
+because the tick must never wait for the network layer: `[data]
+outbox_queue_bytes` (256 MiB by default) caps the queued bytes, the tick charges
+each batch before pushing and the edge releases it as it drains, and one
+oversized batch is admitted alone into an empty queue. Two documented exceptions
+exceed the cap: that oversized batch, and the halt's own terminal `Disconnect`
+batch. A push that does not fit, or a non-empty queue whose drain has consumed
+nothing for 10 s, halts the core exactly like a failed journal append: one error
+naming the cause, an explicit `Disconnect` batch for every live connection, no
+publish and no checkpoint. The tick's `Append` for that tick was already accepted
+by the journal queue — the handoff is asynchronous and the tick does not wait for
+the write — so recovery uses the published contiguous tail: everything before the
+last complete batch, with nothing accepted reordered. The warning mark is 8 MiB:
+one warning per crossing (re-armed below 4 MiB) and the queue peak, never a halt.
+This halt is the fail-stop above, not a new commit boundary.
+
 All generated native chunks, including vanilla-only chunks, may outlive their
 selected inputs. Before enqueueing a tick's WAL append, the tick owner drains
 immutable pre-edit admission images from every dimension into required-baseline

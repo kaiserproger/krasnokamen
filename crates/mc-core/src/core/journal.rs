@@ -17,6 +17,39 @@ fn checkpoint_stage(world_dir: &std::path::Path, stage: &'static str) {
     }
 }
 
+/// Test-only hold on the journal owner's exit path: `(world_dir, entered,
+/// release)`. The owner signals `entered` and waits for `release` before it
+/// returns, so a test can prove a failed start joined the owner before
+/// returning instead of racing its own exit.
+#[cfg(test)]
+pub(super) type ExitHold = (
+    std::path::PathBuf,
+    std::sync::mpsc::Sender<()>,
+    std::sync::mpsc::Receiver<()>,
+);
+
+#[cfg(test)]
+pub(super) static JOURNAL_EXIT_HOLD: parking_lot::Mutex<Option<ExitHold>> =
+    parking_lot::const_mutex(None);
+
+#[cfg(test)]
+fn hold_exit(world_dir: &std::path::Path) {
+    // Only this world's exit is held: other tests' owners exit normally, and the
+    // lock is released before the wait.
+    let taken = {
+        let mut hold = JOURNAL_EXIT_HOLD.lock();
+        if hold.as_ref().is_some_and(|(dir, _, _)| dir == world_dir) {
+            hold.take()
+        } else {
+            None
+        }
+    };
+    if let Some((_, entered, release)) = taken {
+        let _ = entered.send(());
+        let _ = release.recv();
+    }
+}
+
 /// One checkpoint frozen on the tick thread for the journal thread.
 pub(super) struct CheckpointJob {
     pub(super) tick: u64,
@@ -870,6 +903,9 @@ pub(super) fn journal_loop(
             "core journal owner stopped"
         );
     });
+    // Test-only: hold the exit so a failed start's join is measurable.
+    #[cfg(test)]
+    hold_exit(world_dir);
 }
 
 /// Native writer thread: the single redb writer for checkpoints and generated

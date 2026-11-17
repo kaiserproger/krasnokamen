@@ -318,6 +318,13 @@ pub struct DataSection {
     /// docs/architecture/persistence.md "Write errors and publication order".
     #[serde(default = "default_journal_fsync_every_batches")]
     pub journal_fsync_every_batches: u32,
+    /// Hard cap on reliable presentation bytes queued between the core tick and
+    /// the edge pump, in bytes (default 256 MiB). The tick never blocks on a
+    /// slow edge: exceeding this cap, or leaving the queue undrained for 10 s,
+    /// halts the server fail-closed with an explicit disconnect reason. The
+    /// warning mark is 8 MiB. See `docs/architecture/persistence.md`.
+    #[serde(default = "default_outbox_queue_bytes")]
+    pub outbox_queue_bytes: usize,
 }
 
 impl Default for DataSection {
@@ -329,6 +336,7 @@ impl Default for DataSection {
             backup_dir: None,
             checkpoint_every_ticks: default_checkpoint_every_ticks(),
             journal_fsync_every_batches: default_journal_fsync_every_batches(),
+            outbox_queue_bytes: default_outbox_queue_bytes(),
         }
     }
 }
@@ -691,6 +699,12 @@ fn default_checkpoint_every_ticks() -> u64 {
     // mc-core's `CoreConfig::new` cadence.
     1200
 }
+
+fn default_outbox_queue_bytes() -> usize {
+    // mc-core's own default: the 8 GiB target keeps presentation backlog well
+    // inside its memory cap (see docs/OPERATING.md).
+    mc_core::config::OUTBOX_QUEUE_BYTES
+}
 fn default_bind_address() -> String {
     "127.0.0.1".to_owned()
 }
@@ -806,6 +820,10 @@ impl EdgeConfig {
              every tick, and above the default checkpoint interval (1200 ticks) a \
              checkpoint gate flushes the directory first anyway"
         );
+        anyhow::ensure!(
+            cfg.data.outbox_queue_bytes > 0,
+            "data.outbox_queue_bytes must be positive"
+        );
         Ok(cfg)
     }
 
@@ -880,6 +898,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "backup_dir",
                 "checkpoint_every_ticks",
                 "journal_fsync_every_batches",
+                "outbox_queue_bytes",
             ],
         ),
         ("auth", &["online_mode", "require_plugin_login"]),
@@ -1096,6 +1115,26 @@ mod tests {
         let negative =
             EdgeConfig::from_toml("[server]\npause_when_empty_seconds = -1\n", None).unwrap();
         assert_eq!(negative.server.pause_when_empty_seconds, -1);
+    }
+
+    #[test]
+    fn outbox_queue_bytes_is_a_known_data_key_and_validates() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(
+            default.data.outbox_queue_bytes,
+            mc_core::config::OUTBOX_QUEUE_BYTES
+        );
+        let configured =
+            EdgeConfig::from_toml("[data]\noutbox_queue_bytes = 4194304\n", None).unwrap();
+        assert_eq!(configured.data.outbox_queue_bytes, 4 << 20);
+        // A configured value must not be reported as an unknown key.
+        let table: toml::Table = toml::from_str("[data]\noutbox_queue_bytes = 4194304\n").unwrap();
+        assert_eq!(
+            unknown_leaves(&table),
+            Vec::<String>::new(),
+            "outbox_queue_bytes must be a known data key"
+        );
+        assert!(EdgeConfig::from_toml("[data]\noutbox_queue_bytes = 0\n", None).is_err());
     }
 
     #[test]

@@ -1757,6 +1757,7 @@ pub fn core_config(cfg: &EdgeConfig) -> mc_core::config::CoreConfig {
     core.worldgen_gpu = cfg.server.worldgen_gpu;
     core.checkpoint_every_ticks = cfg.data.checkpoint_every_ticks;
     core.journal_fsync_every_batches = cfg.data.journal_fsync_every_batches;
+    core.outbox_queue_bytes = cfg.data.outbox_queue_bytes;
     core.test_acceleration = cfg.test_acceleration;
     core.mob_griefing = mc_core::config::MobGriefingRules {
         creeper_block_damage: cfg.mob_griefing.creeper_block_damage,
