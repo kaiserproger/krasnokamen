@@ -580,7 +580,7 @@ fn planted_sapling_before_admission(corridor: bool) {
             }
         }
     }
-    assert!(planned_cells(&state, &project, "oak").is_ok());
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
     let dirt = block(&state, "minecraft:dirt", &[]);
     let sapling = block(&state, "minecraft:oak_sapling", &[("stage", "1")]);
     state.world.set_block(root[0], root[1] - 1, root[2], dirt);
@@ -593,7 +593,7 @@ fn planted_sapling_before_admission(corridor: bool) {
         .insert(root);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     assert!(
-        planned_cells(&state, &project, "oak").is_err(),
+        planned_cells(&state, &project, "oak", &mut Default::default()).is_err(),
         "future planted crown must exclude this site/corridor before it grows"
     );
     assert_eq!(
@@ -662,7 +662,8 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
                 ordered: true,
                 borrowed_builder: None,
             };
-            let (bounds, _) = planned_cells(&state, &project, "oak").ok()?;
+            let (bounds, _) =
+                planned_cells(&state, &project, "oak", &mut Default::default()).ok()?;
             let route = network.construction_access(&project)?;
             let crown = super::super::forestry::PLANTED_CROWN_RADIUS as i32;
             let root = (bounds.min[0]..=bounds.max[0]).find_map(|x| {
@@ -713,7 +714,7 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
         )
         .is_some()
     );
-    let (bounds, cells) = planned_cells(&state, &project, "oak")
+    let (bounds, cells) = planned_cells(&state, &project, "oak", &mut Default::default())
         .expect("a crown outside the lot and actual access walk must not veto their envelope");
     fund(&mut state, "spanish_house", 1);
     assert!(begin_cells(&mut state, project, bounds, cells));
@@ -1020,7 +1021,7 @@ fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
         .unwrap();
     start(&mut state, id, "house", 2, Some(building));
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     let at = planned
         .iter()
         .find(|cell| {
@@ -1047,12 +1048,15 @@ fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
     ] {
         let tree = block(&state, name, &[]);
         state.world.set_block(at[0], at[1], at[2], tree);
-        assert!(planned_cells(&state, &project, "oak").is_err(), "{name}");
+        assert!(
+            planned_cells(&state, &project, "oak", &mut Default::default()).is_err(),
+            "{name}"
+        );
         assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(tree));
         assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     }
     state.world.set_block(at[0], at[1], at[2], original);
-    assert!(planned_cells(&state, &project, "oak").is_ok());
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
 }
 
 fn upgrade_beam() -> (
@@ -1103,7 +1107,7 @@ fn upgrade_beam() -> (
             .path(),
         "oak_log"
     );
-    let (_, cells) = planned_cells(&state, &project, "oak").unwrap();
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     assert!(cells.iter().any(|cell| {
         cell.at == beam
             && state
@@ -1130,7 +1134,7 @@ fn retained_identical_player_beam_refuses_upgrade_before_the_authored_exemption(
     let (mut state, id, _, project, beam) = upgrade_beam();
     retain_player_edit(&mut state, beam);
     assert!(matches!(
-        planned_cells(&state, &project, "oak"),
+        planned_cells(&state, &project, "oak", &mut Default::default()),
         Err(site_refusals::Reason::ProtectedObstruction)
     ));
     fund(&mut state, "house", 2);
@@ -1145,7 +1149,7 @@ fn retained_identical_player_beam_refuses_upgrade_before_the_authored_exemption(
     state.block_log = super::super::forestry::tests::player_history(&state, beam, 1);
     state.block_log.evict(u64::MAX);
     assert!(!state.block_log.player_touched(beam));
-    assert!(planned_cells(&state, &project, "oak").is_ok());
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
 }
 
 #[test]
@@ -1164,7 +1168,7 @@ fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_be
     state.entities.set_pos(slot, beam.map(f64::from));
     assert!(!state.block_log.enabled());
     assert!(matches!(
-        planned_cells(&state, &project, "oak"),
+        planned_cells(&state, &project, "oak", &mut Default::default()),
         Err(site_refusals::Reason::ProtectedObstruction)
     ));
     state.entities.set_pos(
@@ -1175,5 +1179,5 @@ fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_be
             f64::from(beam[2]),
         ],
     );
-    assert!(planned_cells(&state, &project, "oak").is_ok());
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
 }

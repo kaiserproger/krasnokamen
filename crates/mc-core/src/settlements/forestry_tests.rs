@@ -1556,8 +1556,17 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
         expected_cursor
     );
     let builder = restored.entities.slot_of_uuid(builder_uuid).unwrap();
+    // Unpaid interference recovery may requeue; keep native ticks running
+    // until that order is re-admitted rather than ending at cancellation.
     for _ in 0..10_000 {
-        if restored.settlements.get(id).unwrap().project.is_none() {
+        if restored.settlements.get(id).unwrap().project.is_none()
+            && restored
+                .settlements
+                .get(id)
+                .unwrap()
+                .pending_order
+                .is_none()
+        {
             break;
         }
         if count(&restored, "minecraft:birch_log") == baseline + 8 {
@@ -1568,7 +1577,14 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     }
     assert_eq!(count(&restored, "minecraft:birch_log"), baseline + 8);
     for _ in 0..36_000 {
-        if restored.settlements.get(id).unwrap().project.is_none() {
+        if restored.settlements.get(id).unwrap().project.is_none()
+            && restored
+                .settlements
+                .get(id)
+                .unwrap()
+                .pending_order
+                .is_none()
+        {
             break;
         }
         guide_builder(&mut restored, builder);

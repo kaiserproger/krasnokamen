@@ -289,6 +289,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
         return;
     }
     let record = state.settlements.get(parent).unwrap();
+    let mut clearance = super::super::forestry::Clearance::default();
     if !expedition.sites().into_iter().all(|(name, origin)| {
         let blueprint = blueprints::get(&state.registry, name).expect("authored outpost");
         site_free_claim(
@@ -297,6 +298,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
             origin,
             blueprint.footprint(Rotation(0)),
             Some(&expedition),
+            &mut clearance,
         ) && planned_cells(
             state,
             &Project {
@@ -311,6 +313,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
                 borrowed_builder: None,
             },
             "oak",
+            &mut clearance,
         )
         .is_ok()
     }) {

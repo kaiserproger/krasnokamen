@@ -201,7 +201,8 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
             state.settlements.get(id).unwrap(),
             origin,
             [1, 12, 1],
-            None
+            None,
+            &mut Default::default(),
         ),
         Err(Reason::PlantingProvenance)
     );
@@ -212,7 +213,8 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
             state.settlements.get(id).unwrap(),
             origin,
             [1, 12, 1],
-            None
+            None,
+            &mut Default::default(),
         ),
         Ok(())
     );
@@ -229,7 +231,8 @@ fn native_overlapping_crowns_report_ambiguous_foliage_not_a_clearable_site() {
                 state.settlements.get(id).unwrap(),
                 [witness[0], 200, witness[2]],
                 [1, 12, 1],
-                None
+                None,
+                &mut Default::default(),
             ),
             Err(Reason::AmbiguousFoliage),
             "touching trunks: {connected}"
@@ -266,7 +269,8 @@ fn persistent_and_retained_player_foliage_report_protected_obstruction() {
                 state.settlements.get(id).unwrap(),
                 origin,
                 [1, 12, 1],
-                None
+                None,
+                &mut Default::default(),
             ),
             Err(Reason::ProtectedObstruction),
             "retained edit: {retained}"

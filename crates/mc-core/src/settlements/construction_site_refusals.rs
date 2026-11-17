@@ -161,6 +161,7 @@ pub(super) fn check(
     origin: [i32; 3],
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
+    clearance: &mut super::super::forestry::Clearance,
 ) -> Result<(), Reason> {
     if founding::site_reserved(state, record.id, origin, size) {
         return Err(Reason::OutpostClaim);
@@ -180,7 +181,6 @@ pub(super) fn check(
     if super::super::forestry::off_lot_sapling_overlaps(state, lot) {
         return Err(Reason::PlantingProvenance);
     }
-    let mut clearance = super::super::forestry::Clearance::default();
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
             if [x, max[1], z]
@@ -198,7 +198,7 @@ pub(super) fn check(
             } else {
                 record.anchor[1]
             };
-            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot), &mut clearance)
+            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot), clearance)
                 .ok_or_else(|| {
                     (anchor_y - SITE_BAND + 1..=anchor_y + SITE_BAND + 1)
                         .find(|&y| {

@@ -244,7 +244,7 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
 }
 
 #[test]
-fn a_decayed_crown_clear_cell_uses_its_column_footing_beyond_perimeter_reach() {
+fn a_decayed_crown_clear_cell_keeps_its_footing_then_requeues_unpaid_work() {
     let (mut state, id, builder) = fixture();
     let next = [8, 220, 8];
     let leaf = super::super::allocator::tests::block(
@@ -308,15 +308,28 @@ fn a_decayed_crown_clear_cell_uses_its_column_footing_beyond_perimeter_reach() {
     let target = target.expect("an emptied planned crown cell still has its column-footing target");
     assert_eq!([target.pos.x, target.pos.y, target.pos.z], [8, 201, 8]);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    // Normal footprint refresh/resume, then the canonical clear operation.
+    // The footing stays valid, but changed unpaid work must be recertified.
     for _ in 0..3 {
         crate::villager::building::tick(&mut state, id);
     }
     let snapshot = executor::status(&state, id, &structure).unwrap();
-    assert_eq!(snapshot.current_stage_index, 1);
+    assert_eq!(snapshot.state, ScriptStructureState::Cancelled);
+    assert_eq!(snapshot.current_stage_index, 0);
+    assert!(state.settlements.get(id).unwrap().project.is_none());
     assert_eq!(
-        executor::next_cell(&state, id, &structure).unwrap(),
-        Some(build)
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .pending_order
+            .as_ref()
+            .unwrap()
+            .blueprint,
+        "house"
+    );
+    assert_eq!(
+        state.world.block_at(build[0], build[1], build[2]),
+        Some(air)
     );
     assert!(snapshot.consumed.is_empty());
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);

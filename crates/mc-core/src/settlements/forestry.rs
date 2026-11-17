@@ -76,6 +76,9 @@ impl Clearance {
                 let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
                     continue;
                 };
+                if !tree_or_sapling(state, block) {
+                    continue;
+                }
                 let leaf = state
                     .registry
                     .blocks
@@ -709,6 +712,12 @@ pub(crate) fn cells(
     use crate::plugin_structures::settlement_builds::PlannedCell;
     let record = state.settlements.get(project.settlement)?;
     let bounds = lot_bounds(state, project)?;
+    if let Some(proofs) = clearance.proofs.as_mut() {
+        // Proofs are scan-wide; the selected work roots are candidate-local.
+        for (_, needed) in proofs.values_mut() {
+            *needed = false;
+        }
+    }
     let mut lot = Vec::new();
     let mut lot_has_tree = false;
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
@@ -801,6 +810,25 @@ pub(crate) fn cells(
         }
     }
     clearance.append_whole_trees(state, &mut cells);
+    let mut first = 0;
+    for index in 0..cells.len() {
+        let at = cells[index].at;
+        if registered_planting(state, at) == Some(true)
+            && state
+                .world
+                .physics_block_at(at[0], at[1], at[2])
+                .is_some_and(|block| {
+                    state
+                        .registry
+                        .blocks
+                        .by_id(BlockStateId(block))
+                        .is_some_and(|block| block.block.id.path().ends_with("_sapling"))
+                })
+        {
+            cells.swap(first, index);
+            first += 1;
+        }
+    }
     Some(Preparation { cells, corridor })
 }
 
@@ -810,10 +838,7 @@ pub(crate) fn footing(
     at: [i32; 3],
 ) -> Option<crate::boundary::BlockPos> {
     let record = state.settlements.get(settlement)?;
-    let lot = record
-        .project
-        .as_ref()
-        .and_then(|project| lot_bounds(state, project));
+    let lot = super::construction::preparation::active_lot(state, record);
     let y = super::construction::surface_y_for_lot(
         state,
         record.anchor[1],
@@ -836,3 +861,12 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "forestry_native_tree_tests.rs"]
 pub(crate) mod native_tree_tests;
+
+#[cfg(test)]
+#[path = "forestry_followup_tests.rs"]
+mod followup_tests;
+
+#[cfg(test)]
+pub(crate) fn proof_builds() -> usize {
+    tree_proof::BUILDS.with(std::cell::Cell::get)
+}

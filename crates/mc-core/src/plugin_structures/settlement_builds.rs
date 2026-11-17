@@ -246,12 +246,11 @@ pub(crate) fn status(
 }
 
 /// A foreign edit inside a native site pauses the structure as
-/// `footprint_changed`. The next construction admission accepts the world as
-/// it now is: re-snapshot the footprint and resume. Remaining cells are placed
-/// over whatever stands there; a placed cell that the edit emptied is queued
-/// again at completion by [`reopen_emptied`], while a solid foreign block in a
-/// placed cell is left alone.
-/// Returns whether a paused structure was resumed.
+/// `footprint_changed`. An unpaid preparation is cancelled and requeued for
+/// fresh tree certification. Paid work re-snapshots the footprint and resumes:
+/// a placed cell that the edit emptied is queued again at completion by
+/// [`reopen_emptied`], while a solid foreign block in a placed cell is left alone.
+/// Returns whether recovery resumed or cancelled the structure.
 pub(crate) fn recover(
     state: &mut TickState,
     settlement: SettlementId,
@@ -264,6 +263,23 @@ pub(crate) fn recover(
     let committed = record.snapshot.state == ScriptStructureState::Committed;
     if !paused && !committed {
         return Ok(false);
+    }
+    let retry = (paused
+        && record.snapshot.consumed.is_empty()
+        && record
+            .snapshot
+            .stages
+            .iter()
+            .any(|stage| stage.stage == "clear"))
+    .then(|| {
+        crate::settlements::construction::preparation::changed_project(state, settlement, handle)
+    })
+    .flatten();
+    if let Some(project) = retry {
+        drop(ledger);
+        crate::settlements::construction::retry_preparation(state, settlement, &project)
+            .map_err(|_| Failure::Blocked)?;
+        return Ok(true);
     }
     let target = world(state, &record.snapshot.dimension)?;
     let build = record
@@ -611,6 +627,11 @@ pub(super) fn debit(
                     &mut clearance,
                 )?);
             } else {
+                // A log-tag variant excluded from tree ownership must never
+                // pass through the flora path with an empty drop list.
+                if state.registry.tree_logs.get(block as usize) == Some(&true) {
+                    return Err(Failure::Blocked);
+                }
                 loot.extend(
                     crate::settlements::forestry::plant_drops(state, cell.at, block)?
                         .into_iter()
@@ -1448,3 +1469,7 @@ pub(crate) fn prepare_founding_transfer(
 pub(crate) fn commit_founding_transfer(state: &mut TickState, prepared: PreparedFoundingTransfer) {
     save(state, &prepared.0);
 }
+
+#[cfg(test)]
+#[path = "settlement_builds_preparation_tests.rs"]
+mod preparation_tests;

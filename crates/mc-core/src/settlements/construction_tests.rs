@@ -744,7 +744,7 @@ fn builder_stalls_without_stock_then_consumes_exact_materials_in_order_and_certi
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     let before = executor::status(&state, id, &project.structure).unwrap();
     for _ in 0..4 {
         attempt(&mut state, id, slot);
@@ -823,7 +823,7 @@ fn upgrade_uses_diff_and_certifies_level_two() {
     let old_writes = state.plugin_block_writes.len();
     start(&mut state, id, "house", 2, Some(building));
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     fund(&mut state, "house", 2);
     complete(&mut state, id, slot);
     assert_eq!(
