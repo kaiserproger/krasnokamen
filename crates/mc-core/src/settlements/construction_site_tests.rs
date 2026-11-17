@@ -7,14 +7,14 @@ const BUILDER_STALL_SHIFT_TICKS: u64 = 3_000;
 /// A storage lot of the street plan and its index in the frontage list the
 /// planner's cursor walks.
 #[derive(Debug, Clone, Copy)]
-struct Site {
-    front: u32,
-    lot: layout::Lot,
-    size: [u8; 3],
+pub(crate) struct Site {
+    pub(crate) front: u32,
+    pub(crate) lot: layout::Lot,
+    pub(crate) size: [u8; 3],
 }
 
 impl Site {
-    fn within(&self, x: i32, z: i32) -> bool {
+    pub(crate) fn within(&self, x: i32, z: i32) -> bool {
         let [ox, _, oz] = self.lot.origin;
         (ox..ox + i32::from(self.size[0])).contains(&x)
             && (oz..oz + i32::from(self.size[2])).contains(&z)
@@ -43,7 +43,7 @@ impl Site {
 }
 
 /// Storage lots of the live street plan, in walking order from the plaza.
-fn storage_lots(state: &TickState, id: SettlementId) -> Vec<Site> {
+pub(crate) fn storage_lots(state: &TickState, id: SettlementId) -> Vec<Site> {
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let mut network = layout::Network::walk(state, record);
@@ -65,7 +65,7 @@ fn storage_lots(state: &TickState, id: SettlementId) -> Vec<Site> {
 /// Solid stone through the terrain-following band on every lot column except
 /// the fixture chest and the given sites: roads, verges and the plaza stay
 /// walkable, so a site exists only where a test leaves one.
-fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Site]) {
+pub(crate) fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Site]) {
     let anchor = state.settlements.get(id).unwrap().anchor;
     for x in -16i32..32 {
         for z in -16i32..32 {
@@ -315,9 +315,9 @@ fn reachable_or_off_shift_builder_keeps_the_slot() {
 }
 
 /// Deterministic terrain, not an operator-built pad: behind a level front
-/// lip, every lot east of the avenue is a 198..=201 diagonal ramp, so each
-/// footprint there crosses both low and high columns. Roads, verges, the
-/// plaza and the western blocks stay level stone and dirt at 200.
+/// lip, every lot is a 198..=201 diagonal ramp, so each footprint crosses both
+/// low and high columns whichever lot the cheapest-sweep rule picks. Roads,
+/// verges and the plaza stay level stone and dirt at 200.
 #[test]
 fn hillside_village_prepares_and_builds_first_storage() {
     use super::tests::complete;
@@ -345,7 +345,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
             .any(|(dx, dz)| layout::cell(anchor, x + dx, z + dz) == layout::Cell::Verge)
     };
     let height = |x: i32, z: i32| {
-        if lot(x, z) && x > anchor[0] && !lip(x, z) {
+        if lot(x, z) && !lip(x, z) {
             198 + (x + z).rem_euclid(4)
         } else {
             200
@@ -402,6 +402,30 @@ fn hillside_village_prepares_and_builds_first_storage() {
             .any(|line| line == &format!("minecraft:dirt: {bill}"))
     );
     assert!(bill > 0);
+    // Terrain cuts credit their own mining drop, so cutting grass or dirt pays
+    // dirt back into storage: count that before the build changes the world.
+    let credited: i32 = {
+        let ledger = state
+            .plugins
+            .get_domain("@native-structures", "ledger")
+            .unwrap();
+        ledger["structures"][&project.structure]["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|stage| stage.as_array().unwrap())
+            .filter(|cell| {
+                u32::try_from(cell["state"].as_u64().unwrap()).unwrap() == state.registry.states.air
+            })
+            .filter(|cell| {
+                let at: [i32; 3] = serde_json::from_value(cell["at"].clone()).unwrap();
+                matches!(
+                    block_name(&state, at[0], at[1], at[2]),
+                    "grass_block" | "dirt"
+                )
+            })
+            .count() as i32
+    };
     let floor = project.origin[1];
     let size = blueprints::get(&state.registry, "storage")
         .unwrap()
@@ -492,7 +516,11 @@ fn hillside_village_prepares_and_builds_first_storage() {
         .filter(|s| s.item_id == dirt_item)
         .map(|s| s.count)
         .sum();
-    assert_eq!(stored + carried, 64 - bill as i32);
+    assert_eq!(
+        stored + carried + bill as i32,
+        64 + credited,
+        "foundation dirt is bought exactly once; cuts only credit their own drop"
+    );
     let building = state
         .settlements
         .get(id)
@@ -560,26 +588,33 @@ fn flat_site_keeps_bill_origin_and_same_site_upgrade() {
 }
 
 #[test]
-fn terrain_preparation_rejects_four_block_variance_and_protected_cells() {
+fn terrain_preparation_accepts_a_bounded_pillar_and_rejects_protected_cells() {
     let (mut state, id, _) = fixture();
     let origin = [5, 200, 5];
     let size = [3, 5, 3];
+    // A pillar inside the authored volume is a cut this window owns.
     for y in 201..=204 {
         state.world.set_block(6, y, 6, state.registry.states.stone);
     }
-    assert!(!site_free(
-        &state,
-        state.settlements.get(id).unwrap(),
-        origin,
-        size
-    ));
-    state.world.set_block(6, 204, 6, state.registry.states.air);
     assert!(site_free(
         &state,
         state.settlements.get(id).unwrap(),
         origin,
         size
     ));
+    // One block higher than the roof is not: the window never cuts above it.
+    state
+        .world
+        .set_block(6, 205, 6, state.registry.states.stone);
+    assert!(!site_free(
+        &state,
+        state.settlements.get(id).unwrap(),
+        origin,
+        size
+    ));
+    for y in 201..=205 {
+        state.world.set_block(6, y, 6, state.registry.states.air);
+    }
     for name in [
         "minecraft:oak_planks",
         "minecraft:dirt_path",
@@ -622,29 +657,11 @@ fn unfunded_near_foundation() -> (TickState, SettlementId, Site, Site) {
     (state, id, near, far)
 }
 
+/// B-min replaces the founding-material skip: the near lot is admitted on its
+/// authored bill and its foundation is the project's own waiting shortfall.
 #[test]
-fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
+fn autonomous_admission_takes_the_level_lot_over_a_foundation_lot() {
     let (mut state, id, near, far) = unfunded_near_foundation();
-    // Each pass examines SITE_ATTEMPTS frontage candidates from the cursor;
-    // skipping the unfunded near lot never resets it.
-    let mut cursor = 0;
-    while cursor <= near.front {
-        plan(&mut state, id);
-        cursor += SITE_ATTEMPTS;
-        let record = state.settlements.get(id).unwrap();
-        assert!(
-            record.project.is_none(),
-            "no free funded lot before {cursor}"
-        );
-        assert_eq!(
-            record.construction_cursor, cursor,
-            "unfunded site cannot reset the cursor"
-        );
-    }
-    assert!(
-        far.front >= cursor,
-        "far lot lies beyond the skipping passes"
-    );
     for _ in 0..32 {
         plan(&mut state, id);
         if state.settlements.get(id).unwrap().project.is_some() {
@@ -657,17 +674,20 @@ fn hillside_review_autonomous_search_skips_unfunded_foundation_within_budget() {
         .unwrap()
         .project
         .as_ref()
-        .expect("far funded site");
+        .expect("a complete sweep admits the level lot");
     assert_eq!(
         (project.origin, project.rotation),
-        (far.lot.origin, far.lot.rotation)
+        (far.lot.origin, far.lot.rotation),
+        "the level lot is cheaper; the near lot at {:?} needs foundation dirt",
+        near.lot.origin
     );
 }
 
 #[test]
-fn hillside_review_owner_search_skips_unfunded_foundation() {
+fn owner_order_takes_the_cheaper_level_lot_over_a_foundation_lot() {
     let (mut state, id, _, far) = unfunded_near_foundation();
-    request_build(&mut state, id, "storage").expect("far funded site");
+    // The owner order scans the whole plan once and takes the level lot.
+    request_build(&mut state, id, "storage").expect("a whole sweep admits the level lot");
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
     assert_eq!(
         (project.origin, project.rotation),

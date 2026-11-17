@@ -43,18 +43,18 @@ fn complete_sweeps_report_reason_changes_not_cursor_batches() {
     );
     assert!(!reported(&mut watch, Reason::ProtectedObstruction, 128));
     assert!(!reported(&mut watch, Reason::BuildingBuffer, 128));
-    assert!(!reported(&mut watch, Reason::HeightVariance, 128));
-    assert!(reported(&mut watch, Reason::HeightVariance, 128));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 128));
+    assert!(reported(&mut watch, Reason::SurfaceUnavailable, 128));
     assert!(!reported(&mut watch, Reason::ProtectedObstruction, 128));
     assert!(
         reported(&mut watch, Reason::BuildingBuffer, 128),
         "a previous reason returning is another change"
     );
-    assert!(!reported(&mut watch, Reason::HeightVariance, 128));
-    assert!(!reported(&mut watch, Reason::HeightVariance, 192));
-    assert!(!reported(&mut watch, Reason::HeightVariance, 192));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 128));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 192));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 192));
     assert!(
-        reported(&mut watch, Reason::HeightVariance, 192),
+        reported(&mut watch, Reason::SurfaceUnavailable, 192),
         "a changed network starts a complete new sweep"
     );
 }
@@ -126,7 +126,12 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
             "a new order is a new episode: {text}"
         );
         state.settlements.get_mut(id).unwrap().planted_trees.clear();
-        plan(&mut state, id);
+        for _ in 0..256 {
+            plan(&mut state, id);
+            if state.settlements.get(id).unwrap().project.is_some() {
+                break;
+            }
+        }
         let record = state.settlements.get(id).unwrap();
         assert_eq!(record.project.as_ref().unwrap().blueprint, "storage");
         assert!(record.pending_order.is_none());
@@ -203,11 +208,12 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
             [1, 12, 1],
             None,
             &mut Default::default(),
+            None,
         ),
         Err(Reason::PlantingProvenance)
     );
     super::super::super::forestry::native_tree_tests::grow(&mut state, root, 5);
-    assert_eq!(
+    assert!(
         check(
             &state,
             state.settlements.get(id).unwrap(),
@@ -215,8 +221,10 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
             [1, 12, 1],
             None,
             &mut Default::default(),
-        ),
-        Ok(())
+            None,
+        )
+        .is_ok(),
+        "an actually grown registered tree is clearable by its owner lot"
     );
 }
 
@@ -233,6 +241,7 @@ fn native_overlapping_crowns_report_ambiguous_foliage_not_a_clearable_site() {
                 [1, 12, 1],
                 None,
                 &mut Default::default(),
+                None,
             ),
             Err(Reason::AmbiguousFoliage),
             "touching trunks: {connected}"
@@ -271,6 +280,7 @@ fn persistent_and_retained_player_foliage_report_protected_obstruction() {
                 [1, 12, 1],
                 None,
                 &mut Default::default(),
+                None,
             ),
             Err(Reason::ProtectedObstruction),
             "retained edit: {retained}"

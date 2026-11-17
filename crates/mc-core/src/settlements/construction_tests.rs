@@ -357,6 +357,18 @@ pub(crate) fn clear_work_diff_trees(state: &mut TickState, min: [i32; 3], max: [
     cleared
 }
 
+/// Run bounded planning passes until a project starts. A whole cursor sweep
+/// may need several 64-candidate passes, so one `plan` call is not enough.
+pub(crate) fn plan_until_project(state: &mut TickState, id: SettlementId) {
+    for _ in 0..256 {
+        plan(state, id);
+        if state.settlements.get(id).unwrap().project.is_some() {
+            return;
+        }
+    }
+    panic!("the planner started no project within 256 bounded passes");
+}
+
 pub(crate) fn complete(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     for _ in 0..4096 {
         if state.settlements.get(id).unwrap().project.is_none() {
@@ -398,7 +410,7 @@ fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
     chest[0] = ItemStack::new(acacia, 64);
     chest[1] = ItemStack::new(acacia, 64);
     chest[2] = ItemStack::new(cobble, 64);
-    plan(&mut state, id);
+    plan_until_project(&mut state, id);
     let project = state
         .settlements
         .get(id)
@@ -446,7 +458,7 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
         if ordered {
             request_build(&mut state, id, "storage").expect("oak bill funds owner order");
         } else {
-            plan(&mut state, id);
+            plan_until_project(&mut state, id);
         }
         let project = state
             .settlements

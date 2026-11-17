@@ -1,4 +1,4 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, start};
+use super::tests::{attempt, complete, fixture, fund, open_plan, plan_until_project, start};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use std::sync::{Arc, Mutex};
@@ -74,7 +74,7 @@ fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
-    plan(&mut state, id);
+    plan_until_project(&mut state, id);
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
     assert_eq!(project.blueprint, "spanish_house");
     assert!(!project.ordered);
@@ -170,10 +170,19 @@ fn house_without_site() -> (TickState, SettlementId) {
     let record = state.settlements.get(id).unwrap();
     let images = executor::source_images(&state, id);
     let house = priority_house(&state, record, &images).expect("a funded housing need");
+    let mut sweeps = site_refusals::Sweeps::default();
     assert!(
-        site_project(&state, record, std::iter::once(house), 0, u32::MAX, &images)
-            .0
-            .is_none(),
+        site_project(
+            &state,
+            record,
+            std::iter::once(house),
+            &mut sweeps,
+            0,
+            u32::MAX,
+            &images
+        )
+        .site
+        .is_none(),
         "no loaded House site fits"
     );
     assert!(
@@ -181,13 +190,14 @@ fn house_without_site() -> (TickState, SettlementId) {
             &state,
             record,
             std::iter::once(blueprints::get(&state.registry, "farm").unwrap()),
+            &mut sweeps,
             0,
-            SITE_ATTEMPTS,
+            u32::MAX,
             &images,
         )
-        .0
+        .site
         .is_some(),
-        "the funded Farm has a legal site in this planning pass"
+        "a complete sweep finds the funded Farm a legal site"
     );
     (state, id)
 }
@@ -195,7 +205,7 @@ fn house_without_site() -> (TickState, SettlementId) {
 #[test]
 fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
     let (mut state, id) = house_without_site();
-    plan(&mut state, id);
+    plan_until_project(&mut state, id);
     assert_eq!(
         state
             .settlements
@@ -226,7 +236,12 @@ fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
         level: 1,
         building: None,
     });
-    assert!(plan_order(&mut state, id));
+    for _ in 0..256 {
+        assert!(plan_order(&mut state, id));
+        if state.settlements.get(id).unwrap().project.is_some() {
+            break;
+        }
+    }
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.project.as_ref().unwrap().blueprint, "farm");
     assert!(record.pending_order.is_none());
@@ -304,10 +319,19 @@ fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
         let images = executor::source_images(&state, id);
         let farm = blueprints::get(&state.registry, "farm").unwrap();
         assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        let mut sweeps = site_refusals::Sweeps::default();
         assert!(
-            site_project(&state, record, std::iter::once(farm), 0, u32::MAX, &images)
-                .0
-                .is_none(),
+            site_project(
+                &state,
+                record,
+                std::iter::once(farm),
+                &mut sweeps,
+                0,
+                u32::MAX,
+                &images
+            )
+            .site
+            .is_none(),
             "the funded missing kind has no legal lot"
         );
         let stock = state.block_entities[&(1, 201, 1)].slots.clone();

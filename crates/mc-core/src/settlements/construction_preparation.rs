@@ -53,6 +53,7 @@ pub(super) fn planned_cells(
             }
         }
     }
+    let mut cuts = Vec::new();
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
             for y in project.origin[1] + 1..project.origin[1] + i32::from(size[1]) {
@@ -62,7 +63,7 @@ pub(super) fn planned_cells(
                         || (project.building.is_none() && excavatable(state, block)))
                     && !cells.iter().any(|cell| cell.at == [x, y, z])
                 {
-                    cells.push(executor::PlannedCell {
+                    cuts.push(executor::PlannedCell {
                         at: [x, y, z],
                         state: state.registry.states.air,
                         resource: None,
@@ -72,6 +73,10 @@ pub(super) fn planned_cells(
             }
         }
     }
+    // Cut top-down: a standing builder loses at most one block of support per
+    // work unit, and no cell is removed from under surviving terrain above it.
+    cuts.sort_by_key(|cell| std::cmp::Reverse(cell.at[1]));
+    cells.append(&mut cuts);
     for (offset, block) in &rotated.blocks {
         let placed = *block;
         let (resource, quantity) =
@@ -185,6 +190,15 @@ pub(crate) fn active_lot(
         .project
         .as_ref()
         .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
+}
+
+/// The level ground discovery centres on: the active project's own floor, so a
+/// builder's footing and the fill plan agree, else the bell's elevation.
+pub(crate) fn active_floor(record: &SettlementRecord) -> i32 {
+    record
+        .project
+        .as_ref()
+        .map_or(record.anchor[1], |project| project.origin[1])
 }
 
 /// The only stale-certification trigger for a paused clear stage, evaluated

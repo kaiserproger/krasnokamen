@@ -724,7 +724,7 @@ pub(crate) fn cells(
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
             let y = super::construction::surface_y_for_lot(
                 state,
-                record.anchor[1],
+                project.origin[1],
                 x,
                 z,
                 Some(bounds),
@@ -840,9 +840,11 @@ pub(crate) fn footing(
 ) -> Option<crate::boundary::BlockPos> {
     let record = state.settlements.get(settlement)?;
     let lot = super::construction::preparation::active_lot(state, record);
+    // The active project's own floor is the level the fill plan builds toward.
+    let centre = super::construction::preparation::active_floor(record);
     let y = super::construction::surface_y_for_lot(
         state,
-        record.anchor[1],
+        centre,
         at[0],
         at[2],
         lot,

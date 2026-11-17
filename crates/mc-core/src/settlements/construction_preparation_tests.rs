@@ -204,23 +204,23 @@ fn one_owner_scan_shares_a_registered_root_proof_across_candidate_lots() {
         .unwrap()
         .planted_trees
         .insert(root);
+    fund(&mut state, "storage", 1);
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let images = crate::plugin_structures::settlement_builds::source_images(&state, id);
     let before = forestry::proof_builds();
-    // The same funded kind twice forces two full passes over the same
-    // candidates: one scan-wide Clearance must prove the root only once.
-    let (site, _, report) = site_project(
+    // One owner scan over the same funded kind examines every candidate with a
+    // single scan-wide Clearance: the registered root is proved only once.
+    let mut sweeps = site_refusals::Sweeps::default();
+    let pass = site_project(
         &state,
         record,
-        [blueprint, blueprint].into_iter(),
+        std::iter::once(blueprint),
+        &mut sweeps,
         0,
         u32::MAX,
-        &[],
+        &images,
     );
-    assert!(
-        site.is_none(),
-        "empty funding images force the whole owner scan"
-    );
-    assert!(report.examined > 1);
+    assert!(pass.report.examined > 1);
     assert_eq!(forestry::proof_builds() - before, 1);
 }

@@ -661,6 +661,42 @@ pub(super) fn debit(
                     lot,
                     &mut clearance,
                 )?);
+            } else if crate::settlements::construction::excavatable(state, block) {
+                // Bounded terrain cut: recheck the cell the survey certified
+                // immediately before the debit, credit its own mining drop in
+                // this same transaction, and never write fluid or lava in.
+                if state.block_log.player_touched(cell.at) {
+                    return Err(Failure::Blocked);
+                }
+                let path = state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .map(|definition| definition.block.id.path())
+                    .ok_or(Failure::Blocked)?;
+                let item = crate::villager::mining::item_id(
+                    state,
+                    crate::villager::mining::drop_name(path),
+                )
+                .ok_or(Failure::Blocked)?;
+                for (dx, dy, dz) in [
+                    (1, 0, 0),
+                    (-1, 0, 0),
+                    (0, 1, 0),
+                    (0, -1, 0),
+                    (0, 0, 1),
+                    (0, 0, -1),
+                ] {
+                    let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
+                    let neighbour = state
+                        .world
+                        .block_at(at[0], at[1], at[2])
+                        .ok_or(Failure::Unloaded)?;
+                    if state.registry.states.lava_levels.contains(&neighbour) {
+                        return Err(Failure::Blocked);
+                    }
+                }
+                drops.push(mc_data::ItemStack::new(item, 1));
             } else {
                 // A log-tag variant excluded from tree ownership must never
                 // pass through the flora path with an empty drop list.
