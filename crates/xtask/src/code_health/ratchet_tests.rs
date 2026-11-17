@@ -229,6 +229,8 @@ fn a_ratchet_above_its_ceiling_fails() {
         path_equality: 0,
         panics: 1,
         merge_block_write_pushes: 0,
+        construction_field_accesses: 0,
+        hot_files: &[],
     };
     let mut findings = Vec::new();
     check(&fixture.0, &measured, &mut findings);
@@ -268,6 +270,159 @@ fn a_ratchet_above_its_ceiling_fails() {
             findings[0].message
         );
     }
+}
+
+#[test]
+fn hot_file_counts_ignore_layout_and_test_code() {
+    let fixture = Fixture::new(
+        "hot-file-filter",
+        &[
+            ("lib.rs", "mod a; mod b; mod ignored_tests;"),
+            (
+                "a.rs",
+                r#"
+                // let fake = "statements in a comment";
+                #[doc = "fn fake() {}"]
+                pub fn f() {
+                    #[cfg(test)] let ignored = 1;
+                    #[cfg(test)] assert!(false);
+                    let keep = 1;
+                }
+                #[cfg(test)] fn test_only() { panic!("ignored"); }
+                #[test] fn another_test() { panic!("ignored"); }
+                #[cfg(test)] mod tests { fn hidden() {} }
+                "#,
+            ),
+            (
+                "b.rs",
+                r#"
+                struct S;
+                impl S {
+                    fn production() {}
+                    #[cfg(test)] fn hidden() {}
+                }
+                trait T {
+                    fn production();
+                    #[cfg(test)] fn hidden();
+                }
+                unsafe extern "C" {
+                    fn production();
+                    #[cfg(test)] fn hidden();
+                }
+                "#,
+            ),
+            ("ignored_tests.rs", "fn hidden() { let ignored = 1; }"),
+        ],
+    );
+    let facts = fixture.facts();
+    let src = fixture.0.join("crates/mc-core/src");
+    assert_eq!(facts.files[&src.join("lib.rs")], 2);
+    assert_eq!(facts.files[&src.join("a.rs")], 2);
+    assert_eq!(facts.files[&src.join("b.rs")], 7);
+    assert!(!facts.files.contains_key(&src.join("ignored_tests.rs")));
+
+    fs::write(src.join("a.rs"), "\n\npub fn f() { let keep = 1; }\n").unwrap();
+    assert_eq!(fixture.facts().files[&src.join("a.rs")], 2);
+}
+
+#[test]
+fn hot_file_growth_above_its_measured_ceiling_fails() {
+    let fixture = Fixture::new(
+        "hot-file-growth",
+        &[("lib.rs", "mod a;"), ("a.rs", "fn f() { let first = 1; }")],
+    );
+    let ceilings = Ceilings {
+        hot_files: &[("a.rs", 2)],
+        ..super::CEILINGS
+    };
+    let mut findings = Vec::new();
+    check(&fixture.0, &ceilings, &mut findings);
+    assert!(findings.is_empty(), "{findings:?}");
+
+    // Negative control: one new production statement, not a line-count change.
+    fs::write(
+        fixture.0.join("crates/mc-core/src/a.rs"),
+        "fn f() { let first = 1; let second = 2; }",
+    )
+    .unwrap();
+    check(&fixture.0, &ceilings, &mut findings);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(
+        findings[0]
+            .message
+            .contains("a.rs: 3 is above its ceiling 2")
+    );
+}
+
+#[test]
+fn construction_accesses_count_only_outside_the_owner_and_children() {
+    let fixture = Fixture::new(
+        "construction-access",
+        &[
+            (
+                "lib.rs",
+                "mod settlements; mod other; fn f() { show!(r.project); }",
+            ),
+            (
+                "settlements.rs",
+                "mod construction; #[path = \"settlements/construction_extra.rs\"] \
+                 mod legacy; mod registry;",
+            ),
+            (
+                "settlements/construction.rs",
+                "mod child; fn f() { r.project; r.pending_order; }",
+            ),
+            ("settlements/construction/child.rs", "fn f() { r.project; }"),
+            (
+                "settlements/construction_extra.rs",
+                "#[path = \"legacy_child.rs\"] mod child; fn f() { r.project; }",
+            ),
+            ("settlements/legacy_child.rs", "fn f() { r.pending_order; }"),
+            (
+                "settlements/registry.rs",
+                r#"
+                fn f() { r.project; r.pending_order; }
+                #[cfg(test)] fn hidden() { r.project; }
+                const TEXT: &str = "r.project r.pending_order";
+                "#,
+            ),
+            ("other.rs", "mod construction;"),
+            ("other/construction.rs", "fn f() { r.project; }"),
+        ],
+    );
+    assert_eq!(fixture.facts().total(Counter::ConstructionFieldAccess), 4);
+    let measured = Ceilings {
+        construction_field_accesses: 4,
+        hot_files: &[],
+        ..super::CEILINGS
+    };
+    let mut findings = Vec::new();
+    check(&fixture.0, &measured, &mut findings);
+    assert!(findings.is_empty(), "{findings:?}");
+    check(
+        &fixture.0,
+        &Ceilings {
+            construction_field_accesses: 3,
+            ..measured
+        },
+        &mut findings,
+    );
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(
+        findings[0]
+            .message
+            .contains("accesses outside construction")
+    );
+
+    let inline = Fixture::new(
+        "construction-inline",
+        &[(
+            "lib.rs",
+            "mod settlements { mod construction { mod child { fn f() { r.project; } } } \
+             mod registry { fn f() { r.pending_order; } } }",
+        )],
+    );
+    assert_eq!(inline.facts().total(Counter::ConstructionFieldAccess), 1);
 }
 
 #[test]
