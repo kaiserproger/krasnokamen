@@ -464,6 +464,85 @@ class RearmScenarioTests(unittest.TestCase):
             self.assertIsNone(br.windup_horse({"tick": 2, "image": image}, observer.horses),
                               "a roster member is not a horse extra")
 
+    @staticmethod
+    def full_image(elapsed, ids, fighters, live=None):
+        return {"version": 1,
+                "battle": {"running": True, "elapsed_ticks": elapsed,
+                           "formation": {"members": [{"id": 1}, {"id": 2}], "regiments": [], "tick": elapsed},
+                           "combat": {"ids": list(ids), "fighters": list(fighters)},
+                           "live": live or {"holds": [], "spectators": []}},
+                "columns": [[actor, None, None] for actor in ids], "removed": []}
+
+    @staticmethod
+    def header(image):
+        """The image without its six lists, as core journals a changed header."""
+        header = json.loads(json.dumps(image))
+        for name in br.BATTLE_LISTS:
+            parent, leaf = br._battle_list(header, name)
+            parent[leaf] = []
+        return header
+
+    def test_windup_observer_folds_battle_patches_after_the_full_image(self):
+        guard = {"action": {"Guard": {"until": 0}}}
+        full = self.full_image(100, [1, 2], [guard, guard])
+        changed = self.full_image(101, [1, 2, 3], [guard, guard, guard])
+        patch = {"header": self.header(changed), "lists": [
+            {"list": "ids", "len": 3, "set": [[2, 3]]},
+            {"list": "fighters", "len": 3, "set": [
+                [0, {"action": {"Windup": {"target": 3, "start": 99, "weapon": "Sword"}}}],
+                [2, {"action": "Wounded"}]]},
+            {"list": "columns", "len": 3, "set": [[2, [3, None, None]]]}]}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch(root, 1, 1, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}},
+                               {"Dimension": {"dimension": "minecraft:overworld",
+                                              "entries": [{"Battle": {"value": json.dumps(full)}}]}}])
+            batch(root, 2, 2, [{"Dimension": {"dimension": "minecraft:overworld",
+                                              "entries": [{"BattlePatch": {"value": patch}}]}}])
+            observer = br.WindupObserver(root, 67)
+            observer.update()
+            self.assertEqual(observer.image["tick"], 2)
+            self.assertEqual(observer.image["image"]["battle"]["elapsed_ticks"], 101)
+            target = br.windup_horse(observer.image, observer.horses)
+            self.assertEqual((target["actor"], target["target"], target["impact"], target["wal_tick"]),
+                             (1, 3, 109, 2), "the windup arrives only in the patch")
+            history = {(1, 1): root / f"batch-{1:020d}-{1:020d}.bin", (2, 2): root / f"batch-{2:020d}-{2:020d}.bin"}
+            self.assertEqual(br.battle_image(history, 1)["image"], full)
+            folded = br.battle_image(history, 2)
+            self.assertEqual(folded["tick"], 2)
+            self.assertEqual(folded["image"]["battle"]["combat"]["ids"], [1, 2, 3])
+            self.assertEqual(folded["image"]["columns"], changed["columns"])
+
+    def test_battle_image_reads_header_changes_at_the_locked_tick(self):
+        full = self.full_image(100, [1], [{"action": "Wounded"}])
+        held = self.full_image(101, [1], [{"action": "Wounded"}],
+                               live={"holds": [{"name": "PovRed"}], "spectators": [["CamSpec", "PovRed"]]})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            history = {(1, 1): batch(root, 1, 1, [{"Battle": {"value": json.dumps(full)}}]),
+                       (2, 2): batch(root, 2, 2, [{"BattlePatch": {"value": {"header": self.header(held)}}}]),
+                       (3, 3): batch(root, 3, 3, [{"Player": {"uuid": "x"}}])}
+            image = br.battle_image(history, 3)
+            self.assertEqual(image["tick"], 2)
+            self.assertEqual(image["image"]["battle"]["live"], held["battle"]["live"])
+            self.assertEqual(image["image"]["battle"]["combat"]["fighters"], [{"action": "Wounded"}])
+
+    def test_battle_patch_refusals_mirror_the_core(self):
+        full = self.full_image(100, [1, 2], [{"action": "Wounded"}, {"action": "Wounded"}])
+        for base, patch, expected in (
+                (None, {}, "without a full image"),
+                (full, {"lists": [], "extra": 1}, "malformed battle patch"),
+                (full, {"lists": [{"list": "horses", "len": 0, "set": []}]}, "malformed battle patch list"),
+                (full, {"lists": [{"list": "ids", "len": 1, "set": [[5, 7]]}]}, "index 5 past length 1"),
+                (full, {"lists": [{"list": "ids", "len": 3, "set": []}]}, "left a ids element unset"),
+                (full, {"lists": [{"list": "members", "len": 1_000_000, "set": []}]}, "exceeds capacity"),
+                (full, {"header": {"battle": {}}}, "battle image lacks members")):
+            with self.subTest(expected=expected), self.assertRaisesRegex(br.Incomplete, expected):
+                br.apply_battle_patch(json.loads(json.dumps(base)) if base else None, patch)
+        shrunk = br.apply_battle_patch(json.loads(json.dumps(full)),
+                                       {"lists": [{"list": "ids", "len": 1, "set": []}]})
+        self.assertEqual(shrunk["battle"]["combat"]["ids"], [1], "a shorter length drops the tail")
+
     def test_rearm_scenario_runs_two_acknowledged_commands_before_census(self):
         fifo = mock.Mock()
         fifo.mark.side_effect = [11, 22]

@@ -319,7 +319,9 @@ fn parsed(image: &str) -> serde_json::Value {
 /// and then only the parts that changed: a soldier standing guard does not
 /// re-journal his fighter record every tick (his fight clock moves only when
 /// he enters or leaves the fight loop). Folding the records over the
-/// checkpoint row reproduces the live image after every tick.
+/// checkpoint row reproduces the live image after every tick, also while the
+/// lists shrink, shift and grow: a horse leaves the columns, a roster member
+/// dies, the battle resets and a new one is staged and started.
 #[test]
 fn battle_wal_patches_changed_parts_and_replays_the_live_image() {
     let mut state = started(100);
@@ -385,6 +387,118 @@ fn battle_wal_patches_changed_parts_and_replays_the_live_image() {
         patch_bytes * 4 <= patches * full,
         "a tick's patch must stay far below the full image: {patch_bytes} B in {patches} ticks, full {full} B"
     );
+
+    let horse = state
+        .entities
+        .rider_slots()
+        .next()
+        .expect("a cavalry horse");
+    let horse_id = state.entities.body(horse).id;
+    assert!(state.hostile.battle.columns.ids.contains(&horse_id));
+    kill(&mut state, horse);
+    crate::tick::run_tick(&mut state, &[]);
+    assert!(
+        !state.hostile.battle.columns.ids.contains(&horse_id),
+        "the dead horse left the execution columns"
+    );
+    replay = fold_and_compare(&mut state, replay, "horse left the columns");
+
+    let member = state
+        .hostile
+        .battle
+        .formation
+        .members
+        .iter()
+        .find_map(|member| state.entities.slot_of(member.id))
+        .expect("a living roster member");
+    let member_id = state.entities.body(member).id;
+    kill(&mut state, member);
+    crate::tick::run_tick(&mut state, &[]);
+    assert!(
+        parsed(&encode(&state).unwrap())["removed"]
+            .as_array()
+            .unwrap()
+            .contains(&member_id.0.into()),
+        "the dead member is a removed roster ID"
+    );
+    replay = fold_and_compare(&mut state, replay, "roster member died");
+
+    execute(
+        &mut state,
+        &mut ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &BattleCommand::Reset,
+    )
+    .unwrap();
+    assert!(state.hostile.battle.formation.members.is_empty());
+    replay = fold_and_compare(&mut state, replay, "battle reset");
+
+    execute(
+        &mut state,
+        &mut ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &BattleCommand::Setup { seed: 7, count: 20 },
+    )
+    .unwrap();
+    let desired = state.desired_chunks();
+    state.world.ensure_blocking(&desired);
+    state.refresh_active_chunks(state.tick);
+    replay = fold_and_compare(&mut state, replay, "new battle staged");
+    for _ in 0..8 {
+        crate::tick::run_tick(&mut state, &[]);
+        replay = fold_and_compare(&mut state, replay, "new battle grounding");
+    }
+    execute(
+        &mut state,
+        &mut ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &BattleCommand::Start,
+    )
+    .unwrap();
+    for _ in 0..3 {
+        crate::tick::run_tick(&mut state, &[]);
+        replay = fold_and_compare(&mut state, replay, "new battle running");
+    }
+    assert_eq!(state.hostile.battle.formation.members.len(), 40);
+}
+
+fn kill(state: &mut crate::tick::TickState, slot: crate::entities::EntitySlot) {
+    state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    assert!(!state.entities.body(slot).alive);
+}
+
+/// Journal one boundary inside the same WAL tail (patches only, no full image),
+/// fold it and compare the folded image with the live one.
+fn fold_and_compare(state: &mut crate::tick::TickState, replay: Replay, step: &str) -> Replay {
+    let mut entries = Vec::new();
+    journal_entries(state, &mut entries).unwrap();
+    assert!(
+        entries
+            .iter()
+            .all(|entry| matches!(entry, JournalEntry::BattlePatch { .. })),
+        "{step}: a tail continues with patches: {entries:?}"
+    );
+    let replay = crate::journal::apply_batch_images(replay, &[(state.tick, state.tick, entries)]);
+    assert!(
+        replay.battle_fault.is_none(),
+        "{step}: {:?}",
+        replay.battle_fault
+    );
+    assert!(
+        parsed(&image(&replay).unwrap()) == parsed(&encode(state).unwrap()),
+        "{step}: the folded records reproduce the live image"
+    );
+    replay
 }
 
 /// A patch builds only on a full image earlier in the WAL tail; a bad index,

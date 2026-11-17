@@ -324,7 +324,12 @@ length beyond capacity or an index past the length; an element left unset by a
 longer length stays `null`, which decoding refuses. A WAL mixing records from
 binaries before and after this format is unsupported. A fighter's fight-loop
 clock (the `fighting` telemetry window) changes only when he enters or leaves
-his fight loop, so a steady fight does not rewrite every fighter. Regressions:
+his fight loop, so a steady fight does not rewrite every fighter. That clock
+changed the image schema while the row stays version 1: a world whose battle
+row or WAL tail was written by an older binary after its first battle tick
+refuses to open (fail closed); run `battle reset` and save with the old binary,
+or reset the world, before upgrading. The harness gates read the same chain
+(`battle_recovery.py` `fold_battle`, the same refusals). Regressions:
 `battle_wal_journals_changed_parts_not_the_whole_image_each_tick`,
 `battle_wal_patches_changed_parts_and_replays_the_live_image` and
 `battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements`.

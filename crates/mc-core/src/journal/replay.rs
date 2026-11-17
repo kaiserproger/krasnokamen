@@ -55,7 +55,7 @@ pub struct Replay {
     pub transits: BTreeMap<uuid::Uuid, Option<Arc<String>>>,
     /// Checkpoint row or latest full WAL image; read it through
     /// `battle::persistence::image`, which applies the later patches.
-    pub battle: Option<Arc<String>>,
+    pub(crate) battle: Option<Arc<String>>,
     pub(crate) battle_tail: crate::battle::persistence::Tail,
     pub(crate) battle_fault: Option<String>,
     /// Block-log checkpoint table rows.
