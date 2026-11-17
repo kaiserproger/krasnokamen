@@ -3791,6 +3791,10 @@ mod growth_tests;
 #[path = "construction_filler.rs"]
 pub(super) mod filler;
 
+#[cfg(test)]
+#[path = "construction_liquid_tests.rs"]
+mod liquid_tests;
+
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;
 use preparation::planned_cells;

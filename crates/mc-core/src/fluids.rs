@@ -215,29 +215,37 @@ fn offset(pos: BlockPos, step: [i32; 3]) -> BlockPos {
 /// Schedule the fluid cells at and around every written position.
 pub fn schedule(state: &mut TickState, writes: &[(BlockPos, u32)]) {
     for (pos, _) in writes {
-        for step in [
-            [0, 0, 0],
-            [0, 1, 0],
-            [0, -1, 0],
-            [1, 0, 0],
-            [-1, 0, 0],
-            [0, 0, 1],
-            [0, 0, -1],
-        ] {
-            let cell = offset(*pos, step);
-            let Some(current) = state.world.block_at(cell.x, cell.y, cell.z) else {
-                continue;
-            };
-            let Some((fluid, level)) = contained(state, current) else {
-                continue;
-            };
-            state.fluid_ticks.schedule(
-                cell,
-                fluid.tick_id(level),
-                state.tick + fluid.delay(state.dimension),
-                0,
-            );
-        }
+        schedule_around(state, *pos);
+    }
+}
+
+/// Schedule the fluid cells at and around one written position. The commit-tail
+/// owners (native settlements work) write after `schedule` has run for the
+/// tick; they call this so the flow a replaced source used to feed can recede
+/// instead of waiting for an unrelated write.
+pub(crate) fn schedule_around(state: &mut TickState, pos: BlockPos) {
+    for step in [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, -1, 0],
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 0, 1],
+        [0, 0, -1],
+    ] {
+        let cell = offset(pos, step);
+        let Some(current) = state.world.block_at(cell.x, cell.y, cell.z) else {
+            continue;
+        };
+        let Some((fluid, level)) = contained(state, current) else {
+            continue;
+        };
+        state.fluid_ticks.schedule(
+            cell,
+            fluid.tick_id(level),
+            state.tick + fluid.delay(state.dimension),
+            0,
+        );
     }
 }
 
