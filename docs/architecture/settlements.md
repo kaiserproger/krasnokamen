@@ -123,6 +123,9 @@ Daily food consumption is new gameplay, owned by production's consumption module
 for **all** settlements, including those with no jobs: one food point per living
 member per 24,000 game ticks (`DAILY_FOOD_POINTS`). Existing villager food values
 apply (bread four, vegetables one).
+An absent consumption watermark (including a restored record without one) is
+initialized lazily on its first economy tick and journaled once with the normal
+record revision increment. Subsequent idle ticks emit no settlement image.
 The first daily charge waits at least one complete day before its settlement
 phase (strictly less than two days). Recovery rejects deadlines at least two days
 ahead, credit above three points, debit beyond the exact native/script counter

@@ -1168,10 +1168,40 @@ fn production_and_caravan_share_one_real_body_without_conflicting_goals() {
         economy::target(&f.state, Some(f.settlement), f.carrier_uuid),
         Some(expected)
     );
+    let mut uninitialized =
+        serde_json::to_value(f.state.settlements.get(f.settlement).unwrap()).unwrap();
+    assert!(uninitialized["economy"]["production"]["consumption"]["next_due"].is_null());
+    economy::tick(&mut f.state);
+    let initialized = f.state.settlements.take_images();
+    assert_eq!(
+        initialized.len(),
+        1,
+        "initialize exactly one consumption clock"
+    );
+    assert_eq!(initialized[0].id, f.settlement);
+    let record = initialized[0]
+        .value
+        .as_ref()
+        .expect("settlement post-image");
+    assert_eq!(Some(record), f.state.settlements.get(f.settlement));
+    // The journal revision advances once; the watermark is the only policy change.
+    assert_eq!(
+        record.revision,
+        uninitialized["revision"].as_u64().unwrap() + 1
+    );
+    uninitialized["revision"] = serde_json::json!(record.revision);
+    let mut initialized = serde_json::to_value(record).unwrap();
+    let due = initialized["economy"]["production"]["consumption"]["next_due"]
+        .take()
+        .as_u64()
+        .expect("initialized game-time consumption deadline");
+    assert!(due > f.state.tick_control.game_ticks(f.state.tick) + 1);
+    assert_eq!(initialized, uninitialized, "only the watermark initializes");
+    f.state.tick += 1;
     economy::tick(&mut f.state);
     assert!(
         f.state.settlements.take_images().is_empty(),
-        "early idle work must not touch the WAL"
+        "steady-state early idle work must not touch the WAL"
     );
     let before = f.state.settlements.get(f.settlement).unwrap().clone();
     let request = open(&f, "body-route", 3, None);
