@@ -641,13 +641,13 @@ impl OutboxSender {
 
 /// Tick-side stall detector: a non-empty outbox whose drain epoch has not moved
 /// for the whole limit. Instant-driven and instant-checked: no sleeps, and no
-/// state beyond the last observation.
+/// state beyond the last observation. Time the tick owner itself did not run
+/// (a stopped process, a long tick) still counts: clients waited through it.
 #[derive(Debug)]
 pub(crate) struct StallWatch {
     limit: std::time::Duration,
     epoch: u64,
     since: Option<std::time::Instant>,
-    last: Option<std::time::Instant>,
 }
 
 impl StallWatch {
@@ -656,7 +656,6 @@ impl StallWatch {
             limit,
             epoch: 0,
             since: None,
-            last: None,
         }
     }
 
@@ -667,19 +666,6 @@ impl StallWatch {
         budget: &OutboxBudget,
         now: std::time::Instant,
     ) -> Option<std::time::Duration> {
-        // A gap no schedule produces means this owner did not run (process stop, a
-        // VM pause, SIGSTOP during a build): restart the clock instead of calling
-        // the pump stalled for a stop we caused. Half the limit, but never under a
-        // second, so a short configured limit (tests drive 50 ms against a 50 ms
-        // tick cadence) is still observable.
-        let stopped_gap = (self.limit / 2).max(std::time::Duration::from_secs(1));
-        if self
-            .last
-            .is_some_and(|last| now.saturating_duration_since(last) > stopped_gap)
-        {
-            self.since = None;
-        }
-        self.last = Some(now);
         if budget.queued_bytes() == 0 {
             self.since = None;
             return None;

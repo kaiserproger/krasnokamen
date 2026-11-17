@@ -54,8 +54,10 @@ oversized batch is admitted alone into an empty queue. Two documented exceptions
 exceed the cap: that oversized batch, and the halt's own terminal `Disconnect`
 batch. A push that does not fit, or a non-empty queue whose drain has consumed
 nothing for 10 s, halts the core exactly like a failed journal append: one error
-naming the cause, an explicit `Disconnect` batch for every live connection, no
-publish and no checkpoint. The tick's `Append` for that tick was already accepted
+naming the cause, an explicit `Disconnect` batch for every live connection
+(delivered by the edge pump, so a wedged pump delivers nothing and the process
+keeps running until restarted), no publish and no checkpoint. The tick's
+`Append` for that tick was already accepted
 by the journal queue — the handoff is asynchronous and the tick does not wait for
 the write — so recovery uses the published contiguous tail: everything before the
 last complete batch, with nothing accepted reordered. The warning mark is 8 MiB:

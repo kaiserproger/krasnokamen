@@ -146,8 +146,7 @@ fn the_stall_watch_fires_only_after_the_limit_without_consuming_a_batch() {
     // An empty outbox is never a stall.
     assert!(watch.stalled_at(sender.budget(), t0).is_none());
     sender.push(1, batch(1, vec![chat("q")])).unwrap();
-    // The first observation only starts the clock. Steps stay under half the
-    // limit: a longer gap would be a stopped owner, not a stalled pump.
+    // The first observation only starts the clock.
     assert!(watch.stalled_at(sender.budget(), t0).is_none());
     assert!(
         watch
@@ -186,6 +185,27 @@ fn the_stall_watch_fires_only_after_the_limit_without_consuming_a_batch() {
     assert_eq!(
         watch.stalled_at(sender.budget(), restart + Duration::from_secs(10)),
         Some(Duration::from_secs(10))
+    );
+}
+
+#[test]
+fn sparse_observations_of_a_stalled_pump_still_fire_the_watch() {
+    use std::time::{Duration, Instant};
+    let (sender, _outbox) = sender_pair(1 << 20);
+    let mut watch = StallWatch::new(Duration::from_secs(10));
+    let t0 = Instant::now();
+    sender.push(1, batch(1, vec![chat("q")])).unwrap();
+    // A tick owner that observes only every 6 s (a long tick, a stopped
+    // process) must not restart the clock: clients waited the whole time.
+    assert!(watch.stalled_at(sender.budget(), t0).is_none());
+    assert!(
+        watch
+            .stalled_at(sender.budget(), t0 + Duration::from_secs(6))
+            .is_none()
+    );
+    assert_eq!(
+        watch.stalled_at(sender.budget(), t0 + Duration::from_secs(12)),
+        Some(Duration::from_secs(12))
     );
 }
 

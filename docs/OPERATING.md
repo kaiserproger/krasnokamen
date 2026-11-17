@@ -131,10 +131,12 @@ layer bounded, because the tick never waits for a slow edge:
 backlog and warns once per crossing at 8 MiB (re-armed only after the queue falls
 below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
 batch larger than the whole cap is admitted alone into an empty queue, and a
-halt's terminal disconnect batch is admitted past it so every player still learns
-why. A backlog that reaches the cap, or that consumes no batch for 10 s, stops the
-server fail-closed with one explicit disconnect reason per player; the next start
-replays the retained WAL
+halt's terminal disconnect batch is admitted past it so the reason can still be
+delivered. A batch that no longer fits under the cap, or a backlog that consumes
+no batch for 10 s, stops the core fail-closed (no publish, no checkpoint). Its
+explicit disconnect reason per player travels through the edge pump: when the
+pump itself is wedged, players are not disconnected and the process does not exit
+on its own, so restart it. The next start replays the retained WAL
 ([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
 warning's byte count before raising the cap. The queued and peak byte counters
 exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in
