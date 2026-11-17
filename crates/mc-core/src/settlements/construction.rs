@@ -2150,8 +2150,11 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         .and_then(|((item, _), pos)| executor::pickup_point(state, id, item, pos));
     let navigation = villager.and_then(|v| v.navigation_target);
     let navigation_failed = villager.map(|v| v.navigation_search_failed);
-    let preparation =
-        (protected && snapshot.consumed.is_empty()).then(|| retry_preparation(state, id, &project));
+    // A failed first recovery (another window without a cell) gives back the
+    // slot of unpaid work, as a protected tree does: rotating builders that
+    // cannot reach the worksite would otherwise hold the only slot forever.
+    let preparation = ((protected || !report) && snapshot.consumed.is_empty())
+        .then(|| retry_preparation(state, id, &project));
     let recovery = if preparation.as_ref().is_some_and(|result| result.is_ok()) {
         "preparation_cancelled"
     } else if snapshot.pause_reason.is_some() {
@@ -2237,12 +2240,12 @@ fn retry_preparation(
             id,
             if requeued {
                 format!(
-                    "Protected tree blocked {} preparation; queued a new site.",
+                    "Cancelled unpaid {} work that made no progress; queued a new site.",
                     project.blueprint
                 )
             } else {
                 format!(
-                    "Cancelled unpaid {} preparation at a protected tree; any newer pending order is retained.",
+                    "Cancelled unpaid {} work that made no progress; any newer pending order is retained.",
                     project.blueprint
                 )
             },

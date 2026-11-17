@@ -245,6 +245,27 @@ fn builder_that_cannot_advance_the_project_is_replaced_and_chosen_last() {
     let (mut state, id, stuck) = fixture();
     fund(&mut state, "storage", 1);
     super::tests::start(&mut state, id, "storage", 1, None);
+    // Builder rotation continues only for paid work: seed 24's unpaid clear
+    // stage now gives back its slot after one failed rotation, which lets the
+    // waiting House start (SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4).
+    let structure = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .clone()
+        .unwrap()
+        .structure;
+    let mut ledger = state
+        .plugins
+        .get_domain("@native-structures", "ledger")
+        .unwrap()
+        .clone();
+    ledger["structures"][&structure]["snapshot"]["consumed"] =
+        serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
+    state
+        .plugins
+        .set_domain("@native-structures", "ledger", ledger);
     let recruit = |state: &mut TickState, x: f64| {
         let slot = villager(state, [x, 201.0, 4.5]);
         let entity = state.entities.body(slot).id;
