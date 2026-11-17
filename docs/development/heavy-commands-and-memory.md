@@ -323,7 +323,9 @@ cwd to the agent.
   discard live-tree caches; slots ignore the in-use registry. See
   [`tools/dev/README.md`](../../tools/dev/README.md#slot-gc---delete--v-slot).
 - **Order when space is short** (owner, 2026-11-16). Free only reproducible
-  build output, in this order, and check `df` after each step:
+  build output, in this order, and check `df` after each step. Standing owner
+  permission (2026-11-17): below the floor, build caches may be cleared whole,
+  all three steps, without asking.
   1. Incremental caches of idle slots:
      `tools/dev/slot-gc --delete --incremental-only --min-free-gb <target GiB>`
      (dry run without `--delete` first). Busy slots are skipped as above.
