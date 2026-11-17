@@ -79,6 +79,73 @@ fn failed_native_transaction_keeps_previous_world_and_wal_without_dirty_ack() {
     );
 }
 
+/// A shutdown whose final checkpoint is refused keeps the pushed tail
+/// published: the guard `world prune` runs must name it, and one clean start and
+/// stop must clear it (WORLD-PRUNE-JUDGES-STORE-WITHOUT-TAIL-CHECKPOINT).
+#[test]
+fn shutdown_with_a_refused_final_checkpoint_leaves_the_tail_prune_refuses() {
+    use crate::native_checkpoint::{
+        UNCHECKPOINTED_TAIL, published_manifest, require_checkpointed_tail,
+    };
+
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    Core::open(config.clone()).expect("fresh world").shutdown();
+    let durable = crate::native_checkpoint::recover_offline(&config)
+        .expect("recover clean world")
+        .manifest
+        .tick;
+    let mut journal = JournalWriter::open(directory.path(), 1).unwrap();
+    journal
+        .append(
+            durable + 1,
+            durable + 1,
+            &[crate::journal::JournalEntry::Block {
+                pos: [0, 64, 0],
+                state: 1,
+            }],
+        )
+        .expect("publish a crash journal tail");
+    drop(journal);
+
+    // A start that fails its final checkpoint cannot fold the tail in.
+    let core = Core::open(config.clone()).expect("world with a crash tail");
+    FAIL_CHECKPOINT_AFTER_REGIONS
+        .lock()
+        .expect("precommit failure hook")
+        .push(directory.path().to_path_buf());
+    core.shutdown();
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let reader = store.checkpoint_reader().unwrap();
+    let manifest = published_manifest(&config, &reader).unwrap();
+    assert_eq!(
+        manifest.tick, durable,
+        "the refused commit published nothing"
+    );
+    let refusal = require_checkpointed_tail(&config, manifest.tick)
+        .expect_err("the tail above the manifest is not checkpointed");
+    assert!(
+        refusal.to_string().contains(UNCHECKPOINTED_TAIL),
+        "{refusal}"
+    );
+    assert!(
+        refusal
+            .to_string()
+            .contains(&format!("{}..={}", durable + 1, durable + 1)),
+        "{refusal}"
+    );
+    drop(reader);
+    drop(store);
+
+    // The remedy the refusal names: a start and stop whose checkpoint commits.
+    Core::open(config.clone()).expect("reopen").shutdown();
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let reader = store.checkpoint_reader().unwrap();
+    let manifest = published_manifest(&config, &reader).unwrap();
+    assert!(manifest.tick > durable);
+    require_checkpointed_tail(&config, manifest.tick).expect("the tail is checkpointed");
+}
+
 #[test]
 fn crash_after_durable_native_commit_recovers_complete_world_without_ack_or_pruning() {
     let directory = tempfile::tempdir().unwrap();

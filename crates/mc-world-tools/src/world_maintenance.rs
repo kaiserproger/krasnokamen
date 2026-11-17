@@ -105,7 +105,8 @@ fn rectangle(center: [i32; 2], radius: u32) -> ([i32; 2], [i32; 2]) {
 /// Forget untouched, uninhabited overworld chunks outside the keep radius, then
 /// compact the file. The world is opened and closed once first, exactly like
 /// serving, so a journal tail from a crash is folded into the store before any
-/// chunk is judged. Nether and End chunks are never pruned.
+/// chunk is judged; a tail that shutdown did not checkpoint is refused instead.
+/// Nether and End chunks are never pruned.
 pub fn prune_world(config: &CoreConfig, request: &PruneRequest) -> Result<PruneReport, CoreError> {
     if request.max_inhabited_ticks < 0 {
         return Err(storage("max inhabited ticks must not be negative"));
@@ -117,11 +118,25 @@ pub fn prune_world(config: &CoreConfig, request: &PruneRequest) -> Result<PruneR
     let core = Core::open(config.clone())?;
     let spawn = core.world_spawn();
     core.shutdown();
-    let world = stopped_world(config)?;
     let center = request.center.unwrap_or([spawn[0], spawn[2]]);
-    let (keep_min, keep_max) = rectangle(center, request.keep_radius);
+    prune_stopped(config, request, center)
+}
+
+/// Judge and prune a stopped world under the lease. The guard writes nothing and
+/// runs before any classification, dry run included: when the store's published
+/// WAL tail was not checkpointed, prune classifies and deletes nothing.
+fn prune_stopped(
+    config: &CoreConfig,
+    request: &PruneRequest,
+    center: [i32; 2],
+) -> Result<PruneReport, CoreError> {
+    let world = stopped_world(config)?;
     let bytes_before = file_bytes(&world.path)?;
     let store = open_store(config, &world)?;
+    let reader = store.checkpoint_reader().map_err(storage)?;
+    let manifest = mc_core::native_checkpoint::published_manifest(config, &reader)?;
+    mc_core::native_checkpoint::require_checkpointed_tail(config, manifest.tick)?;
+    let (keep_min, keep_max) = rectangle(center, request.keep_radius);
     let chunks = store
         .prune_pristine(&NativePruneRequest {
             dimension: mc_core::native_checkpoint::dimension_id(Dimension::Overworld),

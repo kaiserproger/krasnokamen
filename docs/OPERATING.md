@@ -1077,7 +1077,15 @@ prunes and compacts nothing, but that first open and close still happens, like
 a server start and clean stop: it replays a crash journal tail, writes a
 checkpoint and removes the journal batches the checkpoint covers, even on a
 cleanly stopped world. Copy a crash image you want to keep as evidence before
-running prune on it. The Nether and the End are not pruned.
+running prune on it. If that stop did not finish its final checkpoint — the log
+reports a refused checkpoint or a core process panic — prune refuses with
+`the last shutdown did not checkpoint the published journal tail` and names the
+tick range, because a chunk changed only in that tail would be judged untouched
+and regenerated. Nothing is pruned and the journal is kept, so it replays on the
+next start. Another start and stop alone does not fix a persistent cause: clear
+the checkpoint error logged above, start the server and stop it until the stop
+logs `checkpoint committed`, then rerun prune. The Nether and the End are not
+pruned.
 
 ### Native backup and restore
 
