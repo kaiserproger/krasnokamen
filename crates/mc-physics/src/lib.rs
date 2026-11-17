@@ -1606,15 +1606,27 @@ fn overlaps_across(body_min: f64, body_max: f64, obstacle_min: f64, obstacle_max
     body_min + COLLISION_EPSILON < obstacle_max && body_max - COLLISION_EPSILON >= obstacle_min
 }
 
+/// Vanilla `VoxelShape.collideX` (`javap -c` of server-26.1.2.jar) clips a face
+/// the body is within `1.0E-7` of on *both* sides: `d >= -1.0E-7 && d < movement`
+/// for positive movement, `d <= 1.0E-7 && d > movement` for negative. A side up
+/// to `COLLISION_EPSILON` past the face is snapped back out to it instead of
+/// being skipped, so the clip and the overlap predicate (`overlaps_across`)
+/// agree about the same contact.
 fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
     for obstacle in collision_boxes {
         if overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
             && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
         {
-            if dx > 0.0 && body.max_x <= obstacle.min_x {
-                dx = dx.min(obstacle.min_x - body.max_x);
-            } else if dx < 0.0 && body.min_x >= obstacle.max_x {
-                dx = dx.max(obstacle.max_x - body.min_x);
+            if dx > 0.0 {
+                let clip = obstacle.min_x - body.max_x;
+                if clip >= -COLLISION_EPSILON && clip < dx {
+                    dx = clip;
+                }
+            } else if dx < 0.0 {
+                let clip = obstacle.max_x - body.min_x;
+                if clip <= COLLISION_EPSILON && clip > dx {
+                    dx = clip;
+                }
             }
         }
     }
@@ -1626,10 +1638,16 @@ fn clip_z(body: WorldAabb, mut dz: f64, collision_boxes: &[WorldAabb]) -> f64 {
         if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
             && overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
         {
-            if dz > 0.0 && body.max_z <= obstacle.min_z {
-                dz = dz.min(obstacle.min_z - body.max_z);
-            } else if dz < 0.0 && body.min_z >= obstacle.max_z {
-                dz = dz.max(obstacle.max_z - body.min_z);
+            if dz > 0.0 {
+                let clip = obstacle.min_z - body.max_z;
+                if clip >= -COLLISION_EPSILON && clip < dz {
+                    dz = clip;
+                }
+            } else if dz < 0.0 {
+                let clip = obstacle.max_z - body.min_z;
+                if clip <= COLLISION_EPSILON && clip > dz {
+                    dz = clip;
+                }
             }
         }
     }
@@ -1643,6 +1661,29 @@ fn resolve_horizontal_sweep(
 ) -> Vec3 {
     let mut resolved = Vec3::ZERO;
     let mut remaining = desired;
+
+    // Vanilla contact tolerance first (R6 G2): a face the body is within
+    // `COLLISION_EPSILON` of is a contact *now*, so that axis may not advance —
+    // and a side up to 1e-7 past the face snaps back out to it. The clip result
+    // is taken only when its own magnitude is inside the tolerance: a larger
+    // clip is a normal wall stop that stays with the sweep's axis order, so a
+    // body leaving an edge it overlaps on the cross axis keeps diagonal
+    // resolution. `(clip - desired).abs()` would be wrong here: an outward snap
+    // of 5.7e-14 for a 0.0115 step differs from the request by the whole step.
+    let snap_x = clip_x(body, desired.x, collision_boxes);
+    let snap_z = clip_z(body, desired.z, collision_boxes);
+    let contact_x = snap_x.abs() <= COLLISION_EPSILON;
+    let contact_z = snap_z.abs() <= COLLISION_EPSILON;
+    if contact_x {
+        resolved.x = snap_x;
+        remaining.x = desired.x - snap_x;
+        body = body.moved(Vec3::new(snap_x, 0.0, 0.0));
+    }
+    if contact_z {
+        resolved.z = snap_z;
+        remaining.z = desired.z - snap_z;
+        body = body.moved(Vec3::new(0.0, 0.0, snap_z));
+    }
 
     // At most two horizontal normals can be removed. A third pass only applies
     // the remaining tangent movement after the second contact.

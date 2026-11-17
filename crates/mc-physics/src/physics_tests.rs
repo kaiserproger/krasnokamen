@@ -2312,3 +2312,50 @@ fn deeply_embedded_body_keeps_moving_without_a_push_out() {
         body.position.z
     );
 }
+
+/// The contact gate must use the clip's own magnitude, not its distance from the
+/// request: an outward snap of `5.68e-14` against a `0.0115` step differs from
+/// the request by the whole step, and the sweep drops a contact whose entry time
+/// is in the past (`first_sweep_hit`), so a `(clip - desired).abs()` gate would
+/// leave the body walking into the wall.
+#[test]
+fn wall_face_snap_uses_the_clip_result_not_its_distance_from_the_request() {
+    let wall = WorldAabb {
+        min_x: 10.0,
+        min_y: 64.0,
+        min_z: 511.0,
+        max_x: 12.0,
+        max_y: 71.0,
+        max_z: 512.0,
+    };
+    // Body face one rounding step inside the wall's interior face (512.0).
+    let body = WorldAabb {
+        min_x: 10.2,
+        min_y: 64.0,
+        min_z: 511.99999999999994,
+        max_x: 10.8,
+        max_y: 65.95,
+        max_z: 512.59999999999994,
+    };
+    let requested = -0.0115;
+    let snap = clip_z(body, requested, &[wall]);
+    assert!(
+        (snap - 5.684_341_886_080_802e-14).abs() <= 1.0e-18,
+        "the clip must snap the face back out to 512.0: {snap:e}"
+    );
+    assert!(
+        (snap - requested).abs() > COLLISION_EPSILON,
+        "the snap is a whole step away from the request, which is why the gate \
+         cannot compare the two"
+    );
+    let swept = resolve_horizontal_sweep(body, Vec3::new(0.0, 0.0, requested), &[wall]);
+    assert!(
+        swept.z > 0.0 && swept.z <= COLLISION_EPSILON,
+        "the contact must apply the snap outward instead of being skipped: {swept:?}"
+    );
+    assert!(
+        body.min_z + swept.z >= 512.0 - 1.0e-12,
+        "the body must end flush with the face, not inside it: min_z {}",
+        body.min_z + swept.z
+    );
+}
