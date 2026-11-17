@@ -7234,3 +7234,25 @@ repro = "cargo"
 regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_with_a_pending_blow_by_a_departed_horse_reopens", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_after_a_foreign_attacker_dies_in_its_blow_merge_reopens", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_after_a_creeper_blast_on_soldiers_reopens", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_pending_blow_by_a_held_player_who_left_rebinds_after_recovery"]
 fix_commit = "ae0f2ec11"
 failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-LEDGE-DESCENT-OVERSHOOT-LIVELOCK"
+title = "A fast-walking villager waiting to descend from a ledge overshoots its waypoint, steps back up and shakes in place for tens of ticks"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "D6 unit-jitter classification 2026-11-17 (receipts/UnitJitter/CLASSIFY.md, design review receipts/UnitJitter/REVIEW-DESIGN-fable.md F1/F2): on a hash-verified copy of a Spain trial world, 399 of 411 villager reversals follow a horizontal step longer than the remaining distance to the waypoint centre (crates/mc-core/src/villager/brain/motion.rs resolve_body_motion); 100 are one Idle villager in runs of 10/24/30/36 ticks where the full step carries the body back onto the ledge and the stale ground flag allows step-up, so the descent waits for the 40-tick stroll deadline. Speeds above 4 blocks/s (Idle, Panic) are affected."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "VILLAGER-SWIM-BOBS-ABOVE-BED-WAYPOINT"
+title = "A swimming villager bobs 0.6-0.7 blocks above a waypoint on the water bed and only advances at the arrival-tolerance edge"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "D6 design review 2026-11-17 (receipts/UnitJitter/REVIEW-DESIGN-fable.md F7): trace of Farmer 45, ticks 111149-111160, on the hash-verified Spain trial copy used by receipts/UnitJitter/CLASSIFY.md; the swimmer stays 0.59-0.73 above a bed waypoint and pops only at the 0.6 tolerance (crates/mc-core/src/villager/brain/motion.rs). Not changed by the horizontal step cap."
+repro = "source"
+regression = []
+failing_first = "not recorded"
