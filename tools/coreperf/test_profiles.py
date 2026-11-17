@@ -28,10 +28,77 @@ class ProfilesTests(unittest.TestCase):
         self.assertEqual([n for k, n in recipe["expected"].items() if k != "minecraft:villager"], [12500] * 8)
 
     def test_official_recipe_bytes_remain_unchanged(self):
+        # Deliberate fixture correction (2026-11-18): the pens now build floor, walls and
+        # roof BEFORE clearing the interior, and clear once more bounded at roof-1. The
+        # old order dug an open pit in desert terrain, surface sand collapsed onto the
+        # floor at the summon height, and an animal summoned there suffocated and died
+        # inside a block (receipts/Perf1M/ENTITY-LOSS.md, proven by world probe: 90 of
+        # 250,000 summon cells were sand at y=64). Nothing else in the recipe changed;
+        # the new digests are the same recipe with the corrected command order.
         self.assertEqual(profiles.load.digest(profiles.fixture(100000, 0)),
-                         "92db3da297768ff28ba35e9e5d6da9513b8bed3dd2b3d397fe117bebe2984368")
+                         "197da323965ace8fc67fb1b305bc77ddb8950985923c766768f0b26387c11066")
         self.assertEqual(profiles.load.digest(profiles.fixture(100000, 20000)),
-                         "0084b89a8aac94b7194964c15ec2f1559d131b7c73f0ea6545de7ff9072ae374")
+                         "ab3f2ba18fc9ff8f12f5bffaeb67c9531c6547463de326f3113be2eabba1ce7a")
+
+    def test_pen_clearance_gate_reads_the_summon_cells_it_will_check(self):
+        recipe = {"regions": [{"commands": [
+            "fill 0 63 0 3 63 3 minecraft:grass_block",
+            "summon minecraft:chicken 10.5 64 20.5 {CustomName:'x',PersistenceRequired:1b}",
+            "summon minecraft:cow 1.5 64 1.5 {}",
+        ]}]}
+        # feet cell and head cell of every summon, deduplicated, in recipe order
+        self.assertEqual(profiles.cohort_cells(recipe),
+                         [(10, 64, 20), (10, 65, 20), (1, 64, 1), (1, 65, 1)])
+
+    def test_pen_clearance_gate_refuses_a_summon_cell_that_is_not_air(self):
+        """Negative control: the gate fails a world where an animal stands in a block.
+
+        The prober is faked here (no world, no server launch); the real-world control is
+        receipts/Perf1M/evidence/intact-check: 90 of 250,000 cells were sand at y=64 in
+        the preparation that lost a chicken to suffocation.
+        """
+        recipe = {"regions": [{"commands": [
+            "summon minecraft:chicken 10.5 64 20.5 {CustomName:'x',PersistenceRequired:1b}"]}]}
+        prober = """#!/bin/sh
+out=""
+blocks=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --receipt) out=$2; shift 2 ;;
+    --block) blocks="$blocks $2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+if [ "$FAKE_PROBE" = "blocked" ]; then
+  printf '%s' '{"status":"PASS","blocks":[{"x":10,"y":64,"z":20,"block":"minecraft:sand"}]}' > "$out"
+  exit 0
+fi
+{ printf '%s' '{"status":"PASS","blocks":['; first=1
+  for cell in $blocks; do
+    x=${cell%%,*}; rest=${cell#*,}; y=${rest%%,*}; z=${rest#*,}
+    [ $first -eq 1 ] || printf ','
+    first=0
+    printf '{"x":%s,"y":%s,"z":%s,"block":"minecraft:air"}' "$x" "$y" "$z"
+  done
+  printf ']}'; } > "$out"
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / "fake-native-prober"
+            fake.write_text(prober)
+            fake.chmod(0o755)
+            args = argparse.Namespace(server_bin=fake)
+            world = root / "world"
+            world.mkdir()
+            with patch.dict("os.environ", {"FAKE_PROBE": "blocked"}):
+                with self.assertRaises(profiles.load.ClassifiedFailure) as refused:
+                    profiles.verify_pen_clearance(
+                        args, world, root / "server.toml", root / "receipts", recipe)
+            self.assertIn("not air", str(refused.exception))
+            with patch.dict("os.environ", {"FAKE_PROBE": "clear"}):
+                passed = profiles.verify_pen_clearance(
+                    args, world, root / "server.toml", root / "receipts", recipe)
+            self.assertEqual(passed, {"cells": 2, "blocked": []})
 
     def test_idle_and_explore_do_not_summon_entities(self):
         recipe = profiles.fixture(0, 0)
@@ -134,9 +201,13 @@ class ProfilesTests(unittest.TestCase):
         self.assertNotIn("gamerule randomTickSpeed 3", rules)
 
     def test_native_100_recipe_digest_is_unchanged(self):
-        # The fixture-cache keys of every native-100 world (the kelp-polluted one included) derive from this.
+        # The fixture-cache keys of every native-100 world (the kelp-polluted one included)
+        # derive from this. Updated 2026-11-18 with the pen seal-then-clear correction and
+        # the clearance gate; the reason is written in
+        # test_official_recipe_bytes_remain_unchanged above and in
+        # receipts/Perf1M/ENTITY-LOSS.md. Every cached native-100 world is a miss now.
         self.assertEqual(profiles.load.digest(profiles.fixture(100000, 0)),
-                         "92db3da297768ff28ba35e9e5d6da9513b8bed3dd2b3d397fe117bebe2984368")
+                         "197da323965ace8fc67fb1b305bc77ddb8950985923c766768f0b26387c11066")
         self.assertNotIn("native-100-kelp12k", profiles.PROFILES)
 
     def test_half_open_window_tps_and_server_only_memory(self):
@@ -937,6 +1008,8 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
                      patch.object(profiles.load, "tree_hash", return_value={"sha256": "registry"}), \
                      patch.object(profiles.compare, "fixture_cache_key", return_value="fixture"), \
                      patch.object(profiles.compare, "prepare", new=prepared), \
+                     patch.object(profiles, "verify_pen_clearance",
+                                  return_value={"cells": 0, "blocked": []}), \
                      patch.object(profiles.load, "native_snapshot", new=observed):
                     status = await profiles.run(args)
                 result = json.loads((args.out / "result.json").read_text())
@@ -995,7 +1068,9 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
                 with patch.object(profiles, "host_receipt", return_value={}), \
                      patch.object(profiles, "pinned_binary", return_value=manifest), \
                      patch.object(profiles.load, "tree_hash", return_value={"sha256": "registry"}), \
-                     patch.object(profiles.compare, "prepare", new=prepared):
+                     patch.object(profiles.compare, "prepare", new=prepared), \
+                     patch.object(profiles, "verify_pen_clearance",
+                                  return_value={"cells": 0, "blocked": []}):
                     status = await profiles.run(args)
                 result = json.loads((args.out / "result.json").read_text())
                 self.assertEqual(status, int(saved != 20))

@@ -10,6 +10,7 @@ import asyncio
 import copy
 import json
 import math
+import re
 import os
 from pathlib import Path
 import platform
@@ -322,15 +323,24 @@ def scale_fixture(residents: int, mix: str, *, excluded_kinds: tuple[str, ...] =
                 group = len(regions)
                 x, z = group % 32 * 256, group // 32 * 256
                 roof = 67 if kind == "spider" else 71
+                # Seal before digging. Clearing first opened a pit in desert
+                # terrain, surface sand collapsed into it and set as a floor layer
+                # at y=64, and an animal summoned there suffocated inside the sand
+                # (receipts/Perf1M/ENTITY-LOSS.md). Walls and roof go up first, then
+                # the interior is cleared, so nothing outside can fall in.
                 commands = [
                     f"fill {x-1} 62 {z-1} {x+64} 62 {z+64} minecraft:dirt",
                     f"fill {x-1} 63 {z-1} {x+64} 63 {z+64} minecraft:grass_block",
-                    f"fill {x} 64 {z} {x+63} 70 {z+63} minecraft:air",
                     f"fill {x-1} 64 {z-1} {x+64} {roof-1} {z-1} minecraft:stone",
                     f"fill {x-1} 64 {z+64} {x+64} {roof-1} {z+64} minecraft:stone",
                     f"fill {x-1} 64 {z} {x-1} {roof-1} {z+63} minecraft:stone",
                     f"fill {x+64} 64 {z} {x+64} {roof-1} {z+63} minecraft:stone",
                     f"fill {x-1} {roof} {z-1} {x+64} {roof} {z+64} minecraft:stone",
+                    # Clear only after sealing: with the walls and roof up, nothing
+                    # outside can fall onto the floor, so one sweep is enough (two made
+                    # the preparation ~4x slower). Stop at roof-1: the spider pens roof
+                    # at y=67 and a sweep to 70 would delete their ceiling.
+                    f"fill {x} 64 {z} {x+63} {roof-1} {z+63} minecraft:air",
                 ]
                 if active:
                     # Keep the normal moving observer on its roof ticket; no
@@ -868,6 +878,67 @@ def validate_churn_cohort(recipe: dict[str, Any], before: dict[str, Any], snapsh
                 if row["kind"] not in ("minecraft:cow", "minecraft:pig")}}
     validate_cohort(stable(before), stable(after), stable_expected)
     return after, {"before": len(old_churn), "after": len(churn), "replaced_min": count}
+
+
+SUMMON_CELL = re.compile(r"summon minecraft:[a-z_]+ (-?[0-9.]+) (-?[0-9.]+) (-?[0-9.]+)")
+
+
+def cohort_cells(recipe: dict[str, Any]) -> list[tuple[int, int, int]]:
+    """Feet and head cells of every cohort summon, in recipe order, deduplicated.
+
+    The pen builder seals the enclosure before it clears it, but a preparation can
+    still strand an animal inside a block when terrain collapses elsewhere, and an
+    animal inside a block suffocates and dies while the cohort fence insists it is
+    alive (receipts/Perf1M/ENTITY-LOSS.md). These cells are the ones that must read
+    as air in the finished world.
+    """
+    cells: list[tuple[int, int, int]] = []
+    seen: set[tuple[int, int, int]] = set()
+    for index, region in enumerate(recipe["regions"]):
+        for command in region.get("commands", ()):
+            match = SUMMON_CELL.match(command)
+            if match is None:
+                continue
+            x, y, z = (math.floor(float(value)) for value in match.groups())
+            for cell in ((x, y, z), (x, y + 1, z)):
+                if cell not in seen:
+                    seen.add(cell)
+                    cells.append(cell)
+    return cells
+
+
+def verify_pen_clearance(args: argparse.Namespace, world: Path, config: Path,
+                         receipt_dir: Path, recipe: dict[str, Any],
+                         batch: int = 20000) -> dict[str, Any]:
+    """Fail when any cohort summon cell is not air, read from the stopped world."""
+    cells = cohort_cells(recipe)
+    if not cells:
+        return {"cells": 0, "blocked": []}
+    receipt_dir.mkdir(parents=True, exist_ok=True)
+    blocked: list[dict[str, Any]] = []
+    for start in range(0, len(cells), batch):
+        chunk = cells[start:start + batch]
+        receipt = receipt_dir / f"pen-clearance-{start // batch}.json"
+        command = [str(args.server_bin), "--config", str(config), "world", "probe",
+                   "--source", str(world), "--receipt", str(receipt)]
+        command += [item for cell in chunk for item in ("--block", f"{cell[0]},{cell[1]},{cell[2]}")]
+        done = subprocess.run(command, capture_output=True, text=True)
+        if done.returncode:
+            raise load.ClassifiedFailure(
+                "SETUP_FAILED",
+                f"pen clearance probe failed ({done.returncode}): {done.stderr.strip()[-400:]}")
+        data = json.loads(receipt.read_text())
+        if data.get("status") != "PASS":
+            raise load.ClassifiedFailure("SETUP_FAILED", f"pen clearance probe refused: {data.get('error')}")
+        for row in data["blocks"]:
+            if row["block"] != "minecraft:air":
+                blocked.append({"x": row["x"], "y": row["y"], "z": row["z"], "block": row["block"]})
+    if blocked:
+        raise load.ClassifiedFailure(
+            "SETUP_FAILED",
+            f"{len(blocked)} cohort summon cells are not air, e.g. {blocked[:5]}: an animal summoned there "
+            "would suffocate (seal-then-clear must leave the interior clear)")
+    return {"cells": len(cells), "blocked": []}
 
 
 def fixture_block_spec(recipe: dict[str, Any]) -> dict[str, Any]:
@@ -1570,6 +1641,8 @@ async def run(args: argparse.Namespace) -> int:
         finally:
             args.server_toml_extra = ""
         validate_prepared(recipe, prepared)
+        result["pen_clearance"] = verify_pen_clearance(
+            args, world, args.out / "prepare" / "server.toml", args.out / "prepare", recipe)
         if args.profile == "items-heavy":
             result["items_before"] = items_census(recipe, prepared["snapshot"])
         if recipe.get("spawn_rules"):
