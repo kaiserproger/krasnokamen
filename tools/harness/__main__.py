@@ -358,16 +358,16 @@ def cmd_run(argv: list[str]) -> int:
         run_tree = ledger.tree_fingerprint(REPO_ROOT)
     except Exception as error:
         run_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
-    # The client binary this run launches, bound to its source through the pin-release manifest beside
-    # it: a client-surface row is promoted on a `client:<sha>` fix_commit, and its negative control is
-    # a receipt of the pre-fix client, so the receipt has to say which client ran, not which checkout
-    # happened to be beside this one. Never fatal: the receipt records the reason instead.
-    try:
-        from . import ledger
+    # Only native runs use the native client pin. Java clients are identified by
+    # their own launch logs, not by an unrelated KRASNOKAMEN_CLIENT_BINARY.
+    client_binary = None
+    if client == "native":
+        try:
+            from . import ledger
 
-        client_binary = ledger.client_pin(os.environ.get("KRASNOKAMEN_CLIENT_BINARY"))
-    except Exception as error:
-        client_binary = {"path": os.environ.get("KRASNOKAMEN_CLIENT_BINARY"), "error": str(error)}
+            client_binary = ledger.client_pin(os.environ.get("KRASNOKAMEN_CLIENT_BINARY"))
+        except Exception as error:
+            client_binary = {"path": os.environ.get("KRASNOKAMEN_CLIENT_BINARY"), "error": str(error)}
     start_epoch = time.time()
     named_scenario: dict[str, Any] | None = None
     if scenario is not None:

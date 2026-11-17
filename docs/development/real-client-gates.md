@@ -9,6 +9,18 @@ commands, receipts, Java/Loader client variables). This page is the working
 recipe and the traps for graphical and native-client gates. Profile and scenario
 lists come from `python3 -m tools.harness list` and `explain`, not from here.
 
+## Mixed Fabric interaction
+
+`loader-fabric-mixed-interaction` uses the `loader-live` lifecycle and an
+explicit release server and plugin directory. It launches agent-run Fabric
+26.3 and 26.1.2 clients in one fresh world; both observe the other's UUID,
+exchange fresh chat, and hand a diamond from one observed inventory to the
+other with the ordinary drop key. Screenshots need visual review. Set
+`A8_NEGATIVE_CONTROL=no-drop` to check that the recipient inventory oracle
+fails. Each run requires server-log admission records binding the clients'
+names and distinct connection IDs to protocols 777 and 775 respectively.
+This does not exercise 26.2 gameplay or replace the freeze-pin recheck.
+
 ## Optional packs and unloaded-eye regression scenes
 
 `native-v2-p2-optional-pack` follows the native client's documented automatic

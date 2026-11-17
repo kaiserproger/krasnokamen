@@ -743,6 +743,12 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
     prepare_operator_fixture(ctx, [loader.USERNAMES[platform]])
     details: dict[str, Any] = {}
     timeout = ctx.timeout_seconds or LOADER_LIVE_TIMEOUT_SECONDS
+    if ctx.scenario_id == "loader-fabric-mixed-interaction":
+        from .mixed_interaction import run_candidate
+
+        if platform != "fabric":
+            raise ValueError("mixed interaction requires Fabric")
+        return run_candidate(ctx, timeout)
     if ctx.scenario_id == "loader-fabric-mixed-version-build":
         from .loader_mixed_version import run_candidate
 
