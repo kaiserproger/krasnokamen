@@ -21,6 +21,9 @@ pub(crate) mod furnace;
 #[path = "construction_founding.rs"]
 pub(super) mod founding;
 
+#[path = "construction_site_refusals.rs"]
+pub(super) mod site_refusals;
+
 pub(crate) const PLAN_CADENCE: u64 = 20;
 
 /// A same-dimension native outpost. Construction stage and culture are derived
@@ -205,6 +208,7 @@ pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<
         .take()
         .ok_or("No pending construction order.")?;
     record.revision = record.revision.saturating_add(1);
+    state.settlements.site_watch.remove(&id);
     Ok(())
 }
 
@@ -678,7 +682,7 @@ fn start_build(
         .lock()
         .expect("forest cache poisoned")
         .misses();
-    let (site, cursor) = site_project(
+    let (site, cursor, report) = site_project(
         state,
         record,
         std::iter::once(blueprint),
@@ -702,6 +706,7 @@ fn start_build(
             let record = state.settlements.get_mut(id).expect("planned settlement");
             record.construction_cursor = cursor;
             record.revision = record.revision.saturating_add(1);
+            site_refusals::observe(state, id, &blueprint.id, report);
         }
         return Err(
             "No free loaded construction site is available within the material budget.".into(),
@@ -716,6 +721,7 @@ fn start_build(
         .get_mut(id)
         .expect("admitted settlement")
         .construction_cursor = cursor;
+    state.settlements.site_watch.remove(&id);
     Ok(())
 }
 
@@ -1090,84 +1096,7 @@ fn site_free_claim(
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
 ) -> bool {
-    if founding::site_reserved(state, record.id, origin, size) {
-        return false;
-    }
-    let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
-    if super::forestry::planted_crown_overlaps(
-        state,
-        ScriptWorldBounds::new(origin, max).expect("blueprint bounds"),
-    ) {
-        return false;
-    }
-    let mut minimum = origin[1];
-    let mut maximum = origin[1];
-    if record.buildings.values().any(|building| {
-        [0, 2].into_iter().all(|axis| {
-            origin[axis] <= building.bounds.max[axis] + 1
-                && building.bounds.min[axis] <= max[axis] + 1
-        })
-    }) {
-        return false;
-    }
-    for x in origin[0]..=max[0] {
-        for z in origin[2]..=max[2] {
-            if [x, max[1], z]
-                .into_iter()
-                .zip(record.anchor)
-                .map(|(value, anchor)| (i64::from(value) - i64::from(anchor)).pow(2))
-                .sum::<i64>()
-                > i64::from(record.radius).pow(2)
-                && !expedition.is_some_and(|site| site.contains([x, max[1], z]))
-            {
-                return false;
-            }
-            let anchor_y = if expedition.is_some_and(|site| site.contains(origin)) {
-                origin[1]
-            } else {
-                record.anchor[1]
-            };
-            let Some(height) = surface_y(state, anchor_y, x, z) else {
-                return false;
-            };
-            minimum = minimum.min(height);
-            maximum = maximum.max(height);
-            if maximum - minimum > SITE_VARIANCE {
-                return false;
-            }
-            let ground = state
-                .world
-                .physics_block_at(x, height, z)
-                .expect("loaded surface");
-            if !floor_replaceable(state, ground) {
-                return false;
-            }
-            for y in height.min(origin[1])..=max[1].max(height) {
-                let Some(block) = state.world.physics_block_at(x, y, z) else {
-                    return false;
-                };
-                if state.block_entities.contains_key(&(x, y, z))
-                    || (super::forestry::tree(state, block)
-                        && !super::forestry::clearable(state, [x, y, z]))
-                    || (y == origin[1] && !floor_replaceable(state, block))
-                    || (y > origin[1]
-                        && !clearable(state, block)
-                        && !excavatable(state, block)
-                        && !super::forestry::clearable(state, [x, y, z]))
-                    || (y > height
-                        && y <= origin[1]
-                        && !clearable(state, block)
-                        && !super::forestry::clearable(state, [x, y, z]))
-                {
-                    return false;
-                }
-            }
-        }
-    }
-    !executor::area_reserved(
-        state,
-        ScriptWorldBounds::new([origin[0], minimum, origin[2]], max).expect("blueprint bounds"),
-    )
+    site_refusals::check(state, record, origin, size, expedition).is_ok()
 }
 
 fn planned_cells(
@@ -1585,13 +1514,18 @@ fn site_project<'a>(
     start: u32,
     attempts: u32,
     images: &[super::inventory::Image],
-) -> (Option<FundedSite>, u32) {
+) -> (Option<FundedSite>, u32, site_refusals::Report) {
     let share = attempts / blueprints.len().max(1) as u32;
     let mut network = layout::Network::for_construction(state, record);
     let fronts = network.frontage();
     let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
+    let mut report = site_refusals::Report {
+        frontages: count,
+        ..Default::default()
+    };
     if count == 0 {
-        return (None, 0);
+        report.reject(site_refusals::Reason::NoFrontage, record.anchor);
+        return (None, 0, report);
     }
     let mut index = start % count;
     for blueprint in blueprints {
@@ -1599,11 +1533,16 @@ fn site_project<'a>(
         for _ in 0..share.min(count) {
             let (front, normal) = fronts[index as usize];
             index = (index + 1) % count;
+            report.examined += 1;
             let Some(lot) = network.lot(blueprint, front, normal) else {
+                report.reject(site_refusals::Reason::LotGeometry, front);
                 continue;
             };
             let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-            if !site_free(state, record, lot.origin, size) {
+            if let Err(reason) =
+                site_refusals::check(state, record, lot.origin, size, record.founding.as_ref())
+            {
+                report.reject(reason, lot.origin);
                 continue;
             }
             let project = Project {
@@ -1617,8 +1556,11 @@ fn site_project<'a>(
                 ordered: false,
                 borrowed_builder: None,
             };
-            if let Some((bounds, mut cells)) = planned_cells(state, &project, "oak")
-                && let Some(bill) = cell_bill(state, &cells)
+            let Some((bounds, mut cells)) = planned_cells(state, &project, "oak") else {
+                report.reject(site_refusals::Reason::Preparation, lot.origin);
+                continue;
+            };
+            if let Some(bill) = cell_bill(state, &cells)
                 && let Some((species, color)) = funded_variant(state, record.id, &bill, images)
                 && apply_species(state, &mut cells, species).is_some()
                 && apply_bed_color(state, &mut cells, color).is_some()
@@ -1630,11 +1572,13 @@ fn site_project<'a>(
                         cells,
                     }),
                     0,
+                    report,
                 );
             }
+            report.reject(site_refusals::Reason::MaterialBill, lot.origin);
         }
     }
-    (None, index)
+    (None, index, report)
 }
 
 /// Street work for the buildings already standing: the first unpaved road
@@ -1726,8 +1670,14 @@ fn plan(state: &mut TickState, id: SettlementId) {
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
     // Housing gets its own bounded scan. If it has no site, ordinary funded
     // candidates still get their shared scan in this same planning pass.
-    let (house, cursor) = priority_house(state, record, &images).map_or(
-        (None, record.construction_cursor),
+    let (house, cursor, _) = priority_house(state, record, &images).map_or_else(
+        || {
+            (
+                None,
+                record.construction_cursor,
+                site_refusals::Report::default(),
+            )
+        },
         |house| {
             site_project(
                 state,
@@ -1759,7 +1709,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
         }
     }
     if funded_count != 0 {
-        let (site, cursor) = site_project(
+        let (site, cursor, _) = site_project(
             state,
             record,
             funded
