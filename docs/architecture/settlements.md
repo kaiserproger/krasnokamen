@@ -155,8 +155,9 @@ Migration transit (`settlements/transit.rs`, [ADR 0023](../decisions/0023-offscr
 holds a departing household or lone resident between two settlements of one
 dimension. Departure removes the bodies and inserts one `transit/<uuid>` record
 (keyed by the lowest member UUID) in the same tick; arrival restores the same
-entities at the destination's simulated edge, joins them and deletes the record
-in the same tick. The record keeps each member's complete WAL entity image and
+entities at its simulated edge, or at the nearest standing cell near its anchor
+when the return bearing has no entry, joins them and deletes the record in the
+same tick. The record keeps each member's complete WAL entity image and
 the household record `leave` removed; member images name no settlement or
 household of their own. Records ride the tick WAL as `Transit` entries and the
 checkpoint as `transit/<uuid>` global rows; a checkpoint deletes the rows the WAL

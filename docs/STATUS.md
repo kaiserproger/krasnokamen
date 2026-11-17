@@ -97,10 +97,11 @@ decides it):
   owner's four questions in the ADR; the Java import and the content bundle
   are the current path, not an old side.
 - Off-screen settlement simulation ([ADR 0023](decisions/0023-offscreen-settlement-simulation.md)):
-  proposed; slice 1 (migration transit custody) implemented on a branch,
-  slices 2–5 (game-time economy clocks, deferred production and consumption,
-  construction labour, births) designed, not started. Today's residency-gated
-  economy is the current path, not an old side.
+  accepted design; migration transit/flows, game-time economy clocks and deferred
+  production/consumption are integrated (slices 1–3). Production outside simulation
+  accrues deferred portions, not resident-only physical output. Construction
+  labour and birth credit (slices 4–5) remain planned; their current paths still
+  require simulation.
 
 Supported surfaces (standing contracts, not transitions; only an
 owner-declared sunset would make one):

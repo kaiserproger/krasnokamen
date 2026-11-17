@@ -44,8 +44,9 @@ const MAX_EDGE_DISTANCE: i32 = 1024;
 pub(crate) const EXIT_REACH: f64 = 2.0;
 /// Abstract travel time per block from the exit to the destination anchor.
 pub(crate) const TICKS_PER_BLOCK: u64 = 10;
-/// Records admitted per tick; later due records wait for the next tick.
+/// Entry searches/restores admitted per tick, including refused attempts.
 const MAX_ARRIVALS_PER_TICK: usize = 4;
+const ARRIVAL_RETRY_TICKS: u64 = 100;
 /// Villager body used to judge a standable surface cell.
 const BODY_HALF_WIDTH: f64 = 0.3;
 const BODY_HEIGHT: f64 = 1.95;
@@ -84,6 +85,9 @@ pub(crate) struct Record {
     pub(crate) household: Option<Household>,
     /// Complete native entity records, ascending by UUID.
     pub(crate) members: Vec<ReplayEntity>,
+    /// Failed entry attempts wait in game time; never part of custody/WAL.
+    #[serde(skip)]
+    retry_at: u64,
 }
 
 /// One dimension's transit records with their touched-only WAL images.
@@ -91,6 +95,8 @@ pub(crate) struct Record {
 pub(crate) struct Ledger {
     records: BTreeMap<uuid::Uuid, Record>,
     touched: BTreeSet<uuid::Uuid>,
+    #[cfg(test)]
+    entry_attempts: usize,
 }
 
 /// One arrival that joined its destination, returned by [`tick`] for the
@@ -220,6 +226,56 @@ fn surface(state: &TickState, x: i32, z: i32) -> Option<BlockPos> {
         }
     }
     None
+}
+
+/// A bounded nearest-foot-cell search when the return bearing has no shore.
+fn anchor_entry(state: &TickState, anchor: [i32; 3]) -> Option<BlockPos> {
+    let mut best = None;
+    for dy in [0, 1, -1, 2, -2] {
+        for dx in -4..=4 {
+            for dz in -4..=4 {
+                let distance = dx * dx + dy * dy + dz * dz;
+                if best
+                    .as_ref()
+                    .is_some_and(|&(previous, _)| previous <= distance)
+                {
+                    continue;
+                }
+                let pos = BlockPos {
+                    x: anchor[0] + dx,
+                    y: anchor[1] + dy,
+                    z: anchor[2] + dz,
+                };
+                if state
+                    .world
+                    .is_active(pos.x.div_euclid(16), pos.z.div_euclid(16))
+                    && super::allocator::standing(
+                        &state.world,
+                        &state.registry,
+                        pos,
+                        BODY_HALF_WIDTH,
+                        BODY_HEIGHT,
+                    )
+                    .is_some()
+                {
+                    if distance == 0 {
+                        return Some(pos);
+                    }
+                    best = Some((distance, pos));
+                }
+            }
+        }
+    }
+    best.map(|(_, pos)| pos)
+}
+
+fn defer_arrival(state: &mut TickState, id: uuid::Uuid, now: u64, reason: &str) {
+    let record = state.settlements.transit.records.get_mut(&id).unwrap();
+    if record.retry_at == 0 {
+        tracing::warn!(transit = %id, destination = record.destination.0, reason,
+            "settlement_transit_arrival_deferred");
+    }
+    record.retry_at = now.saturating_add(ARRIVAL_RETRY_TICKS);
 }
 
 fn horizontal(a: [i32; 3], b: [i32; 3]) -> f64 {
@@ -413,6 +469,7 @@ pub(crate) fn depart(
         status: Status::Travelling,
         household: departed.household,
         members: images.into_iter().map(|(_, image)| image).collect(),
+        retry_at: 0,
     };
     tracing::info!(
         transit = %id,
@@ -490,16 +547,18 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) -> Vec<Arriva
         return arrivals;
     }
     let now = game_time(state);
-    let due: Vec<uuid::Uuid> = state
+    let mut due: Vec<_> = state
         .settlements
         .transit
         .records
         .iter()
-        .filter(|(_, record)| record.arrives <= now)
-        .map(|(id, _)| *id)
+        .filter(|(_, record)| record.arrives <= now && record.retry_at <= now)
+        .map(|(id, record)| (record.arrives.max(record.retry_at), *id))
         .collect();
+    // Old untouched arrivals must not starve behind repeatedly refused UUIDs.
+    due.sort_unstable();
     let mut admitted = 0;
-    for id in due {
+    for (_, id) in due {
         retarget(state, id);
         let record = &state.settlements.transit.records[&id];
         let anchor = record.destination_anchor;
@@ -517,17 +576,28 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) -> Vec<Arriva
         if admitted == MAX_ARRIVALS_PER_TICK {
             continue;
         }
+        admitted += 1;
+        #[cfg(test)]
+        {
+            state.settlements.transit.entry_attempts += 1;
+        }
         let back = (record.bearing + 180.0).rem_euclid(360.0);
-        let Some(entry) = edge_point(state, anchor, back) else {
+        let Some(entry) = edge_point(state, anchor, back).or_else(|| anchor_entry(state, anchor))
+        else {
+            defer_arrival(
+                state,
+                id,
+                now,
+                "no standing entry on the return bearing or near the anchor",
+            );
             continue;
         };
         match arrive(state, changes, id, entry) {
             Ok(arrival) => {
-                admitted += 1;
                 arrivals.extend(arrival);
             }
             Err(reason) => {
-                tracing::error!(transit = %id, reason, "settlement_transit_arrival_refused");
+                defer_arrival(state, id, now, &reason);
             }
         }
     }
@@ -565,6 +635,7 @@ fn retarget(state: &mut TickState, id: uuid::Uuid) {
     );
     record.destination = destination;
     record.destination_anchor = anchor;
+    record.retry_at = 0;
     state.settlements.transit.put(id, record);
 }
 
@@ -577,13 +648,13 @@ fn arrive(
     changes: &mut ChangeSet,
     id: uuid::Uuid,
     entry: BlockPos,
-) -> Result<Option<Arrival>, &'static str> {
+) -> Result<Option<Arrival>, std::borrow::Cow<'static, str>> {
     let record = state.settlements.transit.records[&id].clone();
     let mut uuids = Vec::with_capacity(record.members.len());
     for member in &record.members {
         let uuid: uuid::Uuid = member.uuid.parse().map_err(|_| "invalid member UUID")?;
         if worlds(state).any(|world| world.entities.slot_of_uuid(uuid).is_some()) {
-            return Err("a member already exists in the world");
+            return Err("a member already exists in the world".into());
         }
         uuids.push(uuid);
     }
@@ -594,7 +665,7 @@ fn arrive(
             .is_none_or(|family| !to.households.contains_key(&family.id))
     });
     if !bound && state.settlements.get(record.destination).is_some() {
-        return Err("destination household identity conflict");
+        return Err("destination household identity conflict".into());
     }
     let centre = [
         f64::from(entry.x) + 0.5,
@@ -617,9 +688,8 @@ fn arrive(
         }
         let entity = state.entities.alloc_id();
         if let Err(error) = crate::core::restore_entity(state, entity.0, &image) {
-            tracing::error!(transit = %id, %error, "settlement_transit_member_restore");
             discard(state, &spawned);
-            return Err("a member record did not restore");
+            return Err(format!("member {} could not restore: {error}", member.uuid).into());
         }
         spawned.push(entity);
     }
@@ -634,7 +704,7 @@ fn arrive(
         )
     {
         discard(state, &spawned);
-        return Err(reason);
+        return Err(reason.into());
     }
     state.settlements.transit.remove(id);
     let arrival = bound.then(|| Arrival {

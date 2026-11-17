@@ -458,6 +458,11 @@ impl TickState {
                 if row.health <= 0.0 && body.alive {
                     body.alive = false;
                     let kind = body.kind;
+                    if villager
+                        && let Some(settlement) = row.villager.as_ref().and_then(|v| v.settlement)
+                    {
+                        crate::settlements::migration::note_death(self, settlement);
+                    }
                     deaths.push(id);
                     events.push(EntityEvent::Death { entity: id });
                     let victim_uuid = self.entities.row(slot).uuid;
