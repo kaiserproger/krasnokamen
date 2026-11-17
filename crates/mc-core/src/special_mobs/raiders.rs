@@ -292,6 +292,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 impulse: state.entities.horizontal_impulse(slot),
                 rotation: state.entities.rot(slot),
                 look_target: destination,
+                battle_facing: false,
                 climbs_walls: false,
                 aquatic_control: crate::species::AquaticControl::Other,
                 air_supply: state.entities.body(slot).air_supply,
