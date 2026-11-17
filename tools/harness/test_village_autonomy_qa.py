@@ -801,7 +801,7 @@ class UpgradeSpeciesObservationTests(unittest.TestCase):
     def upgraded_storage():
         """Client cells of the authored Storage L2: cells the upgrade left
         unchanged keep the L1 project's birch, cells it placed are acacia."""
-        blueprint = next(b for b in qa._authored_blueprints() if b["kind"] == "storage")
+        blueprint = next(b for b in qa._authored_blueprints() if b["id"] == "storage")
         lower = blueprint["levels"][0]["layers"]
         upper = blueprint["levels"][1]["layers"]
         cells = []

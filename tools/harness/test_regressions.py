@@ -63,10 +63,9 @@ class RegressionLedgerTests(unittest.TestCase):
                     regressions._profile_command('civilization-seed-qa', 'new_house')
 
     def test_owner_order_ref_rejects_d5_diagnostic_overrides(self):
-        for name in ('D5_QUEUE_CLIENT', 'D5_QUEUE_CONTROL'):
-            with patch.dict('os.environ', {name: '1'}):
-                with self.assertRaisesRegex(ValueError, name):
-                    regressions._profile_command('village-owner-order-qa', 'all')
+        with patch.dict('os.environ', {'D5_QUEUE_CONTROL': 'no-second-order'}):
+            with self.assertRaisesRegex(ValueError, 'D5_QUEUE_CONTROL'):
+                regressions._profile_command('village-owner-order-qa', 'all')
 
     def test_building_verdict_is_keyed_by_blueprint(self):
         command = regressions._profile_command('buildings-qa', 'wall.L1_built')

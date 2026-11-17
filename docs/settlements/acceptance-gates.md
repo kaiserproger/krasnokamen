@@ -12,14 +12,10 @@ The primary player is not an operator. In the isolated QA world, spawn protectio
 
 ## Owner order
 
-`village-owner-order-qa` uses a fresh seed-100 world and an operator teleport fixture near the generated anchor; it does not prove navigation to the bell. It claims the village and checks an unfunded House L1 order and its waiting-for-materials status before and after restart. The harness then uses bounded console `item replace block` fixtures in the founding chest to fund construction, checks the new start notification and project status, and checks the busy reason and cancellation of a second queued order. This supplied-material scenario is not proof of autonomous material production.
+`village-owner-order-qa` uses a fresh seed-100 world and an operator teleport fixture near the generated anchor; it does not prove navigation to the bell. It claims the village, confirms an active project, and queues House L1 as pending. A different Farm order must receive the fresh queue-full chat reply without replacing House or changing the active project. After restart the pending House must survive; bounded console `item replace block` fixtures fund it, and the harness checks its fresh start notification and project status before testing a busy Farm order and its cancellation. This supplied-material scenario is not proof of autonomous material production.
 
-With `D5_QUEUE_CLIENT=1`, the diagnostic instead confirms an active project,
-queues House and checks that a different Farm order receives the fresh queue-full
-chat reply without replacing House. After restart, bounded chest fixtures fund
-the pending House and the client observes it start. This mode is not proof of
-autonomous production. Set `D5_QUEUE_CONTROL=no-second-order` as well to omit
-the refused request and fail at the fresh-refusal assertion.
+`D5_QUEUE_CONTROL=no-second-order` omits the refused request and must fail at
+the fresh-refusal assertion. Ledger execution forbids this control override.
 
 ## Civilization observation
 

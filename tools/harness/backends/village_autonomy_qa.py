@@ -961,13 +961,6 @@ def _owner_order_before_restart(probe: ProbeSteps, detail: dict[str, Any], artif
     claim = _recent_chat(_send(probe, "settlement claim"), 20)
     detail["claim_chat"] = claim
     probe.check("owner_claimed", bool(claim) and claim[0].startswith("Claimed "))
-    if os.environ.get("D5_QUEUE_CLIENT") != "1":
-        queued = _recent_chat(_send(probe, "settlement build house"), 20)
-        detail["queued_chat"] = queued
-        probe.check("house_queued_unfunded", bool(queued) and queued[0].startswith("Queued house: not enough:"))
-        pending = _owner_projects(probe, detail, "pending_before_restart", artifact)
-        probe.check("pending_before_restart", "Pending: House L1 — waiting for materials" in pending["body"])
-        return
     active = _project_progress(_project_status(probe))
     detail["d5_active_before_order"] = active
     probe.check("d5_project_active", bool(active))
@@ -1005,8 +998,7 @@ def _owner_order_after_restart(
     server: subprocess.Popen[Any], log_path: Path,
 ) -> None:
     pending = _owner_projects(probe, detail, "pending_after_restart", artifact)
-    expected_pending = ("Pending: House L1" if os.environ.get("D5_QUEUE_CLIENT") == "1"
-                        else "Pending: House L1 — waiting for materials")
+    expected_pending = "Pending: House L1"
     probe.check("pending_survives_restart", expected_pending in pending["body"])
     previous = _recent_chat(probe.observe(), 20)
     chest = tuple(detail["founding_chest"])
@@ -1041,8 +1033,7 @@ def _owner_order_after_restart(
     server.stdin.flush()
     probe.call("minecraft_wait_ticks", {"ticks": 40})
     detail["funded_storage"] = _read_storage_container(server, log_path, chest, min(15.0, probe.remaining()))
-    order_wait = 2400.0 if os.environ.get("D5_QUEUE_CLIENT") == "1" else 180.0
-    deadline = time.monotonic() + min(order_wait, probe.remaining(limit=None))
+    deadline = time.monotonic() + min(2400.0, probe.remaining(limit=None))
     started = False
     while time.monotonic() < deadline:
         chat = _recent_chat(probe.observe(), 20)
