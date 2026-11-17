@@ -2204,3 +2204,111 @@ impl GridPos {
         Self { x, y, z }
     }
 }
+
+/// A body within the collision tolerance of a block face is touching that block.
+/// `VoxelShape.collideX` (26.1.2) snaps it to the face with `d >= -1.0E-7` /
+/// `d <= 1.0E-7`; the entity step must never resolve it *through* the block.
+///
+/// The offset below is what an ordinary clip writes: at the pen's coordinates
+/// `512.3 + (512.0 - (512.3 - 0.3)) - 0.3` is `-5.68e-14` below the face, and the
+/// production evidence (prep11-125000 pen 64) has bodies 0.04..0.35 blocks inside
+/// the same wall column, lifted onto it by a jump.
+#[test]
+fn wall_face_snap_never_lets_a_body_cross_the_face() {
+    struct Pen;
+    impl BlockSampler for Pen {
+        fn material_at(&self, _x: i32, y: i32, z: i32) -> BlockMaterial {
+            // Ground for y <= 63 (grass block at 63) and the pen's `-z` wall
+            // column at z = 511 (blocks 511..512) for y 64..=70.
+            if y <= 63 || (z == 511 && (64..=70).contains(&y)) {
+                BlockMaterial::Solid
+            } else {
+                BlockMaterial::Air
+            }
+        }
+    }
+    let half_width = 0.3;
+    let face = 512.0;
+    let mut config = PhysicsConfig::living_entity();
+    config.air_drag = 1.0;
+    config.ground_friction = 1.0;
+    config.vertical_air_drag = 0.98;
+    for round_ulp in [0.0, -1.0e-13, -5.0e-8] {
+        let mut body = EntityBody {
+            position: Vec3::new(11.5, 64.0, face + half_width + round_ulp),
+            velocity: Vec3::ZERO,
+            aabb: Aabb {
+                half_width,
+                height: 1.95,
+            },
+            on_ground: true,
+        };
+        let mut deepest = f64::NEG_INFINITY;
+        for tick in 0..80 {
+            body.velocity.x = 0.0;
+            body.velocity.z = -0.23;
+            body = step_entity(body, &Pen, config).body;
+            let penetration = face - (body.position.z - half_width);
+            deepest = deepest.max(penetration);
+            assert!(
+                penetration <= 0.0 + 1.0e-9,
+                "offset {round_ulp:e} tick {tick}: body crossed the wall face by {penetration:e} \
+                 (pos z {})",
+                body.position.z
+            );
+        }
+        assert!(
+            deepest <= 1.0e-9,
+            "offset {round_ulp:e}: deepest penetration {deepest:e}"
+        );
+        // The production state (prep11-125000 pen 64) is a body standing at
+        // y = 65.00 *on* the wall's lowest block after jumping from inside it.
+        // With no step and no support across the face, only the floor at y = 64
+        // can hold the body.
+        assert!(
+            body.position.y < 64.5,
+            "offset {round_ulp:e}: body rests on the wall block at y {}",
+            body.position.y
+        );
+    }
+}
+
+/// The tolerance must not become a push-out: a body already embedded deeper
+/// than `COLLISION_EPSILON` keeps today's semantics (vanilla has no unstick for
+/// mobs; only items and experience orbs call `moveTowardsClosestSpace`).
+#[test]
+fn deeply_embedded_body_keeps_moving_without_a_push_out() {
+    struct Pen;
+    impl BlockSampler for Pen {
+        fn material_at(&self, _x: i32, y: i32, z: i32) -> BlockMaterial {
+            if y <= 63 || (z == 511 && (64..=70).contains(&y)) {
+                BlockMaterial::Solid
+            } else {
+                BlockMaterial::Air
+            }
+        }
+    }
+    let mut config = PhysicsConfig::living_entity();
+    config.air_drag = 1.0;
+    config.ground_friction = 1.0;
+    config.vertical_air_drag = 0.98;
+    let mut body = EntityBody {
+        position: Vec3::new(11.5, 64.0, 511.7),
+        velocity: Vec3::ZERO,
+        aabb: Aabb {
+            half_width: 0.3,
+            height: 1.95,
+        },
+        on_ground: true,
+    };
+    let start = body.position.z;
+    for _ in 0..10 {
+        body.velocity.z = -0.23;
+        body = step_entity(body, &Pen, config).body;
+    }
+    assert!(
+        body.position.z < start - 0.05,
+        "an embedded body must keep its vanilla free movement, not be pushed out: {start} -> {}",
+        body.position.z
+    );
+}
