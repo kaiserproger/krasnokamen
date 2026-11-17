@@ -36,7 +36,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Books is a pure encoding leaf: 184 modules, 2026-11-09.
     // Merge ec3a463a (LedgerMobsB01) adds the sniffer, parrot and strider tick
     // modules, all of which drive TickState: 187 modules, 2026-11-12.
-    cycle_modules: 187,
+    // D9 entity-view ownership, 2026-11-17: `entity_views` was the page
+    // container for `boundary::EntityView` records with a single out-edge back
+    // to `boundary` and no algorithm of its own; as `boundary::views` it stops
+    // being a false top-level cycle node: 186 modules.
+    cycle_modules: 186,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
@@ -64,7 +68,9 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         ("tick/entity_phase.rs", 734),
         ("settlements/construction.rs", 1_076),
         ("tick.rs", 834),
-        ("entities.rs", 924),
+        // D9 motion-gate extraction, 2026-11-17: the native motion gate policy
+        // moved byte-for-byte to its owner `entities/motion_gate.rs`: 863.
+        ("entities.rs", 863),
     ],
 };
 

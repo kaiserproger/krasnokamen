@@ -117,7 +117,6 @@ pub mod entity_life;
 pub mod entity_loot;
 pub mod entity_motion;
 mod entity_uuid;
-mod entity_views;
 pub mod experience_orbs;
 pub mod explosion;
 pub mod falling;
