@@ -486,12 +486,7 @@ pub(crate) fn rest_turns_toward_target(
     rotation: [f32; 3],
     position: [f64; 3],
 ) -> bool {
-    let Some(target) = columns
-        .look_by_slot
-        .get(slot.0 as usize)
-        .copied()
-        .flatten()
-    else {
+    let Some(target) = columns.look_by_slot.get(slot.0 as usize).copied().flatten() else {
         return false;
     };
     crate::entity_motion::look(
