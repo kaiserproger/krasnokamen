@@ -421,3 +421,21 @@ fn relative_movement_range_uses_quantized_endpoints_and_sync_resets_the_consumer
     assert_eq!(consumer.receive(&mob), Some(MoveEntityPos::ID));
     assert_eq!(consumer.position, [origin[0], 69.0, origin[2]]);
 }
+
+/// One panicking encode must not brick the shard: with a poisonable lock every
+/// later viewer's frame would panic on `lock().expect`, freezing all clients
+/// (one thread's panic becoming every client's freeze).
+#[test]
+fn panicking_encode_leaves_the_shard_usable() {
+    let shared = SharedMoves::default();
+    let entity = entity(2, [8.5, 64.0, 8.0]);
+    let baseline = baseline_at([8.0, 64.0, 8.0], 0.0, 0.0, 0.0);
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        shared.probe_panic_in_move_shard(entity.id.0);
+    }));
+    assert!(panicked.is_err(), "the probe panics inside the shard");
+    let served = shared.movement(&entity, baseline).expect("moved");
+    let (id, data, next) = oracle(&entity, baseline).expect("moved");
+    assert_eq!((served.id, served.data, served.next), (id, data, next));
+    assert_eq!(shared.head(&entity).0, RotateHead::ID);
+}

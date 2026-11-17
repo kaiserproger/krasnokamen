@@ -273,6 +273,13 @@ pub struct NetworkSection {
     /// unlimited.
     #[serde(default)]
     pub max_connections_per_ip: u32,
+    /// Server-wide cap on concurrent pre-play connections (handshake, status
+    /// and login before Play). `0` (default) derives `max_players * 2 + 64`:
+    /// the per-address knobs above cannot bound a flood from many addresses,
+    /// and each pre-play socket may hold up to 1 MiB of decoded input. A
+    /// connection over the cap is closed before its handshake is read.
+    #[serde(default)]
+    pub max_pre_play_connections: u32,
 }
 
 impl Default for NetworkSection {
@@ -282,6 +289,7 @@ impl Default for NetworkSection {
             port: default_port(),
             connection_throttle_ms: 0,
             max_connections_per_ip: 0,
+            max_pre_play_connections: 0,
         }
     }
 }

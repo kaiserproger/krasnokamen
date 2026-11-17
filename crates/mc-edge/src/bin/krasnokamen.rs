@@ -89,11 +89,16 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
                 Ok(()) => info!(cause = "edge serve loop returned", "server stopping"),
                 Err(error) => tracing::error!(error = %format_args!("{error:#}"), "edge failed; server stopping"),
             }
+            spawn_stop_escalation();
             shutdown_core.shutdown();
             result
         }
         cause = shutdown => {
             info!(cause, "shutdown requested; stopping core");
+            // The final checkpoint can take minutes on a big dirty set; a
+            // second stop signal must not be swallowed now that the first
+            // listener is gone.
+            spawn_stop_escalation();
             shutdown_core.shutdown();
             info!(cause, "shutdown requested; core stopped");
             // A signal that arrives while `serve` handles a halt drops that
@@ -105,6 +110,37 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
             Ok(())
         }
     }
+}
+
+/// Exit code for a second stop signal: 130 is the Ctrl-C convention, a
+/// non-zero status distinguishable from a clean stop and from a crash.
+const SECOND_STOP_EXIT_CODE: i32 = 130;
+
+/// Arm the escalation path while a clean shutdown runs: a second SIGTERM or
+/// SIGINT logs one line and exits immediately instead of waiting for the final
+/// checkpoint. Safe because the WAL is crash-consistent — the next start
+/// replays it, exactly as after a power loss.
+fn spawn_stop_escalation() {
+    spawn_stop_escalation_with(|cause| {
+        tracing::error!(
+            cause,
+            code = SECOND_STOP_EXIT_CODE,
+            "second stop signal: exiting without the final checkpoint; the WAL replays on the next start"
+        );
+        std::process::exit(SECOND_STOP_EXIT_CODE);
+    });
+}
+
+/// [`spawn_stop_escalation`] with the exit replaced, so a test can observe the
+/// signal half in-process. The listener is registered synchronously here, before
+/// the caller blocks: a signal that arrives during the first checkpoint still
+/// lands on it.
+fn spawn_stop_escalation_with(on_second: impl FnOnce(&'static str) + Send + 'static) {
+    let second = shutdown_signal();
+    tokio::spawn(async move {
+        let cause = second.await;
+        on_second(cause);
+    });
 }
 
 /// Ctrl-C or SIGTERM: either requests shutdown, then the process exits.
@@ -165,5 +201,27 @@ mod tests {
                 .expect("shutdown signal"),
             "SIGTERM"
         );
+    }
+
+    /// After the first stop signal has started the clean shutdown, a second one
+    /// must reach the escalation listener: before the fix the listener was
+    /// dropped with the completed select, so only SIGKILL could end the wait for
+    /// the final checkpoint.
+    #[tokio::test]
+    async fn second_stop_signal_reaches_the_escalation_listener() {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        super::spawn_stop_escalation_with(move |cause| {
+            let _ = tx.send(cause);
+        });
+        let sent = std::process::Command::new("kill")
+            .args(["-TERM", &std::process::id().to_string()])
+            .status()
+            .expect("send test SIGTERM");
+        assert!(sent.success());
+        let cause = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .expect("second stop signal is heard while shutting down")
+            .expect("escalation listener reports the cause");
+        assert_eq!(cause, "SIGTERM");
     }
 }
