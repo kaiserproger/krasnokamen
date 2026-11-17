@@ -139,6 +139,16 @@ impl Client {
         self.compression = compression;
     }
 
+    /// Enter the Play phase for a caller that completes Configuration itself.
+    ///
+    /// `drive_configuration` sets this on the FinishConfiguration ack; the Loader
+    /// transport does its own configuration walk, and without this it leaves the
+    /// phase-gated wire behaviour (the chunk-batch acknowledgement) inactive, so a
+    /// server that paces world delivery on that ack stops after one batch.
+    pub fn enter_play(&mut self) {
+        self.play = true;
+    }
+
     pub async fn write_packet<P: Packet>(&mut self, packet: &P) -> Result<()> {
         let mut body = BytesMut::new();
         packet.encode(&mut body)?;
