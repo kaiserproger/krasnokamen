@@ -11,8 +11,19 @@ fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
 ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
 [tick_hi u64][length u32][crc32 u32][payload]`; the payload is JSON lines of
-absolute post-images and tombstones. The writer fsyncs a temporary file and
-renames it to publish the batch. Unpublished temporary files are ignored.
+absolute post-images and tombstones. The writer writes
+`batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
+fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
+published batches (default 10, `[data] journal_fsync_every_batches`); a
+checkpoint gate and shutdown flush it sooner. Until that directory fsync a host
+power loss can drop the published names; the process-crash window is separate
+— see [the acknowledgement window](#write-errors-and-publication-order). Readers ignore
+unpublished `.tmp` files, and the next `JournalWriter::open` removes them
+(`open_removes_unpublished_batch_leftovers`): the exclusive world lease
+guarantees no other writer owns one, pruning never sweeps them because a live
+append writes its temporary file on another thread, and a leftover the sweep
+cannot remove is warned about with its path and reason rather than silently
+kept.
 Entries cover changed state, not a complete copy every tick. A battle image
 journals only its changed parts after its first full record in the tail
 ([battle decision history](#battle-decision-history)). Player state and
@@ -76,6 +87,52 @@ A crash between baseline commit and WAL can leave an unused baseline. Retained
 WAL folds over the original base even after adding, changing or removing a pack.
 SIGKILL regressions use real flushed WAL, repeated recovery, checkpoint/prune and
 another recovery.
+
+### Write errors and publication order
+
+- A failed WAL `write`, `sync_all`, `rename` or journal-directory `sync_all` is
+  fatal: the journal owner returns without acknowledging, closes its work queue
+  and the tick owner halts (failed closed). No retry, because a hole in the
+  batch sequence cannot be filled afterwards.
+- The checkpoint gate and the pre-backup flush follow the same rule for I/O: a
+  failed directory fsync or a failed WAL-tail verification stops the world
+  (`GateError::Io`). A **coverage hole** is the one non-fatal gate refusal
+  (`GateError::Hole`): that checkpoint is skipped, its ACK is negative, the
+  appended batches stay durable and the world keeps serving. A backup *copy*
+  error stays local to that backup job; only its pre-copy flush is fatal.
+- Order is always batch file fsync, rename, journal directory fsync (within the
+  window), WAL gate, native `Durability::Immediate` commit, then prune. A
+  checkpoint therefore never claims state whose WAL is not durable, and the
+  directory entry of a published batch becomes durable no later than the next
+  gate.
+- The journal directory's own entry is made durable when `JournalWriter::open`
+  creates it, through the shared `atomic_file::create_dir_all_durable` helper
+  (which persists every entry it created, including one left unflushed by an
+  interrupted first start), so no batch rename can claim durability inside a
+  directory a later recovery cannot find.
+- Close errors are not observable: Rust drops a `File` without reporting
+  `close(2)`. Durability rests on the explicit fsync before the rename, never on
+  drop, and nothing here re-checks a closed file: the directory fsync that
+  follows a rename publishes the *name*, it is not a second look at that file's
+  writeback errors.
+- **Acknowledgement window.** A tick reaches clients once its batch is queued,
+  before the batch is published (written, fsynced, renamed). Two windows follow.
+  Any crash, SIGKILL included, can lose every batch not yet published: up to
+  128 queued batches or 256 MiB of post-images (about 6.4 s at 20 TPS, fewer
+  ticks when batches are large) and the batch being written if its rename has
+  not happened, so an empty queue does not close it. A host power loss can also
+  drop up to `journal_fsync_every_batches` published batches whose names the
+  directory fsync has not yet made durable, and a lost name before later ones
+  leaves a hole in the tail. Setting the cadence to 1 closes only this second
+  window.
+- A failed prune is warned and counted, never fatal: batches at or below the
+  committed checkpoint are ignored on replay, so only the WAL grows. One line
+  per failed attempt names the directory, failure count, retained bytes and the
+  first error (`prune_reports_and_counts_a_refused_removal`); the counters
+  `krasnokamen_journal_prune_failures_total` and
+  `krasnokamen_journal_prune_retained_bytes` are on `/metrics` and under
+  `journal` in `/stats`. A directory that cannot be written at all still halts
+  the world on the next append.
 
 ### Recovery evidence and clocks
 
@@ -531,7 +588,14 @@ journal coverage gap, so append refuses before reaching the injected ENOSPC.
 Offline `backup` and `restore` require a stopped, exclusively leased world;
 restore verifies the backup inventory and checksums. The running console
 `backup` is a different operation: the native writer makes a consistent copy
-of the committed checkpoint plus its WAL. Use the documented operator commands
+of the committed checkpoint plus its WAL, and it decodes and CRC-checks every
+batch it copies, so a byte-identical copy of a damaged source is refused
+instead of being published as a backup (Books R5 G3). A `journal/` directory
+belongs to the store it was written with: batches carry no store identity, so a
+foreign or mismatched tail replays into the wrong world without a refusal.
+Never mix the two — `backup` and `restore` always move both, and restoring only
+`native/state.redb` over an existing `journal/` is operator error, not a
+supported path (Books R4-P3). Use the documented operator commands
 and check their results; a filesystem copy of a live writer is not equivalent.
 Anvil export is not a native backup: native-only plugin and settlement state
 and block-log history are not represented. See [operations](../OPERATING.md)

@@ -693,15 +693,10 @@ impl NativeStore {
     /// A clean database is read-only; only a database requiring redb recovery is
     /// opened writable. Recovery can change bytes even if the update is refused.
     pub fn read_identity_for_update(path: &std::path::Path) -> Result<[u8; 32], NativeError> {
-        match redb::Database::builder()
-            .set_cache_size(super::DB_CACHE_BYTES)
-            .open_read_only(path)
-        {
+        match super::database_builder(super::DB_CACHE_BYTES).open_read_only(path) {
             Ok(database) => identity_from_transaction(&db(database.begin_read())?),
             Err(redb::DatabaseError::RepairAborted) => {
-                let database = db(redb::Database::builder()
-                    .set_cache_size(super::DB_CACHE_BYTES)
-                    .open(path))?;
+                let database = db(super::database_builder(super::DB_CACHE_BYTES).open(path))?;
                 identity_from_transaction(&db(database.begin_read())?)
             }
             Err(error) => Err(NativeError::Database(error.into())),
@@ -718,9 +713,7 @@ impl NativeStore {
         from: &NativeGenerationContract,
         to: &NativeGenerationContract,
     ) -> Result<(), NativeError> {
-        let database = db(redb::Database::builder()
-            .set_cache_size(super::DB_CACHE_BYTES)
-            .open(path))?;
+        let database = db(super::database_builder(super::DB_CACHE_BYTES).open(path))?;
         let mut tx = db(database.begin_write())?;
         db(tx.set_durability(redb::Durability::Immediate))?;
         {

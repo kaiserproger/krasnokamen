@@ -8794,3 +8794,104 @@ fn same_tick_slot_swap_attack_uses_previous_tick_held_attributes() {
         "attack must land"
     );
 }
+
+/// Review F1: a failed journal-directory fsync inside the checkpoint gate is
+/// fatal. The journal queue closes without retrying the fsync, the tick owner
+/// halts, and the manifest does not advance past the last committed checkpoint.
+#[test]
+fn journal_gate_flush_failure_halts_the_world() {
+    use crate::config::CoreConfig;
+    use crate::core::{Core, FAIL_JOURNAL_FLUSH};
+    use crate::native_checkpoint::tests::fixture_store;
+    let dir = std::env::temp_dir().join(format!(
+        "mc-core-gate-flush-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = CoreConfig::new(dir.clone(), 11);
+    config.checkpoint_every_ticks = 5;
+    // Appends must not flush on their own: only the checkpoint gate may fail.
+    config.journal_fsync_every_batches = 1_000_000;
+    let core = Core::open(config.clone()).expect("open");
+    let store = fixture_store(&config).unwrap();
+    let checkpoint_tick = |store: &mc_world::native::NativeStore| {
+        store
+            .checkpoint_reader()
+            .unwrap()
+            .read_checkpoint()
+            .unwrap()
+            .tick
+    };
+    let mut rx = core.subscribe();
+    let mut baseline = 0;
+    while baseline == 0 {
+        let _ = rx.blocking_recv().expect("tick");
+        baseline = checkpoint_tick(&store);
+    }
+    *FAIL_JOURNAL_FLUSH.lock().expect("hook") = Some((dir.clone(), 0));
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) =
+            rx.blocking_recv()
+        {}
+        let _ = done_tx.send(());
+    });
+    done_rx
+        .recv_timeout(std::time::Duration::from_secs(60))
+        .expect("a failed gate fsync halts the tick subscribers");
+    assert_eq!(
+        checkpoint_tick(&store),
+        baseline,
+        "no checkpoint commits after the failed gate fsync"
+    );
+    *FAIL_JOURNAL_FLUSH.lock().expect("hook") = None;
+    core.shutdown();
+    drop(store);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Review F1: a failed WAL flush before a backup is fatal and the backup job
+/// reports it. A failed *copy* stays job-local instead (see `hot_backup`).
+#[test]
+fn journal_flush_failure_before_backup_halts_and_reports() {
+    use crate::config::CoreConfig;
+    use crate::core::{Core, FAIL_JOURNAL_FLUSH};
+    let dir = std::env::temp_dir().join(format!(
+        "mc-core-backup-flush-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = CoreConfig::new(dir.clone(), 11);
+    config.checkpoint_every_ticks = u64::MAX;
+    config.journal_fsync_every_batches = 1_000_000;
+    let core = Core::open(config).expect("open");
+    let out = dir.join("backup-out");
+    let mut rx = core.subscribe();
+    for _ in 0..3 {
+        let _ = rx.blocking_recv().expect("tick");
+    }
+    // Skip the flush of the checkpoint the backup command forces, then fail the
+    // flush that precedes the copy: that is the branch under test.
+    *FAIL_JOURNAL_FLUSH.lock().expect("hook") = Some((dir.clone(), 1));
+    let error = core.backup(&out).expect_err("the flush refuses the backup");
+    assert!(
+        error.to_string().contains("injected journal flush failure"),
+        "{error}"
+    );
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) =
+            rx.blocking_recv()
+        {}
+        let _ = done_tx.send(());
+    });
+    done_rx
+        .recv_timeout(std::time::Duration::from_secs(60))
+        .expect("a failed pre-backup flush halts the world");
+    assert!(!out.exists(), "the refused backup publishes nothing");
+    *FAIL_JOURNAL_FLUSH.lock().expect("hook") = None;
+    core.shutdown();
+    let _ = std::fs::remove_dir_all(&dir);
+}

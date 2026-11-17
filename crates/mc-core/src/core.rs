@@ -272,6 +272,17 @@ static FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT: std::sync::Mutex<Option<std::path::P
 pub static FAIL_JOURNAL_APPEND: std::sync::Mutex<Option<std::path::PathBuf>> =
     std::sync::Mutex::new(None);
 
+/// Test hook: armed with a world dir and a `skip` count, [`JournalWriter::flush`]
+/// for THAT dir lets `skip` flushes through and then fails every one with a
+/// storage error (simulates a failed journal-directory fsync). A checkpoint
+/// gate or a pre-backup flush then halts the world (fail closed, no retry).
+/// The skip makes the two branches independently reachable: a backup command
+/// flushes once for its forced checkpoint and once before the copy. Unit tests
+/// only.
+#[cfg(test)]
+pub static FAIL_JOURNAL_FLUSH: std::sync::Mutex<Option<(std::path::PathBuf, u32)>> =
+    std::sync::Mutex::new(None);
+
 /// Test-only, world-scoped rendezvous after a successful durable append.
 /// The observer may block the journal owner until a crash test kills it.
 #[cfg(test)]
@@ -797,7 +808,10 @@ impl Core {
                 "unpublished conversion staging directory cannot be opened by the runtime".into(),
             ));
         }
-        std::fs::create_dir_all(&config.world_dir)
+        // R4-P2: creating the world directory must persist its own entry, or a
+        // power loss after the first durable store/ journal publication can
+        // remove the whole world (Books R4-P2).
+        mc_world::atomic_file::create_dir_all_durable(&config.world_dir)
             .map_err(|e| CoreError::Storage(e.to_string()))?;
         let world_lease = lock_world_lease(&config.world_dir)?;
         let path = config.world_dir.join("native/state.redb");
@@ -878,6 +892,7 @@ impl Core {
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
         }
         let identity = crate::native_checkpoint::native_identity(&config);
+        let repairs_before = mc_world::native::redb_repairs();
         if fresh && !path.exists() {
             // Created under a temporary name and renamed once redb has committed
             // it, so `state.redb` is never a partly written file. A temporary
@@ -906,6 +921,19 @@ impl Core {
             && !store
                 .has_checkpoint()
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
+        // Books R4-P1 (logging half). Every repair is reported as a possible
+        // rollback: redb may have switched to an earlier commit (a damaged
+        // header slot or newest commit) and the store cannot tell which, and
+        // the WAL behind an acknowledged checkpoint is already pruned.
+        let repairs = mc_world::native::redb_repairs().saturating_sub(repairs_before);
+        if repairs > 0 {
+            tracing::error!(
+                repairs,
+                "redb repaired the native store (unclean stop or damaged commit); it may \
+                 have rolled back to an earlier commit. WAL replay restores what the \
+                 journal still covers; a repair after a clean stop points at the disk"
+            );
+        }
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
         let base_registry = Arc::clone(&registry);

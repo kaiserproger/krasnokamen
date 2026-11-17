@@ -196,6 +196,9 @@ enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
 # backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
+# journal_fsync_every_batches = 10  # 1..=1200 published batches between
+#                                    # directory fsyncs; power loss can drop
+#                                    # up to this many (see "What a crash can lose")
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records
@@ -1107,6 +1110,18 @@ checkpoint and removes the journal batches the checkpoint covers, even on a
 cleanly stopped world. Copy a crash image you want to keep as evidence before
 running prune on it. The Nether and the End are not pruned.
 
+Pruning itself never stops the server. A batch it cannot remove (read-only or
+EIO journal directory, changed permissions) is warned once per checkpoint with
+the directory, the count and the retained bytes, and shows as
+`krasnokamen_journal_prune_failures_total` and
+`krasnokamen_journal_prune_retained_bytes` on `/metrics` (and under `journal` in
+`/stats`). Covered batches stay replay-inert, so the world stays correct while
+the journal grows; the next failed append is what halts the server.
+
+`journal_fsync_every_batches` sets only the power-loss window described in
+"What a crash can lose" above; 1 closes it at one directory fsync per tick. The
+process-crash window (the batch being written plus the queued ones) stays.
+
 ### Native backup and restore
 
 Offline commands need the server stopped: they take the exclusive world lease,
@@ -1119,7 +1134,11 @@ krasnokamen --config restored-server.toml
 ```
 
 A backup holds the native database, WAL/journal and other world files with a
-versioned SHA-256 manifest (lease files excluded). Restore verifies the full
+versioned SHA-256 manifest (lease files excluded). Never mix a `journal/`
+directory with a store it was not written by: batches carry no store identity,
+so a foreign tail replays into the wrong world without a refusal. `backup` and
+`restore` always move both together; restoring only `native/state.redb` over an
+existing `journal/` is operator error, not a supported path. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
@@ -1153,6 +1172,10 @@ the manifest is durable, so a failed backup leaves nothing behind. Restore with
 a copy of the backup directory: opening replays the WAL to tick `N`, exactly as
 crash recovery does. It covers world state only.
 
+Never open a world with an older binary than the one that last wrote it: newer
+manifests and WAL records are forward-only, and an older reader either defaults
+the newer state away or refuses the tail.
+
 ## Observability
 
 ### Dashboard and metrics
@@ -1173,9 +1196,10 @@ metrics_bearer_token = "replace-with-a-secret"   # optional, /metrics only
 
 The scrape includes TPS, tick p50/p95/p99, the latest per-phase timings, online
 players, loaded chunks, entity count, resident memory, network bytes, reliable
-drops, input drops and skipped pump ticks. A token protects only `/metrics`: keep
-the loopback bind or put the JSON endpoints behind an authenticated reverse
-proxy. A non-loopback address needs `allow_remote = true`; otherwise the dashboard does
+drops, input drops, skipped pump ticks and the journal prune counters. A token
+protects only `/metrics`: keep the loopback bind or put the JSON endpoints
+behind an authenticated reverse proxy. A non-loopback address needs
+`allow_remote = true`; otherwise the dashboard does
 not start and a warning is logged. Operators at level 2 can run `/tps` and
 `/mspt` in game; both report the same rolling window and are observation only.
 

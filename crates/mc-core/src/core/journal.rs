@@ -770,7 +770,26 @@ pub(super) fn journal_loop(
                             "gate_refused"
                         },
                     );
-                    let plugins = gate.map(|()| Box::new(plugins.clone()));
+                    let plugins = match gate {
+                        Ok(()) => Ok(Box::new(plugins.clone())),
+                        // A coverage hole refuses this checkpoint only: the
+                        // appended batches stay durable, nothing is pruned and
+                        // the world keeps serving (drilled contract). The
+                        // native writer logs the refusal and answers with a
+                        // negative ACK.
+                        Err(crate::journal::GateError::Hole(error)) => Err(error),
+                        // A journal fsync/tail failure means durability is no
+                        // longer provable. No retry: return, which drops the
+                        // queue and halts the tick owner.
+                        Err(crate::journal::GateError::Io(error)) => {
+                            tracing::error!(
+                                tick = job.tick,
+                                error = %stop::Chain(&error),
+                                "journal gate fsync failed; world halting (fail closed)"
+                            );
+                            return;
+                        }
+                    };
                     if native_tx
                         .send(NativeWork::Checkpoint { job, plugins })
                         .is_err()
@@ -795,8 +814,18 @@ pub(super) fn journal_loop(
                             return;
                         }
                     }
+                    // The WAL directory fsync failed, so the backup could copy a
+                    // tail that is not durable, and the journal can no longer
+                    // promise durability at all. Report to the console command,
+                    // then halt instead of retrying the fsync. A COPY error
+                    // stays local to its backup job (see `NativeWork::Backup`).
                     Err(error) => {
+                        tracing::error!(
+                            error = %stop::Chain(&error),
+                            "journal flush before backup failed; world halting (fail closed)"
+                        );
                         let _ = job.reply.send(Err(error));
+                        return;
                     }
                 },
                 JournalWork::RequireGenerated(chunks) => {

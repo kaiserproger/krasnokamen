@@ -177,6 +177,15 @@ pub struct CorePerfVisibilityProof {
     pub pair_limit: usize,
 }
 
+/// Journal pruning health (process counters, read on demand).
+#[derive(Debug, Clone, Copy, Serialize, Default)]
+pub struct DashboardJournal {
+    /// Failed covered-batch removals since start.
+    pub prune_failures_total: u64,
+    /// Bytes the latest prune attempt could not remove.
+    pub prune_retained_bytes: u64,
+}
+
 /// The complete `/stats` payload.
 #[derive(Debug, Clone, Serialize)]
 pub struct StatsSnapshot {
@@ -210,6 +219,8 @@ pub struct StatsSnapshot {
     pub coreperf_visibility_proof: Option<CorePerfVisibilityProof>,
     /// Network counters.
     pub network: DashboardNetwork,
+    /// Journal prune health: a failing prune means the WAL grows silently.
+    pub journal: DashboardJournal,
     /// Absent when no production component deployment is configured.
     pub plugin: Option<PluginStats>,
     /// Autoscale is not implemented on the edge; always `false`.
@@ -814,6 +825,13 @@ impl DashboardState {
                 input_drops,
                 ..inner.network.clone()
             },
+            journal: {
+                let stats = mc_core::journal::journal_prune_stats();
+                DashboardJournal {
+                    prune_failures_total: stats.failures_total,
+                    prune_retained_bytes: stats.retained_bytes,
+                }
+            },
             plugin: self.plugin_snapshot(),
             autoscale: false,
             warnings: inner.warnings.clone(),
@@ -1245,6 +1263,18 @@ fn prometheus(state: &DashboardState) -> String {
         &mut out,
         "krasnokamen_pump_skipped_ticks_total",
         snapshot.pump_skipped_ticks,
+    );
+    out.push_str("# TYPE krasnokamen_journal_prune_failures_total counter\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_prune_failures_total",
+        snapshot.journal.prune_failures_total,
+    );
+    out.push_str("# TYPE krasnokamen_journal_prune_retained_bytes gauge\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_prune_retained_bytes",
+        snapshot.journal.prune_retained_bytes,
     );
     if let Some(bytes) = crate::host_telemetry::resident_memory_bytes() {
         prometheus_gauge(&mut out, "krasnokamen_process_resident_memory_bytes", bytes);
@@ -2029,6 +2059,38 @@ mod tests {
         ] {
             assert!(metrics.contains(name), "missing {name}: {metrics}");
         }
+    }
+
+    #[test]
+    fn journal_prune_failures_reach_the_operator_surfaces() {
+        let state = test_state();
+        let dir = tempfile::tempdir().unwrap();
+        let journal = dir.path().join("journal");
+        std::fs::create_dir_all(&journal).unwrap();
+        // Parses as a covered batch but cannot be removed: a directory.
+        std::fs::create_dir(journal.join("batch-00000000000000000001-00000000000000000001.bin"))
+            .unwrap();
+        mc_core::journal::prune_batches_through(&journal, 5);
+        let stats = mc_core::journal::journal_prune_stats();
+        assert!(stats.failures_total > 0, "the refusal is counted");
+        let metrics = prometheus(&state);
+        for name in [
+            "krasnokamen_journal_prune_failures_total",
+            "krasnokamen_journal_prune_retained_bytes",
+        ] {
+            assert!(metrics.contains(name), "missing {name}: {metrics}");
+        }
+        assert!(
+            metrics.contains(&format!(
+                "krasnokamen_journal_prune_failures_total {}\n",
+                stats.failures_total
+            )),
+            "the scrape reports the current count: {metrics}"
+        );
+        assert_eq!(
+            state.snapshot().journal.prune_failures_total,
+            stats.failures_total
+        );
     }
 
     #[tokio::test]

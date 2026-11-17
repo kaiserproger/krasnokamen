@@ -308,6 +308,16 @@ pub struct DataSection {
     /// empty-server pause still checkpoint. Zero counts as one.
     #[serde(default = "default_checkpoint_every_ticks")]
     pub checkpoint_every_ticks: u64,
+    /// Journal directory-fsync cadence in published batches (ticks); one is
+    /// the safest, ten is the default. A batch file is fsynced before its
+    /// rename, but the rename is durable only after the next directory fsync,
+    /// so a host power loss can drop up to this many published batches. It
+    /// does not bound the process-crash window: a tick reaches clients once
+    /// its batch is queued, so the queued batches (up to 128 / 256 MiB) and the
+    /// one being written can be lost by any crash. See
+    /// docs/architecture/persistence.md "Write errors and publication order".
+    #[serde(default = "default_journal_fsync_every_batches")]
+    pub journal_fsync_every_batches: u32,
 }
 
 impl Default for DataSection {
@@ -318,6 +328,7 @@ impl Default for DataSection {
             vanilla_data_dir: default_vanilla_data_dir(),
             backup_dir: None,
             checkpoint_every_ticks: default_checkpoint_every_ticks(),
+            journal_fsync_every_batches: default_journal_fsync_every_batches(),
         }
     }
 }
@@ -689,6 +700,9 @@ fn default_port() -> u16 {
 fn default_world_dir() -> PathBuf {
     PathBuf::from("world")
 }
+fn default_journal_fsync_every_batches() -> u32 {
+    10
+}
 fn default_vanilla_data_dir() -> PathBuf {
     PathBuf::new()
 }
@@ -786,6 +800,12 @@ impl EdgeConfig {
             cfg.recorder.world_queue_bytes > 0,
             "recorder.world_queue_bytes must be positive"
         );
+        anyhow::ensure!(
+            (1..=1200).contains(&cfg.data.journal_fsync_every_batches),
+            "data.journal_fsync_every_batches must be in 1..=1200 batches: one is \
+             every tick, and above the default checkpoint interval (1200 ticks) a \
+             checkpoint gate flushes the directory first anyway"
+        );
         Ok(cfg)
     }
 
@@ -859,6 +879,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "vanilla_data_dir",
                 "backup_dir",
                 "checkpoint_every_ticks",
+                "journal_fsync_every_batches",
             ],
         ),
         ("auth", &["online_mode", "require_plugin_login"]),
@@ -1084,6 +1105,34 @@ mod tests {
         let long =
             EdgeConfig::from_toml("[data]\ncheckpoint_every_ticks = 1000000\n", None).unwrap();
         assert_eq!(long.data.checkpoint_every_ticks, 1_000_000);
+    }
+
+    #[test]
+    fn journal_fsync_window_defaults_to_ten_and_is_validated() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(default.data.journal_fsync_every_batches, 10);
+        assert_eq!(
+            crate::server::core_config(&default).journal_fsync_every_batches,
+            10,
+            "the core keeps the same default"
+        );
+        let every_tick =
+            EdgeConfig::from_toml("[data]\njournal_fsync_every_batches = 1\n", None).unwrap();
+        assert_eq!(every_tick.data.journal_fsync_every_batches, 1);
+        assert_eq!(
+            crate::server::core_config(&every_tick).journal_fsync_every_batches,
+            1,
+            "the configured window reaches the core"
+        );
+        for refused in ["0", "1201"] {
+            let text = format!("[data]\njournal_fsync_every_batches = {refused}\n");
+            let error = EdgeConfig::from_toml(&text, None)
+                .expect_err("out-of-range window must be refused");
+            assert!(
+                error.to_string().contains("journal_fsync_every_batches"),
+                "the refusal names the key: {error}"
+            );
+        }
     }
 
     #[test]
