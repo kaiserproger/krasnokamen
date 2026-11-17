@@ -110,7 +110,7 @@ impl Proof {
     pub(super) fn new(state: &TickState, root: [i32; 3], grove: &mut Grove) -> Self {
         #[cfg(test)]
         BUILDS.with(|count| count.set(count.get() + 1));
-        let Some(component) = grove.component(state, root).map(<[[i32; 3]]>::to_vec) else {
+        let Some(component) = grove.component(state, root).map(|logs| logs.to_vec()) else {
             return Self::empty(root);
         };
         let top = component
@@ -179,7 +179,7 @@ impl Proof {
             {
                 continue;
             }
-            let Some(logs) = grove.component(state, other).map(<[[i32; 3]]>::to_vec) else {
+            let Some(logs) = grove.component(state, other).map(|logs| logs.to_vec()) else {
                 continue;
             };
             let mut marked = false;
