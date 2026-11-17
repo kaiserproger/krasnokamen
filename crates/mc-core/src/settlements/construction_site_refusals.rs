@@ -14,12 +14,13 @@ pub(super) enum Reason {
     HeightVariance,
     ProtectedFloor,
     Unloaded,
+    PlantingProvenance,
     ProtectedObstruction,
     ExecutorReservation,
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 13] = [
+const REASONS: [Reason; 14] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -29,6 +30,7 @@ const REASONS: [Reason; 13] = [
     Reason::HeightVariance,
     Reason::ProtectedFloor,
     Reason::Unloaded,
+    Reason::PlantingProvenance,
     Reason::ProtectedObstruction,
     Reason::ExecutorReservation,
     Reason::Preparation,
@@ -125,6 +127,18 @@ pub(super) fn observe(state: &mut TickState, id: SettlementId, blueprint: &str, 
     }
 }
 
+fn unproven_planting(state: &TickState, at: [i32; 3], lot: ScriptWorldBounds) -> bool {
+    state
+        .world
+        .physics_block_at(at[0], at[1], at[2])
+        .is_some_and(|block| super::super::forestry::tree_or_sapling(state, block))
+        && super::super::forestry::planted_crown_overlaps(
+            state,
+            ScriptWorldBounds::new(at, at).expect("single cell"),
+        )
+        && !super::super::forestry::clearable_on_lot(state, at, Some(lot))
+}
+
 pub(super) fn check(
     state: &TickState,
     record: &SettlementRecord,
@@ -164,8 +178,15 @@ pub(super) fn check(
             } else {
                 record.anchor[1]
             };
-            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot))
-                .ok_or(Reason::SurfaceUnavailable)?;
+            let height = surface_y_for_lot(state, anchor_y, x, z, Some(lot)).ok_or_else(|| {
+                if (anchor_y - SITE_BAND + 1..=anchor_y + SITE_BAND + 1)
+                    .any(|y| unproven_planting(state, [x, y, z], lot))
+                {
+                    Reason::PlantingProvenance
+                } else {
+                    Reason::SurfaceUnavailable
+                }
+            })?;
             minimum = minimum.min(height);
             maximum = maximum.max(height);
             if maximum - minimum > SITE_VARIANCE {
@@ -198,7 +219,11 @@ pub(super) fn check(
                         && !clearable(state, block)
                         && !super::super::forestry::clearable_on_lot(state, [x, y, z], Some(lot)))
                 {
-                    return Err(Reason::ProtectedObstruction);
+                    return Err(if unproven_planting(state, [x, y, z], lot) {
+                        Reason::PlantingProvenance
+                    } else {
+                        Reason::ProtectedObstruction
+                    });
                 }
             }
         }

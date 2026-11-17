@@ -367,12 +367,16 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
     let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
         return false;
     };
-    if !tree(state, block) || protected_tree(state, at) {
+    if !tree(state, block) || protected_tree(state, at) || near_unlogged_player(state, at) {
         return false;
     }
+    natural(state, at, block)
+}
+
+fn near_unlogged_player(state: &TickState, at: [i32; 3]) -> bool {
     // With capture disabled, a nearby live player is an additional veto. The
     // deterministic baseline still protects all nonmatching historical edits.
-    if !state.block_log.enabled()
+    !state.block_log.enabled()
         && state.players.keys().any(|id| {
             state.entities.slot_of(*id).is_some_and(|slot| {
                 let pos = state.entities.pos(slot);
@@ -380,9 +384,9 @@ pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
                     && (pos[2] - f64::from(at[2])).abs() <= 32.0
             })
         })
-    {
-        return false;
-    }
+}
+
+fn natural(state: &TickState, at: [i32; 3], block: u32) -> bool {
     let generated = state
         .settlements
         .forest
@@ -439,14 +443,34 @@ pub(crate) fn lot_bounds(
     .ok()
 }
 
-/// Construction may fell managed plantings only on its needed lot. All other
-/// cells retain natural-tree evidence and player-edit protection.
+/// Missing roots cannot turn a conservative protection halo into permission.
+/// Root coordinates prove only the exact sapling cell, not later crown cells.
+fn registered_planting(state: &TickState, at: [i32; 3]) -> Option<(bool, bool)> {
+    let mut registered = false;
+    let mut in_halo = false;
+    for record in state.settlements.records() {
+        for root in &record.planted_trees {
+            if at[0].abs_diff(root[0]) <= PLANTED_CROWN_RADIUS
+                && at[2].abs_diff(root[2]) <= PLANTED_CROWN_RADIUS
+                && (root[1]..=root[1] + 64).contains(&at[1])
+            {
+                state.world.physics_block_at(root[0], root[1], root[2])?;
+                registered |= at == *root;
+                in_halo = true;
+            }
+        }
+    }
+    Some((registered, in_halo))
+}
+
+/// Needed lots may remove registered saplings, nonpersistent grown leaves and
+/// positive natural baselines. A planting halo never proves log ownership.
 pub(crate) fn clearable_on_lot(
     state: &TickState,
     at: [i32; 3],
     lot: Option<mc_script::ScriptWorldBounds>,
 ) -> bool {
-    if state.block_log.player_touched(at) {
+    if state.block_log.player_touched(at) || near_unlogged_player(state, at) {
         return false;
     }
     let on_lot = lot.is_some_and(|bounds| {
@@ -455,13 +479,29 @@ pub(crate) fn clearable_on_lot(
             .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&at[axis]))
     });
     if on_lot
-        && state
-            .world
-            .physics_block_at(at[0], at[1], at[2])
-            .is_some_and(|block| tree_or_sapling(state, block))
-        && planted(state, at)
+        && let Some(block) = state.world.physics_block_at(at[0], at[1], at[2])
+        && let Some(definition) = state.registry.blocks.by_id(BlockStateId(block))
     {
-        return true;
+        let name = definition.block.id.path();
+        if !tree_name(name) && !name.ends_with("_sapling") {
+            return false;
+        }
+        let Some((registered, in_halo)) = registered_planting(state, at) else {
+            return false;
+        };
+        if name.ends_with("_leaves") {
+            // Vanilla placement marks player leaves persistent; tree growth
+            // and subsequent distance/decay updates preserve false.
+            return definition
+                .properties
+                .iter()
+                .any(|(key, value)| key == "persistent" && value == "false")
+                && (in_halo || natural(state, at, block));
+        }
+        if registered && name.ends_with("_sapling") {
+            return true;
+        }
+        return tree_name(name) && natural(state, at, block);
     }
     clearable(state, at)
 }

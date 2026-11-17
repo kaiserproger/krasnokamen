@@ -760,7 +760,7 @@ fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
     );
 }
 
-fn managed_lot_is_felled_and_built(sapling: bool) {
+fn proven_lot_is_felled_and_built(sapling: bool) {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);
     let record = state.settlements.get(id).unwrap();
@@ -803,6 +803,12 @@ fn managed_lot_is_felled_and_built(sapling: bool) {
         }
         let block = block(&state, "minecraft:birch_sapling", &[]);
         state.world.set_block(root[0], root[1], root[2], block);
+    } else {
+        // A grown, nonpersistent leaf where regeneration had air must use its
+        // own placement-state evidence, not the agreeing trunk baseline.
+        let at = [root[0] + 3, root[1] + 3, root[2]];
+        let leaves = block(&state, "minecraft:birch_leaves", &[("persistent", "false")]);
+        state.world.set_block(at[0], at[1], at[2], leaves);
     }
     state
         .settlements
@@ -856,8 +862,8 @@ fn managed_lot_is_felled_and_built(sapling: bool) {
     assert_eq!(state.world.block_at(root[0], root[1], root[2]), original);
     assert!(executor::clearing(&state, id, &project.structure));
 
-    // A managed tree must not trigger the protected-tree cancellation path,
-    // even when there is no adult available to make preparation advance.
+    // Proven natural cells and registered saplings must not trigger protected
+    // cancellation when no adult can advance their preparation.
     state
         .entities
         .row_mut(builder)
@@ -951,11 +957,11 @@ fn managed_lot_is_felled_and_built(sapling: bool) {
 }
 
 #[test]
-fn managed_tree_on_needed_lot_is_felled_conserved_and_built() {
-    managed_lot_is_felled_and_built(false);
+fn natural_baseline_tree_in_planted_halo_is_felled_conserved_and_built() {
+    proven_lot_is_felled_and_built(false);
 }
 
 #[test]
 fn managed_sapling_on_needed_lot_is_felled_conserved_and_built() {
-    managed_lot_is_felled_and_built(true);
+    proven_lot_is_felled_and_built(true);
 }

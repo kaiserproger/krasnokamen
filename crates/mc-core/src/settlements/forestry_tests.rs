@@ -903,6 +903,266 @@ fn disabled_block_history_protects_natural_forest_near_a_live_player() {
     assert!(clearable(&state, root));
 }
 
+fn lot_around(root: [i32; 3]) -> mc_script::ScriptWorldBounds {
+    mc_script::ScriptWorldBounds::new(
+        [root[0] - 4, root[1] - 1, root[2] - 4],
+        [root[0] + 4, root[1] + 64, root[2] + 4],
+    )
+    .unwrap()
+}
+
+fn player_history(
+    state: &TickState,
+    at: [i32; 3],
+    retention_secs: u64,
+) -> crate::block_log::BlockLog {
+    crate::block_log::BlockLog::restore(
+        crate::config::BlockLogSettings {
+            retention_secs,
+            ..Default::default()
+        },
+        vec![crate::block_log::Delta {
+            records: vec![crate::block_log::Record {
+                seq: 0,
+                tick: Some(1),
+                time: 0,
+                actor: Arc::from("player"),
+                pos: at,
+                change: crate::block_log::Change::Block {
+                    before: state.registry.states.air,
+                    after: state.world.block_at(at[0], at[1], at[2]).unwrap(),
+                    entity: None,
+                },
+                rolled_back: false,
+            }],
+            marks: Vec::new(),
+        }],
+    )
+}
+
+#[test]
+fn planted_halo_never_authorizes_foreign_logs_with_empty_or_expired_history() {
+    let (mut state, id, _, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let lot = Some(lot_around(root));
+    let log = block(&state, "minecraft:birch_log", &[]);
+    for dx in [3, 1] {
+        let at = [root[0] + dx, root[1] + 3, root[2]];
+        state.world.set_block(at[0], at[1], at[2], log);
+        state.block_log = Default::default();
+        assert!(!clearable_on_lot(&state, at, lot), "empty history: {at:?}");
+        state.block_log = player_history(&state, at, 1);
+        state.block_log.evict(u64::MAX);
+        assert!(!state.block_log.player_touched(at));
+        assert!(
+            !clearable_on_lot(&state, at, lot),
+            "expired history: {at:?}"
+        );
+        assert!(drops(&state, at, log, lot).is_err());
+        assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
+    }
+}
+
+#[test]
+fn retained_player_log_touching_registered_trunk_is_kept() {
+    let (mut state, id, _, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0], root[1] + 1, root[2]];
+    let lot = Some(lot_around(root));
+    assert!(clearable_on_lot(&state, at, lot));
+    state.block_log = player_history(&state, at, 0);
+    assert!(state.block_log.player_touched(at));
+    assert!(!clearable_on_lot(&state, at, lot));
+    let log = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    assert!(drops(&state, at, log, lot).is_err());
+}
+
+#[test]
+fn persistent_player_leaves_in_planted_halo_are_kept() {
+    let (mut state, id, _, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0] + 1, root[1] + 4, root[2]];
+    let lot = Some(lot_around(root));
+    assert!(clearable_on_lot(&state, at, lot));
+    let leaves = block(&state, "minecraft:birch_leaves", &[("persistent", "true")]);
+    state.world.set_block(at[0], at[1], at[2], leaves);
+    assert_eq!(
+        crate::farming::prop(&state.registry.blocks, leaves, "persistent"),
+        Some("true")
+    );
+    assert!(!clearable_on_lot(&state, at, lot));
+    assert!(drops(&state, at, leaves, lot).is_err());
+    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(leaves));
+}
+
+#[test]
+fn nonpersistent_nonbaseline_leaf_is_cleared_only_on_the_needed_lot() {
+    let (mut state, id, _, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0] + 3, root[1] + 3, root[2]];
+    let leaf = block(&state, "minecraft:birch_leaves", &[("persistent", "false")]);
+    state.world.set_block(at[0], at[1], at[2], leaf);
+    assert!(!clearable_on_lot(&state, at, None));
+    let lot = Some(lot_around(root));
+    assert!(clearable_on_lot(&state, at, lot));
+    assert!(drops(&state, at, leaf, lot).is_ok());
+    state.block_log = player_history(&state, at, 0);
+    assert!(!clearable_on_lot(&state, at, lot));
+    assert!(drops(&state, at, leaf, lot).is_err());
+}
+
+#[test]
+fn player_leaf_placement_is_persistent_and_protected_without_history() {
+    let (mut state, id, _, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0], root[1] + 4, root[2]];
+    state
+        .world
+        .set_block(at[0], at[1], at[2], state.registry.states.air);
+    let click = crate::placement::Click {
+        clicked: crate::boundary::BlockPos {
+            x: root[0],
+            y: root[1] + 3,
+            z: root[2],
+        },
+        face: crate::placement::Face::Up,
+        cursor: [0.5, 1.0, 0.5],
+        yaw: 0.0,
+        pitch: 0.0,
+        sneaking: false,
+    };
+    let placed = {
+        let read = |pos: crate::boundary::BlockPos| state.world.block_at(pos.x, pos.y, pos.z);
+        let replaceable = |block| block == state.registry.states.air;
+        let reads = crate::placement::Reads {
+            block_at: &read,
+            replaceable: &replaceable,
+            water_source: state.registry.states.water,
+        };
+        let block = state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse("minecraft:birch_leaves").unwrap())
+            .unwrap();
+        crate::placement::place(&state.registry.blocks, block, &click, &reads).unwrap()
+    };
+    assert_eq!(placed.len(), 1);
+    for (pos, leaf) in placed {
+        assert_eq!([pos.x, pos.y, pos.z], at);
+        assert_eq!(
+            crate::farming::prop(&state.registry.blocks, leaf, "persistent"),
+            Some("true")
+        );
+        state.world.set_block(pos.x, pos.y, pos.z, leaf);
+    }
+    assert!(
+        !state.block_log.player_touched(at),
+        "the state bit protects even without attribution"
+    );
+    assert!(!clearable_on_lot(&state, at, Some(lot_around(root))));
+}
+
+#[test]
+fn unloaded_registered_root_cannot_authorize_loaded_natural_crown() {
+    let (mut state, id, _) = fixture();
+    let root = [15, 201, 5];
+    grown_world(&mut state, vec![root], "birch");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [16, 205, 5];
+    let lot = Some(lot_around(root));
+    assert!(clearable_on_lot(&state, at, lot));
+    // The fixture is an unedited generator image, so it can be evicted cleanly.
+    let revision = state.world.chunk_revision(0, 0);
+    state
+        .world
+        .mark_flushed(&[(ChunkPos { x: 0, z: 0 }, revision)]);
+    let wanted = rustc_hash::FxHashMap::from_iter([(ChunkPos { x: 1, z: 0 }, 0)]);
+    assert!(
+        state
+            .world
+            .evict_outside(&wanted)
+            .contains(&ChunkPos { x: 0, z: 0 })
+    );
+    assert!(
+        state
+            .world
+            .physics_block_at(root[0], root[1], root[2])
+            .is_none()
+    );
+    let leaves = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    assert!(!clearable_on_lot(&state, at, lot));
+    assert!(drops(&state, at, leaves, lot).is_err());
+}
+
+#[test]
+fn disabled_history_near_player_vetoes_registered_sapling_and_natural_halo() {
+    let (mut state, id, slot, _, root, _) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0] + 1, root[1] + 4, root[2]];
+    let lot = Some(lot_around(root));
+    let sapling = block(&state, "minecraft:birch_sapling", &[]);
+    state.world.set_block(root[0], root[1], root[2], sapling);
+    let entity = state.entities.body(slot).id;
+    let connection = crate::boundary::ConnectionId(999);
+    state
+        .entities
+        .set_kind(slot, crate::entities::EntityKind::Player { connection });
+    state.entities.row_mut(slot).villager = None;
+    state.players.insert(
+        entity,
+        crate::player::PlayerState::new(connection, crate::commands::GameMode::Survival),
+    );
+    state.entities.set_pos(slot, root.map(f64::from));
+    assert!(!state.block_log.enabled());
+    assert!(!clearable_on_lot(&state, root, lot));
+    assert!(!clearable_on_lot(&state, at, lot));
+    state.entities.set_pos(
+        slot,
+        [
+            f64::from(root[0]) + 34.0,
+            f64::from(root[1]),
+            f64::from(root[2]),
+        ],
+    );
+    assert!(clearable_on_lot(&state, root, lot));
+    assert!(clearable_on_lot(&state, at, lot));
+}
+
 fn checkpoint_forest(state: &mut TickState, config: &crate::CoreConfig) {
     use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
     use mc_world::native::NativeCheckpoint;
@@ -1261,5 +1521,35 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     assert_eq!(
         restored.world.block_at(access[0], access[1], access[2]),
         Some(restored.registry.states.air)
+    );
+}
+
+#[test]
+fn nonpersistent_leaf_without_registered_halo_needs_ready_natural_evidence() {
+    let (mut state, id, _, _, root, _) = forest();
+    let at = [root[0] + 3, root[1] + 3, root[2]];
+    let leaf = block(&state, "minecraft:birch_leaves", &[("persistent", "false")]);
+    state.world.set_block(at[0], at[1], at[2], leaf);
+    let lot = Some(lot_around(root));
+    state.settlements.forest = Default::default();
+    assert!(
+        !clearable_on_lot(&state, at, lot),
+        "cold evidence cannot grant permission"
+    );
+    warm(&state, at);
+    assert!(
+        !clearable_on_lot(&state, at, lot),
+        "generation had air, not this leaf"
+    );
+    assert!(drops(&state, at, leaf, lot).is_err());
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    assert!(
+        clearable_on_lot(&state, at, lot),
+        "a registered halo scopes the leaf-state permission"
     );
 }

@@ -138,3 +138,59 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
         );
     });
 }
+
+#[test]
+fn native_grown_planted_cells_without_natural_baseline_have_named_refusal() {
+    let (mut state, id, _, project, root, _) = super::super::super::forestry::tests::forest();
+    super::super::super::forestry::tests::grown_world(&mut state, Vec::new(), "birch");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let sapling = crate::settlements::allocator::tests::block(
+        &state,
+        "minecraft:birch_sapling",
+        &[("stage", "1")],
+    );
+    let dirt = crate::settlements::allocator::tests::block(&state, "minecraft:dirt", &[]);
+    state.world.set_block(root[0], root[1] - 1, root[2], dirt);
+    state.world.set_block(root[0], root[1], root[2], sapling);
+    let at = crate::boundary::BlockPos {
+        x: root[0],
+        y: root[1],
+        z: root[2],
+    };
+    let growth = (0..64)
+        .find_map(|seed| crate::plants::bonemeal(&state, at, seed))
+        .expect("native birch growth on its supported registered sapling");
+    assert!(
+        growth
+            .writes
+            .iter()
+            .any(|(_, block)| { super::super::super::forestry::tree(&state, *block) })
+    );
+    for (at, block) in growth.writes {
+        state.world.set_block(at.x, at.y, at.z, block);
+    }
+    let lot = super::super::super::forestry::lot_bounds(&state, &project).unwrap();
+    assert!(!super::super::super::forestry::clearable_on_lot(
+        &state,
+        root,
+        Some(lot)
+    ));
+    let blueprint = blueprints::get(&state.registry, &project.blueprint).unwrap();
+    let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
+    assert_eq!(
+        check(
+            &state,
+            state.settlements.get(id).unwrap(),
+            project.origin,
+            size,
+            None
+        ),
+        Err(Reason::PlantingProvenance),
+    );
+    assert!(planned_cells(&state, &project, "oak").is_none());
+}
