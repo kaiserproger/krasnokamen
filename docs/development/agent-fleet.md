@@ -23,7 +23,10 @@ every slice in batches by area; no per-task reviewer spawns. Persistence and D7
 changes still need both members' verdicts; other slices may take one member's.
 An agent that needs a build token runs one blocking command that waits for the
 token and then runs (the `mem-run` runner already does); never `timeout N true`,
-sleep or status-polling loops. Main's hourly report gives live executors, token
+sleep or status-polling loops. Executors run only L0/L1 for their own crates
+(filtered tests, `fmt`, `code-health`); no `correctness`, full L2 or
+workspace-wide Clippy in a worktree. Main runs L2 once per merge wave on `main`
+(owner, 2026-11-18). Main's hourly report gives live executors, token
 holders, token waiters and their waiting time, CPU use and Main's RSS; the cap
 moves only on that data. The builder-token, disk-floor and `mem-run` limits are
 unchanged. This mode overrides the general fleet defaults/history below, until
