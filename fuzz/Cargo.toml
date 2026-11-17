@@ -7,7 +7,8 @@ edition = "2024"
 [package.metadata]
 cargo-fuzz = true
 
-# Own workspace: excluded from the root workspace so CI/L2 never build it.
+# Own workspace: excluded from the root workspace so L2/code-health never build
+# it. `ci.yml`'s `fuzz` job builds it on its own nightly toolchain.
 [workspace]
 
 [dependencies]
