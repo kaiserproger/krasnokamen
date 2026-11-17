@@ -449,9 +449,10 @@ fn natural(path: &str) -> bool {
 /// The one mining drop mapping: harvested natural blocks name their own item.
 pub(crate) fn drop_name(path: &str) -> &str {
     match path {
-        "grass_block" => "dirt",
+        "grass_block" | "podzol" | "mycelium" => "dirt",
         "stone" => "cobblestone",
         "deepslate" => "cobbled_deepslate",
+        "clay" => "clay_ball",
         "coal_ore" | "deepslate_coal_ore" => "coal",
         "iron_ore" | "deepslate_iron_ore" => "raw_iron",
         "copper_ore" | "deepslate_copper_ore" => "raw_copper",
@@ -461,6 +462,14 @@ pub(crate) fn drop_name(path: &str) -> &str {
         "redstone_ore" | "deepslate_redstone_ore" => "redstone",
         "lapis_ore" | "deepslate_lapis_ore" => "lapis_lazuli",
         other => other,
+    }
+}
+
+/// Stacks of that drop one block yields (vanilla: clay gives four balls).
+pub(crate) fn drop_count(path: &str) -> i32 {
+    match path {
+        "clay" => 4,
+        _ => 1,
     }
 }
 

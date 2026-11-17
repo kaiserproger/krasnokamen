@@ -111,8 +111,7 @@ pub struct Registry {
     pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
     /// Whole-sweep cheapest-lot scratch, derived and never persisted. A restart
     /// discards it and restarts the sweep from the persisted cursor.
-    pub(super) site_sweep:
-        std::sync::Mutex<BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>>,
+    pub(super) site_sweep: BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,
@@ -645,10 +644,7 @@ impl Registry {
         self.counts.remove(&id);
         self.economic_active.remove(&id);
         self.site_watch.remove(&id);
-        self.site_sweep
-            .get_mut()
-            .expect("site sweep poisoned")
-            .remove(&id);
+        self.site_sweep.remove(&id);
         self.resident_settlement.retain(|_, sid| *sid != id);
         self.resident_ids.remove(&id);
         self.household_counts.remove(&id);
@@ -698,10 +694,7 @@ impl Registry {
         } else {
             self.economic_active.remove(&image.id);
             self.site_watch.remove(&image.id);
-            self.site_sweep
-                .get_mut()
-                .expect("site sweep poisoned")
-                .remove(&image.id);
+            self.site_sweep.remove(&image.id);
             if let Some(record) = self.records.remove(&image.id) {
                 for household in record.households.keys() {
                     self.household_sizes.remove(household);

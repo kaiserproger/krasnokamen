@@ -1286,3 +1286,65 @@ fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_be
     );
     assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
 }
+
+/// Committee ruling: an unfinished sweep holds the project slot only while it
+/// already holds a legal candidate. An empty one must not starve the upgrade,
+/// meadow, fortification or street planning.
+#[test]
+fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // Widen the street walk past one kind's whole per-pass share, then flood
+    // everything outside the standing house: the sweep stays unfinished for
+    // several passes and never finds a legal lot.
+    let chunks = rustc_hash::FxHashMap::from_iter(
+        (-3..=3).flat_map(|x| (-3..=3).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))),
+    );
+    state.world.ensure_blocking(&chunks);
+    let water = block(&state, "minecraft:water", &[("level", "0")]);
+    for x in -48..64 {
+        for z in -48..64 {
+            let inside = (0..17).contains(&x) && (0..14).contains(&z);
+            state.world.set_block(
+                x,
+                201,
+                z,
+                if inside {
+                    state.registry.states.stone
+                } else {
+                    water
+                },
+            );
+            for y in 202..210 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
+    );
+    plan(&mut state, id);
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .project
+        .as_ref()
+        .expect("the empty sweep left the slot to the upgrade");
+    assert_eq!(project.blueprint, "spanish_house");
+    assert_eq!(project.building, Some(house));
+    assert_eq!(project.level, 2);
+}

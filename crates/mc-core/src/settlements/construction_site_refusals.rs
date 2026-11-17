@@ -12,6 +12,7 @@ pub(super) enum Reason {
     OutpostClaim,
     BuildingBuffer,
     Territory,
+    HeightVariance,
     SurfaceUnavailable,
     ProtectedFloor,
     Unloaded,
@@ -25,12 +26,13 @@ pub(super) enum Reason {
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 17] = [
+const REASONS: [Reason; 18] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
     Reason::BuildingBuffer,
     Reason::Territory,
+    Reason::HeightVariance,
     Reason::SurfaceUnavailable,
     Reason::ProtectedFloor,
     Reason::Unloaded,
@@ -154,6 +156,9 @@ impl Cost {
 #[derive(Debug)]
 struct Sweep {
     frontages: u32,
+    /// Identity of the ordered frontage input this sweep walked; a different
+    /// list of the same length invalidates the stored ranking too.
+    topology: u64,
     start: u32,
     next: u32,
     best: Option<([i32; 3], u8, u32)>,
@@ -165,22 +170,41 @@ pub(crate) struct Sweeps {
     live: BTreeMap<String, Sweep>,
 }
 impl Sweeps {
-    pub(super) fn clear(&mut self) {
-        self.live.clear();
-    }
     /// Drop sweeps of a topology that no longer exists.
-    fn retain(&mut self, blueprint: &str, frontages: u32) {
+    fn retain(&mut self, blueprint: &str, frontages: u32, topology: u64) {
         self.live
-            .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages));
+            .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
+    }
+
+    /// Some unfinished sweep already holds a legal candidate.
+    pub(super) fn waiting(&self) -> bool {
+        self.live.values().any(|sweep| sweep.best.is_some())
     }
 }
 
-fn sweep_stale(id: &str, sweep: &Sweep, blueprint: &str, frontages: u32) -> bool {
+fn sweep_stale(id: &str, sweep: &Sweep, blueprint: &str, frontages: u32, topology: u64) -> bool {
     // Another kind's finished topology stays cheap to keep; only this kind's
-    // own frontage count invalidates it.
-    id == blueprint && sweep.frontages != frontages
+    // own ordered frontage input invalidates it.
+    id == blueprint && (sweep.frontages != frontages || sweep.topology != topology)
 }
 
+/// Identity of the ordered frontage list a sweep walked.
+fn topology(fronts: &[([i32; 3], [i32; 2])]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for (at, normal) in fronts {
+        for byte in at
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .chain(normal.iter().flat_map(|value| value.to_le_bytes()))
+        {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    hash
+}
+
+#[derive(Debug)]
 pub(super) enum Advance {
     /// The sweep is unfinished; nothing may be admitted from it yet.
     Incomplete(u32),
@@ -287,10 +311,12 @@ pub(super) fn advance(
         report.reject(Reason::NoFrontage, record.anchor);
         return Advance::Empty;
     }
-    sweeps.retain(&blueprint.id, count);
+    let topology = topology(&fronts);
+    sweeps.retain(&blueprint.id, count, topology);
     let start = start % count;
     let sweep = sweeps.live.entry(blueprint.id.clone()).or_insert(Sweep {
         frontages: count,
+        topology,
         start,
         next: 0,
         best: None,
@@ -319,7 +345,13 @@ pub(super) fn advance(
             Err(reason) => report.reject(reason, lot.origin),
             Ok(cost) => {
                 let cost = cost.total();
-                if sweep.best.is_none_or(|(_, _, known)| cost < known) {
+                // Ties break on the lot's own block position, never on sweep
+                // start or cursor order: a restart cannot change the winner.
+                let key = (cost, lot.origin, rotation);
+                if sweep
+                    .best
+                    .is_none_or(|(origin, rotation, known)| key < (known, origin, rotation))
+                {
                     sweep.best = Some((lot.origin, rotation, cost));
                 }
             }
@@ -333,9 +365,24 @@ pub(super) fn advance(
         .live
         .remove(&blueprint.id)
         .and_then(|sweep| sweep.best);
-    match best {
-        Some((origin, rotation, _)) => Advance::Cheapest(origin, rotation),
-        None => Advance::Empty,
+    let Some((origin, rotation, stored)) = best else {
+        return Advance::Empty;
+    };
+    // The world may have moved since that candidate was ranked: re-check it
+    // now and restart this sweep when its cost changed.
+    let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
+    let mut fresh = super::super::forestry::Clearance::default();
+    match check(
+        state,
+        record,
+        origin,
+        size,
+        record.founding.as_ref(),
+        &mut fresh,
+        Some(&floors[usize::from(rotation) % 4]),
+    ) {
+        Ok(cost) if cost.total() == stored => Advance::Cheapest(origin, rotation),
+        Ok(_) | Err(_) => Advance::Incomplete(0),
     }
 }
 
@@ -369,31 +416,34 @@ fn definition(state: &TickState, block: u32) -> Option<&mc_world::BlockState> {
     state.registry.blocks.by_id(mc_world::BlockStateId(block))
 }
 
+/// Deepest foundation this slice pays for under one column. A deeper column
+/// would be a retaining wall the settlement may not level (committee ruling).
+const MAX_FILL_DEPTH: i32 = 4;
+
 fn fluid(state: &TickState, block: u32) -> bool {
     definition(state, block).is_some_and(|definition| definition.has_fluid())
 }
 
-fn lava(state: &TickState, at: [i32; 3]) -> bool {
-    state
-        .world
-        .physics_block_at(at[0], at[1], at[2])
-        .is_some_and(|block| state.registry.states.lava_levels.contains(&block))
-}
-
-/// One-cell shell around the work volume: lava there would flow into a cut.
-fn lava_shell(state: &TickState, volume: ScriptWorldBounds) -> bool {
+/// One-cell shell around the work volume: a fluid there would flow into a cut.
+fn shell_fluid(state: &TickState, volume: ScriptWorldBounds) -> bool {
     let [x0, y0, z0] = volume.min.map(|value| value - 1);
     let [x1, y1, z1] = volume.max.map(|value| value + 1);
     for x in x0..=x1 {
         for z in z0..=z1 {
             let edge = x == x0 || x == x1 || z == z0 || z == z1;
+            let wet = |y: i32| {
+                state
+                    .world
+                    .physics_block_at(x, y, z)
+                    .is_some_and(|block| fluid(state, block))
+            };
             if !edge {
-                if lava(state, [x, y0, z]) || lava(state, [x, y1, z]) {
+                if wet(y0) || wet(y1) {
                     return true;
                 }
                 continue;
             }
-            if (y0..=y1).any(|y| lava(state, [x, y, z])) {
+            if (y0..=y1).any(wet) {
                 return true;
             }
         }
@@ -468,17 +518,31 @@ pub(super) fn check(
             }
             let authored_floor =
                 floors.is_some_and(|floors| floors.contains(&[x - origin[0], z - origin[2]]));
-            // The floor cell is the building's own level: an authored block
-            // pays for it, otherwise the terrain there must be replaceable. A
-            // fluid, a path, farmland or a paid crop is not.
-            if !authored_floor {
-                let floor_block = state
-                    .world
-                    .physics_block_at(x, floor, z)
-                    .ok_or(Reason::Unloaded)?;
-                if !floor_replaceable(state, floor_block) {
-                    return Err(Reason::ProtectedFloor);
-                }
+            // The column's own floor cell is rewritten either way, so every
+            // veto applies to it: the authored exemption waives only its fill
+            // price, never permission, fluid, container or player checks.
+            let floor_block = state
+                .world
+                .physics_block_at(x, floor, z)
+                .ok_or(Reason::Unloaded)?;
+            if fluid(state, floor_block) {
+                return Err(Reason::LiquidInWork);
+            }
+            if state.block_entities.contains_key(&(x, floor, z)) {
+                return Err(Reason::ProtectedObstruction);
+            }
+            if !floor_replaceable(state, floor_block) {
+                return Err(Reason::ProtectedFloor);
+            }
+            if floor_block != state.registry.states.air
+                && state.block_log.player_touched([x, floor, z])
+            {
+                return Err(Reason::ProtectedObstruction);
+            }
+            // A single fill column deeper than this is a retaining wall, not a
+            // foundation: the lot is refused instead of levelled.
+            if floor - height > MAX_FILL_DEPTH {
+                return Err(Reason::HeightVariance);
             }
             // Fill: real blocks in air, liquid-free cells between the support
             // and the floor. A solid there is a cut this window does not own,
@@ -549,7 +613,7 @@ pub(super) fn check(
         }
     }
     let volume = ScriptWorldBounds::new([origin[0], lowest, origin[2]], max).expect("work volume");
-    if lava_shell(state, volume) {
+    if shell_fluid(state, volume) {
         return Err(Reason::LavaShell);
     }
     if executor::area_reserved(state, volume) {

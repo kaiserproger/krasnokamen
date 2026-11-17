@@ -99,21 +99,63 @@ fn near_and_far(state: &TickState, id: SettlementId) -> (Site, Site) {
     (near, far)
 }
 
+/// The lot the planner must pick: cheapest cut+fill, ties on block position.
+fn ranking_lot(state: &TickState, id: SettlementId, blueprint_name: &str) -> Site {
+    let record = state.settlements.get(id).unwrap();
+    let blueprint = blueprints::get(&state.registry, blueprint_name).unwrap();
+    let mut network = layout::Network::for_construction(state, record);
+    let fronts = network.frontage();
+    let mut best: Option<(u32, [i32; 3], u8, Site)> = None;
+    for (front, (at, normal)) in fronts.into_iter().enumerate() {
+        let Some(lot) = network.lot(blueprint, at, normal) else {
+            continue;
+        };
+        let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+        let floors = site_refusals::floor_columns(blueprint, lot.rotation);
+        let Ok(cost) = site_refusals::check(
+            state,
+            record,
+            lot.origin,
+            size,
+            record.founding.as_ref(),
+            &mut Default::default(),
+            Some(&floors),
+        ) else {
+            continue;
+        };
+        let key = (cost.total(), lot.origin, lot.rotation);
+        if best.as_ref().is_none_or(|(c, o, r, _)| key < (*c, *o, *r)) {
+            best = Some((
+                cost.total(),
+                lot.origin,
+                lot.rotation,
+                Site {
+                    front: u32::try_from(front).unwrap(),
+                    lot,
+                    size,
+                },
+            ));
+        }
+    }
+    best.expect("a legal lot").3
+}
+
 /// Seed 87122 claim QA: a storage ordered at the anchor was sited 110 blocks
 /// away, and 21 earlier orders were refused. Two free lots exist; the order
 /// takes the one first in walking order from the plaza.
 #[test]
-fn owner_order_takes_the_first_free_lot_in_walking_order() {
+fn owner_order_takes_the_cheapest_free_lot() {
     let (mut state, id, _) = fixture();
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
     let (near, far) = near_and_far(&state, id);
     street_plateau(&mut state, id, &[near, far]);
+    let expected = ranking_lot(&state, id, "storage");
     request_build(&mut state, id, "storage").unwrap();
     let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
     assert_eq!(
         (project.origin, project.rotation),
-        (near.lot.origin, near.lot.rotation),
+        (expected.lot.origin, expected.lot.rotation),
         "not the lot at {far:?}"
     );
 }

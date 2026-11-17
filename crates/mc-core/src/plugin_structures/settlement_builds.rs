@@ -679,6 +679,7 @@ pub(super) fn debit(
                     crate::villager::mining::drop_name(path),
                 )
                 .ok_or(Failure::Blocked)?;
+                let count = crate::villager::mining::drop_count(path);
                 for (dx, dy, dz) in [
                     (1, 0, 0),
                     (-1, 0, 0),
@@ -692,11 +693,18 @@ pub(super) fn debit(
                         .world
                         .block_at(at[0], at[1], at[2])
                         .ok_or(Failure::Unloaded)?;
-                    if state.registry.states.lava_levels.contains(&neighbour) {
+                    // Lava or water next to the cell would flow into the cut.
+                    if state.registry.states.lava_levels.contains(&neighbour)
+                        || state
+                            .registry
+                            .blocks
+                            .by_id(mc_world::BlockStateId(neighbour))
+                            .is_some_and(|definition| definition.has_fluid())
+                    {
                         return Err(Failure::Blocked);
                     }
                 }
-                drops.push(mc_data::ItemStack::new(item, 1));
+                drops.push(mc_data::ItemStack::new(item, count));
             } else {
                 // A log-tag variant excluded from tree ownership must never
                 // pass through the flora path with an empty drop list.

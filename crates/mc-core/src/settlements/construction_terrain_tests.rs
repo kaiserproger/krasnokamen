@@ -425,31 +425,31 @@ fn the_terrain_window_is_bounded_below_the_floor_and_above_the_roof() {
         )
     };
     assert_eq!(column(&state).map(|cost| cost.total()), Ok(0));
-    // Eight below the floor is the deepest support this slice fills.
-    for y in FLOOR - 7..=FLOOR {
+    // Four below the floor is the deepest foundation this slice pays for.
+    for y in FLOOR - 3..=FLOOR {
         state.world.set_block(6, y, 6, state.registry.states.air);
     }
     state
         .world
-        .set_block(6, FLOOR - 8, 6, state.registry.states.stone);
+        .set_block(6, FLOOR - 4, 6, state.registry.states.stone);
     state.world.fold_overlay();
     assert_eq!(
         column(&state).map(|cost| cost.fill),
-        Ok(8),
-        "eight fill cells below the floor"
+        Ok(4),
+        "four fill cells below the floor"
     );
-    // A ninth block down is outside the window.
+    // A fifth block is a retaining wall the committee refuses, not a payment.
     state
         .world
-        .set_block(6, FLOOR - 8, 6, state.registry.states.air);
+        .set_block(6, FLOOR - 4, 6, state.registry.states.air);
     state
         .world
-        .set_block(6, FLOOR - 9, 6, state.registry.states.stone);
+        .set_block(6, FLOOR - 5, 6, state.registry.states.stone);
     state.world.fold_overlay();
     assert_eq!(
         column(&state).err(),
-        Some(site_refusals::Reason::SurfaceUnavailable),
-        "support below the band is not this slice's fill"
+        Some(site_refusals::Reason::HeightVariance),
+        "a fill column deeper than four blocks is refused"
     );
     // Restore the flat lot, then bound the cut at the authored top.
     for y in FLOOR - 9..=FLOOR {
@@ -570,9 +570,11 @@ fn excavated_solids_are_credited_once_and_the_fill_is_debited() {
         sand + cuts as i64,
         "excavated solids credited exactly once"
     );
+    // Conservation: what storage and the builder's hands hold together equals
+    // the stock after delivery minus what the plan placed.
     assert_eq!(
-        stock(&state, dirt_item),
-        dirt - fills as i64 + carried(&state, builder, dirt_item),
+        stock(&state, dirt_item) + carried(&state, builder, dirt_item),
+        dirt - fills as i64,
         "the fill is bought from storage, never conjured"
     );
     for at in &pillar.cells {
@@ -786,4 +788,159 @@ fn terrain_is_cut_top_down_and_no_step_drops_more_than_one_block() {
     for at in &pillar.cells {
         assert_ne!(name_of(&state, *at), "stone", "{at:?} stays cut");
     }
+}
+
+/// Committee ruling: the authored-floor exemption waives only the fill price.
+/// A fluid on the written floor cell is still refused, overhang or not.
+#[test]
+fn an_authored_floor_still_refuses_fluid_on_its_own_cell() {
+    let (mut state, id, _) = fixture();
+    let site = only_lot(&mut state, id);
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let record = state.settlements.get(id).unwrap().clone();
+    let floors = site_refusals::floor_columns(blueprint, site.lot.rotation);
+    let [ox, oy, oz] = site.lot.origin;
+    let relative = *floors.iter().next().expect("authored floor column");
+    let (x, z) = (ox + relative[0], oz + relative[1]);
+    assert!(
+        lot_cost(&state, &record, blueprint, &site).is_ok(),
+        "clean lot"
+    );
+    // A stone overhang above the floor plus water in the written floor cell.
+    state
+        .world
+        .set_block(x, oy + 2, z, state.registry.states.stone);
+    let water = block(&state, "minecraft:water", &[("level", "0")]);
+    state.world.set_block(x, oy, z, water);
+    state.world.fold_overlay();
+    assert_eq!(
+        lot_cost(&state, &record, blueprint, &site).err(),
+        Some(site_refusals::Reason::LiquidInWork),
+        "the floor cell the plan rewrites must not hold fluid"
+    );
+}
+
+/// Committee ruling: a ranking measured before the world moved is stale. The
+/// sweep restarts instead of admitting the old cheapest lot.
+#[test]
+fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
+    let (mut state, id, _) = fixture();
+    wide_plan(&mut state);
+    restore_stock(&mut state);
+    fund(&mut state, "storage", 1);
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let record = state.settlements.get(id).unwrap().clone();
+    let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
+        site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
+    });
+    let sites = planner_lots(&state, id);
+    let legal: Vec<_> = sites
+        .iter()
+        .filter(|site| lot_cost(&state, &record, blueprint, site).is_ok())
+        .take(2)
+        .cloned()
+        .collect();
+    assert_eq!(legal.len(), 2, "two legal lots");
+    let (cheap, other) = (legal[0].clone(), legal[1].clone());
+    let mut network = layout::Network::for_construction(&state, &record);
+    let mut clearance = super::super::forestry::Clearance::default();
+    let mut sweeps = site_refusals::Sweeps::default();
+    let mut report = site_refusals::Report::default();
+    let mut budget = u32::MAX;
+    let first = site_refusals::advance(
+        &state,
+        &record,
+        &mut network,
+        blueprint,
+        &floors,
+        &mut clearance,
+        &mut sweeps,
+        0,
+        &mut budget,
+        &mut report,
+    );
+    let winner = match first {
+        site_refusals::Advance::Cheapest(origin, rotation) => (origin, rotation),
+        other => panic!("a complete sweep ranks the lots: {other:?}"),
+    };
+    // The world moves under the ranking: dear up the whole cheap lot's floor.
+    let [ox, oy, oz] = cheap.lot.origin;
+    for x in ox..ox + i32::from(cheap.size[0]) {
+        for z in oz..oz + i32::from(cheap.size[2]) {
+            for y in oy - 3..=oy {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let _ = other;
+    // Same sweep state, current world: the stale ranking must not survive.
+    let mut network = layout::Network::for_construction(&state, &record);
+    let mut budget = u32::MAX;
+    let second = site_refusals::advance(
+        &state,
+        &record,
+        &mut network,
+        blueprint,
+        &floors,
+        &mut clearance,
+        &mut sweeps,
+        0,
+        &mut budget,
+        &mut report,
+    );
+    if winner == (cheap.lot.origin, cheap.lot.rotation) {
+        assert!(
+            matches!(
+                second,
+                site_refusals::Advance::Incomplete(_) | site_refusals::Advance::Empty
+            ),
+            "the stale winner is dropped, not admitted: {second:?}"
+        );
+    }
+}
+
+/// Committee ruling: ties break on the lot's own block position, so a restart
+/// in the middle of the sweep cannot change the winner.
+#[test]
+fn a_restart_keeps_the_tie_winner() {
+    let (mut state, id, _) = fixture();
+    wide_plan(&mut state);
+    restore_stock(&mut state);
+    fund(&mut state, "storage", 1);
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let record = state.settlements.get(id).unwrap().clone();
+    let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
+        site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
+    });
+    let mut clearance = super::super::forestry::Clearance::default();
+    let mut report = site_refusals::Report::default();
+    let mut winner = |start: u32, sweeps: &mut site_refusals::Sweeps| {
+        let mut network = layout::Network::for_construction(&state, &record);
+        let mut budget = u32::MAX;
+        match site_refusals::advance(
+            &state,
+            &record,
+            &mut network,
+            blueprint,
+            &floors,
+            &mut clearance,
+            sweeps,
+            start,
+            &mut budget,
+            &mut report,
+        ) {
+            site_refusals::Advance::Cheapest(origin, rotation) => (origin, rotation),
+            other => panic!("a complete sweep ranks the lots: {other:?}"),
+        }
+    };
+    let mut straight = site_refusals::Sweeps::default();
+    let direct = winner(0, &mut straight);
+    // A restart walks the same candidates from a later cursor.
+    let mut restarted = site_refusals::Sweeps::default();
+    let after = winner(7, &mut restarted);
+    assert_eq!(
+        direct, after,
+        "the tie winner does not depend on the cursor"
+    );
 }

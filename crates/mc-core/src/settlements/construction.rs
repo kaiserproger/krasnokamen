@@ -681,24 +681,20 @@ fn start_build(
         .lock()
         .expect("forest cache poisoned")
         .misses();
+    let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
     let pass = {
-        let mut guard = state
-            .settlements
-            .site_sweep
-            .lock()
-            .expect("site sweep poisoned");
-        let sweeps = guard.entry(id).or_default();
         let record = state.settlements.get(id).expect("claimed settlement");
         site_project(
             state,
             record,
             std::iter::once(blueprint),
-            sweeps,
+            &mut sweeps,
             start,
             attempts,
             &images,
         )
     };
+    state.settlements.site_sweep.insert(id, sweeps);
     let SitePass {
         site,
         cursor,
@@ -1416,9 +1412,11 @@ struct SitePass {
     site: Option<FundedSite>,
     cursor: u32,
     report: site_refusals::Report,
-    /// At least one kind's whole sweep still has candidates to examine, so the
-    /// planner must let it finish before unrelated work takes the slot.
+    /// At least one kind's whole sweep still has candidates to examine.
     running: bool,
+    /// Some unfinished sweep already holds a legal candidate, so its cheapest
+    /// lot is worth holding the slot for. An empty sweep never blocks other work.
+    waiting: bool,
 }
 
 /// Search the funded kinds in priority order over one shared street walk.
@@ -1451,6 +1449,7 @@ fn site_project<'a>(
             cursor: 0,
             report,
             running: false,
+            waiting: false,
         };
     }
     let mut cursor = start % count;
@@ -1509,6 +1508,7 @@ fn site_project<'a>(
                     cursor: 0,
                     report,
                     running: false,
+                    waiting: false,
                 };
             }
         }
@@ -1518,6 +1518,7 @@ fn site_project<'a>(
         cursor,
         report,
         running,
+        waiting: sweeps.waiting(),
     }
 }
 
@@ -1611,19 +1612,17 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // Housing gets its own bounded scan. If it has no site, ordinary funded
     // candidates still get their shared scan in this same planning pass. Both
     // read and extend the same runtime-only sweep scratch.
-    let (house, house_cursor, funded_site, search_running) = {
-        let mut guard = state
-            .settlements
-            .site_sweep
-            .lock()
-            .expect("site sweep poisoned");
-        let sweeps = guard.entry(id).or_default();
+    let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+    let record = state.settlements.get(id).expect("planned settlement");
+    let (house, house_cursor, funded_site, search_running, search_waiting) = {
+        let sweeps = &mut sweeps;
         let house = priority_house(state, record, &images).map_or_else(
             || SitePass {
                 site: None,
                 cursor: record.construction_cursor,
                 report: site_refusals::Report::default(),
                 running: false,
+                waiting: false,
             },
             |house| {
                 site_project(
@@ -1638,6 +1637,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
             },
         );
         let mut running = house.running;
+        let mut waiting = house.waiting;
         let mut funded_site = None;
         if house.site.is_none() {
             let mut funded = [None; AUTONOMOUS_KINDS];
@@ -1669,11 +1669,13 @@ fn plan(state: &mut TickState, id: SettlementId) {
                     &images,
                 );
                 running |= pass.running;
+                waiting |= pass.waiting;
                 funded_site = Some(pass);
             }
         }
-        (house.site, house.cursor, funded_site, running)
+        (house.site, house.cursor, funded_site, running, waiting)
     };
+    state.settlements.site_sweep.insert(id, sweeps);
     if let Some(site) = house {
         begin_cells(state, site.project, site.bounds, site.cells);
         return;
@@ -1688,9 +1690,10 @@ fn plan(state: &mut TickState, id: SettlementId) {
             return;
         }
     }
-    // A kind's whole sweep is still running: its cheapest legal lot is decided
-    // only after the last candidate, so no other project may take the slot.
-    if search_running {
+    // A kind's sweep is still running and already holds a legal candidate: its
+    // cheapest lot is decided only after the last one, so the slot waits. An
+    // unfinished sweep with nothing legal yet must not hold it.
+    if search_running && search_waiting {
         if !funded_kinds {
             let record = state.settlements.get_mut(id).expect("planned settlement");
             if record.construction_cursor != house_cursor {
