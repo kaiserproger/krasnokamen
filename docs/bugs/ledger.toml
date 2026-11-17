@@ -7377,3 +7377,14 @@ status = "open"
 source = "Auditor C, D19 CS341 audit, /var/tmp/w/receipts/CS341/REPORT-C.md finding G-6 (book rules ch. 12.2.4 p. 270, ch. 12.6 p. 286 'handle failures', ch. 18.7 p. 374). Evidence: crates/mc-core/src/journal.rs:982-997 - `let Ok(entries) = std::fs::read_dir(journal_dir) else { return }`, `let Ok(entry) = entry else { continue }`, `let _ = std::fs::remove_file(...)`; the only caller is the checkpoint completion path crates/mc-core/src/core/journal.rs:1008-1009, which logs nothing about pruning, so a filesystem refusal (remount-ro after a disk error, an overlay/NFS volume turning read-only, a changed directory mode) makes every checkpoint commit while nothing is deleted. Correctness is unaffected (batches at or below the committed checkpoint are ignored by replay), so the observable symptom is pure growth until ENOSPC. Not reproduced as a failure; read from source. Repro/test idea: a cargo test in mc-core that runs a real checkpoint through journal_loop on a temp world, makes the journal directory non-writable (chmod 0555 / a read-only overlay in a drill), then asserts the checkpoint still commits and that a warning is emitted naming the directory, the failing entry count and the errno; the same test must keep the existing green prune test unchanged. Suggested fix: count failures and emit one rate-limited warn per checkpoint with errno and unpruned count/bytes."
 regression = []
 failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-CROWD-PUSH-INTO-WALL"
+title = "Crowded mobs in an enclosed pen are pushed into the pen's stone wall (up to the whole body inside the block) and take repeated suffocation damage; vanilla movement never lets entity push carry a body into a solid block."
+area = "gameplay"
+repro = "native"
+severity = "major"
+status = "open"
+source = "Perf1M prep11-125000 on main de660fabd fixture (seal-then-clear pens, no Invulnerable), 2026-11-17 ~23:00: at 98/128 pens, 95,798 cohort summons, 190 suffocation events on 93 distinct cohort animals, every one inside a pen wall, repeating every 10 ticks at the same position. Examples: zombie pos=11.54,65.00,511.95 (0.4-wide body spans z 511.75-512.15, 0.25 into the stone wall at z=511); skeleton pos=7966.70,65.00,511.30 (body z 511.10-511.50, wholly inside the wall block). Pens span z=512..575, wall at z=511; no fixture sweep reaches the wall. Receipt: targets/Perf1M/legs/prep11-125000/prepare/server.log. Cause not yet located: suspected crowd separation/push applied to position without block collision. Not yet reproduced in a small test."
+regression = []
+failing_first = "reported"
