@@ -47,6 +47,59 @@ mod stop_tests;
 type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
 pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
 
+/// Minimum interval between two "input queue full" warnings.
+const INPUT_DROP_WARN_INTERVAL_MS: u64 = 10_000;
+
+/// Rate limiter for the input-drop warning: at most one warning per
+/// [`INPUT_DROP_WARN_INTERVAL_MS`] across every submitting thread.
+///
+/// Time is read from one monotonic [`Instant`] origin, never the wall clock,
+/// so an NTP step can neither re-arm nor mute the warning, and there is no
+/// zero-clock case: the first claim always warns. One atomic load on the drop
+/// path and a CAS only when the interval has expired, so the full-queue path
+/// never takes a lock and never logs per input.
+#[derive(Debug)]
+struct DropWarn {
+    origin: std::time::Instant,
+    /// Milliseconds since `origin` of the last emitted warning;
+    /// [`DropWarn::NEVER`] until the first one.
+    last_ms: AtomicU64,
+}
+
+impl DropWarn {
+    /// `last_ms` value meaning "never warned".
+    const NEVER: u64 = u64::MAX;
+
+    fn new() -> Self {
+        Self {
+            origin: std::time::Instant::now(),
+            last_ms: AtomicU64::new(Self::NEVER),
+        }
+    }
+
+    /// True when this drop should warn; claims the interval when so.
+    fn claim(&self) -> bool {
+        self.claim_at(
+            self.origin
+                .elapsed()
+                .as_millis()
+                .min(u128::from(Self::NEVER - 1)) as u64,
+        )
+    }
+
+    /// [`DropWarn::claim`] at `now_ms` after the origin, so the interval
+    /// contract is testable without sleeping.
+    fn claim_at(&self, now_ms: u64) -> bool {
+        let last = self.last_ms.load(Ordering::Relaxed);
+        if last != Self::NEVER && now_ms.saturating_sub(last) < INPUT_DROP_WARN_INTERVAL_MS {
+            return false;
+        }
+        self.last_ms
+            .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+    }
+}
+
 /// Publish impulse epochs after travel, resolving stable entity ids in their
 /// current world rather than only the world where the explosion happened.
 pub(crate) fn observe_explosion_knockback(
@@ -76,6 +129,13 @@ pub(crate) fn observe_explosion_knockback(
         worlds().any(|world| world.connections.entity_of(*connection).is_some())
     };
     if !affected.is_empty() || knockback_ticks.keys().any(|id| !live(id)) {
+        // `Arc::make_mut` walks the tree once (O(K) nodes, K = tracked
+        // connections) because every published snapshot of the retained
+        // broadcast window holds this map. It runs only on a tick that carries
+        // an impulse or prunes a dead connection; an unchanged tick keeps the
+        // same `Arc` (same pointer, same content). Measured and kept: the
+        // alternative (a private map cloned only on change) copies on exactly
+        // the same ticks.
         let epochs = Arc::make_mut(knockback_ticks);
         epochs.retain(|id, _| live(id));
         for connection in affected {
@@ -84,9 +144,24 @@ pub(crate) fn observe_explosion_knockback(
             epoch.1 = output.tick;
         }
     }
-    Arc::get_mut(&mut output.snapshot)
-        .expect("tick output is not shared before publication")
-        .player_knockback_ticks = Arc::clone(knockback_ticks);
+    // Publish the epoch map into this tick's snapshot. Unconditionally: a
+    // fresh `run_tick` snapshot starts with an empty map, so an unchanged tick
+    // must still carry the current (non-empty) one.
+    let epochs = Arc::clone(knockback_ticks);
+    match Arc::get_mut(&mut output.snapshot) {
+        // The tick loop's own snapshot is unique here.
+        Some(snapshot) => snapshot.player_knockback_ticks = epochs,
+        // A second holder exists (a reader that cloned this tick's snapshot
+        // before publication, or a caller outside the tick loop). Never panic
+        // the tick owner and never mutate a snapshot a reader holds: rebuild
+        // this tick's snapshot with the current map and leave the held one as
+        // it was.
+        None => {
+            let mut snapshot = (*output.snapshot).clone();
+            snapshot.player_knockback_ticks = epochs;
+            output.snapshot = Arc::new(snapshot);
+        }
+    }
 }
 
 #[path = "core_session.rs"]
@@ -96,6 +171,10 @@ pub use session::PlayerSession;
 #[cfg(test)]
 #[path = "core_session_tests.rs"]
 mod session_tests;
+
+#[cfg(test)]
+#[path = "core_input_drop_tests.rs"]
+mod input_drop_tests;
 
 /// Only edge consumers share this receiver; the tick owns its sender.
 #[derive(Debug)]
@@ -380,6 +459,8 @@ struct CoreInner {
         )>,
     >,
     input_dropped: AtomicU64,
+    /// Rate limiter for the "input queue full" warning beside the counter.
+    input_drop_warn: DropWarn,
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
     tick_tx: broadcast::WeakSender<TickOutput>,
@@ -1043,6 +1124,7 @@ impl Core {
                 #[cfg(test)]
                 backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
+                input_drop_warn: DropWarn::new(),
                 tick_tx: tick_tx.downgrade(),
                 knockback_publication,
                 timing_tx: timing_tx.downgrade(),
@@ -1176,13 +1258,20 @@ impl Core {
     }
 
     /// Submit one decoded player input. Bounded and push-woken: returns
-    /// `false` (and counts the drop) when the queue is full. Never blocks.
-    /// Safe to call from Tokio I/O threads.
+    /// `false` (and counts and rate-limitedly warns about the drop) when the
+    /// queue is full. Never blocks. Safe to call from Tokio I/O threads.
     pub fn submit(&self, input: PlayerInput) -> bool {
         match self.inner.input_tx.try_send(input) {
             Ok(()) => true,
             Err(_) => {
-                self.inner.input_dropped.fetch_add(1, Ordering::Relaxed);
+                let dropped = self.inner.input_dropped.fetch_add(1, Ordering::Relaxed) + 1;
+                if self.inner.input_drop_warn.claim() {
+                    tracing::warn!(
+                        dropped,
+                        capacity = self.inner.input_tx.max_capacity(),
+                        "input queue full: the refused input is lost and the server corrects the client"
+                    );
+                }
                 false
             }
         }

@@ -655,3 +655,92 @@ fn streaming_build_page_micro() {
         );
     }
 }
+
+// B8 (CS341 REPORT-B.md): `publish`'s ascending, duplicate-free contract is
+// enforced in every build. It used to be a `debug_assert!` alone, so a release
+// build accepted a batch whose slot assignment (and, for duplicates, whose
+// single slot) the serial lifecycle cannot represent.
+
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(text) = payload.downcast_ref::<String>() {
+        text.clone()
+    } else if let Some(text) = payload.downcast_ref::<&str>() {
+        (*text).to_owned()
+    } else {
+        "<non-string panic>".to_owned()
+    }
+}
+
+/// Publish one batch exactly as given, with no sorting.
+fn publish_verbatim(views: &mut EntityViews, batch: &[(i32, Option<EntityView>)]) {
+    views.publish(
+        batch,
+        |(id, image)| (EntityId(*id), image.as_ref()),
+        |image| image.clone(),
+    );
+}
+
+#[test]
+fn publish_rejects_descending_ids_with_a_named_contract_panic() {
+    let appearance = Arc::new(EntityAppearance::default());
+    let mut views = EntityViews::default();
+    let batch = [
+        (2, Some(view(2, 2.5, 0.5, &appearance))),
+        (1, Some(view(1, 1.5, 0.5, &appearance))),
+    ];
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        publish_verbatim(&mut views, &batch);
+    }))
+    .expect_err("a descending batch must be refused, not silently re-slotted");
+    let message = panic_text(&*payload);
+    assert!(
+        message.contains("strictly ascending and unique"),
+        "the refusal names the contract, so a release build fails loudly \
+         instead of mis-assigning slots: {message}"
+    );
+    assert!(
+        message.contains("got 1 after 2"),
+        "the refusal names both ids: {message}"
+    );
+}
+
+#[test]
+fn publish_rejects_a_duplicate_id_that_would_free_one_slot_twice() {
+    let appearance = Arc::new(EntityAppearance::default());
+    let mut views = EntityViews::default();
+    let birth = [(1, Some(view(1, 1.5, 0.5, &appearance)))];
+    publish_verbatim(&mut views, &birth);
+    // The id's slot was captured before this batch's mutations: a second
+    // appearance of the same id would free that slot twice.
+    let duplicate = [(1, None), (1, None)];
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        publish_verbatim(&mut views, &duplicate);
+    }))
+    .expect_err("a duplicate id must be refused");
+    let message = panic_text(&*payload);
+    assert!(
+        message.contains("strictly ascending and unique"),
+        "duplicates name the same contract: {message}"
+    );
+}
+
+#[test]
+fn ascending_batch_still_publishes_and_keeps_its_slots() {
+    // Control: the always-on check cannot pass by refusing correct batches.
+    let appearance = Arc::new(EntityAppearance::default());
+    let mut views = EntityViews::default();
+    let batch = [
+        (1, Some(view(1, 1.5, 0.5, &appearance))),
+        (2, Some(view(2, 2.5, 0.5, &appearance))),
+        (3, Some(view(3, 3.5, 0.5, &appearance))),
+    ];
+    publish_verbatim(&mut views, &batch);
+    assert_eq!(views.len(), 3);
+    assert_eq!(views.changed().len(), 3);
+    for id in 1..=3 {
+        assert_eq!(
+            views.get(EntityId(id)).map(|row| row.id),
+            Some(EntityId(id))
+        );
+    }
+}
