@@ -5744,6 +5744,17 @@ regression = []
 failing_first = "reported"
 
 [[bug]]
+id = "CORE-DROP-RELEASES-LEASE-BEFORE-OWNERS-JOIN"
+title = "Dropping a running Core without Core::shutdown detaches the tick and journal owners and releases the world lease while they may still write"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Sol code review of CoreBounds (receipts/CoreBounds/REVIEW-CODE-sol.md, 2026-11-18): Core/CoreInner have no Drop that stops and joins the owners; on a plain drop(core) the JoinHandles detach and the lease File closes (crates/mc-core/src/core.rs:353-357 at wt/CoreBounds e41b22250), while the safe order exists only in Core::shutdown (:1450-1475). A second Core::open of the same world could then run beside a still-writing owner. CoreBounds' StartupOwners guard covers only the failed-start path. Possibly the cause of CORE-DROP-LEAVES-WORLD-DIR-WRITER; not yet reproduced."
+regression = []
+failing_first = "reported"
+
+[[bug]]
 id = "PLUGIN-ENGINE-CACHE-TEST-COUNTS-ASYNC-FILE"
 title = "The plugin engine cache test sometimes counts one new cache file on the second engine start under load"
 area = "harness"
