@@ -232,8 +232,14 @@ fn census_keys_dimension_and_rejects_duplicate_uuid_across_dimensions() {
     )
     .unwrap();
     assert!(
-        insert_entity(&mut overworld, &mut seen, Dimension::Nether, "u".into(), make_entity())
-            .is_err()
+        insert_entity(
+            &mut overworld,
+            &mut seen,
+            Dimension::Nether,
+            "u".into(),
+            make_entity()
+        )
+        .is_err()
     );
     let mut nether = BTreeMap::new();
     insert_entity(
