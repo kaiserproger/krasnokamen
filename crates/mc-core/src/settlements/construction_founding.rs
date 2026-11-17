@@ -336,13 +336,14 @@ pub(super) fn owns_project(record: &SettlementRecord, project: &Project) -> bool
 }
 
 pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId) {
-    let record = state.settlements.get(parent).expect("founding parent");
-    if let Some(project) = record
-        .project
-        .as_ref()
-        .filter(|project| owns_project(record, project))
-    {
-        let structure = project.structure.clone();
+    let owned = {
+        let record = state.settlements.get(parent).expect("founding parent");
+        projects(record)
+            .next()
+            .filter(|project| owns_project(record, project))
+            .map(|project| project.structure.clone())
+    };
+    if let Some(structure) = owned {
         cancel_project(state, parent, &structure).expect("cancel admitted founding structure");
     }
     let record = state.settlements.get_mut(parent).unwrap();
@@ -354,7 +355,7 @@ pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId
 /// shortages leave ordinary native extraction and crafting active.
 pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
     let record = state.settlements.get(parent).unwrap();
-    let pending = record.pending_order.is_some();
+    let pending = orders(record).next().is_some();
     if record.founding.is_none() {
         if pending {
             return false;
@@ -368,7 +369,10 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
         cancel(state, parent);
         return false;
     }
-    if state.settlements.get(parent).unwrap().project.is_some() {
+    if projects(state.settlements.get(parent).unwrap())
+        .next()
+        .is_some()
+    {
         return true;
     }
     for (name, origin) in expedition.sites() {
@@ -419,7 +423,7 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
         return false;
     }
     let source = state.settlements.get(parent).unwrap();
-    if source.project.is_some()
+    if projects(source).next().is_some()
         || source.revision > u64::MAX - 2
         || source.households[&expedition.household].revision == u64::MAX
     {

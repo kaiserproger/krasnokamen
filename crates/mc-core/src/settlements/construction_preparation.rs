@@ -181,9 +181,8 @@ pub(crate) fn active_lot(
     state: &TickState,
     record: &SettlementRecord,
 ) -> Option<ScriptWorldBounds> {
-    record
-        .project
-        .as_ref()
+    projects(record)
+        .next()
         .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
 }
 
@@ -201,12 +200,11 @@ pub(crate) fn stale_tree_certification(
     let Some(record) = state.settlements.get(id) else {
         return false;
     };
-    let keeps_its_place = record
-        .project
-        .as_ref()
+    let keeps_its_place = projects(record)
+        .next()
         .filter(|project| project.structure == handle)
         .is_none_or(|project| project.ordered)
-        && record.pending_order.is_none();
+        && orders(record).next().is_none();
     keeps_its_place
         && remaining.iter().any(|at| {
             record.planted_trees.contains(at)
@@ -226,12 +224,8 @@ pub(crate) fn changed_project(
     id: SettlementId,
     handle: &str,
 ) -> Option<Project> {
-    state
-        .settlements
-        .get(id)?
-        .project
-        .as_ref()
-        .filter(|project| project.structure == handle && !layout::infra(&project.blueprint))
+    project_for_structure(state.settlements.get(id)?, handle)
+        .filter(|project| !layout::infra(&project.blueprint))
         .cloned()
 }
 

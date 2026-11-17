@@ -9,7 +9,7 @@ pub(super) fn plan(state: &mut TickState, id: SettlementId) -> bool {
     let Some(record) = state.settlements.get(id) else {
         return false;
     };
-    if record.project.is_some()
+    if projects(record).next().is_some()
         || crate::villager::smelting::owned_furnaces(state, id)
             .next()
             .is_some()
