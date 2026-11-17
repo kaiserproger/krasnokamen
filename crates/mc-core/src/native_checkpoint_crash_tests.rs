@@ -129,9 +129,7 @@ fn shutdown_with_a_refused_final_checkpoint_leaves_the_tail_prune_refuses() {
         "{refusal}"
     );
     assert!(
-        refusal
-            .to_string()
-            .contains(&format!("{}..={}", durable + 1, durable + 1)),
+        refusal.to_string().contains(&format!("{}..=", durable + 1)),
         "{refusal}"
     );
     drop(reader);

@@ -133,9 +133,13 @@ fn prune_stopped(
     let world = stopped_world(config)?;
     let bytes_before = file_bytes(&world.path)?;
     let store = open_store(config, &world)?;
-    let reader = store.checkpoint_reader().map_err(storage)?;
-    let manifest = mc_core::native_checkpoint::published_manifest(config, &reader)?;
-    mc_core::native_checkpoint::require_checkpointed_tail(config, manifest.tick)?;
+    // Drop the read transaction before classification: compaction refuses while
+    // one is open.
+    let manifest_tick = {
+        let reader = store.checkpoint_reader().map_err(storage)?;
+        mc_core::native_checkpoint::published_manifest(config, &reader)?.tick
+    };
+    mc_core::native_checkpoint::require_checkpointed_tail(config, manifest_tick)?;
     let (keep_min, keep_max) = rectangle(center, request.keep_radius);
     let chunks = store
         .prune_pristine(&NativePruneRequest {

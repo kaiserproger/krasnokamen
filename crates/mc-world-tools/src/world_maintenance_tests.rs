@@ -109,7 +109,10 @@ fn append_block_tail(config: &CoreConfig) {
 fn prune_refuses_a_published_tail_the_checkpoint_does_not_cover() {
     let dir = world_dir("mc-core-prune-uncheckpointed-tail");
     let config = config(&dir, 11);
-    let request = PregenerateRequest::new(64);
+    let request = PregenerateRequest {
+        radius: 64,
+        center: Some([0, 0]),
+    };
     let first = pregenerate(&config, &request, &mut no_progress).expect("pregenerate");
     assert_eq!(first.chunks, 81);
     append_block_tail(&config);
