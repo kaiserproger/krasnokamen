@@ -178,3 +178,7 @@ Status: design decided, timing not decided; not implemented. Until it lands,
 - The settlement record changes shape with no adapter: an older world with a
   settlement refuses to open. Whether a specific world (such as the test server)
   is kept, and how, is an owner decision before deploy.
+- It is built behind a narrow settlement-construction interface: code outside
+  the construction module does not read or write the record's project or pending
+  order directly (owner, 2026-11-17, with the code-health ratchet that counts
+  such accesses).

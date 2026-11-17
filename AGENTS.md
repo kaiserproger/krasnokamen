@@ -290,9 +290,10 @@ python3 -m tools.harness list
   is a submodule of its domain host or a new top-level module that nothing in
   the cycle refers to, and a submodule's references count as its host's, so
   they can still pull modules in; check the count on the integrated tree.
-  Existing code is not moved now; extracting it
-  is a later goal along [ADR 0021](docs/decisions/0021-build-time-and-crate-split.md)
-  ([how-to](docs/development/adding-a-feature.md#new-features-are-modules)).
+  Existing code moves along the cycle-cut plan of [ADR 0021](docs/decisions/0021-build-time-and-crate-split.md)
+  with byte-exact moves; before the 21 November announcement only once the current
+  release tasks are closed, otherwise after (owner, 2026-11-17;
+  [how-to](docs/development/adding-a-feature.md#new-features-are-modules)).
 - Krasnokamen has no released compatibility surface of its own: migrate callers and
   delete superseded APIs, schemas, authorities, adapters, flags and fallbacks.
   Compatibility targets are the vanilla protocol and Anvil, not old Krasnokamen
