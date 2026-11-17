@@ -332,7 +332,7 @@ fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
 }
 
 #[derive(Clone, Default)]
-struct Warnings(Arc<Mutex<Vec<String>>>);
+pub(super) struct Warnings(pub(super) Arc<Mutex<Vec<String>>>);
 
 impl tracing::Subscriber for Warnings {
     fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
@@ -344,26 +344,26 @@ impl tracing::Subscriber for Warnings {
     fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
     fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
     fn event(&self, event: &tracing::Event<'_>) {
-        struct Cause(String);
-        impl tracing::field::Visit for Cause {
+        if event.metadata().fields().field("cause").is_none() {
+            return;
+        }
+        struct Fields(String);
+        impl tracing::field::Visit for Fields {
             fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-                if field.name() == "cause" {
-                    self.0 = format!("{value:?}");
-                }
+                use std::fmt::Write as _;
+                write!(&mut self.0, "{}={value:?} ", field.name()).unwrap();
             }
         }
-        let mut cause = Cause(String::new());
-        event.record(&mut cause);
-        if !cause.0.is_empty() {
-            self.0.lock().unwrap().push(cause.0);
-        }
+        let mut fields = Fields(String::new());
+        event.record(&mut fields);
+        self.0.lock().unwrap().push(fields.0);
     }
     fn enter(&self, _: &tracing::span::Id) {}
     fn exit(&self, _: &tracing::span::Id) {}
 }
 
 #[test]
-fn a_stalled_project_warns_once_after_three_work_hours_without_a_builder() {
+fn a_stalled_project_reports_initial_and_repeated_stalls_without_a_builder() {
     let (mut state, id, builder) = fixture();
     fund(&mut state, "storage", 1);
     start(&mut state, id, "storage", 1, None);
@@ -494,10 +494,9 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
             .all(mc_data::ItemStack::is_empty),
         "retry returns the builder's carry before releasing its profession"
     );
-    assert_eq!(
-        &*warnings.0.lock().unwrap(),
-        &["\"protected_tree_in_preparation\""]
-    );
+    let events = warnings.0.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert!(events[0].contains("cause=\"protected_tree_in_preparation\""));
 }
 
 #[test]
@@ -532,10 +531,9 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
     assert_eq!(after.consumed, before.consumed);
     assert_eq!(state.world.block_at(root[0], root[1], root[2]), tree);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert_eq!(
-        &*warnings.0.lock().unwrap(),
-        &["\"protected_tree_in_preparation\""]
-    );
+    let events = warnings.0.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert!(events[0].contains("cause=\"protected_tree_in_preparation\""));
 }
 
 fn planted_sapling_before_admission(corridor: bool) {

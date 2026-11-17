@@ -1,19 +1,7 @@
+use super::growth_tests::Warnings;
 use super::tests::fixture;
 use super::*;
 use mc_data::ItemStack;
-use std::io::Write;
-
-#[derive(Clone, Default)]
-struct Log(std::sync::Arc<parking_lot::Mutex<Vec<u8>>>);
-impl Write for Log {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
 
 fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
     let (mut state, id, builder) = fixture();
@@ -55,21 +43,15 @@ fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
 }
 
 fn log_stall(state: &mut TickState, id: SettlementId) -> String {
-    let log = Log::default();
-    let writer = log.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .without_time()
-        .with_ansi(false)
-        .with_writer(move || writer.clone())
-        .finish();
-    tracing::subscriber::with_default(subscriber, || {
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
         // Three windows distinguish the first stall, failed recovery and silence.
         for _ in 0..=450 {
             state.tick += 20;
             release_stalled_builder(state, id);
         }
     });
-    String::from_utf8(log.0.lock().clone()).unwrap()
+    warnings.0.lock().unwrap().join("\n")
 }
 
 #[test]
@@ -175,7 +157,7 @@ fn a_real_fetch_refusal_is_retained_for_the_stall_report_without_debiting_stock(
 }
 
 #[test]
-fn a_repeated_stall_names_the_failed_action_and_cell_once_without_discarding_work() {
+fn a_repeated_stall_names_the_first_recovery_and_cell_once_without_discarding_work() {
     let (mut state, id, _) = bed_project();
     let project = state.settlements.get(id).unwrap().project.clone().unwrap();
     let before = executor::status(&state, id, &project.structure).unwrap();
@@ -194,7 +176,7 @@ fn a_repeated_stall_names_the_failed_action_and_cell_once_without_discarding_wor
     for evidence in [
         "spanish_fortress",
         "next=Some([10, 202, 10])",
-        "failed_action=\"builder_released\"",
+        "first_recovery=\"builder_released\"",
         "cause=\"no_builder\"",
         "recovery=\"no_builder\"",
     ] {
@@ -259,4 +241,83 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
         ScriptStructureState::Committed
     );
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), Some(air));
+}
+
+#[test]
+fn a_decayed_crown_clear_cell_uses_its_column_footing_beyond_perimeter_reach() {
+    let (mut state, id, builder) = fixture();
+    let next = [8, 220, 8];
+    let leaf = super::super::allocator::tests::block(
+        &state,
+        "minecraft:oak_leaves",
+        &[("distance", "7"), ("persistent", "false")],
+    );
+    state.world.set_block(next[0], next[1], next[2], leaf);
+    state.world.fold_overlay();
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
+    let air = state.registry.states.air;
+    let log = super::super::allocator::tests::block(&state, "minecraft:oak_log", &[]);
+    let build = [8, 202, 8];
+    let structure = executor::prepare(
+        &mut state,
+        id,
+        "house".into(),
+        bounds,
+        bounds,
+        vec![
+            executor::PlannedCell {
+                at: next,
+                state: air,
+                resource: None,
+                quantity: 0,
+            },
+            executor::PlannedCell {
+                at: build,
+                state: log,
+                resource: Some("minecraft:oak_log".into()),
+                quantity: 1,
+            },
+        ],
+    )
+    .unwrap();
+    state.settlements.get_mut(id).unwrap().project = Some(Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: structure.clone(),
+        ordered: true,
+        borrowed_builder: None,
+    });
+    // Decay happens after the canonical clear cell was planned. The crown
+    // is nineteen blocks above its footing, beyond any perimeter stand.
+    state.world.set_block(next[0], next[1], next[2], air);
+    state.world.fold_overlay();
+    state.entities.set_pos(builder, [8.5, 201.0, 8.5]);
+    assert!(executor::clearing(&state, id, &structure));
+    let mut v = state.entities.row_mut(builder).villager.take().unwrap();
+    let target = crate::villager::building::work(
+        &mut state,
+        builder,
+        &mut v,
+        &mut crate::boundary::ChangeSet::default(),
+    );
+    state.entities.row_mut(builder).villager = Some(v);
+    let target = target.expect("an emptied planned crown cell still has its column-footing target");
+    assert_eq!([target.pos.x, target.pos.y, target.pos.z], [8, 201, 8]);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    // Normal footprint refresh/resume, then the canonical clear operation.
+    for _ in 0..3 {
+        crate::villager::building::tick(&mut state, id);
+    }
+    let snapshot = executor::status(&state, id, &structure).unwrap();
+    assert_eq!(snapshot.current_stage_index, 1);
+    assert_eq!(
+        executor::next_cell(&state, id, &structure).unwrap(),
+        Some(build)
+    );
+    assert!(snapshot.consumed.is_empty());
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }

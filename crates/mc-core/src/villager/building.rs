@@ -66,7 +66,11 @@ fn preparation_footing(
         && state
             .world
             .physics_block_at(next[0], next[1], next[2])
-            .is_some_and(|block| crate::settlements::forestry::tree(state, block)))
+            .is_some_and(|block| {
+                // Planned tree cells keep their footing after decay or removal.
+                block == state.registry.states.air
+                    || crate::settlements::forestry::tree(state, block)
+            }))
     .then(|| crate::settlements::forestry::footing(state, project.settlement, next))
     .flatten()
 }
