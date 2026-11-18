@@ -806,3 +806,123 @@ fn bound_farmer_waits_for_a_certified_job_before_harvesting() {
         0
     );
 }
+
+/// Spain seed 100 (pin 3068dfb1b857): the certified houses stood 95-130
+/// blocks from the plaza where the residents live and eat, so their empty
+/// beds stayed outside every resident's 48-block spare-bed scan and the
+/// village stopped at 8-10. Two residents homed in an uncertified dwelling by
+/// the founding chest and a certified two-bed house 110 blocks away; with
+/// `near_spare`, a second uncertified dwelling by the plaza as well.
+fn far_house_village(near_spare: bool) -> (TickState, [EntitySlot; 2], [BlockPos; 2]) {
+    use crate::settlements::migration::return_tests::{fixture, house, shelter, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    if near_spare {
+        shelter(&mut state, 36);
+    }
+    house(&mut state, settlement, 118);
+    let chest = block(&state, "minecraft:chest", &[]);
+    state.world.set_block(9, 64, 11, chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(item(&state, "minecraft:bread"), 6);
+    state.block_entities.insert(
+        (9, 64, 11),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([9, 64, 11]);
+    state.world.fold_overlay();
+    let parents = [8.5, 10.5].map(|x| {
+        let slot = villager(&mut state, [x, 64.0, 8.5]);
+        let id = state.entities.body(slot).id;
+        crate::settlements::bind(&mut state, settlement, id).unwrap();
+        slot
+    });
+    let far = [7, 9].map(|z| BlockPos { x: 118, y: 64, z });
+    (state, parents, far)
+}
+
+/// Runs the village to its first birth and returns the newborn's home.
+fn first_birth_home(state: &mut TickState, parents: [EntitySlot; 2]) -> BlockPos {
+    for _ in 0..8_000 {
+        crate::settlements::migration::return_tests::step(state);
+        if let Some(child) = state.entities.slots().find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.birth_origin.is_some())
+        }) {
+            let home = state.entities.row(child).villager.as_ref().unwrap().home;
+            return home.expect("a newborn is born with its spare bed claimed");
+        }
+    }
+    panic!(
+        "no birth: parents={:?}, chest={:?}",
+        parents.map(|slot| (
+            state.entities.pos(slot),
+            state.entities.row(slot).villager.as_ref().unwrap()
+        )),
+        state.block_entities[&(9, 64, 11)].slots[0]
+    );
+}
+
+fn parent_homes(state: &TickState, parents: [EntitySlot; 2]) -> [BlockPos; 2] {
+    parents.map(|slot| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .home
+            .expect("parents keep their homes")
+    })
+}
+
+#[test]
+fn residents_breed_into_a_certified_house_beyond_the_local_bed_scan() {
+    let (mut state, parents, far) = far_house_village(false);
+    let home = first_birth_home(&mut state, parents);
+    assert!(
+        far.contains(&home),
+        "the child's bed is the far house's: {home:?}"
+    );
+    for slot in parents {
+        assert!(
+            distance(state.entities.pos(slot), centre(home)) > 48.0 * 48.0,
+            "the house bed is beyond the local scan"
+        );
+    }
+    assert!(
+        parent_homes(&state, parents)
+            .iter()
+            .all(|parent| parent.x == 20 && *parent != home),
+        "parents sleep in the uncertified dwelling; the child's bed is its own"
+    );
+}
+
+/// Control: the far certified house is a fallback. A nearby roofed bed in an
+/// uncertified dwelling stays the spare bed, as in vanilla.
+#[test]
+fn a_nearby_uncertified_bed_stays_the_spare_bed_over_a_far_certified_house() {
+    let (mut state, parents, far) = far_house_village(true);
+    let home = first_birth_home(&mut state, parents);
+    assert!(
+        !far.contains(&home),
+        "the near dwelling's bed comes first: {home:?}"
+    );
+    assert!(
+        home.x == 20 || home.x == 36,
+        "an uncertified dwelling's bed: {home:?}"
+    );
+    assert!(!parent_homes(&state, parents).contains(&home));
+}

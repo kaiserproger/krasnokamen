@@ -224,13 +224,6 @@ fn horizontal(a: [i32; 3], b: [i32; 3]) -> f64 {
     )
 }
 
-fn in_bounds(bounds: mc_script::ScriptWorldBounds, pos: BlockPos) -> bool {
-    [pos.x, pos.y, pos.z]
-        .into_iter()
-        .enumerate()
-        .all(|(i, p)| p >= bounds.min[i] && p <= bounds.max[i])
-}
-
 /// Roofed bed pairs in certified houses, and those of them open to newcomers:
 /// less one for each member who sleeps in one, has no home or has no loaded
 /// body. Members of uncertified generated houses keep their own beds; savanna
@@ -238,33 +231,14 @@ fn in_bounds(bounds: mc_script::ScriptWorldBounds, pos: BlockPos) -> bool {
 /// beds, two of them empty, against eight members, so `beds - members`
 /// admitted no migrant for 60k ticks).
 fn physical_beds(state: &TickState, record: &super::SettlementRecord) -> (usize, usize) {
-    let mut beds = rustc_hash::FxHashSet::default();
-    for building in record
-        .buildings
-        .values()
-        .filter(|b| b.kind == super::buildings::BuildingKind::House)
-    {
-        for x in building.bounds.min[0].div_euclid(16)..=building.bounds.max[0].div_euclid(16) {
-            for z in building.bounds.min[2].div_euclid(16)..=building.bounds.max[2].div_euclid(16) {
-                if let Some(chunk) = state
-                    .villager_pois
-                    .chunks
-                    .get(&crate::boundary::ChunkPos { x, z })
-                {
-                    for poi in &chunk.pois {
-                        if poi.kind == allocator::PoiKind::Home
-                            && record.contains([poi.pos.x, poi.pos.y, poi.pos.z])
-                            && in_bounds(building.bounds, poi.pos)
-                            && allocator::bed_pair(&state.world, &state.registry, poi.pos).is_some()
-                            && allocator::roofed(&state.world, &state.registry, poi.pos)
-                        {
-                            beds.insert(poi.pos);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let beds: rustc_hash::FxHashSet<BlockPos> = allocator::house_beds(&state.villager_pois, record)
+        .map(|(_, poi)| poi.pos)
+        .filter(|&pos| {
+            record.contains([pos.x, pos.y, pos.z])
+                && allocator::bed_pair(&state.world, &state.registry, pos).is_some()
+                && allocator::roofed(&state.world, &state.registry, pos)
+        })
+        .collect();
     let used = state
         .settlements
         .member_ids(record.id)

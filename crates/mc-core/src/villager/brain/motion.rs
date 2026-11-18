@@ -383,14 +383,7 @@ pub(super) fn move_to(
         if (new_target || changed || (due && v.navigation_path.is_empty()) || stalled)
             && cache.spend_path(state, Consumer::Brain)
         {
-            let from = at(pos);
-            let horizontal = from
-                .x
-                .abs_diff(target.x)
-                .max(from.z.abs_diff(target.z))
-                .saturating_add(8)
-                .clamp(48, 512);
-            let vertical = from.y.abs_diff(target.y).saturating_add(4).clamp(16, 512);
+            let (horizontal, vertical) = allocator::route_bounds(at(pos), target);
             let mut seek_path = std::mem::take(&mut cache.candidate_path);
             let mut ctx = allocator::RouteCtx {
                 world: &state.world,

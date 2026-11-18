@@ -5,7 +5,7 @@ use crate::boundary::BlockPos;
 use crate::entities::EntitySlot;
 use crate::settlements::{
     SettlementId,
-    allocator::{self, PoiCache, PoiKind, RouteCtx},
+    allocator::{self, PoiCache, RouteCtx},
 };
 use crate::tick::TickState;
 use crate::tick_budget::Consumer;
@@ -69,25 +69,9 @@ fn nearest_bed(
     let record = state.settlements.get(memory.settlement)?;
     let pos = state.entities.pos(slot);
     let owner = state.entities.body(slot).id;
-    record
-        .buildings
-        .values()
-        .filter(|b| b.kind == crate::settlements::buildings::BuildingKind::House)
-        .flat_map(|building| {
-            (building.bounds.min[0].div_euclid(16)..=building.bounds.max[0].div_euclid(16))
-                .flat_map(move |x| {
-                    (building.bounds.min[2].div_euclid(16)..=building.bounds.max[2].div_euclid(16))
-                        .filter_map(move |z| cache.chunks.get(&crate::boundary::ChunkPos { x, z }))
-                })
-                .flat_map(move |chunk| chunk.pois.iter().map(move |poi| (building, *poi)))
-        })
-        .filter(|(building, poi)| {
-            poi.kind == PoiKind::Home
-                && !memory.rejected.contains(&Some(poi.pos))
-                && [poi.pos.x, poi.pos.y, poi.pos.z]
-                    .into_iter()
-                    .enumerate()
-                    .all(|(i, p)| p >= building.bounds.min[i] && p <= building.bounds.max[i])
+    allocator::house_beds(cache, record)
+        .filter(|(_, poi)| {
+            !memory.rejected.contains(&Some(poi.pos))
                 && allocator::claimable_bed(state, cache, owner, Some(memory.settlement), *poi)
         })
         .min_by(|(a, p), (b, q)| {
