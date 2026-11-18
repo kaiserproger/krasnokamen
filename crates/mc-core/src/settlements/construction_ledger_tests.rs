@@ -90,8 +90,8 @@ fn settlement_ledger_writes_replay_from_the_wal_after_every_transition() {
     );
     fund(&mut state, "house", 1);
 
-    // Empty a placed cell mid-build: the next advance pauses on the changed
-    // footprint, the next admission recovers it into a repair stage.
+    // An already-processed cell is not a pending-cell certificate. Its loss
+    // queues a paid repair at completion without stopping unrelated work.
     let mut emptied = None;
     let seen = build_checked(
         &mut state,
@@ -141,8 +141,8 @@ fn settlement_ledger_writes_replay_from_the_wal_after_every_transition() {
     assert!(emptied.is_some(), "a placed build cell was emptied");
     assert!(
         seen.iter()
-            .any(|s| s.pause_reason.as_deref() == Some("footprint_changed")),
-        "the changed footprint paused the record"
+            .all(|s| s.pause_reason.as_deref() != Some("footprint_changed")),
+        "completed-cell damage does not pause a pending portion"
     );
     assert!(
         seen.iter()
@@ -458,6 +458,8 @@ fn reopen(directory: &std::path::Path) -> Result<TickState, crate::CoreError> {
         })));
     // The stock chest lives in a checkpointed chunk: hydrate it as a tick would.
     crate::tick::sync_chunk_block_entities(&mut state);
+    // The structure startup fence follows physical dimension recovery.
+    crate::plugin_structures::validate(&state)?;
     Ok(state)
 }
 
@@ -639,6 +641,13 @@ fn preparation_portion_boundary_and_mid_portion_recover_exact_physical_evidence(
     let log = crate::settlements::allocator::tests::block(&state, "minecraft:oak_log", &[]);
     let air = state.registry.states.air;
     let dirt = state.registry.states.dirt;
+    let planks = crate::settlements::allocator::tests::block(&state, "minecraft:oak_planks", &[]);
+    state.world.set_block(6, 201, 4, planks);
+    let plank_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_planks").unwrap())
+        .unwrap();
     state.world.set_block(3, 201, 4, log);
     state
         .world
@@ -763,6 +772,16 @@ fn preparation_portion_boundary_and_mid_portion_recover_exact_physical_evidence(
     // The still-unprocessed second build cell changes after restart.
     restored.world.set_block(7, 201, 4, dirt);
     assert!(executor::advance(&mut restored, id, &handle, uuid).unwrap());
+    assert_eq!(
+        restored.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == plank_item)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        1,
+        "pre-admission planks credit once, not again after repeated WAL replay"
+    );
     let committed = snapshot(&restored, id, &handle);
     assert_eq!(committed.state, mc_script::ScriptStructureState::Committed);
     assert_eq!(committed.watermark, 5);

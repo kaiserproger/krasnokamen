@@ -4,8 +4,57 @@ use crate::settlements::allocator::tests::block;
 use crate::settlements::{SettlementId, construction::Project};
 use mc_data::ItemStack;
 
+#[test]
+fn implicit_preparation_tools_use_the_lowest_suitable_ordinary_tier() {
+    let (state, _, _, _) = plan();
+    for (name, tool_name) in [
+        ("minecraft:cobblestone", "minecraft:wooden_pickaxe"),
+        ("minecraft:iron_ore", "minecraft:stone_pickaxe"),
+        ("minecraft:diamond_ore", "minecraft:iron_pickaxe"),
+        ("minecraft:obsidian", "minecraft:diamond_pickaxe"),
+        ("minecraft:snow", "minecraft:wooden_shovel"),
+    ] {
+        let block = block(&state, name, &[]);
+        let definition = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .unwrap();
+        let tool = canonical_tool(&state, &definition.block).unwrap();
+        assert_eq!(
+            state.registry.items.name_of(tool.item_id).unwrap().as_str(),
+            tool_name
+        );
+        assert!(tool.enchantments.is_empty());
+    }
+}
+
+#[test]
+fn unchanged_village_placements_credit_nonterrain_but_not_foundation_soil() {
+    let (mut state, id, builder, handle) =
+        plan_with_build([Some("minecraft:oak_planks"), Some("minecraft:dirt")]);
+    for _ in 0..5 {
+        builds::advance(&mut state, id, &handle, builder).unwrap();
+    }
+    assert_eq!(stock(&state, "minecraft:oak_planks"), 1);
+    let soil = stock(&state, "minecraft:dirt");
+    assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+    assert_eq!(stock(&state, "minecraft:oak_planks"), 1);
+    assert_eq!(stock(&state, "minecraft:dirt"), soil);
+}
+
 fn plan() -> (TickState, SettlementId, uuid::Uuid, String) {
+    plan_with_build([None, None])
+}
+
+fn plan_with_build(before: [Option<&str>; 2]) -> (TickState, SettlementId, uuid::Uuid, String) {
     let (mut state, id, builder) = crate::settlements::construction::tests::fixture();
+    for (index, name) in before.into_iter().enumerate() {
+        if let Some(name) = name {
+            let block = block(&state, name, &[]);
+            state.world.set_block(8 + index as i32, 201, 4, block);
+        }
+    }
     state.registry = Arc::new(
         crate::registry::CoreRegistry::load(Some(
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
@@ -113,6 +162,31 @@ fn stock(state: &TickState, name: &str) -> i32 {
         .filter(|stack| stack.item_id == item)
         .map(|stack| stack.count)
         .sum()
+}
+
+#[test]
+fn upgrade_registered_sapling_is_still_the_first_disposition() {
+    let (state, id, _, _) = plan();
+    let cell = builds::PlannedCell {
+        portion: PortionKind::Build,
+        at: [4, 201, 4],
+        state: state.registry.states.stone,
+        resource: Some("minecraft:cobblestone".into()),
+        quantity: 1,
+    };
+    let lot = ScriptWorldBounds::new(cell.at, cell.at).unwrap();
+    let cleared = builds::upgrade_trees_clear(
+        &state,
+        id,
+        "house",
+        cell.at,
+        &[cell],
+        Some(lot),
+        &mut crate::settlements::forestry::Clearance::default(),
+    )
+    .unwrap();
+    assert_eq!(cleared.len(), 1);
+    assert_eq!(cleared[0].portion, PortionKind::Saplings);
 }
 
 #[test]
@@ -265,7 +339,17 @@ fn missing_partial_or_corrupt_portions_refuse_startup_but_empty_world_opens() {
     let (mut state, _, _, handle) = plan();
     let key = ledger::structure_key(&handle);
     let valid = certificate(&state, &handle);
-    for variant in ["missing", "partial", "raw", "identity", "roots", "unknown"] {
+    for variant in [
+        "missing",
+        "partial",
+        "raw",
+        "identity",
+        "roots",
+        "duplicate_root",
+        "missing_roots",
+        "missing_expected",
+        "unknown",
+    ] {
         let mut bad = valid.clone();
         match variant {
             "missing" => {
@@ -277,6 +361,18 @@ fn missing_partial_or_corrupt_portions_refuse_startup_but_empty_world_opens() {
             "raw" => bad["portions"][0]["expected"] = serde_json::json!([u32::MAX]),
             "identity" => bad["portions"][0]["expected"] = serde_json::json!([]),
             "roots" => bad["portions"][0]["roots"] = serde_json::json!([[15, 201, 15]]),
+            "duplicate_root" => {
+                bad["portions"][0]["roots"] = serde_json::json!([[4, 201, 4], [4, 201, 4]])
+            }
+            "missing_roots" => {
+                bad["portions"][0].as_object_mut().unwrap().remove("roots");
+            }
+            "missing_expected" => {
+                bad["portions"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("expected");
+            }
             _ => bad["portions"][0]["extra"] = serde_json::json!(true),
         }
         state.plugins.set_domain(OWNER, &key, bad);
@@ -343,6 +439,18 @@ fn completed_fill_repairs_and_all_rewrites_preserve_certificate_alignment() {
             .stage,
         "repair"
     );
+    // A second interference while repair is pending truncates and re-derives
+    // that same final portion, never appending a second repair certificate.
+    let mut local = ledger_mut(&mut state).unwrap();
+    let record = local.structure_mut(&handle).unwrap();
+    record.snapshot.state = ScriptStructureState::Paused;
+    record.snapshot.pause_reason = Some("footprint_changed".into());
+    save(&mut state, local);
+    assert!(builds::recover(&mut state, id, &handle).unwrap());
+    replica.step(&mut state);
+    replica.assert_matches(&state);
+    validate(&state).unwrap();
+    assert_eq!(builds::status(&state, id, &handle).unwrap().stages.len(), 6);
     assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
     state.world.set_block(7, 201, 4, state.registry.states.air);
     assert!(builds::reopen_emptied(&mut state, id, &handle).unwrap());

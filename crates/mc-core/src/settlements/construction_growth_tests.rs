@@ -926,6 +926,9 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .unwrap()
         .unwrap();
     let previous = state.world.block_at(next[0], next[1], next[2]);
+    // Outside village property, retained player history still protects a cell.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    state.settlements.get_mut(id).unwrap().anchor = [anchor[0] + 1000, anchor[1], anchor[2]];
     retain_player_edit(&mut state, next);
     let uuid = state.entities.row(builder).uuid;
     // The executor only advances a project for its bound builder (P2-5).
@@ -936,6 +939,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     );
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    state.settlements.get_mut(id).unwrap().anchor = anchor;
     state.block_log = Default::default();
 
     for _ in 0..4096 {

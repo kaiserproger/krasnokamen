@@ -2041,7 +2041,7 @@ fn farm_level_one_is_fully_placed_and_a_funded_upgrade_clears_only_its_removals(
     assert_eq!((project.level, project.ordered), (2, false));
     for _ in 0..4096 {
         let status = executor::status(&state, id, &project.structure).unwrap();
-        if status.current_stage_index >= 1 {
+        if status.stages[status.current_stage_index as usize].stage == "build" {
             break;
         }
         attempt(&mut state, id, slot);

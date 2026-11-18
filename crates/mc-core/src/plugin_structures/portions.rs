@@ -206,7 +206,14 @@ pub(super) fn village_drops(
         .world
         .block_at(cell.at[0], cell.at[1], cell.at[2])
         .ok_or(Failure::Unloaded)?;
-    if identity(state, block)? == expected {
+    let unchanged = identity(state, block)? == expected;
+    if unchanged
+        && (cell.state == state.registry.states.air
+            || block == cell.state
+            || block == state.registry.states.air
+            || !inside(state, id, cell.at)
+            || crate::settlements::construction::excavatable(state, block))
+    {
         return Ok(None);
     }
     if !inside(state, id, cell.at) && crate::settlements::forestry::vetoed(state, cell.at) {
@@ -251,6 +258,61 @@ pub(super) fn village_drops(
     conserved_drops(state, cell.at, block).map(Some)
 }
 
+/// Settlements already extract with implicit tools. Demolition uses that same
+/// authority, with the lowest ordinary tier accepted by the canonical rules.
+fn canonical_tool(
+    state: &TickState,
+    block: &mc_world::Block,
+) -> Result<mc_data::ItemStack, Failure> {
+    static TOOLS: std::sync::LazyLock<[mc_data::Identifier; 31]> = std::sync::LazyLock::new(|| {
+        [
+            "minecraft:wooden_pickaxe",
+            "minecraft:wooden_shovel",
+            "minecraft:wooden_axe",
+            "minecraft:wooden_hoe",
+            "minecraft:wooden_sword",
+            "minecraft:golden_pickaxe",
+            "minecraft:golden_shovel",
+            "minecraft:golden_axe",
+            "minecraft:golden_hoe",
+            "minecraft:golden_sword",
+            "minecraft:stone_pickaxe",
+            "minecraft:stone_shovel",
+            "minecraft:stone_axe",
+            "minecraft:stone_hoe",
+            "minecraft:stone_sword",
+            "minecraft:iron_pickaxe",
+            "minecraft:iron_shovel",
+            "minecraft:iron_axe",
+            "minecraft:iron_hoe",
+            "minecraft:iron_sword",
+            "minecraft:diamond_pickaxe",
+            "minecraft:diamond_shovel",
+            "minecraft:diamond_axe",
+            "minecraft:diamond_hoe",
+            "minecraft:diamond_sword",
+            "minecraft:netherite_pickaxe",
+            "minecraft:netherite_shovel",
+            "minecraft:netherite_axe",
+            "minecraft:netherite_hoe",
+            "minecraft:netherite_sword",
+            "minecraft:shears",
+        ]
+        .map(|name| mc_data::Identifier::parse(name).expect("canonical tool identifier"))
+    });
+    let items = state.registry.item_rules();
+    for name in &*TOOLS {
+        let Some(id) = state.registry.items.id_of(name) else {
+            continue;
+        };
+        let tool = mc_data::ItemStack::new(id, 1);
+        if crate::block_drops::correct_tool(&items, block, &tool) {
+            return Ok(tool);
+        }
+    }
+    Err(Failure::Blocked)
+}
+
 pub(super) fn conserved_drops(
     state: &TickState,
     at: [i32; 3],
@@ -279,15 +341,17 @@ pub(super) fn conserved_drops(
     {
         return Err(Failure::Blocked);
     }
-    if state
+    let tool = if state
         .registry
         .mining
         .requires_correct_tool_for_drops(block)
         .unwrap_or(false)
     {
-        return Err(Failure::Blocked);
-    }
-    crate::settlements::forestry::roll(state, at, block)
+        canonical_tool(state, &definition.block)?
+    } else {
+        mc_data::ItemStack::EMPTY
+    };
+    crate::settlements::forestry::roll_with_tool(state, at, block, &tool)
 }
 
 #[cfg(test)]

@@ -260,7 +260,7 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
 }
 
 #[test]
-fn foreign_plank_replacement_pauses_without_debit_then_next_admission_resumes_and_completes() {
+fn foreign_replacement_of_a_completed_cell_does_not_pause_pending_portions() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
@@ -286,26 +286,20 @@ fn foreign_plank_replacement_pauses_without_debit_then_next_admission_resumes_an
     state
         .world
         .set_block(plank[0], plank[1], plank[2], state.registry.states.stone);
-    // The executor still refuses to place over a changed footprint.
-    let mut paused = before.clone();
+    // Evidence is local to pending cells; a replaced completed cell neither
+    // rewinds payment nor freezes unrelated work.
     for _ in 0..8 {
         attempt(&mut state, id, slot);
-        paused = executor::status(&state, id, &project.structure).unwrap();
-        if paused.state == ScriptStructureState::Paused {
-            break;
-        }
+        assert_ne!(
+            executor::status(&state, id, &project.structure)
+                .unwrap()
+                .state,
+            ScriptStructureState::Paused
+        );
     }
-    assert_eq!(paused.state, ScriptStructureState::Paused);
-    assert_eq!(paused.pause_reason.as_deref(), Some("footprint_changed"));
-    assert_eq!(paused.completed_work_units, before.completed_work_units);
-    assert_eq!(paused.consumed, before.consumed);
-    assert_eq!(state.plugin_block_writes.len(), writes);
-    // The next construction admission re-snapshots the footprint and resumes.
-    attempt(&mut state, id, slot);
-    let resumed = executor::status(&state, id, &project.structure).unwrap();
-    assert_ne!(resumed.state, ScriptStructureState::Paused);
-    assert_eq!(resumed.pause_reason, None);
-    assert_eq!(resumed.completed_work_units, before.completed_work_units);
+    let continued = executor::status(&state, id, &project.structure).unwrap();
+    assert!(continued.watermark > before.watermark);
+    assert!(state.plugin_block_writes.len() > writes);
     complete(&mut state, id, slot);
     assert_eq!(
         state.world.block_at(plank[0], plank[1], plank[2]),

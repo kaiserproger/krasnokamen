@@ -262,14 +262,11 @@ pub(crate) fn status(
         .clone())
 }
 
-/// A foreign edit inside a native site pauses the structure as
-/// `footprint_changed`. The clear stage is cancelled and its owner order retried
-/// only for its own stale-tree hazard: nothing has been felled yet, the clear
-/// manifest still holds a registered root that is no longer a sapling, and the
-/// order keeps its place in the queue. Everything else, including natural leaf
-/// decay and any started felling, re-snapshots the footprint and resumes: a
-/// placed cell that the edit emptied is queued again at completion by
-/// [`reopen_emptied`], while a solid foreign block in a placed cell is left alone.
+/// N3 alone pauses a grown certified sapling as `footprint_changed`. Before
+/// any felling, its owner order may be cancelled and requeued in the same FIFO
+/// slot. Otherwise recovery resumes with the pending per-cell evidence intact.
+/// Completed fill/build damage is appended as a newly certified repair portion;
+/// a solid foreign replacement of an already-processed cell is left alone.
 /// Returns whether recovery resumed or cancelled the structure.
 pub(crate) fn recover(
     state: &mut TickState,
@@ -675,9 +672,6 @@ pub(super) fn debit(
         .and_then(|record| crate::settlements::construction::project_for_structure(record, handle))
         .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
         .ok_or(Failure::Forbidden)?;
-    // A new site and an upgrade both carry clear-stage cells: an upgrade that
-    // clears natural forest or a registered tree must credit the same drops.
-    let preparing = true;
     // A solid cell may not be placed through another project's builder: that
     // body is not this site's to trap (D8 review SOL-4).
     for cell in cells
@@ -709,92 +703,85 @@ pub(super) fn debit(
     let mut drops = Vec::new();
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
-    if preparing {
-        for (cell, expected) in cells.iter().zip(expected) {
-            if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
-                drops.extend(credit);
-                continue;
+    for (cell, expected) in cells.iter().zip(expected) {
+        if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
+            drops.extend(credit);
+            continue;
+        }
+        if cell.state != state.registry.states.air {
+            continue;
+        }
+        let block = state
+            .world
+            .block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        if crate::settlements::forestry::tree_or_sapling(state, block) {
+            drops.extend(if portions::inside(state, id, cell.at) {
+                crate::settlements::forestry::roll(state, cell.at, block)?
+            } else {
+                crate::settlements::forestry::drops(state, cell.at, block, lot, &mut clearance)?
+            });
+        } else if crate::settlements::construction::excavatable(state, block) {
+            // Bounded terrain cut: recheck the cell the survey certified
+            // immediately before the debit, credit its own mining drop in
+            // this same transaction, and never write fluid or lava in.
+            if !portions::inside(state, id, cell.at) && state.block_log.player_touched(cell.at) {
+                return Err(Failure::Blocked);
             }
-            if cell.state != state.registry.states.air {
-                continue;
-            }
-            let block = state
-                .world
-                .block_at(cell.at[0], cell.at[1], cell.at[2])
-                .ok_or(Failure::Unloaded)?;
-            if crate::settlements::forestry::tree_or_sapling(state, block) {
-                drops.extend(if portions::inside(state, id, cell.at) {
-                    crate::settlements::forestry::roll(state, cell.at, block)?
-                } else {
-                    crate::settlements::forestry::drops(state, cell.at, block, lot, &mut clearance)?
-                });
-            } else if crate::settlements::construction::excavatable(state, block) {
-                // Bounded terrain cut: recheck the cell the survey certified
-                // immediately before the debit, credit its own mining drop in
-                // this same transaction, and never write fluid or lava in.
-                if !portions::inside(state, id, cell.at) && state.block_log.player_touched(cell.at)
+            let path = state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(block))
+                .map(|definition| definition.block.id.path())
+                .ok_or(Failure::Blocked)?;
+            let item =
+                crate::villager::mining::item_id(state, crate::villager::mining::drop_name(path))
+                    .ok_or(Failure::Blocked)?;
+            let count = crate::villager::mining::drop_count(path);
+            for (dx, dy, dz) in [
+                (1, 0, 0),
+                (-1, 0, 0),
+                (0, 1, 0),
+                (0, -1, 0),
+                (0, 0, 1),
+                (0, 0, -1),
+            ] {
+                let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
+                let neighbour = state
+                    .world
+                    .block_at(at[0], at[1], at[2])
+                    .ok_or(Failure::Unloaded)?;
+                // Lava or water next to the cell would flow into the cut.
+                if state.registry.states.lava_levels.contains(&neighbour)
+                    || state
+                        .registry
+                        .blocks
+                        .by_id(mc_world::BlockStateId(neighbour))
+                        .is_some_and(|definition| definition.has_fluid())
                 {
                     return Err(Failure::Blocked);
                 }
-                let path = state
-                    .registry
-                    .blocks
-                    .by_id(mc_world::BlockStateId(block))
-                    .map(|definition| definition.block.id.path())
-                    .ok_or(Failure::Blocked)?;
-                let item = crate::villager::mining::item_id(
-                    state,
-                    crate::villager::mining::drop_name(path),
-                )
-                .ok_or(Failure::Blocked)?;
-                let count = crate::villager::mining::drop_count(path);
-                for (dx, dy, dz) in [
-                    (1, 0, 0),
-                    (-1, 0, 0),
-                    (0, 1, 0),
-                    (0, -1, 0),
-                    (0, 0, 1),
-                    (0, 0, -1),
-                ] {
-                    let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
-                    let neighbour = state
-                        .world
-                        .block_at(at[0], at[1], at[2])
-                        .ok_or(Failure::Unloaded)?;
-                    // Lava or water next to the cell would flow into the cut.
-                    if state.registry.states.lava_levels.contains(&neighbour)
-                        || state
-                            .registry
-                            .blocks
-                            .by_id(mc_world::BlockStateId(neighbour))
-                            .is_some_and(|definition| definition.has_fluid())
-                    {
-                        return Err(Failure::Blocked);
-                    }
-                }
-                drops.push(mc_data::ItemStack::new(item, count));
-            } else if portions::inside(state, id, cell.at)
-                && !crate::settlements::construction::clearable(state, block)
-            {
-                drops.extend(portions::conserved_drops(state, cell.at, block)?);
-            } else {
-                // A log-tag variant excluded from tree ownership must never
-                // pass through the flora path with an empty drop list.
-                if state.registry.tree_logs.get(block as usize) == Some(&true) {
-                    return Err(Failure::Blocked);
-                }
-                loot.extend(
-                    crate::settlements::forestry::plant_drops(state, cell.at, block)?
-                        .into_iter()
-                        .map(|stack| (cell.at, stack)),
-                );
             }
+            drops.push(mc_data::ItemStack::new(item, count));
+        } else if portions::inside(state, id, cell.at)
+            && !crate::settlements::construction::clearable(state, block)
+        {
+            drops.extend(portions::conserved_drops(state, cell.at, block)?);
+        } else {
+            // A log-tag variant excluded from tree ownership must never
+            // pass through the flora path with an empty drop list.
+            if state.registry.tree_logs.get(block as usize) == Some(&true) {
+                return Err(Failure::Blocked);
+            }
+            loot.extend(
+                crate::settlements::forestry::plant_drops(state, cell.at, block)?
+                    .into_iter()
+                    .map(|stack| (cell.at, stack)),
+            );
         }
     }
     if required.is_empty() && drops.is_empty() && loot.is_empty() {
-        if preparing {
-            retire_cleared_roots(state, cells);
-        }
+        retire_cleared_roots(state, cells);
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -852,9 +839,7 @@ pub(super) fn debit(
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
     inventory::commit(state, changes)?;
-    if preparing {
-        retire_cleared_roots(state, cells);
-    }
+    retire_cleared_roots(state, cells);
     for (at, stack) in spilled {
         crate::tick::spawn_item_entity(
             state,
@@ -1112,7 +1097,20 @@ pub(crate) fn upgrade_trees_clear(
             return Err(Failure::Blocked);
         }
         cleared.push(PlannedCell {
-            portion: PortionKind::Trees,
+            portion: if state
+                .settlements
+                .records()
+                .any(|record| record.planted_trees.contains(&cell.at))
+                && state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .is_some_and(|definition| definition.block.id.path().ends_with("_sapling"))
+            {
+                PortionKind::Saplings
+            } else {
+                PortionKind::Trees
+            },
             at: cell.at,
             state: state.registry.states.air,
             resource: None,

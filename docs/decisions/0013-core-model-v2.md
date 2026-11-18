@@ -308,8 +308,8 @@ ledger of older binaries and this one refuse each other (fail closed, no
 converter); see [structure ledger keys](../architecture/persistence.md#structure-ledger-keys).
 
 Settlement preparation certificates live in that same required record shape:
-one per ordered stage, with persisted per-cell expected raw IDs, their ordered
-SHA-256 and registered roots. Every unprocessed cell is checked at commit;
+one per ordered stage, with persisted per-cell expected raw IDs and registered
+roots used by grown-sapling recertification. Every unprocessed cell is checked at commit;
 village-territory edits are locally re-derived with conserved live-block loot.
 Certificate rewrites, repair, custody, blocks and cursor share the existing
 tick/WAL/checkpoint boundary. Missing `portions` refuses a record, while plugin

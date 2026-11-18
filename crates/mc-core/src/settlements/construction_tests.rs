@@ -267,6 +267,15 @@ pub(crate) fn start(
 }
 
 pub(crate) fn fund(state: &mut TickState, blueprint: &str, level: u8) -> Vec<(u32, u32)> {
+    if level > 1 {
+        // Upgrade removal tests require the real world's canonical loot tables.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
+    }
     fund_at(state, (1, 201, 1), blueprint, level)
 }
 

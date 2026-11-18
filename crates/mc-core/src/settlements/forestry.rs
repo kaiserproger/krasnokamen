@@ -678,6 +678,15 @@ pub(crate) fn roll(
     at: [i32; 3],
     block: u32,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
+    roll_with_tool(state, at, block, &mc_data::ItemStack::EMPTY)
+}
+
+pub(crate) fn roll_with_tool(
+    state: &TickState,
+    at: [i32; 3],
+    block: u32,
+    tool: &mc_data::ItemStack,
+) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
     let seed = at
         .into_iter()
         .fold(state.world.seed() as u64 ^ state.tick, |seed, value| {
@@ -691,7 +700,7 @@ pub(crate) fn roll(
             z: at[2],
         },
         block,
-        &mc_data::ItemStack::EMPTY,
+        tool,
         seed,
     )
     .map_err(|_| mc_script::ScriptOperationFailure::Blocked)
