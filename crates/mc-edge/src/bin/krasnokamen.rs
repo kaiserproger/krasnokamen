@@ -132,15 +132,41 @@ fn spawn_stop_escalation() {
 }
 
 /// [`spawn_stop_escalation`] with the exit replaced, so a test can observe the
-/// signal half in-process. The listener is registered synchronously here, before
-/// the caller blocks: a signal that arrives during the first checkpoint still
-/// lands on it.
+/// signal half in-process.
+///
+/// The listener runs on its own OS thread with a private current-thread
+/// runtime, never as a task on the edge runtime: the shutdown it has to
+/// interrupt is exactly the case where no edge worker is free (a synchronous
+/// section holding the only worker, the failure mode the halt path guards
+/// against), and a `tokio::spawn` task would never be polled there. The signal
+/// stream is registered synchronously, before the caller blocks on the final
+/// checkpoint, so a signal that arrives then still lands on it.
 fn spawn_stop_escalation_with(on_second: impl FnOnce(&'static str) + Send + 'static) {
-    let second = shutdown_signal();
-    tokio::spawn(async move {
-        let cause = second.await;
-        on_second(cause);
-    });
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            tracing::error!(%error, "second stop signal listener unavailable");
+            return;
+        }
+    };
+    // Registration needs the runtime that owns the signal driver; the driver
+    // itself is polled on the new thread.
+    let second = {
+        let _context = runtime.enter();
+        shutdown_signal()
+    };
+    let thread = std::thread::Builder::new()
+        .name("edge-stop-escalation".to_owned())
+        .spawn(move || {
+            let cause = runtime.block_on(second);
+            on_second(cause);
+        });
+    if let Err(error) = thread {
+        tracing::error!(%error, "second stop signal listener thread unavailable");
+    }
 }
 
 /// Ctrl-C or SIGTERM: either requests shutdown, then the process exits.
@@ -223,5 +249,91 @@ mod tests {
             .expect("second stop signal is heard while shutting down")
             .expect("escalation listener reports the cause");
         assert_eq!(cause, "SIGTERM");
+    }
+
+    /// Child side of [`second_stop_signal_survives_a_wedged_runtime`]: arms the
+    /// production escalation, wedges the runtime's only worker inside a
+    /// synchronous section (the core-halt failure mode: nothing on the edge
+    /// runtime can run any more), and announces readiness. Only the next
+    /// SIGTERM can end this process, and it must do so with code 130.
+    #[test]
+    fn escalation_child_wedges_its_only_worker() {
+        use std::io::Write;
+        if std::env::var_os("EH_ESCALATION_CHILD").is_none() {
+            return;
+        }
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("child runtime");
+        runtime.block_on(async {
+            super::spawn_stop_escalation();
+            tokio::spawn(async {
+                println!("EH_READY");
+                std::io::stdout().flush().expect("child readiness flush");
+                // A synchronous section no runtime timer can escape.
+                loop {
+                    std::thread::park();
+                }
+            });
+            std::future::pending::<()>().await;
+        });
+    }
+
+    /// The escalation must not depend on an edge worker: with the only worker
+    /// blocked in a synchronous section, a `tokio::spawn` listener is never
+    /// polled and the process outlives the stop request.
+    #[test]
+    fn second_stop_signal_survives_a_wedged_runtime() {
+        use std::io::BufRead;
+        let exe = std::env::current_exe().expect("test binary");
+        let mut child = std::process::Command::new(exe)
+            .args([
+                "tests::escalation_child_wedges_its_only_worker",
+                "--exact",
+                "--nocapture",
+            ])
+            .env("EH_ESCALATION_CHILD", "1")
+            .env("TOKIO_WORKER_THREADS", "1")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn escalation child");
+        let pid = child.id();
+        // Readiness is a line from the child, not a delay.
+        let stdout = child.stdout.take().expect("child stdout");
+        let mut lines = std::io::BufReader::new(stdout).lines();
+        loop {
+            match lines.next() {
+                Some(Ok(line)) if line.contains("EH_READY") => break,
+                Some(Ok(_)) => continue,
+                other => panic!("child ended before readiness: {other:?}"),
+            }
+        }
+        let sent = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .expect("send child SIGTERM");
+        assert!(sent.success());
+        // Exit is the event; the receiver bounds the wait, the thread reaps.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(child.wait());
+        });
+        let status = match rx.recv_timeout(std::time::Duration::from_secs(60)) {
+            Ok(status) => status.expect("wait for the escalation child"),
+            Err(_) => {
+                let _ = std::process::Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .status();
+                panic!("a wedged worker starved the second-signal escalation");
+            }
+        };
+        assert_eq!(
+            status.code(),
+            Some(super::SECOND_STOP_EXIT_CODE),
+            "the escalation exits with 130: {status:?}"
+        );
     }
 }

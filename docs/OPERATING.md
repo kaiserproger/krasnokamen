@@ -350,10 +350,15 @@ Connection admission:
   `0` derives `max_players * 2 + 64` from `[server] max_players`; a Play session
   releases its slot, so the cap counts only peers still connecting. A connection
   over it is closed before its handshake, and the log names `cap` and `live` at
-  most once per second. Tradeoff: during a flood every accepted socket holds a
-  slot for up to the 30-second pre-play deadline, so joining players wait; the cap
-  bounds memory at the cost of that delay, and it never refuses an established
-  player.
+  most once per second. Tradeoff: the cap bounds memory, not time. It is not one
+  global deadline, and each stage has its own: handshake, Status and Login share
+  a 30-second total, every pre-play packet read also has a 10-second deadline, so
+  Configuration (whose reads happen after that total) is bounded per read only;
+  the phase is capped at 96 packets and 512 KiB of decoded input, the wait for the
+  core to confirm Join adds 10 seconds, and the join burst's writes are bounded by
+  a 5-second stall fence. A deliberately slow client can therefore hold a slot for
+  minutes; the cap keeps that to bounded memory per socket, and it never refuses
+  an established player.
 - Independently, at most eight pre-play connections per socket IP are accepted
   for direct clients (Play sessions do not count). This is disabled in Velocity
   mode, where the proxy owns connection control.
