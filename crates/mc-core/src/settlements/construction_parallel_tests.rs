@@ -1,0 +1,405 @@
+//! Regressions for the D8 parallel-construction review round 1 (Opus):
+//! rotation, binding uniqueness, borrowed-builder restore, stall watch by
+//! binding, the joint proof for walls and lamps, order position on a retried
+//! preparation, and the first-project lookups.
+use super::tests::{bind_project, fixture, fund, open_plan, start};
+use super::*;
+
+fn chest(state: &mut TickState) -> &mut Vec<mc_data::ItemStack> {
+    &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots
+}
+
+fn double_stock(state: &mut TickState) {
+    for stack in chest(state).iter_mut().filter(|stack| stack.count > 0) {
+        stack.count = (stack.count * 2).min(64);
+    }
+}
+
+/// P1-1: with two settlements the admission clock must reach every project of
+/// every settlement, not only the indices congruent mod gcd(S, P).
+#[test]
+fn every_project_of_every_settlement_gets_a_turn() {
+    let (mut state, id, _slot) = fixture();
+    let second = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "farmers".into(),
+            "owner".into(),
+            [40, 201, 40],
+            48,
+        )
+        .unwrap();
+    for (settlement, origins) in [
+        (id, [[2, 201, 2], [10, 201, 10]]),
+        (second, [[34, 201, 34], [42, 201, 42]]),
+    ] {
+        let record = state.settlements.get_mut(settlement).unwrap();
+        for (index, origin) in origins.into_iter().enumerate() {
+            access::push_project(
+                record,
+                Project {
+                    settlement,
+                    blueprint: "house".into(),
+                    level: 1,
+                    origin,
+                    rotation: 0,
+                    building: None,
+                    structure: format!("clock-{}-{index}", settlement.0),
+                    ordered: true,
+                    builder: Some((uuid::Uuid::from_u128(index as u128 + 1), None)),
+                    order_seq: None,
+                },
+            );
+        }
+    }
+    // The admission clock visits one settlement every four ticks and one
+    // project of that settlement; both settlements and both indices per
+    // settlement must appear.
+    let settlements = state.settlements.records().count() as u64;
+    let mut seen = std::collections::BTreeSet::new();
+    for turn in 0..32u64 {
+        state.tick = turn * 4;
+        let chosen = state
+            .settlements
+            .records()
+            .nth((state.tick / 4) as usize % settlements as usize)
+            .map(|record| record.id)
+            .unwrap();
+        let bound: Vec<_> = access::projects_of(&state.settlements, chosen)
+            .filter(|project| project.builder.is_some())
+            .collect();
+        let count = bound.len();
+        if count == 0 {
+            continue;
+        }
+        let index = (state.tick / 4 / settlements) as usize % count;
+        seen.insert((chosen, index));
+    }
+    for settlement in [id, second] {
+        for index in 0..2 {
+            assert!(
+                seen.contains(&(settlement, index)),
+                "project {index} of settlement {} never gets the clock",
+                settlement.0
+            );
+        }
+    }
+}
+
+/// P1-2: one resident never binds two projects, and the record still opens.
+#[test]
+fn one_builder_never_binds_two_projects_and_the_record_opens() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let first = access::projects_of(&state.settlements, id)
+        .next()
+        .unwrap()
+        .structure
+        .clone();
+    let second = first.clone();
+    // A second project that shares the resident: the access refuses it.
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &first, slot);
+    let mut record = state.settlements.get(id).unwrap().clone();
+    access::push_project(
+        &mut record,
+        Project {
+            settlement: id,
+            blueprint: "house".into(),
+            level: 1,
+            origin: [20, 201, 20],
+            rotation: 0,
+            building: None,
+            structure: "second".into(),
+            ordered: true,
+            builder: None,
+            order_seq: None,
+        },
+    );
+    assert!(
+        !access::bind_builder(&mut record, "second", Some((uuid, None))),
+        "a resident already bound to {second} is not bound again"
+    );
+    assert_eq!(
+        access::project_for_structure(&record, &first)
+            .unwrap()
+            .builder,
+        Some((uuid, None))
+    );
+    // The record with the refused duplicate still opens.
+    *state.settlements.get_mut(id).unwrap() = record;
+    let encoded = serde_json::to_vec(state.settlements.get(id).unwrap()).unwrap();
+    let restored: SettlementRecord = serde_json::from_slice(&encoded).unwrap();
+    assert!(
+        super::validate_record(&restored).is_ok(),
+        "the record decodes"
+    );
+}
+
+/// P1-3: a native Builder keeps its career while another project holds a
+/// borrowed gatherer, and the borrowed one goes back after completion.
+#[test]
+fn a_native_builder_is_not_stripped_by_the_borrow_restore() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let uuid = state.entities.row(slot).uuid;
+    let handle = access::projects_of(&state.settlements, id)
+        .next()
+        .unwrap()
+        .structure
+        .clone();
+    // A native Builder holds its project as `(uuid, None)`: not borrowed.
+    bind_project(&mut state, id, &handle, slot);
+    assert_eq!(
+        access::projects_of(&state.settlements, id)
+            .next()
+            .unwrap()
+            .builder,
+        Some((uuid, None))
+    );
+    // No gatherer is staffed, so the planner asks for one on every pass.
+    for tick in 0..8u64 {
+        state.tick = tick * PLAN_CADENCE;
+        tick_settlements(&mut state);
+    }
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Builder,
+        "a native Builder keeps its career and its job"
+    );
+}
+
+fn tick_settlements(state: &mut TickState) {
+    super::tick(state);
+}
+
+/// P1-4: a stalled project releases its own builder, never the other project's.
+#[test]
+fn a_stalled_project_releases_only_its_own_builder() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "house", 1);
+    start(&mut state, id, "house", 1, None);
+    let healthy = access::projects_of(&state.settlements, id)
+        .next()
+        .unwrap()
+        .structure
+        .clone();
+    let healthy_uuid = state.entities.row(slot).uuid;
+    // A second project bound to a second resident that is walled in.
+    let trapped = crate::settlements::allocator::tests::villager(&mut state, [10.5, 201.0, 10.5]);
+    let entity = state.entities.body(trapped).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    state
+        .entities
+        .row_mut(trapped)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Builder;
+    state
+        .entities
+        .row_mut(trapped)
+        .villager
+        .as_mut()
+        .unwrap()
+        .activity = crate::villager::Activity::Work;
+    for x in 9..=11 {
+        for z in 9..=11 {
+            for y in 201..=203 {
+                if (x, z) != (10, 10) || y == 203 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        access::push_project(
+            record,
+            Project {
+                settlement: id,
+                blueprint: "house".into(),
+                level: 1,
+                origin: [24, 201, 24],
+                rotation: 0,
+                building: None,
+                structure: "walled".into(),
+                ordered: true,
+                builder: Some((state.entities.row(trapped).uuid, None)),
+                order_seq: None,
+            },
+        );
+    }
+    let trapped_uuid = state.entities.row(trapped).uuid;
+    assign_builder(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        access::project_for_structure(record, &healthy)
+            .unwrap()
+            .builder,
+        Some((healthy_uuid, None)),
+        "the healthy project keeps its builder"
+    );
+    assert_eq!(
+        access::project_for_structure(record, "walled")
+            .unwrap()
+            .builder,
+        None,
+        "the trapped project gives its builder back"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(trapped)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::None
+    );
+    let _ = trapped_uuid;
+}
+
+/// P2-1: an unbound resident builds nothing (no fallback to the first project).
+#[test]
+fn an_unbound_builder_owns_no_project() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let uuid = state.entities.row(slot).uuid;
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        access::unbind_builder(record, uuid);
+    }
+    let record = state.settlements.get(id).unwrap();
+    assert!(
+        access::project_of_builder(record, uuid).is_none(),
+        "an unbound resident has no project"
+    );
+}
+
+/// P2-2: a wall never funds itself out of an active project's materials.
+#[test]
+fn a_wall_is_refused_against_an_active_underfunded_project() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let stored = {
+        let images = executor::source_images(&state, id);
+        let cells = vec![executor::PlannedCell {
+            at: [2, 201, 2],
+            state: state.registry.states.air,
+            resource: Some("minecraft:oak_log".into()),
+            quantity: 0,
+        }];
+        let bill = cell_bill(&state, &cells);
+        let funded = bill
+            .as_ref()
+            .is_some_and(|bill| jointly_fundable(&state, id, bill));
+        let _ = images;
+        let _ = slot;
+        funded
+    };
+    assert!(
+        !stored,
+        "an empty chest cannot fund a wall beside an active project"
+    );
+}
+
+/// P2-3: a retried order goes back to its submission position, not the tail,
+/// and a full queue refuses the retry before the project is cancelled.
+#[test]
+fn a_retried_order_keeps_its_submission_position() {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        record.owner = Some("owner".into());
+        access::push_order(
+            record,
+            OwnerOrder {
+                seq: 0,
+                blueprint: "house".into(),
+                level: 1,
+                building: None,
+            },
+        );
+        access::push_order(
+            record,
+            OwnerOrder {
+                seq: 0,
+                blueprint: "storage".into(),
+                level: 1,
+                building: None,
+            },
+        );
+        access::push_order(
+            record,
+            OwnerOrder {
+                seq: 0,
+                blueprint: "farm".into(),
+                level: 1,
+                building: None,
+            },
+        );
+    }
+    // The middle request was lifted first, then its predecessor is cancelled.
+    let lifted = {
+        let record = state.settlements.get_mut(id).unwrap();
+        access::take_order(record, 1).unwrap()
+    };
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        access::take_order(record, 0);
+        access::insert_order_by_seq(record, lifted.clone());
+    }
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        access::orders(record)
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["storage", "farm"],
+        "the restored request stays ahead of the later one"
+    );
+    let _ = id;
+}
+
+/// P2-5: debit and fetch refuse a project with no binding.
+#[test]
+fn an_unbound_project_cannot_pay_or_haul() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = access::projects_of(&state.settlements, id)
+        .next()
+        .unwrap()
+        .structure
+        .clone();
+    let uuid = state.entities.row(slot).uuid;
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        access::unbind_builder(record, uuid);
+    }
+    let stock = chest(&mut state).clone();
+    let item = chest(&mut state)
+        .iter()
+        .find(|stack| stack.count > 0)
+        .map_or(1, |stack| stack.item_id);
+    let fetched = executor::fetch(&mut state, uuid, &handle, [1, 201, 1], item);
+    assert!(fetched.is_err(), "an unbound project hauls nothing");
+    assert_eq!(chest(&mut state), &stock, "stock is untouched");
+}

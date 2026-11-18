@@ -358,8 +358,13 @@ fn trapped_builder_on_shift_is_replaced_by_a_resident_who_reaches_storage() {
     crate::settlements::bind(&mut state, id, entity).unwrap();
     assert_eq!(profession(&state, trapped), Profession::Builder);
     assign_builder(&mut state, id);
-    assert_eq!(profession(&state, trapped), Profession::None);
+    // An unbound resident is nobody's incumbent (D8): the planner binds the one
+    // who can reach storage, and the walled one holds no project.
     assert_eq!(profession(&state, free), Profession::Builder);
+    assert!(!access::bound_builder(
+        &state.settlements,
+        state.entities.row(trapped).uuid
+    ));
 }
 
 /// Seed 24 (CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT): a stationary zombie eight

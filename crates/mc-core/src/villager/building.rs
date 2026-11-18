@@ -384,11 +384,17 @@ fn builder_ready(state: &TickState, id: SettlementId, slot: EntitySlot) -> bool 
 pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     // One project per admission, round-robin over the active set: a tick still
     // writes one structure-registry image (D8).
+    // The settlement is chosen every four ticks by `(tick/4) % S`, so the
+    // project turn counts whole settlement rounds: a project index that is not
+    // congruent mod gcd(S, P) would otherwise never be visited (D8 review
+    // P1-1). An unbound project takes its turn like any other and is bound by
+    // the admission below (founding handover, fresh project).
     let count = crate::settlements::construction::projects_of(&state.settlements, id).count();
     if count == 0 {
         return;
     }
-    let turn = (state.tick / 4) as usize % count;
+    let settlements = state.settlements.records().count().max(1) as u64;
+    let turn = (state.tick / 4 / settlements) as usize % count;
     let Some(project) = crate::settlements::construction::projects_of(&state.settlements, id)
         .nth(turn)
         .cloned()
@@ -400,8 +406,16 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     // order never leaves a paid project with no authority to advance it.
     let candidate = match project.builder {
         Some((uuid, _)) => Some(uuid),
+        // A lazy bind never takes a resident who already holds a project: one
+        // binding per resident, or the record stops opening (P1-2).
         None => construction::residents(state, id)
-            .find(|slot| builder_ready(state, id, *slot))
+            .find(|slot| {
+                builder_ready(state, id, *slot)
+                    && !construction::bound_builder(
+                        &state.settlements,
+                        state.entities.row(*slot).uuid,
+                    )
+            })
             .map(|slot| state.entities.row(slot).uuid),
     };
     let bound = match (project.builder.map(|(uuid, _)| uuid), candidate) {
@@ -447,9 +461,12 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         };
         // Only the builder bound to this project advances it; an unbound or
         // stale binding is the planner's business, not this tick's.
-        let Some(slot) = construction::residents(state, id)
-            .find(|slot| builder_ready(state, id, *slot))
-            .filter(|slot| bound.is_some_and(|uuid| state.entities.row(*slot).uuid == uuid))
+        // The admitted project's builder is resolved by uuid first: a readiness
+        // search would stop at whichever resident is first in the list and drop
+        // the project's own builder on the filter (SOL-1).
+        let Some(slot) = bound
+            .and_then(|uuid| state.entities.slot_of_uuid(uuid))
+            .filter(|slot| builder_ready(state, id, *slot))
         else {
             return;
         };

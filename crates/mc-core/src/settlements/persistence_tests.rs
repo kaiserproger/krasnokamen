@@ -280,6 +280,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             serde_json::to_vec(&Row {
                 dimension: Dimension::Overworld,
                 value: SettlementRecord {
+                    order_seq: 0,
                     id: SettlementId(1000),
                     name: "mismatch".into(),
                     owner: Some("owner".into()),
@@ -317,6 +318,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
         root.settlements.apply_image(RecordImage {
             id,
             value: Some(SettlementRecord {
+                order_seq: 0,
                 id,
                 name: "same".into(),
                 owner: Some("owner".into()),
@@ -351,6 +353,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
     multi.settlements.apply_image(RecordImage {
         id: SettlementId(201),
         value: Some(SettlementRecord {
+            order_seq: 0,
             id: SettlementId(201),
             name: "same".into(),
             owner: Some("owner".into()),
@@ -379,6 +382,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
     child.settlements.apply_image(RecordImage {
         id: SettlementId(202),
         value: Some(SettlementRecord {
+            order_seq: 0,
             id: SettlementId(202),
             name: "same".into(),
             owner: Some("owner".into()),

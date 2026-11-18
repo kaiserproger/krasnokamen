@@ -37,7 +37,8 @@ fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
         building: None,
         structure,
         ordered: true,
-        builder: None,
+        builder: Some((state.entities.row(builder).uuid, None)),
+        order_seq: None,
     }];
     (state, id, builder)
 }
@@ -62,6 +63,7 @@ fn a_material_stall_reports_the_item_source_route_and_actual_builder_release() {
     v.navigation_target = Some(crate::boundary::BlockPos { x: 1, y: 201, z: 1 });
     v.navigation_search_failed = true;
     state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "spanish_house".into(),
         level: 1,
         building: None,
@@ -201,7 +203,22 @@ fn a_repeated_stall_names_the_first_recovery_and_cell_once_without_discarding_wo
             "missing {evidence}: {repeated}"
         );
     }
-    assert_eq!(*&state.settlements.get(id).unwrap().projects[0], project);
+    // The release clears the binding; the paid project keeps its slot, site and
+    // level through every failed recovery.
+    let kept = state.settlements.get(id).unwrap().projects[0].clone();
+    assert_eq!(kept.builder, None, "the released builder holds no project");
+    assert_eq!(
+        (
+            kept.structure.as_str(),
+            kept.blueprint.as_str(),
+            kept.origin
+        ),
+        (
+            project.structure.as_str(),
+            project.blueprint.as_str(),
+            project.origin
+        )
+    );
     assert_eq!(
         executor::status(&state, id, &project.structure).unwrap(),
         before
@@ -242,6 +259,7 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
         structure: structure.clone(),
         ordered: false,
         builder: None,
+        order_seq: None,
     }];
     state.entities.set_pos(builder, [5.5, 201.0, 10.5]);
     crate::villager::building::tick(&mut state, id);
@@ -303,6 +321,7 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
         structure: structure.clone(),
         ordered: true,
         builder: None,
+        order_seq: None,
     }];
     // Decay happens after the canonical clear cell was planned. The crown
     // is nineteen blocks above its footing, beyond any perimeter stand.
@@ -310,6 +329,14 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
     state.world.fold_overlay();
     state.entities.set_pos(builder, [8.5, 201.0, 8.5]);
     assert!(executor::clearing(&state, id, &structure));
+    // The planner binds the builder; a direct work call needs the same authority.
+    if let Some(mut record) = state.settlements.get_mut(id) {
+        super::bind_builder(
+            &mut record,
+            &structure,
+            Some((state.entities.row(builder).uuid, None)),
+        );
+    }
     let mut v = state.entities.row_mut(builder).villager.take().unwrap();
     let target = crate::villager::building::work(
         &mut state,
@@ -376,6 +403,7 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
         structure: structure.clone(),
         ordered: true,
         builder: None,
+        order_seq: None,
     }];
     // The registered root outgrew its certified sapling: the clear manifest's
     // tree certification is genuinely stale.
@@ -386,6 +414,7 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
         .planted_trees
         .insert(next);
     state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "storage".into(),
         level: 1,
         building: None,
@@ -461,6 +490,7 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
         structure: structure.clone(),
         ordered: true,
         builder: None,
+        order_seq: None,
     }];
     // A registered root that is no longer a sapling sits in the build cells, so
     // only the stage condition prevents a cancel here.
@@ -526,6 +556,7 @@ fn free_project(
         structure: structure.clone(),
         ordered: false,
         builder: None,
+        order_seq: None,
     }];
     structure
 }
@@ -613,6 +644,7 @@ fn an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order()
         .unwrap()
         .inventory[0] = Some(ItemStack::new(item, 1));
     let order = OwnerOrder {
+        seq: 0,
         blueprint: "spanish_house".into(),
         level: 1,
         building: None,

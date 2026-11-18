@@ -655,14 +655,13 @@ pub(super) fn debit(
     let project = state
         .settlements
         .get(id)
-        .and_then(|record| crate::settlements::construction::project_for_structure(record, handle));
-    if project.is_some_and(|project| project.builder.is_some_and(|(bound, _)| bound != uuid)) {
-        return Err(Failure::Forbidden);
-    }
+        .and_then(|record| crate::settlements::construction::project_for_structure(record, handle))
+        .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
+        .ok_or(Failure::Forbidden)?;
     // A new site and an upgrade both carry clear-stage cells: an upgrade that
     // clears natural forest or a registered tree must credit the same drops.
-    let preparing = project.is_some();
-    let lot = project.and_then(|project| crate::settlements::forestry::lot_bounds(state, project));
+    let preparing = true;
+    let lot = crate::settlements::forestry::lot_bounds(state, project);
     let mut drops = Vec::new();
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
@@ -1190,8 +1189,10 @@ pub(crate) fn fetch(
         let project = state
             .settlements
             .get(id)
-            .and_then(|record| crate::settlements::construction::project_of_builder(record, uuid))
-            .filter(|project| project.structure == handle)
+            .and_then(|record| {
+                crate::settlements::construction::project_for_structure(record, handle)
+            })
+            .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
             .ok_or(Failure::Forbidden)?;
         let record = structure(&ledger, &owner(id), &project.structure)?;
         let mut bill = remaining(record)

@@ -646,6 +646,7 @@ fn a_member_with_construction_work_is_refused_without_mutation() {
         structure: "order".into(),
         ordered: true,
         builder: Some((builder_uuid, Some(Profession::Mason))),
+        order_seq: None,
     };
     state.settlements.get_mut(source).unwrap().projects = vec![order.clone()];
     let revision = state.settlements.get(source).unwrap().revision;

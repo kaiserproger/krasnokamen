@@ -12,11 +12,13 @@ fn a_funded_queued_order_lifts_over_an_unfunded_head() {
     open_plan(&mut state);
     // The head cannot be funded from this fixture's stock; the house can.
     let head = OwnerOrder {
+        seq: 0,
         blueprint: "spanish_plaza".into(),
         level: 1,
         building: None,
     };
     let lifted = OwnerOrder {
+        seq: 0,
         blueprint: "house".into(),
         level: 1,
         building: None,
@@ -60,6 +62,7 @@ fn the_queue_refuses_an_order_beyond_its_limit() {
         access::push_order(
             record,
             OwnerOrder {
+                seq: 0,
                 blueprint: "house".into(),
                 level: 1,
                 building: None,
@@ -83,6 +86,7 @@ fn a_pass_admits_one_project_and_a_second_pass_admits_the_next() {
         access::push_order(
             state.settlements.get_mut(id).unwrap(),
             OwnerOrder {
+                seq: 0,
                 blueprint: "house".into(),
                 level: 1,
                 building: None,
@@ -140,6 +144,7 @@ fn the_joint_proof_keeps_a_second_project_out_of_the_first_ones_stock() {
         access::push_order(
             state.settlements.get_mut(id).unwrap(),
             OwnerOrder {
+                seq: 0,
                 blueprint: "house".into(),
                 level: 1,
                 building: None,

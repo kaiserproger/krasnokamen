@@ -311,6 +311,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
                 structure: String::new(),
                 ordered: false,
                 builder: None,
+                order_seq: None,
             },
             "oak",
             &mut clearance,
@@ -407,6 +408,7 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
             structure: String::new(),
             ordered: false,
             builder: None,
+            order_seq: None,
         };
         return begin(state, project, &species, color);
     }

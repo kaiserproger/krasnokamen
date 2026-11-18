@@ -231,6 +231,7 @@ fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
             structure: String::new(),
             ordered: false,
             builder: None,
+            order_seq: None,
         };
         assert!(begin_cells(&mut state, project, work.bounds, work.cells));
         finish(&mut state, id, builder);

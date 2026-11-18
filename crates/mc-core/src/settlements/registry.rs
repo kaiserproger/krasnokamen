@@ -28,6 +28,10 @@ pub struct SettlementRecord {
     pub anchor: [i32; 3],
     pub radius: u32,
     pub revision: u64,
+    /// Last submission sequence handed to an owner request; the queue is
+    /// ordered by it so a restored request keeps its place (D8 review P2-3).
+    #[serde(default)]
+    pub order_seq: u64,
     #[serde(default)]
     pub household_sequence: u64,
     #[serde(default)]
@@ -497,6 +501,7 @@ impl Registry {
         }
         let id = self.next_id(*sequence)?;
         let record = SettlementRecord {
+            order_seq: 0,
             id,
             name,
             owner: Some(owner),
@@ -548,6 +553,7 @@ impl Registry {
             return Err("generated village name already exists");
         }
         let record = SettlementRecord {
+            order_seq: 0,
             id,
             name,
             owner: None,

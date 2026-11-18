@@ -100,6 +100,7 @@ pub(crate) fn forest() -> (
         structure: String::new(),
         ordered: true,
         builder: None,
+        order_seq: None,
     };
     let root = [lot.origin[0] + 2, 201, lot.origin[2] + 2];
     let corridor = network.construction_access(&project).unwrap();

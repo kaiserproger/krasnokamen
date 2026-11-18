@@ -58,6 +58,25 @@ pub(crate) fn bind_builder(
     handle: &str,
     builder: Option<(uuid::Uuid, Option<VillagerProfession>)>,
 ) -> bool {
+    let Some(current) = record
+        .projects
+        .iter()
+        .find(|project| project.structure == handle)
+    else {
+        return false;
+    };
+    if current.builder == builder {
+        return false;
+    }
+    // One resident holds one project: a duplicate binding refuses to open the
+    // world after the next checkpoint (D8).
+    if let Some((uuid, _)) = builder
+        && record.projects.iter().any(|other| {
+            other.structure != handle && other.builder.is_some_and(|(bound, _)| bound == uuid)
+        })
+    {
+        return false;
+    }
     let Some(project) = record
         .projects
         .iter_mut()
@@ -65,9 +84,6 @@ pub(crate) fn bind_builder(
     else {
         return false;
     };
-    if project.builder == builder {
-        return false;
-    }
     project.builder = builder;
     true
 }
@@ -99,19 +115,15 @@ pub(crate) fn clear_projects(record: &mut SettlementRecord) {
     record.projects.clear();
 }
 
-/// The project this villager builds.
+/// The project this villager builds: the binding is the only authority (D8).
 ///
-/// The bound builder is the authority; a project with no binding answers only
-/// while it is the settlement's first project, which is what the single-slot
-/// store did before S1b. S2 raises the project cap once every caller resolves
-/// by binding.
+/// An unbound resident builds nothing, so it can never stand at another
+/// project's worksite or pay for its cells.
 pub(crate) fn project_of_builder(
     record: &SettlementRecord,
     builder: uuid::Uuid,
 ) -> Option<&Project> {
-    projects(record)
-        .find(|project| project.builder.is_some_and(|(bound, _)| bound == builder))
-        .or_else(|| projects(record).next())
+    projects(record).find(|project| project.builder.is_some_and(|(bound, _)| bound == builder))
 }
 
 /// Every pending owner request, in the order it was submitted.
@@ -129,9 +141,23 @@ pub(crate) fn head_order_of(settlements: &Registry, id: SettlementId) -> Option<
     settlements.get(id).and_then(head_order)
 }
 
-/// Append an owner request at the tail of the queue.
-pub(crate) fn push_order(record: &mut SettlementRecord, order: OwnerOrder) {
+/// Append an owner request, stamping its submission sequence. The queue stays
+/// sorted by that sequence, so restoring a request after others were removed
+/// keeps FIFO against the requests submitted around it.
+pub(crate) fn push_order(record: &mut SettlementRecord, mut order: OwnerOrder) {
+    order.seq = record.order_seq.saturating_add(1);
+    record.order_seq = order.seq;
     record.orders.push(order);
+}
+
+/// Insert a request at its submission position (by [`OwnerOrder::seq`]).
+pub(crate) fn insert_order_by_seq(record: &mut SettlementRecord, order: OwnerOrder) {
+    let index = record
+        .orders
+        .iter()
+        .position(|queued| queued.seq > order.seq)
+        .unwrap_or(record.orders.len());
+    record.orders.insert(index, order);
 }
 
 /// Remove and return the request at `index`.

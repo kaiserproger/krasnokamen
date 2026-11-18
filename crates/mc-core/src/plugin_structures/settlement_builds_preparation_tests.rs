@@ -19,8 +19,11 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
     // not only for a new site's preparation.
     project.building = Some(crate::settlements::buildings::BuildingId(1));
     let handle = project.structure.clone();
+    let uuid = state.entities.row(builder).uuid;
+    // The executor only pays for the project's bound builder (P2-5).
+    project.builder = Some((uuid, None));
     state.settlements.get_mut(id).unwrap().projects = vec![project];
-    let builder = state.entities.row(builder).uuid.to_string();
+    let builder = uuid.to_string();
     let before = counts(&state);
     let cells = [super::super::Cell {
         at: root,
@@ -56,7 +59,12 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
-    let builder = state.entities.row(builder).uuid.to_string();
+    let uuid = state.entities.row(builder).uuid;
+    // The executor only pays for the project's bound builder (P2-5).
+    if let Some(mut record) = state.settlements.get_mut(id) {
+        record.projects[0].builder = Some((uuid, None));
+    }
+    let builder = uuid.to_string();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let cells = [super::super::Cell {
         at: root,

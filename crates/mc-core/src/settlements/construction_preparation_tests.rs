@@ -263,6 +263,7 @@ fn raised_lot(id: super::super::SettlementId) -> Project {
         structure: String::new(),
         ordered: false,
         builder: None,
+        order_seq: None,
     }
 }
 

@@ -103,6 +103,7 @@ fn replanting_respects_admitted_corridors_without_reserving_the_whole_world() {
             structure: handle,
             ordered: false,
             builder: None,
+            order_seq: None,
         }];
         for (base, planted) in [([2, 201, 2], false), ([-8, 201, -8], true)] {
             let dirt = block(&state, "minecraft:dirt", &[]);

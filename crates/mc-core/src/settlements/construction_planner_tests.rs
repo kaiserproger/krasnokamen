@@ -216,6 +216,10 @@ fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
     let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
     slots.fill(mc_data::ItemStack::EMPTY);
     slots[..stock.len()].clone_from_slice(&stock);
+    // The lamp is funded on top of the active project's bill (D8 joint proof).
+    for stack in slots.iter_mut().filter(|stack| stack.count > 0) {
+        stack.count = (stack.count * 2).min(64);
+    }
     let images = executor::source_images(&state, id);
     assert_eq!(needed_gatherer(&state, id), Some(Profession::Lumberjack));
     assert_eq!(
@@ -385,6 +389,7 @@ fn iron_demand_tracks_open_house_and_real_shears_or_wool() {
         .data
         .profession = Profession::None;
     state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "house".into(),
         level: 1,
         building: None,
@@ -1600,6 +1605,7 @@ fn colored_sheep_is_the_house_wool_source() {
     state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[1] =
         mc_data::ItemStack::new(planks, 3);
     state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "house".into(),
         level: 1,
         building: None,

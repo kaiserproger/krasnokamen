@@ -238,6 +238,7 @@ fn project_at(id: SettlementId, site: &Site) -> Project {
         structure: String::new(),
         ordered: true,
         builder: None,
+        order_seq: None,
     }
 }
 

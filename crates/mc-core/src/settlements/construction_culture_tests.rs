@@ -68,6 +68,7 @@ fn style_follows_owner_cohort_but_not_names_pending_orders_or_unowned_peers() {
         state.settlements.get(peer).unwrap()
     ));
     state.settlements.get_mut(parent).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "spanish_house".into(),
         level: 1,
         building: None,

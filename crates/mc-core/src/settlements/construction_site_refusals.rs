@@ -268,6 +268,7 @@ pub(super) fn materialize(
         structure: String::new(),
         ordered: false,
         builder: None,
+        order_seq: None,
     };
     let Ok((bounds, mut cells)) = planned_cells(state, &project, winner.species, clearance) else {
         report.reject(Reason::Preparation, winner.origin);

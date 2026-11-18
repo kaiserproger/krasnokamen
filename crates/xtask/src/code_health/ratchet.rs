@@ -79,9 +79,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // (S1b) took it to 1058. S2 (joint per-project bills, binding liveness,
         // per-project stall watch, addressed queue API) adds 69: 1127. The
         // wave-1 site refactor (SpainLevel's whole-plan sweep, SpainD7Rest's
-        // candidate ranking) merged in adds 23: 1150. The next extraction
+        // candidate ranking) merged in adds 23: 1150. Review round 1
+        // (binding-only incumbent, a joint gate for walls and lamps, and a
+        // submission-sequenced retry) adds 51: 1201. The next extraction
         // candidate is the stall watch, which is now per project.
-        ("settlements/construction.rs", 1_150),
+        ("settlements/construction.rs", 1_201),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

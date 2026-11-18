@@ -97,7 +97,8 @@ fn prepared_at(
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                builder: None
+                builder: None,
+                order_seq: None,
             },
             "oak",
             0
@@ -182,6 +183,10 @@ fn an_outpost_builder_outside_the_civil_radius_still_places_paid_cells() {
         .unwrap()
         .unwrap();
     let uuid = state.entities.row(builder).uuid;
+    // The executor only hauls for the project's bound builder (P2-5).
+    if let Some(mut record) = state.settlements.get_mut(parent) {
+        super::super::bind_builder(&mut record, &project.structure, Some((uuid, None)));
+    }
     executor::fetch(&mut state, uuid, &project.structure, [1, 201, 1], item).unwrap();
     state
         .world
@@ -959,6 +964,7 @@ fn review_cancelled_history_does_not_poison_a_rebuilt_outpost_handover() {
             structure: String::new(),
             ordered: false,
             builder: None,
+            order_seq: None,
         },
         "oak",
         0
@@ -979,6 +985,7 @@ fn review_cancelled_history_does_not_poison_a_rebuilt_outpost_handover() {
                 structure: String::new(),
                 ordered: false,
                 builder: None,
+                order_seq: None,
             },
             "oak",
             0

@@ -1,4 +1,6 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, plan_until_project, start};
+use super::tests::{
+    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, start,
+};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use std::sync::{Arc, Mutex};
@@ -240,6 +242,7 @@ fn a_house_without_a_site_does_not_hold_a_direct_farm_order() {
 fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
     let (mut state, id) = house_without_site();
     state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "farm".into(),
         level: 1,
         building: None,
@@ -690,6 +693,7 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
                 structure: String::new(),
                 ordered: true,
                 builder: None,
+                order_seq: None,
             };
             let (bounds, _) =
                 planned_cells(&state, &project, "oak", &mut Default::default()).ok()?;
@@ -815,6 +819,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         structure: String::new(),
         ordered: true,
         builder: None,
+        order_seq: None,
     };
     let root = [
         lot.origin[0] + i32::from(size[0]) / 2,
@@ -924,6 +929,8 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     let previous = state.world.block_at(next[0], next[1], next[2]);
     retain_player_edit(&mut state, next);
     let uuid = state.entities.row(builder).uuid;
+    // The executor only advances a project for its bound builder (P2-5).
+    bind_project(&mut state, id, &project.structure, builder);
     assert_eq!(
         executor::advance(&mut state, id, &project.structure, uuid),
         Err(mc_script::ScriptOperationFailure::Blocked)

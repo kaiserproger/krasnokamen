@@ -83,6 +83,7 @@ pub(super) fn plan(state: &mut TickState, id: SettlementId) -> bool {
                     structure: String::new(),
                     ordered: false,
                     builder: None,
+                    order_seq: None,
                 };
                 if stand(state, &project, at).is_none() {
                     continue;

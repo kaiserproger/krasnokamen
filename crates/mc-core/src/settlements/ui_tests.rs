@@ -1694,6 +1694,7 @@ fn projects_show_localized_missing_owned_furnace_for_house_wool() {
     chest.slots[2] = mc_data::ItemStack::new(logs, 64);
     state.settlements.get_mut(id).unwrap().orders =
         vec![crate::settlements::construction::OwnerOrder {
+            seq: 0,
             blueprint: "house".into(),
             level: 1,
             building: None,

@@ -254,11 +254,11 @@ pub(crate) fn start(
             structure: String::new(),
             ordered: true,
             builder: None,
+            order_seq: None,
         },
         "oak",
         0,
     ));
-    bind_native_builder(state, id);
 }
 
 /// The planner binds a builder when it admits a project; fixtures that call the
@@ -319,6 +319,21 @@ pub(crate) fn fund_at(
     materials
 }
 
+/// Bind `slot` to the project `handle`: a fixture that drives the executor
+/// directly stands in for the planner and must set the authority itself.
+pub(crate) fn bind_project(
+    state: &mut TickState,
+    id: SettlementId,
+    handle: &str,
+    slot: EntitySlot,
+) {
+    let uuid = state.entities.row(slot).uuid;
+    if let Some(mut record) = state.settlements.get_mut(id) {
+        crate::settlements::construction::bind_builder(&mut record, handle, Some((uuid, None)));
+        record.revision = record.revision.saturating_add(1);
+    }
+}
+
 pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     // This shared driver stands in for the planner: bind the acting resident to
     // every active project the way `assign_builder` does, because the executor
@@ -326,18 +341,15 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     // clock visits them in turn. An existing binding keeps its borrowed
     // profession, which the completion path restores.
     let uuid = state.entities.row(slot).uuid;
+    // Bind the resident to every unbound project: one resident cannot hold two,
+    // so an already-bound project keeps its own builder (D8 review P1-2).
     let bindings: Vec<(String, Option<(uuid::Uuid, Option<Profession>)>)> = state
         .settlements
         .get(id)
         .map(|record| {
             crate::settlements::construction::projects(record)
-                .map(|project| {
-                    let borrowed = project
-                        .builder
-                        .filter(|(bound, _)| *bound == uuid)
-                        .and_then(|(_, borrowed)| borrowed);
-                    (project.structure.clone(), Some((uuid, borrowed)))
-                })
+                .filter(|project| project.builder.is_none())
+                .map(|project| (project.structure.clone(), Some((uuid, None))))
                 .collect()
         })
         .unwrap_or_default();
@@ -1266,6 +1278,8 @@ fn builder_walks_to_solid_storage_then_selects_exact_site_target() {
         .unwrap()
         .unwrap();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    // The planner binds the builder; a direct work call needs the same authority.
+    bind_project(&mut state, id, &handle, slot);
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
     let target = building::work(&mut state, slot, &mut v, &mut ChangeSet::default()).unwrap();
     state.entities.row_mut(slot).villager = Some(v);
@@ -1557,6 +1571,7 @@ fn gate_level_one_is_built_cell_for_cell_in_every_rotation() {
                 structure: String::new(),
                 ordered: true,
                 builder: None,
+                order_seq: None,
             },
             "oak",
             0,

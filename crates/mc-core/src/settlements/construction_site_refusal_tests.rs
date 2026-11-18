@@ -77,6 +77,7 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
     let record = state.settlements.get_mut(id).unwrap();
     record.planted_trees = roots;
     record.orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "storage".into(),
         level: 1,
         building: None,
@@ -112,6 +113,7 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
         cancel_pending(&mut state, id).unwrap();
         assert!(!state.settlements.site_watch.contains_key(&id));
         state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+            seq: 0,
             blueprint: "storage".into(),
             level: 1,
             building: None,
