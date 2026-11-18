@@ -1402,10 +1402,13 @@ pub(crate) fn next_material(
     Ok(Some((item, cell.quantity)))
 }
 
-/// Materials for the next cells of the current stage, in first-need order,
-/// that carry cannot yet cover, packed into the carry's slot capacity. The
-/// first uncovered cell is always planned; later cells join while every
-/// distinct item still fits in stacks of the villager's real inventory.
+/// Materials for the next cells of the project, from the current stage on, in
+/// first-need order, that carry cannot yet cover, packed into the carry's slot
+/// capacity. The first uncovered cell is always planned; later cells, of this
+/// or a later stage, join while every distinct item still fits in stacks of the
+/// villager's real inventory. A window ending at the stage boundary cost a
+/// round trip per stage: Spain seed 100 walked 110 blocks each way for a
+/// house's two-dirt fill stage before fetching its walls.
 fn haul_plan(
     state: &TickState,
     record: &Structure,
@@ -1428,16 +1431,21 @@ fn haul_plan(
     let mut need: BTreeMap<u32, u32> = BTreeMap::new();
     let mut order: Vec<u32> = Vec::new();
     let mut covered: BTreeMap<u32, u32> = carried;
-    let Some(cells) = record
+    let current = record.snapshot.current_stage_index as usize;
+    let window = record
         .cells
-        .get(record.snapshot.current_stage_index as usize)
-    else {
-        return Vec::new();
-    };
-    for cell in cells
         .iter()
-        .skip(record.snapshot.completed_work_units as usize)
-    {
+        .enumerate()
+        .skip(current)
+        .flat_map(|(index, cells)| {
+            let done = if index == current {
+                record.snapshot.completed_work_units as usize
+            } else {
+                0
+            };
+            cells.iter().skip(done)
+        });
+    for cell in window {
         let Some(name) = cell.resource.as_ref() else {
             continue;
         };

@@ -1557,6 +1557,99 @@ fn one_haul_trip_carries_several_item_types_for_the_next_cells() {
     assert!(units >= 50, "one trip carries a real load, got {units}");
 }
 
+/// Spain seed 100 (trace pin 3068dfb1b857-34aa00ea): a house 110 blocks from
+/// storage took a 2,300-tick round trip for its two-dirt fill stage, then
+/// another for its walls. A haul carries the next stage's materials too while
+/// they fit the carry.
+#[test]
+fn one_haul_trip_carries_the_next_stages_materials_too() {
+    let (mut state, id, slot) = fixture();
+    let item = |state: &TickState, name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (dirt, log) = (
+        item(&state, "minecraft:dirt"),
+        item(&state, "minecraft:oak_log"),
+    );
+    let log_state = block(&state, "minecraft:oak_log", &[]);
+    let bounds = mc_script::ScriptWorldBounds::new([3, 201, 4], [7, 201, 4]).unwrap();
+    let cells = [
+        (
+            executor::PortionKind::Fill,
+            5,
+            state.registry.states.dirt,
+            "minecraft:dirt",
+        ),
+        (
+            executor::PortionKind::Build,
+            6,
+            log_state,
+            "minecraft:oak_log",
+        ),
+        (
+            executor::PortionKind::Build,
+            7,
+            log_state,
+            "minecraft:oak_log",
+        ),
+    ]
+    .into_iter()
+    .map(|(portion, x, state, resource)| executor::PlannedCell {
+        portion,
+        at: [x, 201, 4],
+        state,
+        resource: Some(resource.to_owned()),
+        quantity: 1,
+    })
+    .collect();
+    let handle = executor::prepare(&mut state, id, "house".into(), bounds, bounds, cells).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: false,
+        builder: Some((uuid, None)),
+        order_seq: None,
+    }];
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    chest.slots[0] = ItemStack::new(dirt, 8);
+    chest.slots[1] = ItemStack::new(log, 8);
+    assert_eq!(
+        executor::next_material(&state, id, &handle).unwrap(),
+        Some((dirt, 1)),
+        "fixture: the current stage needs only dirt"
+    );
+    building::tick(&mut state, id);
+    let carried = |item: u32| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .filter(|stack| stack.item_id == item)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+    };
+    assert_eq!(
+        (carried(dirt), carried(log)),
+        (1, 2),
+        "one trip loads the fill and the walls after it"
+    );
+}
+
 /// A Builder places every authored cell of a level in every rotation, not only
 /// enough of them to certify: the gate's pillars flank an open passage that a
 /// certificate never inspects.
