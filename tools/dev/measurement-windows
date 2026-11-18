@@ -14,9 +14,9 @@
 # W4/W3/W6 (expired).
 2026-11-16T02:30/2026-11-16T05:30
 2026-11-16T05:30/2026-11-16T08:30
-# W10 trial take (Tue) and W10 Wednesday trial.
+# W10 trial take (Tue). The Wednesday W10 trial was dropped on 2026-11-18: its
+# battle takes run on the laptop lane (GO #4/#6), no host -x window is needed.
 2026-11-17T14:00/2026-11-17T16:00
-2026-11-18T14:00/2026-11-18T16:00
 # W13 laptop freeze take.
 2026-11-19T20:00/2026-11-19T22:00
 # W14 requires every freeze-pin matrix cell; unrun cells remain blocked.
