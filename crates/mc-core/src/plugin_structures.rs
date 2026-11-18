@@ -16,6 +16,8 @@ use crate::tick::TickState;
 mod features;
 #[path = "plugin_structures/ledger.rs"]
 mod ledger;
+#[path = "plugin_structures/portions.rs"]
+mod portions;
 #[path = "plugin_structures/settlement_builds.rs"]
 pub(crate) mod settlement_builds;
 #[path = "plugin_structures/worksites.rs"]
@@ -275,6 +277,7 @@ struct Structure {
     blueprint_hash: String,
     image: String,
     cells: Vec<Vec<Cell>>,
+    portions: Vec<portions::Portion>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -672,7 +675,7 @@ pub(crate) fn prepare_structure_build(
         return Err(Failure::Forbidden);
     }
     let target = world(state, &record.snapshot.dimension)?;
-    if fingerprint(target, bounds, record.settlement.is_some())? != record.image {
+    if portions::stale_reason(target, record, portion)?.is_some() {
         return Ok(None);
     }
     let mut edits = Vec::with_capacity(portion.len());
@@ -1007,6 +1010,7 @@ fn execute_operation(
                     snapshot: snapshot.clone(),
                     blueprint_hash: blueprint.content_hash().to_owned(),
                     image,
+                    portions: Vec::new(),
                     cells,
                 },
             );
@@ -1038,14 +1042,17 @@ fn execute_operation(
         } => {
             let mut ledger = ledger_mut(state)?;
             let mut record = take_structure(&mut ledger, owner, structure_id)?;
-            let portion = advance_cells(
+            let count = advance_cells(
                 &record,
                 stage,
                 reservation_ref,
                 *expected_revision,
                 *work_units,
-            )?;
+            )?
+            .len();
             let index = record.snapshot.current_stage_index as usize;
+            let offset = record.snapshot.completed_work_units as usize;
+            let portion = &record.cells[index][offset..offset + count];
             if record.settlement.is_none() {
                 let blueprint = blueprint(state, owner, &record.snapshot.blueprint_id)?;
                 if blueprint.content_hash() != record.blueprint_hash {
@@ -1067,9 +1074,9 @@ fn execute_operation(
                 return Err(Failure::Forbidden);
             }
             let target = world(state, &record.snapshot.dimension)?;
-            if fingerprint(target, bounds, record.settlement.is_some())? != record.image {
+            if let Some(reason) = portions::stale_reason(target, &record, portion)? {
                 record.snapshot.state = ScriptStructureState::Paused;
-                record.snapshot.pause_reason = Some("footprint_changed".to_owned());
+                record.snapshot.pause_reason = Some(reason);
                 ledger.revision = next(ledger.revision)?;
                 record.snapshot.revision = ledger.revision;
                 let result = record.snapshot.clone();
@@ -1082,7 +1089,6 @@ fn execute_operation(
                     },
                 ));
             }
-            let count = portion.len();
             let mut consumed = BTreeMap::new();
             for cell in portion {
                 target
@@ -1128,6 +1134,7 @@ fn execute_operation(
                     reservation_ref,
                     &consumed,
                     portion,
+                    &record.portions[index].expected[offset..offset + count],
                 )?;
             } else {
                 let reservation = inventories::reservation(state, owner, reservation_ref)?;
@@ -1153,8 +1160,10 @@ fn execute_operation(
                 crate::block_entity_defaults::after_blocks(target, &[(pos, cell.state)]);
                 target.plugin_block_writes.push((pos, cell.state));
             }
-            record.image = fingerprint(target, bounds, record.settlement.is_some())
-                .expect("preflight native footprint");
+            if record.settlement.is_none() {
+                record.image =
+                    fingerprint(target, bounds, false).expect("preflight native footprint");
+            }
             record.snapshot.state = ScriptStructureState::Running;
             record.snapshot.revision = revision;
             record.snapshot.watermark = sequence;
@@ -1236,11 +1245,12 @@ fn execute_operation(
                     if record.snapshot.state != ScriptStructureState::Paused {
                         return Err(Failure::Blocked);
                     }
-                    if fingerprint(
-                        world(state, &record.snapshot.dimension)?,
-                        bounds_of_structure(&record)?,
-                        record.settlement.is_some(),
-                    )? != record.image
+                    if record.settlement.is_none()
+                        && fingerprint(
+                            world(state, &record.snapshot.dimension)?,
+                            bounds_of_structure(&record)?,
+                            false,
+                        )? != record.image
                     {
                         return Err(Failure::Blocked);
                     }
@@ -1462,6 +1472,13 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
     if ledger.revision > MAX_SCRIPT_WORLD_TIME {
         return Err(malformed());
     }
+    let raw_count = state
+        .registry
+        .blocks
+        .states()
+        .map(|definition| definition.block.raw_id as u32)
+        .max()
+        .map_or(0, |raw| raw + 1);
     for (token, survey) in ledger.surveys() {
         if token != &survey.snapshot.survey_token
             || survey.owner.is_empty()
@@ -1473,6 +1490,9 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
         survey.snapshot.validate().map_err(|_| malformed())?;
     }
     for (id, record) in ledger.structures() {
+        if !portions::valid(record, raw_count, state.registry.states.air) {
+            return Err(malformed());
+        }
         if id != &record.snapshot.structure_id
             || record.owner.is_empty()
             || !valid_hash(&record.image)

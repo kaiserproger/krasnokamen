@@ -196,6 +196,27 @@ cheap bound `watermark <= snapshot.revision`: a wrong watermark within that
 bound is not detected. The watermark is not the sum of the current stages'
 work either: repair and replanning rewrite the stages.
 
+Every structure record requires a `portions` field. Native settlement structures
+carry one certificate per stage, with raw-block expected-before IDs parallel to
+its cells, a SHA-256 over ordered little-endian `(x, y, z, raw_id)`, and sorted
+registered roots. Generic plugin structures carry an explicit empty array and
+retain exact whole-box fencing. Missing certificates, mismatched stage/cell/ID
+counts, malformed hashes, invalid roots or non-disposition stage order refuse
+startup; there is no old-record fallback and no global `plugins` version bump.
+This shape ships in the same schema-2 reset as LedgerSplit and D8: pre-split
+survey/worksite-only ledgers also refuse; worlds without those old records or
+old settlement rows are unaffected.
+
+Each settlement advance checks the next unprocessed cell against its durable
+expected-before identity, not against cells already worked. Inside its owner's
+per-cell 3D territory a mismatch re-derives that cell from live state; destruction
+loot and placement payment share one custody transaction before block writes,
+then cursor, roots, expected IDs and watermark publish with the structure/meta
+keys in the same tick. Failures publish none of these partial effects. Repair
+certificates come from the live world and replace/truncate alongside their cell
+and stage arrays. Checkpoint stores these records unchanged; WAL replay never
+reconstructs certificates from a later world image.
+
 ### Recovery evidence and clocks
 
 Network acknowledgement, native tick, game time and durable WAL coverage are

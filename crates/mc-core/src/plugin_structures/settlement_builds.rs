@@ -1,5 +1,6 @@
 //! Settlement sources for the canonical structure ledger and executor. This
 //! adapter owns neither a placement cursor nor a second placement loop.
+pub(crate) use super::portions::PortionKind;
 use super::*;
 use crate::settlements::{SettlementId, inventory};
 
@@ -12,6 +13,7 @@ pub(crate) struct PlannedCell {
     pub state: u32,
     pub resource: Option<String>,
     pub quantity: u32,
+    pub portion: PortionKind,
 }
 
 pub(crate) fn prepare(
@@ -77,27 +79,33 @@ pub(crate) fn prepare(
     let image = fingerprint(state, bounds, true)?;
     let revision = next(ledger.revision)?;
     let id = format!("settlement-{}-{revision}", settlement.0);
-    let cells: Vec<_> = cells
-        .into_iter()
-        .map(|cell| Cell {
-            at: cell.at,
-            state: cell.state,
-            resource: cell.resource,
-            quantity: cell.quantity,
-        })
-        .collect();
+    if cells
+        .windows(2)
+        .any(|pair| pair[0].portion > pair[1].portion)
+    {
+        return Err(Failure::InvalidRequest);
+    }
     if cells.iter().any(|cell| {
         (0..3).any(|axis| cell.at[axis] < bounds.min[axis] || cell.at[axis] > bounds.max[axis])
     }) {
         return Err(Failure::InvalidRequest);
     }
-    let (clear, build): (Vec<_>, Vec<_>) = cells
-        .into_iter()
-        .partition(|cell| cell.state == state.registry.states.air);
+    let mut groups: Vec<(PortionKind, Vec<Cell>)> = Vec::with_capacity(5);
+    for cell in cells {
+        if groups.last().is_none_or(|(kind, _)| *kind != cell.portion) {
+            groups.push((cell.portion, Vec::new()));
+        }
+        groups.last_mut().expect("portion group").1.push(Cell {
+            at: cell.at,
+            state: cell.state,
+            resource: cell.resource,
+            quantity: cell.quantity,
+        });
+    }
     let mut counts = BTreeMap::new();
-    let mut stages = Vec::with_capacity(2);
-    let mut batches = Vec::with_capacity(2);
-    for (name, cells) in [("clear", clear), ("build", build)] {
+    let mut stages = Vec::with_capacity(groups.len());
+    let mut batches = Vec::with_capacity(groups.len());
+    for (kind, cells) in groups {
         if cells.is_empty() {
             continue;
         }
@@ -109,13 +117,14 @@ pub(crate) fn prepare(
             }
         }
         stages.push(ScriptStructureStagePlan::new(
-            name.into(),
+            kind.name().into(),
             cells.len() as u32,
             cells.len() as u64,
             materials(&stage_counts),
         ));
         batches.push(cells);
     }
+    let portions = portions::certify(state, &batches)?;
     let plan = resource_plan(&stages);
     if !material_free(&stages) {
         plan.validate().map_err(|_| Failure::InvalidRequest)?;
@@ -152,6 +161,7 @@ pub(crate) fn prepare(
             snapshot,
             blueprint_hash: inventories::hash(&batches),
             image,
+            portions,
             cells: batches,
         },
     );
@@ -284,7 +294,7 @@ pub(crate) fn recover(
             .snapshot
             .stages
             .get(record.snapshot.current_stage_index as usize)
-            .is_some_and(|stage| stage.stage == "clear")
+            .is_some_and(|stage| PortionKind::is_preparation(&stage.stage))
         // Only a registered root that grew out of its certified sapling, and
         // only while the order keeps its queue slot, may cancel.
         && crate::settlements::construction::preparation::stale_tree_certification(
@@ -323,13 +333,12 @@ pub(crate) fn recover(
         return Ok(true);
     }
     let target = world(state, &record.snapshot.dimension)?;
-    let build = record
-        .snapshot
-        .stages
-        .iter()
-        .position(|stage| stage.stage == "build");
     let mut repair = Vec::new();
-    if let Some(index) = build {
+    let mut seen = BTreeSet::new();
+    for (index, stage) in record.snapshot.stages.iter().enumerate().rev() {
+        if !matches!(stage.stage.as_str(), "fill" | "build") {
+            continue;
+        }
         let current = record.snapshot.current_stage_index as usize;
         let completed = if current > index {
             record.cells[index].len()
@@ -338,7 +347,7 @@ pub(crate) fn recover(
         } else {
             0
         };
-        for cell in record.cells[index].iter().take(completed) {
+        for cell in record.cells[index].iter().take(completed).rev() {
             let now = target
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
@@ -355,18 +364,18 @@ pub(crate) fn recover(
                 .ok_or(Failure::InvalidRequest)?;
             // Only an emptied cell is re-placed, as in `reopen_emptied`: a
             // solid foreign block in a placed cell keeps its place.
-            if actual.block.raw_id != expected.block.raw_id
+            if seen.insert(cell.at)
+                && actual.block.raw_id != expected.block.raw_id
                 && crate::settlements::construction::clearable(target, now)
             {
                 repair.push(cell.clone());
             }
         }
     }
+    repair.reverse();
     if committed && repair.is_empty() {
         return Ok(false);
     }
-    let bounds = bounds_of_structure(record)?;
-    let image = fingerprint(target, bounds, true)?;
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
@@ -380,6 +389,7 @@ pub(crate) fn recover(
     {
         record.snapshot.stages.truncate(index);
         record.cells.truncate(index);
+        record.portions.truncate(index);
         if record.snapshot.current_stage_index as usize >= index {
             record.snapshot.current_stage_index = index as u32;
             record.snapshot.completed_work_units = 0;
@@ -398,12 +408,14 @@ pub(crate) fn recover(
             repair.len() as u64,
             materials(&counts),
         ));
+        record
+            .portions
+            .extend(portions::certify(state, std::slice::from_ref(&repair))?);
         record.cells.push(repair);
     }
     record.snapshot.resource_plan_hash =
         inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
     record.snapshot.remaining = remaining(&record);
-    record.image = image;
     record.snapshot.state = if record.snapshot.current_stage_index as usize == record.cells.len() {
         ScriptStructureState::Committed
     } else {
@@ -448,7 +460,12 @@ pub(crate) fn reopen_emptied(
     };
     let mut seen = BTreeSet::new();
     let mut stale = Vec::new();
-    for cell in record.cells.iter().flatten() {
+    for cell in record
+        .cells
+        .iter()
+        .rev()
+        .flat_map(|cells| cells.iter().rev())
+    {
         if cell.state == target.registry.states.air || !seen.insert(cell.at) {
             continue;
         }
@@ -468,6 +485,7 @@ pub(crate) fn reopen_emptied(
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    let certificate = portions::certify(state, std::slice::from_ref(&stale))?.remove(0);
     let mut counts = BTreeMap::new();
     for cell in &stale {
         if let Some(resource) = &cell.resource {
@@ -490,11 +508,13 @@ pub(crate) fn reopen_emptied(
         Some(index) => {
             record.snapshot.stages[index] = plan;
             record.cells[index] = stale;
+            record.portions[index] = certificate;
             index
         }
         None => {
             record.snapshot.stages.push(plan);
             record.cells.push(stale);
+            record.portions.push(certificate);
             record.snapshot.stages.len() - 1
         }
     };
@@ -553,7 +573,7 @@ pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str
         .and_then(|stages| stages.get(index))
         .and_then(|stage| stage.get("stage"))
         .and_then(serde_json::Value::as_str)
-        == Some("clear")
+        .is_some_and(PortionKind::is_preparation)
 }
 
 pub(crate) fn advance(
@@ -629,7 +649,11 @@ pub(super) fn debit(
     builder: &str,
     required: &BTreeMap<String, u64>,
     cells: &[super::Cell],
+    expected: &[u32],
 ) -> Result<(), Failure> {
+    if cells.len() != expected.len() {
+        return Err(Failure::InvalidRequest);
+    }
     let uuid = uuid::Uuid::parse_str(builder).map_err(|_| Failure::InvalidRequest)?;
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
         return Err(Failure::Busy);
@@ -686,27 +710,30 @@ pub(super) fn debit(
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
     if preparing {
-        for cell in cells
-            .iter()
-            .filter(|cell| cell.state == state.registry.states.air)
-        {
+        for (cell, expected) in cells.iter().zip(expected) {
+            if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
+                drops.extend(credit);
+                continue;
+            }
+            if cell.state != state.registry.states.air {
+                continue;
+            }
             let block = state
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
                 .ok_or(Failure::Unloaded)?;
             if crate::settlements::forestry::tree_or_sapling(state, block) {
-                drops.extend(crate::settlements::forestry::drops(
-                    state,
-                    cell.at,
-                    block,
-                    lot,
-                    &mut clearance,
-                )?);
+                drops.extend(if portions::inside(state, id, cell.at) {
+                    crate::settlements::forestry::roll(state, cell.at, block)?
+                } else {
+                    crate::settlements::forestry::drops(state, cell.at, block, lot, &mut clearance)?
+                });
             } else if crate::settlements::construction::excavatable(state, block) {
                 // Bounded terrain cut: recheck the cell the survey certified
                 // immediately before the debit, credit its own mining drop in
                 // this same transaction, and never write fluid or lava in.
-                if state.block_log.player_touched(cell.at) {
+                if !portions::inside(state, id, cell.at) && state.block_log.player_touched(cell.at)
+                {
                     return Err(Failure::Blocked);
                 }
                 let path = state
@@ -746,6 +773,10 @@ pub(super) fn debit(
                     }
                 }
                 drops.push(mc_data::ItemStack::new(item, count));
+            } else if portions::inside(state, id, cell.at)
+                && !crate::settlements::construction::clearable(state, block)
+            {
+                drops.extend(portions::conserved_drops(state, cell.at, block)?);
             } else {
                 // A log-tag variant excluded from tree ownership must never
                 // pass through the flora path with an empty drop list.
@@ -1037,7 +1068,7 @@ pub(crate) fn upgrade_trees_clear(
 ) -> Result<Vec<PlannedCell>, Failure> {
     let ledger = ledger(state)?;
     let previous = ledger
-        .structures
+        .structures()
         .values()
         .filter(|record| {
             record.settlement == Some(id)
@@ -1081,6 +1112,7 @@ pub(crate) fn upgrade_trees_clear(
             return Err(Failure::Blocked);
         }
         cleared.push(PlannedCell {
+            portion: PortionKind::Trees,
             at: cell.at,
             state: state.registry.states.air,
             resource: None,

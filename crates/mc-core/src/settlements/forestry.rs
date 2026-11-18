@@ -92,6 +92,7 @@ impl Clearance {
                     continue;
                 }
                 cells.push(crate::plugin_structures::settlement_builds::PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                     at,
                     state: state.registry.states.air,
                     resource: None,
@@ -802,6 +803,7 @@ pub(crate) fn cells(
                 continue;
             }
             cells.push(PlannedCell {
+                portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                 at: [x, y, z],
                 state: state.registry.states.air,
                 resource: None,
@@ -825,6 +827,8 @@ pub(crate) fn cells(
                         .is_some_and(|block| block.block.id.path().ends_with("_sapling"))
                 })
         {
+            cells[index].portion =
+                crate::plugin_structures::settlement_builds::PortionKind::Saplings;
             // Stable: keep the corridor cells first and the manifest's own order.
             cells[first..=index].rotate_right(1);
             first += 1;

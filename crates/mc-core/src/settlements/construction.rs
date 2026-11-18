@@ -1521,8 +1521,11 @@ fn begin_cells(
     state: &mut TickState,
     mut project: Project,
     bounds: ScriptWorldBounds,
-    cells: Vec<executor::PlannedCell>,
+    mut cells: Vec<executor::PlannedCell>,
 ) -> bool {
+    if !cells.is_sorted_by_key(|cell| cell.portion) {
+        cells.sort_by_key(|cell| cell.portion);
+    }
     let site = blueprints::get(&state.registry, &project.blueprint)
         .map(|blueprint| {
             let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
@@ -2523,7 +2526,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let protected = snapshot
         .stages
         .get(snapshot.current_stage_index as usize)
-        .is_some_and(|stage| stage.stage == "clear")
+        .is_some_and(|stage| executor::PortionKind::is_preparation(&stage.stage))
         && next.is_some_and(|at| {
             state
                 .world

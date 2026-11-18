@@ -234,6 +234,7 @@ fn stored_structure(state: &mut TickState) -> String {
             blueprint_hash: blueprint.content_hash().into(),
             image,
             cells,
+            portions: Vec::new(),
         },
     );
     save(state, ledger);

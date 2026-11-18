@@ -307,6 +307,15 @@ each record's watermark is the only count of its advances. The single-image
 ledger of older binaries and this one refuse each other (fail closed, no
 converter); see [structure ledger keys](../architecture/persistence.md#structure-ledger-keys).
 
+Settlement preparation certificates live in that same required record shape:
+one per ordered stage, with persisted per-cell expected raw IDs, their ordered
+SHA-256 and registered roots. Every unprocessed cell is checked at commit;
+village-territory edits are locally re-derived with conserved live-block loot.
+Certificate rewrites, repair, custody, blocks and cursor share the existing
+tick/WAL/checkpoint boundary. Missing `portions` refuses a record, while plugin
+records explicitly store an empty array. This joins the schema-2 LedgerSplit/D8
+reset, without a global plugins-version bump or an old-record adapter.
+
 ### Immutable datapack worldgen inputs
 
 The startup boundary folds checkpoint and contiguous WAL metadata before it

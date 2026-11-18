@@ -181,7 +181,7 @@ pub(crate) fn meadow_work(state: &TickState, record: &SettlementRecord) -> Optio
                         && !vacant(state, block)
                         && construction::clearable(state, block)
                     {
-                        cells.push(free([x, above, z], air));
+                        cells.push(cleared([x, above, z], air));
                         low = low.min(above);
                         high = high.max(above);
                     }
@@ -475,6 +475,7 @@ fn paid(state: &TickState, at: [i32; 3], block: u32) -> Option<PlannedCell> {
     let (item, quantity) =
         blueprints::material_for(&state.registry, mc_world::BlockStateId(block))?;
     Some(PlannedCell {
+        portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
         at,
         state: block,
         resource: Some(state.registry.items.name_of(item)?.to_string()),
@@ -484,11 +485,18 @@ fn paid(state: &TickState, at: [i32; 3], block: u32) -> Option<PlannedCell> {
 
 fn free(at: [i32; 3], block: u32) -> PlannedCell {
     PlannedCell {
+        portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
         at,
         state: block,
         resource: None,
         quantity: 0,
     }
+}
+
+fn cleared(at: [i32; 3], air: u32) -> PlannedCell {
+    let mut cell = free(at, air);
+    cell.portion = crate::plugin_structures::settlement_builds::PortionKind::Cut;
+    cell
 }
 
 /// A finished lamp post: a fence topped by a torch anywhere in the band.
@@ -954,7 +962,7 @@ impl<'a> Network<'a> {
                         && !vacant(state, block)
                         && construction::clearable(state, block)
                     {
-                        cells.push(free([x, above, z], air));
+                        cells.push(cleared([x, above, z], air));
                     }
                 }
                 if soil {
@@ -1002,7 +1010,7 @@ impl<'a> Network<'a> {
         for above in y + 1..=y + 3 {
             let block = state.world.physics_block_at(x, above, z)?;
             if !vacant(state, block) {
-                cells.push(free([x, above, z], air));
+                cells.push(cleared([x, above, z], air));
             }
         }
         cells.push(paid(state, [x, y + 1, z], fence)?);
@@ -1248,7 +1256,7 @@ fn column_cells(
             if !construction::clearable(state, have) {
                 return nothing;
             }
-            cells.push(free([x, y, z], air));
+            cells.push(cleared([x, y, z], air));
         }
         cells.push(placed(state, [x, y, z], want));
     }
@@ -1345,7 +1353,7 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
             if !construction::clearable(state, have) {
                 return None;
             }
-            cells.push(free([x, ground + 1, z], air));
+            cells.push(cleared([x, ground + 1, z], air));
         }
         cells.push(placed(state, [x, ground + 1, z], cobble));
     }
@@ -1354,7 +1362,7 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
         if !construction::clearable(state, above) {
             return None;
         }
-        cells.push(free([cx, centre + 1, cz], air));
+        cells.push(cleared([cx, centre + 1, cz], air));
     }
     cells.push(free([cx, centre, cz], water));
     Some(work_of(cells))

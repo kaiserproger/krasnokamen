@@ -86,6 +86,7 @@ fn replanting_respects_admitted_corridors_without_reserving_the_whole_world() {
             ScriptWorldBounds::new([2, 200, 2], [26, 208, 23]).unwrap(),
             ScriptWorldBounds::new([16, 200, 16], [26, 208, 23]).unwrap(),
             vec![PlannedCell {
+                portion: executor::PortionKind::Cut,
                 at: [2, 201, 2],
                 state: air,
                 resource: None,

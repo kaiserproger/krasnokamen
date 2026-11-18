@@ -1,0 +1,422 @@
+use super::*;
+use crate::plugin_structures::settlement_builds as builds;
+use crate::settlements::allocator::tests::block;
+use crate::settlements::{SettlementId, construction::Project};
+use mc_data::ItemStack;
+
+fn plan() -> (TickState, SettlementId, uuid::Uuid, String) {
+    let (mut state, id, builder) = crate::settlements::construction::tests::fixture();
+    state.registry = Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
+    let uuid = state.entities.row(builder).uuid;
+    let sapling = block(&state, "minecraft:oak_sapling", &[]);
+    let log = block(&state, "minecraft:oak_log", &[]);
+    let air = state.registry.states.air;
+    state.world.set_block(4, 201, 4, sapling);
+    state.world.set_block(5, 201, 4, log);
+    state
+        .world
+        .set_block(6, 201, 4, state.registry.states.stone);
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .extend([[4, 201, 4], [5, 201, 4]]);
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [9, 201, 4]).unwrap();
+    let cells = [
+        (PortionKind::Saplings, [4, 201, 4], air, None),
+        (PortionKind::Trees, [5, 201, 4], air, None),
+        (PortionKind::Cut, [6, 201, 4], air, None),
+        (
+            PortionKind::Fill,
+            [7, 201, 4],
+            state.registry.states.dirt,
+            Some("minecraft:dirt"),
+        ),
+        (
+            PortionKind::Build,
+            [8, 201, 4],
+            log,
+            Some("minecraft:oak_log"),
+        ),
+        (
+            PortionKind::Build,
+            [9, 201, 4],
+            log,
+            Some("minecraft:oak_log"),
+        ),
+    ]
+    .into_iter()
+    .map(|(portion, at, state, resource)| builds::PlannedCell {
+        portion,
+        at,
+        state,
+        quantity: u32::from(resource.is_some()),
+        resource: resource.map(str::to_owned),
+    })
+    .collect();
+    let handle = builds::prepare(&mut state, id, "house".into(), bounds, bounds, cells).unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: false,
+        builder: Some((uuid, None)),
+        order_seq: None,
+    }];
+    for (slot, name) in ["minecraft:dirt", "minecraft:oak_log"]
+        .into_iter()
+        .enumerate()
+    {
+        let item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap();
+        state
+            .entities
+            .row_mut(builder)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory[slot] = Some(ItemStack::new(item, 8));
+    }
+    (state, id, uuid, handle)
+}
+
+fn certificate(state: &TickState, handle: &str) -> serde_json::Value {
+    state
+        .plugins
+        .get_domain(OWNER, &ledger::structure_key(handle))
+        .unwrap()
+        .clone()
+}
+
+fn stock(state: &TickState, name: &str) -> i32 {
+    let item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse(name).unwrap())
+        .unwrap();
+    state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+#[test]
+fn preparation_portions_follow_disposition_order_and_retire_exact_roots() {
+    let (mut state, id, builder, handle) = plan();
+    let snapshot = builds::status(&state, id, &handle).unwrap();
+    assert_eq!(
+        snapshot
+            .stages
+            .iter()
+            .map(|stage| stage.stage.as_str())
+            .collect::<Vec<_>>(),
+        ["saplings", "trees", "cut", "fill", "build"]
+    );
+    let record = certificate(&state, &handle);
+    assert_eq!(
+        record["portions"][0]["roots"],
+        serde_json::json!([[4, 201, 4]])
+    );
+    assert_eq!(
+        record["portions"][1]["roots"],
+        serde_json::json!([[5, 201, 4]])
+    );
+    for index in 0..6 {
+        assert_eq!(
+            builds::next_cell(&state, id, &handle).unwrap(),
+            Some([4 + index, 201, 4])
+        );
+        builds::advance(&mut state, id, &handle, builder).unwrap();
+        validate(&state).unwrap();
+    }
+    assert_eq!(
+        builds::status(&state, id, &handle).unwrap().state,
+        ScriptStructureState::Committed
+    );
+    assert!(state.settlements.get(id).unwrap().planted_trees.is_empty());
+    assert_eq!(stock(&state, "minecraft:oak_log"), 1);
+    assert_eq!(stock(&state, "minecraft:cobblestone"), 1);
+}
+
+#[test]
+fn changed_later_and_mid_portion_cells_rederive_with_exact_credit_without_livelock() {
+    let (mut state, id, builder, handle) = plan();
+    // A later build cell changes, then changes again after this portion started.
+    state
+        .world
+        .set_block(9, 201, 4, state.registry.states.stone);
+    for _ in 0..5 {
+        builds::advance(&mut state, id, &handle, builder).unwrap();
+    }
+    let before = builds::status(&state, id, &handle).unwrap();
+    assert_eq!(
+        (before.current_stage_index, before.completed_work_units),
+        (4, 1)
+    );
+    state.world.set_block(9, 201, 4, state.registry.states.dirt);
+    let evidence_before = certificate(&state, &handle);
+    assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+    let after = builds::status(&state, id, &handle).unwrap();
+    assert_eq!(after.state, ScriptStructureState::Committed);
+    assert_eq!(after.watermark, 6);
+    assert_eq!(
+        stock(&state, "minecraft:dirt"),
+        1,
+        "credit the live dirt, not the stale stone"
+    );
+    assert_eq!(
+        stock(&state, "minecraft:cobblestone"),
+        1,
+        "only the original cut credits stone"
+    );
+    let evidence_after = certificate(&state, &handle);
+    assert_eq!(
+        evidence_after["portions"], evidence_before["portions"],
+        "processed evidence is not rewritten"
+    );
+    assert_eq!(
+        evidence_after["portions"][0],
+        evidence_before["portions"][0]
+    );
+    assert_eq!(
+        after
+            .consumed
+            .iter()
+            .map(|m| (m.resource.as_str(), m.quantity))
+            .collect::<Vec<_>>(),
+        [("minecraft:dirt", 1), ("minecraft:oak_log", 2)]
+    );
+    assert_eq!(
+        builds::advance(&mut state, id, &handle, builder),
+        Err(Failure::Blocked)
+    );
+    assert_eq!(stock(&state, "minecraft:dirt"), 1);
+    validate(&state).unwrap();
+}
+
+#[test]
+fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
+    for protected in [false, true] {
+        let (mut state, id, builder, handle) = plan();
+        for _ in 0..5 {
+            builds::advance(&mut state, id, &handle, builder).unwrap();
+        }
+        state.settlements.get_mut(id).unwrap().radius = 1;
+        let grass = block(&state, "minecraft:grass_block", &[]);
+        state.world.set_block(9, 201, 4, grass);
+        if protected {
+            state.block_log =
+                crate::settlements::forestry::tests::player_history(&state, [9, 201, 4], 0);
+            assert!(state.block_log.player_touched([9, 201, 4]));
+        }
+        let before = certificate(&state, &handle);
+        let carry = state
+            .entities
+            .row(state.entities.slot_of_uuid(builder).unwrap())
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .clone();
+        if protected {
+            assert_eq!(
+                builds::advance(&mut state, id, &handle, builder),
+                Err(Failure::Blocked)
+            );
+            assert_eq!(certificate(&state, &handle), before);
+            assert_eq!(stock(&state, "minecraft:dirt"), 0);
+            assert_eq!(state.world.block_at(9, 201, 4), Some(grass));
+            assert_eq!(
+                state
+                    .entities
+                    .row(state.entities.slot_of_uuid(builder).unwrap())
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .inventory,
+                carry
+            );
+        } else {
+            assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+            assert_eq!(stock(&state, "minecraft:dirt"), 1);
+        }
+    }
+}
+
+#[test]
+fn missing_partial_or_corrupt_portions_refuse_startup_but_empty_world_opens() {
+    let (empty, _, _) = crate::settlements::construction::tests::fixture();
+    validate(&empty).unwrap();
+    let (mut state, _, _, handle) = plan();
+    let key = ledger::structure_key(&handle);
+    let valid = certificate(&state, &handle);
+    for variant in ["missing", "partial", "raw", "identity", "roots", "unknown"] {
+        let mut bad = valid.clone();
+        match variant {
+            "missing" => {
+                bad.as_object_mut().unwrap().remove("portions");
+            }
+            "partial" => {
+                bad["portions"].as_array_mut().unwrap().pop();
+            }
+            "raw" => bad["portions"][0]["expected"] = serde_json::json!([u32::MAX]),
+            "identity" => bad["portions"][0]["expected"] = serde_json::json!([]),
+            "roots" => bad["portions"][0]["roots"] = serde_json::json!([[15, 201, 15]]),
+            _ => bad["portions"][0]["extra"] = serde_json::json!(true),
+        }
+        state.plugins.set_domain(OWNER, &key, bad);
+        assert!(
+            matches!(validate(&state), Err(crate::CoreError::Recovery(_))),
+            "{variant}"
+        );
+    }
+    state.plugins.set_domain(OWNER, &key, valid);
+    validate(&state).unwrap();
+}
+
+#[test]
+fn resume_after_paid_progress_uses_cell_evidence_not_the_admission_box() {
+    let (mut state, id, builder, handle) = plan();
+    for _ in 0..5 {
+        builds::advance(&mut state, id, &handle, builder).unwrap();
+    }
+    let before = builds::status(&state, id, &handle).unwrap();
+    execute_operation(
+        &mut state,
+        &builds::owner(id),
+        &ScriptWorldStructureOperation::PauseStructure {
+            operation_id: "pause".into(),
+            structure_id: handle.clone(),
+            expected_revision: before.revision,
+        },
+    )
+    .unwrap();
+    let paused = builds::status(&state, id, &handle).unwrap();
+    execute_operation(
+        &mut state,
+        &builds::owner(id),
+        &ScriptWorldStructureOperation::ResumeStructure {
+            operation_id: "resume".into(),
+            structure_id: handle.clone(),
+            expected_revision: paused.revision,
+        },
+    )
+    .unwrap();
+    assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+    assert_eq!(builds::status(&state, id, &handle).unwrap().watermark, 6);
+}
+
+#[test]
+fn completed_fill_repairs_and_all_rewrites_preserve_certificate_alignment() {
+    let (mut state, id, builder, handle) = plan();
+    let mut replica = Replica::capture(&mut state);
+    for _ in 0..6 {
+        builds::advance(&mut state, id, &handle, builder).unwrap();
+    }
+    replica.step(&mut state);
+    state.world.set_block(7, 201, 4, state.registry.states.air);
+    assert!(builds::recover(&mut state, id, &handle).unwrap());
+    replica.step(&mut state);
+    replica.assert_matches(&state);
+    validate(&state).unwrap();
+    assert_eq!(
+        builds::status(&state, id, &handle)
+            .unwrap()
+            .stages
+            .last()
+            .unwrap()
+            .stage,
+        "repair"
+    );
+    assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+    state.world.set_block(7, 201, 4, state.registry.states.air);
+    assert!(builds::reopen_emptied(&mut state, id, &handle).unwrap());
+    replica.step(&mut state);
+    replica.assert_matches(&state);
+    validate(&state).unwrap();
+    assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+    let snapshot = builds::status(&state, id, &handle).unwrap();
+    assert_eq!(
+        snapshot
+            .consumed
+            .iter()
+            .find(|m| m.resource == "minecraft:dirt")
+            .unwrap()
+            .quantity,
+        3
+    );
+    validate(&state).unwrap();
+}
+
+#[test]
+fn overlapping_portions_simulate_preceding_targets_in_the_certificate() {
+    let (mut state, _, _, handle) = plan();
+    let original = ledger(&state).unwrap().structures()[&handle].cells[3][0].clone();
+    let mut cleared = original.clone();
+    cleared.state = state.registry.states.air;
+    cleared.resource = None;
+    cleared.quantity = 0;
+    state.world.set_block(
+        original.at[0],
+        original.at[1],
+        original.at[2],
+        state.registry.states.stone,
+    );
+    let portions = certify(&state, &[vec![cleared], vec![original]]).unwrap();
+    assert_eq!(
+        portions[0].expected,
+        [identity(&state, state.registry.states.stone).unwrap()]
+    );
+    assert_eq!(
+        portions[1].expected,
+        [identity(&state, state.registry.states.air).unwrap()]
+    );
+}
+
+#[test]
+fn grown_certified_sapling_requeues_before_any_cut_and_keeps_its_root() {
+    let (mut state, id, builder, handle) = plan();
+    state.settlements.get_mut(id).unwrap().projects[0].ordered = true;
+    let log = block(&state, "minecraft:oak_log", &[]);
+    state.world.set_block(4, 201, 4, log);
+    state.world.set_block(4, 202, 4, log);
+    assert!(!builds::advance(&mut state, id, &handle, builder).unwrap());
+    assert_eq!(
+        builds::status(&state, id, &handle)
+            .unwrap()
+            .pause_reason
+            .as_deref(),
+        Some("footprint_changed")
+    );
+    assert!(builds::recover(&mut state, id, &handle).unwrap());
+    assert_eq!(
+        builds::status(&state, id, &handle).unwrap().state,
+        ScriptStructureState::Cancelled
+    );
+    assert_eq!(state.world.block_at(4, 201, 4), Some(log));
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&[4, 201, 4])
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 1);
+}

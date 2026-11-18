@@ -524,3 +524,23 @@ fn find<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::V
         _ => None,
     }
 }
+
+#[test]
+fn plugin_structure_requires_explicit_empty_portions() {
+    let mut state = state();
+    let handle = stored_structure(&mut state);
+    let key = ledger::structure_key(&handle);
+    let valid = state.plugins.get_domain(OWNER, &key).unwrap().clone();
+    assert_eq!(valid["portions"], serde_json::json!([]));
+    validate(&state).unwrap();
+    let mut missing = valid.clone();
+    missing.as_object_mut().unwrap().remove("portions");
+    state.plugins.set_domain(OWNER, &key, missing);
+    assert!(validate(&state).is_err());
+    let mut extra = valid.clone();
+    extra["portions"] = serde_json::json!([{"expected": [], "roots": []}]);
+    state.plugins.set_domain(OWNER, &key, extra);
+    assert!(validate(&state).is_err());
+    state.plugins.set_domain(OWNER, &key, valid);
+    validate(&state).unwrap();
+}

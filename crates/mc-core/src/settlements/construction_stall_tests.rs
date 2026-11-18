@@ -21,6 +21,7 @@ fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: [10, 202, 10],
             state: block,
             resource: Some("minecraft:white_bed".into()),
@@ -242,6 +243,7 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Trees,
             at: next,
             state: air,
             resource: None,
@@ -297,12 +299,14 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
         bounds,
         vec![
             executor::PlannedCell {
+                portion: executor::PortionKind::Saplings,
                 at: next,
                 state: air,
                 resource: None,
                 quantity: 0,
             },
             executor::PlannedCell {
+                portion: executor::PortionKind::Build,
                 at: build,
                 state: log,
                 resource: Some("minecraft:oak_log".into()),
@@ -386,6 +390,7 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Trees,
             at: next,
             state: air,
             resource: None,
@@ -473,6 +478,7 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at,
             state: log,
             resource: Some("minecraft:oak_log".into()),
@@ -575,6 +581,7 @@ fn an_unpaid_road_that_stops_running_gives_back_the_slot_after_a_failed_rotation
         layout::ROAD,
         [near, far]
             .map(|at| executor::PlannedCell {
+                portion: executor::PortionKind::Build,
                 at,
                 state: path,
                 resource: None,
@@ -625,6 +632,7 @@ fn an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order()
         id,
         layout::PERIMETER,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: far,
             state: cobblestone,
             resource: Some("minecraft:cobblestone".into()),

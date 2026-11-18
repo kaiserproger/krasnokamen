@@ -32,12 +32,21 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
         quantity: 0,
     }];
     let block = state.world.block_at(root[0], root[1], root[2]).unwrap();
+    let before_ids = [portions::identity(&state, block).unwrap()];
     let mut expected = before.clone();
     for drop in crate::settlements::forestry::roll(&state, root, block).unwrap() {
         *expected.entry(drop.item_id).or_default() += drop.count;
     }
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &BTreeMap::new(),
+            &cells,
+            &before_ids
+        ),
         Ok(())
     );
     assert_eq!(counts(&state), expected, "upgrade clear drops once");
@@ -64,6 +73,8 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     if let Some(mut record) = state.settlements.get_mut(id) {
         record.projects[0].builder = Some((uuid, None));
     }
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    state.settlements.get_mut(id).unwrap().anchor = [0, 201, 0];
     let builder = uuid.to_string();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let cells = [super::super::Cell {
@@ -79,8 +90,17 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     ] {
         let value = block(&state, name, &[]);
         state.world.set_block(root[0], root[1], root[2], value);
+        let expected = [portions::identity(&state, value).unwrap()];
         assert_eq!(
-            debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
+            debit(
+                &mut state,
+                id,
+                &handle,
+                &builder,
+                &BTreeMap::new(),
+                &cells,
+                &expected
+            ),
             Err(Failure::Blocked),
             "{name}"
         );

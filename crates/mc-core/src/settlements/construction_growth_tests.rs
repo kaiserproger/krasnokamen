@@ -1035,6 +1035,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     let at = [8, 203, 8];
     let lot = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
     let cell = executor::PlannedCell {
+        portion: executor::PortionKind::Trees,
         at,
         state: state.registry.states.air,
         resource: None,

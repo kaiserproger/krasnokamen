@@ -15,8 +15,8 @@ fn structure(state: &TickState, id: SettlementId) -> Option<String> {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .as_ref()
+        .projects
+        .first()
         .map(|project| project.structure.clone())
 }
 
@@ -272,7 +272,8 @@ fn cancelling_one_prepared_structure_journals_only_its_record() {
             building: None,
             structure: String::new(),
             ordered: false,
-            borrowed_builder: None
+            builder: None,
+            order_seq: None,
         },
         "oak",
         0
@@ -417,7 +418,7 @@ fn construction_image(state: &TickState, id: SettlementId) -> serde_json::Value 
         "blocks": blocks,
         "stock": state.block_entities[&(1, 201, 1)].slots,
         "carry": carry,
-        "project": state.settlements.get(id).unwrap().project,
+        "projects": state.settlements.get(id).unwrap().projects,
     })
 }
 
@@ -618,4 +619,229 @@ fn settlement_ledger_recovers_from_checkpoint_and_wal_tail_with_its_physical_eff
         "after checkpoint and prune"
     );
     crate::plugin_structures::validate(&reopened).unwrap();
+}
+
+#[test]
+fn preparation_portion_boundary_and_mid_portion_recover_exact_physical_evidence() {
+    let work = tempfile::tempdir().unwrap();
+    let live = work.path().join("live");
+    std::fs::create_dir_all(&live).unwrap();
+    let config = CoreConfig::new(live.clone(), 42);
+    let (mut state, id, builder) = native_fixture(&live);
+    state.registry = std::sync::Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
+    let registry = std::sync::Arc::clone(&state.registry);
+    let uuid = state.entities.row(builder).uuid;
+    let log = crate::settlements::allocator::tests::block(&state, "minecraft:oak_log", &[]);
+    let air = state.registry.states.air;
+    let dirt = state.registry.states.dirt;
+    state.world.set_block(3, 201, 4, log);
+    state
+        .world
+        .set_block(4, 201, 4, state.registry.states.stone);
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert([3, 201, 4]);
+    let bounds = mc_script::ScriptWorldBounds::new([3, 201, 4], [7, 201, 4]).unwrap();
+    let cells = [
+        (executor::PortionKind::Trees, 3, air, None),
+        (executor::PortionKind::Cut, 4, air, None),
+        (executor::PortionKind::Fill, 5, dirt, Some("minecraft:dirt")),
+        (
+            executor::PortionKind::Build,
+            6,
+            log,
+            Some("minecraft:oak_log"),
+        ),
+        (
+            executor::PortionKind::Build,
+            7,
+            log,
+            Some("minecraft:oak_log"),
+        ),
+    ]
+    .into_iter()
+    .map(|(portion, x, state, resource)| executor::PlannedCell {
+        portion,
+        at: [x, 201, 4],
+        state,
+        quantity: u32::from(resource.is_some()),
+        resource: resource.map(str::to_owned),
+    })
+    .collect();
+    let handle = executor::prepare(&mut state, id, "house".into(), bounds, bounds, cells).unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: false,
+        builder: Some((uuid, None)),
+        order_seq: None,
+    }];
+    for (index, name) in ["minecraft:dirt", "minecraft:oak_log"]
+        .into_iter()
+        .enumerate()
+    {
+        let item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap();
+        state
+            .entities
+            .row_mut(builder)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory[index] = Some(mc_data::ItemStack::new(item, 8));
+    }
+    state.tick_control.set_frozen(true);
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+    checkpoint(&mut state, &config);
+    let mut writer = JournalWriter::open(&live, 1).unwrap();
+    for step in 0..4 {
+        executor::advance(&mut state, id, &handle, uuid).unwrap();
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+        writer.append(output.tick, output.tick, &entries).unwrap();
+        writer.flush().unwrap();
+        if step == 0 || step == 3 {
+            let status = snapshot(&state, id, &handle);
+            assert_eq!(
+                (status.current_stage_index, status.completed_work_units),
+                if step == 0 { (1, 0) } else { (3, 1) }
+            );
+            let saved = work.path().join(format!("restart-{step}"));
+            copy_world(&live, &saved);
+            let image = construction_image(&state, id);
+            for _ in 0..2 {
+                let restored = reopen(&saved).unwrap();
+                assert_eq!(
+                    construction_image(&restored, id),
+                    image,
+                    "repeat WAL replay at step {step}"
+                );
+                assert!(
+                    restored
+                        .settlements
+                        .get(id)
+                        .unwrap()
+                        .planted_trees
+                        .is_empty()
+                );
+                crate::plugin_structures::validate(&restored).unwrap();
+            }
+        }
+    }
+    drop(writer);
+    let saved = work.path().join("restart-3");
+    let mut restored = reopen(&saved).unwrap();
+    restored.registry = std::sync::Arc::clone(&registry);
+    let dirt_item = restored
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    let stock_before: i32 = restored.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .filter(|stack| stack.item_id == dirt_item)
+        .map(|stack| stack.count)
+        .sum();
+    // The still-unprocessed second build cell changes after restart.
+    restored.world.set_block(7, 201, 4, dirt);
+    assert!(executor::advance(&mut restored, id, &handle, uuid).unwrap());
+    let committed = snapshot(&restored, id, &handle);
+    assert_eq!(committed.state, mc_script::ScriptStructureState::Committed);
+    assert_eq!(committed.watermark, 5);
+    assert_eq!(
+        committed
+            .consumed
+            .iter()
+            .map(|material| (material.resource.as_str(), material.quantity))
+            .collect::<Vec<_>>(),
+        [("minecraft:dirt", 1), ("minecraft:oak_log", 2)]
+    );
+    assert_eq!(
+        restored.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == dirt_item)
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        stock_before + 1
+    );
+    restored.tick_control.set_frozen(true);
+    let (output, _, _) = crate::tick::run_tick(&mut restored, &[]);
+    let entries = crate::core::journal_entries_for_tick(&mut restored, &output).unwrap();
+    {
+        let mut writer = JournalWriter::open(&saved, 1).unwrap();
+        writer.append(output.tick, output.tick, &entries).unwrap();
+    }
+    checkpoint(&mut restored, &CoreConfig::new(saved.clone(), 42));
+    for batch in walkdir(&saved.join("journal")) {
+        if batch
+            .extension()
+            .is_some_and(|extension| extension == "bin")
+        {
+            std::fs::remove_file(batch).unwrap();
+        }
+    }
+    let image = construction_image(&restored, id);
+    let reopened = reopen(&saved).unwrap();
+    assert_eq!(
+        construction_image(&reopened, id),
+        image,
+        "checkpoint survives pruning the replayed WAL"
+    );
+    crate::plugin_structures::validate(&reopened).unwrap();
+}
+
+#[test]
+fn startup_refuses_structure_without_portions_but_construction_free_store_opens() {
+    let work = tempfile::tempdir().unwrap();
+    let live = work.path().join("live");
+    std::fs::create_dir_all(&live).unwrap();
+    let (mut state, id, _) = native_fixture(&live);
+    state.tick_control.set_frozen(true);
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+    checkpoint(&mut state, &CoreConfig::new(live.clone(), 42));
+    let clean = work.path().join("construction-free");
+    copy_world(&live, &clean);
+    assert!(reopen(&clean).is_ok());
+    start(&mut state, id, "house", 1, None);
+    let handle = structure(&state, id).unwrap();
+    let key = record_key(&handle);
+    let valid = state.plugins.get_domain(OWNER, &key).unwrap().clone();
+    let mut old = valid.clone();
+    old.as_object_mut().unwrap().remove("portions");
+    state.plugins.set_domain(OWNER, &key, old);
+    checkpoint(&mut state, &CoreConfig::new(live.clone(), 42));
+    let refused = work.path().join("without-portions");
+    copy_world(&live, &refused);
+    assert!(matches!(
+        reopen(&refused),
+        Err(crate::CoreError::Recovery(_))
+    ));
+    state.plugins.set_domain(OWNER, &key, valid);
+    checkpoint(&mut state, &CoreConfig::new(live.clone(), 42));
+    let current = work.path().join("with-portions");
+    copy_world(&live, &current);
+    assert!(
+        reopen(&current).is_ok(),
+        "the same store opens with required evidence"
+    );
 }
