@@ -95,14 +95,10 @@ pub(crate) fn copy_world(
     // pair. It is read here, on the writer thread, after the commit that it
     // describes; a store with a checkpoint always has one.
     let marker_path = mc_world::store_marker::path(world_dir);
-    let marker = std::fs::read(&marker_path)
+    let marker_bytes = std::fs::read(&marker_path)
         .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
-    let marker = mc_world::store_marker::StoreMarker::decode(&marker).map_err(|error| {
-        CoreError::Storage(format!(
-            "{}: {error}",
-            mc_world::store_marker::path(world_dir).display()
-        ))
-    })?;
+    let marker = mc_world::store_marker::StoreMarker::decode(&marker_bytes)
+        .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
     if marker.checkpoint_tick > checkpoint_tick {
         return Err(CoreError::Storage(format!(
             "hot backup: checkpoint marker records {}, ahead of the committed checkpoint {}; \
@@ -112,7 +108,10 @@ pub(crate) fn copy_world(
     }
     files.insert(
         mc_world::store_marker::MARKER_FILE.to_owned(),
-        copy_reader_hashed(&mut marker.as_slice(), &out.join(mc_world::store_marker::MARKER_FILE))?,
+        copy_reader_hashed(
+            &mut marker_bytes.as_slice(),
+            &out.join(mc_world::store_marker::MARKER_FILE),
+        )?,
     );
 
     let mut batches = Vec::new();

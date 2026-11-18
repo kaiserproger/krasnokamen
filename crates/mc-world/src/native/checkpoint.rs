@@ -182,6 +182,17 @@ fn checkpoint_tick_from(tx: &redb::ReadTransaction) -> Result<Option<u64>, Nativ
         .map(|record| decode_envelope(record.value()).map(|(_, captured_tick, _)| captured_tick))
         .transpose()
 }
+
+/// Store id from the native header and the committed checkpoint tick.
+fn marker_fields_from(tx: &redb::ReadTransaction) -> Result<([u8; 16], Option<u64>), NativeError> {
+    let header = db(tx.open_table(super::HEADER))?;
+    let store_uuid = db(header.get("store_uuid"))?
+        .ok_or_else(|| failure("world/store_uuid", "missing"))?
+        .value()
+        .try_into()
+        .map_err(|_| failure("world/store_uuid", "invalid length"))?;
+    Ok((store_uuid, checkpoint_tick_from(tx)?))
+}
 pub(super) fn initialize(tx: &redb::WriteTransaction) -> Result<(), NativeError> {
     db(tx.open_table(GLOBAL))?;
     db(tx.open_table(PLAYERS))?;
@@ -856,18 +867,24 @@ impl NativeStore {
     /// Offline operator path: the store id and committed checkpoint tick of a
     /// stopped world, without validating the store against a configuration.
     /// Used to check a restored or copied world against its checkpoint marker.
+    /// A clean database is read-only; a copy that redb would repair on first
+    /// serve (a hot backup of a live store, an unclean stop) is opened
+    /// writable, exactly as recovery will, because only then is its committed
+    /// tick readable. Nothing but redb's own repair bytes changes.
     pub fn read_marker_fields(
         path: &std::path::Path,
     ) -> Result<([u8; 16], Option<u64>), NativeError> {
-        let database = super::read_only_database(path, super::DB_CACHE_BYTES)?;
-        let tx = db(database.begin_read())?;
-        let header = db(tx.open_table(super::HEADER))?;
-        let store_uuid = db(header.get("store_uuid"))?
-            .ok_or_else(|| failure("world/store_uuid", "missing"))?
-            .value()
-            .try_into()
-            .map_err(|_| failure("world/store_uuid", "invalid length"))?;
-        Ok((store_uuid, checkpoint_tick_from(&tx)?))
+        let read = |database: &redb::ReadOnlyDatabase| -> Result<_, NativeError> {
+            marker_fields_from(&db(database.begin_read())?)
+        };
+        match super::read_only_database(path, super::DB_CACHE_BYTES) {
+            Ok(database) => read(&database),
+            Err(NativeError::Source(_)) => {
+                let database = db(super::database_builder(super::DB_CACHE_BYTES).open(path))?;
+                marker_fields_from(&db(database.begin_read())?)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub fn commit_checkpoint(

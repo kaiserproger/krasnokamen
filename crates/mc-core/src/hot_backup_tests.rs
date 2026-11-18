@@ -95,6 +95,24 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
     );
 }
 
+/// Books R4-P1: a copy whose store is behind its own marker is a rolled-back
+/// store; the backup is refused instead of producing a copy that restore and
+/// startup would reject.
+#[test]
+fn copy_refuses_a_marker_ahead_of_the_committed_checkpoint() {
+    let world = fake_world();
+    let out = tempfile::tempdir().unwrap();
+    let error =
+        crate::hot_backup::copy_world(world.path(), out.path(), &mut b"database".as_slice(), 9, 9)
+            .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ahead of the committed checkpoint"),
+        "{error}"
+    );
+}
+
 #[test]
 fn copy_refuses_a_wal_hole_and_a_straddling_batch() {
     let world = fake_world();

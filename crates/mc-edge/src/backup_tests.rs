@@ -519,3 +519,76 @@ fn hot_backup_of_a_running_core_is_a_verified_restorable_backup() {
     assert!(error.to_string().contains("core stopped"), "{error:#}");
     assert_eq!(std::fs::read_dir(&backups).unwrap().count(), 1);
 }
+
+fn stopped_core_world(root: &Path) -> PathBuf {
+    let world = root.join("world");
+    let core = mc_core::Core::open(live_config(world.clone())).unwrap();
+    core.shutdown();
+    drop(core);
+    world
+}
+
+/// Books R4-P1: the checkpoint marker is part of the backed-up state, and a
+/// restore proves the copied marker and the copied store still belong together.
+#[test]
+fn offline_backup_and_restore_keep_the_store_and_its_marker_paired() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let source = mc_world::store_marker::read(&world)
+        .unwrap()
+        .expect("a Core world has a checkpoint marker");
+    let backup = root.path().join("backup");
+    run_backup(&world, &backup).unwrap();
+    assert!(
+        read_manifest(&backup)
+            .unwrap()
+            .files
+            .contains_key(mc_world::store_marker::MARKER_FILE),
+        "the backup manifest covers the marker"
+    );
+
+    let target = root.path().join("restored");
+    run_restore(&backup, &target).unwrap();
+    assert_eq!(
+        mc_world::store_marker::read(&target).unwrap(),
+        Some(source),
+        "the marker is restored with the store"
+    );
+    let (store_uuid, store_tick) =
+        NativeStore::read_marker_fields(&target.join(NATIVE_DATABASE)).unwrap();
+    assert_eq!(store_uuid, source.store_uuid);
+    assert_eq!(store_tick, Some(source.checkpoint_tick));
+    // The pair is admitted, not merely copied: the restored world serves.
+    let recovered = mc_core::Core::open(live_config(target)).unwrap();
+    recovered.shutdown();
+}
+
+#[test]
+fn restore_refuses_a_marker_from_another_store() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let source = mc_world::store_marker::read(&world).unwrap().unwrap();
+    let backup = root.path().join("backup");
+    run_backup(&world, &backup).unwrap();
+
+    // Replace the copied marker with a foreign store's marker and keep the
+    // manifest honest, so only the pair check can refuse the restore.
+    let foreign = [0x77; 16];
+    mc_world::store_marker::write(&backup, foreign, source.checkpoint_tick).unwrap();
+    change_manifest(&backup, |manifest| {
+        let digest = digest_file(&backup.join(mc_world::store_marker::MARKER_FILE)).unwrap();
+        manifest["files"][mc_world::store_marker::MARKER_FILE] = serde_json::Value::String(digest);
+    });
+
+    let target = root.path().join("restored");
+    let error = run_restore(&backup, &target).unwrap_err().to_string();
+    assert!(error.contains("restored world is inconsistent"), "{error}");
+    assert!(
+        error.contains(&uuid::Uuid::from_bytes(foreign).to_string()),
+        "{error}"
+    );
+    assert!(
+        !target.join(NATIVE_DATABASE).exists(),
+        "a refused restore keeps no store"
+    );
+}

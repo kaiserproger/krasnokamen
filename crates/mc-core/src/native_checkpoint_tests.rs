@@ -1432,6 +1432,9 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
             &registry.items,
         )
         .unwrap();
+    // A world this build wrote always has its checkpoint marker; the subject
+    // here is the pre-plugin domain set, not the store identity.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).unwrap();
     drop(store);
     let core = crate::Core::open(config.clone()).unwrap();
     core.shutdown();

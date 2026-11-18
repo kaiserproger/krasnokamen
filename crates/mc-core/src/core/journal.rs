@@ -952,11 +952,8 @@ pub(super) fn native_writer_loop(
                 &mut block_log,
             )
         }));
-        if matches!(outcome, Ok(std::ops::ControlFlow::Break(()))) {
-            tracing::info!(
-                cause = "shutdown requested",
-                "native checkpoint writer stopped"
-            );
+        if let Ok(std::ops::ControlFlow::Break(cause)) = outcome {
+            tracing::info!(cause, "native checkpoint writer stopped");
             return;
         }
         if let Err(payload) = outcome {
@@ -988,9 +985,9 @@ pub(super) fn run_native_work(
     native_failed: &std::sync::atomic::AtomicBool,
     prev_manifest: &mut CheckpointManifest,
     block_log: &mut crate::block_log::Backlog,
-) -> std::ops::ControlFlow<()> {
+) -> std::ops::ControlFlow<&'static str> {
     match work {
-        NativeWork::Shutdown => return std::ops::ControlFlow::Break(()),
+        NativeWork::Shutdown => return std::ops::ControlFlow::Break("shutdown requested"),
         NativeWork::Checkpoint { mut job, plugins } => {
             let started = std::time::Instant::now();
             // Block-log rows join the table before the commit that may prune
@@ -1106,7 +1103,7 @@ pub(super) fn run_native_work(
             } else if committed {
                 // A committed checkpoint whose marker is not durable cannot be
                 // acknowledged or pruned; stop the writer (fail closed).
-                return std::ops::ControlFlow::Break(());
+                return std::ops::ControlFlow::Break("checkpoint marker not durable");
             }
         }
         NativeWork::RequireGenerated { chunks, done } => {

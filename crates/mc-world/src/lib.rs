@@ -35,6 +35,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 mod inhabited_time_tests;
 #[cfg(test)]
 mod plant_rules_26_1_2_tests;
+#[cfg(test)]
+mod store_marker_tests;
 
 #[cfg(test)]
 mod structure_starts_tests;

@@ -1710,6 +1710,10 @@ mod native_checkpoint_crash_tests;
 mod checkpoint_custody_tests;
 
 #[cfg(test)]
+#[path = "store_marker_tests.rs"]
+mod store_marker_tests;
+
+#[cfg(test)]
 #[path = "native_component_26_3_tests.rs"]
 mod native_component_26_3_tests;
 

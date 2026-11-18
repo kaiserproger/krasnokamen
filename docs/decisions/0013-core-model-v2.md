@@ -279,8 +279,21 @@ stops the world); the single non-fatal refusal is a **coverage hole**
 serving with the appended batches intact. A backup copy error stays local to its
 backup job. Publication order stays WAL file fsync, rename, journal directory
 fsync (every `journal_fsync_every_batches` published batches, default 10),
-checkpoint gate, `Durability::Immediate` commit, then prune, so
-a committed checkpoint never outruns its WAL. The journal directory's own entry
+checkpoint gate, `Durability::Immediate` commit, checkpoint marker, ACK, then
+prune, so a committed checkpoint never outruns its WAL and a pruned WAL never
+outruns the durable witness that its checkpoint existed. The checkpoint marker
+is `<world>/checkpoint.marker`: a fixed-size file outside redb with the store's
+immutable random `store_uuid` (a required native header key, minted at store
+creation and import) and the acknowledged checkpoint tick, installed through a
+temporary file, `sync_all`, rename and directory fsync. A marker write error
+publishes no ACK, prunes nothing and stops the writer. Before replay, startup
+refuses a missing or corrupt marker next to a store with a checkpoint, a foreign
+store id, or a store tick behind the marker tick — a redb repair rolled the store
+back behind an acknowledged, already pruned checkpoint; a store ahead of the
+marker is the commit-to-marker crash window and rewrites it. Hot backup copies
+the marker, and `world restore` refuses a restored pair whose store id or tick
+disagrees with it. There is no converter for worlds written before the store id
+and marker. The journal directory's own entry
 is persisted through `atomic_file::create_dir_all_durable` when the writer opens
 it. Close errors are not observable through Rust's `File` drop, so durability
 rests on the explicit fsync before the rename, not on close, and the later
@@ -298,7 +311,8 @@ next journal open under the exclusive world lease, and a leftover the sweep
 cannot remove is warned about with its path and reason. Every redb repair is
 logged at `error!` as a possible rollback to an earlier commit (Books R4-P1):
 the repair callback cannot tell an unclean stop from a damaged commit or header slot, and the
-WAL behind an acknowledged checkpoint is already pruned. Policy and drills:
+WAL behind an acknowledged checkpoint is already pruned, which is why the marker
+exists. Policy and drills:
 [persistence](../architecture/persistence.md).
 
 ### Immutable datapack worldgen inputs

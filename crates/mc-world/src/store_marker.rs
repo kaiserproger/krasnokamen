@@ -66,8 +66,8 @@ pub enum MarkerError {
     )]
     Foreign {
         path: PathBuf,
-        marker_store: Box<[u8; 16]>,
-        store: Box<[u8; 16]>,
+        marker_store: [u8; 16],
+        store: [u8; 16],
     },
     #[error(
         "native store checkpoint {} is behind checkpoint marker {} at {}; the store rolled back \
@@ -208,8 +208,8 @@ pub fn check(
     if marker.store_uuid != store_uuid {
         return Err(MarkerError::Foreign {
             path: target,
-            marker_store: Box::new(marker.store_uuid),
-            store: Box::new(store_uuid),
+            marker_store: marker.store_uuid,
+            store: store_uuid,
         });
     }
     let store_tick = store_tick.unwrap_or(0);

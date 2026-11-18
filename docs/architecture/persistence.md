@@ -236,6 +236,44 @@ world written under another version refuses startup. The constant lives in
 by `crates/mc-world/src/native/checkpoint.rs` for readers that open a store
 without the core.
 
+### Checkpoint marker
+
+`<world>/checkpoint.marker` is a fixed-size file independent of redb. It records
+the store's immutable random `store_uuid` and the tick of the last checkpoint
+whose WAL was acknowledged. The store id is written once into the native header
+when the store is created, by world creation and by the Anvil import
+(`NativeStore::create`); it is a required key, so a store without it refuses to
+open and is never given a fresh identity. The marker cannot be derived from redb
+because redb's unattended repair switches to an older commit when the newest one
+fails its checksum, and the damaged commit leaves no trace inside the store
+(Books R4-P1, `WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT`).
+
+Every durable checkpoint, starting with a new world's initial one, writes the
+marker in this order: redb `Durability::Immediate` commit, then a temporary
+file, `sync_all`, rename over the marker and the world-directory fsync
+(`atomic_file::replace_file_durable`), then the checkpoint ACK, and only then the
+prune of the WAL batches that checkpoint covers. A marker write error is a
+durability failure: no ACK, no prune, and the writer stops the world (fail
+closed); the marker keeps the previous checkpoint, so the retained WAL still
+replays on the next start.
+
+Before any replay, startup refuses a store that has a checkpoint while the marker
+is missing or fails its checksum, whose `store_uuid` differs from the native
+header, or whose stored checkpoint tick is behind the marker's tick — the store
+rolled back behind an acknowledged checkpoint whose WAL is already pruned. A
+store ahead of the marker is the crash window between the commit and the marker
+write: it opens and the marker is rewritten to the store's tick. There is no
+converter; a world written before the store id and marker refuses startup
+instead of being rewritten.
+
+Hot backup copies the marker with the store and refuses a marker ahead of the
+committed checkpoint. The offline backup copies it as an ordinary world file and
+covers it by the manifest digest. `world restore` verifies every hash, then the
+restored pair — store id and checkpoint tick read back from the copied store
+against the copied marker — and on a mismatch removes what it copied and reports
+no world. WAL batches still carry no store identity of their own; the marker
+binds a store to its own checkpoints, not a foreign journal directory to it.
+
 Disk-full checkpoint drills wrap the real lease-holding native file backend.
 The injected writer and `NativeStore` retain the same `Arc<File>`, as the
 production database and its backup reader do; failure injection never reopens
@@ -376,9 +414,11 @@ receipts/Q04CoreFix/javap). Anvil import also drops an unknown or malformed
 
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.krasnokamen-first-start`, creates `native/state.redb.new` and renames the
-committed store into place. The marker is removed after the initial checkpoint
-is durable. A remaining marker permits retrying interrupted first start; a store
-without a checkpoint or marker fails closed. Required checkpoint player records
+committed store into place. The first-start marker is removed after the initial
+checkpoint is durable. A remaining first-start marker permits retrying interrupted
+first start; a store without a checkpoint or marker fails closed. (This is not the
+[checkpoint marker](#checkpoint-marker): that file is `checkpoint.marker` and
+stays for the world's lifetime.) Required checkpoint player records
 must decode and match their keys; offline player custody is retained rather than
 silently discarded.
 
