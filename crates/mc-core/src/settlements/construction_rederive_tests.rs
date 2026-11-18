@@ -1513,11 +1513,15 @@ fn a_terrain_stage_restart_pays_planks_once_and_dirt_nothing() {
     let (output, _, _) = crate::tick::run_tick(&mut s.state, &[]);
     crate::core::journal_entries_for_tick(&mut s.state, &output).unwrap();
     checkpoint(&mut s.state, &config);
-    // Run the terrain stage out and stop before the build stage publishes.
+    let mut writer = JournalWriter::open(&live, 1).unwrap();
+    // Run the terrain stage out, journaling every step to the WAL, and stop
+    // before the build stage publishes.
     while status(&s).current_stage_index == 0 && status(&s).state != ScriptStructureState::Committed
     {
         step(&mut s).unwrap();
+        journal(&mut s.state, &mut writer);
     }
+    drop(writer);
     assert_eq!(
         status(&s).current_stage_index,
         1,
@@ -1525,14 +1529,25 @@ fn a_terrain_stage_restart_pays_planks_once_and_dirt_nothing() {
     );
     let stopped = work.path().join("stopped");
     copy_world(&live, &stopped);
-    let scene_like = Scene {
-        state: crate::settlements::construction::tests::fixture().0,
-        id: s.id,
-        builder: s.builder,
-        handle: s.handle.clone(),
-    };
+    let mut restored = restore(&s, &stopped);
     drop(s);
-    let mut restored = restore(&scene_like, &stopped);
+    // The terrain stage's progress and its credit are durable: the restart
+    // resumes at the build stage, not before the terrain stage.
+    assert_eq!(
+        status(&restored).current_stage_index,
+        1,
+        "the restart resumes at the build stage"
+    );
+    assert_eq!(
+        stock(&restored.state, "minecraft:oak_planks"),
+        1,
+        "the terrain stage's plank credit survived the restart"
+    );
+    assert_eq!(
+        stock(&restored.state, "minecraft:dirt"),
+        0,
+        "the terrain stage paid nothing for the planner's ground"
+    );
     while status(&restored).state != ScriptStructureState::Committed {
         step(&mut restored).unwrap();
     }
