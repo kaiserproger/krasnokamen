@@ -10,23 +10,6 @@ use super::tests::fixture;
 use super::*;
 use crate::settlements::allocator::tests::block;
 
-/// Flat stone terrain with air above: `stone` roof at `ground` and `ground+1`,
-/// clear above. The pool tests dig into the top layer.
-fn plateau(state: &mut TickState, ground: i32) {
-    let stone = state.registry.states.stone;
-    let air = state.registry.states.air;
-    for x in 0..16 {
-        for z in 0..16 {
-            state.world.set_block(x, ground - 1, z, stone);
-            state.world.set_block(x, ground, z, stone);
-            for y in ground + 1..ground + 10 {
-                state.world.set_block(x, y, z, air);
-            }
-        }
-    }
-    state.world.fold_overlay();
-}
-
 /// The storage blueprint's lot at `[3, 201, 3]`, with a one-deep water pool in
 /// its footprint dug at `ground = 200` and the ring left solid.
 fn pool_lot() -> (
@@ -37,7 +20,16 @@ fn pool_lot() -> (
     BTreeSet<[i32; 2]>,
 ) {
     let (mut state, id, _slot) = fixture();
-    plateau(&mut state, 200);
+    // A loaded flat plan: stone ground at 200 (plus a 199 row for the pool
+    // bottoms) and air above, so both `check` and `planned_cells` can run.
+    super::tests::open_plan(&mut state);
+    let stone = state.registry.states.stone;
+    for x in 0..16 {
+        for z in 0..16 {
+            state.world.set_block(x, 199, z, stone);
+        }
+    }
+    state.world.fold_overlay();
     let blueprint = blueprints::get(&state.registry, "storage").expect("storage blueprint");
     let size = blueprint.footprint(Rotation::from_quarter_turns(0));
     let origin = [3, 201, 3];
@@ -106,40 +98,51 @@ fn an_open_bowl_refuses_the_lot() {
 }
 
 #[test]
-fn mixed_liquids_and_preserved_water_supplies_refuse() {
-    let (state, id, origin, size, floors) = pool_lot();
-    let mut liquids = liquid::Liquids {
+fn mixed_liquids_refuse() {
+    let (state, _id, origin, size, _floors) = pool_lot();
+    let liquids = liquid::Liquids {
         water: 1,
         lava: 1,
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &liquids, origin, size, origin[1] - 2),
+        liquid::finish(&state, &liquids, origin, size, origin[1] - 2, &[]),
         Err(Reason::MixedLiquids)
     );
-    liquids = liquid::Liquids {
-        preserved_water: true,
-        ..Default::default()
-    };
-    assert_eq!(
-        liquid::finish(&state, &liquids, origin, size, origin[1] - 2),
-        Err(Reason::LiquidInWork)
-    );
-    let mut mixed = liquid::Liquids {
+    // A preserved water source (waterlogged/bubble) counts as water for mixing.
+    let preserved = liquid::Liquids {
         lava: 1,
         preserved_water: true,
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &mixed, origin, size, origin[1] - 2),
+        liquid::finish(&state, &preserved, origin, size, origin[1] - 2, &[]),
         Err(Reason::MixedLiquids)
     );
-    mixed = liquid::Liquids {
+}
+
+#[test]
+fn a_preserved_water_supply_alone_refuses() {
+    let (state, _id, origin, size, _floors) = pool_lot();
+    let liquids = liquid::Liquids {
+        preserved_water: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        liquid::finish(&state, &liquids, origin, size, origin[1] - 2, &[]),
+        Err(Reason::LiquidInWork)
+    );
+}
+
+#[test]
+fn the_liquid_bound_refuses() {
+    let (state, _id, origin, size, _floors) = pool_lot();
+    let liquids = liquid::Liquids {
         water: liquid::MAX_LIQUID_CELLS as u32 + 1,
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &mixed, origin, size, origin[1] - 2),
+        liquid::finish(&state, &liquids, origin, size, origin[1] - 2, &[]),
         Err(Reason::LiquidBeyondBound)
     );
 }
@@ -378,4 +381,148 @@ fn executor_write_over_a_lava_source_schedules_the_flow_it_fed() {
         Some(air),
         "the flow the replaced source fed must recede on its due fluid tick"
     );
+}
+
+/// Replace the whole footprint at `y` with one fluid state (no authored floor
+/// test setup): every column then looks like a one-deep pool.
+fn fill_footprint(state: &mut TickState, origin: [i32; 3], size: [u8; 3], block: u32) {
+    for x in origin[0]..origin[0] + i32::from(size[0]) {
+        for z in origin[2]..origin[2] + i32::from(size[2]) {
+            state.world.set_block(x, 200, z, block);
+        }
+    }
+    state.world.fold_overlay();
+}
+
+#[test]
+fn a_player_attributed_fluid_below_the_floor_refuses() {
+    let (mut state, id, origin, size, floors) = pool_lot();
+    let at = [origin[0], origin[1] - 1, origin[2]];
+    state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+    assert!(state.block_log.player_touched(at));
+    let before = state.world.block_at(at[0], at[1], at[2]);
+    let slots = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert_eq!(
+        check_lot(&state, id, origin, size, &floors),
+        Err(Reason::ProtectedObstruction),
+        "a player-attributed water cell is never a fill target"
+    );
+    assert_eq!(state.world.block_at(at[0], at[1], at[2]), before);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, slots);
+}
+
+#[test]
+fn a_tree_in_the_ring_does_not_close_the_bowl() {
+    let (mut state, id, origin, size, floors) = pool_lot();
+    let log = block(&state, "minecraft:oak_log", &[]);
+    state.world.set_block(origin[0] - 1, 200, origin[2], log);
+    state.world.fold_overlay();
+    assert_eq!(
+        check_lot(&state, id, origin, size, &floors),
+        Err(Reason::LiquidOpenShell),
+        "a ring tree is felled by this same plan, so it is not a wall"
+    );
+}
+
+#[test]
+fn a_cave_under_a_neighbouring_column_opens_the_bowl() {
+    let (mut state, id, origin, size, floors) = pool_lot();
+    let air = state.registry.states.air;
+    let stone = state.registry.states.stone;
+    // Support stays at 200 with a pocket at 199, while the pool floors are 199:
+    // the fluid could flow sideways and descend under the ring.
+    state.world.set_block(origin[0], 200, origin[2], stone);
+    state.world.set_block(origin[0], 199, origin[2], air);
+    state.world.fold_overlay();
+    assert_eq!(
+        check_lot(&state, id, origin, size, &floors),
+        Err(Reason::LiquidOpenShell)
+    );
+}
+
+#[test]
+fn a_combustible_ring_is_not_a_retaining_shell_for_lava() {
+    let (mut state, id, origin, size, floors) = pool_lot();
+    let lava = state.registry.states.lava_levels[0];
+    fill_footprint(&mut state, origin, size, lava);
+    let planks = block(&state, "minecraft:oak_planks", &[]);
+    state.world.set_block(origin[0] - 1, 200, origin[2], planks);
+    state.world.fold_overlay();
+    assert_eq!(
+        check_lot(&state, id, origin, size, &floors),
+        Err(Reason::CombustibleShell)
+    );
+    // The same ring holds water: water does not ignite it.
+    let water = state.registry.states.water_levels[0];
+    fill_footprint(&mut state, origin, size, water);
+    state.world.fold_overlay();
+    assert!(
+        check_lot(&state, id, origin, size, &floors).is_ok(),
+        "a wooden ring is a legal bowl for water"
+    );
+}
+
+#[test]
+fn a_fluid_on_an_unfloored_floor_row_is_one_paid_fill() {
+    let (mut state, id, origin, size, floors) = pool_lot();
+    // A column the blueprint does not floor: its floor row may be a fluid cell,
+    // and the plan writes exactly one paid fill cell there.
+    let column = origin[0]..origin[0] + i32::from(size[0]);
+    let unfloored = column
+        .flat_map(|x| (origin[2]..origin[2] + i32::from(size[2])).map(move |z| [x, z]))
+        .find(|[x, z]| !floors.contains(&[x - origin[0], z - origin[2]]))
+        .expect("a storage lot keeps unfloored columns");
+    let at = [unfloored[0], origin[1], unfloored[1]];
+    let air = state.registry.states.air;
+    let stone = state.registry.states.stone;
+    let water = state.registry.states.water_levels[0];
+    // A dry support under a one-deep pond whose surface is the floor row.
+    state.world.set_block(at[0], at[1] - 1, at[2], stone);
+    state.world.set_block(at[0], at[1], at[2], water);
+    // Leave the rest of the footprint dry so only this column is liquid.
+    for x in origin[0]..origin[0] + i32::from(size[0]) {
+        for z in origin[2]..origin[2] + i32::from(size[2]) {
+            if [x, z] != unfloored {
+                state.world.set_block(x, 200, z, stone);
+                state.world.set_block(x, 201, z, air);
+            }
+        }
+    }
+    // A solid one-cell ring up to the fluid's own top.
+    let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
+    for x in origin[0] - 1..=max[0] + 1 {
+        for z in origin[2] - 1..=max[2] + 1 {
+            let ring =
+                x == origin[0] - 1 || x == max[0] + 1 || z == origin[2] - 1 || z == max[2] + 1;
+            if ring {
+                state.world.set_block(x, 200, z, stone);
+                state.world.set_block(x, 201, z, stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let cost = check_lot(&state, id, origin, size, &floors).expect("fluid on the floor row");
+    assert!(cost.liquid >= 1, "the floor-row fluid is a liquid cell");
+    assert!(cost.water >= 1);
+    let project = Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin,
+        rotation: 0,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+        borrowed_builder: None,
+    };
+    let (_, cells) =
+        super::preparation::planned_cells(&state, &project, "oak", &mut Default::default())
+            .expect("the lot plans");
+    let fill = cells
+        .iter()
+        .find(|cell| cell.at == at)
+        .expect("the floor-row fluid is in the plan");
+    assert_eq!(fill.state, state.registry.states.dirt);
+    assert_eq!(fill.resource.as_deref(), Some("minecraft:dirt"));
+    assert_eq!(fill.quantity, 1, "one paid fill block");
 }

@@ -64,16 +64,23 @@ publish seal. The contract that follows, and that ownership must keep:
 2. **No relocation.** An executor write is never moved into the pre-settlement
    `block_writes`: that phase has already run and its overlay is folded, so a
    late append would publish the same position twice.
-3. **World-state waits.** A liquid fill waits on the world, never on a timer: a
-   flowing or falling lava cell is never written, and the next admission reads
-   the drained state. A waiting gate may schedule the orphan flow's
-   neighbourhood itself; the wait is bounded by the engine's drain (lava 30-tick
-   steps) and is named in the stall cause (`lava_draining`) instead of being
-   reported as a stalled builder.
+3. **World-state waits.** A liquid fill waits on the world, never on a timer:
+   the executor gate refuses to write a flowing or falling lava cell, and the
+   next admission reads the drained state. The gate is part of the settlement
+   executor follow-up (the pre-`clear` liquid stage), not of the admission
+   change alone. A waiting gate schedules the orphan flow's neighbourhood
+   **once, when the wait starts** — the fluid queue deduplicates only inside one
+   tick, so a per-tick call would add a fresh tick per neighbour on every
+   deadline. The wait is bounded by the engine's drain (lava 30-tick steps) and
+   is named in the stall cause (`lava_draining`) instead of being reported as a
+   stalled builder.
 4. **Pause and resume.** A fluid drain that changes the structure's block
    identity inside its bounds trips the ordinary `footprint_changed` pause; the
    settlement owner re-snapshots and resumes through its existing `recover`
-   path, which re-runs admission checks on the winner. There is no
+   path. `recover` does **not** re-run admission: it only refreshes the image and
+   builds the repair stage. Re-proving the liquid supply, mix and bowl before a
+   resume (with the shell inside the interference fence, and without re-planning
+   or re-charging paid cells) belongs to the executor follow-up. There is no
    fluid-tolerant image and no second recovery path.
 
 ## Declaration and resource model

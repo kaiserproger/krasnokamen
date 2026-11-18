@@ -170,8 +170,10 @@ claims require the actual pinned-server run, not this design decision.
 - Filling water and lava on lots is **implemented** (owner D21, 2026-11-17:
   pulled before the freeze, so the "missing" status above is superseded): water
   and lava below a needed lot's authored floor are filled with real blocks from a
-  safe stand, sources first, and a lava flow is waited out before the cell is
-  worked. The rules, named refusals and the bounded cost are in
+  safe stand and sources first. The builder-side drain wait, the pre-`clear`
+  liquid stage, the lava-neighbour veto and the safe-stand rule are wired in the
+  executor follow-up, not by the admission change alone; a lava lot is not safe
+  to build until that lands. The rules, named refusals and the bounded cost are in
   [construction](construction.md). A fluid door or verge column
   still refuses the lot, now by name `LiquidAccess`; preparing it is backlog.
 - Village paths and farmland on a needed lot may be removed, but the road

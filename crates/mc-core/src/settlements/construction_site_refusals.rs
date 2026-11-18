@@ -25,13 +25,14 @@ pub(super) enum Reason {
     LavaShell,
     LiquidOpenShell,
     MixedLiquids,
+    CombustibleShell,
     LiquidBeyondBound,
     LiquidAccess,
     ExecutorReservation,
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 22] = [
+const REASONS: [Reason; 23] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -49,6 +50,7 @@ const REASONS: [Reason; 22] = [
     Reason::LavaShell,
     Reason::LiquidOpenShell,
     Reason::MixedLiquids,
+    Reason::CombustibleShell,
     Reason::LiquidBeyondBound,
     Reason::LiquidAccess,
     Reason::ExecutorReservation,
@@ -519,6 +521,9 @@ pub(super) fn check(
     let mut lowest = floor;
     let mut cost = Cost::default();
     let mut liquids = liquid::Liquids::default();
+    // Per-column discovered supports: the bowl also proves the interior below a
+    // higher neighbour's support is solid ground (no cave pocket to descend in).
+    let mut columns: Vec<([i32; 2], i32)> = Vec::new();
     if record.buildings.values().any(|building| {
         !building.natural_zone
             && [0, 2].into_iter().all(|axis| {
@@ -552,6 +557,7 @@ pub(super) fn check(
                         })
                 })?;
             lowest = lowest.min(height);
+            columns.push(([x, z], height));
             let ground = state
                 .world
                 .physics_block_at(x, height, z)
@@ -569,15 +575,25 @@ pub(super) fn check(
                 .physics_block_at(x, floor, z)
                 .ok_or(Reason::Unloaded)?;
             // A fluid on the authored floor row is above the fill work: it is a
-            // named liquid refusal, not a generic protected floor. A fluid on an
-            // unfloored floor row is the last fill cell and is scanned below.
-            if authored_floor && liquid::contained(state, floor_block).is_some() {
+            // named liquid refusal, not a generic protected floor. On an
+            // unfloored row the fluid block *is* the last fill cell and the plan
+            // writes one paid block into it, so it is admitted here and counted
+            // by `scan_column`; a waterlogged solid there is a supply no fill can
+            // cut off and refuses by name.
+            let floor_fluid = liquid::fluid_block(state, floor_block);
+            let floor_contained = liquid::contained(state, floor_block).is_some();
+            if floor_contained && (authored_floor || !floor_fluid) {
                 return Err(Reason::LiquidInWork);
             }
+            // Only a candidate whose authored plan is known may treat its own
+            // unfloored floor row as the last fill cell. A generic footprint
+            // test (`floors: None`, e.g. founding) keeps refusing any fluid
+            // there, as does an authored floor row.
+            let floor_fluid_fill = floor_fluid && floors.is_some() && !authored_floor;
             if state.block_entities.contains_key(&(x, floor, z)) {
                 return Err(Reason::ProtectedObstruction);
             }
-            if !floor_replaceable(state, floor_block) {
+            if !floor_replaceable(state, floor_block) && !floor_fluid_fill {
                 return Err(Reason::ProtectedFloor);
             }
             if floor_block != state.registry.states.air
@@ -670,7 +686,7 @@ pub(super) fn check(
     }
     // Fluid inside the work volume is a fill target only while its supply ends
     // inside this footprint (closed bowl) and it is a single fluid kind.
-    liquid::finish(state, &liquids, origin, size, lowest)?;
+    liquid::finish(state, &liquids, origin, size, lowest, &columns)?;
     cost.liquid = liquids.total();
     cost.water = liquids.water;
     cost.lava = liquids.lava;
