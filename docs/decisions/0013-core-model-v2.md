@@ -300,6 +300,12 @@ logged at `error!` as a possible rollback to an earlier commit (Books R4-P1):
 the repair callback cannot tell an unclean stop from a damaged commit or header slot, and the
 WAL behind an acknowledged checkpoint is already pruned. Policy and drills:
 [persistence](../architecture/persistence.md).
+The native structure ledger is one plugin-domain key per structure, survey and
+worksite plus a schema-2 meta key; a tick journals only the records it wrote and
+the meta key, never the whole ledger. Structure work receipts are not stored:
+each record's watermark is the only count of its advances. The single-image
+ledger of older binaries and this one refuse each other (fail closed, no
+converter); see [structure ledger keys](../architecture/persistence.md#structure-ledger-keys).
 
 ### Immutable datapack worldgen inputs
 

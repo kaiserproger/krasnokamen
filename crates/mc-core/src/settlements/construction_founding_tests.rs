@@ -1038,3 +1038,6 @@ fn review_population_radius_growth_cannot_steal_a_founding_claim() {
     checkpoint(&mut state, &config);
     crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
 }
+
+#[path = "construction_ledger_tests.rs"]
+mod ledger;

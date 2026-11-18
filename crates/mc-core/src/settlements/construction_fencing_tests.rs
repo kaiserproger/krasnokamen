@@ -124,11 +124,11 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
 
         if restart {
             let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
-            let ledger = state
+            let ledger: Vec<(String, serde_json::Value)> = state
                 .plugins
-                .get_domain("@native-structures", "ledger")
-                .unwrap()
-                .clone();
+                .domain_entries("@native-structures")
+                .map(|(key, value)| (key.to_owned(), value.clone()))
+                .collect();
             let carry = state.entities.row(slot).villager.clone();
             let (mut restored, restored_id, restored_slot) = fixture();
             assert_eq!(restored_id, id);
@@ -140,9 +140,11 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
                 id.0,
             )
             .unwrap();
-            restored
-                .plugins
-                .set_domain("@native-structures", "ledger", ledger);
+            for (key, value) in ledger {
+                restored
+                    .plugins
+                    .set_domain("@native-structures", &key, value);
+            }
             restored.entities.row_mut(restored_slot).villager = carry;
             crate::settlements::rebuild_counts(&mut restored);
             restored.block_entities.get_mut(&(1, 201, 1)).unwrap().slots =

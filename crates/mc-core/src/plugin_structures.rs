@@ -14,17 +14,23 @@ use crate::tick::TickState;
 
 #[path = "plugin_structures/features.rs"]
 mod features;
+#[path = "plugin_structures/ledger.rs"]
+mod ledger;
 #[path = "plugin_structures/settlement_builds.rs"]
 pub(crate) mod settlement_builds;
 #[path = "plugin_structures/worksites.rs"]
 mod worksites;
 
+use ledger::Ledger;
+#[cfg(test)]
+pub(crate) use ledger::replica::Replica;
+
 const OWNER: &str = "@native-structures";
-const KEY: &str = "ledger";
 pub(crate) type Catalogs = BTreeMap<String, BlueprintCatalog>;
 
-/// Derived decoded state for one exact native domain image. PluginState owns
-/// invalidation at every domain write, including mutable access and WAL replay.
+/// Derived decoded state for the exact native domain keys of `OWNER`.
+/// PluginState owns invalidation at every domain write, including mutable
+/// access and WAL replay.
 #[derive(Default)]
 pub(crate) struct LedgerCache {
     decoded: std::sync::OnceLock<Result<Arc<Ledger>, Failure>>,
@@ -53,26 +59,18 @@ impl PartialEq for LedgerCache {
 impl Eq for LedgerCache {}
 
 impl LedgerCache {
-    pub(crate) fn invalidate(&mut self, owner: &str, key: &str) {
-        if owner == OWNER && key == KEY {
+    pub(crate) fn invalidate(&mut self, owner: &str) {
+        if owner == OWNER {
             self.decoded.take();
         }
     }
 
-    fn read(&self, value: Option<&serde_json::Value>) -> Result<LedgerView, Failure> {
+    fn read<'a>(
+        &self,
+        entries: impl Iterator<Item = (&'a str, &'a serde_json::Value)>,
+    ) -> Result<LedgerView, Failure> {
         self.decoded
-            .get_or_init(|| {
-                value.map_or_else(
-                    || Ok(Arc::new(Ledger::default())),
-                    |value| {
-                        #[cfg(test)]
-                        count_ledger(|stats| stats.decodes += 1);
-                        Ledger::deserialize(value)
-                            .map(Arc::new)
-                            .map_err(|_| Failure::RuntimeUnavailable)
-                    },
-                )
-            })
+            .get_or_init(|| Ledger::decode(entries).map(Arc::new))
             .clone()
             .map(LedgerView)
     }
@@ -242,14 +240,8 @@ fn catalog_namespace(files: &[(String, String)]) -> Option<String> {
     })
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
-struct Ledger {
-    revision: u64,
-    surveys: BTreeMap<String, Survey>,
-    structures: BTreeMap<String, Structure>,
-    worksites: BTreeMap<String, Worksite>,
-}
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Survey {
     owner: String,
     snapshot: ScriptSurveySnapshot,
@@ -257,6 +249,7 @@ struct Survey {
     expires: u64,
 }
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Cell {
     at: [i32; 3],
     state: u32,
@@ -267,7 +260,10 @@ struct Cell {
 fn default_cell_quantity() -> u32 {
     1
 }
+/// One structure's record. Its advance receipts are returned to the caller and
+/// counted by `snapshot.watermark`; they are not kept here.
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Structure {
     owner: String,
     #[serde(default)]
@@ -279,9 +275,9 @@ struct Structure {
     blueprint_hash: String,
     image: String,
     cells: Vec<Vec<Cell>>,
-    receipts: Vec<ScriptStructureReceipt>,
 }
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Worksite {
     owner: String,
     dimension: String,
@@ -309,7 +305,7 @@ pub(crate) fn building_facts<'a>(
                 return Err(Failure::NotFound);
             }
             if worksite {
-                let record = ledger.worksites.get(id).ok_or(Failure::NotFound)?;
+                let record = ledger.worksites().get(id).ok_or(Failure::NotFound)?;
                 if record.owner != owner {
                     return Err(Failure::Forbidden);
                 }
@@ -320,7 +316,7 @@ pub(crate) fn building_facts<'a>(
                     blueprint: None,
                 })
             } else {
-                let record = ledger.structures.get(id).ok_or(Failure::NotFound)?;
+                let record = ledger.structures().get(id).ok_or(Failure::NotFound)?;
                 if record.owner != owner {
                     return Err(Failure::Forbidden);
                 }
@@ -349,24 +345,22 @@ fn ledger(state: &TickState) -> Result<LedgerView, Failure> {
     state
         .plugins
         .structure_cache
-        .read(state.plugins.get_domain(OWNER, KEY))
+        .read(state.plugins.domain_entries(OWNER))
 }
 
 fn ledger_mut(state: &mut TickState) -> Result<LedgerView, Failure> {
     let ledger = ledger(state)?;
-    // The serialized image is still authoritative until save. Removing only its
+    // The serialized keys stay authoritative until save. Removing only their
     // derived cache lets an exclusive writer reuse the decoded allocation.
     state.plugins.structure_cache.decoded.take();
     Ok(ledger)
 }
 
-fn save(state: &mut TickState, ledger: &LedgerView) {
-    state.plugins.set_domain(
-        OWNER,
-        KEY,
-        serde_json::to_value(&*ledger.0).expect("native structure ledger serialization"),
-    );
-    state.plugins.structure_cache.install(ledger.0.clone());
+/// Publishes the records this writer touched plus the meta key, then installs
+/// the written ledger, with no marks left, as the decoded cache.
+fn save(state: &mut TickState, mut ledger: LedgerView) {
+    ledger.publish(&mut state.plugins);
+    state.plugins.structure_cache.install(ledger.0);
 }
 fn next(value: u64) -> Result<u64, Failure> {
     value
@@ -433,7 +427,7 @@ fn validate_survey(
     bounds: ScriptWorldBounds,
     revision: u64,
 ) -> Result<(), Failure> {
-    let survey = ledger.surveys.get(reference).ok_or(Failure::NotFound)?;
+    let survey = ledger.surveys().get(reference).ok_or(Failure::NotFound)?;
     if survey.owner != owner {
         return Err(Failure::Forbidden);
     }
@@ -558,18 +552,19 @@ fn blueprint(state: &TickState, owner: &str, id: &str) -> Result<Arc<Blueprint>,
         .ok_or(Failure::NotFound)
 }
 fn structure<'a>(ledger: &'a Ledger, owner: &str, id: &str) -> Result<&'a Structure, Failure> {
-    let record = ledger.structures.get(id).ok_or(Failure::NotFound)?;
+    let record = ledger.structures().get(id).ok_or(Failure::NotFound)?;
     if record.owner != owner {
         return Err(Failure::Forbidden);
     }
     Ok(record)
 }
+/// Removes the record for an exclusive rewrite; the ledger marks its key, so
+/// a later `save` writes it again or, if it was not reinserted, removes it.
 fn take_structure(ledger: &mut Ledger, owner: &str, id: &str) -> Result<Structure, Failure> {
-    let record = ledger.structures.remove(id).ok_or(Failure::NotFound)?;
-    if record.owner != owner {
+    if ledger.structures().get(id).ok_or(Failure::NotFound)?.owner != owner {
         return Err(Failure::Forbidden);
     }
-    Ok(record)
+    Ok(ledger.take_structure(id).expect("record present"))
 }
 
 fn advance_cells<'a>(
@@ -780,7 +775,7 @@ fn survey(
         return Err(Failure::Capacity);
     }
     let existing = ledger
-        .structures
+        .structures()
         .values()
         .filter(|s| {
             s.snapshot.state != ScriptStructureState::Cancelled
@@ -805,8 +800,8 @@ fn survey(
     snapshot.validate().map_err(|_| Failure::InvalidRequest)?;
     ledger.revision = revision;
     let watermark = state.plugins.revision();
-    ledger.surveys.retain(|_, s| s.expires >= watermark);
-    ledger.surveys.insert(
+    ledger.retain_surveys(|s| s.expires >= watermark);
+    ledger.insert_survey(
         token,
         Survey {
             owner: owner.to_owned(),
@@ -815,7 +810,7 @@ fn survey(
             expires: watermark.saturating_add(64),
         },
     );
-    save(state, &ledger);
+    save(state, ledger);
     Ok((
         revision,
         ScriptWorldStructureResult::Survey {
@@ -930,7 +925,7 @@ fn execute_operation(
                 return Err(Failure::InvalidRequest);
             }
             if ledger
-                .structures
+                .structures()
                 .values()
                 .filter(|s| {
                     s.owner == owner
@@ -949,7 +944,7 @@ fn execute_operation(
             if settlement_builds::expedition_reserved(target, bounds, None) {
                 return Err(Failure::Blocked);
             }
-            if ledger.structures.values().any(|s| {
+            if ledger.structures().values().any(|s| {
                 s.snapshot.dimension == *dimension
                     && s.snapshot.state != ScriptStructureState::Cancelled
                     && reserved_bounds(s).is_ok_and(|b| overlaps(b, bounds))
@@ -1003,7 +998,7 @@ fn execute_operation(
             snapshot.validate().map_err(|_| Failure::InvalidRequest)?;
             let image = fingerprint(target, bounds, false)?;
             ledger.revision = revision;
-            ledger.structures.insert(
+            ledger.insert_structure(
                 id,
                 Structure {
                     owner: owner.to_owned(),
@@ -1013,10 +1008,9 @@ fn execute_operation(
                     blueprint_hash: blueprint.content_hash().to_owned(),
                     image,
                     cells,
-                    receipts: Vec::new(),
                 },
             );
-            save(state, &ledger);
+            save(state, ledger);
             Ok((
                 revision,
                 ScriptWorldStructureResult::Structure {
@@ -1079,8 +1073,8 @@ fn execute_operation(
                 ledger.revision = next(ledger.revision)?;
                 record.snapshot.revision = ledger.revision;
                 let result = record.snapshot.clone();
-                ledger.structures.insert(structure_id.clone(), record);
-                save(state, &ledger);
+                ledger.insert_structure(structure_id.clone(), record);
+                save(state, ledger);
                 return Ok((
                     result.revision,
                     ScriptWorldStructureResult::Structure {
@@ -1196,10 +1190,9 @@ fn execute_operation(
                     record.snapshot.state = ScriptStructureState::Committed;
                 }
             }
-            record.receipts.push(receipt.clone());
             ledger.revision = revision;
-            ledger.structures.insert(structure_id.clone(), record);
-            save(state, &ledger);
+            ledger.insert_structure(structure_id.clone(), record);
+            save(state, ledger);
             Ok((
                 revision,
                 ScriptWorldStructureResult::Receipt {
@@ -1274,8 +1267,8 @@ fn execute_operation(
             ledger.revision = revision;
             record.snapshot.revision = ledger.revision;
             let result = record.snapshot.clone();
-            ledger.structures.insert(structure_id.clone(), record);
-            save(state, &ledger);
+            ledger.insert_structure(structure_id.clone(), record);
+            save(state, ledger);
             Ok((
                 result.revision,
                 ScriptWorldStructureResult::Structure {
@@ -1286,7 +1279,7 @@ fn execute_operation(
         ScriptWorldStructureOperation::RegisterWorksite { request, .. } => {
             let mut ledger = ledger_mut(state)?;
             let survey = ledger
-                .surveys
+                .surveys()
                 .get(&request.survey_token)
                 .ok_or(Failure::NotFound)?;
             let dimension = survey.snapshot.dimension.clone();
@@ -1314,7 +1307,7 @@ fn execute_operation(
                 ledger.revision,
             );
             snapshot.validate().map_err(|_| Failure::InvalidRequest)?;
-            ledger.worksites.insert(
+            ledger.insert_worksite(
                 id,
                 Worksite {
                     owner: owner.to_owned(),
@@ -1322,7 +1315,7 @@ fn execute_operation(
                     snapshot: snapshot.clone(),
                 },
             );
-            save(state, &ledger);
+            save(state, ledger);
             Ok((
                 snapshot.revision,
                 ScriptWorldStructureResult::Worksite {
@@ -1333,7 +1326,10 @@ fn execute_operation(
         ScriptWorldStructureOperation::WorksiteStatus { worksite_id }
         | ScriptWorldStructureOperation::CheckWorksite { worksite_id } => {
             let ledger = ledger(state)?;
-            let worksite = ledger.worksites.get(worksite_id).ok_or(Failure::NotFound)?;
+            let worksite = ledger
+                .worksites()
+                .get(worksite_id)
+                .ok_or(Failure::NotFound)?;
             if worksite.owner != owner {
                 return Err(Failure::Forbidden);
             }
@@ -1454,11 +1450,19 @@ pub(crate) fn advance_npc_work(
 pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError> {
     let malformed =
         || crate::config::CoreError::Recovery("invalid native plugin structure ledger".into());
+    if ledger::legacy(state.plugins.get_domain(OWNER, ledger::META)) {
+        return Err(crate::config::CoreError::Recovery(
+            "native plugin structure ledger has the single-image format of older binaries; \
+             this binary does not open it (reset the world, see OPERATING \"Structure ledger \
+             format\")"
+                .into(),
+        ));
+    }
     let ledger = ledger(state).map_err(|_| malformed())?;
     if ledger.revision > MAX_SCRIPT_WORLD_TIME {
         return Err(malformed());
     }
-    for (token, survey) in &ledger.surveys {
+    for (token, survey) in ledger.surveys() {
         if token != &survey.snapshot.survey_token
             || survey.owner.is_empty()
             || !valid_hash(&survey.image)
@@ -1468,12 +1472,15 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
         }
         survey.snapshot.validate().map_err(|_| malformed())?;
     }
-    for (id, record) in &ledger.structures {
+    for (id, record) in ledger.structures() {
         if id != &record.snapshot.structure_id
             || record.owner.is_empty()
             || !valid_hash(&record.image)
             || !valid_hash(&record.blueprint_hash)
             || record.snapshot.revision > ledger.revision
+            // Each advance sets the record's revision to a new global
+            // revision and adds one to its watermark; nothing lowers either.
+            || record.snapshot.watermark > record.snapshot.revision
             || record.cells.len() != record.snapshot.stages.len()
         {
             return Err(malformed());
@@ -1566,18 +1573,6 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
         if inventories::resource_plan_hash(&plan) != record.snapshot.resource_plan_hash {
             return Err(malformed());
         }
-        if record.receipts.len() as u64 != record.snapshot.watermark {
-            return Err(malformed());
-        }
-        for (index, receipt) in record.receipts.iter().enumerate() {
-            receipt.validate().map_err(|_| malformed())?;
-            if receipt.structure_id != *id
-                || receipt.sequence != index as u64 + 1
-                || receipt.revision > record.snapshot.revision
-            {
-                return Err(malformed());
-            }
-        }
         if let Some(reference) = &record.snapshot.reservation_ref {
             match inventories::reservation(state, &record.owner, reference) {
                 Ok(reservation)
@@ -1590,7 +1585,7 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
             }
         }
     }
-    for (id, worksite) in &ledger.worksites {
+    for (id, worksite) in ledger.worksites() {
         if id != &worksite.snapshot.worksite_id
             || worksite.owner.is_empty()
             || worksite.snapshot.revision > ledger.revision

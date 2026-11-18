@@ -546,17 +546,16 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
         .unwrap();
     retain_player_edit(&mut state, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
-    // using the canonical persisted ledger image, without changing its stage.
-    let mut ledger = state
+    // using the canonical persisted structure record, without changing its stage.
+    let key = format!("structure/{}", project.structure);
+    let mut record = state
         .plugins
-        .get_domain("@native-structures", "ledger")
+        .get_domain("@native-structures", &key)
         .unwrap()
         .clone();
-    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+    record["snapshot"]["consumed"] =
         serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
-    state
-        .plugins
-        .set_domain("@native-structures", "ledger", ledger);
+    state.plugins.set_domain("@native-structures", &key, record);
     let before = executor::status(&state, id, &project.structure).unwrap();
     assert!(!before.consumed.is_empty());
     assert!(executor::clearing(&state, id, &project.structure));

@@ -38,7 +38,7 @@ pub(crate) fn prepare(
         return Err(Failure::Blocked);
     }
     let ledger = ledger(state)?;
-    if ledger.structures.values().any(|record| {
+    if ledger.structures().values().any(|record| {
         let same_settlement = record.settlement == Some(settlement);
         // An in-flight structure of this settlement holds its own site, not the
         // wide clear-stage window: a neighbour lot may be prepared beside it
@@ -143,7 +143,7 @@ pub(crate) fn prepare(
     snapshot.validate().map_err(|_| Failure::InvalidRequest)?;
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
-    ledger.structures.insert(
+    ledger.insert_structure(
         id.clone(),
         Structure {
             owner: owner(settlement),
@@ -153,17 +153,16 @@ pub(crate) fn prepare(
             blueprint_hash: inventories::hash(&batches),
             image,
             cells: batches,
-            receipts: Vec::new(),
         },
     );
     ledger.revision = revision;
-    save(state, &ledger);
+    save(state, ledger);
     Ok(id)
 }
 
 pub(crate) fn area_reserved(state: &TickState, bounds: ScriptWorldBounds) -> bool {
     ledger(state).map_or(true, |ledger| {
-        ledger.structures.values().any(|record| {
+        ledger.structures().values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
                 && reserved_bounds(record).is_ok_and(|existing| overlaps(existing, bounds))
@@ -192,7 +191,7 @@ fn spent_free_work(record: &Structure) -> bool {
 /// [`area_reserved`] without the spent free work of [`spent_free_work`].
 pub(crate) fn area_held(state: &TickState, bounds: ScriptWorldBounds) -> bool {
     ledger(state).map_or(true, |ledger| {
-        ledger.structures.values().any(|record| {
+        ledger.structures().values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
                 && !spent_free_work(record)
@@ -203,7 +202,7 @@ pub(crate) fn area_held(state: &TickState, bounds: ScriptWorldBounds) -> bool {
 
 pub(crate) fn cancel(state: &mut TickState, id: SettlementId) -> Result<(), Failure> {
     let ledger = ledger(state)?;
-    if !ledger.structures.values().any(|record| {
+    if !ledger.structures().values().any(|record| {
         record.settlement == Some(id) && record.snapshot.state != ScriptStructureState::Cancelled
     }) {
         return Ok(());
@@ -211,18 +210,14 @@ pub(crate) fn cancel(state: &mut TickState, id: SettlementId) -> Result<(), Fail
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let revision = next(ledger.revision)?;
-    for record in ledger
-        .structures
-        .values_mut()
-        .filter(|record| record.settlement == Some(id))
-    {
+    for record in ledger.structures_mut_where(|record| record.settlement == Some(id)) {
         record.snapshot.state = ScriptStructureState::Cancelled;
         record.snapshot.revision = revision;
         record.snapshot.pause_reason = None;
         record.snapshot.reservation_ref = None;
     }
     ledger.revision = revision;
-    save(state, &ledger);
+    save(state, ledger);
     Ok(())
 }
 
@@ -236,13 +231,13 @@ pub(crate) fn cancel_structure(
     let mut ledger = ledger_mut(state)?;
     structure(&ledger, &owner(settlement), handle)?;
     let revision = next(ledger.revision)?;
-    let record = ledger.structures.get_mut(handle).ok_or(Failure::NotFound)?;
+    let record = ledger.structure_mut(handle).ok_or(Failure::NotFound)?;
     record.snapshot.state = ScriptStructureState::Cancelled;
     record.snapshot.revision = revision;
     record.snapshot.pause_reason = None;
     record.snapshot.reservation_ref = None;
     ledger.revision = revision;
-    save(state, &ledger);
+    save(state, ledger);
     Ok(())
 }
 
@@ -417,8 +412,8 @@ pub(crate) fn recover(
     record.snapshot.pause_reason = None;
     ledger.revision = next(ledger.revision)?;
     record.snapshot.revision = ledger.revision;
-    ledger.structures.insert(handle.to_owned(), record);
-    save(state, &ledger);
+    ledger.insert_structure(handle.to_owned(), record);
+    save(state, ledger);
     Ok(true)
 }
 
@@ -512,8 +507,8 @@ pub(crate) fn reopen_emptied(
     record.blueprint_hash = inventories::hash(&record.cells);
     ledger.revision = next(ledger.revision)?;
     record.snapshot.revision = ledger.revision;
-    ledger.structures.insert(handle.to_owned(), record);
-    save(state, &ledger);
+    ledger.insert_structure(handle.to_owned(), record);
+    save(state, ledger);
     Ok(true)
 }
 
@@ -536,9 +531,7 @@ pub(crate) fn next_cell(
 pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str) -> bool {
     let Some(record) = state
         .plugins
-        .get_domain(OWNER, KEY)
-        .and_then(|ledger| ledger.get("structures"))
-        .and_then(|structures| structures.get(handle))
+        .get_domain(OWNER, &ledger::structure_key(handle))
     else {
         return false;
     };
@@ -982,9 +975,9 @@ fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
     })
 }
 
-/// Resolve a town's workstation reference without deserializing the world's
-/// cell/receipt ledger on every villager admission. The borrowed JSON is the
-/// canonical ledger itself; the settlement handle grants no custody alone.
+/// Resolve a town's workstation reference without decoding the world's
+/// structure ledger on every villager admission. The borrowed JSON is the
+/// canonical record itself; the settlement handle grants no custody alone.
 pub(crate) fn furnace_workstation(
     state: &TickState,
     id: SettlementId,
@@ -992,9 +985,7 @@ pub(crate) fn furnace_workstation(
 ) -> Option<[i32; 3]> {
     let record = state
         .plugins
-        .get_domain(OWNER, KEY)?
-        .get("structures")?
-        .get(handle)?;
+        .get_domain(OWNER, &ledger::structure_key(handle))?;
     if record.get("settlement")?.as_u64()? != id.0 {
         return None;
     }
@@ -1017,7 +1008,7 @@ pub(crate) fn built_at(
     origin: [i32; 3],
 ) -> bool {
     ledger(state).is_ok_and(|ledger| {
-        ledger.structures.values().any(|record| {
+        ledger.structures().values().any(|record| {
             record.settlement == Some(id)
                 && record
                     .snapshot
@@ -1650,7 +1641,7 @@ pub(crate) fn founding_claim_clear(
 ) -> bool {
     let source_owner = owner(source);
     ledger(state).is_ok_and(|ledger| {
-        ledger.structures.values().all(|record| {
+        ledger.structures().values().all(|record| {
             record.snapshot.dimension != state.dimension.name()
                 || record.snapshot.state == ScriptStructureState::Cancelled
                 || spent_free_work(record)
@@ -1701,7 +1692,7 @@ pub(crate) fn prepare_founding_transfer(
             })
     };
     for (name, origin) in sites {
-        if !ledger.structures.values().any(|record| {
+        if !ledger.structures().values().any(|record| {
             matches(record)
                 && record.snapshot.state == ScriptStructureState::Committed
                 && record
@@ -1714,7 +1705,11 @@ pub(crate) fn prepare_founding_transfer(
             return Err(Failure::Blocked);
         }
     }
-    for record in ledger.structures.values().filter(|record| matches(record)) {
+    for record in ledger
+        .structures()
+        .values()
+        .filter(|record| matches(record))
+    {
         if record.snapshot.dimension != state.dimension.name()
             || record.cells.iter().flatten().any(|cell| {
                 cell.state != state.registry.states.air
@@ -1739,13 +1734,9 @@ pub(crate) fn prepare_founding_transfer(
         }
     }
     let revision = next(ledger.revision)?;
-    for record in ledger
-        .structures
-        .values_mut()
-        .filter(|record| matches(record))
-    {
-        // Stable opaque structure IDs and original payment receipts remain the
-        // construction history; only the one live owner/provenance changes.
+    for record in ledger.structures_mut_where(|record| matches(record)) {
+        // Stable opaque structure IDs remain the construction history; only
+        // the one live owner/provenance changes.
         record.owner = owner(destination);
         record.settlement = Some(destination);
         record.snapshot.revision = revision;
@@ -1755,7 +1746,7 @@ pub(crate) fn prepare_founding_transfer(
 }
 
 pub(crate) fn commit_founding_transfer(state: &mut TickState, prepared: PreparedFoundingTransfer) {
-    save(state, &prepared.0);
+    save(state, prepared.0);
 }
 
 #[cfg(test)]

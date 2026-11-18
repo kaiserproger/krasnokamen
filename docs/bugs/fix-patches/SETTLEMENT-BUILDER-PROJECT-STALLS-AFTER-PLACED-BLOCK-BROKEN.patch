@@ -1,7 +1,7 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -245,7 +245,9 @@
+@@ -243,7 +243,9 @@ pub(crate) fn status(
  /// A foreign edit inside a native site pauses the structure as
  /// `footprint_changed`. The next construction admission accepts the world as
  /// it now is: re-snapshot the footprint and resume. Remaining cells are placed
@@ -12,7 +12,7 @@ diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/
  /// Returns whether a paused structure was resumed.
  pub(crate) fn recover(
      state: &mut TickState,
-@@ -254,18 +256,195 @@
+@@ -252,18 +254,195 @@ pub(crate) fn recover(
  ) -> Result<bool, Failure> {
      let ledger = ledger(state)?;
      let record = structure(&ledger, &owner(settlement), handle)?;
@@ -114,8 +114,8 @@ diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/
 +    record.snapshot.pause_reason = None;
 +    ledger.revision = next(ledger.revision)?;
 +    record.snapshot.revision = ledger.revision;
-+    ledger.structures.insert(handle.to_owned(), record);
-+    save(state, &ledger);
++    ledger.insert_structure(handle.to_owned(), record);
++    save(state, ledger);
 +    Ok(true)
 +}
 +
@@ -212,11 +212,11 @@ diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/
 +    record.blueprint_hash = inventories::hash(&record.cells);
      ledger.revision = next(ledger.revision)?;
      record.snapshot.revision = ledger.revision;
-     ledger.structures.insert(handle.to_owned(), record);
+     ledger.insert_structure(handle.to_owned(), record);
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2242,6 +2242,11 @@
+@@ -2551,6 +2551,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
      else {
          return false;
      };
@@ -228,7 +228,7 @@ diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src
      if !executor::status(state, id, &project.structure)
          .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
      {
-@@ -2258,6 +2263,11 @@
+@@ -2567,6 +2572,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
          record.revision = record.revision.saturating_add(1);
          return true;
      }

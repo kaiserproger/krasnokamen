@@ -161,6 +161,40 @@ another recovery.
   `krasnokamen_journal_prune_retained_bytes` are on `/metrics` and under
   `journal` in `/stats`. A directory that cannot be written at all still halts
   the world on the next append.
+### Structure ledger keys
+
+The native structure ledger lives in the `@native-structures` plugin domain as
+one key per record: `structure/<id>`, `survey/<token>` and `worksite/<id>`,
+plus the meta key `ledger` = `{schema: 2, revision}`. A write marks only the
+records it changes; the tick journals those keys and the meta key, never the
+whole ledger, so the bytes of a write do not depend on how many other records
+the ledger holds. All keys of one tick come from one sealed plugin delta, so a
+recovered ledger is always a tick boundary. The checkpoint stores every key.
+
+Startup refuses the ledger, before any checkpoint, WAL batch or prune, when:
+
+- the meta key has the single-image format of older binaries (a `structures`
+  field), whether the checkpoint or a WAL tail carries it;
+- the schema is not 2, records exist without the meta key, a key has an
+  unknown prefix, or a record has an unknown field;
+- a record's revision exceeds the meta revision, or its watermark exceeds its
+  own revision. An advance sets the record's revision to a new global revision
+  and adds one to its watermark; no transition lowers either.
+
+An older binary refuses a new world too: its ledger decoder needs the fields
+the meta key no longer has. See OPERATING
+[Structure ledger format](../OPERATING.md#structure-ledger-format).
+
+Structure work receipts are not stored. `snapshot.watermark` is the only
+stored count of advances; the next advance numbers its receipt `watermark + 1`
+and returns it to the caller in the `AdvanceStructure` result. With the stored
+list gone, startup no longer checks per receipt that its sequence is its index
+plus one, that its `structure_id` names the record, that its revision lies
+within the record's revision, or its own fields (stage, work units,
+materials); nor that the list length equals the watermark. What remains is the
+cheap bound `watermark <= snapshot.revision`: a wrong watermark within that
+bound is not detected. The watermark is not the sum of the current stages'
+work either: repair and replanning rewrite the stages.
 
 ### Recovery evidence and clocks
 
