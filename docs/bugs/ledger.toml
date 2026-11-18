@@ -7365,6 +7365,17 @@ regression = []
 failing_first = "not recorded"
 
 [[bug]]
+id = "SETTLEMENT-AUTONOMY-SCAN-GROWTH-AFTER-PREP-UNEXPLAINED"
+title = "After the Prep integration the adopted-village shears autonomy test needs about 4% more recipe-candidate scans to close, for a reason not yet established"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Found 2026-11-18 by PrepTerritory's A/B and PrepPortions (receipts/PrepPortions/shears-budget/): villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds exceeded its 1,700,000 candidate budget on the integrated Prep head 1a598ebf1 (closure tick 48105, 19,942 full proofs, 1,770,358 candidates; the pre-Prep head closed by tick 44541 within budget). Disabling only the unchanged-placement credits leaves the counts identical, so that change is not the cause; the cause is not established. For the 2026-11-18 candidate the test budget was raised to 1,900,000 (PrepPortions adb7fc3a6) without a funding-code change. Expected: find which Prep change adds the scans and either justify the work or remove it, then lower the budget again."
+repro = "cargo"
+regression = []
+failing_first = "reported"
+
+[[bug]]
 id = "BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT"
 title = "A cavalry husk whose horse died skates across the battlefield at 45-107 blocks per second toward its regiment's sweep point"
 area = "gameplay"
