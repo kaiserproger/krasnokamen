@@ -240,6 +240,27 @@ pub(crate) fn changed_project(
         .cloned()
 }
 
+/// The owner's notice at a stall report whose paid remainder is refused for
+/// provenance outside the territory (PrepLifecycle §2.3, Sol S-2). That wait
+/// ends only when the blocking player edit leaves the log, never with time
+/// eviction off, so the first report of each episode names the cell.
+pub(super) fn provenance_wait(
+    state: &TickState,
+    id: SettlementId,
+    project: &Project,
+    snapshot: &mc_script::ScriptStructureSnapshot,
+    report: bool,
+) -> Option<String> {
+    if !report || snapshot.consumed.is_empty() {
+        return None;
+    }
+    let [x, y, z] = executor::provenance_refusal(state, id, &project.structure)?;
+    Some(format!(
+        "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
+        project.blueprint
+    ))
+}
+
 #[cfg(test)]
 #[path = "construction_preparation_tests.rs"]
 mod tests;

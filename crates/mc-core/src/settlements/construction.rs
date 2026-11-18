@@ -2579,29 +2579,16 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         .then(|| retry_preparation(state, id, &project));
     // A retry the queue refused is the owner's to act on: the paid request is
     // still in flight, so the reason reaches them instead of only the log
-    // (D8 review R2-6).
-    if let Some(Err(error)) = preparation.as_ref() {
-        notify_owner(
-            state,
-            id,
-            format!("{} could not be retried: {error}", project.blueprint),
-        );
-    }
-    // A paid remainder refused for provenance outside the territory waits
-    // until the blocking player edit leaves the log, which never happens with
-    // time eviction off: the owner is told the cell once per episode (Sol S-2).
-    if report
-        && !snapshot.consumed.is_empty()
-        && let Some([x, y, z]) = executor::provenance_refusal(state, id, &project.structure)
-    {
-        notify_owner(
-            state,
-            id,
-            format!(
-                "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
-                project.blueprint
-            ),
-        );
+    // (D8 review R2-6). A retry needs nothing consumed, so it never meets the
+    // paid provenance wait.
+    if let Some(message) = match preparation.as_ref() {
+        Some(Err(error)) => Some(format!(
+            "{} could not be retried: {error}",
+            project.blueprint
+        )),
+        _ => self::preparation::provenance_wait(state, id, project, &snapshot, report),
+    } {
+        notify_owner(state, id, message);
     }
     let recovery = if preparation.as_ref().is_some_and(|result| result.is_ok()) {
         "preparation_cancelled"
