@@ -9,10 +9,32 @@ fn chest(state: &mut TickState) -> &mut Vec<mc_data::ItemStack> {
     &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots
 }
 
-fn double_stock(state: &mut TickState) {
-    for stack in chest(state).iter_mut().filter(|stack| stack.count > 0) {
-        stack.count = (stack.count * 2).min(64);
-    }
+/// The terrain fixture holds one lot, so a second neighbour project is pushed
+/// directly: its authored box is all these regressions read.
+fn push_neighbour(state: &mut TickState, id: SettlementId, handle: &str, origin: [i32; 3]) {
+    let record = state.settlements.get_mut(id).unwrap();
+    access::push_project(
+        record,
+        Project {
+            settlement: id,
+            blueprint: "house".into(),
+            level: 1,
+            origin,
+            rotation: 0,
+            building: None,
+            structure: handle.into(),
+            ordered: true,
+            builder: None,
+            order_seq: None,
+        },
+    );
+    record.revision = record.revision.saturating_add(1);
+}
+
+fn handles(state: &TickState, id: SettlementId) -> Vec<String> {
+    access::projects_of(&state.settlements, id)
+        .map(|project| project.structure.clone())
+        .collect()
 }
 
 /// P1-1: with two settlements the admission clock must reach every project of
@@ -402,4 +424,223 @@ fn an_unbound_project_cannot_pay_or_haul() {
     let fetched = executor::fetch(&mut state, uuid, &handle, [1, 201, 1], item);
     assert!(fetched.is_err(), "an unbound project hauls nothing");
     assert_eq!(chest(&mut state), &stock, "stock is untouched");
+}
+
+/// SOL-4: a stand or body inside a neighbour lot's authored footprint is
+/// refused, while the project's own footprint stays available.
+#[test]
+fn a_neighbour_footprint_is_not_a_stand() {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let mine = handles(&state, id)[0].clone();
+    push_neighbour(&mut state, id, "neighbour-house", [23, 200, 3]);
+    let other = "neighbour-house".to_string();
+    let record = state.settlements.get(id).unwrap();
+    let own = footprint(&state, project_for_structure(record, &mine).unwrap()).unwrap();
+    let theirs = footprint(&state, project_for_structure(record, &other).unwrap()).unwrap();
+    let inside_theirs = theirs.min;
+    let inside_own = own.min;
+    assert!(
+        in_other_footprint(&state, id, &mine, inside_theirs),
+        "a neighbour's future body is not this builder's stand"
+    );
+    assert!(
+        !in_other_footprint(&state, id, &mine, inside_own),
+        "a builder may stand in its own lot"
+    );
+    assert!(
+        in_other_footprint(&state, id, &other, inside_own),
+        "the rule is symmetric for the neighbour"
+    );
+}
+
+/// SOL-3: the reserve future carries every other active project's remainder
+/// and never the queried project itself.
+#[test]
+fn a_haul_reserves_the_other_active_bills() {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let mine = handles(&state, id)[0].clone();
+    let own_bill = project_bill(&state, id, &mine).unwrap();
+    assert!(
+        !own_bill.is_empty(),
+        "a running project has a bill to reserve"
+    );
+    // Nothing else is active, so this project reserves nothing against itself
+    // and a query for a stranger reserves the whole bill.
+    assert!(other_active_bill(&state, id, &mine).is_empty());
+    assert_eq!(
+        other_active_bill(&state, id, "stranger"),
+        own_bill,
+        "every other active bill is reserved exactly"
+    );
+}
+
+/// SOL-6: an addressable carry return reports whether it actually delivered,
+/// so a full store cannot silently drop the load.
+#[test]
+fn a_carry_return_reports_delivery() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let uuid = state.entities.row(slot).uuid;
+    let handle = handles(&state, id)[0].clone();
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
+    // A full store cannot take the load, so the return is not delivered.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::new(log, 64);
+    }
+    assert!(
+        !executor::return_carry_of(&mut state, id, uuid),
+        "a load the store cannot take is not delivered"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .as_ref()
+            .map(|stack| stack.count),
+        Some(7),
+        "the load stays on the body"
+    );
+    // Space appearing later lets the next pass deliver it.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    assert!(
+        executor::return_carry_of(&mut state, id, uuid),
+        "the freed store takes the load"
+    );
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .is_none(),
+        "the delivered load leaves the body"
+    );
+}
+
+/// R2-4: every submission takes its sequence even before it starts, so a
+/// request that later retries does not fall behind requests submitted after it.
+#[test]
+fn every_submission_takes_its_sequence() {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    state.settlements.get_mut(id).unwrap().owner = Some("owner".into());
+    // An empty chest leaves the first request waiting; it still takes seq 1.
+    let _ = submit_order(
+        &mut state,
+        id,
+        OwnerOrder {
+            seq: 0,
+            blueprint: "house".into(),
+            level: 1,
+            building: None,
+        },
+    );
+    let _ = submit_order(
+        &mut state,
+        id,
+        OwnerOrder {
+            seq: 0,
+            blueprint: "house".into(),
+            level: 1,
+            building: None,
+        },
+    );
+    let record = state.settlements.get(id).unwrap();
+    let seqs: Vec<u64> = orders(record).map(|order| order.seq).collect();
+    assert_eq!(
+        seqs,
+        vec![1, 2],
+        "submission sequences are stamped in order"
+    );
+    assert_eq!(
+        record.order_seq, 2,
+        "the settlement keeps the last sequence"
+    );
+}
+
+/// The persistence fence: a stored project written before the D8 fields
+/// existed refuses instead of reading as an unbound, sequence-less project.
+#[test]
+fn a_record_without_the_new_project_fields_refuses() {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let record = state.settlements.get(id).unwrap();
+    let mut value = serde_json::to_value(record).expect("record serialises");
+    let project = value["projects"][0]
+        .as_object_mut()
+        .expect("project object");
+    project.remove("order_seq");
+    project.remove("builder");
+    let decoded: SettlementRecord = serde_json::from_value(value).expect("row decodes");
+    assert!(
+        validate_record(&decoded).is_err(),
+        "a row without the D8 project fields is refused"
+    );
+}
+
+/// R2-1: a binding only counts as an incumbent while the resident is still a
+/// Builder of this settlement and is not assigned to another job.
+#[test]
+fn a_stale_binding_is_not_an_incumbent() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    {
+        let record = state.settlements.get(id).unwrap();
+        let project = project_for_structure(record, &handle).unwrap();
+        assert_eq!(
+            incumbent_slot(&state, id, project),
+            Some(slot),
+            "the bound Builder holds its project"
+        );
+    }
+    // A resident that stopped being a Builder keeps no incumbent: the binding
+    // is stale and must be cleared by the rebind pass, carry first.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = crate::villager::VillagerProfession::Farmer;
+    {
+        let record = state.settlements.get(id).unwrap();
+        let project = project_for_structure(record, &handle).unwrap();
+        assert_eq!(
+            incumbent_slot(&state, id, project),
+            None,
+            "a non-Builder keeps nothing"
+        );
+    }
+    let _ = uuid;
 }

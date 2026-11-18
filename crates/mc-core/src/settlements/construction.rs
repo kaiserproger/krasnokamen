@@ -67,21 +67,38 @@ pub struct Project {
     pub ordered: bool,
     /// The resident bound to this project and the profession to restore on
     /// release (`None` for a native Builder). One binding per project, and a
-    /// villager is bound to at most one project.
+    /// villager is bound to at most one project. A row written before this
+    /// field decodes to the nil sentinel and is refused by [`validate_record`]
+    /// instead of reading as unbound (DESIGN.md:25).
+    #[serde(default = "absent_builder")]
     pub builder: Option<(uuid::Uuid, Option<Profession>)>,
     /// Submission sequence of the owner request this project was lifted from,
     /// so a retried preparation restores its FIFO place even after other
-    /// requests were cancelled (D8 review P2-3).
-    #[serde(default)]
+    /// requests were cancelled (D8 review P2-3). A row without the key refuses
+    /// rather than reading as "no sequence" (DESIGN.md:25); an explicit null
+    /// stays valid for an autonomous project.
+    #[serde(default = "absent_order_seq")]
     pub order_seq: Option<u64>,
 }
 /// One pending owner request, stored in the settlement post-image.
+/// A row written before `Project::order_seq` existed refuses in
+/// [`validate_record`] instead of reading as "no sequence" (DESIGN.md:25).
+fn absent_order_seq() -> Option<u64> {
+    Some(u64::MAX)
+}
+
+/// A row written before `Project::builder` existed decodes to the nil sentinel
+/// and is refused by [`validate_record`]; a real `null` stays "unbound".
+fn absent_builder() -> Option<(uuid::Uuid, Option<Profession>)> {
+    Some((uuid::Uuid::nil(), None))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerOrder {
     /// Submission order; the queue is sorted by it, so a restored request keeps
-    /// its place relative to the requests submitted around it.
-    #[serde(default)]
+    /// its place relative to the requests submitted around it. No default: a
+    /// row without the key refuses (DESIGN.md:25).
     pub seq: u64,
     pub blueprint: String,
     pub level: u8,
@@ -193,6 +210,19 @@ fn submit_order(
             "Construction queue is full: MAX_ORDERS={MAX_ORDERS}."
         ));
     }
+    // The request takes its submission sequence whether it starts at once or
+    // waits: a project that starts immediately and later retries must still
+    // restore the place it was submitted at (D8 review R2-4). The sequence is
+    // committed only when the request is kept, so a refused submission leaves
+    // the record untouched.
+    let seq = state
+        .settlements
+        .get(id)
+        .ok_or("Settlement not found.")?
+        .order_seq
+        .saturating_add(1);
+    let mut order = order;
+    order.seq = seq;
     // A request never overtakes a waiting queue: the planner admits funded
     // requests in submission order, so a new one joins the queue and lifts on
     // the next pass (DESIGN 178-185, D8 review P2-3).
@@ -204,14 +234,35 @@ fn submit_order(
             .settlements
             .get_mut(id)
             .ok_or("Settlement not found.")?;
-        access::push_order(record, order);
+        record.order_seq = seq;
+        access::insert_order_by_seq(record, order);
         record.revision = record.revision.saturating_add(1);
+        // The reason names this request's wait, not the older head's (D8
+        // review P3/A2).
+        let index = orders(state.settlements.get(id).expect("pushed settlement"))
+            .position(|queued| queued.seq == seq)
+            .unwrap_or(0);
         return Ok(OrderOutcome::Queued {
-            reason: pending_reason(state, id).unwrap_or_else(|| "queued".into()),
+            reason: pending_reason_at(state, id, index).unwrap_or_else(|| "queued".into()),
         });
     }
     match start_order(state, id, &order, None) {
-        Ok(_) => Ok(OrderOutcome::Started),
+        Ok(handle) => {
+            // The started project carries its sequence, so its own retry keeps
+            // the submission place instead of taking the newest one.
+            if let Some(record) = state.settlements.get_mut(id) {
+                record.order_seq = seq;
+                if let Some(project) = record
+                    .projects
+                    .iter_mut()
+                    .find(|project| project.structure == handle)
+                {
+                    project.order_seq = Some(seq);
+                }
+                record.revision = record.revision.saturating_add(1);
+            }
+            Ok(OrderOutcome::Started)
+        }
         Err(reason)
             if reason == "Busy."
                 || reason.starts_with("not enough:")
@@ -221,7 +272,8 @@ fn submit_order(
                 .settlements
                 .get_mut(id)
                 .ok_or("Settlement not found.")?;
-            access::push_order(record, order);
+            record.order_seq = seq;
+            access::insert_order_by_seq(record, order);
             record.revision = record.revision.saturating_add(1);
             Ok(OrderOutcome::Queued {
                 reason: if reason == "Busy." {
@@ -401,7 +453,6 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
             }
         }
     }
-    let _ = first;
     true
 }
 
@@ -686,8 +737,12 @@ fn funded_variant<'a>(
     let joint = joint_requirement(state, id)?;
     colors[..count].iter().copied().find_map(|color| {
         let bill = bed_bill(state, materials, color)?;
-        let bill = with_joint(bill.into_owned(), &joint);
-        select_species(state, &bill, images, false).map(|species| (species, color))
+        // The species is chosen for the candidate alone: re-colouring inside the
+        // combined bill would rewrite another project's oak obligation (SOL-2).
+        let species = select_species(state, &bill, images, false)?;
+        let candidate = species_bill(state, &bill, species).unwrap_or_else(|| bill.into_owned());
+        let combined = with_joint(candidate, &joint);
+        super::construction_crafting::can_fund(state, &combined, images).then_some((species, color))
     })
 }
 
@@ -696,6 +751,66 @@ fn funded_variant<'a>(
 /// project never funds itself out of an earlier one's stock (D8, joint proof).
 fn joint_requirement(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u32)>> {
     joint_active_bill(state, id)
+}
+
+/// The authored footprint box of one project, for neighbour safety.
+pub(crate) fn footprint(
+    state: &TickState,
+    project: &Project,
+) -> Option<mc_script::ScriptWorldBounds> {
+    let blueprint = blueprints::get(&state.registry, &project.blueprint)?;
+    let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
+    let min = project.origin;
+    let max = [
+        min[0] + i32::from(size[0]) - 1,
+        min[1] + i32::from(size[1]) - 1,
+        min[2] + i32::from(size[2]) - 1,
+    ];
+    mc_script::ScriptWorldBounds::new(min, max).ok()
+}
+
+/// Whether `at` falls inside another active project's footprint: no builder
+/// stands or places there (D8 review SOL-4).
+pub(crate) fn in_other_footprint(
+    state: &TickState,
+    id: SettlementId,
+    except: &str,
+    at: [i32; 3],
+) -> bool {
+    access::projects_of(&state.settlements, id)
+        .filter(|project| project.structure != except)
+        .filter_map(|project| footprint(state, project))
+        .any(|bounds| {
+            (0..3).all(|axis| bounds.min[axis] <= at[axis] && at[axis] <= bounds.max[axis])
+        })
+}
+
+/// Every other active project's remaining bill, net of that project's own bound
+/// builder carry. A fetch or a generic recipe must not spend it (SOL-3).
+pub(crate) fn other_active_bill(
+    state: &TickState,
+    id: SettlementId,
+    except: &str,
+) -> Vec<(u32, u32)> {
+    let mut total: Vec<(u32, u32)> = Vec::new();
+    for handle in access::projects_of(&state.settlements, id)
+        .map(|project| project.structure.clone())
+        .collect::<Vec<_>>()
+    {
+        if handle == except {
+            continue;
+        }
+        let Some(bill) = project_bill(state, id, &handle) else {
+            continue;
+        };
+        for (item, count) in bill {
+            match total.iter_mut().find(|(known, _)| *known == item) {
+                Some((_, sum)) => *sum = sum.saturating_add(count),
+                None => total.push((item, count)),
+            }
+        }
+    }
+    total
 }
 
 /// The joint proof for a site that is not itself a project yet: the candidate
@@ -808,10 +923,17 @@ fn funding_error(state: &TickState, id: SettlementId, materials: &[(u32, u32)]) 
     // their recipe surplus, or the materials already promised to another active
     // project. The whole-project proof authorizes admission.
     let joint = joint_active_bill(state, id).unwrap_or_default();
-    if joint.iter().any(|(item, _)| {
-        !super::construction_crafting::can_fund(state, &[(*item, 1)], &images) == false
-    }) {
-        return Some("not enough: promised to another project".into());
+    if !joint.is_empty() {
+        let mut combined = bill.to_vec();
+        for (item, count) in &joint {
+            match combined.iter_mut().find(|(known, _)| known == item) {
+                Some((_, sum)) => *sum = sum.saturating_add(*count),
+                None => combined.push((*item, *count)),
+            }
+        }
+        if !super::construction_crafting::can_fund(state, &combined, &images) {
+            return Some("not enough: promised to another project".into());
+        }
     }
     Some("not enough: shared recipe ingredients".into())
 }
@@ -886,8 +1008,6 @@ fn start_build(
     site.project.ordered = true;
     // The admitted project's own handle is the authority, not a search by
     // blueprint: two parallel houses share a blueprint (D8 review P2-3).
-    let ordered = site.project.ordered;
-    let _ = ordered;
     let cells = site.cells;
     let bounds = site.bounds;
     if !begin_cells(state, site.project, bounds, cells) {
@@ -2101,15 +2221,11 @@ pub(crate) fn incumbent_slot(
     project: &Project,
 ) -> Option<crate::entities::EntitySlot> {
     let (uuid, _) = project.builder?;
-    let slot = state.entities.slot_of_uuid(uuid)?;
-    let alive = state.entities.body(slot).alive;
-    let ours = state
-        .entities
-        .row(slot)
-        .villager
-        .as_ref()
-        .is_some_and(|v| v.settlement == Some(id) && v.age >= 0 && v.conversion_time.is_none());
-    (alive && ours).then_some(slot)
+    // A dead, converting, foreign or re-assigned resident is not an incumbent:
+    // the same predicate that clears the binding decides it (D8 review R2-1).
+    incumbent_is_live(state, id, uuid)
+        .then(|| state.entities.slot_of_uuid(uuid))
+        .flatten()
 }
 
 /// Release a bound builder outside simulation, or an on-shift builder that
@@ -2137,11 +2253,10 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
             continue;
         };
         let Some(slot) = incumbent_slot(state, id, &project) else {
-            // A dead or foreign resident keeps nothing: drop the binding.
-            if let Some(record) = state.settlements.get_mut(id) {
-                access::unbind_builder(record, uuid);
-                record.revision = record.revision.saturating_add(1);
-            }
+            // A dead, converting or re-assigned resident holds nothing. The
+            // binding is cleared by rebind_lost_builders, which returns its
+            // carry first (D8 review R2-1); clearing it here would drop the
+            // load with the binding.
             held = false;
             continue;
         };
@@ -2266,7 +2381,14 @@ fn rebind_lost_builders(state: &mut TickState, id: SettlementId) {
         .filter(|(_, uuid)| !live_builder(state, id, *uuid))
         .collect();
     for (handle, uuid) in lost {
-        executor::return_carry_of(state, id, uuid);
+        // An undelivered load keeps the binding, so the next pass retries the
+        // addressable return instead of dropping it (D8 review SOL-6). A body
+        // that no longer exists has nothing left to deliver.
+        if state.entities.slot_of_uuid(uuid).is_some()
+            && !executor::return_carry_of(state, id, uuid)
+        {
+            continue;
+        }
         let Some(mut record) = state.settlements.get_mut(id) else {
             return;
         };
@@ -2274,6 +2396,21 @@ fn rebind_lost_builders(state: &mut TickState, id: SettlementId) {
         record.revision = record.revision.saturating_add(1);
         let _ = handle;
     }
+}
+
+/// A bound villager is still a live Builder of this settlement, unassigned to
+/// another job: the one predicate for both holding and clearing a binding.
+fn incumbent_is_live(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
+    live_builder(state, id, uuid)
+        && state.entities.slot_of_uuid(uuid).is_some_and(|slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.age >= 0)
+                && !crate::settlements::economy::worker_reserved(state, Some(id), uuid)
+        })
 }
 
 /// A bound villager is still a living Builder of this settlement.
@@ -2432,6 +2569,16 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // cannot reach the worksite would otherwise hold the only slot forever.
     let preparation = ((protected || !report) && snapshot.consumed.is_empty())
         .then(|| retry_preparation(state, id, &project));
+    // A retry the queue refused is the owner's to act on: the paid request is
+    // still in flight, so the reason reaches them instead of only the log
+    // (D8 review R2-6).
+    if let Some(Err(error)) = preparation.as_ref() {
+        notify_owner(
+            state,
+            id,
+            format!("{} could not be retried: {error}", project.blueprint),
+        );
+    }
     let recovery = if preparation.as_ref().is_some_and(|result| result.is_ok()) {
         "preparation_cancelled"
     } else if snapshot.pause_reason.is_some() {
@@ -2528,7 +2675,7 @@ pub(crate) fn retry_preparation(
         ));
     }
     if let Some((uuid, _)) = project.builder {
-        executor::return_carry_of(state, id, uuid);
+        let _ = executor::return_carry_of(state, id, uuid);
     }
     cancel_project(state, id, &project.structure)?;
     let record = state
@@ -3024,7 +3171,11 @@ fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, 
 
 /// One project's remaining bill, net of the carry of the builder bound to it.
 /// Another project's load never pays for these cells (D8).
-fn project_bill(state: &TickState, id: SettlementId, handle: &str) -> Option<Vec<(u32, u32)>> {
+pub(crate) fn project_bill(
+    state: &TickState,
+    id: SettlementId,
+    handle: &str,
+) -> Option<Vec<(u32, u32)>> {
     let project =
         access::projects_of(&state.settlements, id).find(|project| project.structure == handle)?;
     let snapshot = executor::status(state, id, &project.structure).ok()?;
@@ -3189,23 +3340,24 @@ pub(crate) fn iron_demand(
             .map_or(0, |bill| demand(&bill));
     }
     // Every active project's bill asks for its own iron (D8).
-    let mut active = 0;
+    let mut active: u32 = 0;
     for project in access::projects(record) {
-        active = active.max(executor::status(state, id, &project.structure).ok().map_or(
-            0,
-            |snapshot| {
-                let bill: Vec<_> = snapshot
-                    .remaining
-                    .iter()
-                    .filter_map(|material| {
-                        let name = mc_data::Identifier::parse(&material.resource).ok()?;
-                        let item = state.registry.items.id_of(&name)?;
-                        Some((item, u32::try_from(material.quantity).unwrap_or(u32::MAX)))
-                    })
-                    .collect();
-                demand(&bill)
-            },
-        ));
+        active = active.saturating_add(
+            executor::status(state, id, &project.structure)
+                .ok()
+                .map_or(0, |snapshot| {
+                    let bill: Vec<_> = snapshot
+                        .remaining
+                        .iter()
+                        .filter_map(|material| {
+                            let name = mc_data::Identifier::parse(&material.resource).ok()?;
+                            let item = state.registry.items.id_of(&name)?;
+                            Some((item, u32::try_from(material.quantity).unwrap_or(u32::MAX)))
+                        })
+                        .collect();
+                    demand(&bill)
+                }),
+        );
     }
     let catalog = catalog(state, record);
     candidate_kinds(state, record, &images)
@@ -3353,9 +3505,9 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
     };
     let images = executor::source_images(state, id);
     let catalog = catalog(state, record);
-    let active = access::projects(record)
-        .next()
-        .map(|project| project.blueprint.as_str());
+    let active: Vec<&str> = access::projects(record)
+        .map(|project| project.blueprint.as_str())
+        .collect();
     let mut kinds = Vec::new();
     let pending = access::head_order(record);
     let queued = pending.and_then(|order| {
@@ -3364,7 +3516,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
     let autonomous = candidate_kinds(state, record, &images)
         .filter(|_| pending.is_none())
         .filter_map(|kind| catalog.clone().find(|blueprint| blueprint.kind == kind))
-        .filter(|blueprint| active != Some(blueprint.id.as_str()))
+        .filter(|blueprint| !active.contains(&blueprint.id.as_str()))
         .map(|blueprint| (blueprint, 1));
     for (blueprint, level) in queued.into_iter().chain(autonomous) {
         let Some(level) = blueprint.level(level) else {
@@ -3443,9 +3595,23 @@ pub(crate) fn project_summary(state: &TickState, id: SettlementId) -> Vec<String
     let Some(record) = state.settlements.get(id) else {
         return vec!["Settlement not found.".into()];
     };
-    let Some(project) = access::projects(record).next() else {
+    let mut lines = Vec::new();
+    // Every active project is summarised: parallel sites all report their own
+    // ledger and materials (D8 review R2-5).
+    for project in access::projects(record) {
+        if !lines.is_empty() {
+            lines.push(format!("--- {}", project.structure));
+        }
+        lines.extend(project_lines(state, id, project));
+    }
+    if lines.is_empty() {
         return vec!["No active project. Waiting for residents, materials or a free site.".into()];
-    };
+    }
+    lines
+}
+
+/// One project's status lines, from its own ledger and material proof.
+fn project_lines(state: &TickState, id: SettlementId, project: &Project) -> Vec<String> {
     let Ok(snapshot) = executor::status(state, id, &project.structure) else {
         return vec!["Project ledger unavailable; paused.".into()];
     };
@@ -3510,6 +3676,10 @@ pub(super) fn validate_record(record: &SettlementRecord) -> Result<(), &'static 
                 .building
                 .is_some_and(|id| !record.buildings.contains_key(&id))
             || (project.level > 1) != project.building.is_some()
+            || project.order_seq == Some(u64::MAX)
+            || project
+                .builder
+                .is_some_and(|(uuid, _)| uuid == uuid::Uuid::nil())
         {
             return Err("invalid settlement construction project");
         }
@@ -3528,7 +3698,12 @@ pub(super) fn validate_record(record: &SettlementRecord) -> Result<(), &'static 
             return Err("a villager is bound to two construction projects");
         }
     }
+    let mut previous = 0;
     for order in access::orders(record) {
+        if order.seq < previous || order.seq > record.order_seq {
+            return Err("construction orders are not in submission order");
+        }
+        previous = order.seq;
         if record.owner.is_none()
             || order.blueprint.is_empty()
             || order.blueprint.len() > 128

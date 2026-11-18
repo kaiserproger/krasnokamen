@@ -842,6 +842,29 @@ pub(crate) fn footing(
     let lot = super::construction::preparation::active_lot(state, record);
     // The active project's own floor is the level the fill plan builds toward.
     let centre = super::construction::preparation::active_floor(record);
+    footing_in(state, centre, at, lot)
+}
+
+/// The footing of one project's site: a neighbour's lot never decides where
+/// this project's own cells sit (D8 review R2-5).
+pub(crate) fn footing_of(
+    state: &TickState,
+    settlement: super::SettlementId,
+    handle: &str,
+    at: [i32; 3],
+) -> Option<crate::boundary::BlockPos> {
+    let record = state.settlements.get(settlement)?;
+    let lot = super::construction::preparation::project_lot(state, record, handle);
+    let centre = super::construction::preparation::project_floor(record, handle);
+    footing_in(state, centre, at, lot)
+}
+
+fn footing_in(
+    state: &TickState,
+    centre: i32,
+    at: [i32; 3],
+    lot: Option<mc_script::ScriptWorldBounds>,
+) -> Option<crate::boundary::BlockPos> {
     let y = super::construction::surface_y_for_lot(
         state,
         centre,

@@ -71,7 +71,14 @@ fn preparation_footing(
                 block == state.registry.states.air
                     || crate::settlements::forestry::tree(state, block)
             }))
-    .then(|| crate::settlements::forestry::footing(state, project.settlement, next))
+    .then(|| {
+        crate::settlements::forestry::footing_of(
+            state,
+            project.settlement,
+            &project.structure,
+            next,
+        )
+    })
     .flatten()
 }
 
@@ -82,7 +89,7 @@ fn preparation_target(
     next: [i32; 3],
 ) -> Option<BlockPos> {
     let base = preparation_footing(state, project, next)?;
-    preparation_stand(state, slot, project.settlement, next, base)
+    preparation_stand(state, slot, project, next, base)
 }
 
 /// A dry footing near the cell `next` that the builder's body can stand on
@@ -91,7 +98,7 @@ fn preparation_target(
 pub(super) fn preparation_stand(
     state: &TickState,
     slot: EntitySlot,
-    settlement: SettlementId,
+    project: &construction::Project,
     next: [i32; 3],
     base: BlockPos,
 ) -> Option<BlockPos> {
@@ -106,9 +113,10 @@ pub(super) fn preparation_stand(
             if dx * dx + dz * dz > 9 {
                 continue;
             }
-            let Some(at) = crate::settlements::forestry::footing(
+            let Some(at) = crate::settlements::forestry::footing_of(
                 state,
-                settlement,
+                project.settlement,
+                &project.structure,
                 [next[0] + dx, next[1], next[2] + dz],
             ) else {
                 continue;
@@ -196,9 +204,12 @@ fn site_target(
         .flat_map(|x| [[x, edge_min[1]], [x, edge_max[1]]])
         .chain((edge_min[1] + 1..edge_max[1]).flat_map(|z| [[edge_min[0], z], [edge_max[0], z]]));
     for [x, z] in perimeter {
-        let Some(at) =
-            crate::settlements::forestry::footing(state, project.settlement, [x, min[1], z])
-        else {
+        let Some(at) = crate::settlements::forestry::footing_of(
+            state,
+            project.settlement,
+            &project.structure,
+            [x, min[1], z],
+        ) else {
             continue;
         };
         let Some(stand) = crate::settlements::allocator::standing(
@@ -210,6 +221,16 @@ fn site_target(
         ) else {
             continue;
         };
+        // A neighbour lot's future body is not a stand: another project would
+        // place a wall through this builder (D8 review SOL-4).
+        let column = [
+            stand[0].floor() as i32,
+            stand[1].floor() as i32,
+            stand[2].floor() as i32,
+        ];
+        if construction::in_other_footprint(state, project.settlement, &project.structure, column) {
+            continue;
+        }
         let placement_distance = (stand[0] - f64::from(next[0]) - 0.5).powi(2)
             + (stand[1] - f64::from(next[1])).powi(2)
             + (stand[2] - f64::from(next[2]) - 0.5).powi(2);
@@ -300,7 +321,7 @@ fn in_reach(
         }
         // Only a cell with no stand in felling reach falls back to the
         // perimeter rule below, matching `site_target`.
-        if preparation_stand(state, slot, project.settlement, next, base).is_some() {
+        if preparation_stand(state, slot, project, next, base).is_some() {
             return false;
         }
     }
@@ -327,7 +348,18 @@ fn in_reach(
         let min = f64::from(project.origin[axis]);
         pos[axis] + width <= min || pos[axis] - width >= min + f64::from(size[axis])
     });
-    outside && super::mining::near(state, slot, block_pos(next), REACH)
+    if !outside {
+        return false;
+    }
+    let column = [
+        pos[0].floor() as i32,
+        pos[1].floor() as i32,
+        pos[2].floor() as i32,
+    ];
+    // Standing inside a neighbour lot's future cells would put a wall through
+    // this builder (D8 review SOL-4).
+    !construction::in_other_footprint(state, project.settlement, &project.structure, column)
+        && super::mining::near(state, slot, block_pos(next), REACH)
 }
 
 pub(crate) fn wait_reason(

@@ -30,7 +30,8 @@ pub struct SettlementRecord {
     pub revision: u64,
     /// Last submission sequence handed to an owner request; the queue is
     /// ordered by it so a restored request keeps its place (D8 review P2-3).
-    #[serde(default)]
+    /// No default: a row written before this field refuses to decode
+    /// (DESIGN.md:25), because a silent 0 would re-order the restored queue.
     pub order_seq: u64,
     #[serde(default)]
     pub household_sequence: u64,

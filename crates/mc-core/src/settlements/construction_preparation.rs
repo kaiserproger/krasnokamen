@@ -191,6 +191,23 @@ pub(crate) fn active_lot(
         .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
 }
 
+/// One project's own lot: parallel sites must not read the first project's
+/// bounds (D8 review R2-5).
+pub(crate) fn project_lot(
+    state: &TickState,
+    record: &SettlementRecord,
+    handle: &str,
+) -> Option<ScriptWorldBounds> {
+    access::project_for_structure(record, handle)
+        .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
+}
+
+/// One project's own floor level (D8 review R2-5).
+pub(crate) fn project_floor(record: &SettlementRecord, handle: &str) -> i32 {
+    access::project_for_structure(record, handle)
+        .map_or(record.anchor[1], |project| project.origin[1])
+}
+
 /// The level ground discovery centres on: the active project's own floor, so a
 /// builder's footing and the fill plan agree, else the bell's elevation.
 pub(crate) fn active_floor(record: &SettlementRecord) -> i32 {
@@ -213,9 +230,7 @@ pub(crate) fn stale_tree_certification(
     let Some(record) = state.settlements.get(id) else {
         return false;
     };
-    let keeps_its_place = projects(record)
-        .next()
-        .filter(|project| project.structure == handle)
+    let keeps_its_place = access::project_for_structure(record, handle)
         .is_none_or(|project| project.ordered)
         && orders(record).next().is_none();
     keeps_its_place

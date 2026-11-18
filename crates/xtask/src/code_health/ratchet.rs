@@ -83,7 +83,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // (binding-only incumbent, a joint gate for walls and lamps, and a
         // submission-sequenced retry) adds 51: 1201. The next extraction
         // candidate is the stall watch, which is now per project.
-        ("settlements/construction.rs", 1_201),
+        // D8 review round 2 adds 54: the neighbour-footprint helpers, the
+        // per-project summary split, the submission-sequence stamp and the
+        // joint-proof funding cause. The next extraction candidate is the
+        // admission/queue block, which now owns submit_order's sequence.
+        ("settlements/construction.rs", 1_255),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

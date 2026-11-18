@@ -661,6 +661,33 @@ pub(super) fn debit(
     // A new site and an upgrade both carry clear-stage cells: an upgrade that
     // clears natural forest or a registered tree must credit the same drops.
     let preparing = true;
+    // A solid cell may not be placed through another project's builder: that
+    // body is not this site's to trap (D8 review SOL-4).
+    for cell in cells
+        .iter()
+        .filter(|cell| cell.state != state.registry.states.air)
+    {
+        for resident in crate::settlements::construction::residents(state, id) {
+            let pos = state.entities.pos(resident);
+            if [0, 1, 2]
+                .into_iter()
+                .any(|axis| pos[axis].floor() as i32 != cell.at[axis])
+            {
+                continue;
+            }
+            let body = state.entities.body(resident);
+            let uuid_here = state.entities.row(resident).uuid;
+            let bound_elsewhere = state.settlements.get(id).is_some_and(|record| {
+                crate::settlements::construction::projects(record).any(|other| {
+                    other.structure != handle
+                        && other.builder.is_some_and(|(bound, _)| bound == uuid_here)
+                })
+            });
+            if bound_elsewhere && body.height > 0.0 {
+                return Err(Failure::Blocked);
+            }
+        }
+    }
     let lot = crate::settlements::forestry::lot_bounds(state, project);
     let mut drops = Vec::new();
     let mut loot = Vec::new();
@@ -849,15 +876,19 @@ pub(crate) fn missing(
         .iter()
         .map(|material| (material.resource.clone(), material.quantity))
         .collect();
-    for slot in crate::settlements::construction::residents(state, id) {
-        let Some(v) = state.entities.row(slot).villager.as_ref() else {
-            continue;
-        };
-        if v.settlement != Some(id)
-            || v.data.profession != crate::villager::VillagerProfession::Builder
-        {
-            continue;
-        }
+    // Only the resident bound to this project carries its materials: another
+    // project's load never pays for these cells (D8 review SOL-5).
+    let bound = state
+        .settlements
+        .get(id)
+        .and_then(|record| crate::settlements::construction::project_for_structure(record, handle))
+        .and_then(|project| project.builder)
+        .map(|(uuid, _)| uuid);
+    if let Some(uuid) = bound
+        && let Some(slot) = state.entities.slot_of_uuid(uuid)
+        && let Some(v) = state.entities.row(slot).villager.as_ref()
+        && v.settlement == Some(id)
+    {
         for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
             if let Some(name) = state.registry.items.name_of(stack.item_id)
                 && let Some(count) = required.get_mut(name.as_str())
@@ -1232,6 +1263,9 @@ pub(crate) fn fetch(
         images.iter().map(|image| image.slots.clone()).collect();
     let mut carry_after = carry.slots.clone();
     let rules = state.registry.item_rules();
+    // The rest of the settlement's active bills are not this haul's to spend
+    // (D8 review SOL-3).
+    let neighbours = crate::settlements::construction::other_active_bill(state, id, handle);
     for (planned, wanted) in plan {
         // Craft the whole haul; on a shortfall settle for what stock can give.
         let mut amount = wanted;
@@ -1240,6 +1274,12 @@ pub(crate) fn fetch(
             let mut future = remaining_bill.clone();
             if let Some((_, count)) = future.iter_mut().find(|(id, _)| *id == planned) {
                 *count = count.saturating_sub(amount);
+            }
+            for (item, count) in &neighbours {
+                match future.iter_mut().find(|(known, _)| known == item) {
+                    Some((_, sum)) => *sum = sum.saturating_add(*count),
+                    None => future.push((*item, *count)),
+                }
             }
             let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
             let reserved = if specific {
@@ -1396,22 +1436,24 @@ pub(crate) fn return_carry(state: &mut TickState, id: SettlementId) {
         })
         .collect();
     for uuid in builders {
-        return_carry_of(state, id, uuid);
+        let _ = return_carry_of(state, id, uuid);
     }
 }
 
 /// Return one builder's load to settlement storage. Release, rebind and
 /// stalled-builder recovery address a single project's builder, never the
 /// whole settlement.
-pub(crate) fn return_carry_of(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid) {
+/// True when the body no longer carries anything this settlement has to take
+/// back, so an addressable return is never dropped before delivery (SOL-6).
+pub(crate) fn return_carry_of(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
-        return;
+        return false;
     }
     let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
-        return;
+        return false;
     };
     if carry.slots.iter().all(mc_data::ItemStack::is_empty) {
-        return;
+        return true;
     }
     let images = source_images(state, id);
     let mut post: Vec<Vec<mc_data::ItemStack>> =
@@ -1431,14 +1473,16 @@ pub(crate) fn return_carry_of(state: &mut TickState, id: SettlementId, uuid: uui
             (before.slots != after).then_some(inventory::Change { before, after })
         })
         .collect();
+    let delivered = after.iter().all(mc_data::ItemStack::is_empty);
     if changes.is_empty() {
-        return;
+        return false;
     }
     changes.push(inventory::Change {
         before: carry,
         after,
     });
     let _ = inventory::commit(state, changes);
+    delivered
 }
 
 pub(crate) fn pickup_point(
