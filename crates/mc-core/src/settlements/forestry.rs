@@ -45,6 +45,10 @@ pub(crate) struct Clearance {
     /// Street columns: inside the territory only a cell's player history is
     /// not read; an unattributed tree keeps the generator-evidence path.
     history_only: bool,
+    /// Forecast of a funded building's street walk (owner D7, 2026-11-17):
+    /// inside the territory a registered planted tree on the route is felled
+    /// whole like a tree on the lot, so it is not an obstacle to reach a lot.
+    fells_planted: bool,
 }
 
 impl Default for Clearance {
@@ -58,6 +62,7 @@ impl Default for Clearance {
             missed: false,
             territory: None,
             history_only: false,
+            fells_planted: false,
         }
     }
 }
@@ -90,11 +95,12 @@ impl Clearance {
     /// territory a player-attributed cell (block history, persistent-leaf mark,
     /// live-player veto) is the village's; an unattributed tree still needs this
     /// world's generator evidence, which a cold town's street walk requests.
-    pub(crate) fn street(record: &super::SettlementRecord) -> Self {
+    pub(crate) fn street(record: &super::SettlementRecord, forecast: bool) -> Self {
         Self {
             proofs: None,
             territory: Some(record.id),
             history_only: true,
+            fells_planted: forecast,
             ..Self::default()
         }
     }
@@ -189,6 +195,22 @@ impl Clearance {
             }
         }
         certified
+    }
+
+    /// A planted log the walking corridor needs cleared marks its own registered
+    /// root, so the whole tree is felled (owner D7). The proof was built by the
+    /// `clearable` call that admitted the cell.
+    fn mark_owner(&mut self, state: &TickState, at: [i32; 3]) {
+        let Some(proofs) = self.proofs.as_ref() else {
+            return;
+        };
+        for record in state.settlements.records() {
+            for &root in &record.planted_trees {
+                if in_halo(root, at) && proofs.get(&root).is_some_and(|proof| proof.owns_log(at)) {
+                    self.needed.insert(root);
+                }
+            }
+        }
     }
 
     pub(crate) fn append_whole_trees(
@@ -835,6 +857,18 @@ impl Clearance {
         lot: Option<mc_script::ScriptWorldBounds>,
     ) -> bool {
         self.missed = false;
+        if self.fells_planted
+            && self
+                .territory
+                .and_then(|id| state.settlements.get(id))
+                .is_some_and(|record| record.contains(at))
+            && planted(state, at)
+        {
+            return state
+                .world
+                .physics_block_at(at[0], at[1], at[2])
+                .is_some_and(|block| tree_or_sapling(state, block));
+        }
         let property = self.village_property(state, at);
         if !property && vetoed(state, at) {
             return false;
@@ -1025,7 +1059,10 @@ pub(crate) fn cells(
         let on_lot = [0, 2]
             .into_iter()
             .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&[x, y, z][axis]));
+        // Owner D7: inside the territory a planted tree on the walking corridor
+        // is felled whole like a tree on the lot; beyond it every protection holds.
         if !on_lot
+            && !record.contains([x, y, z])
             && planted_crown_overlaps(
                 state,
                 mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
@@ -1064,12 +1101,29 @@ pub(crate) fn cells(
             if !tree_or_sapling(state, block) {
                 continue;
             }
-            if !clearance.clearable(state, [x, y, z], Some(bounds)) {
+            // A planted crown above the corridor's headroom is no obstacle: it
+            // goes only with its whole tree, when a cell at head height marks it.
+            if !on_lot && y > floor + 2 && planted(state, [x, y, z]) {
+                continue;
+            }
+            // Owner D7: inside the territory a planted tree the walk crosses is
+            // judged exactly like a tree on the lot: its own cell is the lot.
+            let planted_corridor =
+                !on_lot && record.contains([x, y, z]) && planted(state, [x, y, z]);
+            let lot = if planted_corridor {
+                mc_script::ScriptWorldBounds::new([x, y, z], [x, y, z]).ok()?
+            } else {
+                bounds
+            };
+            if !clearance.clearable(state, [x, y, z], Some(lot)) {
                 // A protected crown above the actual work volume stays there.
                 if y <= floor + 2 || (on_lot && y < project.origin[1] + i32::from(size[1])) {
                     return None;
                 }
                 continue;
+            }
+            if planted_corridor {
+                clearance.mark_owner(state, [x, y, z]);
             }
             cells.push(PlannedCell {
                 portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,

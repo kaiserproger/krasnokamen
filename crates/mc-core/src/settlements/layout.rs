@@ -357,19 +357,14 @@ pub(super) fn sample(
         return Column::Occupied;
     }
     // Owner D27.4: inside the territory a player's history neither hides the
-    // street column's ground nor blocks its headroom.
-    let mut street = super::forestry::Clearance::street(record);
+    // street column's ground nor blocks its headroom. Owner D7: a registered
+    // planted tree on the route is felled whole like a tree on the lot, so a
+    // construction forecast walks through it (the proposed crown of a planting
+    // preview still blocks, see `Network::column`).
+    let mut street = super::forestry::Clearance::street(record, prepare_forest);
     let Some(y) = construction::surface_y_for_lot(state, anchor_y, x, z, None, &mut street) else {
         return Column::Blocked;
     };
-    if prepare_forest
-        && super::forestry::planted_crown_overlaps(
-            state,
-            ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).expect("street headroom"),
-        )
-    {
-        return Column::Occupied;
-    }
     if state.block_entities.contains_key(&(x, y, z))
         || state.block_entities.contains_key(&(x, y + 1, z))
     {
@@ -929,8 +924,22 @@ impl<'a> Network<'a> {
             at = self.parents[at];
         }
         route.reverse();
+        // Owner D7: the forecast walks through a registered planted tree on the
+        // door step as it does on the street (see `sample`).
+        let mut clearance = if self.prepare_forest {
+            super::forestry::Clearance::street(self.record, true)
+        } else {
+            super::forestry::Clearance::prepared()
+        };
         for [cx, cz] in [[x + nx, z + nz], [x, z]] {
-            let y = construction::surface_y(self.state, self.record.anchor[1], cx, cz)?;
+            let y = construction::surface_y_for_lot(
+                self.state,
+                self.record.anchor[1],
+                cx,
+                cz,
+                None,
+                &mut clearance,
+            )?;
             route.push([cx, y, cz]);
         }
         Some(route)

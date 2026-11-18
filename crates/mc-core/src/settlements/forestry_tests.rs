@@ -307,6 +307,54 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
     );
 }
 
+/// Owner D7 (2026-11-17): a lumberjack's planted tree on the walking corridor
+/// of a needed lot is felled whole like a tree on the lot, its logs entering
+/// real storage, instead of cutting the street (seed 100: two planted roots on
+/// the avenue left the Spanish church no site).
+#[test]
+fn planted_tree_on_the_access_corridor_is_felled_whole_into_storage() {
+    let (mut state, id, builder, expected, root, access) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(access);
+    fund(&mut state, "storage", 1);
+    construction::tests::request_started(&mut state, id, "storage");
+    let project = &state.settlements.get(id).unwrap().projects[0];
+    assert_eq!(
+        project.origin, expected.origin,
+        "the street through the planted tree still reaches the lot"
+    );
+    let old = count(&state, "minecraft:birch_log");
+    let structure = project.structure.clone();
+    for _ in 0..4096 {
+        if crate::plugin_structures::settlement_builds::next_material(&state, id, &structure)
+            .unwrap()
+            .is_some()
+        {
+            break;
+        }
+        attempt(&mut state, id, builder);
+    }
+    assert_eq!(
+        count(&state, "minecraft:birch_log") - old,
+        8,
+        "both four-log trunks, the planted one included, enter real storage"
+    );
+    for [x, y, z] in [root, access] {
+        for above in y..y + 4 {
+            assert_eq!(
+                state.world.block_at(x, above, z),
+                Some(state.registry.states.air)
+            );
+        }
+    }
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+}
+
 #[test]
 fn updated_leaf_distance_remains_clearable_without_ignoring_other_properties() {
     let (mut state, id, builder, _, root, _) = forest();

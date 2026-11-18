@@ -618,10 +618,36 @@ fn planted_sapling_before_admission(corridor: bool) {
         .planted_trees
         .insert(root);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert!(
-        planned_cells(&state, &project, "oak", &mut Default::default()).is_err(),
-        "future planted crown must exclude this site/corridor before it grows"
-    );
+    let planned = planned_cells(&state, &project, "oak", &mut Default::default());
+    if corridor {
+        // Owner D7: a planted sapling on the walking corridor is felled like a
+        // tree on the lot, as the first sapling cell of the preparation.
+        let (_, cells) = planned.expect("the corridor sapling is clearance work");
+        assert!(cells.iter().any(|cell| {
+            cell.at == root
+                && cell.portion
+                    == crate::plugin_structures::settlement_builds::PortionKind::Saplings
+        }));
+    } else {
+        // The sapling beside the lot is no corridor work; its future crown over
+        // the lot is the site check's refusal.
+        let size = blueprints::get(&state.registry, &project.blueprint)
+            .unwrap()
+            .footprint(Rotation::from_quarter_turns(project.rotation));
+        assert_eq!(
+            site_refusals::check(
+                &state,
+                state.settlements.get(id).unwrap(),
+                project.origin,
+                size,
+                None,
+                &mut Default::default(),
+                None,
+            ),
+            Err(site_refusals::Reason::PlantingProvenance),
+            "future planted crown must exclude this site before it grows"
+        );
+    }
     assert_eq!(
         state.world.block_at(root[0], root[1], root[2]),
         Some(sapling),
@@ -655,7 +681,7 @@ fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_house_site() {
 }
 
 #[test]
-fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_access_corridor() {
+fn a_sapling_planted_first_on_the_access_corridor_is_felled_with_the_preparation() {
     planted_sapling_before_admission(true);
 }
 

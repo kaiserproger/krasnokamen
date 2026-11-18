@@ -68,14 +68,28 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let mut network = layout::Network::for_construction(&state, record);
     let fronts = network.frontage();
-    let roots = fronts
+    let lots = fronts
         .iter()
-        .copied()
-        .filter_map(|(at, normal)| network.lot(blueprint, at, normal).map(|lot| lot.origin))
+        .filter(|&&(at, normal)| network.lot(blueprint, at, normal).is_some())
+        .count();
+    assert!(lots > 0);
+    // A registered sapling beside every door: its future crown reserves each lot
+    // (owner D7 fells a planted tree on the street, never one's crown over a lot).
+    let sapling = crate::settlements::allocator::tests::block(
+        &state,
+        "minecraft:oak_sapling",
+        &[("stage", "1")],
+    );
+    let roots: std::collections::BTreeSet<[i32; 3]> = fronts
+        .iter()
+        .map(|&(at, _)| [at[0], at[1] + 1, at[2]])
         .collect();
+    for root in &roots {
+        state.world.set_block(root[0], root[1], root[2], sapling);
+    }
     let passes = fronts.len().div_ceil(SITE_ATTEMPTS as usize) * 3;
     let record = state.settlements.get_mut(id).unwrap();
-    record.planted_trees = roots;
+    record.planted_trees = roots.clone();
     record.orders = vec![OwnerOrder {
         seq: 0,
         blueprint: "storage".into(),
@@ -108,7 +122,7 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
             1,
             "{text}"
         );
-        assert!(text.contains("ProtectedObstruction"), "{text}");
+        assert!(text.contains("PlantingProvenance"), "{text}");
         assert!(text.contains("storage"), "{text}");
         cancel_pending(&mut state, id).unwrap();
         assert!(!state.settlements.site_watch.contains_key(&id));
@@ -128,6 +142,11 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
             "a new order is a new episode: {text}"
         );
         state.settlements.get_mut(id).unwrap().planted_trees.clear();
+        for root in &roots {
+            state
+                .world
+                .set_block(root[0], root[1], root[2], state.registry.states.air);
+        }
         for _ in 0..256 {
             plan(&mut state, id);
             if !state.settlements.get(id).unwrap().projects.is_empty() {

@@ -473,7 +473,8 @@ fn a_player_log_on_a_street_column_is_village_property_inside_the_territory_only
         let record = state.settlements.get(id).unwrap();
         assert!(!record.contains(at));
         assert!(
-            !crate::settlements::forestry::Clearance::street(record).clearable(&state, at, None),
+            !crate::settlements::forestry::Clearance::street(record, true)
+                .clearable(&state, at, None),
             "rise {rise}: outside the territory the player's log stays protected"
         );
     }

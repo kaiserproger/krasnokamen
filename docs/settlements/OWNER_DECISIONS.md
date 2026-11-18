@@ -118,9 +118,13 @@ claims require the actual pinned-server run, not this design decision.
 > Согласен
 
 - Planted lumberjack trees stay protected (2026-11-08 above), except on a lot that
-  construction needs ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17)).
-- A lumberjack does not plant where the root or future canopy would block
-  access to streets, plots or reserved sites.
+  construction needs ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17))
+  and, inside the territory, on the street corridor that lot needs (D7 applied to
+  the walk, Main 2026-11-19 for D44): the construction forecast walks through the
+  tree and the preparation fells it whole.
+- A lumberjack prefers not to plant where the root or future canopy would block
+  access to streets, plots or reserved sites. This is a planting-time preference,
+  not a restriction on planted trees that construction then needs.
 - Only settlements the canopy can reach are checked; an unrelated settlement
   never vetoes a planting.
 
