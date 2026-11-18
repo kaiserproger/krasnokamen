@@ -1030,3 +1030,87 @@ fn a_far_spare_bed_search_reaches_past_unreachable_nearer_beds() {
         "the reachable far bed within three searches: {found:?}"
     );
 }
+
+/// Two couples court for the one spare bed. The couple that finds it taken
+/// when its courtship ends keeps its food (docs/settlements/breeding.md).
+#[test]
+fn a_couple_that_loses_the_spare_bed_keeps_its_food() {
+    use crate::settlements::migration::return_tests::{fixture, shelter, step, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    shelter(&mut state, 36);
+    let spare = one_bed_house(&mut state, settlement, 118, false);
+    let residents = [8.5, 10.5, 12.5, 14.5].map(|x| bound_resident(&mut state, settlement, x));
+    settle_homes(&mut state, &residents);
+    let bread = item(&state, "minecraft:bread");
+    for slot in residents {
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory[0] = Some(ItemStack::new(bread, 3));
+    }
+    let courting = |state: &TickState, slot: EntitySlot| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .partner
+            .is_some()
+    };
+    let mut overlap = false;
+    let mut child = None;
+    for _ in 0..4_000 {
+        step(&mut state);
+        overlap |= residents.iter().all(|&slot| courting(&state, slot));
+        child = state.entities.slots().find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.birth_origin.is_some())
+        });
+        if child.is_some() && !residents.iter().any(|&slot| courting(&state, slot)) {
+            break;
+        }
+    }
+    let child = child.expect("one couple's child");
+    assert!(overlap, "both couples courted for the one bed at once");
+    assert_eq!(home_of(&state, child), Some(spare));
+    assert_eq!(population(&state), 5, "the bed takes one child");
+    let parents = state
+        .entities
+        .row(child)
+        .villager
+        .as_ref()
+        .unwrap()
+        .birth_origin
+        .clone()
+        .unwrap()
+        .parents;
+    for slot in residents {
+        let uuid = state.entities.row(slot).uuid.to_string();
+        let kept = food_count(&state, slot, bread);
+        if parents.contains(&uuid) {
+            assert_eq!(kept, 0, "the parents ate their courtship bread");
+        } else {
+            assert_eq!(kept, 3, "the couple that lost the bed keeps its bread");
+            assert_eq!(
+                state
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .food_level,
+                0
+            );
+        }
+    }
+}

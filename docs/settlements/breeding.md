@@ -12,7 +12,7 @@ A birth needs an unclaimed, reachable, complete bed (both halves; no headroom is
 
 Ration and spare-bed searches have their own 40-tick cadence. A search that exhausts the shared path budget cannot immediately repeat on every tick and starve the resident's work or delivery route.
 
-Vanilla spends a courtship's food even when no bed takes the baby. A settlement resident does not: it courts only while a spare bed is reachable (the same search and 40-tick cadence as the ration search), so the founding bread is kept for the birth a new house allows instead of burning on courtships that find no bed. Villagers outside a settlement keep the vanilla behavior.
+Vanilla spends a courtship's food even when no bed takes the baby. A settlement resident does not: it courts only while a spare bed is reachable (the same search and 40-tick cadence as the ration search), so the founding bread is kept for the birth a new house allows instead of burning on courtships that find no bed. When another couple takes the spare bed before the courtship ends, the courtship ends without a birth and both residents keep their food. Villagers outside a settlement keep the vanilla behavior.
 
 ## Farming
 

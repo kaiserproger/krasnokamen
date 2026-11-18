@@ -740,10 +740,17 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
             let kind = a.data.kind;
             let pos = state.entities.pos(first);
             let started_tick = a.courtship_started_tick.expect("validated courtship clock");
-            eat_for_birth(&cache.food, &mut a, &protected_a);
+            // Vanilla eats the courtship's food even when no bed takes the
+            // baby. A settlement resident eats it only for a birth: another
+            // couple may have taken the spare bed since this courtship began.
+            if bed.is_some() || a.settlement.is_none() {
+                eat_for_birth(&cache.food, &mut a, &protected_a);
+            }
             abort_courtship(&mut a);
             let b = state.entities.row_mut(second).villager.as_mut().unwrap();
-            eat_for_birth(&cache.food, b, &protected_b);
+            if bed.is_some() || b.settlement.is_none() {
+                eat_for_birth(&cache.food, b, &protected_b);
+            }
             abort_courtship(b);
             if bed.is_some() {
                 a.age = state
