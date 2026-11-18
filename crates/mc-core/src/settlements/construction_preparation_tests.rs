@@ -145,6 +145,10 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
         );
     }
     assert_eq!(logs, 5);
+    // A registered root retires with its empty trunk column on the ordinary
+    // retire pass, not cell by cell.
+    state.tick = 20;
+    forestry::retire_missing(&mut state);
     assert!(
         !state
             .settlements

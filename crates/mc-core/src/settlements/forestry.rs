@@ -22,56 +22,156 @@ mod tree_proof;
 /// intrinsic vetoes on cells already certified in its canonical work manifest;
 /// it must not repeat a volume scan, or depend on a root retired while felling.
 pub(crate) struct Clearance {
-    proofs: Option<HashMap<[i32; 3], (tree_proof::Proof, bool)>>,
+    proofs: Option<HashMap<[i32; 3], tree_proof::Proof>>,
+    /// Roots whose whole tree is felled for this scan. Deterministic order and
+    /// no closure: only cells certified on a lot, corridor or upgrade diff mark.
+    needed: std::collections::BTreeSet<[i32; 3]>,
+    grove: tree_proof::Grove,
+    /// The manifest may carry cells outside the authored lot (whole trees).
+    lot_free: bool,
+    /// Executor mode: a log must prove its own identity against worldgen or a
+    /// registered root column instead of trusting the manifest.
+    verify: bool,
+    /// The last `clearable` lost forest evidence that is still being generated.
+    missed: bool,
 }
 
 impl Default for Clearance {
     fn default() -> Self {
         Self {
             proofs: Some(HashMap::default()),
+            needed: std::collections::BTreeSet::new(),
+            grove: tree_proof::Grove::default(),
+            lot_free: false,
+            verify: false,
+            missed: false,
         }
     }
 }
 
 impl Clearance {
     pub(crate) fn prepared() -> Self {
-        Self { proofs: None }
+        Self {
+            proofs: None,
+            lot_free: true,
+            ..Self::default()
+        }
+    }
+
+    /// A per-cell identity recheck for the canonical executor. No volume proof:
+    /// a log is either worldgen evidence or a log inside a registered root's
+    /// own column, and leaves need none because a placed leaf is persistent.
+    pub(crate) fn verify() -> Self {
+        Self {
+            proofs: None,
+            verify: true,
+            ..Self::prepared()
+        }
+    }
+
+    pub(crate) fn lost_evidence(&self) -> bool {
+        self.missed
     }
 
     fn owned(&mut self, state: &TickState, at: [i32; 3], leaf: bool) -> bool {
-        let Some(proofs) = self.proofs.as_mut() else {
+        let Some(_) = self.proofs else {
             return true;
         };
-        state.settlements.records().any(|record| {
-            record.planted_trees.iter().any(|&root| {
+        // Roots are visited straight from the registry: no per-cell collection.
+        let mut any = false;
+        let grove = &mut self.grove;
+        let proofs = self.proofs.as_mut().expect("selection proofs");
+        for record in state.settlements.records() {
+            for &root in &record.planted_trees {
                 if !in_halo(root, at) {
-                    return false;
+                    continue;
                 }
-                let (proof, needed) = proofs
-                    .entry(root)
-                    .or_insert_with(|| (tree_proof::Proof::new(state, root), false));
-                let owned = if leaf {
+                any = true;
+                if !proofs.contains_key(&root) {
+                    proofs.insert(root, tree_proof::Proof::new(state, root, grove));
+                }
+            }
+        }
+        if !any {
+            return false;
+        }
+        let mut certified = false;
+        let proofs = self.proofs.as_ref().expect("selection proofs");
+        for record in state.settlements.records() {
+            for &root in &record.planted_trees {
+                if !in_halo(root, at) {
+                    continue;
+                }
+                let Some(proof) = proofs.get(&root) else {
+                    continue;
+                };
+                let owns = if leaf {
                     proof.permits(at)
                 } else {
                     proof.owns_log(at)
                 };
-                *needed |= owned;
-                owned
-            })
-        })
+                if !owns {
+                    continue;
+                }
+                certified = true;
+                // Only a certified *crown* can mutilate a neighbour: a cut log
+                // cell marks its owner alone (Opus review P3.1).
+                if !leaf {
+                    continue;
+                }
+                // A crown leaf belongs to the *nearest* registered tree that
+                // reaches it: a neighbour that merely stands within RANGE of a
+                // leaf grown by another tree is not mutilated by cutting it, so
+                // only the closest contributor(s) become needed.
+                let mut best = i32::MAX;
+                for &other in &proof.contributors {
+                    if let Some(distance) = nearest_log(self.grove.component(state, other), at) {
+                        best = best.min(distance);
+                    }
+                }
+                if best == i32::MAX {
+                    continue;
+                }
+                for &other in &proof.contributors {
+                    if self.needed.contains(&other) {
+                        continue;
+                    }
+                    if nearest_log(self.grove.component(state, other), at) == Some(best) {
+                        self.needed.insert(other);
+                    }
+                }
+            }
+        }
+        certified
     }
 
     pub(crate) fn append_whole_trees(
-        &self,
+        &mut self,
         state: &TickState,
         cells: &mut Vec<crate::plugin_structures::settlement_builds::PlannedCell>,
     ) {
-        let Some(proofs) = &self.proofs else { return };
-        let mut seen: HashSet<_> = cells.iter().map(|cell| cell.at).collect();
-        for (&root, (proof, needed)) in proofs {
-            if !needed {
-                continue;
+        // The proofs are parked while the grove memo is used, so a crown check
+        // can walk a neighbour's component without borrowing this root's proof.
+        let Some(mut proofs) = self.proofs.take() else {
+            return;
+        };
+        if self.needed.is_empty() {
+            self.proofs = Some(proofs);
+            return;
+        }
+        // A root may be marked needed from a neighbour's proof, so build its
+        // own proof on demand from the same scan-wide component memo.
+        let needed: Vec<[i32; 3]> = self.needed.iter().copied().collect();
+        for &root in &needed {
+            if !proofs.contains_key(&root) {
+                proofs.insert(root, tree_proof::Proof::new(state, root, &mut self.grove));
             }
+        }
+        let mut seen: HashSet<_> = cells.iter().map(|cell| cell.at).collect();
+        for root in needed {
+            let Some(proof) = proofs.get(&root) else {
+                continue;
+            };
             for at in proof.positions(root) {
                 let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
                     continue;
@@ -84,6 +184,9 @@ impl Clearance {
                     .blocks
                     .by_id(BlockStateId(block))
                     .is_some_and(|b| b.block.id.path().ends_with("_leaves"));
+                if leaf && !self.crown_is_this_trees(root, &proof.contributors, state, at) {
+                    continue;
+                }
                 if !(proof.owns_log(at) || (leaf && proof.permits(at)))
                     || vetoed(state, at)
                     || (leaf && persistent(state, block))
@@ -99,7 +202,51 @@ impl Clearance {
                 });
             }
         }
+        self.proofs = Some(proofs);
     }
+
+    /// A crown cell belongs to `root` only when no other tree of its own box
+    /// reaches it: felling a leaf another (unneeded) registered tree supports
+    /// would mutilate that tree instead of clearing a grove.
+    fn crown_is_this_trees(
+        &mut self,
+        root: [i32; 3],
+        contributors: &[[i32; 3]],
+        state: &TickState,
+        at: [i32; 3],
+    ) -> bool {
+        for &other in contributors {
+            if other == root || self.needed.contains(&other) {
+                continue;
+            }
+            if self
+                .grove
+                .component(state, other)
+                .is_some_and(|logs| logs.iter().any(|log| within_reach(*log, at)))
+            {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// Distance from `at` to the closest log of a component, if it is in reach.
+fn nearest_log(component: Option<&[[i32; 3]]>, at: [i32; 3]) -> Option<i32> {
+    let mut best = i32::MAX;
+    for &log in component? {
+        let distance = (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs();
+        if distance <= tree_proof::RANGE {
+            best = best.min(distance);
+        }
+    }
+    (best != i32::MAX).then_some(best)
+}
+
+/// Manhattan distance from a log to a certified or candidate cell: the union
+/// radius [`tree_proof::RANGE`], shared by the needed-set and crown checks.
+fn within_reach(log: [i32; 3], at: [i32; 3]) -> bool {
+    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs() <= tree_proof::RANGE
 }
 
 pub(crate) fn vetoed(state: &TickState, at: [i32; 3]) -> bool {
@@ -456,7 +603,7 @@ pub(super) fn off_lot_sapling_overlaps(
 }
 
 /// Retire vanished roots only when their whole possible trunk is loaded.
-pub(super) fn retire_missing(state: &mut TickState) {
+pub(crate) fn retire_missing(state: &mut TickState) {
     if !state.tick.is_multiple_of(20) {
         return;
     }
@@ -524,34 +671,45 @@ fn near_unlogged_player(state: &TickState, at: [i32; 3]) -> bool {
 }
 
 fn natural(state: &TickState, at: [i32; 3], block: u32) -> bool {
+    natural_evidence(state, at, block) == Some(true)
+}
+
+/// `None` when the forest cache has no evidence for the cell yet: a caller that
+/// may not guess (the executor) retries instead of treating that as a refusal.
+fn natural_evidence(state: &TickState, at: [i32; 3], block: u32) -> Option<bool> {
     let generated = state
         .settlements
         .forest
         .lock()
         .expect("forest cache poisoned")
-        .block(state, at);
-    let Some(generated) = generated else {
-        return false;
-    };
+        .block(state, at)?;
     if generated == block {
-        return true;
+        return Some(true);
     }
-    let Some(actual) = state.registry.blocks.by_id(BlockStateId(block)) else {
-        return false;
-    };
-    let Some(baseline) = state.registry.blocks.by_id(BlockStateId(generated)) else {
-        return false;
-    };
-    actual.block.id == baseline.block.id
-        && actual.block.id.path().ends_with("_leaves")
-        && actual.properties.len() == baseline.properties.len()
-        && actual.properties.iter().all(|(key, value)| {
-            key == "distance"
-                || baseline
-                    .properties
-                    .iter()
-                    .any(|(other, expected)| other == key && expected == value)
+    let actual = state.registry.blocks.by_id(BlockStateId(block))?;
+    let baseline = state.registry.blocks.by_id(BlockStateId(generated))?;
+    Some(
+        actual.block.id == baseline.block.id
+            && actual.block.id.path().ends_with("_leaves")
+            && actual.properties.len() == baseline.properties.len()
+            && actual.properties.iter().all(|(key, value)| {
+                key == "distance"
+                    || baseline
+                        .properties
+                        .iter()
+                        .any(|(other, expected)| other == key && expected == value)
+            }),
+    )
+}
+
+/// A registered planting's own trunk cell: inside that root's column and height
+/// bound. The executor's identity evidence for a log, without any volume proof.
+fn registered_column(state: &TickState, at: [i32; 3]) -> bool {
+    state.settlements.records().any(|record| {
+        record.planted_trees.iter().any(|&root| {
+            root[0] == at[0] && root[2] == at[2] && (root[1]..=root[1] + 64).contains(&at[1])
         })
+    })
 }
 
 pub(crate) fn tree_or_sapling(state: &TickState, block: u32) -> bool {
@@ -608,11 +766,12 @@ impl Clearance {
         at: [i32; 3],
         lot: Option<mc_script::ScriptWorldBounds>,
     ) -> bool {
+        self.missed = false;
         if vetoed(state, at) {
             return false;
         }
         let on_lot = lot.is_some_and(|bounds| {
-            self.proofs.is_none()
+            self.lot_free
                 || [0, 2]
                     .into_iter()
                     .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&at[axis]))
@@ -633,12 +792,35 @@ impl Clearance {
                     .properties
                     .iter()
                     .any(|(key, value)| key == "persistent" && value == "false");
-                return nonpersistent && (self.owned(state, at, true) || natural(state, at, block));
+                // A placed leaf is always persistent (placement.rs), and a
+                // persistent leaf is refused here, so the executor needs no
+                // further identity evidence for leaves.
+                return nonpersistent
+                    && (self.verify || self.owned(state, at, true) || natural(state, at, block));
             }
             if registered && name.ends_with("_sapling") {
                 return true;
             }
-            return tree_name(name) && (self.owned(state, at, false) || natural(state, at, block));
+            if !tree_name(name) {
+                return false;
+            }
+            if self.verify {
+                // The manifest is not evidence of identity. A log is either
+                // worldgen evidence or a log inside its registered root's own
+                // column; selection certifies exactly that same set, because a
+                // component never extends past its root's column.
+                if registered_column(state, at) {
+                    return true;
+                }
+                return match natural_evidence(state, at, block) {
+                    Some(natural) => natural,
+                    None => {
+                        self.missed = true;
+                        false
+                    }
+                };
+            }
+            return self.owned(state, at, false) || natural(state, at, block);
         }
         clearable(state, at)
     }
@@ -652,7 +834,12 @@ pub(crate) fn drops(
     clearance: &mut Clearance,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
     if !clearance.clearable(state, at, lot) {
-        return Err(mc_script::ScriptOperationFailure::Blocked);
+        // Missing forest evidence is a wait, not a permanent refusal.
+        return Err(if clearance.lost_evidence() {
+            mc_script::ScriptOperationFailure::Unloaded
+        } else {
+            mc_script::ScriptOperationFailure::Blocked
+        });
     }
     roll(state, at, block)
 }
@@ -712,12 +899,8 @@ pub(crate) fn cells(
     use crate::plugin_structures::settlement_builds::PlannedCell;
     let record = state.settlements.get(project.settlement)?;
     let bounds = lot_bounds(state, project)?;
-    if let Some(proofs) = clearance.proofs.as_mut() {
-        // Proofs are scan-wide; the selected work roots are candidate-local.
-        for (_, needed) in proofs.values_mut() {
-            *needed = false;
-        }
-    }
+    // Proofs are scan-wide; the selected whole trees are candidate-local.
+    clearance.needed.clear();
     let mut lot = Vec::new();
     let mut lot_has_tree = false;
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
