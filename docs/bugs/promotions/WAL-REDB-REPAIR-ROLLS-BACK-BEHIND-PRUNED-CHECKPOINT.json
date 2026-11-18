@@ -1,0 +1,130 @@
+{
+  "id": "WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT",
+  "verdict": "promoted",
+  "fix_commit": "patch:e749161b0a6f48036bd7da2f35c04d4a06168b519bbec2dd9edc513d19ca359a",
+  "fix_commit_full": "patch:e749161b0a6f48036bd7da2f35c04d4a06168b519bbec2dd9edc513d19ca359a",
+  "promoted_at": "2026-11-18T12:58:14+00:00",
+  "tree_head": "7e421d34c060956d4c71dc1caa26d9f3c41f5d85",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "e749161b0a6f48036bd7da2f35c04d4a06168b519bbec2dd9edc513d19ca359a",
+  "reversed_files": [
+    "crates/mc-core/src/core.rs",
+    "crates/mc-core/src/core/journal.rs",
+    "crates/mc-core/src/hot_backup.rs",
+    "crates/mc-core/src/native_checkpoint.rs",
+    "crates/mc-edge/src/backup.rs",
+    "crates/mc-world-conversion/src/census.rs",
+    "crates/mc-world-conversion/src/crash_census.rs",
+    "crates/mc-world-conversion/src/custody_census.rs",
+    "crates/mc-world-conversion/src/import.rs",
+    "crates/mc-world-conversion/src/probe.rs",
+    "crates/mc-world-tools/src/pregenerate.rs",
+    "crates/mc-world-tools/src/world_maintenance.rs",
+    "crates/mc-world-tools/src/worldgen_upgrade.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-world-tools:world_maintenance::tests::compact_refuses_a_store_that_disagrees_with_its_checkpoint_marker": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-tools:worldgen_upgrade::tests::a_stale_marker_with_a_refused_upgrade_leaves_the_world_unchanged": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::restore_refuses_a_marker_from_another_store": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:core::store_marker_tests::a_store_rolled_back_behind_the_marker_is_refused_before_replay": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world:store_marker_tests::store_behind_the_marker_is_refused_and_names_both_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:probe_tests::probe_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_foreign_pair": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:core::store_marker_tests::an_interrupted_first_start_publishes_the_marker_once_and_then_refuses": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::offline_backup_and_restore_keep_the_store_and_its_marker_paired": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:census_tests::census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pair": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:hot_backup_tests::copy_refuses_a_marker_ahead_of_the_committed_checkpoint": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:core::store_marker_tests::a_marker_write_failure_prunes_nothing_and_halts_the_world": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:hot_backup_tests::copy_refuses_a_marker_from_another_store": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-world-tools:world_maintenance::tests::compact_refuses_a_store_that_disagrees_with_its_checkpoint_marker": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-tools:worldgen_upgrade::tests::a_stale_marker_with_a_refused_upgrade_leaves_the_world_unchanged": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::restore_refuses_a_marker_from_another_store": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::store_marker_tests::a_store_rolled_back_behind_the_marker_is_refused_before_replay": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:store_marker_tests::store_behind_the_marker_is_refused_and_names_both_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:probe_tests::probe_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_foreign_pair": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::store_marker_tests::an_interrupted_first_start_publishes_the_marker_once_and_then_refuses": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::offline_backup_and_restore_keep_the_store_and_its_marker_paired": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:census_tests::census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pair": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::copy_refuses_a_marker_ahead_of_the_committed_checkpoint": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::store_marker_tests::a_marker_write_failure_prunes_nothing_and_halts_the_world": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::copy_refuses_a_marker_from_another_store": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LedgerStoreMarker/.analysis/validation/20261118T124028-ledger-promote-3g75uqe9"
+}
