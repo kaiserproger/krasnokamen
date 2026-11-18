@@ -730,7 +730,7 @@ fn a_pending_detour_keeps_the_network_walkable_for_the_next_plan() {
         .expect("the lot is admitted")
         .expect("the lot covers village work");
     let record = state.settlements.get(id).unwrap();
-    let nodes = plan_walk(&state, record);
+    let nodes = plan_walk(&state, record).expect("the mounted network reads");
     // The unbuilt detour stands for the next plan...
     for cell in &planned.detour {
         assert_eq!(

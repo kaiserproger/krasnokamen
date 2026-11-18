@@ -1118,11 +1118,13 @@ fn execute_operation(
             }
             let count = portion.len();
             let mut consumed = BTreeMap::new();
-            // A village retirement rewrites the soil already in place: when the
-            // world no longer holds that path or field (a player dug it, the
-            // footprint changed and recovery resumed the same manifest) the cell
-            // is a no-op instead of a block from nothing.
+            // A village retirement and a free paving rewrite the soil already in
+            // place: when the world no longer holds that ground (a player dug it,
+            // the footprint changed and recovery resumed the same manifest) the
+            // cell is a no-op instead of a block from nothing or a foreign block
+            // overwritten without credit.
             let mut retired_noop: BTreeSet<[i32; 3]> = BTreeSet::new();
+            let paved = crate::settlements::layout::paved_state(state);
             for cell in portion {
                 let current = target
                     .world
@@ -1134,6 +1136,23 @@ fn execute_operation(
                     && !crate::settlements::construction::relayout::village_soil(state, current)
                     // A fluid cell is the liquid rules' fill target, never a
                     // retirement of the path or field itself.
+                    && !state
+                        .registry
+                        .blocks
+                        .by_id(mc_world::BlockStateId(current))
+                        .is_some_and(|definition| definition.has_fluid())
+                {
+                    retired_noop.insert(cell.at);
+                }
+                // A free pavement cell is the soil itself: paving turns the
+                // ground it stands on into a path (owner D10). With the soil
+                // gone, or a foreign block there, there is nothing to pave and
+                // nothing to buy: a no-op, exactly like a village retirement.
+                if record.settlement.is_some()
+                    && cell.resource.is_none()
+                    && Some(cell.state) == paved
+                    && current != cell.state
+                    && !crate::settlements::construction::relayout::soil(state, current)
                     && !state
                         .registry
                         .blocks

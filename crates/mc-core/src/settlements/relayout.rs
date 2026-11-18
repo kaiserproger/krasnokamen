@@ -282,7 +282,7 @@ fn vacant(state: &TickState, block: u32) -> bool {
     name(state, block).is_some_and(|name| matches!(name, "air" | "cave_air" | "void_air"))
 }
 
-fn soil(state: &TickState, block: u32) -> bool {
+pub(crate) fn soil(state: &TickState, block: u32) -> bool {
     name(state, block).is_some_and(|name| SOIL.contains(&name))
 }
 
@@ -304,7 +304,7 @@ fn reconnection(
     lot: ScriptWorldBounds,
     paths: &[[i32; 3]],
 ) -> Result<Salient, Reason> {
-    let nodes = plan_walk(state, record);
+    let nodes = plan_walk(state, record)?;
     let seeds = bell_columns(record, &nodes);
     if seeds.is_empty() {
         // No walk starts from the bell: nothing can be proved about the
@@ -569,15 +569,19 @@ fn walk(state: &TickState, record: &SettlementRecord) -> Nodes {
 
 /// The network a plan sees: the world's own walk plus every pending project's
 /// hold, so two individually valid plans cannot cut it together (D8, P2-5).
-fn plan_walk(state: &TickState, record: &SettlementRecord) -> Nodes {
+fn plan_walk(state: &TickState, record: &SettlementRecord) -> Result<Nodes, Reason> {
     let mut nodes = walk(state, record);
-    mount_pending(state, record, &mut nodes);
-    nodes
+    mount_pending(state, record, &mut nodes)?;
+    Ok(nodes)
 }
 
 /// Mount the relayouts of the settlement's other unfinished projects: their
 /// detour stands, the village line they retire is gone.
-fn mount_pending(state: &TickState, record: &SettlementRecord, nodes: &mut Nodes) {
+fn mount_pending(
+    state: &TickState,
+    record: &SettlementRecord,
+    nodes: &mut Nodes,
+) -> Result<(), Reason> {
     let owner = crate::plugin_structures::settlement_builds::owner(record.id);
     let path = layout::paved_state(state);
     let mut retired: HashSet<(i32, i32)> = HashSet::default();
@@ -607,6 +611,7 @@ fn mount_pending(state: &TickState, record: &SettlementRecord, nodes: &mut Nodes
         }
     }
     nodes.retain(|column, _| !retired.contains(column));
+    Ok(())
 }
 
 fn bell_columns(record: &SettlementRecord, nodes: &Nodes) -> Vec<(i32, i32)> {

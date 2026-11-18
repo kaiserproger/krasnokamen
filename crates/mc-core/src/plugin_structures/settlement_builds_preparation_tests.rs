@@ -90,7 +90,7 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
 }
 
 #[test]
-fn a_player_dug_pavement_cell_pauses_instead_of_paving_air() {
+fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
     let site = ScriptWorldBounds::new(
         [root[0] - 2, root[1], root[2] - 2],
@@ -105,75 +105,125 @@ fn a_player_dug_pavement_cell_pauses_instead_of_paving_air() {
         resource: None,
         quantity: 0,
     };
-    // Ground under the cell, the cell itself clear: paving replaces the space
-    // above ground, so the cell is normally air.
-    let under = [root[0], root[1] - 1, root[2]];
-    state.world.set_block(under[0], under[1], under[2], dirt);
+    // A free pavement cell is the soil itself: a player dug it out (air, with
+    // air under it) before the builder reached it.
     state
         .world
         .set_block(root[0], root[1], root[2], state.registry.states.air);
+    state
+        .world
+        .set_block(root[0], root[1] - 1, root[2], state.registry.states.air);
     state.world.fold_overlay();
     let handle = prepare(&mut state, id, "storage".into(), site, site, vec![planned])
         .expect("the pavement project prepares");
     let uuid = state.entities.row(builder).uuid;
-    // The executor only pays for the project's bound builder.
-    state.settlements.get_mut(id).unwrap().projects =
-        vec![crate::settlements::construction::Project {
-            settlement: id,
-            blueprint: "storage".into(),
-            level: 1,
-            origin: site.min,
-            rotation: 0,
-            building: None,
-            structure: handle.clone(),
-            ordered: true,
-            builder: Some((uuid, None)),
-            order_seq: None,
-        }];
-    let cell = super::super::Cell {
+    bind(&mut state, id, &handle, uuid, site.min);
+    let empty: BTreeMap<String, u64> = BTreeMap::new();
+    let builder = uuid.to_string();
+    assert_eq!(
+        debit(&mut state, id, &handle, &builder, &empty, &[]),
+        Ok(()),
+        "the debit is not where the dug cell is refused"
+    );
+    advance(&mut state, id, &handle, uuid).expect("the stage advances past the dug cell");
+    assert_eq!(
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(state.registry.states.air),
+        "no block is written into the dug column"
+    );
+    let _ = dirt;
+}
+
+#[test]
+fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
+    let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    let site = ScriptWorldBounds::new(
+        [root[0] - 2, root[1], root[2] - 2],
+        [root[0] + 3, root[1] + 5, root[2] + 3],
+    )
+    .expect("the lot bounds");
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    let planks = block(&state, "minecraft:oak_planks", &[]);
+    let planned = PlannedCell {
         at: root,
         state: path,
         resource: None,
         quantity: 0,
     };
-    let empty: BTreeMap<String, u64> = BTreeMap::new();
-    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    state.world.set_block(root[0], root[1], root[2], planks);
+    state.world.fold_overlay();
+    let handle = prepare(&mut state, id, "storage".into(), site, site, vec![planned])
+        .expect("the pavement project prepares");
+    let uuid = state.entities.row(builder).uuid;
+    bind(&mut state, id, &handle, uuid, site.min);
     let builder = uuid.to_string();
+    let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(
-            &mut state,
-            id,
-            &handle,
-            &builder,
-            &empty,
-            std::slice::from_ref(&cell)
-        ),
-        Ok(()),
-        "paving over real ground is free work"
+        debit(&mut state, id, &handle, &builder, &empty, &[]),
+        Ok(())
     );
+    advance(&mut state, id, &handle, uuid).expect("the stage advances past the foreign cell");
     assert_eq!(
-        state.block_entities[&(1, 201, 1)].slots.clone(),
-        stock,
-        "paving charges nothing"
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(planks),
+        "a foreign block is never overwritten by free paving"
     );
-    // The player digs the ground out before the project resumes: the same free
-    // cell is now a block from nothing, so the project pauses.
+}
+
+#[test]
+fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
+    let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    let site = ScriptWorldBounds::new(
+        [root[0] - 2, root[1], root[2] - 2],
+        [root[0] + 3, root[1] + 5, root[2] + 3],
+    )
+    .expect("the lot bounds");
+    let dirt = state.registry.states.dirt;
+    let planned = PlannedCell {
+        at: root,
+        state: dirt,
+        resource: None,
+        quantity: 0,
+    };
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    state.world.set_block(root[0], root[1], root[2], path);
+    state.world.fold_overlay();
+    let handle = prepare(&mut state, id, "storage".into(), site, site, vec![planned])
+        .expect("the retirement project prepares");
+    let uuid = state.entities.row(builder).uuid;
+    bind(&mut state, id, &handle, uuid, site.min);
+    let builder = uuid.to_string();
+    let empty: BTreeMap<String, u64> = BTreeMap::new();
+    assert_eq!(
+        debit(&mut state, id, &handle, &builder, &empty, &[]),
+        Ok(())
+    );
+    assert!(advance(&mut state, id, &handle, uuid).expect("the stage advances"));
+    // The house stood; the player digs the free retirement cell out afterwards.
     state
         .world
         .set_block(root[0], root[1], root[2], state.registry.states.air);
-    state
-        .world
-        .set_block(under[0], under[1], under[2], state.registry.states.air);
     state.world.fold_overlay();
-    assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[cell]),
-        Err(Failure::Blocked)
+    assert!(
+        !reopen_emptied(&mut state, id, &handle).expect("the certification reads"),
+        "a dug free soil cell has nothing to restore and never reopens the house"
     );
-    assert_eq!(
-        state.world.block_at(root[0], root[1], root[2]),
-        Some(state.registry.states.air),
-        "air over a dug column is never paved"
-    );
+}
+
+fn bind(state: &mut TickState, id: SettlementId, handle: &str, uuid: uuid::Uuid, origin: [i32; 3]) {
+    state.settlements.get_mut(id).unwrap().projects =
+        vec![crate::settlements::construction::Project {
+            settlement: id,
+            blueprint: "storage".into(),
+            level: 1,
+            origin,
+            rotation: 0,
+            building: None,
+            structure: handle.to_string(),
+            ordered: true,
+            builder: Some((uuid, None)),
+            order_seq: None,
+        }];
 }
 
 #[test]

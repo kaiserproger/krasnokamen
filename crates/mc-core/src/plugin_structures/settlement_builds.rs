@@ -433,6 +433,17 @@ const REPAIR: &str = "repair";
 /// authored cell is not emptied and is never replaced.
 /// One pass over the structure's cells at completion, never per tick. Returns
 /// whether cells were queued (the building must not be certified yet).
+/// Whether a manifest cell is free soil work: no material was ever charged, so
+/// the cell only rewrites the ground already there.
+fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
+    cell.resource.is_none()
+        && state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(cell.state))
+            .is_some_and(|definition| matches!(definition.block.id.path(), "dirt" | "dirt_path"))
+}
+
 pub(crate) fn reopen_emptied(
     state: &mut TickState,
     settlement: SettlementId,
@@ -454,7 +465,15 @@ pub(crate) fn reopen_emptied(
     let mut seen = BTreeSet::new();
     let mut stale = Vec::new();
     for cell in record.cells.iter().flatten() {
-        if cell.state == target.registry.states.air || !seen.insert(cell.at) {
+        if cell.state == target.registry.states.air
+            // Free soil work rewrites the ground already in place: a village
+            // retirement re-soils the path or field it found, a detour or a
+            // road paves the soil under it. Nothing was consumed, so a cell the
+            // player dug out has nothing to restore — reopening it would repair
+            // a cell the executor no-ops for ever and never certify the house.
+            || free_soil_work(target, cell)
+            || !seen.insert(cell.at)
+        {
             continue;
         }
         let now = target
@@ -666,34 +685,6 @@ pub(super) fn debit(
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
     if preparing {
-        // A free pavement cell never lays a block from nothing: paving replaces
-        // the clearable space above ground, so the cell itself is usually air,
-        // but the ground under it must still be there. A column the player dug
-        // out pauses the project instead of paving void.
-        let pavement = crate::settlements::construction::relayout::dirt_path(state);
-        for cell in cells.iter().filter(|cell| {
-            cell.resource.is_none() && cell.quantity == 0 && Some(cell.state) == pavement
-        }) {
-            let block = state
-                .world
-                .block_at(cell.at[0], cell.at[1], cell.at[2])
-                .ok_or(Failure::Unloaded)?;
-            if block != state.registry.states.air {
-                continue;
-            }
-            let below = state
-                .world
-                .physics_block_at(cell.at[0], cell.at[1] - 1, cell.at[2])
-                .ok_or(Failure::Unloaded)?;
-            let supported = state
-                .registry
-                .collision_boxes
-                .get(below as usize)
-                .is_some_and(|boxes| !boxes.is_empty());
-            if !supported {
-                return Err(Failure::Blocked);
-            }
-        }
         for cell in cells
             .iter()
             .filter(|cell| cell.state == state.registry.states.air)
