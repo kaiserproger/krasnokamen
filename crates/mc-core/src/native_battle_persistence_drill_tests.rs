@@ -1310,6 +1310,15 @@ fn compact_entity_records_survive_a_crash_after_the_published_batch() {
         "the compact record's metadata byte survives the kill"
     );
     assert_eq!(
+        recovered
+            .state
+            .entities
+            .row(recovered.state.entities.slot_of(member).unwrap())
+            .health,
+        expected_health,
+        "the member's health survives the kill"
+    );
+    assert_eq!(
         recovered.state.hostile.battle.formation.members[0].id, member,
         "the battle history still names the body the compact record updated"
     );
