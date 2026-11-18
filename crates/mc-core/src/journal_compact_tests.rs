@@ -293,9 +293,11 @@ fn scenario(force_full: bool) -> Vec<(u64, u64, Vec<JournalEntry>)> {
     let slot = state.entities.slot_of(villager).unwrap();
     let row = state.entities.row_mut(slot);
     row.persistent = true;
-    let mut state_villager = crate::villager::VillagerState::default();
-    state_villager.wandering = true;
-    state_villager.age = 50;
+    let state_villager = crate::villager::VillagerState {
+        wandering: true,
+        age: 50,
+        ..Default::default()
+    };
     row.villager = Some(Box::new(state_villager));
     state.appearance_changed.push(husk);
     state.appearance_changed.push(baby);
@@ -620,8 +622,10 @@ fn delta_values_round_trip_through_a_batch() {
         "the clear reaches the state"
     );
 
-    let mut appearance = crate::journal::EntityAppearanceImage::default();
-    appearance.custom_name = Some("named".into());
+    let mut appearance = crate::journal::EntityAppearanceImage {
+        custom_name: Some("named".into()),
+        ..Default::default()
+    };
     let JournalEntry::EntityAppearance {
         appearance: delta, ..
     } = &decoded[2]

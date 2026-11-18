@@ -1154,7 +1154,7 @@ pub(crate) fn apply_batch_images(
                     // A delta needs an image in this tail, not merely a record
                     // (a checkpoint fills `entities` without one), and a dead
                     // body is a removal that keeps the image path.
-                    if *alive == false || !replay.tail_images.contains(id) {
+                    if !*alive || !replay.tail_images.contains(id) {
                         compact_fault(&mut replay, *id);
                         continue;
                     }
@@ -1211,7 +1211,7 @@ pub(crate) fn apply_batch_images(
                     // A delta needs an image in this tail, a record, and the
                     // retained projectile that image carried; a dead body is a
                     // removal that keeps the image path.
-                    if *alive == false
+                    if !*alive
                         || !replay.tail_images.contains(id)
                         || !replay
                             .entities

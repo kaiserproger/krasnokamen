@@ -754,7 +754,7 @@ fn a_flight_hold_is_stamped_once_and_never_slides_forward() {
     // attack decision, so the guard is the only thing it could rewrite.
     battle.formation.members[bi].routing = false;
     let mut rally = 141;
-    while (rally + actor.0 as u64) % ATTACK_DECISION_TICKS == 0 {
+    while (rally + actor.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
         rally += 1;
     }
     step_off_chunk(&state, &mut battle, rally, bi, false);

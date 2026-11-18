@@ -1561,17 +1561,12 @@ pub enum EntityDataValueImage {
 /// `None`, so a cleared field would silently keep its old value. The derived
 /// enum encoding is unambiguous (`"Unchanged"`, `"Clear"`, `{"Set": value}`) and
 /// is covered by tests through a real batch encode/decode.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum DeltaValue<T> {
+    #[default]
     Unchanged,
     Clear,
     Set(T),
-}
-
-impl<T> Default for DeltaValue<T> {
-    fn default() -> Self {
-        Self::Unchanged
-    }
 }
 
 impl<T> DeltaValue<T> {

@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// A copy of every registered connection's handles.
+pub(super) type HandleCopy = Vec<(ConnectionId, ConnectionHandles)>;
+
 pub struct ConnectionRegistry {
     pub(super) next_id: AtomicU64,
     pub(super) inner: parking_lot::Mutex<RegistryInner>,
@@ -362,10 +365,7 @@ impl ConnectionRegistry {
     pub(super) fn routing_snapshot(
         &self,
         generation: &mut u64,
-    ) -> (
-        Option<Vec<(ConnectionId, ConnectionHandles)>>,
-        Option<Vec<String>>,
-    ) {
+    ) -> (Option<HandleCopy>, Option<Vec<String>>) {
         let (handles, names) = {
             let mut inner = self.inner.lock();
             let handles = if inner.routing_generation == *generation {
