@@ -133,7 +133,12 @@ fn capture_custody_ticks_remove_picked_up_merged_and_retracted_rows() {
     use crate::boundary::{ConnectionId, PlayerInput};
     use mc_data::ItemStack;
     let directory = tempfile::tempdir().unwrap();
-    let mut world = World::new(directory.path());
+    // A live simulation window keeps the lot's chunk active across ticks, so its
+    // chest block entity and the plan's writes persist like a played area.
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 2;
+    let mut world = World::open(config);
     world
         .state
         .gamerules
@@ -3685,4 +3690,227 @@ fn container_stale_ack_and_real_eviction_keep_full_custody_in_every_dimension() 
             expected.assert_stored(&reopened, "post-eviction restart fence");
         }
     }
+}
+
+/// D10 liquid-lot custody through the real root tick and a durable checkpoint:
+/// a funded source cell is paid once from the builder's real carry, the paid
+/// block and the paid prefix become durable, and the reopened plan advances the
+/// unpaid cell after the restart without paying the first one again.
+#[test]
+fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
+    use crate::settlements::allocator::tests::{block, villager};
+    use crate::settlements::construction::Project;
+    use crate::settlements::{SettlementId, layout};
+    let directory = tempfile::tempdir().unwrap();
+    // A live simulation window keeps the lot's chunk active across ticks, so the
+    // plan's writes and the resident persist like a played area.
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 2;
+    let mut world = World::open(config);
+    let state = &mut world.state;
+    let registry = state.registry.clone();
+    let air = registry.states.air;
+    let stone = registry.states.stone;
+    let dirt = registry.states.dirt;
+    let water = registry.states.water_levels[0];
+    let dirt_item = registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    state.world.ensure_blocking(
+        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect(),
+    );
+    // Flat two-cell lot with a floor: A holds a real source, B is dry.
+    let a = [11, 201, 11];
+    let b = [11, 201, 12];
+    for at in [
+        [11, 200, 11],
+        [11, 200, 12],
+        [10, 200, 11],
+        [10, 201, 11],
+        [10, 202, 11],
+    ] {
+        state.world.set_block(at[0], at[1], at[2], stone);
+    }
+    state.world.set_block(10, 201, 11, air);
+    state.world.set_block(10, 202, 11, air);
+    state.world.set_block(a[0], a[1], a[2], water);
+    state.world.set_block(b[0], b[1], b[2], air);
+    state.world.fold_overlay();
+    let id: SettlementId = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "builders".into(),
+            "owner".into(),
+            a,
+            48,
+        )
+        .unwrap();
+    state.tickets.insert(
+        "liquid-custody".into(),
+        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
+    );
+    let slot = villager(state, [10.5, 201.0, 11.5]);
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(state, id, entity).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    {
+        let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        v.data.profession = crate::villager::VillagerProfession::Builder;
+        v.activity = crate::villager::Activity::Work;
+    }
+    state.day_time = 3000;
+    let bounds = mc_script::ScriptWorldBounds::new(a, b).unwrap();
+    let project = Project {
+        settlement: id,
+        blueprint: layout::ROAD.into(),
+        level: 1,
+        origin: [a[0], 200, a[2]],
+        rotation: 0,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    };
+    let cells = vec![
+        crate::plugin_structures::settlement_builds::PlannedCell {
+            at: a,
+            state: dirt,
+            resource: Some("minecraft:dirt".into()),
+            quantity: 1,
+        },
+        crate::plugin_structures::settlement_builds::PlannedCell {
+            at: b,
+            state: dirt,
+            resource: Some("minecraft:dirt".into()),
+            quantity: 1,
+        },
+    ];
+    assert!(crate::settlements::construction::begin_cells(
+        state, project, bounds, cells
+    ));
+    let handle = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .last()
+        .unwrap()
+        .structure
+        .clone();
+    crate::settlements::construction::bind_builder(
+        state.settlements.get_mut(id).unwrap(),
+        &handle,
+        Some((uuid, None)),
+    );
+    let carried = |state: &TickState| -> i32 {
+        state
+            .entities
+            .slots()
+            .filter_map(|slot| state.entities.row(slot).villager.as_ref())
+            .flat_map(|v| v.inventory.iter().flatten())
+            .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
+            .map(|stack| stack.count)
+            .sum()
+    };
+    let stock = |state: &mut TickState| {
+        let slot = state.entities.slot_of_uuid(uuid).expect("builder");
+        let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        v.inventory[0] = Some(mc_data::ItemStack::new(dirt_item, 1));
+    };
+    stock(state);
+    for _ in 0..24 {
+        world.tick(|_| {});
+    }
+    assert_eq!(
+        world.state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the source cell is filled through the root tick"
+    );
+    assert_eq!(
+        world.state.world.block_at(b[0], b[1], b[2]),
+        Some(air),
+        "the unfunded cell stays open"
+    );
+    assert_eq!(
+        carried(&world.state),
+        0,
+        "exactly one unit paid for one cell"
+    );
+    let consumed = |state: &TickState| {
+        crate::plugin_structures::settlement_builds::status(state, id, &handle)
+            .unwrap()
+            .consumed
+            .len()
+    };
+    assert_eq!(consumed(&world.state), 1, "the source cell is charged once");
+    world.checkpoint();
+    let mut reopened = world.crash();
+    reopened.state.world.ensure_blocking(
+        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect(),
+    );
+    assert_eq!(
+        reopened.state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the paid block is durable"
+    );
+    assert_eq!(consumed(&reopened.state), 1, "the paid prefix is durable");
+    assert_eq!(
+        carried(&reopened.state),
+        0,
+        "the reopen charges nothing again"
+    );
+    // The resident must be at work after the restart, as a real player's is.
+    let slot = reopened.state.entities.slot_of_uuid(uuid).expect("builder");
+    reopened.state.entities.set_pos(slot, [10.5, 201.0, 11.5]);
+    {
+        let v = reopened
+            .state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .expect("restored villager");
+        v.data.profession = crate::villager::VillagerProfession::Builder;
+        v.activity = crate::villager::Activity::Work;
+    }
+    reopened.state.day_time = 3000;
+    crate::settlements::construction::bind_builder(
+        reopened.state.settlements.get_mut(id).unwrap(),
+        &handle,
+        Some((uuid, None)),
+    );
+    stock(&mut reopened.state);
+    for _ in 0..24 {
+        reopened.tick(|_| {});
+    }
+    assert_eq!(
+        reopened.state.world.block_at(b[0], b[1], b[2]),
+        Some(dirt),
+        "the reopened plan finishes the unpaid cell"
+    );
+    assert_eq!(
+        reopened.state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the paid cell was not written or charged again"
+    );
+    // The plan's receipts record the paid prefix; the exact charge accounting is
+    // the real carry: two units were handed to the builder, two cells stand,
+    // nothing is left over and the first cell was never paid again.
+    assert!(
+        consumed(&reopened.state) >= 1,
+        "the paid prefix stays recorded after the restart"
+    );
+    assert_eq!(
+        carried(&reopened.state),
+        0,
+        "two cells cost exactly two units"
+    );
 }

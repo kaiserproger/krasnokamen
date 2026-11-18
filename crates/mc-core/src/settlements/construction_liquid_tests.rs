@@ -350,6 +350,7 @@ fn one_cell_project(
         structure: String::new(),
         ordered: true,
         builder: None,
+        order_seq: None,
     };
     (project, bounds, cells)
 }
@@ -543,6 +544,7 @@ fn a_fluid_on_an_unfloored_floor_row_is_one_paid_fill() {
         structure: String::new(),
         ordered: false,
         builder: None,
+        order_seq: None,
     };
     let (_, cells) =
         super::preparation::planned_cells(&state, &project, "oak", &mut Default::default())
@@ -594,6 +596,7 @@ fn begin_plan(
         structure: String::new(),
         ordered: false,
         builder: None,
+        order_seq: None,
     };
     assert!(
         begin_cells(state, project, bounds, planned),
@@ -1017,227 +1020,5 @@ fn a_repeated_wait_schedules_once() {
         image(&mut state),
         0,
         "a third wait on a later tick wakes nothing"
-    );
-}
-
-/// D10 custody through the root tick: a funded liquid-source lot charges one
-/// real unit per cell, keeps the paid prefix across a checkpoint and reopen,
-/// and continues without re-paying it.
-#[test]
-fn a_funded_liquid_lot_charges_once_through_the_root_tick_and_reopen() {
-    let directory = tempfile::tempdir().expect("temp dir");
-    let config = crate::CoreConfig::new(directory.path().to_owned(), 42);
-    let (mut state, id) = crate::settlements::autonomy::tests::native_village(&config);
-    let chest = {
-        let [x, y, z] = state
-            .settlements
-            .get(id)
-            .expect("settlement")
-            .bootstrap_storage
-            .expect("adopted storage");
-        (x, y, z)
-    };
-    let dirt_item = state
-        .registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:dirt").expect("dirt id"))
-        .expect("dirt item");
-    let dirt = state.registry.states.dirt;
-    let water = state.registry.states.water_levels[0];
-    let stone = state.registry.states.stone;
-    let air = state.registry.states.air;
-    // A two-cell lot beside the adopted storage: the builder stands by the
-    // chest, so the material fetch and the reach both hold without a path.
-    let a = [chest.0, 201, chest.2 + 3];
-    let b = [chest.0, 201, chest.2 + 4];
-    for at in [a, b] {
-        state.world.set_block(at[0], at[1] - 1, at[2], stone);
-    }
-    state.world.set_block(a[0], a[1], a[2], water);
-    state.world.set_block(b[0], b[1], b[2], air);
-    state.world.fold_overlay();
-    // The settlement phase only admits a settlement whose anchor chunk is
-    // active; the fixture loads but keeps no ticket, so the root tick would
-    // refresh the active set to empty.
-    state.tickets.insert(
-        "liquid-fixture".into(),
-        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
-    );
-    state.refresh_active_chunks(0);
-    let slot = state
-        .entities
-        .slots()
-        .find(|slot| state.entities.row(*slot).villager.is_some())
-        .expect("adopted resident");
-    let uuid = state.entities.row(slot).uuid;
-    {
-        let v = state
-            .entities
-            .row_mut(slot)
-            .villager
-            .as_mut()
-            .expect("villager");
-        v.data.profession = crate::villager::VillagerProfession::Builder;
-        v.activity = crate::villager::Activity::Work;
-    }
-    state.day_time = 3000;
-    state.entities.set_pos(
-        slot,
-        [f64::from(chest.0) + 0.5, 201.0, f64::from(chest.2) + 1.5],
-    );
-    // One storage unit only: the first cell can be paid, the second waits.
-    state.block_entities.get_mut(&chest).expect("chest").slots[0] =
-        mc_data::ItemStack::new(dirt_item, 1);
-    let bounds = ScriptWorldBounds::new(a, b).expect("lot bounds");
-    let project = Project {
-        settlement: id,
-        blueprint: layout::ROAD.into(),
-        level: 1,
-        origin: [a[0], 200, a[2]],
-        rotation: 0,
-        building: None,
-        structure: String::new(),
-        ordered: false,
-        builder: None,
-    };
-    let cells = vec![
-        executor::PlannedCell {
-            at: a,
-            state: dirt,
-            resource: Some("minecraft:dirt".into()),
-            quantity: 1,
-        },
-        executor::PlannedCell {
-            at: b,
-            state: dirt,
-            resource: Some("minecraft:dirt".into()),
-            quantity: 1,
-        },
-    ];
-    assert!(begin_cells(&mut state, project, bounds, cells));
-    let handle = state
-        .settlements
-        .get(id)
-        .expect("settlement")
-        .projects
-        .last()
-        .expect("project")
-        .structure
-        .clone();
-    crate::settlements::construction::bind_builder(
-        state.settlements.get_mut(id).expect("settlement"),
-        &handle,
-        Some((uuid, None)),
-    );
-    let stored = |state: &TickState| {
-        state.block_entities[&chest]
-            .slots
-            .iter()
-            .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
-            .map(|stack| stack.count)
-            .sum::<i32>()
-    };
-    // Root ticks: the liquid stage pays the source cell, the second waits for a
-    // unit that is not there.
-    for _ in 0..16 {
-        crate::tick::run_dimension_tick(&mut state, &[]);
-    }
-    assert_eq!(
-        state.world.block_at(a[0], a[1], a[2]),
-        Some(dirt),
-        "the source cell is filled through the root tick"
-    );
-    assert_eq!(
-        state.world.block_at(b[0], b[1], b[2]),
-        Some(air),
-        "the unfunded cell stays open"
-    );
-    assert_eq!(stored(&state), 0, "exactly one unit paid for one cell");
-    // Checkpoint the live world and reopen it.
-    let tick = state.tick;
-    crate::settlements::autonomy::tests::native_checkpoint(&mut state, &config, tick);
-    drop(state);
-    let mut reopened =
-        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
-            .expect("reopen");
-    // The reopened world starts with no loaded or active chunk: the lot and the
-    // settlement's admission need both.
-    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
-    reopened
-        .world
-        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
-    reopened.tickets.insert("liquid-fixture".into(), (chunk, 0));
-    reopened.refresh_active_chunks(tick);
-    // The chunk loads after the state exists, so the runtime block-entity map
-    // is hydrated from the chunk for the storage chest the fetch reads.
-    if !reopened.block_entities.contains_key(&chest)
-        && let Some(slots) = reopened
-            .world
-            .chunk(chunk)
-            .and_then(|chunk| {
-                chunk.chests.get(&mc_world::BlockPos {
-                    x: chest.0,
-                    y: chest.1,
-                    z: chest.2,
-                })
-            })
-            .map(|stored| {
-                (0..27)
-                    .map(|index| {
-                        stored
-                            .slots
-                            .get(index)
-                            .filter(|slot| slot.count > 0)
-                            .map_or(mc_data::ItemStack::EMPTY, |slot| {
-                                mc_data::ItemStack::new(slot.item_id, slot.count)
-                            })
-                    })
-                    .collect::<Vec<_>>()
-            })
-    {
-        reopened.block_entities.insert(
-            chest,
-            crate::tick::BlockEntityState {
-                slots,
-                furnace: None,
-            },
-        );
-    }
-    // The fixture checkpoint helper refreshes the world regions but not the
-    // dimension chunk manifest, so the reopened *world block* is only asserted
-    // before the checkpoint; the custody claim across the reopen is the plan's
-    // paid prefix and the charge accounting below.
-    assert_eq!(
-        reopened
-            .settlements
-            .get(id)
-            .expect("settlement")
-            .projects
-            .len(),
-        1,
-        "the plan survives the reopen"
-    );
-    let snapshot = executor::status(&reopened, id, &handle).expect("restored plan");
-    assert_eq!(
-        snapshot.consumed.len(),
-        1,
-        "the paid prefix is kept, not re-planned"
-    );
-    assert_eq!(stored(&reopened), 0, "the reopen charges nothing again");
-    // The fixture checkpoint helper refreshes the plugin and settlement rows
-    // but not the dimension chunk manifest, so a runtime world block written
-    // before the checkpoint is not visible after the reopen. The custody claim
-    // across the reopen is therefore the restored plan: one paid cell in the
-    // consumed list, no re-charge, and the next cell still ahead (asserted by
-    // the fixture-funded continuation tests).
-    assert_eq!(
-        executor::next_cell(&reopened, id, &handle).expect("cursor"),
-        Some(b),
-        "the reopened plan continues at the unpaid cell"
-    );
-    assert_eq!(
-        snapshot.state,
-        mc_script::ScriptStructureState::Running,
-        "the reopened plan resumes instead of restarting"
     );
 }

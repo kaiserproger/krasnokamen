@@ -911,4 +911,4 @@ fn piece_kind(
 
 #[cfg(test)]
 #[path = "autonomy_tests.rs"]
-pub(crate) mod tests;
+mod tests;

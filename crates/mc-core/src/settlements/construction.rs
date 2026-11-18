@@ -1508,7 +1508,7 @@ fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> b
     begin_cells(state, project, bounds, cells)
 }
 
-fn begin_cells(
+pub(crate) fn begin_cells(
     state: &mut TickState,
     mut project: Project,
     bounds: ScriptWorldBounds,
