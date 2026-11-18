@@ -56,6 +56,25 @@ fn projection_follows_join_unlock_relock_and_leave() {
     assert!(unlocked_sessions(&state).is_empty());
 }
 
+/// A join or a leave with no login-lock change must still move the stamp: the
+/// two inputs are independent, and the edge mirror follows both.
+#[test]
+fn a_join_or_leave_alone_advances_the_stamp() {
+    let mut state = fixture();
+    let connection = ConnectionId(31);
+    let empty = stamp(&state);
+    join(&mut state, connection);
+    let joined = stamp(&state);
+    assert_ne!(joined, empty, "a join alone advances the mirror stamp");
+    assert!(state.connections.remove_by_connection(connection).is_some());
+    assert_ne!(
+        stamp(&state),
+        joined,
+        "a leave alone advances the mirror stamp"
+    );
+    assert!(unlocked_sessions(&state).is_empty());
+}
+
 #[test]
 fn lock_set_generation_only_advances_on_a_real_change() {
     let mut state = fixture();
