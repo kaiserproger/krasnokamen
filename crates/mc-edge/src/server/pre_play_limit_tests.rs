@@ -201,7 +201,7 @@ async fn cap_refusal_keeps_the_address_admissible() {
     // Free the cap; the same address must be admitted again.
     drop(holder);
     wait_for_live(&limiter, 0).await;
-    let mut admitted = connect_from("127.0.0.1", address).await;
+    let admitted = connect_from("127.0.0.1", address).await;
     wait_for_live(&limiter, 1).await;
     let mut probe = [0_u8; 1];
     assert!(

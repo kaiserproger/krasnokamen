@@ -334,12 +334,7 @@ fn a_b_c_grove_needs_two_trees_and_keeps_the_third_crown() {
     let mut logs: Vec<([i32; 3], Vec<[i32; 3]>)> = Vec::new();
     for root in [a, b, c] {
         grove.ensure(&state, root);
-        let cells: Vec<_> = grove
-            .get(root)
-            .expect("registered component")
-            .iter()
-            .copied()
-            .collect();
+        let cells: Vec<_> = grove.get(root).expect("registered component").to_vec();
         logs.push((root, cells));
     }
     let nearest = |at: [i32; 3]| {

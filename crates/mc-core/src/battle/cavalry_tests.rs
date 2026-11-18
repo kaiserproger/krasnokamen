@@ -1147,7 +1147,7 @@ fn an_episode_carries_the_movement_of_its_last_exposed_tick() {
 /// snapshot (Sol P1-a).
 #[test]
 fn a_boundary_close_reports_the_movement_of_the_last_exposed_tick() {
-    use super::super::formation::{Order, RegimentSpec, slot_position};
+    use super::super::formation::{Order, RegimentSpec};
     let (mut state, _, pos) = fixture();
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
     let (px, py, pz) = (pos[0] as i32, pos[1] as i32, pos[2] as i32);
