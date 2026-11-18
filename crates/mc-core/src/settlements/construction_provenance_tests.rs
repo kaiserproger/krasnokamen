@@ -371,12 +371,9 @@ fn shift_passes(lot: &mut Lot, day_time: i64, passes: usize) {
     }
 }
 
-/// Sol S-2: a paid remainder refused for provenance waits while the player's
-/// edit stays in the log, which with time eviction off is forever. The owner
-/// is told the blocking cell once per stall episode, also when they were
-/// offline at the stall report and come online later without new progress.
-#[test]
-fn a_paid_remainder_refused_for_provenance_tells_the_owner_once_after_a_late_login() {
+/// An outside lot whose project has paid materials, its handle and the next
+/// cell, with the owner set but offline.
+fn paid_lot() -> (Lot, String, [i32; 3]) {
     let mut lot = lot(true, true);
     let handle = lot.state.settlements.get(lot.id).unwrap().projects[0]
         .structure
@@ -394,37 +391,74 @@ fn a_paid_remainder_refused_for_provenance_tells_the_owner_once_after_a_late_log
         attempt(&mut lot.state, lot.id, lot.builder);
     }
     assert!(paid(&lot.state), "materials were paid");
-    // The player puts sand into the next cell; the edit stays in the log.
     let at = executor::next_cell(&lot.state, lot.id, &handle)
         .unwrap()
         .unwrap();
+    lot.state.settlements.get_mut(lot.id).unwrap().owner = Some(OWNER.to_string());
+    (lot, handle, at)
+}
+
+const OWNER: uuid::Uuid = uuid::Uuid::from_u128(77);
+const OWNER_CONNECTION: crate::boundary::ConnectionId = crate::boundary::ConnectionId(77);
+
+fn log_in(lot: &mut Lot) {
+    lot.state.connections.insert(
+        OWNER_CONNECTION,
+        crate::boundary::EntityId(77),
+        OWNER,
+        "Owner".into(),
+    );
+}
+
+/// Notices naming `at` the owner's queue holds.
+fn told(lot: &Lot, at: [i32; 3]) -> usize {
+    let cell = format!("{} {} {}", at[0], at[1], at[2]);
+    chat(&lot.state, OWNER_CONNECTION)
+        .iter()
+        .filter(|line| line.contains(&cell))
+        .count()
+}
+
+/// Sol S-2 / PV2-1: a paid remainder refused for provenance waits while the
+/// player's edit stays in the log, which with time eviction off is forever.
+/// The owner is told the blocking cell once per stall episode, also when they
+/// were offline at the stall report and come online later, or had their chat
+/// hidden, without new progress.
+#[test]
+fn a_paid_remainder_refused_for_provenance_tells_the_owner_once_after_a_late_login() {
+    let (mut lot, handle, at) = paid_lot();
+    // The player puts sand into the next cell; the edit stays in the log.
     lot.state.world.set_block(at[0], at[1], at[2], lot.sand);
     history(&mut lot.state, 0, &[at]);
-    let owner = uuid::Uuid::from_u128(77);
-    let connection = crate::boundary::ConnectionId(77);
-    lot.state.settlements.get_mut(lot.id).unwrap().owner = Some(owner.to_string());
     // Two stall windows while the owner is offline: the episode is reported.
     shift_passes(&mut lot, 2_000, 301);
     let progress = executor::status(&lot.state, lot.id, &handle).unwrap();
-    lot.state.connections.insert(
-        connection,
-        crate::boundary::EntityId(77),
-        owner,
-        "Owner".into(),
-    );
-    let cell = format!("{} {} {}", at[0], at[1], at[2]);
-    let told = |state: &TickState| {
-        chat(state, connection)
-            .iter()
-            .filter(|line| line.contains(&cell))
-            .count()
-    };
-    // The login, a few passes and no stall window later: told once.
+    // The login with chat hidden: nothing reaches the owner, nothing settles.
+    log_in(&mut lot);
+    lot.state
+        .connections
+        .set_chat_visibility(OWNER_CONNECTION, crate::boundary::ChatVisibility::Hidden);
     shift_passes(&mut lot, 2_000, 5);
-    assert_eq!(told(&lot.state), 1, "{:?}", chat(&lot.state, connection));
+    assert_eq!(told(&lot, at), 0);
+    // Chat shown again, a few passes and no stall window later: told once.
+    lot.state
+        .connections
+        .set_chat_visibility(OWNER_CONNECTION, crate::boundary::ChatVisibility::Full);
+    shift_passes(&mut lot, 2_000, 5);
+    assert_eq!(
+        told(&lot, at),
+        1,
+        "{:?}",
+        chat(&lot.state, OWNER_CONNECTION)
+    );
     // Two more stall windows of the same episode: not again.
     shift_passes(&mut lot, 2_000, 301);
-    assert_eq!(told(&lot.state), 1, "{:?}", chat(&lot.state, connection));
+    assert_eq!(
+        told(&lot, at),
+        1,
+        "{:?}",
+        chat(&lot.state, OWNER_CONNECTION)
+    );
     let now = executor::status(&lot.state, lot.id, &handle).unwrap();
     assert_eq!(
         (now.current_stage_index, now.completed_work_units),
@@ -436,6 +470,51 @@ fn a_paid_remainder_refused_for_provenance_tells_the_owner_once_after_a_late_log
         executor::next_cell(&lot.state, lot.id, &handle).unwrap(),
         Some(at),
         "the paid remainder waits at the blocking cell"
+    );
+}
+
+/// PV2-1: a stall reported for another cause (a filled container in the next
+/// cell) settles nothing; once a retained player edit makes it a provenance
+/// refusal, without progress, the online owner is told the cell once.
+#[test]
+fn a_stall_that_becomes_a_provenance_refusal_tells_the_owner_once() {
+    let (mut lot, handle, at) = paid_lot();
+    let chest = super::super::allocator::tests::block(&lot.state, "minecraft:chest", &[]);
+    lot.state.world.set_block(at[0], at[1], at[2], chest);
+    let mut slots = vec![mc_data::ItemStack::EMPTY; 27];
+    slots[0] = mc_data::ItemStack::new(lot.item, 1);
+    lot.state.block_entities.insert(
+        (at[0], at[1], at[2]),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    history(&mut lot.state, 0, &[]);
+    log_in(&mut lot);
+    shift_passes(&mut lot, 2_000, 301);
+    let progress = executor::status(&lot.state, lot.id, &handle).unwrap();
+    assert_eq!(told(&lot, at), 0, "no provenance refusal yet");
+    history(&mut lot.state, 0, &[at]);
+    shift_passes(&mut lot, 2_000, 5);
+    assert_eq!(
+        told(&lot, at),
+        1,
+        "{:?}",
+        chat(&lot.state, OWNER_CONNECTION)
+    );
+    shift_passes(&mut lot, 2_000, 301);
+    assert_eq!(
+        told(&lot, at),
+        1,
+        "{:?}",
+        chat(&lot.state, OWNER_CONNECTION)
+    );
+    let now = executor::status(&lot.state, lot.id, &handle).unwrap();
+    assert_eq!(
+        (now.current_stage_index, now.completed_work_units),
+        (progress.current_stage_index, progress.completed_work_units),
+        "one episode throughout"
     );
 }
 

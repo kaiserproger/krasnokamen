@@ -243,10 +243,11 @@ pub(crate) fn changed_project(
 /// The owner's notice for a stalled paid remainder refused for provenance
 /// outside the territory (PrepLifecycle §2.3, Sol S-2). That wait ends only
 /// when the blocking player edit leaves the log, never with time eviction off,
-/// so it is said once per stall episode: on the first watch pass after the
-/// episode's report that finds the owner online (a pass that finds no such
-/// refusal settles the episode silently). An owner who was offline at the
-/// report hears it when they come online, without new progress.
+/// so it is said once per stall episode, on the first watch pass after the
+/// episode's report that finds the refusal and an owner whose queue accepts
+/// text. The episode is settled only by an accepted notice: an owner offline,
+/// with chat hidden, or on a sealed queue at that point, or a stall whose
+/// cause turns into a refusal later, still hears it without new progress.
 pub(super) fn tell_provenance_wait(
     state: &mut TickState,
     id: SettlementId,
@@ -272,15 +273,27 @@ pub(super) fn tell_provenance_wait(
     {
         return;
     }
-    let Some(connection) = super::super::owner_connection(state, id) else {
+    // `push_to_recipient` drops text for a hidden chat without a trace.
+    let Some(connection) = super::super::owner_connection(state, id).filter(|connection| {
+        state.connections.chat_visibility_of(*connection) != crate::boundary::ChatVisibility::Hidden
+    }) else {
         return;
     };
-    if let Some([x, y, z]) = executor::provenance_refusal(state, id, &project.structure) {
-        let message = format!(
-            "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
-            project.blueprint
-        );
-        state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
+    let Some([x, y, z]) = executor::provenance_refusal(state, id, &project.structure) else {
+        return;
+    };
+    let message = format!(
+        "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
+        project.blueprint
+    );
+    state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
+    // A sealed queue (`push_player_unfiltered`) drops it as well.
+    if state
+        .disconnects
+        .iter()
+        .any(|(sealed, _)| *sealed == connection)
+    {
+        return;
     }
     if let Some(watch) = state.settlements.builder_watch.get_mut(&key) {
         watch.told = Some(progress);
