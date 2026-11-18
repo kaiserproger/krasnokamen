@@ -250,6 +250,61 @@ fn late_player_log_in_an_admitted_manifest_is_not_felled() {
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
 }
 
+/// P2 livelock guard: selection never certifies a log outside its root's own
+/// column, which is exactly what the executor proves, so a trunk that steps
+/// sideways refuses the whole tree **before** any clearing instead of being
+/// certified and then refused cell by cell (the requeue loop).
+#[test]
+fn off_column_trunk_steps_are_refused_before_clearing() {
+    use crate::settlements::forestry::tests::forest;
+    let (mut state, id, _, _, _, _) = forest();
+    let root = [0, 201, 0];
+    let dirt = block(&state, "minecraft:dirt", &[]);
+    let log = block(&state, "minecraft:acacia_log", &[]);
+    state.world.set_block(root[0], root[1] - 1, root[2], dirt);
+    let mut trunk = Vec::new();
+    for (dx, dy) in [(0, 0), (0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (2, 6)] {
+        let at = [root[0] + dx, root[1] + dy, root[2]];
+        state.world.set_block(at[0], at[1], at[2], log);
+        trunk.push(at);
+    }
+    state
+        .settlements
+        .get_mut(id)
+        .expect("settlement")
+        .planted_trees
+        .insert(root);
+    let lot = mc_script::ScriptWorldBounds::new(
+        [root[0] - 4, root[1] - 1, root[2] - 4],
+        [root[0] + 4, root[1] + 64, root[2] + 4],
+    )
+    .expect("witness lot");
+    let mut clearance = crate::settlements::forestry::Clearance::default();
+    for at in &trunk {
+        assert!(
+            !clearance.clearable(&state, *at, Some(lot)),
+            "the off-column step makes the whole component ambiguous: {at:?}"
+        );
+    }
+    let mut planned = Vec::new();
+    clearance.append_whole_trees(&state, &mut planned);
+    assert!(
+        planned.is_empty(),
+        "nothing is manifested, so the executor is never handed a failing cell"
+    );
+    // Worldgen evidence is the supported way for a sideways-grown vanilla tree:
+    // a natural acacia is cleared per cell by `natural`, not by this walk.
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .expect("settlement")
+            .planted_trees
+            .contains(&root),
+        "the registration is untouched by a refusal"
+    );
+}
+
 /// N6 boundary: the canonical executor advances one cell per debit, and a
 /// registered tree's crown sits above a trunk whose cells are cleared first.
 /// Every remaining cell must still prove its identity, so a registered tree is

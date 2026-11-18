@@ -1001,7 +1001,7 @@ pub(crate) fn player_history(
 }
 
 #[test]
-fn planted_halo_keeps_disconnected_logs_but_accepts_historyless_touching_logs() {
+fn lateral_log_at_the_same_height_keeps_its_registered_tree() {
     let (mut state, id, _, _, root, _) = forest();
     state
         .settlements
@@ -1011,24 +1011,21 @@ fn planted_halo_keeps_disconnected_logs_but_accepts_historyless_touching_logs() 
         .insert(root);
     let lot = Some(lot_around(root));
     let log = block(&state, "minecraft:birch_log", &[]);
+    // A log one cell aside at the same height is a player structure attached to
+    // the trunk, not a limb: no tree of this server grows a level lateral step.
+    // Selection refuses the whole component, so the executor can never be handed
+    // a cell it would refuse (the treehouse livelock). It is refused with empty,
+    // expired and retained history alike.
     for dx in [3, 1] {
         let at = [root[0] + dx, root[1] + 3, root[2]];
         state.world.set_block(at[0], at[1], at[2], log);
         state.block_log = Default::default();
-        assert_eq!(
-            clearable_on_lot(&state, at, lot),
-            dx == 1,
-            "empty history: {at:?}"
-        );
+        assert!(!clearable_on_lot(&state, at, lot), "empty history: {at:?}");
         state.block_log = player_history(&state, at, 1);
         state.block_log.evict(u64::MAX);
         assert!(!state.block_log.player_touched(at));
-        assert_eq!(
-            clearable_on_lot(&state, at, lot),
-            dx == 1,
-            "expired history: {at:?}"
-        );
-        assert_eq!(drops(&state, at, log, lot).is_ok(), dx == 1);
+        assert!(!clearable_on_lot(&state, at, lot), "expired history: {at:?}");
+        assert!(drops(&state, at, log, lot).is_err());
         assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
     }
 }

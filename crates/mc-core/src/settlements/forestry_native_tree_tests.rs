@@ -123,7 +123,7 @@ fn native_touching_player_tree_with_a_second_soil_root_is_kept() {
 }
 
 #[test]
-fn vanilla_acacia_diagonal_trunk_steps_are_owned_and_conserved() {
+fn synthetic_off_column_acacia_steps_are_ambiguous_not_owned() {
     let (mut state, id, _, _, root, _) = super::tests::forest();
     state
         .settlements
@@ -131,7 +131,10 @@ fn vanilla_acacia_diagonal_trunk_steps_are_owned_and_conserved() {
         .unwrap()
         .planted_trees
         .insert(root);
-    // ForkingTrunkPlacer 26.3 advances Y and X/Z in the same step.
+    // ForkingTrunkPlacer 26.3 advances Y and X/Z in the same step. Selection
+    // refuses it for a *registered* root because the executor proves only the
+    // root's own column; a worldgen acacia is cleared through its natural
+    // evidence instead, which the forest-baseline tests cover.
     let log = block(&state, "minecraft:acacia_log", &[]);
     let branch = [root[0] + 1, root[1] + 4, root[2]];
     let tip = [root[0] + 2, root[1] + 5, root[2]];
@@ -140,28 +143,29 @@ fn vanilla_acacia_diagonal_trunk_steps_are_owned_and_conserved() {
     }
     let lot = Some(super::tests::lot_around(root));
     let mut clearance = Clearance::default();
+    // The generator in this fixture stands the same column at `root`, so the
+    // root itself is still provable through worldgen evidence: that is the
+    // supported path for a sideways-grown vanilla tree. The synthetic steps
+    // have no such evidence and stay refused.
+    assert!(clearance.clearable(&state, root, lot));
     for at in [branch, tip] {
-        assert!(clearance.clearable(&state, at, lot));
-        let drops = super::drops(&state, at, log, lot, &mut clearance).unwrap();
-        assert_eq!(drops.iter().map(|stack| stack.count).sum::<i32>(), 1);
-        assert_eq!(
-            state
-                .registry
-                .items
-                .name_of(drops[0].item_id)
-                .unwrap()
-                .as_str(),
-            "minecraft:acacia_log"
+        assert!(
+            !clearance.clearable(&state, at, lot),
+            "off-column step is refused: {at:?}"
         );
+        assert!(super::drops(&state, at, log, lot, &mut clearance).is_err());
     }
     let mut cells = Vec::new();
     clearance.append_whole_trees(&state, &mut cells);
+    for at in [branch, tip] {
         assert!(
             !cells.iter().any(|cell| cell.at == at),
             "the off-column step is never manifested: {at:?}"
         );
     }
     for at in [branch, tip] {
+        assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
+    }
 }
 
 #[test]

@@ -77,30 +77,32 @@ impl Clearance {
         let Some(_) = self.proofs else {
             return true;
         };
-        let roots: Vec<[i32; 3]> = state
-            .settlements
-            .records()
-            .flat_map(|record| record.planted_trees.iter().copied())
-            .filter(|&root| in_halo(root, at))
-            .collect();
-        if roots.is_empty() {
-            return false;
-        }
-        {
-            let grove = &mut self.grove;
-            let proofs = self.proofs.as_mut().expect("selection proofs");
-            for &root in &roots {
+        // Roots are visited straight from the registry: no per-cell collection.
+        let mut any = false;
+        let grove = &mut self.grove;
+        let proofs = self.proofs.as_mut().expect("selection proofs");
+        for record in state.settlements.records() {
+            for &root in &record.planted_trees {
+                if !in_halo(root, at) {
+                    continue;
+                }
+                any = true;
                 if !proofs.contains_key(&root) {
                     proofs.insert(root, tree_proof::Proof::new(state, root, grove));
                 }
             }
         }
+        if !any {
+            return false;
+        }
         let mut certified = false;
-        let mut contributors: Vec<[i32; 3]> = Vec::new();
-        {
-            let proofs = self.proofs.as_ref().expect("selection proofs");
-            for root in &roots {
-                let Some(proof) = proofs.get(root) else {
+        let proofs = self.proofs.as_ref().expect("selection proofs");
+        for record in state.settlements.records() {
+            for &root in &record.planted_trees {
+                if !in_halo(root, at) {
+                    continue;
+                }
+                let Some(proof) = proofs.get(&root) else {
                     continue;
                 };
                 let owns = if leaf {
@@ -108,16 +110,38 @@ impl Clearance {
                 } else {
                     proof.owns_log(at)
                 };
-                if owns {
-                    certified = true;
-                    contributors.extend(proof.contributors.iter().copied());
+                if !owns {
+                    continue;
+                }
+                certified = true;
+                // Only a certified *crown* can mutilate a neighbour: a cut log
+                // cell marks its owner alone (Opus review P3.1).
+                if !leaf {
+                    continue;
+                }
+                // A crown leaf belongs to the *nearest* registered tree that
+                // reaches it: a neighbour that merely stands within RANGE of a
+                // leaf grown by another tree is not mutilated by cutting it, so
+                // only the closest contributor(s) become needed.
+                let mut best = i32::MAX;
+                for &other in &proof.contributors {
+                    if let Some(distance) = nearest_log(self.grove.component(state, other), at) {
+                        best = best.min(distance);
+                    }
+                }
+                if best == i32::MAX {
+                    continue;
+                }
+                for &other in &proof.contributors {
+                    if self.needed.contains(&other) {
+                        continue;
+                    }
+                    if nearest_log(self.grove.component(state, other), at) == Some(best) {
+                        self.needed.insert(other);
+                    }
                 }
             }
         }
-                logs.iter().any(|log| {
-                    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
-                        <= tree_proof::RANGE
-                })
         certified
     }
 
@@ -191,24 +215,40 @@ impl Clearance {
         state: &TickState,
         at: [i32; 3],
     ) -> bool {
-        let others: Vec<[i32; 3]> = contributors
-            .iter()
-            .copied()
-            .filter(|other| *other != root && !self.needed.contains(other))
-            .collect();
-        for other in others {
-            let reach = self.grove.component(state, other).is_some_and(|logs| {
-                logs.iter().any(|log| {
-                    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
-                        <= tree_proof::RANGE
-                })
-            });
-            if reach {
+        for &other in contributors {
+            if other == root || self.needed.contains(&other) {
+                continue;
+            }
+            if self
+                .grove
+                .component(state, other)
+                .is_some_and(|logs| logs.iter().any(|log| within_reach(*log, at)))
+            {
                 return false;
             }
         }
         true
     }
+}
+
+/// Distance from `at` to the closest log of a component, if it is in reach.
+fn nearest_log(component: Option<&[[i32; 3]]>, at: [i32; 3]) -> Option<i32> {
+    let mut best = i32::MAX;
+    for &log in component? {
+        let distance =
+            (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs();
+        if distance <= tree_proof::RANGE {
+            best = best.min(distance);
+        }
+    }
+    (best != i32::MAX).then_some(best)
+}
+
+/// Manhattan distance from a log to a certified or candidate cell: the union
+/// radius [`tree_proof::RANGE`], shared by the needed-set and crown checks.
+fn within_reach(log: [i32; 3], at: [i32; 3]) -> bool {
+    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
+        <= tree_proof::RANGE
 }
 
 pub(crate) fn vetoed(state: &TickState, at: [i32; 3]) -> bool {
@@ -767,8 +807,10 @@ impl Clearance {
                 return false;
             }
             if self.verify {
-                // The manifest is not evidence of identity: a log is either
-                // its own registered trunk column or worldgen evidence.
+                // The manifest is not evidence of identity. A log is either
+                // worldgen evidence or a log inside its registered root's own
+                // column; selection certifies exactly that same set, because a
+                // component never extends past its root's column.
                 if registered_column(state, at) {
                     return true;
                 }

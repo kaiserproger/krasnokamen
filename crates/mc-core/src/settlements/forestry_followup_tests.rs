@@ -139,7 +139,7 @@ fn touching_registered_grove_is_certified_and_felled_whole() {
 #[test]
 fn player_log_in_a_grove_makes_the_whole_component_ambiguous() {
     let (mut state, _, root) = planted();
-    let at = [root[0] + 1, root[1] + 3, root[2]];
+    let at = [root[0], root[1] + 3, root[2]];
     let log = block(&state, "minecraft:birch_log", &[]);
     state.world.set_block(at[0], at[1], at[2], log);
     let lot = tests::lot_around(root);
@@ -190,9 +190,162 @@ fn diagonal_log_is_foreign_because_no_grown_tree_has_one() {
 }
 
 #[test]
+fn lateral_historyless_log_keeps_its_registered_tree() {
+    let (mut state, _, root) = planted();
+    let log = block(&state, "minecraft:birch_log", &[]);
+    let at = [root[0] + 1, root[1] + 3, root[2]];
+    state.world.set_block(at[0], at[1], at[2], log);
+    assert!(!state.block_log.player_touched(at), "no retained record for it");
+    let lot = tests::lot_around(root);
+    let mut clearance = Clearance::default();
+    assert!(
+        !clearance.clearable(&state, root, Some(lot)),
+        "a level lateral log is not a limb: the whole tree stays"
+    );
+    let mut cells = Vec::new();
+    clearance.append_whole_trees(&state, &mut cells);
+    assert!(cells.is_empty(), "nothing is manifested, so no requeue loop");
+    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
+}
+
+fn tree_cells_in(state: &TickState, around: &[[i32; 3]]) -> Vec<[i32; 3]> {
+    let mut cells = Vec::new();
+    for &root in around {
+        for y in root[1]..=root[1] + 8 {
+            for dx in -4i32..=4 {
+                for dz in -4i32..=4 {
+                    let at = [root[0] + dx, y, root[2] + dz];
+                    if state
+                        .world
+                        .block_at(at[0], at[1], at[2])
+                        .is_some_and(|block| tree_or_sapling(state, block))
+                    {
+                        cells.push(at);
+                    }
+                }
+            }
+        }
+    }
+    cells.sort_unstable();
+    cells.dedup();
+    cells
+}
+
+fn is_leaf(state: &TickState, at: [i32; 3]) -> bool {
+    state
+        .world
+        .block_at(at[0], at[1], at[2])
+        .and_then(|block| state.registry.blocks.by_id(BlockStateId(block)))
+        .is_some_and(|definition| definition.block.id.path().ends_with("_leaves"))
+}
+
+#[test]
+fn a_b_c_grove_needs_two_trees_and_keeps_the_third_crown() {
+    let (mut state, id, _, _, _, _) = tests::forest();
+    tests::grown_world(&mut state, Vec::new(), "birch");
+    let a = [0, 201, 0];
+    let b = [5, 201, 0];
+    let c = [10, 201, 0];
+    for root in [a, b, c] {
+        native_tree_tests::grow(&mut state, root, 5);
+    }
+    let record = state.settlements.get_mut(id).unwrap();
+    for root in [a, b, c] {
+        record.planted_trees.insert(root);
+    }
+    let lot = tests::lot_around(a);
+    let build = |state: &TickState, reverse: bool| {
+        let mut clearance = Clearance::default();
+        let mut starts = tree_cells_in(state, &[a]);
+        if reverse {
+            starts.reverse();
+        }
+        for at in starts {
+            assert!(clearance.clearable(state, at, Some(lot)), "A cell {at:?}");
+        }
+        let mut planned: Vec<_> = tree_cells_in(state, &[a])
+            .into_iter()
+            .map(|at| crate::plugin_structures::settlement_builds::PlannedCell {
+                at,
+                state: state.registry.states.air,
+                resource: None,
+                quantity: 0,
+            })
+            .collect();
+        clearance.append_whole_trees(state, &mut planned);
+        planned.into_iter().map(|cell| cell.at).collect::<Vec<_>>()
+    };
+    let manifest = build(&state, false);
+    let mut sorted = manifest.clone();
+    sorted.sort_unstable();
+    let mut unique = sorted.clone();
+    unique.dedup();
+    assert_eq!(sorted, unique, "no cell is felled twice");
+    for at in tree_cells_in(&state, &[c]) {
         if (at[0] - c[0]).abs() > 2 || (at[2] - c[2]).abs() > 2 {
             continue; // the box also holds B's leaves; C's own crown is ±2
         }
+        assert!(!manifest.contains(&at), "the third tree is untouched: {at:?}");
+    }
+    assert!(manifest.contains(&a), "the lot tree is felled");
+    assert!(
+        manifest.iter().any(|at| at[0] == b[0]),
+        "the touching neighbour is felled whole"
+    );
+    // A manifested crown cell belongs to the nearest registered tree that
+    // reaches it. C's own crown is never felled, and no cell whose nearest tree
+    // is C may be cleared: that is the "do not mutilate an unneeded neighbour"
+    // rule, stated without depending on crown geometry.
+    let mut grove = tree_proof::Grove::default();
+    let mut logs: Vec<([i32; 3], Vec<[i32; 3]>)> = Vec::new();
+    for root in [a, b, c] {
+        grove.ensure(&state, root);
+        let cells: Vec<_> = grove
+            .get(root)
+            .expect("registered component")
+            .iter()
+            .copied()
+            .collect();
+        logs.push((root, cells));
+    }
+    let nearest = |at: [i32; 3]| {
+        logs.iter()
+            .map(|(root, cells)| {
+                let best = cells
+                    .iter()
+                    .map(|log| {
+                        (log[0] - at[0]).abs()
+                            + (log[1] - at[1]).abs()
+                            + (log[2] - at[2]).abs()
+                    })
+                    .min()
+                    .expect("component has logs");
+                (*root, best)
+            })
+            .min_by_key(|(_, distance)| *distance)
+            .expect("three trees")
+    };
+    let mut leaves = 0;
+    for at in &manifest {
+        if !is_leaf(&state, *at) {
+            continue;
+        }
+        leaves += 1;
+        assert_ne!(
+            nearest(*at).0,
+            c,
+            "a crown cell of the unneeded third tree is kept: {at:?}"
+        );
+    }
+    assert!(leaves > 0, "the grove manifest holds crown cells");
+    assert_eq!(
+        build(&state, true),
+        manifest,
+        "a different candidate order yields the same ordered manifest"
+    );
+}
+
+#[test]
 fn touching_stripped_logs_wood_and_hyphae_are_not_owned_or_manifested() {
     for name in [
         "minecraft:stripped_birch_log",
@@ -207,8 +360,8 @@ fn touching_stripped_logs_wood_and_hyphae_are_not_owned_or_manifested() {
             .set_block(foreign[0], foreign[1], foreign[2], value);
         let proof = tree_proof::Proof::new(&state, root, &mut tree_proof::Grove::default());
         assert!(
-            proof.owns_log(root),
-            "the registered trunk remains eligible: {name}"
+            !proof.owns_log(root),
+            "an off-column log makes the component ambiguous: {name}"
         );
         assert!(!proof.owns_log(foreign), "foreign log-tag variant: {name}");
         let mut clearance = Clearance::default();

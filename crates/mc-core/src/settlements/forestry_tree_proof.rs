@@ -25,17 +25,27 @@ pub(super) struct Grove {
 }
 
 impl Grove {
-    /// `None` when the component is ambiguous (nothing may be owned) or when
-    /// the root is not a tree log at all.
-    pub(super) fn component(&mut self, state: &TickState, root: [i32; 3]) -> Option<&[[i32; 3]]> {
+    /// Walk once per registered root per scan; later calls are a lookup.
+    pub(super) fn ensure(&mut self, state: &TickState, root: [i32; 3]) {
         self.components
             .entry(root)
             .or_insert_with(|| component(state, root));
+    }
+
+    /// `None` when the component is ambiguous (nothing may be owned) or when
+    /// the root is not a tree log at all.
+    pub(super) fn get(&self, root: [i32; 3]) -> Option<&[[i32; 3]]> {
         self.components
             .get(&root)
-            .expect("memoized component")
+            .expect("walked component")
             .as_deref()
             .filter(|logs| !logs.is_empty())
+    }
+
+    /// Component of a root that may not have been walked yet.
+    pub(super) fn component(&mut self, state: &TickState, root: [i32; 3]) -> Option<&[[i32; 3]]> {
+        self.ensure(state, root);
+        self.get(root)
     }
 }
 
@@ -110,7 +120,8 @@ impl Proof {
     pub(super) fn new(state: &TickState, root: [i32; 3], grove: &mut Grove) -> Self {
         #[cfg(test)]
         BUILDS.with(|count| count.set(count.get() + 1));
-        let Some(component) = grove.component(state, root).map(|logs| logs.to_vec()) else {
+        grove.ensure(state, root);
+        let Some(component) = grove.get(root) else {
             return Self::empty(root);
         };
         let top = component
@@ -155,21 +166,22 @@ impl Proof {
                 *cell |= LOG;
             }
         }
-        for at in &component {
+        for at in component {
             cells[proof.index(*at).expect("component inside proof")] |= OWNED;
         }
         // A log of another non-ambiguous registered component stops being a
         // foreign source, so leaves between the two trunks are permitted.
         // Ambiguous neighbours stay foreign: nothing is assumed about them.
-        let roots: Vec<[i32; 3]> = state
+        // Roots are visited in registry order from a memoized walk, so a direct
+        // pass over the records needs no intermediate collection.
+        let crown = PLANTED_CROWN_RADIUS as i32;
+        let [min_x, min_y, min_z] = proof.min;
+        let [max_x, max_y, max_z] = proof.max();
+        for other in state
             .settlements
             .records()
             .flat_map(|record| record.planted_trees.iter().copied())
-            .collect();
-        let [min_x, min_y, min_z] = proof.min;
-        let [max_x, max_y, max_z] = proof.max();
-        for other in roots {
-            let crown = PLANTED_CROWN_RADIUS as i32;
+        {
             if other[0] + crown < min_x
                 || other[0] - crown > max_x
                 || other[2] + crown < min_z
@@ -179,15 +191,15 @@ impl Proof {
             {
                 continue;
             }
-            let Some(logs) = grove.component(state, other).map(|logs| logs.to_vec()) else {
-                continue;
-            };
+            grove.ensure(state, other);
             let mut marked = false;
-            for at in logs {
-                if let Some(index) = proof.index(at) {
-                    if cells[index] & LOG != 0 {
-                        cells[index] |= UNION;
-                        marked = true;
+            if let Some(logs) = grove.get(other) {
+                for at in logs {
+                    if let Some(index) = proof.index(*at) {
+                        if cells[index] & LOG != 0 {
+                            cells[index] |= UNION;
+                            marked = true;
+                        }
                     }
                 }
             }
@@ -266,6 +278,11 @@ fn component(state: &TickState, root: [i32; 3]) -> Option<Vec<[i32; 3]>> {
     if !state.registry.tree_logs.get(block as usize).copied()? || !tree(state, block) {
         return Some(Vec::new());
     }
+    // A retained player edit on the root itself is attribution for the whole
+    // tree: the component is ambiguous before its first log is admitted.
+    if state.block_log.player_touched(root) {
+        return None;
+    }
     let mut seen = [false; WIDTH * WIDTH * HEIGHT];
     let mut logs = vec![root];
     seen[index(root)] = true;
@@ -293,6 +310,15 @@ fn component(state: &TickState, root: [i32; 3]) -> Option<Vec<[i32; 3]>> {
                     let block = state.world.physics_block_at(next[0], next[1], next[2])?;
                     if !state.registry.tree_logs.get(block as usize).copied()? {
                         continue;
+                    }
+                    // The executor proves a log by its registered root's own
+                    // column alone (worldgen evidence covers everything else),
+                    // so selection must not certify anything wider: a log in a
+                    // different column is a player structure attached to the
+                    // trunk (a treehouse, a support) and makes the whole
+                    // component ambiguous before any clearing starts.
+                    if next[0] != root[0] || next[2] != root[2] {
+                        return None;
                     }
                     // A log beyond the ownership envelope is evidence of a
                     // larger/foreign component, never a silent truncation.
