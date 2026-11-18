@@ -43,6 +43,14 @@ pub(super) fn refresh_join_permission_tree(
     Ok(())
 }
 
+/// Vanilla Netty sets `TCP_NODELAY` on every accepted child channel. Without
+/// it a small clientbound frame (keepalive, block ack, position correction)
+/// waits behind an in-flight world batch for the delayed ACK, up to ~40 ms of
+/// jitter on a high-RTT link.
+pub(super) fn tune_game_socket(stream: &TcpStream) -> std::io::Result<()> {
+    stream.set_nodelay(true)
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum AcceptFailure {
     /// One pending connection failed; the listener is fine.
@@ -83,10 +91,12 @@ impl Drop for PrePlayPermit<'_> {
 }
 
 /// Per-connection pipeline. Status connections return after the ping;
-/// Play connections run until disconnect or overflow.
+/// Play connections run until disconnect or overflow. `pre_play` is the
+/// server-wide slot taken by the accept loop and released at the Play handoff.
 pub(super) async fn handle_connection(
     stream: TcpStream,
     server: Arc<EdgeServer>,
+    pre_play_slot: crate::server::pre_play_limit::PrePlaySlot,
 ) -> anyhow::Result<()> {
     let peer = stream
         .peer_addr()
@@ -103,7 +113,7 @@ pub(super) async fn handle_connection(
             warn!(%peer, connection = id.0, cause, "connection closed by delivery policy");
             Err(anyhow::anyhow!("connection delivery stopped"))
         }
-        result = run_connection(stream, Arc::clone(&server), id, peer.clone(), &mut lifecycle) => result,
+        result = run_connection(stream, Arc::clone(&server), id, peer.clone(), &mut lifecycle, pre_play_slot) => result,
     };
     lifecycle.stop_writer().await;
     result
@@ -115,6 +125,7 @@ async fn run_connection(
     id: ConnectionId,
     peer: String,
     lifecycle: &mut ConnectionLifecycle<'_>,
+    pre_play_slot: crate::server::pre_play_limit::PrePlaySlot,
 ) -> anyhow::Result<()> {
     let permit = if server.velocity.is_none() {
         let ip = stream.peer_addr()?.ip();
@@ -450,6 +461,9 @@ async fn run_connection(
     server.connections.set_name(id, outcome.name.clone());
     refresh_join_permission_tree(&server, id, burst_op_level)?;
     drop(operator_guard);
+    // Play: this session now counts against `max_players`, not the
+    // server-wide pre-play cap.
+    drop(pre_play_slot);
     server.feedback(id, "Settlements / Поселения: /settlement guide")?;
     if *server.stop.borrow() {
         server.kick(

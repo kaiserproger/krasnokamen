@@ -76,6 +76,8 @@ use connection::*;
 mod pump;
 use pump::*;
 mod halt_watchdog;
+mod pre_play_limit;
+use pre_play_limit::PrePlayLimit;
 
 /// Next-connection-id counter start (1-based; 0 is reserved as "none").
 const FIRST_CONNECTION_ID: u64 = 1;
@@ -259,6 +261,9 @@ pub struct EdgeServer {
     /// Live connection registry (for pump routing + dashboard roster).
     pub connections: Arc<ConnectionRegistry>,
     pre_play_addresses: crate::conn_limit::AddressLimiter,
+    /// Server-wide cap on concurrent pre-play connections, independent of the
+    /// per-address limits above.
+    pre_play: Arc<PrePlayLimit>,
     /// Dashboard state (updated off the tick path).
     pub dashboard: Arc<DashboardState>,
     /// Tick stats for the dashboard rollup.
@@ -448,6 +453,8 @@ impl EdgeServer {
             .transpose()?;
         let computer_processes = Arc::new(tokio::sync::Semaphore::new(cfg.computer.max_processes));
         let protocols = crate::translation::Catalog::discover(&data);
+        // Built from the config before the struct literal moves it.
+        let pre_play = Arc::new(PrePlayLimit::resolve(&cfg));
         Ok(Self {
             admin,
             console_state: crate::console::ConsoleState::load(data.root())?,
@@ -474,6 +481,7 @@ impl EdgeServer {
             cfg,
             connections,
             pre_play_addresses: crate::conn_limit::AddressLimiter::new(0, 8),
+            pre_play,
             dashboard,
             tick_stats: Arc::new(TickStats::new()),
             net_counters: Arc::new(NetCounters::new()),
@@ -1629,6 +1637,8 @@ async fn serve_with_pump(
     // Set when accept hit descriptor/buffer exhaustion: retried only after one of
     // our own sessions ends and releases its socket (no timer).
     let mut accept_blocked = false;
+    // Last pre-play-cap refusal log line: rate-limited to one per second.
+    let mut last_refusal_log: Option<Instant> = None;
     loop {
         tokio::select! {
             _ = async { let _ = stop.wait_for(|stopping| *stopping).await; } => {
@@ -1684,10 +1694,41 @@ async fn serve_with_pump(
                 };
                 // Refused before the handshake: the throttle and the per-address
                 // cap answer like an absent listener instead of buffering work.
+                // Vanilla Netty sets `TCP_NODELAY` on every child channel: a
+                // small frame must not wait behind Nagle for a world batch ACK.
+                if let Err(error) = tune_game_socket(&stream) {
+                    warn!(%peer, %error, "could not set TCP_NODELAY; connection closed");
+                    drop(stream);
+                    continue;
+                }
+                // Server-wide backstop first: the per-address knobs cannot
+                // bound a flood from many addresses. Taking the slot before
+                // `addresses.admit` keeps the two counters independent — every
+                // refusal path below drops the socket without holding an
+                // address slot, so no refusal can leak one. One line per
+                // second while saturated; the close itself is the answer to
+                // the client.
+                let Some(pre_play) = server.pre_play.try_acquire() else {
+                    let now = Instant::now();
+                    if last_refusal_log.is_none_or(|last: Instant| {
+                        now.duration_since(last) >= std::time::Duration::from_secs(1)
+                    }) {
+                        last_refusal_log = Some(now);
+                        warn!(
+                            %peer,
+                            cap = server.pre_play.cap(),
+                            live = server.pre_play.live(),
+                            "pre-play connections at the server-wide cap; connection closed"
+                        );
+                    }
+                    drop(stream);
+                    continue;
+                };
                 let address = Some(peer.ip());
                 if let Some(address) = address
                     && !addresses.admit(address)
                 {
+                    // `pre_play` drops here, before the task exists.
                     debug!(%peer, "connection refused by the per-address limit");
                     drop(stream);
                     continue;
@@ -1696,7 +1737,7 @@ async fn serve_with_pump(
                 let server = Arc::clone(&server);
                 let addresses = Arc::clone(&addresses);
                 tasks.spawn(async move {
-                    if let Err(error) = handle_connection(stream, server).await {
+                    if let Err(error) = handle_connection(stream, server, pre_play).await {
                         debug!(%error, "connection closed");
                     }
                     if let Some(address) = address {
@@ -1950,6 +1991,18 @@ fn supports_screen_sharing(platform: Option<mc_loader::LoaderPlatform>) -> bool 
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "server/connection_tests.rs"]
+mod connection_tests;
+
+#[cfg(test)]
+#[path = "server/pre_play_limit_tests.rs"]
+mod pre_play_limit_tests;
+
+#[cfg(test)]
+#[path = "server/serve_guard_tests.rs"]
+mod serve_guard_tests;
 
 #[cfg(test)]
 #[path = "admin_tests.rs"]

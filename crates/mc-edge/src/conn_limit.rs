@@ -5,6 +5,11 @@
 //! immediately, before the handshake reads a byte: the client sees the same
 //! "connection reset" a vanilla-style throttle produces, and no per-connection
 //! task or buffer is allocated for it.
+//!
+//! [`AddressLimiter::admit`] counts the connection, so the accept loop calls it
+//! only after the server-wide pre-play slot is taken: every refusal path either
+//! happens before `admit` or drops the slot in the same expression, which is what
+//! keeps one refusal from consuming an address slot forever.
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
