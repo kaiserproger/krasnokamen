@@ -20,7 +20,7 @@ mod access;
 pub(crate) use access::projects_of;
 pub(crate) use access::{
     bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
-    project_of_builder, projects, record_heap_bytes, upgrading,
+    project_of_builder, projects, record_heap_bytes, unbound_project, upgrading,
 };
 
 #[path = "construction_furnace.rs"]
@@ -1712,7 +1712,10 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     let Some(record) = state.settlements.get(id) else {
         return;
     };
-    if claim_slot(state, id).is_err() {
+    // Autonomous work opens a site only when every active project has its
+    // builder: a site nobody can build only parks a slot and a lot (Spain
+    // seed 100: eight projects for three builders, no_builder 26 times).
+    if claim_slot(state, id).is_err() || unbound_project(&state.settlements, id).is_some() {
         return;
     }
     let residents = state.settlements.member_count(id);
@@ -2165,20 +2168,16 @@ pub(crate) struct BuilderWatch {
     recovery: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
+    /// Some builder was bound to the project during this episode: only a site
+    /// a builder failed is given back for another.
+    bound: bool,
     /// The progress of the episode whose owner notice was settled (Sol S-2).
     told: Option<(String, u32, u64)>,
 }
 
-/// The first active project with no bound builder.
-fn unbound_project(state: &TickState, id: SettlementId) -> Option<String> {
-    access::projects_of(&state.settlements, id)
-        .find(|project| project.builder.is_none())
-        .map(|project| project.structure.clone())
-}
-
 /// Bind an already-working native Builder to the first unbound project.
 fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: crate::entities::EntitySlot) {
-    let Some(target) = unbound_project(state, id) else {
+    let Some(target) = unbound_project(&state.settlements, id) else {
         return;
     };
     let binding = Some((state.entities.row(slot).uuid, None));
@@ -2303,6 +2302,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
             refusal: None,
             recovery: None,
             shunned: Vec::new(),
+            bound: false,
             told: None,
         });
     let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
@@ -2313,8 +2313,10 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         watch.reported = false;
         watch.refusal = None;
         watch.recovery = None;
+        watch.bound = project.builder.is_some();
         return false;
     }
+    watch.bound |= project.builder.is_some();
     if !on_shift {
         return false;
     }
@@ -2325,7 +2327,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     watch.idle = 0;
     let report = !watch.reported;
     watch.reported = true;
-    let refusal = watch.refusal;
+    let (refusal, bound) = (watch.refusal, watch.bound);
     let first_recovery = if report { None } else { watch.recovery.take() };
     // The incumbent is the resident bound to this project, never another
     // project's builder standing first in the resident list (D8).
@@ -2385,7 +2387,12 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // A failed first recovery (another window without a cell) gives back the
     // slot of unpaid work, as a protected tree does: rotating builders that
     // cannot reach the worksite would otherwise hold the only slot forever.
-    let preparation = ((protected || !report) && snapshot.consumed.is_empty())
+    // Only a site a builder failed is given back: a project nobody was bound
+    // to in this episode keeps its site, because another lot has no builder
+    // either and a re-sited order only lets autonomous work take its lot
+    // (Spain seed 100: the church re-sited twice with no builder, then
+    // site_refused 587/587 and the order was lost).
+    let preparation = ((protected || (!report && bound)) && snapshot.consumed.is_empty())
         .then(|| retry_preparation(state, id, project));
     // A retry the queue refused is the owner's to act on: the paid request is
     // still in flight, so the reason reaches them instead of only the log
@@ -2684,7 +2691,7 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         return;
     }
     rebind_lost_builders(state, id);
-    let Some(target) = unbound_project(state, id) else {
+    let Some(target) = unbound_project(&state.settlements, id) else {
         return;
     };
     // Extraction workers are lent to construction one at a time and only while

@@ -1117,15 +1117,22 @@ pub(crate) fn footing_of(
     let record = state.settlements.get(settlement)?;
     let lot = super::construction::preparation::project_lot(state, record, handle);
     let centre = super::construction::preparation::project_floor(record, handle);
-    // The same territory-aware surface the plan was materialized with.
-    let y = super::construction::surface_y_for_lot(
-        state,
-        centre,
-        at[0],
-        at[2],
-        lot,
-        Clearance::prepared().within(record),
-    )?;
+    // The same territory-aware surface the plan was materialized with: the
+    // lot's own band first, then the street band around the bell, which is
+    // where the access corridor's columns were sampled (layout `sample`). A
+    // corridor tree on a rise more than SITE_BAND above a low lot otherwise
+    // has no footing, and the builder never gets a stand (Spain seed 100:
+    // ground 74 under a lot floor of 63, worksite_unreached for 22,000 ticks).
+    let y = [centre, record.anchor[1]].into_iter().find_map(|centre| {
+        super::construction::surface_y_for_lot(
+            state,
+            centre,
+            at[0],
+            at[2],
+            lot,
+            Clearance::prepared().within(record),
+        )
+    })?;
     Some(crate::boundary::BlockPos {
         x: at[0],
         y: y + 1,

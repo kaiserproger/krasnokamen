@@ -727,3 +727,40 @@ fn an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order()
         Some(state.registry.states.air)
     );
 }
+
+/// Spain seed 100 (pin 3068dfb1b857): the owner's church waited for a builder
+/// through two stall windows, was cancelled and re-sited twice, autonomous
+/// work took its freed ground, and the third search ended site_refused
+/// 587/587 with the order lost. A project nobody was bound to keeps its site.
+#[test]
+fn an_order_nobody_was_bound_to_keeps_its_site_through_stall_windows() {
+    let (mut state, id, builder) = bed_project();
+    state.settlements.get_mut(id).unwrap().projects[0].builder = None;
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Farmer;
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let text = log_stall(&mut state, id);
+    assert!(
+        text.contains("settlement_construction_recovery_failed"),
+        "setup: a second window without progress: {text}"
+    );
+    assert!(!text.contains("preparation_cancelled"), "{text}");
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.projects, vec![project.clone()], "{text}");
+    assert!(
+        record.orders.is_empty(),
+        "the order was not requeued: {text}"
+    );
+    assert_ne!(
+        executor::status(&state, id, &project.structure)
+            .unwrap()
+            .state,
+        ScriptStructureState::Cancelled
+    );
+}

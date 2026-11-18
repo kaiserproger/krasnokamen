@@ -1468,3 +1468,163 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
         "nearby B's access still vetoes A's planting"
     );
 }
+
+/// Spain seed 100 (pin 3068dfb1b857): lots sit up to SITE_BAND below the
+/// bell, while the access corridor's columns are sampled around the bell. A
+/// corridor tree on ground 74 above a lot floor of 63 had no footing in the
+/// lot's band, so its builder got no stand and idled at the store
+/// (worksite_unreached, navigation=None) for 22,000 ticks.
+#[test]
+fn a_corridor_tree_on_ground_above_a_low_lot_gets_a_felling_stand() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    // The bell six below the street keeps a pit lot ten below the street and
+    // the street itself inside the bell's band, as on the seed-100 hillside.
+    state.settlements.get_mut(id).unwrap().anchor[1] = 194;
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let (lot, size) = {
+        let record = state.settlements.get(id).unwrap();
+        let mut network = layout::Network::walk(&state, record);
+        network
+            .frontage()
+            .into_iter()
+            .filter_map(|(at, normal)| {
+                let lot = network.lot(blueprint, at, normal)?;
+                let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+                let [ox, _, oz] = lot.origin;
+                (ox >= -14
+                    && oz >= -14
+                    && ox + i32::from(size[0]) <= 30
+                    && oz + i32::from(size[2]) <= 30)
+                    .then_some((lot, size))
+            })
+            .max_by_key(|(lot, _)| (lot.origin[0] - 8).abs() + (lot.origin[2] - 8).abs())
+            .expect("a loaded storage lot on the street plan")
+    };
+    let floor = 190;
+    let mut project = Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin: [lot.origin[0], floor, lot.origin[2]],
+        rotation: lot.rotation,
+        building: None,
+        structure: String::new(),
+        ordered: true,
+        builder: None,
+        order_seq: None,
+    };
+    // The corridor column farthest from the lot, beyond felling reach of a
+    // builder waiting beside it, as the plaza-side trees were from the far lots.
+    let route = {
+        let record = state.settlements.get(id).unwrap();
+        layout::Network::walk(&state, record)
+            .construction_access(&project)
+            .expect("a walk from the plaza to the lot")
+    };
+    let distance = |at: [i32; 3]| {
+        let gap = |axis: usize| {
+            let min = lot.origin[axis];
+            let max = min + i32::from(size[axis]) - 1;
+            (min - at[axis]).max(at[axis] - max).max(0)
+        };
+        gap(0).max(gap(2))
+    };
+    let [x, ground, z] = route
+        .iter()
+        .copied()
+        .filter(|&[x, _, z]| (x, z) != (1, 1))
+        .max_by_key(|&at| distance(at))
+        .unwrap();
+    assert_eq!(ground, 200, "setup: the street stands on the flat plan");
+    assert!(
+        distance([x, ground, z]) >= 6,
+        "setup: the tree is beyond felling reach from beside the lot"
+    );
+    let root = [x, ground + 1, z];
+    super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
+    for x in lot.origin[0]..lot.origin[0] + i32::from(size[0]) {
+        for z in lot.origin[2]..lot.origin[2] + i32::from(size[2]) {
+            state
+                .world
+                .set_block(x, floor, z, state.registry.states.stone);
+            for y in floor + 1..=200 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    assert!(
+        surface_y_for_lot(
+            &state,
+            floor,
+            x,
+            z,
+            None,
+            &mut super::super::forestry::Clearance::prepared()
+        )
+        .is_none(),
+        "setup: the corridor ground is beyond the lot floor's band"
+    );
+    assert!(begin(&mut state, project.clone(), "oak", 0));
+    project = state.settlements.get(id).unwrap().projects[0].clone();
+    super::tests::bind_project(&mut state, id, &project.structure, builder);
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        [next[0], next[2]],
+        [x, z],
+        "setup: the corridor tree is the first cell"
+    );
+    // The builder waits on the street plan out of placement reach of the tree,
+    // as the seed-100 builder stood at the store 19 blocks from it.
+    let [ox, _, oz] = lot.origin;
+    let (far, gap) = (-15..31)
+        .flat_map(|x| (-15..31).map(move |z| [x, z]))
+        .filter(|&[x, z]| {
+            !(ox - 1..=ox + i32::from(size[0])).contains(&x)
+                || !(oz - 1..=oz + i32::from(size[2])).contains(&z)
+        })
+        .map(|at| (at, (at[0] - x).abs().max((at[1] - z).abs())))
+        .max_by_key(|&(_, gap)| gap)
+        .unwrap();
+    assert!(
+        gap > 13,
+        "setup: the builder is out of placement reach: {gap}"
+    );
+    state.entities.set_pos(
+        builder,
+        [f64::from(far[0]) + 0.5, 201.0, f64::from(far[1]) + 0.5],
+    );
+    let mut v = state.entities.row_mut(builder).villager.take().unwrap();
+    let target = crate::villager::building::work(
+        &mut state,
+        builder,
+        &mut v,
+        &mut crate::boundary::ChangeSet::default(),
+    );
+    state.entities.row_mut(builder).villager = Some(v);
+    let target = target.expect("the corridor tree has a felling stand");
+    assert!(target.exact);
+    assert_eq!(
+        target.pos.y,
+        ground + 1,
+        "the stand is on the corridor's ground"
+    );
+    assert!(
+        (target.pos.x - x).abs() <= 3 && (target.pos.z - z).abs() <= 3,
+        "the stand is beside the tree: {:?}, tree at {root:?}",
+        target.pos
+    );
+    for _ in 0..64 {
+        if state.world.block_at(root[0], root[1], root[2]) == Some(state.registry.states.air) {
+            return;
+        }
+        super::tests::attempt(&mut state, id, builder);
+    }
+    panic!(
+        "the corridor tree was never felled: next={:?}",
+        executor::next_cell(&state, id, &project.structure)
+    );
+}

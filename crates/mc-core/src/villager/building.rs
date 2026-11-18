@@ -528,16 +528,23 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     let candidate = match project.builder {
         Some((uuid, _)) => Some(uuid),
         // A lazy bind never takes a resident who already holds a project: one
-        // binding per resident, or the record stops opening (P1-2).
-        None => construction::residents(state, id)
-            .find(|slot| {
-                builder_ready(state, id, *slot)
-                    && !construction::bound_builder(
-                        &state.settlements,
-                        state.entities.row(*slot).uuid,
-                    )
-            })
-            .map(|slot| state.entities.row(slot).uuid),
+        // binding per resident, or the record stops opening (P1-2). A free
+        // builder goes to the project the planner would give it, so an owner's
+        // order is never passed over by autonomous work whose turn came first.
+        None if construction::unbound_project(&state.settlements, id).as_deref()
+            == Some(project.structure.as_str()) =>
+        {
+            construction::residents(state, id)
+                .find(|slot| {
+                    builder_ready(state, id, *slot)
+                        && !construction::bound_builder(
+                            &state.settlements,
+                            state.entities.row(*slot).uuid,
+                        )
+                })
+                .map(|slot| state.entities.row(slot).uuid)
+        }
+        None => None,
     };
     let bound = match (project.builder.map(|(uuid, _)| uuid), candidate) {
         (Some(uuid), _) => Some(uuid),

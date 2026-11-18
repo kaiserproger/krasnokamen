@@ -1145,3 +1145,125 @@ fn an_infected_builders_debt_survives_a_reopen_and_delivers_after_a_real_cure() 
         "the body hands its load over"
     );
 }
+
+/// Spain seed 100 (pin 3068dfb1b857): free builders bound to whichever
+/// unbound project came first, so the owner's church waited behind every
+/// autonomous site opened before it. A free builder takes the order first,
+/// through the planning pass and through the admission turn alike.
+#[test]
+fn a_free_builder_takes_the_owners_order_before_autonomous_work() {
+    for lazy in [false, true] {
+        let (mut state, id, slot) = fixture();
+        open_plan(&mut state);
+        for (handle, origin, ordered) in [
+            ("autonomous", [2, 201, 2], false),
+            ("order", [20, 201, 20], true),
+        ] {
+            let record = state.settlements.get_mut(id).unwrap();
+            access::push_project(
+                record,
+                Project {
+                    settlement: id,
+                    blueprint: "house".into(),
+                    level: 1,
+                    origin,
+                    rotation: 0,
+                    building: None,
+                    structure: handle.into(),
+                    ordered,
+                    builder: None,
+                    order_seq: None,
+                },
+            );
+        }
+        if lazy {
+            // One admission turn each, the autonomous site's first.
+            for turn in 0..2 {
+                state.tick = turn * 4;
+                crate::villager::building::tick(&mut state, id);
+            }
+        } else {
+            assign_builder(&mut state, id);
+        }
+        let uuid = state.entities.row(slot).uuid;
+        let record = state.settlements.get(id).unwrap();
+        assert_eq!(
+            access::project_for_structure(record, "order")
+                .unwrap()
+                .builder,
+            Some((uuid, None)),
+            "lazy={lazy}"
+        );
+        assert_eq!(
+            access::project_for_structure(record, "autonomous")
+                .unwrap()
+                .builder,
+            None,
+            "lazy={lazy}"
+        );
+    }
+}
+
+/// Spain seed 100 (pin 3068dfb1b857): the planner opened autonomous sites up
+/// to the eight-project cap for three builders; five stood unbuilt
+/// (no_builder 26 times) and held the slots the owner's church needed.
+#[test]
+fn the_planner_opens_no_site_while_a_project_waits_for_its_builder() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    // A free paving cell far from the plaza lots: no bill, no shared ground.
+    let at = [28, 201, 28];
+    let soil = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
+    state.world.set_block(at[0], at[1], at[2], soil);
+    state.world.fold_overlay();
+    let path = crate::settlements::allocator::tests::block(&state, "minecraft:dirt_path", &[]);
+    let bounds = ScriptWorldBounds::new(at, at).unwrap();
+    let structure = executor::prepare(
+        &mut state,
+        id,
+        layout::ROAD.into(),
+        bounds,
+        bounds,
+        vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
+            at,
+            state: path,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    let record = state.settlements.get_mut(id).unwrap();
+    access::push_project(
+        record,
+        Project {
+            settlement: id,
+            blueprint: layout::ROAD.into(),
+            level: 1,
+            origin: at,
+            rotation: 0,
+            building: None,
+            structure: structure.clone(),
+            ordered: false,
+            builder: None,
+            order_seq: None,
+        },
+    );
+    for _ in 0..64 {
+        plan(&mut state, id);
+    }
+    assert_eq!(
+        handles(&state, id),
+        vec![structure.clone()],
+        "no autonomous site opens while a project waits for its builder"
+    );
+    bind_project(&mut state, id, &structure, slot);
+    for _ in 0..256 {
+        plan(&mut state, id);
+        if handles(&state, id).len() == 2 {
+            return;
+        }
+    }
+    panic!("setup: with every project bound the planner opens the funded storage");
+}
