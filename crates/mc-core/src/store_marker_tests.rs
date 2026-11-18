@@ -352,12 +352,8 @@ fn a_marker_write_failure_prunes_nothing_and_halts_the_world() {
     // broadcast without a shutdown request. One deadline for the whole wait.
     let (closed_tx, closed) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        loop {
-            match rx.blocking_recv() {
-                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
+        use tokio::sync::broadcast::error::RecvError;
+        while let Ok(_) | Err(RecvError::Lagged(_)) = rx.blocking_recv() {}
         let _ = closed_tx.send(());
     });
     closed
