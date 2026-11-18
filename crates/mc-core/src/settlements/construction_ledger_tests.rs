@@ -864,3 +864,7 @@ fn startup_refuses_structure_without_portions_but_construction_free_store_opens(
         "the same store opens with required evidence"
     );
 }
+
+#[cfg(test)]
+#[path = "construction_rederive_tests.rs"]
+mod rederive;
