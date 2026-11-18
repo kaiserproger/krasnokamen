@@ -551,14 +551,10 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
                 Some(VillagerProfession::Miner | VillagerProfession::Lumberjack) => borrowed,
                 _ => None,
             };
-            if let Some(mut record) = state.settlements.get_mut(id) {
-                if construction::bind_builder(
-                    &mut record,
-                    &project.structure,
-                    Some((uuid, borrowed)),
-                ) {
-                    record.revision = record.revision.saturating_add(1);
-                }
+            if let Some(record) = state.settlements.get_mut(id)
+                && construction::bind_builder(record, &project.structure, Some((uuid, borrowed)))
+            {
+                record.revision = record.revision.saturating_add(1);
             }
             Some(uuid)
         }

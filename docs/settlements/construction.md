@@ -4,6 +4,8 @@ Settlements build from authored blueprints and can certify player-built structur
 
 See [jobs](jobs.md), [menus](menus.md), [breeding](breeding.md), and the [settlement architecture](../architecture/settlements.md).
 
+Runtime billing uses explicit project handles or the joint active bill, and carry returns address a builder UUID. Queue-fixture stamping and plain-text failure diagnostics are test-only, not alternate runtime construction paths.
+
 ## Blueprint files
 
 Krasnokamen owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog has 21 blueprints, one per building kind (`id` is the `/settlement build` argument):

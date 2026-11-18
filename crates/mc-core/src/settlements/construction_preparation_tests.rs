@@ -530,7 +530,7 @@ fn outpost_begin_reserves_the_brick_chain_for_its_fill() {
         "the chain's stone is stocked before admission"
     );
     assert!(super::super::begin(&mut state, project, "oak", 0));
-    let bill = super::super::active_project_bill(&state, id).expect("active bill");
+    let bill = super::super::joint_active_bill(&state, id).expect("active bill");
     let stone_left = bill
         .iter()
         .find(|(item, _)| {

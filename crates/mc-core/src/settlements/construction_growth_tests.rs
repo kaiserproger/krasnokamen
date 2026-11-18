@@ -102,14 +102,7 @@ fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_ord
     );
     for _ in 0..40 {
         crate::tick::run_tick(&mut state, &[]);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -141,14 +134,7 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
     state.day_time = 0;
     for _ in 0..256 {
         crate::tick::run_tick(&mut state, &[]);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }

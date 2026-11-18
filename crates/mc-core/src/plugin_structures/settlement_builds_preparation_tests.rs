@@ -61,7 +61,7 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
         .clone();
     let uuid = state.entities.row(builder).uuid;
     // The executor only pays for the project's bound builder (P2-5).
-    if let Some(mut record) = state.settlements.get_mut(id) {
+    if let Some(record) = state.settlements.get_mut(id) {
         record.projects[0].builder = Some((uuid, None));
     }
     let builder = uuid.to_string();

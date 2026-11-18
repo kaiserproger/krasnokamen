@@ -145,15 +145,14 @@ pub(crate) fn crop_seed(path: &str) -> Option<&'static str> {
     }
 }
 
+pub(crate) type CropYield = (Option<(&'static str, i32)>, Option<&'static str>);
+
 /// Produce and seed of one crop block: `(produce, seed)` for the item of a
 /// plant reaped `ripe` (a mature plant) or uprooted (an immature one). The one
 /// table both the settlement's farmers and a lot's field removal read, so a
 /// crop on a needed lot yields exactly what reaping it does.
 #[must_use]
-pub(crate) fn crop_yield(
-    path: &str,
-    ripe: bool,
-) -> Option<(Option<(&'static str, i32)>, Option<&'static str>)> {
+pub(crate) fn crop_yield(path: &str, ripe: bool) -> Option<CropYield> {
     if let Some(&(_, item, count)) = CROPS.iter().find(|(crop, _, _)| *crop == path) {
         // An unripe grain plant leaves only its seed; an unripe root vegetable
         // still yields one, as vanilla's own harvest does.

@@ -107,18 +107,18 @@ pub(crate) fn ground_y_for_lot(
 /// `record` is the working settlement: inside its territory the player veto
 /// reads no history (owner D27.4).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn scan_column(
+pub(in crate::settlements::construction) fn scan_column(
     state: &TickState,
     record: &crate::settlements::SettlementRecord,
     liquids: &mut Liquids,
     cost: &mut site_refusals::Cost,
-    x: i32,
-    z: i32,
+    column: [i32; 2],
     height: i32,
     floor: i32,
     authored_floor: bool,
 ) -> Result<(), site_refusals::Reason> {
     use site_refusals::Reason;
+    let [x, z] = column;
     for y in height + 1..=floor {
         let at = [x, y, z];
         let block = state
@@ -175,7 +175,7 @@ pub(crate) fn scan_column(
 /// and the closed bowl. `lowest` is the deepest discovered support; the bowl
 /// reaches the highest fluid cell because a fluid can descend and leave at a
 /// lower level but never rises above its own top.
-pub(crate) fn finish(
+pub(in crate::settlements::construction) fn finish(
     state: &TickState,
     liquids: &Liquids,
     origin: [i32; 3],

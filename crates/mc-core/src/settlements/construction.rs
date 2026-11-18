@@ -17,11 +17,11 @@ pub(crate) use availability::gatherer_for_item;
 
 #[path = "construction_access.rs"]
 mod access;
+pub(crate) use access::projects_of;
 pub(crate) use access::{
     bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
     project_of_builder, projects, record_heap_bytes, upgrading,
 };
-pub(crate) use access::{head_order_of, projects_of};
 
 #[path = "construction_furnace.rs"]
 pub(crate) mod furnace;
@@ -314,10 +314,6 @@ pub(crate) fn cancel_pending_at(
     record.revision = record.revision.saturating_add(1);
     state.settlements.site_watch.remove(&id);
     Ok(())
-}
-
-pub(crate) fn pending_reason(state: &TickState, id: SettlementId) -> Option<String> {
-    pending_reason_at(state, id, 0)
 }
 
 /// The waiting reason of one queued request (zero-based). Funding is checked
@@ -2397,8 +2393,8 @@ fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: crate::enti
         return;
     };
     let binding = Some((state.entities.row(slot).uuid, None));
-    if let Some(mut record) = state.settlements.get_mut(id)
-        && access::bind_builder(&mut record, &target, binding)
+    if let Some(record) = state.settlements.get_mut(id)
+        && access::bind_builder(record, &target, binding)
     {
         record.revision = record.revision.saturating_add(1);
     }
@@ -2424,10 +2420,10 @@ fn rebind_lost_builders(state: &mut TickState, id: SettlementId) {
         if executor::return_carry_of(state, id, uuid) != executor::CarryReturn::Delivered {
             owe_carry(state, id, uuid, &handle);
         }
-        let Some(mut record) = state.settlements.get_mut(id) else {
+        let Some(record) = state.settlements.get_mut(id) else {
             return;
         };
-        access::unbind_builder(&mut record, uuid);
+        access::unbind_builder(record, uuid);
         record.revision = record.revision.saturating_add(1);
         let _ = handle;
     }
@@ -2546,7 +2542,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
-    let lot = super::forestry::lot_bounds(state, &project);
+    let lot = super::forestry::lot_bounds(state, project);
     let protected = snapshot
         .stages
         .get(snapshot.current_stage_index as usize)
@@ -2559,7 +2555,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     } else if let Some(reason) = snapshot.pause_reason.as_deref() {
         reason
     } else if let Some((slot, next)) = incumbent.zip(next) {
-        let waiting = crate::villager::building::wait_reason(state, slot, &project, next);
+        let waiting = crate::villager::building::wait_reason(state, slot, project, next);
         if waiting == "placement_not_advancing" {
             refusal.unwrap_or(waiting)
         } else {
@@ -2599,7 +2595,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // slot of unpaid work, as a protected tree does: rotating builders that
     // cannot reach the worksite would otherwise hold the only slot forever.
     let preparation = ((protected || !report) && snapshot.consumed.is_empty())
-        .then(|| retry_preparation(state, id, &project));
+        .then(|| retry_preparation(state, id, project));
     // A retry the queue refused is the owner's to act on: the paid request is
     // still in flight, so the reason reaches them instead of only the log
     // (D8 review R2-6).
@@ -2837,7 +2833,7 @@ pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uui
     if owed.is_empty() {
         return;
     }
-    let Some(mut record) = state.settlements.get_mut(id) else {
+    let Some(record) = state.settlements.get_mut(id) else {
         return;
     };
     record.carry_pending.insert(uuid, owed);
@@ -2858,7 +2854,7 @@ fn drain_carry_duties(state: &mut TickState, id: SettlementId) {
         .collect();
     for (uuid, owed) in debts {
         let residual = executor::return_owed_carry(state, id, uuid, &owed);
-        let Some(mut record) = state.settlements.get_mut(id) else {
+        let Some(record) = state.settlements.get_mut(id) else {
             return;
         };
         match residual {
@@ -2890,11 +2886,6 @@ fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
         .is_some_and(|record| record.carry_pending.contains_key(&uuid))
 }
 
-/// Test hook: drain one settlement's return duties outside the clock.
-pub(crate) fn drain_carry_duties_for_test(state: &mut TickState, id: SettlementId) {
-    drain_carry_duties(state, id);
-}
-
 fn assign_builder(state: &mut TickState, id: SettlementId) {
     drain_carry_duties(state, id);
     release_stalled_builder(state, id);
@@ -2918,9 +2909,7 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         .is_some_and(|project| project.ordered);
     let protected = state.settlements.get(id).and_then(|record| {
         let images = executor::source_images(state, id);
-        let Some(bill) = joint_active_bill(state, id) else {
-            return None;
-        };
+        let bill = joint_active_bill(state, id)?;
         super::construction_crafting::needed_gatherer(state, &bill, &images).or_else(|| {
             if ordered {
                 return None;
@@ -3048,8 +3037,8 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         _ => None,
     };
     let binding = Some((state.entities.row(slot).uuid, borrowed));
-    if let Some(mut record) = state.settlements.get_mut(id)
-        && access::bind_builder(&mut record, &target, binding)
+    if let Some(record) = state.settlements.get_mut(id)
+        && access::bind_builder(record, &target, binding)
     {
         record.revision = record.revision.saturating_add(1);
     }
@@ -3282,6 +3271,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
 /// One needed blueprint kind whose level-one bill the settlement cannot fund.
 #[derive(Debug)]
 pub(crate) struct WaitingKind {
+    #[cfg(test)]
     pub(crate) blueprint: String,
     /// Unfunded bill entries, in bill order.
     pub(crate) needs: Vec<WaitingNeed>,
@@ -3295,16 +3285,6 @@ pub(crate) struct WaitingNeed {
     pub(crate) total: u64,
     pub(crate) source_item: Option<String>,
     pub(crate) no_source: Option<SourceReason>,
-}
-
-/// Remaining physical project requirements after subtracting exact items in
-/// builder carry. Ingredients in carry are not craftable until deposited.
-fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u32)>> {
-    let handle = access::projects_of(&state.settlements, id)
-        .next()?
-        .structure
-        .clone();
-    project_bill(state, id, &handle)
 }
 
 /// One project's remaining bill, net of the carry of the builder bound to it.
@@ -3710,6 +3690,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
         }
         if !needs.is_empty() {
             kinds.push(WaitingKind {
+                #[cfg(test)]
                 blueprint: blueprint.id.clone(),
                 needs,
             });
@@ -3770,6 +3751,7 @@ pub(crate) fn project_summary(state: &TickState, id: SettlementId) -> Vec<String
 }
 
 /// One project's status lines, from its own ledger and material proof.
+#[cfg(test)]
 fn project_lines(state: &TickState, id: SettlementId, project: &Project) -> Vec<String> {
     let Ok(snapshot) = executor::status(state, id, &project.structure) else {
         return vec!["Project ledger unavailable; paused.".into()];
