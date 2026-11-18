@@ -107,6 +107,46 @@ fn routing_snapshot_copies_handles_only_on_change() {
     assert!(registry.routing_snapshot(&mut generation).0.is_none());
 }
 
+/// Review (Sol, round 2): closing a connection that never had handles — a
+/// refused login, a Status ping, a second close — must not move the routing
+/// generation, or every such ping would make the pump copy every handle.
+#[test]
+fn closing_without_handles_does_not_move_the_routing_view() {
+    let registry = ConnectionRegistry::new();
+    let mut generation = 0u64;
+    let id = registry.joining_id();
+    let (reliable_tx, _reliable_rx) = mpsc::channel(2);
+    let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
+    registry
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .unwrap();
+    let (handles, _) = registry.routing_snapshot(&mut generation);
+    assert_eq!(handles.expect("the join copies once").len(), 1);
+
+    // A joining connection that never registered handles.
+    let pending = registry.joining_id();
+    registry.close(pending, "refused-login");
+    assert!(
+        registry.routing_snapshot(&mut generation).0.is_none(),
+        "a close without handles copies nothing"
+    );
+
+    // The real removal is one refresh.
+    registry.close(id, "kicked");
+    let handles = registry
+        .routing_snapshot(&mut generation)
+        .0
+        .expect("the real removal refreshes once");
+    assert!(handles.is_empty());
+
+    // A second close of the same connection changes nothing.
+    registry.close(id, "already-closed");
+    assert!(
+        registry.routing_snapshot(&mut generation).0.is_none(),
+        "a repeated close copies nothing"
+    );
+}
+
 /// Informative microbench (debug build, shared host): per-tick routing cost at
 /// K = 1000 connections — the previous per-tick clone of every handle versus
 /// one generation compare. No threshold; it prints both numbers. Ignored by

@@ -305,8 +305,12 @@ impl ConnectionRegistry {
         let closer = {
             let mut inner = self.inner.lock();
             inner.joining.remove(&id);
-            inner.handles.remove(&id);
-            inner.routing_generation += 1;
+            // Only a connection that actually held handles moves the routing
+            // view: a second close, a refused login or a Status ping must not
+            // make the pump copy every remaining handle again.
+            if inner.handles.remove(&id).is_some() {
+                inner.routing_generation += 1;
+            }
             if inner.names.remove(&id).is_some() {
                 inner.roster_dirty = true;
             }
@@ -362,26 +366,30 @@ impl ConnectionRegistry {
         Option<Vec<(ConnectionId, ConnectionHandles)>>,
         Option<Vec<String>>,
     ) {
-        let mut inner = self.inner.lock();
-        let handles = if inner.routing_generation == *generation {
-            None
-        } else {
-            *generation = inner.routing_generation;
-            Some(
-                inner
-                    .handles
-                    .iter()
-                    .map(|(id, handles)| (*id, handles.clone()))
-                    .collect(),
-            )
+        let (handles, names) = {
+            let mut inner = self.inner.lock();
+            let handles = if inner.routing_generation == *generation {
+                None
+            } else {
+                *generation = inner.routing_generation;
+                Some(
+                    inner
+                        .handles
+                        .iter()
+                        .map(|(id, handles)| (*id, handles.clone()))
+                        .collect(),
+                )
+            };
+            // Owned copy under the same guard; the sort runs after it drops,
+            // so a busy roster never extends the critical section.
+            let names = std::mem::take(&mut inner.roster_dirty)
+                .then(|| inner.names.values().cloned().collect::<Vec<_>>());
+            (handles, names)
         };
-        let names = if std::mem::take(&mut inner.roster_dirty) {
-            let mut names = inner.names.values().cloned().collect::<Vec<_>>();
+        let names = names.map(|mut names| {
             names.sort();
-            Some(names)
-        } else {
-            None
-        };
+            names
+        });
         (handles, names)
     }
 
