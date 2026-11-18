@@ -1,11 +1,12 @@
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
 
 from tools.harness.battle_exposure import (D1_MAX_INTERVAL_TICKS, D1_STEP_BLOCKS, analyse_take,
-                                           episode_wire_steps, fling_dismounts, main, parse_log, pooled,
-                                           wire_positions)
+                                           coverage_class, episode_wire_steps, fling_dismounts, main,
+                                           parse_log, pooled, wire_positions)
 
 
 def episode_line(ident=1076, tick=5142, ticks=7, plan='chase', travel=1.985, peak=0.412, outcome='targeted',
@@ -317,6 +318,112 @@ class TakeTest(unittest.TestCase):
         self.assertTrue(pool['complete'], "both logs are complete")
         self.assertFalse(pool['usable_for_d1'], "one unusable take makes the pool unusable")
         self.assertEqual(pool['unusable'], ['yaw-2'])
+
+
+class CoverageClassTest(unittest.TestCase):
+    """An episode with no wire step is classified from the recording, never guessed."""
+
+    def evidence(self, spawn=2400, removed=(), death=(), positions=(2500, 3000)):
+        return {'spawn': spawn, 'removed': list(removed), 'death': list(death), 'positions': list(positions)}
+
+    def test_a_tracked_body_that_did_not_move_is_observed_zero(self):
+        kind, note = coverage_class({'motion': [5143, 5149]}, self.evidence())
+        self.assertEqual(kind, 'observed_zero')
+        self.assertIn('no removal or death', note)
+
+    def test_a_removed_body_is_lost_never_zero_motion(self):
+        # negative control: spawned and tracked, then removed inside the window
+        kind, note = coverage_class({'motion': [5143, 5149]}, self.evidence(removed=[5146]))
+        self.assertEqual(kind, 'lost')
+        self.assertIn('remove_entities', note)
+
+    def test_a_dead_body_is_lost(self):
+        kind, note = coverage_class({'motion': [5143, 5149]}, self.evidence(death=[5141]))
+        self.assertEqual(kind, 'lost')
+        self.assertIn('death', note)
+
+    def test_a_body_the_observer_never_had_is_unobserved(self):
+        kind, _ = coverage_class({'motion': [5143, 5149]}, self.evidence(spawn=None, positions=()))
+        self.assertEqual(kind, 'unobserved')
+
+    def test_a_body_spawned_after_the_window_is_unresolved(self):
+        kind, _ = coverage_class({'motion': [5143, 5149]}, self.evidence(spawn=6000, positions=(6001,)))
+        self.assertEqual(kind, 'unresolved')
+
+    def test_without_a_recording_the_class_is_unresolved(self):
+        self.assertEqual(coverage_class({'motion': [5143, 5149]}, None)[0], 'unresolved')
+
+    def test_observed_zero_covers_the_window_and_lost_does_not(self):
+        log = '\n'.join([episode_line(), summary_line()])
+        positions = {'battle_start_tick': 5000, 'ids': {'2000': [[5140, 0, 0, 0], [5160, 4096, 0, 0]]}}
+        with tempfile.TemporaryDirectory() as root:
+            run = take_directory(root, log)
+            path = positions_file(root, positions)
+            covered = analyse_take('take', run, path, None, None,
+                                   {1076: self.evidence(positions=(5140, 5200))})
+            self.assertEqual(covered['wire']['coverage_by_class'], {'observed_zero': 1})
+            self.assertEqual(covered['wire']['episodes_without_wire_step'], 0)
+            # a window the recording shows as observed zero motion is covered: nothing else gaps
+            self.assertEqual(covered['coverage_gaps'], [])
+            self.assertTrue(covered['usable_for_d1'])
+            lost = analyse_take('take', run, path, None, None,
+                                {1076: self.evidence(removed=[5145], positions=(5140,))})
+            self.assertEqual(lost['wire']['coverage_by_class'], {'lost': 1})
+            self.assertEqual(lost['wire']['episodes_without_wire_step'], 1)
+            self.assertTrue(any('lost' in gap for gap in lost['coverage_gaps']))
+            self.assertFalse(lost['usable_for_d1'])
+
+
+class RecordingReaderTest(unittest.TestCase):
+    """The recording reader decodes the four evidence packets by id."""
+
+    def recording(self, root, frames):
+        packets = Path(root, 'packets.json')
+        packets.write_text(json.dumps({'play': {'clientbound': {
+            'minecraft:add_entity': {'protocol_id': 1},
+            'minecraft:remove_entities': {'protocol_id': 2},
+            'minecraft:entity_event': {'protocol_id': 3},
+            'minecraft:move_entity_pos': {'protocol_id': 4},
+            'minecraft:custom_payload': {'protocol_id': 5},
+        }}}))
+        solrec = Path(root, 'take.solrec')
+        with solrec.open('wb') as handle:
+            handle.write(b'{}\n')
+            for payload in frames:
+                handle.write(struct.pack('>II', 0, len(payload)))
+                handle.write(payload)
+        return solrec, packets
+
+    def varint(self, value):
+        out = b''
+        while True:
+            byte = value & 127
+            value >>= 7
+            out += bytes([byte | (128 if value else 0)])
+            if not value:
+                return out
+
+    def test_spawn_position_removal_and_death_are_read_by_id(self):
+        from tools.harness.battle_exposure import recording_evidence
+        frames = [
+            self.varint(5) + self.varint(len(b'krasnokamen:tick')) + b'krasnokamen:tick' + struct.pack('>QQ', 900, 0),
+            self.varint(1) + self.varint(77) + b'0' * 16 + self.varint(0),
+            self.varint(4) + self.varint(77),
+            self.varint(2) + self.varint(1) + self.varint(77),
+            self.varint(3) + struct.pack('>iB', 88, 3),
+        ]
+        with tempfile.TemporaryDirectory() as root:
+            solrec, packets = self.recording(root, frames)
+            table = recording_evidence(solrec, packets)
+            self.assertEqual(table[77], {'spawn': 900, 'removed': [900], 'death': [], 'positions': [900]})
+            self.assertEqual(table[88]['death'], [900])
+
+    def test_a_truncated_recording_stops_cleanly(self):
+        from tools.harness.battle_exposure import recording_evidence
+        with tempfile.TemporaryDirectory() as root:
+            solrec, packets = self.recording(root, [self.varint(1) + self.varint(5)])
+            solrec.write_bytes(solrec.read_bytes()[:-1])
+            self.assertEqual(recording_evidence(solrec, packets), {})
 
 
 class MainTest(unittest.TestCase):

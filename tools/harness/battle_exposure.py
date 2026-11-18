@@ -11,12 +11,18 @@ untargeted, a wounded-action-free member of a regiment with a sweep plan, and no
 
 usage:
     python3 -m tools.harness.battle_exposure --take yaw-1=RUN_DIR [--take ...] \
-        [--positions yaw-1=POSITIONS.json] [--out report.json]
+        [--positions yaw-1=POSITIONS.json] [--recording yaw-1=take.solrec] [--out report.json]
 
 - `RUN_DIR` is a `tools/battle/run-battle.py` take directory; its `server.log` is read.
 - `POSITIONS.json` is `wire_jitter.py --positions-out`
   (`{battle_start_tick, ids: {id: [[tick, qx, qy, qz], ...]}}`, quantized 1/4096 blocks).
   Optional: without it the report holds the server-truth numbers only.
+- `take.solrec` is the take's own recording. It is what classifies an episode whose window holds no
+  movement packet: spawn (`add_entity`), removal (`remove_entities`), death (`entity_event` 3) and
+  position packets by entity id. `observed_zero` (tracked, never removed, no packet inside the
+  window = it did not move) covers the window with zero motion; `lost`, `unobserved` and
+  `unresolved` keep the take unusable and name the reason. Without `--recording` every such episode
+  is `unresolved`.
 
 Exit status: 0 = report written; 1 = malformed log (the offending line is named); 2 = at least one
 take has no exposure records (fail closed: absence of records is not zero exposure, and this tool
@@ -39,6 +45,7 @@ import argparse
 import json
 import math
 import re
+import struct
 import sys
 from collections import Counter
 from pathlib import Path
@@ -149,6 +156,133 @@ def parse_log(text, source='server.log'):
     return episodes, summaries
 
 
+DEFAULT_PACKETS = Path('/run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/26.3/reports/packets.json')
+REMOVE_ENTITIES = 'minecraft:remove_entities'
+ADD_ENTITY = 'minecraft:add_entity'
+ENTITY_EVENT = 'minecraft:entity_event'
+POSITION_PACKETS = ('minecraft:move_entity_pos', 'minecraft:move_entity_pos_rot')
+
+
+def _varint(data, position):
+    value = 0
+    for shift in range(5):
+        byte = data[position]
+        position += 1
+        value |= (byte & 127) << (7 * shift)
+        if not byte & 128:
+            return value, position
+    raise ValueError('varint runs past five bytes')
+
+
+def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
+    """Per entity id, the recording's own spawn / removal / death / position evidence.
+
+    Reads the take's `take.solrec` frames (header JSON line, then `u32, u32 len` + payload) and
+    decodes only the four clientbound packets that carry the evidence: `add_entity` (spawned for
+    this observer), `remove_entities` (despawn or out of view), `entity_event` status 3 (death) and
+    the two position packets. Nothing is inferred from the shape of a longer gap: a body with no
+    removals, a spawn before a window and a position packet after it was tracked, so a window with
+    no movement packet inside it is observed zero motion.
+    """
+    template = json.loads(Path(packets_path).read_text())
+    ids = template['play']['clientbound']
+    wanted = {
+        ids[ADD_ENTITY]['protocol_id']: 'add',
+        ids[REMOVE_ENTITIES]['protocol_id']: 'remove',
+        ids[ENTITY_EVENT]['protocol_id']: 'event',
+    }
+    for name in POSITION_PACKETS:
+        if name in ids:
+            wanted[ids[name]['protocol_id']] = 'position'
+    custom = ids.get('minecraft:custom_payload', {}).get('protocol_id')
+    marker = b'krasnokamen:tick'
+    table = {}
+
+    def row(ident):
+        return table.setdefault(ident, {'spawn': None, 'removed': [], 'death': [], 'positions': []})
+
+    with Path(solrec).open('rb') as handle:
+        handle.readline()  # the recording header
+        tick = None
+        while True:
+            prefix = handle.read(8)
+            if len(prefix) < 8:
+                break
+            _, length = struct.unpack('>II', prefix)
+            data = handle.read(length)
+            if len(data) < length:
+                break
+            packet, position = _varint(data, 0)
+            if custom is not None and packet == custom:
+                channel_length, position = _varint(data, position)
+                channel = data[position:position + channel_length]
+                position += channel_length
+                if channel == marker and len(data) - position >= 16:
+                    tick = struct.unpack('>QQ', data[position:position + 16])[0]
+                continue
+            kind = wanted.get(packet)
+            if kind is None:
+                continue
+            if kind == 'position':
+                entity, _ = _varint(data, position)
+                row(entity)['positions'].append(tick)
+                continue
+            if kind == 'add':
+                entity, _ = _varint(data, position)
+                current = row(entity)
+                if current['spawn'] is None:
+                    current['spawn'] = tick
+                continue
+            if kind == 'remove':
+                count, position = _varint(data, position)
+                for _ in range(count):
+                    entity, position = _varint(data, position)
+                    row(entity)['removed'].append(tick)
+                continue
+            entity, status = struct.unpack('>iB', data[position:position + 5])
+            if status == 3:
+                row(entity)['death'].append(tick)
+    return table
+
+
+def coverage_class(episode, evidence):
+    """(class, evidence note) for an episode whose window holds no wire step.
+
+    Classes, from the recording only:
+      `lost`           `remove_entities` or a death `entity_event` at or before the window's end: the
+                       observer stopped having the body (despawn, out of view or dead). This is the
+                       negative case — it must never be read as zero motion.
+      `unobserved`     no spawn and no position packet: the observer never had the body.
+      `observed_zero`  spawned at or before the window and never removed: the tracker still held the
+                       body, so a window with no movement packet inside it is a body that did not
+                       move. Vanilla sends a position packet only when the body moves; leaving the
+                       view sends `remove_entities`, which is exactly what this class excludes.
+      `unresolved`     no recording evidence at all — kept unusable rather than guessed.
+    """
+    first, last = episode['motion']
+    if evidence is None:
+        return 'unresolved', 'no recording evidence supplied'
+    removed = [tick for tick in evidence['removed'] if tick is not None and tick <= last]
+    death = [tick for tick in evidence['death'] if tick is not None and tick <= last]
+    if removed:
+        return 'lost', f"remove_entities at tick {min(removed)} (window ends {last})"
+    if death:
+        return 'lost', f"entity_event death at tick {min(death)} (window ends {last})"
+    positions = evidence['positions']
+    if evidence['spawn'] is None and not positions:
+        return 'unobserved', 'never spawned for this observer'
+    if evidence['spawn'] is not None and evidence['spawn'] <= first:
+        return 'observed_zero', (
+            f"tracked from spawn {evidence['spawn']}, no removal or death to {last},"
+            f" last position packet {max(positions) if positions else None}")
+    if positions and min(positions) <= first:
+        return 'observed_zero', (
+            f"tracked from position packet {min(positions)} at or before {first}, no removal or death")
+    return 'unresolved', (
+        f"spawn {evidence['spawn']}, packets {len(positions)}, "
+        f"first {min(positions) if positions else None} (window {first}-{last})")
+
+
 def wire_positions(path):
     """id -> [(tick, x, y, z)] in blocks, from `wire_jitter.py --positions-out`."""
     document = json.loads(Path(path).read_text())
@@ -217,7 +351,7 @@ def fling_dismounts(path):
     return table
 
 
-def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=None):
+def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=None, evidence=None):
     run_dir = Path(run_dir)
     log = run_dir / 'server.log'
     if not log.is_file():
@@ -297,10 +431,19 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
     take['complete'] = not reasons
     if wire is not None:
         rows, d1_bodies, d1_steps, uncorrelated, tail = [], set(), 0, [], 0
+        by_class = Counter()
         for episode in episodes:
             steps = episode_wire_steps(episode, wire.get(episode['id'], ()))
+            classification = None
             if not steps:
-                uncorrelated.append(episode['id'])
+                # No step in the window: the recording's own evidence decides whether that is
+                # observed zero motion (counts) or a body the observer no longer had (unusable).
+                classification, note = coverage_class(episode, evidence.get(episode['id']) if evidence else None)
+                if classification != 'observed_zero':
+                    uncorrelated.append(episode['id'])
+                by_class[classification] += 1
+            else:
+                by_class['covered'] += 1
             last_wire = take['coverage']['last_recorded_tick']
             if last_wire is not None and episode['motion'][1] > last_wire:
                 tail += 1
@@ -308,12 +451,20 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             d1_steps += len(fired)
             if fired:
                 d1_bodies.add(episode['id'])
-            rows.append({'episode': episode, 'wire_steps': steps, 'd1_steps': len(fired)})
+            rows.append({
+                'episode': episode,
+                'wire_steps': steps,
+                'd1_steps': len(fired),
+                'coverage_class': classification or 'covered',
+                'coverage_note': note if classification else None,
+            })
         take['wire'] = {
             'bodies_with_d1_step': len(d1_bodies),
             'd1_steps': d1_steps,
             'episodes_without_wire_step': len(uncorrelated),
             'episodes_past_the_last_packet': tail,
+            'coverage_by_class': dict(by_class),
+            'observed_zero_episodes': by_class.get('observed_zero', 0),
             'episode_rows': rows,
         }
     if dismounts is not None:
@@ -348,7 +499,13 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
                 f"uncovered wire tail: {tail_ticks} ticks past the last packet "
                 f"({take['wire']['episodes_past_the_last_packet']} episodes)")
         if take['wire']['episodes_without_wire_step']:
-            coverage_gaps.append(f"{take['wire']['episodes_without_wire_step']} episodes without a wire step")
+            unobserved = {
+                name: count for name, count in take['wire']['coverage_by_class'].items()
+                if name in ('lost', 'unobserved', 'unresolved')
+            }
+            coverage_gaps.append(
+                f"{take['wire']['episodes_without_wire_step']} episodes without a wire step "
+                f"({unobserved or 'unclassified'})")
     unsettled = take['outcomes'].get('unsettled', 0)
     if unsettled:
         coverage_gaps.append(f"{unsettled} episodes closed without a final sample (unsettled)")
@@ -416,6 +573,11 @@ def main(argv=None):
                         help='a take directory (its server.log is read); repeatable')
     parser.add_argument('--positions', action='append', metavar='NAME=JSON',
                         help='wire positions of that take (wire_jitter.py --positions-out); repeatable')
+    parser.add_argument('--recording', action='append', metavar='NAME=SOLREC',
+                        help="that take's take.solrec: its spawn/remove/death/position evidence "
+                             'classifies an episode with no wire step; repeatable')
+    parser.add_argument('--packets', type=Path, default=DEFAULT_PACKETS,
+                        help='protocol packet ids the recording is decoded with')
     parser.add_argument('--fling-json', action='append', metavar='NAME=JSON',
                         help='fling_analysis.py --out for that take: its real dismounts and its D1 count '
                              'are cross-checked against the exposure episodes; repeatable')
@@ -423,7 +585,8 @@ def main(argv=None):
     arguments = parser.parse_args(argv)
     takes_spec, positions = paired(arguments.take, 'take'), paired(arguments.positions, 'positions')
     fling = paired(arguments.fling_json, 'fling-json')
-    unknown = sorted((set(positions) | set(fling)) - set(takes_spec))
+    recordings = paired(arguments.recording, 'recording')
+    unknown = sorted((set(positions) | set(fling) | set(recordings)) - set(takes_spec))
     if unknown:
         raise SystemExit(f'--positions/--fling-json name unknown take(s): {", ".join(unknown)}')
     dismounts, fling_rows = {}, {}
@@ -434,8 +597,12 @@ def main(argv=None):
             raise SystemExit(f'--fling-json {path}: no take named {name!r} ({", ".join(table)})')
         dismounts[name] = table[name]
         fling_rows[name] = rows[name]
+    evidence = {
+        name: recording_evidence(path, arguments.packets) for name, path in recordings.items()
+    }
     takes = [
-        analyse_take(name, run_dir, positions.get(name), dismounts.get(name), fling_rows.get(name))
+        analyse_take(name, run_dir, positions.get(name), dismounts.get(name), fling_rows.get(name),
+                     evidence.get(name))
         for name, run_dir in takes_spec.items()
     ]
     report = {'takes': takes, 'pooled': pooled(takes)}
