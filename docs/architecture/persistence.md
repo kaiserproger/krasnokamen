@@ -444,10 +444,16 @@ row or WAL tail was written by an older binary after its first battle tick
 refuses to open (fail closed). Before upgrading, run `battle reset` and then
 `save-all flush` with the old binary (or reset the world). The harness gates
 read the same chain (`battle_recovery.py` `fold_battle`, the same refusals).
+A fugitive's guard hold is stamped once per flight, like the fight clock, and
+resolved on the first pass that reads it, so a rout does not rewrite every
+fleeing fighter each tick; recovery stays exact because the stamp and
+`elapsed_ticks` share the image. An older binary opened mid-rout keeps such a
+fighter in Guard until he is hit; run `battle reset` before a downgrade.
 Regressions:
 `battle_wal_journals_changed_parts_not_the_whole_image_each_tick`,
-`battle_wal_patches_changed_parts_and_replays_the_live_image` and
-`battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements`.
+`battle_wal_patches_changed_parts_and_replays_the_live_image`,
+`battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements` and
+`battle_wal_does_not_rejournal_a_routing_fighter_every_tick`.
 
 Native entity custody remains sole authority for life, pose, equipment in hand
 and mounts. Live battle bodies additionally journal changed intra-chunk poses through
