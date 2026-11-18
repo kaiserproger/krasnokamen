@@ -434,30 +434,47 @@ fn well_corners_are_open_plaza_squares_without_a_lamp() {
     }
 }
 
-/// Owner D27.4: a player's log at head height over a street column inside the
-/// territory is forest the prepared street may clear; without forest
-/// preparation the column stays blocked.
+/// Owner D27.4: a player's log standing on a street column (hiding its ground)
+/// or at head height over it is the village's inside the territory: the
+/// prepared street finds the same ground and may clear the log. Without forest
+/// preparation the column stays blocked, and outside the territory the
+/// player's history keeps the log protected.
 #[test]
-fn a_player_log_over_a_street_inside_the_territory_is_clearable_headroom() {
-    let (mut state, id, _) = fixture();
-    open_plan(&mut state);
-    let (x, z) = (8, 20);
-    let record = state.settlements.get(id).unwrap();
-    let Column::Ground { y, .. } = sample(&state, record, x, z, true) else {
-        panic!("the bare plan column is ground");
-    };
-    assert!(record.contains([x, y + 2, z]));
-    let log = block(&state, "minecraft:oak_log", &[]);
-    state.world.set_block(x, y + 2, z, log);
-    state.world.fold_overlay();
-    state.block_log = crate::settlements::forestry::tests::player_history(&state, [x, y + 2, z], 0);
-    let record = state.settlements.get(id).unwrap();
-    assert!(
-        matches!(sample(&state, record, x, z, false), Column::Blocked),
-        "a log is not street headroom without forest preparation"
-    );
-    assert!(
-        matches!(sample(&state, record, x, z, true), Column::Ground { .. }),
-        "inside the territory the player's log is the village's forest"
-    );
+fn a_player_log_on_a_street_column_is_village_property_inside_the_territory_only() {
+    for rise in [1, 2] {
+        let (mut state, id, _) = fixture();
+        open_plan(&mut state);
+        let (x, z) = (8, 20);
+        let record = state.settlements.get(id).unwrap();
+        let Column::Ground { y, .. } = sample(&state, record, x, z, true) else {
+            panic!("the bare plan column is ground");
+        };
+        let at = [x, y + rise, z];
+        assert!(record.contains(at));
+        let log = block(&state, "minecraft:oak_log", &[]);
+        state.world.set_block(at[0], at[1], at[2], log);
+        state.world.fold_overlay();
+        state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+        let record = state.settlements.get(id).unwrap();
+        assert!(
+            matches!(sample(&state, record, x, z, false), Column::Blocked),
+            "rise {rise}: a log is not street headroom without forest preparation"
+        );
+        assert!(
+            matches!(
+                sample(&state, record, x, z, true),
+                Column::Ground { y: ground, .. } if ground == y
+            ),
+            "rise {rise}: inside the territory the player's log is the village's"
+        );
+        let record = state.settlements.get_mut(id).unwrap();
+        record.anchor = [x + 1_000, record.anchor[1], z];
+        record.radius = 8;
+        let record = state.settlements.get(id).unwrap();
+        assert!(!record.contains(at));
+        assert!(
+            !crate::settlements::forestry::Clearance::street(record).clearable(&state, at, None),
+            "rise {rise}: outside the territory the player's log stays protected"
+        );
+    }
 }

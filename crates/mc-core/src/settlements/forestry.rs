@@ -31,6 +31,9 @@ mod tree_proof;
 pub(crate) struct Clearance {
     proofs: Option<HashMap<[i32; 3], (tree_proof::Proof, bool)>>,
     territory: Option<super::SettlementId>,
+    /// Street columns: inside the territory only a cell's player history is
+    /// not read; an unattributed tree keeps the generator-evidence path.
+    history_only: bool,
 }
 
 impl Default for Clearance {
@@ -38,6 +41,7 @@ impl Default for Clearance {
         Self {
             proofs: Some(HashMap::default()),
             territory: None,
+            history_only: false,
         }
     }
 }
@@ -47,6 +51,19 @@ impl Clearance {
         Self {
             proofs: None,
             territory: None,
+            history_only: false,
+        }
+    }
+
+    /// Street ground and headroom for `record` (owner D27.4): inside its
+    /// territory a player-attributed cell (block history, persistent-leaf mark,
+    /// live-player veto) is the village's; an unattributed tree still needs this
+    /// world's generator evidence, which a cold town's street walk requests.
+    pub(crate) fn street(record: &super::SettlementRecord) -> Self {
+        Self {
+            proofs: None,
+            territory: Some(record.id),
+            history_only: true,
         }
     }
 
@@ -62,6 +79,12 @@ impl Clearance {
         self.territory
             .and_then(|id| state.settlements.get(id))
             .is_some_and(|record| record.contains(at))
+            && (!self.history_only
+                || vetoed(state, at)
+                || state
+                    .world
+                    .physics_block_at(at[0], at[1], at[2])
+                    .is_some_and(|block| persistent(state, block)))
     }
 
     fn owned(&mut self, state: &TickState, at: [i32; 3], leaf: bool) -> bool {

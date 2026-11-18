@@ -356,7 +356,10 @@ pub(super) fn sample(
     }) {
         return Column::Occupied;
     }
-    let Some(y) = construction::surface_y(state, anchor_y, x, z) else {
+    // Owner D27.4: inside the territory a player's history neither hides the
+    // street column's ground nor blocks its headroom.
+    let mut street = super::forestry::Clearance::street(record);
+    let Some(y) = construction::surface_y_for_lot(state, anchor_y, x, z, None, &mut street) else {
         return Column::Blocked;
     };
     if prepare_forest
@@ -389,12 +392,7 @@ pub(super) fn sample(
             .physics_block_at(x, above, z)
             .is_some_and(|block| {
                 construction::clearable(state, block)
-                    || (prepare_forest
-                        && super::forestry::clearable(
-                            state,
-                            [x, above, z],
-                            record.contains([x, above, z]),
-                        ))
+                    || (prepare_forest && street.clearable(state, [x, above, z], None))
             })
     });
     if ground.has_fluid()
