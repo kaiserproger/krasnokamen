@@ -128,9 +128,10 @@ fi
 # tokens/priority.gate, a background waiter yields to it. Battle-video work (takes,
 # render, live-take pins) keeps the normal lane, so it gets the next freed token first:
 # that keeps the owner's 2026-11-12 goal ("the battle video gets resources first"). The
-# token-3 reserve for that goal was removed on a laptop proposal (2026-11-18, pending the
-# owner's confirmation; the owner may restore it for take windows).
-build_tokens=3
+# token-3 reserve for that goal stays removed (owner D27 p.7, 2026-11-18); restore a
+# reserve only for live-take windows if a take is starved. Four tokens are a trial (owner
+# D27 p.6): back to 3 if the 15-minute load stays above 20 or tests turn flaky.
+build_tokens=4
 token_slots=$(seq -s, "$build_tokens")
 token_gate=(--hold-gate "$dir/tokens/priority.gate")
 if [ "${KRASNOKAMEN_BUILD_LANE:-}" = background ]; then
