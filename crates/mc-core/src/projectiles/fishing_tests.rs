@@ -676,7 +676,7 @@ fn rain_wait_is_journaled_after_native_checkpoint_and_survives_anvil_export() {
             .set_block(x, above, z, state.registry.states.air);
     }
     state.weather.0 = crate::commands::Weather::Rain;
-    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    crate::tick::run_tick(&mut state, &[]);
     let checkpoint_tick = state.tick;
     let (_, captured, _) = crate::core::checkpoint_data_for(&state, checkpoint_tick);
     let entities = encode_entities(
