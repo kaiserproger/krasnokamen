@@ -548,7 +548,7 @@ fn a_structure_record_without_a_matching_admission_refuses_startup() {
         .unwrap()
         .remove("admission")
         .expect("every record carries its admission");
-    state.plugins.set_domain(OWNER, KEY, stripped);
+    state.plugins.set_domain(OWNER, &key, stripped);
     assert!(validate(&state).is_err(), "a record without admission");
 
     let mut state = self::state();

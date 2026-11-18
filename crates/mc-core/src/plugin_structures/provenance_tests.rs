@@ -81,12 +81,12 @@ fn outside_cells_need_covering_history_or_a_clean_readmission() {
     );
 
     state.block_log = history(&state, 1, &[]);
-    assert!(!cell_ok(&state, id, surveyed, outside));
+    assert!(!covered(&state, surveyed));
     let fresh = admit(&state, id, surveyed, &cells, [0, 0], first)
         .unwrap()
         .expect("a clean remaining plan is admitted again");
     assert_eq!(fresh, Admission::Captured { since: 2 });
-    assert!(cell_ok(&state, id, fresh, outside));
+    assert!(covered(&state, fresh));
 
     state.block_log = history(&state, 1, &[later]);
     assert_eq!(
@@ -96,7 +96,7 @@ fn outside_cells_need_covering_history_or_a_clean_readmission() {
     );
 
     state.block_log = history(&state, 1, &[inside]);
-    assert!(cell_ok(&state, id, surveyed, inside));
+    assert!(super::inside(&state, id, inside));
     assert_eq!(
         admit(&state, id, surveyed, &cells, [0, 2], &cells[0][2..]),
         Ok(None),
@@ -121,7 +121,7 @@ fn outside_cells_need_covering_history_or_a_clean_readmission() {
         },
         Vec::new(),
     );
-    assert!(!cell_ok(&state, id, surveyed, outside));
+    assert!(!covered(&state, surveyed));
     assert_eq!(
         admit(&state, id, surveyed, &cells, [0, 0], first),
         Ok(None),

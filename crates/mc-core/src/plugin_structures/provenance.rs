@@ -54,17 +54,6 @@ pub(super) fn covered(state: &TickState, admission: Admission) -> bool {
     }
 }
 
-/// May the live block at `at` be worked under `admission`? Inside the owning
-/// settlement's territory the answer is yes, without reading history.
-pub(crate) fn cell_ok(
-    state: &TickState,
-    settlement: SettlementId,
-    admission: Admission,
-    at: [i32; 3],
-) -> bool {
-    inside(state, settlement, at) || covered(state, admission)
-}
-
 /// What the commit gate decides for one commit.
 enum Verdict {
     Keep,
