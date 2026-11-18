@@ -761,6 +761,7 @@ fn click(
                     "pending_index".to_owned(),
                     Tag::String((index + 1).to_string()),
                 ),
+                ("pending_seq".to_owned(), Tag::String(order.seq.to_string())),
                 ("pending_blueprint".to_owned(), Tag::String(order.blueprint)),
                 (
                     "pending_level".to_owned(),

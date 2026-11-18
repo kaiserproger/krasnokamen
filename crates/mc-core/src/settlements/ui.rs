@@ -659,6 +659,10 @@ fn pending_order_matches(state: &TickState, ctx: &Ctx, payload: ClickPayload<'_>
     };
     payload.string("pending_blueprint") == Some(order.blueprint.as_str())
         && payload
+            .string("pending_seq")
+            .and_then(|value| value.parse::<u64>().ok())
+            == Some(order.seq)
+        && payload
             .string("pending_level")
             .and_then(|value| value.parse::<u8>().ok())
             == Some(order.level)
@@ -675,6 +679,7 @@ fn with_pending_order(
 ) -> Button {
     button
         .with("pending_index", Tag::String((index + 1).to_string()))
+        .with("pending_seq", Tag::String(order.seq.to_string()))
         .with("pending_blueprint", Tag::String(order.blueprint.clone()))
         .with("pending_level", Tag::String(order.level.to_string()))
         .with(

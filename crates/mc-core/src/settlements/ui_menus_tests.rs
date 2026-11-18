@@ -1156,6 +1156,7 @@ fn d8_construction_icons_list_all_sites_and_all_indexed_owner_orders() {
     for index in 0..8 {
         state.settlements.get_mut(id).unwrap().orders.push(
             crate::settlements::construction::OwnerOrder {
+                seq: index as u64 + 1,
                 blueprint: if index % 2 == 0 { "house" } else { "farm" }.into(),
                 level: 1,
                 building: None,
@@ -1223,6 +1224,7 @@ fn d8_pending_icon_keeps_the_rendered_intent_when_the_queue_shifts() {
     for blueprint in ["house", "farm"] {
         state.settlements.get_mut(id).unwrap().orders.push(
             crate::settlements::construction::OwnerOrder {
+                seq: if blueprint == "house" { 1 } else { 2 },
                 blueprint: blueprint.into(),
                 level: 1,
                 building: None,

@@ -272,6 +272,10 @@ fn click(
         }
         for (key, value) in [
             (
+                "pending_seq",
+                pending.map_or(0, |order| order.seq).to_string(),
+            ),
+            (
                 "pending_blueprint",
                 pending
                     .map_or("", |order| order.blueprint.as_str())
@@ -2295,6 +2299,7 @@ pub(super) fn parallel_ui_fixture(count: usize) -> (TickState, SettlementId) {
                 structure,
                 ordered: true,
                 builder: Some((uuid, None)),
+                order_seq: None,
             });
     }
     (state, id)
@@ -2419,4 +2424,199 @@ fn d8_shared_material_detail_names_each_sites_own_shortage() {
             detail.body
         );
     }
+}
+
+#[test]
+fn d8_upgrade_confirmations_keep_levels_and_cancelled_predecessors_pending() {
+    use crate::settlements::construction;
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    let building = blueprint_build(&mut state, id, "house");
+    state.day_time = 18000;
+    state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .fill(mc_data::ItemStack::EMPTY);
+    click(
+        &mut state,
+        id,
+        "buildings",
+        &[("b", string(&building.0.to_string()))],
+    );
+    let review = press(&mut state, 52);
+    let cached = confirmation_payload(&review, "krasnokamen:settlement/project_upgrade");
+    let confirm = |state: &mut TickState| {
+        last_dialog(&run(
+            state,
+            &[PlayerInput::DialogClick {
+                connection: CONN,
+                id: "krasnokamen:settlement/project_upgrade".into(),
+                payload: Some(cached.clone()),
+            }],
+        ))
+    };
+    assert!(confirm(&mut state).body.starts_with("Queued House L2: "));
+    let stale = confirm(&mut state);
+    assert!(stale.body.contains("changed"), "{}", stale.body);
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 1);
+    let queued = last_dialog(&click(
+        &mut state,
+        id,
+        "project_upgrade",
+        &[("b", string(&building.0.to_string()))],
+    ));
+    assert!(
+        queued.body.starts_with("Queued House L3: "),
+        "{}",
+        queued.body
+    );
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .orders
+            .iter()
+            .map(|order| order.level)
+            .collect::<Vec<_>>(),
+        [2, 3]
+    );
+    let retained = state.settlements.get(id).unwrap().orders[1].clone();
+    construction::cancel_pending(&mut state, id).unwrap();
+    // Both bills are fundable: without the guard, L3 would start cancelled L2.
+    let mut materials = construction::tests::fund(&mut state, "house", 3);
+    materials.extend(construction::tests::fund(&mut state, "house", 2));
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    slots.fill(mc_data::ItemStack::EMPTY);
+    let mut index = 0;
+    for (item, mut quantity) in materials {
+        while quantity > 0 {
+            let count = quantity.min(64);
+            slots[index] = mc_data::ItemStack::new(item, count as i32);
+            quantity -= count;
+            index += 1;
+        }
+    }
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
+    state.tick = state.tick.next_multiple_of(construction::PLAN_CADENCE);
+    construction::tick(&mut state);
+    let record = state.settlements.get(id).unwrap();
+    assert!(
+        record.projects.is_empty(),
+        "a cancelled L2 must not start on L3's behalf"
+    );
+    assert_eq!(record.orders, [retained]);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    let reason = construction::pending_reason_at(&state, id, 0).unwrap();
+    assert!(
+        reason.contains("Upgrade L3") && reason.contains("needs L2 next"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn d8_upgrade_pending_bill_and_started_level_match_the_confirmed_level() {
+    use crate::settlements::construction;
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    let building = blueprint_build(&mut state, id, "house");
+    state.day_time = 18000;
+    state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .fill(mc_data::ItemStack::EMPTY);
+    construction::request_upgrade(&mut state, id, building).unwrap();
+    construction::request_upgrade(&mut state, id, building).unwrap();
+    let level_three = state.settlements.get(id).unwrap().orders[1].clone();
+    construction::tests::fund(&mut state, "house", 2);
+    state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
+    construction::tests::plan_until_project(&mut state, id);
+    assert_eq!(state.settlements.get(id).unwrap().projects[0].level, 2);
+    let slot = villager(&mut state, [1.5, 201.0, 1.5]);
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    let actor = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    actor.data.profession = Profession::Builder;
+    actor.activity = crate::villager::Activity::Work;
+    state.day_time = 3000;
+    construction::tests::complete(&mut state, id, slot);
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings[&building].level,
+        2
+    );
+    state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .fill(mc_data::ItemStack::EMPTY);
+    let reason = construction::pending_reason_at(&state, id, 0).unwrap();
+    let bill = super::super::blueprints::get(&state.registry, "house")
+        .unwrap()
+        .level(3)
+        .unwrap()
+        .materials
+        .clone();
+    assert!(
+        bill.iter().any(|(item, quantity)| {
+            let name = state.registry.items.name_of(*item).unwrap().to_string();
+            reason.contains(&format!("{name} x{quantity}"))
+        }),
+        "{reason}"
+    );
+    construction::tests::fund(&mut state, "house", 3);
+    construction::tests::plan_until_project(&mut state, id);
+    let project = &state.settlements.get(id).unwrap().projects[0];
+    assert_eq!(project.level, level_three.level);
+    assert_eq!(project.order_seq, Some(level_three.seq));
+    assert_eq!(project.building, Some(building));
+}
+
+#[test]
+fn d8_cached_cancel_refuses_an_identical_order_that_shifted_into_its_index() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    prep_projects_site(&mut state, id);
+    state.day_time = 18000;
+    for blueprint in ["house", "house", "farm", "house", "farm"] {
+        click(
+            &mut state,
+            id,
+            "project_order",
+            &[("blueprint", string(blueprint))],
+        );
+    }
+    let review = click(
+        &mut state,
+        id,
+        "project_cancel_review",
+        &[("pending_index", string("3"))],
+    );
+    let cached = confirmation_payload(&review, "krasnokamen:settlement/project_cancel_pending");
+    let first_seq = state.settlements.get(id).unwrap().orders[2].seq;
+    assert_eq!(
+        text(field(&cached, "pending_seq").unwrap()),
+        first_seq.to_string()
+    );
+    for _ in 0..2 {
+        super::super::construction::cancel_pending(&mut state, id).unwrap();
+    }
+    let orders = state.settlements.get(id).unwrap().orders.clone();
+    assert_eq!(orders[2].blueprint, "farm");
+    assert_ne!(orders[2].seq, first_seq);
+    let refused = last_dialog(&run(
+        &mut state,
+        &[PlayerInput::DialogClick {
+            connection: CONN,
+            id: "krasnokamen:settlement/project_cancel_pending".into(),
+            payload: Some(cached),
+        }],
+    ));
+    assert!(refused.body.contains("changed"), "{}", refused.body);
+    assert_eq!(state.settlements.get(id).unwrap().orders, orders);
 }

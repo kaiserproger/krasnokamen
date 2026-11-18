@@ -32,6 +32,9 @@ pub(super) mod founding;
 #[path = "construction_site_refusals.rs"]
 pub(super) mod site_refusals;
 
+#[path = "construction_upgrade.rs"]
+mod upgrade;
+
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
 /// planner scans, so the joint funding proof and the tick stay bounded.
@@ -161,11 +164,15 @@ pub(crate) fn owner_upgrade_level(
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
     let (blueprint, ..) = upgrade_blueprint(state, id, target)?;
-    // Several projects can target one building (D8), so the next level follows
-    // the highest level already in flight, not just the built one.
+    // A confirmed level is immutable, including while its predecessor waits.
     let current = access::projects(record)
         .filter(|project| project.building == Some(building))
         .map(|project| project.level)
+        .chain(
+            access::orders(record)
+                .filter(|order| order.building == Some(building))
+                .map(|order| order.level),
+        )
         .max()
         .unwrap_or(target.level)
         .max(target.level);
@@ -178,6 +185,9 @@ fn start_order(
     order: &OwnerOrder,
     planning_cursor: Option<u32>,
 ) -> Result<String, String> {
+    if upgrade::next_level(state, id, order).is_some_and(|next| next != order.level) {
+        return Err("Busy.".into());
+    }
     match order.building {
         Some(building) => start_upgrade(state, id, building),
         None => start_build(state, id, &order.blueprint, planning_cursor),
@@ -321,6 +331,9 @@ pub(crate) fn pending_reason_at(
     let order = orders(record).nth(index)?;
     let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
     let level = blueprint.level(order.level)?;
+    if let Some(reason) = upgrade::pending_reason(state, id, order) {
+        return Some(reason);
+    }
     if let Some(reason) = funding_error(state, id, &level.materials) {
         return Some(reason);
     }
@@ -381,7 +394,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     }
     // Funded candidates in queue order; the head is first when it is funded.
     let images = executor::source_images(state, id);
-    let mut candidates: Vec<(usize, u8)> = Vec::new();
+    let mut candidates = Vec::new();
     {
         let record = state.settlements.get(id).expect("settlement");
         for (index, order) in access::orders(record).enumerate() {
@@ -394,7 +407,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
                 continue;
             };
             if funded_variant(state, id, &level.materials, &images).is_some() {
-                candidates.push((index, level_number));
+                candidates.push(index);
             }
         }
     }
@@ -404,14 +417,13 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     }
     // A funded request that cannot start for lack of a site does not block the
     // next funded one; it stays where it is in the queue.
-    for (index, level_number) in candidates {
+    for index in candidates {
         let Some(record) = state.settlements.get_mut(id) else {
             return true;
         };
-        let Some(mut order) = access::take_order(record, index) else {
+        let Some(order) = access::take_order(record, index) else {
             continue;
         };
-        order.level = level_number;
         let cursor = state
             .settlements
             .get(id)
@@ -446,16 +458,16 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     true
 }
 
-/// The level an owner request would start at, if its target still allows one.
+/// A confirmed level remains unchanged even while its predecessor is missing.
 fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Option<u8> {
     let Some(building) = order.building else {
         return Some(1);
     };
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
-    blueprints::get(&state.registry, &order.blueprint)
-        .and_then(|blueprint| blueprint.level(target.level + 1))
-        .map(|_| target.level + 1)
+    let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
+    blueprint.level(target.level.saturating_add(1))?;
+    blueprint.level(order.level).map(|_| order.level)
 }
 
 fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {

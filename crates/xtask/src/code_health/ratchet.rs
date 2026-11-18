@@ -91,7 +91,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // debtor) and its comments live with the planner they serve. The next
         // extraction candidate is the stall watch plus carry recovery, which
         // belong in a construction_recovery module.
-        ("settlements/construction.rs", 1_296),
+        // D8S3's extracted upgrade guard leaves five call-site/queue-level statements: 1301.
+        ("settlements/construction.rs", 1_301),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],
