@@ -94,6 +94,11 @@ fn scene_at(
         None => crate::settlements::construction::tests::fixture(),
     };
     state.registry = registry();
+    state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings {
+        enabled: true,
+        retention_secs: 0,
+        max_records: 1_000,
+    });
     let chest = named(&state, "minecraft:chest");
     state.world.set_block(1, Y, 1, chest);
     if dir.is_some() {
@@ -892,10 +897,10 @@ fn outside_territory_natural_drift_proceeds_but_player_history_blocks_without_a_
     assert_eq!(at(&s, 5), Some(log));
     assert_eq!(
         stock(&s.state, "minecraft:dirt"),
-        1,
-        "natural drift is cleared and credited"
+        0,
+        "natural foundation drift is permitted without mining the ground"
     );
-    assert_eq!(total_stock(&s.state), 1);
+    assert_eq!(total_stock(&s.state), 0);
 
     let mut s = scene(None, &[], &[], &build);
     s.state.settlements.get_mut(s.id).unwrap().radius = 1;
@@ -916,7 +921,7 @@ fn outside_territory_natural_drift_proceeds_but_player_history_blocks_without_a_
     s.state.block_log = clean;
     step(&mut s).unwrap();
     assert_eq!(at(&s, 5), Some(log));
-    assert_eq!(stock(&s.state, "minecraft:dirt"), 1);
+    assert_eq!(stock(&s.state, "minecraft:dirt"), 0);
 
     // The same history block inside the territory is the village's property.
     let mut s = scene(None, &[], &[], &build);
@@ -924,7 +929,7 @@ fn outside_territory_natural_drift_proceeds_but_player_history_blocks_without_a_
     s.state.block_log = crate::settlements::forestry::tests::player_history(&s.state, [5, Y, Z], 0);
     step(&mut s).unwrap();
     assert_eq!(at(&s, 5), Some(log));
-    assert_eq!(stock(&s.state, "minecraft:dirt"), 1);
+    assert_eq!(stock(&s.state, "minecraft:dirt"), 0);
 }
 
 // --- 6. a non-empty container in a placement cell ---------------------------
@@ -1322,6 +1327,97 @@ fn free_retirement_does_not_hide_the_paid_floor_from_either_repair_path() {
         assert_eq!(status(&s).consumed[0].quantity, 2);
         crate::plugin_structures::validate(&s.state).unwrap();
     }
+}
+
+fn lapse(s: &mut Scene) {
+    s.state.block_log = crate::block_log::BlockLog::restore(
+        crate::config::BlockLogSettings {
+            enabled: true,
+            retention_secs: 0,
+            max_records: 1_000,
+        },
+        vec![crate::block_log::Delta {
+            coverage: 1,
+            ..Default::default()
+        }],
+    );
+    assert!(!s.state.block_log.covers(0));
+}
+
+#[test]
+fn lapsed_coverage_refuses_a_changed_first_occurrence_anywhere_in_the_outside_tail() {
+    for changed in [5, 6] {
+        let mut s = scene(
+            None,
+            &[(5, "minecraft:stone"), (6, "minecraft:dirt")],
+            &[],
+            &[
+                (Cut, 5, "minecraft:air", None),
+                (Build, 6, "minecraft:oak_log", Some("minecraft:oak_log")),
+            ],
+        );
+        s.state.settlements.get_mut(s.id).unwrap().radius = 1;
+        let changed_at = [changed, Y, Z];
+        set(&mut s, changed, "minecraft:oak_planks");
+        s.state.block_log =
+            crate::settlements::forestry::tests::player_history(&s.state, changed_at, 0);
+        assert!(s.state.block_log.player_touched(changed_at));
+        lapse(&mut s);
+        assert!(!s.state.block_log.player_touched(changed_at));
+        assert_eq!(
+            executor::provenance_refusal(&s.state, s.id, &s.handle),
+            Some(changed_at)
+        );
+        for _ in 0..3 {
+            expect_refusal(&mut s, Failure::Blocked, "lapsed outside divergence");
+        }
+    }
+}
+
+#[test]
+fn lapsed_coverage_simulates_the_outside_cut_then_fill_chain() {
+    let mut s = scene(
+        None,
+        &[(5, "minecraft:stone")],
+        &[],
+        &[
+            (Cut, 5, "minecraft:air", None),
+            (Fill, 5, "minecraft:dirt", Some("minecraft:dirt")),
+        ],
+    );
+    s.state.settlements.get_mut(s.id).unwrap().radius = 1;
+    lapse(&mut s);
+    assert_eq!(executor::provenance_refusal(&s.state, s.id, &s.handle), None);
+    assert!(!step(&mut s).unwrap());
+    assert!(step(&mut s).unwrap());
+    assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:dirt")));
+    assert_eq!(stock(&s.state, "minecraft:cobblestone"), 1);
+    assert_eq!(stock(&s.state, "minecraft:dirt"), 0);
+    assert_eq!(carried(&s, "minecraft:dirt"), 15);
+    assert_eq!(status(&s).consumed[0].quantity, 1);
+    crate::plugin_structures::validate(&s.state).unwrap();
+}
+
+#[test]
+fn lapsed_coverage_does_not_recheck_completed_cells_of_the_current_portion() {
+    let mut s = scene(
+        None,
+        &[(5, "minecraft:stone"), (6, "minecraft:dirt")],
+        &[],
+        &[
+            (Build, 5, "minecraft:oak_log", Some("minecraft:oak_log")),
+            (Build, 6, "minecraft:oak_log", Some("minecraft:oak_log")),
+        ],
+    );
+    s.state.settlements.get_mut(s.id).unwrap().radius = 1;
+    assert!(!step(&mut s).unwrap());
+    set(&mut s, 5, "minecraft:oak_planks");
+    lapse(&mut s);
+    assert!(step(&mut s).unwrap());
+    assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:oak_planks")));
+    assert_eq!(at(&s, 6), Some(named(&s.state, "minecraft:oak_log")));
+    assert_eq!(carried(&s, "minecraft:oak_log"), 14);
+    assert_eq!(total_stock(&s.state), 0);
 }
 
 // --- shared native helpers ---------------------------------------------------

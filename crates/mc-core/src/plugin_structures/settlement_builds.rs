@@ -185,6 +185,7 @@ pub(crate) fn prepare(
             blueprint_hash: inventories::hash(&batches),
             image,
             portions,
+            admission: provenance::Admission::survey(state),
             cells: batches,
         },
     );
@@ -620,6 +621,33 @@ pub(crate) fn next_plan_state(
         .get(record.snapshot.current_stage_index as usize)
         .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
         .map(|cell| cell.state))
+}
+
+/// The cell outside the territory whose lapsed evidence or retained player
+/// edit refuses this structure's next commit (PrepLifecycle §2.3), if any.
+pub(crate) fn provenance_refusal(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Option<[i32; 3]> {
+    let ledger = ledger(state).ok()?;
+    let record = structure(&ledger, &owner(settlement), handle).ok()?;
+    let index = record.snapshot.current_stage_index as usize;
+    let offset = record.snapshot.completed_work_units as usize;
+    let next = record.cells.get(index)?.get(offset..offset + 1)?;
+    portions::lapsed_refusal(state, record)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            provenance::refused_cell(
+                state,
+                settlement,
+                record.admission,
+                &record.cells,
+                [index, offset],
+                next,
+            )
+        })
 }
 
 /// Borrow the canonical stage rather than inferring clearing from a live tree:

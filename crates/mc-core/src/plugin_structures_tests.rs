@@ -234,6 +234,7 @@ fn stored_structure(state: &mut TickState) -> String {
             snapshot,
             blueprint_hash: blueprint.content_hash().into(),
             image,
+            admission: provenance::Admission::Plugin,
             cells,
             portions: Vec::new(),
         },
@@ -532,6 +533,34 @@ fn corrupt_staged_geometry_cannot_recover_as_success() {
     ledger.structure_mut(&id).unwrap().cells[0][0].at[0] += 100;
     save(&mut state, ledger);
     assert!(validate(&state).is_err());
+}
+
+/// PrepLifecycle §2.3 fence C: `admission` is a required field of every
+/// structure record, and its kind must match the record's owner.
+#[test]
+fn a_structure_record_without_a_matching_admission_refuses_startup() {
+    let mut state = state();
+    let id = stored_structure(&mut state);
+    validate(&state).unwrap();
+    let mut stripped = state.plugins.get_domain(OWNER, KEY).unwrap().clone();
+    stripped["structures"][&id]
+        .as_object_mut()
+        .unwrap()
+        .remove("admission")
+        .expect("every record carries its admission");
+    state.plugins.set_domain(OWNER, KEY, stripped);
+    assert!(validate(&state).is_err(), "a record without admission");
+
+    let mut state = self::state();
+    let id = stored_structure(&mut state);
+    let mut ledger = ledger(&state).unwrap();
+    ledger.structures.get_mut(&id).unwrap().admission =
+        provenance::Admission::Captured { since: 0 };
+    save(&mut state, &ledger);
+    assert!(
+        validate(&state).is_err(),
+        "a plugin record with a settlement admission"
+    );
 }
 
 #[test]

@@ -39,6 +39,15 @@ carry the committing server tick. Records from before tick capture have an
 unknown tick, not a reconstructed value; tick-based checks must reject them.
 After replay, block-log WAL deltas remain queued for native-table upsert before
 the next checkpoint can prune their batches, including rollback marks.
+Each dimension also checkpoints one coverage row (row kind 2): the lowest
+sequence from which the log is complete. Eviction raises it past the evicted
+record, and a restart with capture off reserves a sequence and moves it there.
+The first tick after such a restart journals that floor in its block-log delta
+(`coverage`), so the gap is durable before any unlogged edit; recovery takes the
+highest floor of the row and the WAL tail. Restore never assigns a sequence below it.
+Each settlement structure record
+carries a required `admission` (capture off, or the log sequence at its survey),
+and construction provenance outside village territory is judged against it.
 
 Journal admission uses a 128-item FIFO and a 256 MiB estimated in-flight
 append budget; an oversized batch can enter alone. A full queue blocks the

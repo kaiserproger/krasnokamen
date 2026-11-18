@@ -106,6 +106,51 @@ pub(super) fn inside(
         .is_some_and(|town| town.contains(at))
 }
 
+/// A lapsed survey rechecks the whole unpaid outside plan before any current
+/// step can renew its admission. Later occurrences read their predecessor's
+/// planned result, not today's world at that coordinate.
+pub(super) fn lapsed_refusal(
+    state: &TickState,
+    record: &Structure,
+) -> Result<Option<[i32; 3]>, Failure> {
+    let Some(id) = record.settlement else {
+        return Ok(None);
+    };
+    if provenance::covered(state, record.admission) {
+        return Ok(None);
+    }
+    let index = record.snapshot.current_stage_index as usize;
+    let offset = record.snapshot.completed_work_units as usize;
+    let mut previous = BTreeMap::new();
+    for (stage, cells) in record.cells.iter().enumerate().skip(index) {
+        let evidence = record.portions.get(stage).ok_or(Failure::InvalidRequest)?;
+        for (n, cell) in cells
+            .iter()
+            .enumerate()
+            .skip(if stage == index { offset } else { 0 })
+        {
+            if inside(state, id, cell.at) {
+                continue;
+            }
+            let actual = match previous.get(&cell.at) {
+                Some(raw) => *raw,
+                None => identity(
+                    state,
+                    state
+                        .world
+                        .block_at(cell.at[0], cell.at[1], cell.at[2])
+                        .ok_or(Failure::Unloaded)?,
+                )?,
+            };
+            if evidence.expected.get(n) != Some(&actual) {
+                return Ok(Some(cell.at));
+            }
+            previous.insert(cell.at, identity(state, cell.state)?);
+        }
+    }
+    Ok(None)
+}
+
 /// Only unprocessed cells of the requested advance are checked, including after
 /// the first cell of a portion. Earlier writes are not admission-before cells.
 pub(super) fn stale_reason(
@@ -142,6 +187,9 @@ pub(super) fn stale_reason(
         )
     {
         return Ok(Some("footprint_changed".to_owned()));
+    }
+    if lapsed_refusal(state, record)?.is_some() {
+        return Err(Failure::Blocked);
     }
     for (n, cell) in cells.iter().enumerate() {
         let actual = identity(

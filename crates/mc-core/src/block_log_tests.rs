@@ -542,6 +542,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
                 Delta {
                     records: vec![stone(0), stone(1)],
                     marks: Vec::new(),
+                    coverage: 0,
                 },
             ),
             (
@@ -549,10 +550,14 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
                 Delta {
                     records: vec![stone(0)],
                     marks: Vec::new(),
+                    coverage: 0,
                 },
             ),
         ],
-        floors: vec![(Dimension::Overworld, 0), (Dimension::Nether, 0)],
+        floors: vec![
+            (Dimension::Overworld, pruned_at(0)),
+            (Dimension::Nether, pruned_at(0)),
+        ],
     });
     backlog.write(&store, &blocks, &items).expect("write");
     // A later checkpoint marks record 1 and prunes record 0.
@@ -562,9 +567,13 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
             Delta {
                 records: Vec::new(),
                 marks: vec![(1, true)],
+                coverage: 0,
             },
         )],
-        floors: vec![(Dimension::Overworld, 1), (Dimension::Nether, 0)],
+        floors: vec![
+            (Dimension::Overworld, pruned_at(1)),
+            (Dimension::Nether, pruned_at(0)),
+        ],
     });
     backlog.write(&store, &blocks, &items).expect("write");
     drop(store);
@@ -582,6 +591,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
     let tail = Delta {
         records: vec![stone(2)],
         marks: vec![(1, false), (7, true)],
+        coverage: 0,
     };
     let log = BlockLog::restore(BlockLogSettings::default(), vec![overworld, tail]);
     assert_eq!(
@@ -635,6 +645,7 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
         value: Box::new(Delta {
             records: vec![record(1, 99)],
             marks: Vec::new(),
+            coverage: 0,
         }),
     };
     let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).expect("wal");
@@ -684,6 +695,7 @@ fn wal_tick_that_is_present_must_be_a_tick() {
         value: Box::new(Delta {
             records: vec![record(1, 99)],
             marks: Vec::new(),
+            coverage: 0,
         }),
     })
     .expect("entry json");
@@ -791,6 +803,7 @@ fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
         value: Box::new(Delta {
             records: vec![old, new],
             marks: Vec::new(),
+            coverage: 0,
         }),
     };
     let mut wal = crate::journal::JournalWriter::open(world.path(), 1).expect("wal");
@@ -1011,9 +1024,10 @@ fn table_row_with_unknown_name_fails_load() {
                     },
                 ],
                 marks: Vec::new(),
+                coverage: 0,
             },
         )],
-        floors: vec![(Dimension::Nether, 0)],
+        floors: vec![(Dimension::Nether, pruned_at(0))],
     });
     backlog.write(&store, &blocks, &items).expect("write");
     let reader = || store.checkpoint_reader().expect("reader");
@@ -1105,4 +1119,215 @@ fn block_log_capture_cost() {
         sealed.as_nanos() as f64 / changes,
         serde_json::to_vec(record).expect("json").len(),
     );
+}
+
+fn pruned_at(prune: u64) -> Floor {
+    Floor { prune, coverage: 0 }
+}
+
+fn capturing(retention_secs: u64, max_records: usize) -> BlockLogSettings {
+    BlockLogSettings {
+        enabled: true,
+        retention_secs,
+        max_records,
+    }
+}
+
+/// Seal one record the way `journal` numbers it, then apply retention.
+fn seal(log: &mut BlockLog, time: u64) {
+    let seq = log.next_seq;
+    log.next_seq += 1;
+    log.push_record(record(seq, time));
+    log.evict(time);
+}
+
+/// PrepLifecycle §2.3, Sol VOTE 3 false refusal: an admission taken while the
+/// log is empty stays covered when the first records arrive later and nothing
+/// is evicted. Coverage is a sequence boundary, not the first record's time.
+#[test]
+fn coverage_starts_at_the_admission_not_at_the_first_record() {
+    let mut log = BlockLog::new(capturing(0, 10));
+    let since = log.admission_seq().expect("capture is on");
+    for time in [5_000, 6_000, 7_000] {
+        seal(&mut log, time);
+    }
+    assert!(log.covers(since), "nothing after the admission was evicted");
+}
+
+/// Sol VOTE 3 false permit: count eviction of a record sealed after the
+/// admission, in the same Unix second as the record left behind, uncovers it.
+#[test]
+fn count_eviction_past_the_admission_uncovers_it_within_one_second() {
+    let mut log = BlockLog::new(capturing(0, 2));
+    seal(&mut log, 1_000);
+    let since = log.admission_seq().expect("capture is on");
+    for _ in 0..3 {
+        seal(&mut log, 1_000);
+    }
+    assert_eq!(log.floor(), 2);
+    assert!(
+        !log.covers(since),
+        "record {since} was evicted even though the survivor shares its second"
+    );
+    let later = log.next_seq - 2;
+    assert!(
+        log.covers(later),
+        "everything from {later} is still retained"
+    );
+}
+
+/// A fully evicted log keeps its coverage floor across a checkpoint and a
+/// restart: the admission stays uncovered and no sequence is reused.
+#[test]
+fn coverage_floor_survives_full_eviction_and_restart() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("state.redb");
+    let store = mc_world::native::NativeStore::create(&path, [7; 32]).expect("store");
+    let blocks = required_blocks();
+    let items = mc_data::items::krasnokamen_required_items();
+    let settings = capturing(60, 100);
+    let mut log = BlockLog::new(settings);
+    let since = log.admission_seq().expect("capture is on");
+    let now = unix_now();
+    let air = blocks.block(&id("minecraft:air")).expect("air").default.0;
+    let stone = blocks
+        .block(&id("minecraft:stone"))
+        .expect("stone")
+        .default
+        .0;
+    for _ in 0..3 {
+        let seq = log.next_seq;
+        log.next_seq += 1;
+        log.push_record(Record {
+            change: Change::Block {
+                before: stone,
+                after: air,
+                entity: None,
+            },
+            ..record(seq, now)
+        });
+    }
+    let sealed = log.next_seq;
+    log.unpersisted.push(Delta {
+        records: log.records.iter().cloned().collect(),
+        marks: Vec::new(),
+        coverage: 0,
+    });
+    let mut backlog = Backlog::default();
+    let checkpoint = |log: &mut BlockLog, backlog: &mut Backlog| {
+        backlog.absorb(Persist {
+            deltas: log
+                .unpersisted
+                .drain(..)
+                .map(|delta| (Dimension::Overworld, delta))
+                .collect(),
+            floors: vec![(
+                Dimension::Overworld,
+                Floor {
+                    prune: log.floor(),
+                    coverage: log.coverage,
+                },
+            )],
+        });
+        backlog.write(&store, &blocks, &items).expect("write");
+    };
+    checkpoint(&mut log, &mut backlog);
+    assert!(log.covers(since));
+    // Retention ages every record out; the next checkpoint prunes every row.
+    log.evict(now + 3_600);
+    assert!(log.records.is_empty());
+    assert!(!log.covers(since));
+    checkpoint(&mut log, &mut backlog);
+    let reader = store.checkpoint_reader().expect("reader");
+    let rows = load(&reader, &blocks, &items).expect("rows");
+    // A dimension whose rows were all pruned reads like a world that never
+    // wrote one: only the coverage row can remember the floor.
+    let delta = rows.get(&Dimension::Overworld).cloned().unwrap_or_default();
+    assert!(delta.records.is_empty(), "every record row was pruned");
+    let restored = BlockLog::restore_replay(settings, vec![delta], Vec::new());
+    assert!(
+        !restored.covers(since),
+        "a restart must not forget that history since the admission was evicted"
+    );
+    assert!(
+        restored.next_seq >= sealed,
+        "a fully evicted log never reuses a sequence"
+    );
+}
+
+/// PP-1 / PV2-2: a restart with capture off is a gap, durable before the next
+/// checkpoint. The first tick after a capture-off recovery journals the gap in
+/// the same WAL batch as its unlogged world change; a kill after that batch is
+/// flushed and before any checkpoint, then a normal recovery with capture back
+/// on, restores the gap's floor, so the old admission stays uncovered while a
+/// new one is covered.
+#[test]
+fn capture_off_restart_killed_before_checkpoint_keeps_the_gap() {
+    let world = tempfile::tempdir().expect("tempdir");
+    let mut config = crate::CoreConfig::new(world.path().to_path_buf(), 42);
+    config.view_distance = 1;
+    config.simulation_distance = 1;
+    assert!(config.block_log.enabled, "the survey ran with capture on");
+    let initial = crate::Core::open(config.clone()).expect("fresh world");
+    let spawn = initial.world_spawn();
+    initial.shutdown();
+    drop(initial);
+    let base = crate::native_checkpoint::tests::read_manifest(&config)
+        .expect("manifest")
+        .tick;
+    let registry = CoreRegistry::load(None).expect("registry");
+    let rows = || {
+        let store = crate::native_checkpoint::tests::fixture_store(&config).expect("store");
+        load(
+            &store.checkpoint_reader().expect("reader"),
+            &registry.blocks,
+            &registry.items,
+        )
+        .expect("rows")
+        .remove(&Dimension::Overworld)
+        .unwrap_or_default()
+    };
+    let since = BlockLog::restore(config.block_log, vec![rows()])
+        .admission_seq()
+        .expect("capture is on");
+    // Recovery with capture off and its first tick. The real journal adds the
+    // gap to the batch that carries the tick's unlogged world change; the
+    // batch is flushed and the process killed (`JournalWriter` has no
+    // shutdown work) before any checkpoint.
+    let mut state = test_state();
+    state.block_log = BlockLog::restore_replay(
+        BlockLogSettings {
+            enabled: false,
+            ..config.block_log
+        },
+        vec![rows()],
+        Vec::new(),
+    );
+    assert!(
+        !state.block_log.covers(since),
+        "nothing is proven without capture"
+    );
+    let gap = state.block_log.coverage;
+    let mut entries = vec![crate::journal::JournalEntry::Block {
+        pos: [spawn[0], spawn[1] + 2, spawn[2]],
+        state: registry.states.stone,
+    }];
+    journal(&mut state, base + 1, &mut entries);
+    let mut wal = crate::journal::JournalWriter::open(world.path(), 1).expect("wal");
+    wal.append(base + 1, base + 1, &entries).expect("append");
+    wal.flush().expect("flush");
+    drop(wal);
+    // Normal recovery with capture back on replays the batch; its own
+    // checkpoint then stores the floor it recovered.
+    let replayed = crate::Core::open(config.clone()).expect("world with the WAL batch opens");
+    replayed.shutdown();
+    drop(replayed);
+    let back = BlockLog::restore(config.block_log, vec![rows()]);
+    assert_eq!(back.coverage, gap, "recovery keeps the highest floor");
+    assert!(
+        !back.covers(since),
+        "edits made while capture was off were never recorded"
+    );
+    let fresh = back.admission_seq().expect("capture is on again");
+    assert!(back.covers(fresh), "an admission after the gap is covered");
 }
