@@ -227,13 +227,7 @@ fn lapsed_history_refuses_while_a_remaining_outside_cell_has_a_player_edit() {
     assert_eq!(snapshot.completed_work_units, 0, "no cell was worked");
     assert!(snapshot.consumed.is_empty());
     // The ordinary stall path frees the unpaid slot and requeues the order.
-    lot.state.day_time = 2_000;
-    for _ in 0..=300 {
-        crate::villager::building::tick(&mut lot.state, lot.id);
-        lot.state.tick += 20;
-        lot.state.day_time += 20;
-        assign_builder(&mut lot.state, lot.id);
-    }
+    shift_passes(&mut lot, 2_000, 301);
     let record = lot.state.settlements.get(lot.id).unwrap();
     assert!(
         record.projects.is_empty(),
@@ -366,11 +360,23 @@ fn chat(state: &TickState, connection: crate::boundary::ConnectionId) -> Vec<Str
     out
 }
 
+/// Watch passes on the work shift, 20 ticks apart, from `day_time`.
+fn shift_passes(lot: &mut Lot, day_time: i64, passes: usize) {
+    lot.state.day_time = day_time;
+    for _ in 0..passes {
+        crate::villager::building::tick(&mut lot.state, lot.id);
+        lot.state.tick += 20;
+        lot.state.day_time += 20;
+        assign_builder(&mut lot.state, lot.id);
+    }
+}
+
 /// Sol S-2: a paid remainder refused for provenance waits while the player's
 /// edit stays in the log, which with time eviction off is forever. The owner
-/// is told the blocking cell once per stall episode.
+/// is told the blocking cell once per stall episode, also when they were
+/// offline at the stall report and come online later without new progress.
 #[test]
-fn a_paid_remainder_refused_for_provenance_notifies_the_owner_once() {
+fn a_paid_remainder_refused_for_provenance_tells_the_owner_once_after_a_late_login() {
     let mut lot = lot(true, true);
     let handle = lot.state.settlements.get(lot.id).unwrap().projects[0]
         .structure
@@ -397,26 +403,33 @@ fn a_paid_remainder_refused_for_provenance_notifies_the_owner_once() {
     let owner = uuid::Uuid::from_u128(77);
     let connection = crate::boundary::ConnectionId(77);
     lot.state.settlements.get_mut(lot.id).unwrap().owner = Some(owner.to_string());
+    // Two stall windows while the owner is offline: the episode is reported.
+    shift_passes(&mut lot, 2_000, 301);
+    let progress = executor::status(&lot.state, lot.id, &handle).unwrap();
     lot.state.connections.insert(
         connection,
         crate::boundary::EntityId(77),
         owner,
         "Owner".into(),
     );
-    // Two stall windows on shift: the episode reports twice, notifies once.
-    lot.state.day_time = 2_000;
-    for _ in 0..=300 {
-        crate::villager::building::tick(&mut lot.state, lot.id);
-        lot.state.tick += 20;
-        lot.state.day_time += 20;
-        assign_builder(&mut lot.state, lot.id);
-    }
     let cell = format!("{} {} {}", at[0], at[1], at[2]);
-    let notices = chat(&lot.state, connection);
+    let told = |state: &TickState| {
+        chat(state, connection)
+            .iter()
+            .filter(|line| line.contains(&cell))
+            .count()
+    };
+    // The login, a few passes and no stall window later: told once.
+    shift_passes(&mut lot, 2_000, 5);
+    assert_eq!(told(&lot.state), 1, "{:?}", chat(&lot.state, connection));
+    // Two more stall windows of the same episode: not again.
+    shift_passes(&mut lot, 2_000, 301);
+    assert_eq!(told(&lot.state), 1, "{:?}", chat(&lot.state, connection));
+    let now = executor::status(&lot.state, lot.id, &handle).unwrap();
     assert_eq!(
-        notices.iter().filter(|line| line.contains(&cell)).count(),
-        1,
-        "{notices:?}"
+        (now.current_stage_index, now.completed_work_units),
+        (progress.current_stage_index, progress.completed_work_units),
+        "no progress started a new episode"
     );
     assert!(lot.is_sand(at), "the player's block stays");
     assert_eq!(

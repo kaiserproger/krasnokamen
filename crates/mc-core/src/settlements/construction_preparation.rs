@@ -240,25 +240,51 @@ pub(crate) fn changed_project(
         .cloned()
 }
 
-/// The owner's notice at a stall report whose paid remainder is refused for
-/// provenance outside the territory (PrepLifecycle §2.3, Sol S-2). That wait
-/// ends only when the blocking player edit leaves the log, never with time
-/// eviction off, so the first report of each episode names the cell.
-pub(super) fn provenance_wait(
-    state: &TickState,
+/// The owner's notice for a stalled paid remainder refused for provenance
+/// outside the territory (PrepLifecycle §2.3, Sol S-2). That wait ends only
+/// when the blocking player edit leaves the log, never with time eviction off,
+/// so it is said once per stall episode: on the first watch pass after the
+/// episode's report that finds the owner online (a pass that finds no such
+/// refusal settles the episode silently). An owner who was offline at the
+/// report hears it when they come online, without new progress.
+pub(super) fn tell_provenance_wait(
+    state: &mut TickState,
     id: SettlementId,
     project: &Project,
     snapshot: &mc_script::ScriptStructureSnapshot,
-    report: bool,
-) -> Option<String> {
-    if !report || snapshot.consumed.is_empty() {
-        return None;
+) {
+    let key = (id, project.structure.clone());
+    let progress = (
+        project.structure.clone(),
+        snapshot.current_stage_index,
+        snapshot.completed_work_units,
+    );
+    if snapshot.consumed.is_empty()
+        || state
+            .settlements
+            .builder_watch
+            .get(&key)
+            .is_none_or(|watch| {
+                !watch.reported
+                    || watch.progress != progress
+                    || watch.told.as_ref() == Some(&progress)
+            })
+    {
+        return;
     }
-    let [x, y, z] = executor::provenance_refusal(state, id, &project.structure)?;
-    Some(format!(
-        "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
-        project.blueprint
-    ))
+    let Some(connection) = super::super::owner_connection(state, id) else {
+        return;
+    };
+    if let Some([x, y, z]) = executor::provenance_refusal(state, id, &project.structure) {
+        let message = format!(
+            "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
+            project.blueprint
+        );
+        state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
+    }
+    if let Some(watch) = state.settlements.builder_watch.get_mut(&key) {
+        watch.told = Some(progress);
+    }
 }
 
 #[cfg(test)]
