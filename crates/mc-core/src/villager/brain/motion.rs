@@ -595,7 +595,7 @@ const WATER_VERTICAL_DRAG: f64 = 0.8;
 /// Vertical arrival band of a committed waypoint: a body that can stand on its
 /// waypoint descends to it, so a lower waypoint stays committed until the body
 /// actually arrives.
-const WAYPOINT_VERTICAL_REACH: f64 = 0.6;
+pub(crate) const WAYPOINT_VERTICAL_REACH: f64 = 0.6;
 
 /// A body overlapping fluid floats and cannot descend to the bed under a water
 /// waypoint: the route gives a one-block channel its bed top as the standing

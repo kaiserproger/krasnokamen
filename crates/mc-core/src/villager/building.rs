@@ -115,11 +115,8 @@ fn in_other_body(
     )
 }
 
-/// The same test for a stand on the centre of cell `at`, wherever on it the
-/// builder arrives: the brain stops within WAYPOINT_REACH of the centre, so a
-/// stand beside another site would leave the arrived body inside it and never
-/// in reach (Spain seed 100: a builder 0.25 off its stand's centre stood
-/// 0.05 into a neighbour's site for a whole stall window, worksite_unreached).
+/// The same test for a stand on the centre of cell `at`. An arrived builder
+/// settles on that centre ([`settle_on_stand`]), so this is the body it works in.
 fn standing_in_other_body(
     state: &TickState,
     project: &construction::Project,
@@ -135,7 +132,7 @@ fn standing_in_other_body(
             f64::from(at.y),
             f64::from(at.z) + 0.5,
         ],
-        body.half_width + super::brain::WAYPOINT_REACH,
+        body.half_width,
         body.height,
     )
 }
@@ -299,10 +296,8 @@ fn site_target(
         };
         // A neighbour lot's future body is not a stand: another project would
         // place a wall through this builder. The body, not the feet column, is
-        // what must stay clear (D8 review SOL-4/R3-5), wherever on the stand
-        // the brain lets it arrive.
-        let arrival = body.half_width + super::brain::WAYPOINT_REACH;
-        if in_other_body(state, project, stand, arrival, body.height) {
+        // what must stay clear (D8 review SOL-4/R3-5).
+        if in_other_body(state, project, stand, body.half_width, body.height) {
             continue;
         }
         let placement_distance = (stand[0] - f64::from(next[0]) - 0.5).powi(2)
@@ -366,16 +361,46 @@ pub(crate) fn work(
             exact: false,
         });
     }
+    let stand = site_target(
+        state,
+        project,
+        next,
+        slot,
+        v.navigation_target.filter(|_| !v.navigation_search_failed),
+    )?;
+    settle_on_stand(state, slot, stand);
     Some(WorkTarget {
-        pos: site_target(
-            state,
-            project,
-            next,
-            slot,
-            v.navigation_target.filter(|_| !v.navigation_search_failed),
-        )?,
+        pos: stand,
         exact: true,
     })
+}
+
+/// The brain ends a route anywhere within WAYPOINT_REACH of the stand's
+/// standing point, but a stand is chosen, and kept clear of neighbour sites,
+/// for a body on that point. An arrived builder takes the last sub-cell step
+/// onto it, as a sleeper settles on its bed (Spain seed 100: a builder 0.25 off
+/// its felling stand's centre stood 0.05 into a neighbour's site for a whole
+/// stall window). Testing every stand for the whole arrival tolerance instead
+/// left a road segment's only stand, which abuts the next segment, unusable.
+fn settle_on_stand(state: &mut TickState, slot: EntitySlot, stand: BlockPos) {
+    let pos = state.entities.pos(slot);
+    let body = state.entities.body(slot);
+    let Some(point) = crate::settlements::allocator::standing(
+        &state.world,
+        &state.registry,
+        stand,
+        body.half_width,
+        body.height,
+    ) else {
+        return;
+    };
+    let arrived = (pos[0] - point[0]).powi(2) + (pos[2] - point[2]).powi(2)
+        < super::brain::WAYPOINT_REACH.powi(2)
+        && (pos[1] - point[1]).abs() < super::brain::WAYPOINT_VERTICAL_REACH;
+    if arrived && pos != point {
+        state.entities.set_pos(slot, point);
+        state.entities.set_vel(slot, [0.0; 3]);
+    }
 }
 
 /// Whole body outside every future cell and within placement reach of `next`.
