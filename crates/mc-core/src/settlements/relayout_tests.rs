@@ -17,6 +17,18 @@ fn storage_lot(state: &TickState, id: SettlementId) -> ([i32; 3], [i32; 2], layo
     for (front, normal) in network.frontage() {
         if let Some(lot) = network.lot(blueprint, front, normal) {
             let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+            let bounds = ScriptWorldBounds::new(
+                lot.origin,
+                std::array::from_fn(|axis| lot.origin[axis] + i32::from(size[axis]) - 1),
+            )
+            .unwrap();
+            // The fixture's bootstrap chest is a container the site search
+            // refuses, so the planner never takes this lot.
+            if (bounds.min[0]..=bounds.max[0]).contains(&1)
+                && (bounds.min[2]..=bounds.max[2]).contains(&1)
+            {
+                continue;
+            }
             return (front, normal, lot, size);
         }
     }
@@ -99,7 +111,9 @@ fn admit(
         size,
         None,
         &mut Default::default(),
+        None,
     )
+    .map(|_cost| ())
 }
 
 /// Every node still on the walk reaches the bell after every applied cell.
@@ -257,6 +271,24 @@ fn farmland_removal_conserves_the_harvest() {
             }
         }
     }
+    // Every other lot stays a stone pillar through the whole survey band, so
+    // this field is the only legal site the planner can take.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    for x in bounds.min[0] - 16..=bounds.max[0] + 16 {
+        for z in bounds.min[2] - 16..=bounds.max[2] + 16 {
+            if layout::cell(anchor, x, z) != Cell::Lot
+                || ((bounds.min[0]..=bounds.max[0]).contains(&x)
+                    && (bounds.min[2]..=bounds.max[2]).contains(&z))
+                // The fixture's bootstrap chest must keep serving the bill.
+                || (x, z) == (1, 1)
+            {
+                continue;
+            }
+            for y in FLOOR + 1..=FLOOR + 16 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+            }
+        }
+    }
     state.world.fold_overlay();
     admit(&state, id, lot, size).expect("a farmland lot is admitted");
     let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
@@ -299,9 +331,35 @@ fn farmland_removal_conserves_the_harvest() {
         "a mature field yields wheat: {loot:?}"
     );
     // The same plan executes: the clear stage banks the harvest, the build
-    // stage retires the field to the soil it is made of.
-    crate::settlements::construction::request_build(&mut state, id, "storage")
-        .expect("the farmland lot starts");
+    // stage retires the field to the soil it is made of. The site search is
+    // covered by the crossing-lot test, so this hands its own lot straight to
+    // the canonical executor.
+    let project = super::super::Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin: lot.origin,
+        rotation: lot.rotation,
+        building: None,
+        structure: String::new(),
+        ordered: true,
+        borrowed_builder: None,
+    };
+    assert!(
+        super::super::begin(&mut state, project, "oak", 0),
+        "the field is prepared and admitted"
+    );
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .map(|project| (project.origin, project.rotation)),
+        Some((lot.origin, lot.rotation)),
+        "the project is the farmland lot"
+    );
     complete(&mut state, id, builder);
     for at in &crops {
         assert_ne!(

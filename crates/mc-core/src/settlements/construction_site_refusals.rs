@@ -32,7 +32,7 @@ pub(super) enum Reason {
     MaterialBill,
     NoPathDetour,
 }
-const REASONS: [Reason; 22] = [
+const REASONS: [Reason; 23] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -622,6 +622,11 @@ pub(super) fn check(
                 if liquid::has_fluid(state, block) {
                     return Err(Reason::LiquidInWork);
                 }
+                // A container is never the re-layout's work: it refuses even
+                // when the cell is a lot crop or a retired village path.
+                if state.block_entities.contains_key(&(x, y, z)) {
+                    return Err(Reason::ProtectedObstruction);
+                }
                 // A lot crop and a retired village path cell are the
                 // re-layout's own removal work, never a refusal.
                 if relayout
@@ -632,8 +637,7 @@ pub(super) fn check(
                 }
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 let tree_clearable = tree && clearance.clearable(state, [x, y, z], Some(lot));
-                if state.block_entities.contains_key(&(x, y, z))
-                    || (tree && !tree_clearable)
+                if (tree && !tree_clearable)
                     || (!clearable(state, block) && !excavatable(state, block) && !tree_clearable)
                 {
                     return Err(tree_refusal(state, [x, y, z]));

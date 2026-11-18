@@ -1570,7 +1570,11 @@ pub(super) fn surface_y_for_lot(
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above) || clearance.clearable(state, [x, y + 1, z], lot)
+                    clearable(state, above)
+                        || clearance.clearable(state, [x, y + 1, z], lot)
+                        // A crop does not hide its field: a needed lot surveys
+                        // the farmland under the plants it removes (D10).
+                        || crate::farming::age_of(&state.registry.blocks, above).is_some()
                 })
         })
 }
