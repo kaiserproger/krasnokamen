@@ -299,8 +299,9 @@ fn battle_resume_rebuilds_facing_from_the_journaled_pose() {
 /// tick/damage.rs) pushes the victim along the bearing it strikes at, as before
 /// D36; also after a crash recovered from checkpoint and WAL (the charge is
 /// journaled, the facing state rebuilt). Each measured windup starts with the
-/// striker's yaw and head turned 60 degrees off its victim: the split law
-/// would hold that body past the 10-tick windup, and the push would follow it.
+/// striker's yaw and head turned 60 degrees off its victim and the facing state
+/// dropped, as after a restore: the split law would rebuild that body where it
+/// stands and hold it past the 10-tick windup, and the push would follow it.
 /// This melee lands about one blow in forty (cinematic removal odds), so at
 /// the impact tick the blow the strike builds (striker, position, stored yaw,
 /// charge bonus; battle/combat.rs `strike`) is merged natively instead of
@@ -385,6 +386,7 @@ fn charged_push(drill: &mut Drill, charged: u64) -> f32 {
             .state
             .entities
             .set_facing(slot, [toward + 60.0, pitch, toward + 60.0]);
+        drill.state.hostile.battle.facing = Default::default();
         // Up to the impact tick: its battle step strikes with the yaw stored now.
         let impact = start + windup;
         while drill.state.hostile.battle.elapsed_ticks < impact
