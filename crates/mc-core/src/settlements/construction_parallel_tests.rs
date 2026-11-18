@@ -595,22 +595,29 @@ fn a_lost_builder_keeps_its_binding_only_while_the_load_is_pending() {
         *stack = mc_data::ItemStack::new(log, 64);
     }
     super::rebind_lost_builders(&mut state, id);
-    assert_eq!(
+    assert!(
         project_for_structure(state.settlements.get(id).unwrap(), &handle)
-            .and_then(|project| project.builder)
-            .map(|(bound, _)| bound),
-        Some(uuid),
-        "a pending return keeps the binding so a later pass retries it"
+            .is_some_and(|project| project.builder.is_none()),
+        "the project slot is freed at once"
+    );
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .carry_pending
+            .contains_key(&uuid),
+        "a pending return becomes a recorded duty so a later pass retries it"
     );
     // Space appears: the next pass delivers the load and frees the project.
     for stack in chest(&mut state) {
         *stack = mc_data::ItemStack::EMPTY;
     }
     super::rebind_lost_builders(&mut state, id);
+    super::drain_carry_duties_for_test(&mut state, id);
     assert!(
-        project_for_structure(state.settlements.get(id).unwrap(), &handle)
-            .is_some_and(|project| project.builder.is_none()),
-        "a delivered load releases the binding"
+        state.settlements.get(id).unwrap().carry_pending.is_empty(),
+        "a delivered load clears the duty"
     );
 }
 
@@ -635,5 +642,207 @@ fn a_converting_builder_never_holds_its_project() {
         project_for_structure(state.settlements.get(id).unwrap(), &handle)
             .is_some_and(|project| project.builder.is_none()),
         "a converting builder cannot hold the project"
+    );
+}
+
+/// R4-1: an infected builder frees its project at once. Its carried materials
+/// become a recorded return duty that survives the project being cancelled and
+/// a cure delivers them exactly once; another resident's own load is not taken.
+#[test]
+fn an_infected_builder_releases_its_project_and_owes_its_load() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    let food = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bread").unwrap())
+        .expect("bread id");
+    let stored_logs = |state: &TickState| {
+        state
+            .block_entities
+            .get(&(1, 201, 1))
+            .unwrap()
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == log)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+    };
+    let stored_before = stored_logs(&state);
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
+    // A second resident carries its own load with no project at all: the duty
+    // mechanism must never empty an unbound resident's pockets.
+    let lumberjack = crate::settlements::allocator::tests::villager(&mut state, [5.5, 201.0, 5.5]);
+    {
+        let v = state
+            .entities
+            .row_mut(lumberjack)
+            .villager
+            .as_mut()
+            .unwrap();
+        v.data.profession = crate::villager::VillagerProfession::Lumberjack;
+        v.inventory[0] = Some(mc_data::ItemStack::new(log, 3));
+        v.inventory[1] = Some(mc_data::ItemStack::new(food, 2));
+    }
+    // The infection keeps the uuid and the row but the body is no longer a
+    // live villager: the slot and the load's return duty must both be recorded.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    super::rebind_lost_builders(&mut state, id);
+    assert!(
+        project_for_structure(state.settlements.get(id).unwrap(), &handle)
+            .is_some_and(|project| project.builder.is_none()),
+        "an infected builder releases its project"
+    );
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .carry_pending
+            .contains_key(&uuid),
+        "the load's return is recorded, not dropped"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .as_ref()
+            .map(|stack| stack.count),
+        Some(7),
+        "the load waits on the body while it is not addressable"
+    );
+    assert_eq!(stored_logs(&state), stored_before, "nothing is invented");
+    // The project goes away entirely: the duty must outlive it.
+    let project = project_clone(&state, id, &handle);
+    super::retry_preparation(&mut state, id, &project).unwrap();
+    assert!(handles(&state, id).is_empty(), "the project is cancelled");
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .carry_pending
+            .contains_key(&uuid),
+        "the duty survives the project"
+    );
+    // A cure makes the body addressable: the construction tick delivers once.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = None;
+    state.tick = super::PLAN_CADENCE;
+    super::tick(&mut state);
+    if state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory[0]
+        .is_some()
+    {
+        state.tick = super::PLAN_CADENCE * 2;
+        super::tick(&mut state);
+    }
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .is_none(),
+        "the cured body hands its load over"
+    );
+    assert_eq!(
+        stored_logs(&state),
+        stored_before + 7,
+        "the load reaches storage exactly once"
+    );
+    assert!(
+        state.settlements.get(id).unwrap().carry_pending.is_empty(),
+        "a delivered duty is cleared"
+    );
+    // The unbound lumberjack keeps its own load.
+    assert_eq!(
+        state
+            .entities
+            .row(lumberjack)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .as_ref()
+            .map(|stack| stack.count),
+        Some(3),
+        "an unbound resident's own load is not taken"
+    );
+}
+
+/// The project as the registry holds it, for a call that needs a value.
+fn project_clone(state: &TickState, id: SettlementId, handle: &str) -> Project {
+    project_for_structure(state.settlements.get(id).expect("settlement"), handle)
+        .cloned()
+        .expect("active project")
+}
+
+/// R4-5: the indexed cancel removes the request at the position the owner sees
+/// and leaves the rest of the sequenced queue in place.
+#[test]
+fn an_indexed_cancel_takes_the_named_request() {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    state.settlements.get_mut(id).unwrap().owner = Some("owner".into());
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        for name in ["house", "house", "house"] {
+            access::push_order(
+                record,
+                OwnerOrder {
+                    seq: 0,
+                    blueprint: name.into(),
+                    level: 1,
+                    building: None,
+                },
+            );
+        }
+    }
+    assert!(super::cancel_pending_at(&mut state, id, 1).is_ok());
+    let seqs: Vec<u64> = orders(state.settlements.get(id).unwrap())
+        .map(|order| order.seq)
+        .collect();
+    assert_eq!(seqs, vec![1, 3], "the second request is the one removed");
+    assert_eq!(
+        super::cancel_pending_at(&mut state, id, 5),
+        Err("No pending construction order #6.".to_string())
     );
 }

@@ -1452,9 +1452,89 @@ pub(crate) enum CarryReturn {
     Delivered,
     /// Storage could not take it all yet: a later pass retries.
     Pending,
-    /// The body can no longer be addressed (dead, converting, gone): nothing
-    /// is left to return and the binding must not be held by it.
+    /// The body cannot be addressed right now (dead, converting, gone). It
+    /// never holds a binding, and its load is picked up by the planner pass
+    /// once the body is addressable again.
     Unreachable,
+}
+
+/// Deposit at most `owed` of these items from one body into settlement storage
+/// and return what is still owed. Everything the body carries beyond the owed
+/// amounts stays with it, so a resident that later picks up its own food or a
+/// new working load never hands that over (D8 review R4-1).
+pub(crate) fn return_owed_carry(
+    state: &mut TickState,
+    id: SettlementId,
+    uuid: uuid::Uuid,
+    owed: &[(u32, u32)],
+) -> Option<Vec<(u32, u32)>> {
+    if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
+        return Some(owed.to_vec());
+    }
+    let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
+        // Not addressable right now (infected, converting, gone): the debt
+        // stays until the body is a villager again.
+        return if state.entities.slot_of_uuid(uuid).is_some() {
+            Some(owed.to_vec())
+        } else {
+            None
+        };
+    };
+    let images = source_images(state, id);
+    let mut post: Vec<Vec<mc_data::ItemStack>> =
+        images.iter().map(|image| image.slots.clone()).collect();
+    let mut after = carry.slots.clone();
+    let mut residual: Vec<(u32, u32)> = Vec::new();
+    for &(item, count) in owed {
+        let mut left = count;
+        for stack in after
+            .iter_mut()
+            .filter(|stack| !stack.is_empty() && stack.item_id == item)
+        {
+            if left == 0 {
+                break;
+            }
+            let take = left.min(stack.count as u32);
+            let mut trial = post.clone();
+            let mut piece = mc_data::ItemStack::new(item, take as i32);
+            if !crate::settlements::construction_crafting::add_stack(state, &mut trial, &piece) {
+                break;
+            }
+            post = trial;
+            stack.count -= take as i32;
+            if stack.count == 0 {
+                *stack = mc_data::ItemStack::EMPTY;
+            }
+            left -= take;
+            piece.count = 0;
+        }
+        if left > 0 {
+            residual.push((item, left));
+        }
+    }
+    let mut changes: Vec<_> = images
+        .into_iter()
+        .zip(post)
+        .filter_map(|(before, after)| {
+            (before.slots != after).then_some(inventory::Change { before, after })
+        })
+        .collect();
+    if changes.is_empty() {
+        return Some(residual);
+    }
+    changes.push(inventory::Change {
+        before: carry,
+        after,
+    });
+    if inventory::commit(state, changes).is_err() {
+        // A refused commit keeps the whole debt: nothing moved.
+        return Some(owed.to_vec());
+    }
+    if residual.is_empty() {
+        Some(Vec::new())
+    } else {
+        Some(residual)
+    }
 }
 
 /// Return one builder's load to settlement storage. Release, rebind and
@@ -1469,7 +1549,8 @@ pub(crate) fn return_carry_of(
         return CarryReturn::Pending;
     }
     let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
-        // The row is no longer addressable as a live villager.
+        // The row is not addressable as a live villager right now: its load
+        // waits on the body for the planner pass (R4-1).
         return CarryReturn::Unreachable;
     };
     if carry.slots.iter().all(mc_data::ItemStack::is_empty) {

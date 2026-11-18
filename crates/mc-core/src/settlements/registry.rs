@@ -67,6 +67,12 @@ pub struct SettlementRecord {
     pub orders: Vec<super::construction::OwnerOrder>,
     #[serde(default)]
     pub construction_cursor: u32,
+    /// Material debts of released builders, per item: the exact load each body
+    /// still owes storage. The slot is freed at once; the debt survives a
+    /// restart and is drained by the construction pass, independent of which
+    /// project is active (R4-1). No `serde(default)`: a row without the key
+    /// refuses (DESIGN.md:25).
+    pub carry_pending: std::collections::BTreeMap<uuid::Uuid, Vec<(u32, u32)>>,
     #[serde(default)]
     pub founding: Option<super::construction::FoundingExpedition>,
 }
@@ -523,6 +529,7 @@ impl Registry {
             furnace_workstation: None,
             orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         };
         validate_record(&record)?;
@@ -575,6 +582,7 @@ impl Registry {
             furnace_workstation: None,
             orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         };
         validate_record(&record)?;

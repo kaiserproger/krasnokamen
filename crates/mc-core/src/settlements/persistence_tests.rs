@@ -301,6 +301,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
                     furnace_workstation: None,
                     orders: Vec::new(),
                     construction_cursor: 0,
+                    carry_pending: Default::default(),
                     founding: None,
                 },
             })
@@ -339,6 +340,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
                 furnace_workstation: None,
                 orders: Vec::new(),
                 construction_cursor: 0,
+                carry_pending: Default::default(),
                 founding: None,
             }),
         });
@@ -374,6 +376,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             furnace_workstation: None,
             orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         }),
     });
@@ -403,6 +406,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             furnace_workstation: None,
             orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         }),
     });

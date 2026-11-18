@@ -37,7 +37,6 @@ pub(crate) fn project_for_structure<'a>(
     projects(record).find(|project| project.structure == handle)
 }
 
-/// [`project_for_structure`], mutably.
 /// Admit `project` into the settlement's active set.
 pub(crate) fn push_project(record: &mut SettlementRecord, project: Project) {
     record.projects.push(project);
@@ -105,7 +104,6 @@ pub(crate) fn take_project(record: &mut SettlementRecord, handle: &str) -> Optio
 
 /// Drop every active project. Only a settlement teardown uses this.
 /// The project this villager builds: the binding is the only authority (D8).
-///
 /// An unbound resident builds nothing, so it can never stand at another
 /// project's worksite or pay for its cells.
 pub(crate) fn project_of_builder(
@@ -175,10 +173,6 @@ pub(crate) fn insert_order(record: &mut SettlementRecord, index: usize, order: O
 }
 
 /// Drop every pending request.
-pub(crate) fn clear_orders(record: &mut SettlementRecord) {
-    record.orders.clear();
-}
-
 /// True when the settlement has neither active work nor a pending request.
 pub(crate) fn idle(record: &SettlementRecord) -> bool {
     projects(record).next().is_none() && orders(record).next().is_none()

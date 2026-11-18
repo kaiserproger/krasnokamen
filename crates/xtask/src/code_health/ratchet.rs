@@ -87,7 +87,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // per-project summary split, the submission-sequence stamp and the
         // joint-proof funding cause. The next extraction candidate is the
         // admission/queue block, which now owns submit_order's sequence.
-        ("settlements/construction.rs", 1_255),
+        // D8 review round 4 adds 41: the persisted carry debt (owe/drain/
+        // debtor) and its comments live with the planner they serve. The next
+        // extraction candidate is the stall watch plus carry recovery, which
+        // belong in a construction_recovery module.
+        ("settlements/construction.rs", 1_296),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

@@ -286,6 +286,26 @@ pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<
     Ok(())
 }
 
+/// Cancel one queued request by zero-based position; the error names the
+/// one-based position the player asked for. The queue is sequenced, so the
+/// position is the one the owner sees (D8 review R4-5: the indexed cancel the
+/// owner command and UI dispatch resolve).
+pub(crate) fn cancel_pending_at(
+    state: &mut TickState,
+    id: SettlementId,
+    index: usize,
+) -> Result<(), String> {
+    let record = state
+        .settlements
+        .get_mut(id)
+        .ok_or("Settlement not found.")?;
+    access::take_order(record, index)
+        .ok_or_else(|| format!("No pending construction order #{}.", index + 1))?;
+    record.revision = record.revision.saturating_add(1);
+    state.settlements.site_watch.remove(&id);
+    Ok(())
+}
+
 pub(crate) fn pending_reason(state: &TickState, id: SettlementId) -> Option<String> {
     pending_reason_at(state, id, 0)
 }
@@ -721,7 +741,7 @@ fn funded_variant<'a>(
         // project's oak obligation is never re-coloured, SOL-2), and a reserved
         // oak bill does not hide a fundable birch one (SOL-2b).
         species_candidates(state, images).find_map(|species| {
-            let candidate = species_bill(state, &bill, species).unwrap_or_else(|| bill.to_vec());
+            let candidate = species_bill(state, &bill, species)?;
             let combined = with_joint(candidate, &joint);
             super::construction_crafting::can_fund(state, &combined, images)
                 .then_some((species, color))
@@ -909,7 +929,9 @@ fn funding_error(state: &TickState, id: SettlementId, materials: &[(u32, u32)]) 
     // a candidate that would be fundable alone but not on top of the other
     // projects' promises is a joint failure (D8 review P3).
     let own_fundable = super::construction_crafting::can_fund(state, &bill, &images);
-    let joint = joint_active_bill(state, id).unwrap_or_default();
+    let Some(joint) = joint_active_bill(state, id) else {
+        return Some("not enough: another project's bill is unreadable".into());
+    };
     if own_fundable && !joint.is_empty() {
         let mut combined = bill.to_vec();
         for (item, count) in &joint {
@@ -2368,12 +2390,12 @@ fn rebind_lost_builders(state: &mut TickState, id: SettlementId) {
         .filter(|(_, uuid)| !live_builder(state, id, *uuid))
         .collect();
     for (handle, uuid) in lost {
-        // Only a load the store could not take keeps the binding, so the next
-        // pass retries an addressable return. A body that is gone, dead or
-        // converting has nothing left to deliver and never holds the project
-        // (D8 review SOL-6/R3-1).
-        if executor::return_carry_of(state, id, uuid) == executor::CarryReturn::Pending {
-            continue;
+        // The slot is freed at once: the load's return is a recorded duty, so a
+        // dead or converting body never holds the project and a delivery that
+        // cannot happen now is retried by the construction pass after a cure
+        // (D8 review SOL-6/R3-1, R4-1).
+        if executor::return_carry_of(state, id, uuid) != executor::CarryReturn::Delivered {
+            owe_carry(state, id, uuid, &handle);
         }
         let Some(mut record) = state.settlements.get_mut(id) else {
             return;
@@ -2660,8 +2682,12 @@ pub(crate) fn retry_preparation(
             "Construction queue is full: MAX_ORDERS={MAX_ORDERS}."
         ));
     }
-    if let Some((uuid, _)) = project.builder {
-        let _ = executor::return_carry_of(state, id, uuid);
+    if let Some((uuid, _)) = project.builder
+        && executor::return_carry_of(state, id, uuid) != executor::CarryReturn::Delivered
+    {
+        // The cancelled request keeps its return duty even though the project
+        // and its bill are gone (D8 review R4-1).
+        owe_carry(state, id, uuid, &project.structure);
     }
     cancel_project(state, id, &project.structure)?;
     let record = state
@@ -2755,7 +2781,94 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
     }
 }
 
+/// Record what a released builder still owes storage: the carried amount of
+/// each item the project's bill asked for. Only those exact amounts are owed,
+/// so a resident's own food or a later working load is never taken (R4-1).
+pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
+    let Some(bill) = project_bill(state, id, handle) else {
+        return;
+    };
+    let Some(slot) = state.entities.slot_of_uuid(uuid) else {
+        return;
+    };
+    let Some(v) = state.entities.row(slot).villager.as_ref() else {
+        return;
+    };
+    let mut owed: Vec<(u32, u32)> = Vec::new();
+    for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
+        let item = stack.item_id;
+        if !bill.iter().any(|(known, _)| *known == item) {
+            continue;
+        }
+        let count = stack.count as u32;
+        match owed.iter_mut().find(|(known, _)| *known == item) {
+            Some((_, sum)) => *sum = sum.saturating_add(count),
+            None => owed.push((item, count)),
+        }
+    }
+    if owed.is_empty() {
+        return;
+    }
+    let Some(mut record) = state.settlements.get_mut(id) else {
+        return;
+    };
+    record.carry_pending.insert(uuid, owed);
+    record.revision = record.revision.saturating_add(1);
+}
+
+/// Drain the recorded material debts: what the store accepted leaves the debt,
+/// what it could not take stays for a later pass, and a body that no longer
+/// exists has nothing left to deliver.
+fn drain_carry_duties(state: &mut TickState, id: SettlementId) {
+    let Some(record) = state.settlements.get(id) else {
+        return;
+    };
+    let debts: Vec<(uuid::Uuid, Vec<(u32, u32)>)> = record
+        .carry_pending
+        .iter()
+        .map(|(uuid, owed)| (*uuid, owed.clone()))
+        .collect();
+    for (uuid, owed) in debts {
+        let residual = executor::return_owed_carry(state, id, uuid, &owed);
+        let Some(mut record) = state.settlements.get_mut(id) else {
+            return;
+        };
+        match residual {
+            // The body is gone: nothing is owed any more.
+            None => {
+                record.carry_pending.remove(&uuid);
+                record.revision = record.revision.saturating_add(1);
+            }
+            Some(left) if left.is_empty() => {
+                record.carry_pending.remove(&uuid);
+                record.revision = record.revision.saturating_add(1);
+            }
+            Some(left) => {
+                if record.carry_pending.get(&uuid) != Some(&left) {
+                    record.carry_pending.insert(uuid, left);
+                    record.revision = record.revision.saturating_add(1);
+                }
+            }
+        }
+    }
+}
+
+/// A resident that still owes storage is not hired for another project until
+/// the debt is closed, so its new load is never mistaken for the old one.
+fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
+    state
+        .settlements
+        .get(id)
+        .is_some_and(|record| record.carry_pending.contains_key(&uuid))
+}
+
+/// Test hook: drain one settlement's return duties outside the clock.
+pub(crate) fn drain_carry_duties_for_test(state: &mut TickState, id: SettlementId) {
+    drain_carry_duties(state, id);
+}
+
 fn assign_builder(state: &mut TickState, id: SettlementId) {
+    drain_carry_duties(state, id);
     release_stalled_builder(state, id);
     if release_trapped_builder(state, id) {
         return;
@@ -2798,6 +2911,7 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
             let row = state.entities.row(*slot);
             state.entities.body(*slot).alive
                 && !access::bound_builder(&state.settlements, row.uuid)
+                && !carry_debtor(state, id, row.uuid)
                 && row.villager.as_ref().is_some_and(|v| {
                     v.settlement == Some(id)
                         && v.data.profession == Profession::Builder
@@ -2811,8 +2925,10 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
     }
     let mut candidates = Vec::new();
     for slot in residents(state, id) {
+        let uuid = state.entities.row(slot).uuid;
         if !resident_simulated(state, slot)
-            || super::economy::worker_reserved(state, Some(id), state.entities.row(slot).uuid)
+            || super::economy::worker_reserved(state, Some(id), uuid)
+            || carry_debtor(state, id, uuid)
         {
             continue;
         }
@@ -2951,6 +3067,9 @@ pub(crate) fn tick(state: &mut TickState) {
     if state.tick.is_multiple_of(PLAN_CADENCE)
         && let Some(id) = selected(state, state.tick / PLAN_CADENCE)
     {
+        // Return duties are drained for every selected settlement, even one
+        // whose projects are all cancelled or finished (D8 review R4-1).
+        drain_carry_duties(state, id);
         if let Some(profession) = needed_gatherer(state, id) {
             super::allocator::staff_gatherer(state, id, profession);
             restore_borrowed_gatherer(state, id, profession);
