@@ -898,6 +898,34 @@ fn battle_facing_holds_against_knockback_without_changing_motion() {
 
 /// The battle policy stays frozen: a sliding step faces the resolved velocity
 /// (as `de660fabd` did), while a non-battle body faces the direction it wants.
+/// A standing battle row is not hold-eligible, but it is still a battle row and
+/// keeps the legacy look at the resolved velocity: an impulse turns it. Tying
+/// the legacy facing to the hold's selector would freeze its yaw instead.
+#[test]
+fn standing_battle_row_keeps_the_legacy_facing_on_an_impulse() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    state.battle_facing = false;
+    state.legacy_facing = true;
+    state.impulse = [8.0, 0.0];
+    let moved = step(state, &flat, |_, _| true);
+    let legacy = look([0.0; 3], moved.body.position, moved.body.velocity, None);
+    assert_eq!(
+        moved.rotation[0], legacy[0],
+        "the legacy look, not the hold"
+    );
+    assert_eq!(moved.rotation[1], legacy[1], "pitch as well");
+    assert!(moved.rotation[0] < -10.0, "the impulse turns the body");
+}
+
+/// The battle policy stays frozen: a sliding step faces the resolved velocity
+/// (as `de660fabd` did), while a non-battle body faces the direction it wants.
 #[test]
 fn battle_facing_against_a_wall_follows_the_resolved_velocity() {
     let speed = 0.04 / TICK;

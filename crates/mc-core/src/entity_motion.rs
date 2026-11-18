@@ -32,9 +32,14 @@ pub(crate) struct MotionInput {
     pub impulse: [f64; 2],
     pub rotation: [f32; 3],
     pub look_target: Option<[f64; 3]>,
-    /// A moving battle body: without a look target its facing follows
-    /// [`battle_holds_facing`].
+    /// A battle body that is *eligible* for the hold: without a look target its
+    /// facing follows [`battle_holds_facing`]. Standing rows never had the hold.
     pub battle_facing: bool,
+    /// A battle row: its facing takes the legacy look at the resolved velocity,
+    /// hold or not. This covers the rows the hold selector excludes (standing
+    /// battle rows such as a NoAI mob), which turned this way before the
+    /// motion split and must keep doing so.
+    pub legacy_facing: bool,
     /// The mob's own body controller keeps the head on the body
     /// ([`Capabilities::head_follows_body`]); no head lag applies.
     pub head_follows_body: bool,
@@ -545,17 +550,18 @@ pub(crate) fn step<S: BlockSampler>(
     // The battle policy is frozen for this freeze (the candidate A/B measured
     // more rotation and head traffic on the A1 scene): battle rows keep facing
     // the resolved velocity, the hold above unchanged.
-    let rotation = if input.battle_facing {
-        if input.look_target.is_none() && battle_holds_facing(&input.body, &body) {
-            input.rotation
-        } else {
-            look(
-                input.rotation,
-                body.position,
-                body.velocity,
-                input.look_target,
-            )
-        }
+    let rotation = if input.battle_facing
+        && input.look_target.is_none()
+        && battle_holds_facing(&input.body, &body)
+    {
+        input.rotation
+    } else if input.legacy_facing {
+        look(
+            input.rotation,
+            body.position,
+            body.velocity,
+            input.look_target,
+        )
     } else if input.look_target.is_some() {
         look(input.rotation, body.position, Vec3::ZERO, input.look_target)
     } else {
