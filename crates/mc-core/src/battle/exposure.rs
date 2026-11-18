@@ -181,7 +181,7 @@ pub(super) struct Sample<'a> {
 /// through `aligned` (the `combat::prepare` idiom: an aligned side table, reused
 /// buffers, no per-tick allocation), and one pass over the bounded slot table
 /// closes everything that ended.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct Exposure {
     server_tick: u64,
     first_tick: Option<u64>,
@@ -199,31 +199,9 @@ pub(crate) struct Exposure {
     member_ticks: u64,
     excess: u64,
     #[cfg(test)]
-    enabled: bool,
+    disabled: bool,
     #[cfg(test)]
     lines: Vec<String>,
-}
-
-impl Default for Exposure {
-    fn default() -> Self {
-        Self {
-            server_tick: 0,
-            first_tick: None,
-            episodes: Vec::new(),
-            aligned: Vec::new(),
-            open: 0,
-            bodies: Vec::new(),
-            emitted: 0,
-            suppressed: 0,
-            closed: 0,
-            member_ticks: 0,
-            excess: 0,
-            #[cfg(test)]
-            enabled: true,
-            #[cfg(test)]
-            lines: Vec::new(),
-        }
-    }
 }
 
 impl Exposure {
@@ -238,7 +216,7 @@ impl Exposure {
     /// takes no sweep heading because he is not seated.
     pub(super) fn exposed(&mut self, id: EntityId, member: usize, pos: [f64; 3], plan: Plan) {
         #[cfg(test)]
-        if !self.enabled {
+        if self.disabled {
             return;
         }
         self.member_ticks += 1;
@@ -390,9 +368,7 @@ impl Exposure {
         self.excess = 0;
         self.open = 0;
         self.bodies.clear();
-        for slot in &mut self.episodes {
-            *slot = None;
-        }
+        self.episodes.fill(None);
         self.aligned.clear();
     }
 
@@ -493,7 +469,7 @@ impl Exposure {
 
     #[cfg(test)]
     pub(super) fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
+        self.disabled = !enabled;
     }
 }
 

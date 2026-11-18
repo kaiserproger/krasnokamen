@@ -87,9 +87,9 @@ impl Clearance {
                     continue;
                 }
                 any = true;
-                if !proofs.contains_key(&root) {
-                    proofs.insert(root, tree_proof::Proof::new(state, root, grove));
-                }
+                proofs
+                    .entry(root)
+                    .or_insert_with(|| tree_proof::Proof::new(state, root, grove));
             }
         }
         if !any {
@@ -163,9 +163,9 @@ impl Clearance {
         // own proof on demand from the same scan-wide component memo.
         let needed: Vec<[i32; 3]> = self.needed.iter().copied().collect();
         for &root in &needed {
-            if !proofs.contains_key(&root) {
-                proofs.insert(root, tree_proof::Proof::new(state, root, &mut self.grove));
-            }
+            proofs
+                .entry(root)
+                .or_insert_with(|| tree_proof::Proof::new(state, root, &mut self.grove));
         }
         let mut seen: HashSet<_> = cells.iter().map(|cell| cell.at).collect();
         for root in needed {

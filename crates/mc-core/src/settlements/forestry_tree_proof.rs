@@ -195,11 +195,11 @@ impl Proof {
             let mut marked = false;
             if let Some(logs) = grove.get(other) {
                 for at in logs {
-                    if let Some(index) = proof.index(*at) {
-                        if cells[index] & LOG != 0 {
-                            cells[index] |= UNION;
-                            marked = true;
-                        }
+                    if let Some(index) = proof.index(*at)
+                        && cells[index] & LOG != 0
+                    {
+                        cells[index] |= UNION;
+                        marked = true;
                     }
                 }
             }
