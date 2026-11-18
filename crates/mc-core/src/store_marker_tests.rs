@@ -339,6 +339,7 @@ fn a_marker_write_failure_prunes_nothing_and_halts_the_world() {
     let root = tempfile::tempdir().unwrap();
     let config = config(root.path(), 1);
     let core = Core::open(config.clone()).unwrap();
+    let mut rx = core.subscribe();
     let mut observe = Observe::new(&config.world_dir);
     assert_eq!(marker(&config).checkpoint_tick, 0);
     std::fs::create_dir(config.world_dir.join("checkpoint.marker.tmp"))
@@ -347,6 +348,14 @@ fn a_marker_write_failure_prunes_nothing_and_halts_the_world() {
     observe.wait_negative_ack();
     let at_failure = marker(&config).checkpoint_tick;
     let batches_at_failure = batch_ticks(&config);
+    // The world halts on its own: the tick thread exits and closes its
+    // broadcast without a shutdown request.
+    loop {
+        match rx.blocking_recv() {
+            Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
     core.shutdown();
     drop(core);
 
@@ -355,10 +364,14 @@ fn a_marker_write_failure_prunes_nothing_and_halts_the_world() {
         at_failure,
         "a failed marker write must not publish the checkpoint"
     );
-    assert_eq!(
-        batch_ticks(&config),
-        batches_at_failure,
-        "the failed checkpoint's WAL must not be pruned"
+    // A tick the journal dequeued before it saw the failure may still append
+    // its batch; nothing present at the failure is ever pruned.
+    let batches_after = batch_ticks(&config);
+    assert!(
+        batches_at_failure
+            .iter()
+            .all(|tick| batches_after.contains(tick)),
+        "the failed checkpoint's WAL must not be pruned: {batches_at_failure:?} -> {batches_after:?}"
     );
     assert!(
         batches_at_failure.contains(&(at_failure + 1)),
