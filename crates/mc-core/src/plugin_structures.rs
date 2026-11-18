@@ -278,8 +278,11 @@ pub(crate) struct LiquidProof {
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Structure {
-    /// The liquid proof of a plan admitted over fluid; absent for a dry plan.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// The liquid proof of a plan admitted over fluid; null for a dry plan.
+    /// A required key that may be null: the ledger keeps no compatibility with
+    /// its own old saves (one reset, the LedgerSplit), so a record without it
+    /// refuses to load instead of silently reading as a dry plan.
+    #[serde(deserialize_with = "serde::Deserialize::deserialize")]
     liquid: Option<LiquidProof>,
     owner: String,
     #[serde(default)]

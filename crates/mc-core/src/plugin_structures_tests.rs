@@ -2067,3 +2067,33 @@ fn persisted_expedition_claim_refuses_plugin_prepare_without_reserving_or_chargi
     state.settlements.get_mut(parent).unwrap().founding = None;
     assert!(execute_operation(&mut state, "demo", &operation).is_ok());
 }
+
+/// The liquid proof is a required ledger key that may be null: a record saved
+/// before the key existed (or hand-edited to drop it) refuses to load rather
+/// than reading as a dry plan. There is no old-save compatibility: the ledger
+/// breaks once, in the single reset (LedgerSplit).
+#[test]
+fn a_structure_record_without_the_liquid_key_refuses_to_load() {
+    let mut state = state();
+    stored_structure(&mut state);
+    let ledger = ledger(&state).expect("ledger");
+    let record = ledger
+        .structures
+        .get("saved-house")
+        .expect("saved structure");
+    let mut value = serde_json::to_value(record).expect("record json");
+    assert!(
+        value.get("liquid").is_some_and(serde_json::Value::is_null),
+        "a dry plan stores a null liquid proof"
+    );
+    assert!(
+        serde_json::from_value::<Structure>(value.clone()).is_ok(),
+        "a null liquid proof loads"
+    );
+    value.as_object_mut().expect("object").remove("liquid");
+    let missing = serde_json::from_value::<Structure>(value);
+    assert!(
+        missing.is_err(),
+        "a record without the liquid key refuses to load"
+    );
+}
