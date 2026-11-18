@@ -104,20 +104,22 @@ class BuildingOrderTests(unittest.TestCase):
         for reply in ['Started spanish_house construction.', 'Queued spanish_house: busy']:
             with self.subTest(reply=reply):
                 probe, run = Mock(), {}
-                with patch('tools.showcase.spain_trial.village._send',
+                with patch('tools.showcase.spain_trial.buildings_qa._send_fresh',
                            return_value={'recent_chat': [reply]}) as send:
                     order_build(probe, 'spanish_house', run)
                 send.assert_called_once_with(probe, 'settlement build spanish_house')
-                self.assertEqual(run['building_orders'], [{
+                order = dict(run['building_orders'][0])
+                self.assertIsInstance(order.pop('reply_ms_with_marker'), int)
+                self.assertEqual(order, {
                     'command': 'settlement build spanish_house',
                     'recent_chat': [reply], 'admitted': True,
-                }])
+                })
                 probe.check.assert_called_once_with('spanish_house_order_admitted', True)
 
     def test_laptop_site_refusal_fails_immediately_and_retains_its_cause(self):
         reply = 'No free loaded construction site is available within the material budget.'
         probe, run = Mock(), {}
-        with patch('tools.showcase.spain_trial.village._send',
+        with patch('tools.showcase.spain_trial.buildings_qa._send_fresh',
                    return_value={'recent_chat': [reply]}):
             with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted.*No free loaded'):
                 order_build(probe, 'spanish_house', run)
@@ -129,7 +131,7 @@ class BuildingOrderTests(unittest.TestCase):
         for lines in [[], ['Started spanish_plaza construction.']]:
             with self.subTest(lines=lines):
                 probe, run = Mock(), {}
-                with patch('tools.showcase.spain_trial.village._send',
+                with patch('tools.showcase.spain_trial.buildings_qa._send_fresh',
                            return_value={'recent_chat': lines}):
                     with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted'):
                         order_build(probe, 'spanish_house', run)

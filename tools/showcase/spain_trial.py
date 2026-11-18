@@ -36,7 +36,7 @@ from urllib.request import urlopen
 from tools import blueprints
 from tools.harness import runtime
 from tools.harness.profiles import ProfileContext
-from tools.harness.backends import item_merge, native_client, village_autonomy_qa as village
+from tools.harness.backends import buildings_qa, item_merge, native_client, village_autonomy_qa as village
 from tools.harness.backends.probe_steps import ProbeSteps
 from tools.settlement_chronicle import extract
 
@@ -173,11 +173,16 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
 
 def order_build(probe: ProbeSteps, blueprint: str, run: dict) -> None:
     command = f'settlement build {blueprint}'
-    lines = village._recent_chat(village._send(probe, command), 20)
+    # The reply can take seconds under load (bounded site search on a 2-CPU box): wait for
+    # the command's own reply after a fresh chat marker, not a fixed 40-tick window.
+    sent = time.monotonic()
+    lines = village._recent_chat(buildings_qa._send_fresh(probe, command), 20)
+    reply_ms = round((time.monotonic() - sent) * 1000)
     admitted = any(line.startswith((f'Started {blueprint} construction.',
                                     f'Queued {blueprint}:')) for line in lines)
     run.setdefault('building_orders', []).append({
         'command': command, 'recent_chat': lines, 'admitted': admitted,
+        'reply_ms_with_marker': reply_ms,
     })
     if not admitted:
         raise RuntimeError(f'/{command} was not admitted; received server chat: {lines}')
