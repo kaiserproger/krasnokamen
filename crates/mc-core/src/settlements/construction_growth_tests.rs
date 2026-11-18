@@ -270,6 +270,14 @@ fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
 fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
     for level in 1..=2 {
         let (mut state, id, builder) = fixture();
+        // Autonomous upgrades bypass fund(level > 1), but still need real
+        // canonical destruction loot for the standing house's replaced cells.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
         open_plan(&mut state);
         fund(&mut state, "spanish_house", 1);
         start(&mut state, id, "spanish_house", 1, None);
@@ -534,17 +542,16 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
     retain_player_edit(&mut state, next);
     territory_elsewhere(&mut state, id, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
-    // using the canonical persisted ledger image, without changing its stage.
-    let mut ledger = state
+    // using the canonical persisted structure record, without changing its stage.
+    let key = format!("structure/{}", project.structure);
+    let mut record = state
         .plugins
-        .get_domain("@native-structures", "ledger")
+        .get_domain("@native-structures", &key)
         .unwrap()
         .clone();
-    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+    record["snapshot"]["consumed"] =
         serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
-    state
-        .plugins
-        .set_domain("@native-structures", "ledger", ledger);
+    state.plugins.set_domain("@native-structures", &key, record);
     let before = executor::status(&state, id, &project.structure).unwrap();
     assert!(!before.consumed.is_empty());
     assert!(executor::clearing(&state, id, &project.structure));
@@ -1036,6 +1043,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     let at = [8, 203, 8];
     let lot = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
     let cell = executor::PlannedCell {
+        portion: executor::PortionKind::Trees,
         at,
         state: state.registry.states.air,
         resource: None,

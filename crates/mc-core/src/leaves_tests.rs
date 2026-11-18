@@ -133,6 +133,7 @@ fn natural_loot_family_chances_are_deterministic_and_never_drop_leaf_blocks() {
                 id,
                 &mc_data::ItemStack::EMPTY,
                 seed,
+                false,
             )
             .unwrap();
             assert_eq!(
@@ -143,6 +144,7 @@ fn natural_loot_family_chances_are_deterministic_and_never_drop_leaf_blocks() {
                     id,
                     &mc_data::ItemStack::EMPTY,
                     seed,
+                    false,
                 )
                 .unwrap()
             );
@@ -300,7 +302,8 @@ fn leaf_tool_loot_uses_shears_silk_touch_and_fortune_tables() {
         level: 1,
     });
     for tool in [shears, silk] {
-        let drops = crate::block_drop_context::roll(&state, pos(2, 2), id, &tool, 42).unwrap();
+        let drops =
+            crate::block_drop_context::roll(&state, pos(2, 2), id, &tool, 42, true).unwrap();
         assert_eq!(drops, vec![mc_data::ItemStack::new(item("oak_leaves"), 1)]);
     }
     let mut fortune = mc_data::ItemStack::new(item("diamond_hoe"), 1);
@@ -311,7 +314,7 @@ fn leaf_tool_loot_uses_shears_silk_touch_and_fortune_tables() {
     let count = |tool: &mc_data::ItemStack| {
         (0..2048)
             .map(|seed| {
-                crate::block_drop_context::roll(&state, pos(2, 2), id, tool, seed)
+                crate::block_drop_context::roll(&state, pos(2, 2), id, tool, seed, true)
                     .unwrap()
                     .iter()
                     .filter(|stack| stack.item_id == item("oak_sapling"))

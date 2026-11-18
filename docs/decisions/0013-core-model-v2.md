@@ -300,6 +300,21 @@ logged at `error!` as a possible rollback to an earlier commit (Books R4-P1):
 the repair callback cannot tell an unclean stop from a damaged commit or header slot, and the
 WAL behind an acknowledged checkpoint is already pruned. Policy and drills:
 [persistence](../architecture/persistence.md).
+The native structure ledger is one plugin-domain key per structure, survey and
+worksite plus a schema-2 meta key; a tick journals only the records it wrote and
+the meta key, never the whole ledger. Structure work receipts are not stored:
+each record's watermark is the only count of its advances. The single-image
+ledger of older binaries and this one refuse each other (fail closed, no
+converter); see [structure ledger keys](../architecture/persistence.md#structure-ledger-keys).
+
+Settlement preparation certificates live in that same required record shape:
+one per ordered stage, with persisted per-cell expected raw IDs and registered
+roots used by grown-sapling recertification. Every unprocessed cell is checked at commit;
+village-territory edits are locally re-derived with conserved live-block loot.
+Certificate rewrites, repair, custody, blocks and cursor share the existing
+tick/WAL/checkpoint boundary. Missing `portions` refuses a record, while plugin
+records explicitly store an empty array. This joins the schema-2 LedgerSplit/D8
+reset, without a global plugins-version bump or an old-record adapter.
 
 ### Immutable datapack worldgen inputs
 

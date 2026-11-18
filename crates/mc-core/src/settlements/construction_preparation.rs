@@ -18,6 +18,7 @@ pub(super) fn planned_cells(
         .removals
         .iter()
         .map(|offset| executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: rotated.world(project.origin, *offset),
             state: state.registry.states.air,
             resource: None,
@@ -63,6 +64,7 @@ pub(super) fn planned_cells(
                     }
                     bottom = bottom.min(y);
                     fill.push(executor::PlannedCell {
+                        portion: executor::PortionKind::Fill,
                         at: [x, y, z],
                         state: dirt,
                         resource: Some("minecraft:dirt".into()),
@@ -87,6 +89,7 @@ pub(super) fn planned_cells(
                     && !cells.iter().any(|cell| cell.at == [x, y, z])
                 {
                     cuts.push(executor::PlannedCell {
+                        portion: executor::PortionKind::Cut,
                         at: [x, y, z],
                         state: state.registry.states.air,
                         resource: None,
@@ -124,6 +127,7 @@ pub(super) fn planned_cells(
                 (None, 0)
             };
         cells.push(executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: rotated.world(project.origin, *offset),
             state: placed.0,
             resource,
@@ -204,6 +208,7 @@ pub(super) fn planned_cells(
             }
         }
     }
+    cells.sort_by_key(|cell| cell.portion);
     // Include the whole placement extent (roof crowns/yards) in executor
     // interference fencing; certification uses the narrower authored bounds.
     let mut min = [project.origin[0], bottom, project.origin[2]];

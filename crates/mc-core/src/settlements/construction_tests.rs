@@ -6,7 +6,12 @@ use crate::villager::{Activity, building};
 use mc_data::ItemStack;
 
 pub(crate) fn fixture() -> (TickState, SettlementId, EntitySlot) {
-    let mut state = test_state();
+    fixture_in(test_state())
+}
+
+/// The builder settlement on `state`, whose chunk 0,0 is resident with a stone
+/// floor at y=200.
+pub(crate) fn fixture_in(mut state: TickState) -> (TickState, SettlementId, EntitySlot) {
     for x in 0..16 {
         for z in 0..16 {
             for y in 201..224 {
@@ -256,6 +261,15 @@ pub(crate) fn start(
 }
 
 pub(crate) fn fund(state: &mut TickState, blueprint: &str, level: u8) -> Vec<(u32, u32)> {
+    if level > 1 {
+        // Upgrade removal tests require the real world's canonical loot tables.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
+    }
     fund_at(state, (1, 201, 1), blueprint, level)
 }
 
@@ -939,10 +953,10 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     ));
     let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
     let ledger = serde_json::to_vec(
-        state
+        &state
             .plugins
-            .get_domain("@native-structures", "ledger")
-            .unwrap(),
+            .domain_entries("@native-structures")
+            .collect::<std::collections::BTreeMap<_, _>>(),
     )
     .unwrap();
     let carry = serde_json::to_vec(state.entities.row(slot).villager.as_ref().unwrap()).unwrap();
@@ -957,11 +971,13 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
         id.0,
     )
     .unwrap();
-    restored.plugins.set_domain(
-        "@native-structures",
-        "ledger",
-        serde_json::from_slice(&ledger).unwrap(),
-    );
+    let ledger: std::collections::BTreeMap<String, serde_json::Value> =
+        serde_json::from_slice(&ledger).unwrap();
+    for (key, value) in ledger {
+        restored
+            .plugins
+            .set_domain("@native-structures", &key, value);
+    }
     restored.entities.row_mut(restored_slot).villager =
         Some(serde_json::from_slice(&carry).unwrap());
     crate::settlements::rebuild_counts(&mut restored);

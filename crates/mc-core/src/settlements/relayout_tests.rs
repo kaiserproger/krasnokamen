@@ -145,21 +145,20 @@ fn stays_connected(state: &mut TickState, id: SettlementId, cells: &[PlannedCell
     }
 }
 
-/// The manifest the executor receives: the clear stage first (air cells), then
-/// the build stage in its own order.
-fn executor_order(state: &TickState, cells: &[PlannedCell]) -> Vec<PlannedCell> {
-    let air = state.registry.states.air;
-    cells
+/// The same stable disposition order used by the shared executor.
+fn executor_order(_state: &TickState, cells: &[PlannedCell]) -> Vec<PlannedCell> {
+    let mut ordered: Vec<_> = cells
         .iter()
-        .filter(|cell| cell.state == air)
-        .chain(cells.iter().filter(|cell| cell.state != air))
         .map(|cell| PlannedCell {
+            portion: cell.portion,
             at: cell.at,
             state: cell.state,
             resource: cell.resource.clone(),
             quantity: cell.quantity,
         })
-        .collect()
+        .collect();
+    ordered.sort_by_key(|cell| cell.portion);
+    ordered
 }
 
 fn manifest(
@@ -360,6 +359,14 @@ fn a_player_placed_path_is_relaid() {
 #[test]
 fn farmland_removal_conserves_the_harvest() {
     let (mut state, id, builder) = fixture();
+    // D27 also credits crops overwritten directly by a non-air authored cell;
+    // exercise their canonical loot authority, not an empty registry fixture.
+    state.registry = std::sync::Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
     let (_, _, lot, size) = plateau(&mut state, id);
     let bounds = bounds_of(lot, size);
     let farmland = block(&state, "minecraft:farmland", &[("moisture", "7")]);

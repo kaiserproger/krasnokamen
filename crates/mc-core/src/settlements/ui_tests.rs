@@ -2258,12 +2258,14 @@ pub(super) fn parallel_ui_fixture(count: usize) -> (TickState, SettlementId) {
             bounds,
             vec![
                 PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
                     at: origin,
                     state: stone,
                     resource: Some("minecraft:cobblestone".into()),
                     quantity: 1,
                 },
                 PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
                     at: [origin[0], 202, origin[2]],
                     state: stone,
                     resource: Some("minecraft:cobblestone".into()),

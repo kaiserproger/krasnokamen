@@ -323,6 +323,7 @@ fn a_wall_is_refused_against_an_active_underfunded_project() {
     let stored = {
         let images = executor::source_images(&state, id);
         let cells = vec![executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: [2, 201, 2],
             state: state.registry.states.air,
             resource: Some("minecraft:oak_log".into()),

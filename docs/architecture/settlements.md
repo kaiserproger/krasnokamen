@@ -297,11 +297,11 @@ The parent persists only an optional `founding` object containing a ground-level
 `destination` and the existing `household` key. It reserves a loaded, buildable
 site outside the parent's radius against other towns, expeditions and structure
 claims. Four ordinary paid projects build three Spanish houses and a Spanish
-plaza. Construction progress, receipts and stage remain in the existing structure
-ledger. An outpost is not yet a civil settlement, and its beds are not available
-to the parent allocator.
+plaza. Construction progress (stages, completed work and the advance watermark)
+remains in the existing structure ledger. An outpost is not yet a civil
+settlement, and its beds are not available to the parent allocator.
 
-After all four physical structures and payment receipts validate, one native
+After all four physical structures are committed and validate, one native
 tick prepares and publishes the parent, daughter, reissued daughter building
 IDs, transferred structure-ledger ownership, unchanged resident bodies and
 inventories, household membership, and cleared expedition. The daughter shares

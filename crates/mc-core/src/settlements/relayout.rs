@@ -124,6 +124,7 @@ pub(super) fn plan(
                     continue;
                 }
                 cleared.push(PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Cut,
                     at: [x, above, z],
                     state: state.registry.states.air,
                     resource: None,
@@ -150,6 +151,7 @@ pub(super) fn plan(
             ground_by_column.insert((x, z), ground);
         }
         retired.push(PlannedCell {
+            portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
             at: [x, ground, z],
             // A dirt path and farmland are dirt: digging either yields the
             // soil already in place, so the floor keeps it at no material cost.
@@ -454,6 +456,7 @@ fn bridge(
         for under in natural + 1..level {
             // Fill under a raised detour cell is real storage dirt.
             cells.push(PlannedCell {
+                portion: crate::plugin_structures::settlement_builds::PortionKind::Fill,
                 at: [x, under, z],
                 state: state.registry.states.dirt,
                 resource: fill_resource.clone(),
@@ -466,6 +469,7 @@ fn bridge(
             let quantity = path_cost(natural, level);
             let resource = (quantity != 0).then(|| fill_resource.clone()).flatten();
             cells.push(PlannedCell {
+                portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
                 at: [x, level, z],
                 state: path,
                 resource,

@@ -1031,6 +1031,9 @@ fn review_population_radius_growth_cannot_steal_a_founding_claim() {
     crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
 }
 
+#[path = "construction_ledger_tests.rs"]
+mod ledger;
+
 /// Stock the bootstrap chest with exactly the level-1 bills of `sites`.
 fn fund_sites(state: &mut TickState, sites: &[(&'static str, [i32; 3])]) {
     let mut bill = std::collections::BTreeMap::<u32, u32>::new();
