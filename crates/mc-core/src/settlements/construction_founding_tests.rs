@@ -1096,7 +1096,10 @@ fn unrelated_project(state: &mut TickState, parent: SettlementId) -> String {
 
 fn member_uuid(state: &TickState, parent: SettlementId, household: &str) -> uuid::Uuid {
     let member = households::members(state, parent, household)[0];
-    state.entities.row(state.entities.slot_of(member).unwrap()).uuid
+    state
+        .entities
+        .row(state.entities.slot_of(member).unwrap())
+        .uuid
 }
 
 fn chest(state: &TickState) -> Vec<mc_data::ItemStack> {
@@ -1182,7 +1185,10 @@ fn an_owner_order_starts_while_every_outpost_site_is_under_construction() {
     // The site scan is bounded per pass and keeps a cursor.
     for _ in 0..24 {
         super::super::plan(&mut state, parent);
-        if orders(state.settlements.get(parent).unwrap()).next().is_none() {
+        if orders(state.settlements.get(parent).unwrap())
+            .next()
+            .is_none()
+        {
             break;
         }
     }
@@ -1257,8 +1263,10 @@ fn handover_waits_only_for_the_expeditions_own_projects() {
     // leaves that project, and its builder, with the parent.
     let builder = state.entities.slots().next().unwrap();
     let uuid = state.entities.row(builder).uuid;
-    assert!(!households::members(&state, parent, &expedition.household)
-        .contains(&state.entities.body(builder).id));
+    assert!(
+        !households::members(&state, parent, &expedition.household)
+            .contains(&state.entities.body(builder).id)
+    );
     let record = state.settlements.get_mut(parent).unwrap();
     assert!(access::bind_builder(record, &handle, Some((uuid, None))));
     assert!(finish(&mut state, parent, &expedition));
