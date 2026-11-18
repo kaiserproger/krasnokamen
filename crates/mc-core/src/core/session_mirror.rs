@@ -63,7 +63,7 @@ fn worlds(state: &TickState) -> impl Iterator<Item = &TickState> {
 /// The mirror's inputs: world membership and the plugin-login lock set, over
 /// every dimension. Both parts only advance and dimensions sum, so an
 /// unchanged stamp means an unchanged projection.
-pub(super) fn stamp(state: &TickState) -> (u64, u64) {
+pub(crate) fn stamp(state: &TickState) -> (u64, u64) {
     worlds(state).fold((0, 0), |(membership, locks), world| {
         (
             membership.wrapping_add(world.connections.membership_generation()),
@@ -74,7 +74,7 @@ pub(super) fn stamp(state: &TickState) -> (u64, u64) {
 
 /// Every connection joined and unlocked in some dimension (the previous
 /// in-place `retain` + `extend` rebuild, as one fresh set).
-pub(super) fn unlocked_sessions(state: &TickState) -> BTreeSet<ConnectionId> {
+pub(crate) fn unlocked_sessions(state: &TickState) -> BTreeSet<ConnectionId> {
     let mut unlocked = BTreeSet::new();
     for world in worlds(state) {
         unlocked.extend(
