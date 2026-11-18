@@ -1474,3 +1474,84 @@ fn restore(like: &Scene, dir: &Path) -> Scene {
         handle: like.handle.clone(),
     }
 }
+
+/// Owner D27-4 across a real restart: the terrain portion clears the planner's
+/// own ground and pays nothing for it, while a player's plank on the cell next
+/// to it pays its own drop once. The world is checkpointed after the terrain
+/// stage publishes and reopened from disk before the build stage runs.
+#[test]
+fn a_terrain_stage_restart_pays_planks_once_and_dirt_nothing() {
+    let work = tempfile::tempdir().unwrap();
+    let live = work.path().join("live");
+    std::fs::create_dir_all(&live).unwrap();
+    let config = CoreConfig::new(live.clone(), 42);
+    let mut s = scene(
+        Some(&live),
+        &[(5, "minecraft:oak_planks"), (6, "minecraft:dirt")],
+        &[],
+        &[
+            (executor::PortionKind::Terrain, 5, "minecraft:air", None),
+            (executor::PortionKind::Terrain, 6, "minecraft:air", None),
+            (
+                executor::PortionKind::Build,
+                7,
+                "minecraft:oak_log",
+                Some("minecraft:oak_log"),
+            ),
+        ],
+    );
+    assert_eq!(
+        status(&s)
+            .stages
+            .iter()
+            .map(|stage| stage.stage.as_str())
+            .collect::<Vec<_>>(),
+        ["terrain", "build"],
+        "the plan carries the terrain marker as its own persisted stage"
+    );
+    s.state.tick_control.set_frozen(true);
+    let (output, _, _) = crate::tick::run_tick(&mut s.state, &[]);
+    crate::core::journal_entries_for_tick(&mut s.state, &output).unwrap();
+    checkpoint(&mut s.state, &config);
+    // Run the terrain stage out and stop before the build stage publishes.
+    while status(&s).current_stage_index == 0 && status(&s).state != ScriptStructureState::Committed
+    {
+        step(&mut s).unwrap();
+    }
+    assert_eq!(
+        status(&s).current_stage_index,
+        1,
+        "the terrain stage is done and the build stage has not started"
+    );
+    let stopped = work.path().join("stopped");
+    copy_world(&live, &stopped);
+    let scene_like = Scene {
+        state: crate::settlements::construction::tests::fixture().0,
+        id: s.id,
+        builder: s.builder,
+        handle: s.handle.clone(),
+    };
+    drop(s);
+    let mut restored = restore(&scene_like, &stopped);
+    while status(&restored).state != ScriptStructureState::Committed {
+        step(&mut restored).unwrap();
+    }
+    // The player's planks paid once, the planner's ground paid nothing, and the
+    // build stage still placed its log.
+    assert_eq!(
+        stock(&restored.state, "minecraft:oak_planks"),
+        1,
+        "the player's plank pays its own drop exactly once across the restart"
+    );
+    assert_eq!(
+        stock(&restored.state, "minecraft:dirt"),
+        0,
+        "the planner's own ground pays nothing"
+    );
+    assert_eq!(
+        restored.state.world.block_at(7, Y, Z),
+        Some(named(&restored.state, "minecraft:oak_log")),
+        "the build stage still places its block after the restart"
+    );
+    crate::plugin_structures::validate(&restored.state).unwrap();
+}
