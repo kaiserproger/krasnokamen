@@ -770,6 +770,100 @@ fn upgrade_refuses_a_divergent_cell_outside_the_territory() {
 }
 
 #[test]
+fn a_fluid_on_a_placement_cell_refuses_at_admission() {
+    // A fluid is the executor's liquid work, not village property a cut may
+    // remove: admitting it would stall the paid project on `Blocked` mid-plan.
+    let (mut state, id, _, project) = certified_house();
+    let (at, authored_state, _) = replaced_cell(&state, &project);
+    assert_ne!(
+        raw(&state, authored_state),
+        raw(&state, block(&state, "minecraft:water", &[]))
+    );
+    let water = block(&state, "minecraft:water", &[("level", "0")]);
+    state.world.set_block(at[0], at[1], at[2], water);
+    assert_eq!(
+        refusal_at(&state, &project),
+        Some(site_refusals::Reason::PreviousBuildDiverged),
+        "a fluid clear cell refuses instead of a mid-plan Blocked loop"
+    );
+    assert!(
+        matches!(
+            planned_cells(&state, &project, "oak", &mut Default::default()),
+            Err(site_refusals::Reason::PreviousBuildDiverged)
+        ),
+        "the plan refuses the fluid cell"
+    );
+    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(water));
+}
+
+#[test]
+fn a_cleared_door_takes_both_halves_and_credits_one_drop() {
+    let (mut state, id, _, project) = certified_house();
+    // A door at a placement cell whose cell above is not itself a placement: the
+    // second half then comes from the door, never from the plan.
+    let (_, plan) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let air = state.registry.states.air;
+    let placements: std::collections::BTreeSet<[i32; 3]> = plan
+        .iter()
+        .filter(|cell| cell.state != air)
+        .map(|cell| cell.at)
+        .collect();
+    let at = *placements
+        .iter()
+        .find(|at| !placements.contains(&[at[0], at[1] + 1, at[2]]))
+        .expect("a placement cell with a free cell above it");
+    let door = block(&state, "minecraft:oak_door", &[("half", "lower")]);
+    let upper = block(&state, "minecraft:oak_door", &[("half", "upper")]);
+    state.world.set_block(at[0], at[1], at[2], door);
+    state.world.set_block(at[0], at[1] + 1, at[2], upper);
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default())
+        .expect("a village door inside the territory is cleared");
+    let cut = |target: [i32; 3]| {
+        cells
+            .iter()
+            .position(|cell| cell.at == target && cell.state == air)
+            .is_some()
+    };
+    assert!(cut(at), "the lower half is cleared");
+    assert!(
+        cut([at[0], at[1] + 1, at[2]]),
+        "the upper half is cleared too, though the plan places nothing there"
+    );
+    // The player's authored block is not double-counted: the door halves are
+    // two cells and each is cleared once.
+    assert_eq!(
+        cells
+            .iter()
+            .filter(|cell| cell.at == at && cell.state == state.registry.states.air)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn every_refusal_reason_keeps_its_array_slot() {
+    // `Report` indexes counts and examples by `reason as usize`, so the enum's
+    // discriminants and the report's name array must stay in step. The fence's
+    // reason is appended last (25th) and must still print itself.
+    for reason in [
+        site_refusals::Reason::PreviousBuildDiverged,
+        site_refusals::Reason::MaterialBill,
+    ] {
+        let mut report = site_refusals::Report::default();
+        report.reject(reason, [4, 5, 6]);
+        let text = format!("{report:?}");
+        assert!(
+            text.contains(&format!("{reason:?}")),
+            "{reason:?} must print under its own name: {text}"
+        );
+        assert!(
+            text.contains("(1, Some([4, 5, 6]))"),
+            "one rejection, one example: {text}"
+        );
+    }
+}
+
+#[test]
 fn upgrade_clears_a_foreign_block_inside_the_territory() {
     let (mut state, id, builder, project) = certified_house();
     let (at, authored_state, _) = replaced_cell(&state, &project);

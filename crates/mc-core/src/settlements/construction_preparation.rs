@@ -207,7 +207,7 @@ fn cell_plan(
         // executor cannot clear refuses. Nothing is debited, receipted or placed
         // before this refuses.
         if fence {
-            let mut cuts = Vec::new();
+            let mut cuts: Vec<executor::PlannedCell> = Vec::new();
             for action in placement_actions(
                 state,
                 project.settlement,
@@ -217,12 +217,25 @@ fn cell_plan(
             ) {
                 match action {
                     Action::Refuse(divergence) => return Err(divergence.reason),
-                    Action::Clear(at) => cuts.push(executor::PlannedCell {
-                        at,
-                        state: state.registry.states.air,
-                        resource: None,
-                        quantity: 0,
-                    }),
+                    Action::Clear(at) => {
+                        // A door is one block in two cells: clear both halves in
+                        // the same plan, or the half nothing holds stays behind.
+                        // The debit credits the drop once — the second cell is
+                        // air by the time it is worked.
+                        for at in std::iter::once(at).chain(door_partner(state, at)) {
+                            // The partner of one half may itself be a placement
+                            // cell, so the same position can be offered twice.
+                            if cuts.iter().any(|cell| cell.at == at) {
+                                continue;
+                            }
+                            cuts.push(executor::PlannedCell {
+                                at,
+                                state: state.registry.states.air,
+                                resource: None,
+                                quantity: 0,
+                            });
+                        }
+                    }
                 }
             }
             if !cuts.is_empty() {
@@ -433,19 +446,8 @@ fn placement_actions(
             .by_id(mc_world::BlockStateId(block))
             .map(|definition| definition.block.raw_id)
     };
-    let territory = state
-        .settlements
-        .get(settlement)
-        .map(|record| (record.anchor, i64::from(record.radius).pow(2)));
-    let in_territory = |at: [i32; 3]| {
-        territory.is_some_and(|(anchor, radius_sq)| {
-            at.iter()
-                .zip(anchor)
-                .map(|(a, b)| (i64::from(*a) - i64::from(b)).pow(2))
-                .sum::<i64>()
-                <= radius_sq
-        })
-    };
+    let territory = state.settlements.get(settlement);
+    let in_territory = |at: [i32; 3]| territory.is_some_and(|record| record.contains(at));
     let air = state.registry.states.air;
     let mut emptied = std::collections::BTreeSet::new();
     let mut actions = Vec::new();
@@ -489,6 +491,22 @@ fn placement_actions(
             continue;
         }
         if !container && in_territory(cell.at) {
+            // A fluid is not village property the plan can clear: the executor's
+            // liquid stage owns it, and cutting it mid-plan would stall a paid
+            // project on `Blocked`. Refuse at admission, as before the fence.
+            if state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(live))
+                .is_some_and(|definition| definition.has_fluid())
+            {
+                actions.push(Action::Refuse(Divergence {
+                    reason: site_refusals::Reason::PreviousBuildDiverged,
+                    at: cell.at,
+                    live: Some(live),
+                }));
+                continue;
+            }
             actions.push(Action::Clear(cell.at));
             continue;
         }
@@ -499,6 +517,31 @@ fn placement_actions(
         }));
     }
     actions
+}
+
+/// The other half of a two-cell block, if `at` holds one: a door is a single
+/// block in two cells, so clearing one half alone would leave the other behind.
+fn door_partner(state: &TickState, at: [i32; 3]) -> Option<[i32; 3]> {
+    let live = state.world.physics_block_at(at[0], at[1], at[2])?;
+    let definition = state.registry.blocks.by_id(mc_world::BlockStateId(live))?;
+    if !definition.block.id.path().ends_with("_door") {
+        return None;
+    }
+    let identity = definition.block.raw_id;
+    let up = crate::farming::prop(&state.registry.blocks, live, "half") == Some("lower");
+    let partner = [at[0], at[1] + if up { 1 } else { -1 }, at[2]];
+    // Only the same door: another block above a door is not its other half.
+    state
+        .world
+        .physics_block_at(partner[0], partner[1], partner[2])
+        .filter(|other| {
+            state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(*other))
+                .is_some_and(|other| other.block.raw_id == identity)
+        })
+        .map(|_| partner)
 }
 
 /// One project's own lot: parallel sites must not read the first project's
