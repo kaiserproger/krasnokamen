@@ -100,10 +100,8 @@ fn guard_only(old: Option<&Value>, new: &Value) -> bool {
     };
     let mut paths = Vec::new();
     changed_paths(old, new, String::new(), &mut paths);
-    !paths.is_empty()
-        && paths
-            .iter()
-            .all(|path| path == "/action/until" || path.starts_with("/action/until/"))
+    // `Action` is an externally tagged enum: `{"Guard":{"until":N}}`.
+    !paths.is_empty() && paths.iter().all(|path| path == "/action/Guard/until")
 }
 
 fn fighters_of(entry: &JournalEntry, out: &mut Vec<JournalEntry>) {

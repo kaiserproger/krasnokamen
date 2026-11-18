@@ -569,11 +569,13 @@ fn battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements() {
 /// `action.until` is a guard re-stamp, not a decision.
 fn without_hold(element: &serde_json::Value) -> serde_json::Value {
     let mut stripped = element.clone();
-    if let Some(until) = stripped
-        .get_mut("action")
-        .and_then(|action| action.get_mut("until"))
-    {
-        *until = serde_json::Value::from(0);
+    // `Action` is an externally tagged enum: `{"Guard":{"until":N}}`.
+    if let Some(action) = stripped.get_mut("action").and_then(|action| action.as_object_mut()) {
+        for variant in action.values_mut() {
+            if let Some(until) = variant.get_mut("until") {
+                *until = serde_json::Value::from(0);
+            }
+        }
     }
     stripped
 }
