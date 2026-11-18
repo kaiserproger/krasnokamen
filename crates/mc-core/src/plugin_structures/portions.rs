@@ -107,23 +107,21 @@ pub(super) fn inside(
 }
 
 /// Outside the working settlement's territory a player's block stays the
-/// player's (owner D27.4) before every actual write, whatever its type: a
-/// retained player record refuses any non-air cell, and a cell whose type
-/// changed since admission is also refused by the disabled-history live-player
-/// veto. Inside the territory nothing is attributed.
+/// player's (owner D27.4) before every write, whatever its type: a changed
+/// cell, and an unchanged non-air cell the write actually replaces, are refused
+/// by a retained player record or, with history disabled, by a live player
+/// nearby. A cell already holding its planned state is no write and is not
+/// refused. Inside the territory nothing is attributed.
 pub(super) fn outside_attributed(
     state: &TickState,
     id: crate::settlements::SettlementId,
-    at: [i32; 3],
+    cell: &Cell,
     block: u32,
     changed: bool,
 ) -> bool {
-    !inside(state, id, at)
-        && if changed {
-            crate::settlements::forestry::vetoed(state, at)
-        } else {
-            block != state.registry.states.air && state.block_log.player_touched(at)
-        }
+    !inside(state, id, cell.at)
+        && (changed || (block != state.registry.states.air && block != cell.state))
+        && crate::settlements::forestry::vetoed(state, cell.at)
 }
 
 /// Only unprocessed cells of the requested advance are checked, including after
@@ -169,7 +167,7 @@ pub(super) fn stale_reason(
             .block_at(cell.at[0], cell.at[1], cell.at[2])
             .ok_or(Failure::Unloaded)?;
         let changed = evidence.expected.get(offset + n) != Some(&identity(state, block)?);
-        if outside_attributed(state, id, cell.at, block, changed) {
+        if outside_attributed(state, id, cell, block, changed) {
             return Err(Failure::Blocked);
         }
     }
@@ -225,7 +223,7 @@ pub(super) fn village_drops(
         .block_at(cell.at[0], cell.at[1], cell.at[2])
         .ok_or(Failure::Unloaded)?;
     let unchanged = identity(state, block)? == expected;
-    if outside_attributed(state, id, cell.at, block, !unchanged) {
+    if outside_attributed(state, id, cell, block, !unchanged) {
         return Err(Failure::Blocked);
     }
     if unchanged

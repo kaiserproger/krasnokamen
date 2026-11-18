@@ -340,14 +340,16 @@ fn changed_later_and_mid_portion_cells_rederive_with_exact_credit_without_livelo
     validate(&state).unwrap();
 }
 
-/// Outside the territory a player's history refuses the write whether the cell
-/// changed type (grass on admitted air) or kept it (a fern removed and placed
-/// again by a player after admission, review P1-1); without history the changed
-/// cell is re-derived with its credit and the unchanged one is built over.
+/// Outside the territory a player's history, or with history disabled a live
+/// player within 32 blocks, refuses the write whether the cell changed type
+/// (grass on admitted air) or kept it (a fern removed and placed again by a
+/// player after admission, review P1-1); unguarded, the changed cell is
+/// re-derived with its credit and the unchanged one is built over.
 #[test]
 fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
     for same_id in [false, true] {
-        for protected in [false, true] {
+        for guard in ["none", "history", "live_player"] {
+            let protected = guard != "none";
             let (mut state, id, builder, handle) = if same_id {
                 plan_with_build([None, Some("minecraft:fern")])
             } else {
@@ -367,10 +369,29 @@ fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
                 &[],
             );
             state.world.set_block(9, 201, 4, player);
-            if protected {
+            if guard == "history" {
                 state.block_log =
                     crate::settlements::forestry::tests::player_history(&state, [9, 201, 4], 0);
                 assert!(state.block_log.player_touched([9, 201, 4]));
+            }
+            if guard == "live_player" {
+                let slot =
+                    crate::settlements::allocator::tests::villager(&mut state, [20.5, 201.0, 4.5]);
+                let entity = state.entities.body(slot).id;
+                let connection = crate::boundary::ConnectionId(999);
+                state
+                    .entities
+                    .set_kind(slot, crate::entities::EntityKind::Player { connection });
+                state.entities.row_mut(slot).villager = None;
+                state.players.insert(
+                    entity,
+                    crate::player::PlayerState::new(
+                        connection,
+                        crate::commands::GameMode::Survival,
+                    ),
+                );
+                assert!(!state.block_log.enabled());
+                assert!(!state.block_log.player_touched([9, 201, 4]));
             }
             let before = certificate(&state, &handle);
             let carry = state
@@ -385,7 +406,7 @@ fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
                 assert_eq!(
                     builds::advance(&mut state, id, &handle, builder),
                     Err(Failure::Blocked),
-                    "same id: {same_id}"
+                    "same id: {same_id}, guard: {guard}"
                 );
                 assert_eq!(certificate(&state, &handle), before);
                 assert_eq!(stock(&state, "minecraft:dirt"), 0);
