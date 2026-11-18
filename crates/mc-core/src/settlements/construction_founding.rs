@@ -320,6 +320,20 @@ fn admit(state: &mut TickState, parent: SettlementId) {
     }) {
         return;
     }
+    let members = super::super::households::members(state, parent, &expedition.household);
+    let adults = members
+        .iter()
+        .filter(|entity| {
+            let slot = state
+                .entities
+                .slot_of(**entity)
+                .expect("living household member");
+            state.entities.row(slot).villager.as_ref().unwrap().age >= 0
+        })
+        .count();
+    tracing::info!(target: "settlement_audit", parent = parent.0, household = %expedition.household,
+        origin = %record.households[&expedition.household].origin.as_str(), members = members.len(),
+        adults, destination = ?expedition.destination, tick = state.tick, "settlement_founding_admitted");
     let record = state.settlements.get_mut(parent).unwrap();
     record.founding = Some(expedition);
     record.revision = record.revision.saturating_add(1);
@@ -538,7 +552,8 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
     record.founding = None;
     record.revision += 1;
     tracing::info!(target: "settlement_audit", parent = parent.0, settlement = child.0,
-        tick = state.tick, game_time = state.tick_control.game_ticks(state.tick), "settlement_daughter_founded");
+        tick = state.tick, game_time = state.tick_control.game_ticks(state.tick),
+        household = %expedition.household, "settlement_daughter_founded");
     true
 }
 

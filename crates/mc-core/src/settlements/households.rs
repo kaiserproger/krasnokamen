@@ -718,7 +718,9 @@ pub(crate) fn inherit_birth(state: &mut TickState, child: EntityId, parents: [En
     }
     let record = state.settlements.get_mut(settlement).unwrap();
     record.revision = record.revision.saturating_add(1);
-    record.households.get_mut(&household).unwrap().revision += 1;
+    let joined = record.households.get_mut(&household).unwrap();
+    joined.revision += 1;
+    let origin = joined.origin;
     super::refresh_counts(state, parents.into_iter().chain([child]));
     state.settlements.set_household_size(&household, size);
     let child_uuid = state
@@ -726,7 +728,7 @@ pub(crate) fn inherit_birth(state: &mut TickState, child: EntityId, parents: [En
         .row(state.entities.slot_of(child).expect("birth child"))
         .uuid;
     tracing::info!(target: "settlement_audit", child = %child_uuid, settlement = settlement.0,
-        household = %household, tick = state.tick, "settlement_birth");
+        household = %household, tick = state.tick, origin = %origin.as_str(), "settlement_birth");
 }
 
 #[cfg(test)]

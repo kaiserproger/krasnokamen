@@ -314,7 +314,11 @@ IDs, transferred structure-ledger ownership, unchanged resident bodies and
 inventories, household membership, and cleared expedition. The daughter shares
 the original owner and therefore inherits committed culture. Its anchor is the
 actual outpost plaza bell. No teleport, inventory copy or free block paste is
-part of handover. The native daughter audit supplies chronicle lineage.
+part of handover. The native daughter audit supplies chronicle lineage and
+names the household; `settlement_founding_admitted` records the admitted
+household's id, origin, members, adults and destination. `settlement_birth`
+names the origin of the household the child joined, and the offline census
+lists each settlement's households with origin, stored members and adults.
 
 Recovery rejects invalid or overlapping persisted claims. Losing the selected
 household or moving it elsewhere cancels its active expedition; an interrupted
