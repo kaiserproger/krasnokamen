@@ -207,8 +207,15 @@ rechecks empty carry/equipment at departure and leaves no transit record.
 Outside immigration creates ordinary adult villagers only at a route-proven
 simulated entry. The shared bind admission omits presence only for this
 internal path; manual bind still requires the civil sphere. Newcomers are
-members from their spawn tick and have no household, so normal first-birth
-adoption can form a family. Daily arrivals have expectation
+members from their spawn tick and have no household. A birth between two
+household-less adults adopts them into a new household with the child. A birth
+between a household-less adult and a member of a household of three or more
+founds a new `split` household instead: that member leaves the old household
+(ordinary detach) and the parents form one with the child. Smaller households
+still take the co-parent and child, and parents from different households
+never breed. The split refuses before food, spawn or membership change while
+the member's household leads a founding expedition or either parent walks a
+migration exit. Daily arrivals have expectation
 `(1 + min(0.5, (gain - 10) / 100)) × migration_rate`, capped by free beds.
 Owner chat and structured INFO events report arrivals, departures and
 cancellations. `settlement info` displays observations, components, reasons

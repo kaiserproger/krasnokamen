@@ -545,3 +545,7 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
 #[cfg(test)]
 #[path = "construction_founding_tests.rs"]
 pub(super) mod tests;
+
+#[cfg(test)]
+#[path = "construction_founding_household_tests.rs"]
+mod household_tests;

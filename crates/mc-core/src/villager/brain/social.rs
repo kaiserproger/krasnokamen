@@ -622,7 +622,7 @@ pub(super) fn abort_courtship(v: &mut VillagerState) {
     v.courtship_until = None;
     v.courtship_started_tick = None;
 }
-pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &mut ChangeSet) {
+pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &mut ChangeSet) {
     // Birth searches charge the same shared pool as movement.
     let count = cache.actors().len();
     for offset in 0..count {
