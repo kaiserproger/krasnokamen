@@ -26,6 +26,21 @@ def construction_screen(*projects: str, orders: tuple[str, ...] = ()) -> dict:
                          for index, text in enumerate(body)]}
 
 
+def status_view(*texts: str) -> dict:
+    """The client's Status dialog at GUI scale 3 (solaris-client ui/dialog.rs, laptop 22:28 geometry):
+    body text from y=99, 27 px per line, 30 px apart; Close at y=639 with the viewport ending
+    at y=621. Body nodes starting below the viewport are not observed."""
+    nodes, y = [{"id": "dialog/action/3", "label": "Close", "role": "button",
+                 "bounds": [414.0, 639.0, 450.0, 60.0]}], 99.0
+    for index, text in enumerate(texts):
+        height = 27.0 * (text.count("\n") + 1)
+        if y < 621.0:
+            nodes.append({"id": f"dialog/body/{index}", "label": text, "role": "text",
+                          "bounds": [339.0, y, 600.0, height]})
+        y += height + 30.0
+    return {"ui_nodes": nodes}
+
+
 class VillageAutonomyQaTests(unittest.TestCase):
     def test_walk_uses_path_planner_for_the_final_loaded_leg(self) -> None:
         probe = Mock()
@@ -190,24 +205,32 @@ class VillageAutonomyQaTests(unittest.TestCase):
                 "House L1 · Building\n1/9\n1 2 3", "House L1 · Building\n2/9\n1 2 3"))
 
     def test_cut_status_dialog_is_accepted_only_as_a_proven_clipped_view(self) -> None:
-        # Laptop 2026-11-18 22:28, pin 38c3f1cdf358: 4 active projects, the rendered body ends after the third.
-        roads = [f"Road L1 · Prepared\n0/{n}\n115 68 {z}\nBuilder: b{z}" for n, z in ((9, 4), (16, 7), (10, 10))]
-        state = {"ui_nodes": [
-            {"id": "dialog/body/0", "label": "Active projects: 4/8\nPending orders: 1/8\nHead: spanish_plaza L1"},
-            *({"id": f"dialog/body/{i}", "label": road} for i, road in enumerate(roads, 1)),
-        ]}
-        with self.assertRaisesRegex(RuntimeError, "count"):
-            qa._pending_dialog(state)
-        seen = qa._pending_dialog(state, clipped_ok=True)
-        self.assertEqual((seen["clipped"], seen["pending_count"], seen["head"], len(seen["projects"])),
-                         (True, 1, "spanish_plaza L1", 3))
-        # Every project shown but the pending line missing is not a cut tail: still refused.
-        full = {"ui_nodes": [
-            {"id": "dialog/body/0", "label": "Active projects: 3/8\nPending orders: 1/8\nHead: spanish_plaza L1"},
-            *state["ui_nodes"][1:],
-        ]}
+        # Laptop 2026-11-18 22:28, pin 38c3f1cdf358: the rendered body ends inside the third project.
+        road = [f"Road L1 · Prepared\n0/9\n115 68 {z}\nBuilder: b{z}" for z in (4, 7, 10, 13)]
+        summary = "Active projects: {}/8\nPending orders: {}/8\nHead: {}"
+        for active, pending, shown_projects in ((4, 1, 3), (3, 1, 3), (3, 2, 3)):
+            with self.subTest(active=active, pending=pending):
+                orders = [f"Pending #{i}: spanish_plaza L1 · busy" for i in range(1, pending + 1)]
+                state = status_view(summary.format(active, pending, "spanish_plaza L1"), *road[:active], *orders)
+                with self.assertRaisesRegex(RuntimeError, "count"):
+                    qa._pending_dialog(state)
+                seen = qa._pending_dialog(state, clipped_ok=True)
+                self.assertEqual((seen["clipped"], seen["pending_count"], seen["head"], len(seen["projects"]),
+                                  seen["orders"]), (True, pending, "spanish_plaza L1", shown_projects, []))
+        # A visible prefix of the pending lines is kept, numbered from #1.
+        orders = [f"Pending #{i}: spanish_house L1 · busy" for i in range(1, 5)]
+        seen = qa._pending_dialog(status_view(summary.format(2, 4, "spanish_house L1"), *road[:2], *orders),
+                                  clipped_ok=True)
+        self.assertEqual(([o["index"] for o in seen["orders"]], seen["pending_count"]), ([1, 2, 3], 4))
+        # Lines missing from a body that ends well above the action row are not a cut tail.
         with self.assertRaisesRegex(RuntimeError, "pending order list"):
-            qa._pending_dialog(full, clipped_ok=True)
+            qa._pending_dialog(status_view(summary.format(2, 1, "spanish_plaza L1"), *road[:2]), clipped_ok=True)
+        with self.assertRaisesRegex(RuntimeError, "active project list"):
+            qa._pending_dialog(status_view(summary.format(3, 0, "none"), *road[:2]), clipped_ok=True)
+        # A gap in the visible pending numbers is refused even when cut.
+        with self.assertRaisesRegex(RuntimeError, "pending order list"):
+            qa._pending_dialog(status_view(summary.format(2, 4, "spanish_house L1"), *road[:2],
+                                           *orders[1:]), clipped_ok=True)
 
     def test_spanish_construction_dialog_passes_every_parser(self) -> None:
         # Laptop 2026-11-18 22:35, pin 38c3f1cdf358: culture blueprints have no display
@@ -223,9 +246,10 @@ class VillageAutonomyQaTests(unittest.TestCase):
         self.assertEqual([(o["index"], o["blueprint"], o["reason"]) for o in seen["orders"]], [
             (1, "spanish_plaza", "waiting for forest evidence"), (2, "spanish_fortress", "busy")])
         self.assertFalse(qa._head_waits(seen))
-        clipped = {"ui_nodes": state["ui_nodes"][:4]}
+        clipped = status_view(*(n["label"] for n in state["ui_nodes"]))
         cut = qa._pending_dialog(clipped, clipped_ok=True)
-        self.assertEqual((cut["clipped"], cut["pending_count"], cut["head"]), (True, 2, "spanish_plaza L1"))
+        self.assertEqual((cut["clipped"], cut["pending_count"], cut["head"], len(cut["projects"]), cut["orders"]),
+                         (True, 2, "spanish_plaza L1", 3, []))
         sites = {"ui_nodes": [{"id": "dialog/body/0", "label":
                  "Active site: spanish_house L1 · 120 70 7\nActive site: spanish_church L1 · 140 70 7"}]}
         self.assertTrue(qa._map_has_sites(sites, seen["projects"][:2]))

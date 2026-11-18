@@ -900,15 +900,36 @@ def _dialog_body(state: dict[str, Any]) -> str:
                      if str(n.get("id", "")).startswith("dialog/body/"))
 
 
+def _body_cut(state: dict[str, Any]) -> bool:
+    """Whether the client may hide body nodes below the dialog viewport.
+
+    The client observes only body text overlapping its viewport, which ends less than one
+    body spacing above the action row (solaris-client ui/dialog.rs: footer padding 6 < SPACING
+    10 GUI px). A next node starting at least one spacing below the last observed one, within
+    one spacing of the action row, can therefore be off screen; anywhere higher it would show.
+    """
+    nodes = state.get("ui_nodes", [])
+    body = sorted((n["bounds"] for n in nodes
+                   if re.fullmatch(r"dialog/body/\d+", str(n.get("id", ""))) and n.get("bounds")),
+                  key=lambda b: b[1])
+    actions = [n["bounds"][1] for n in nodes
+               if re.fullmatch(r"dialog/action/\d+", str(n.get("id", ""))) and n.get("bounds")]
+    if len(body) < 2 or not actions:
+        return False
+    gap = body[1][1] - (body[0][1] + body[0][3])
+    return body[-1][1] + body[-1][3] + gap >= min(actions) - gap
+
+
 def _pending_dialog(state: dict[str, Any], *, clipped_ok: bool = False) -> dict[str, Any]:
     """Pending orders and projects from the Status dialog.
 
     The server writes the summary, every project, then every pending order
     (settlements/ui.rs project_status_screen). The client observation lists only
     the body nodes it renders, so with many parallel projects the tail is cut.
-    `clipped_ok` accepts that view, but only when fewer projects are shown than
-    "Active projects" counts (proof of a cut tail) and no pending line leaked
-    through; the result then carries the summary count and head instead of the list.
+    `clipped_ok` accepts that view only when the body reaches the action row
+    (`_body_cut`) and what shows is a prefix: projects up to "Active projects",
+    pending lines #1..#k up to "Pending orders" and none before every project.
+    The result then carries the summary count and head besides the visible lines.
     """
     body = _dialog_body(state)
     orders = []
@@ -920,15 +941,16 @@ def _pending_dialog(state: dict[str, Any], *, clipped_ok: bool = False) -> dict[
                        "level": int(match[3]), "reason": match[4]})
     projects = _project_progress(state, clipped_ok=clipped_ok)
     active = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
-    clipped = clipped_ok and active is not None and len(projects) < int(active[1])
     count = re.search(r"(?m)^Pending orders: (\d+)/(\d+)$", body)
-    if clipped and count is not None and not orders:
-        head = re.search(r"(?m)^Head: (.+)$", body)
-        return {"body": body, "orders": [], "projects": projects, "clipped": True,
-                "pending_count": int(count[1]), "head": head[1] if head else None}
-    if count is None or int(count[1]) != len(orders) or [
-        order["index"] for order in orders
-    ] != list(range(1, len(orders) + 1)):
+    indexed = [order["index"] for order in orders] == list(range(1, len(orders) + 1))
+    if clipped_ok and active is not None and count is not None and indexed and _body_cut(state):
+        every_project = len(projects) == int(active[1])
+        if (every_project or not orders) and len(orders) <= int(count[1]) and (
+                not every_project or len(orders) < int(count[1])):
+            head = re.search(r"(?m)^Head: (.+)$", body)
+            return {"body": body, "orders": orders, "projects": projects, "clipped": True,
+                    "pending_count": int(count[1]), "head": head[1] if head else None}
+    if count is None or int(count[1]) != len(orders) or not indexed:
         raise RuntimeError("pending order list does not match its count/indices")
     return {"body": body, "orders": orders, "projects": projects}
 
@@ -2020,7 +2042,8 @@ def _project_progress(observed: dict[str, Any], *, clipped_ok: bool = False) -> 
         projects.append(project)
     count = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
     shown_all = count is not None and int(count[1]) == len(projects)
-    cut_tail = clipped_ok and count is not None and len(projects) < int(count[1])
+    cut_tail = (clipped_ok and count is not None and len(projects) < int(count[1])
+                and _body_cut(observed))
     if not (shown_all or cut_tail) or len({_project_key(p) for p in projects}) != len(projects):
         raise RuntimeError("active project list does not match its count/identities")
     return projects
