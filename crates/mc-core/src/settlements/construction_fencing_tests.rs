@@ -20,15 +20,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             state.world.block_at(cell[0], cell[1], cell[2]),
             Some(expected)
         );
-        assert!(
-            state
-                .settlements
-                .get(id)
-                .unwrap()
-                .projects
-                .first()
-                .is_some()
-        );
+        assert!(!state.settlements.get(id).unwrap().projects.is_empty());
         let log = state
             .registry
             .items
@@ -104,15 +96,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             state.world.block_at(cell[0], cell[1], cell[2]),
             Some(state.registry.states.air)
         );
-        assert!(
-            state
-                .settlements
-                .get(id)
-                .unwrap()
-                .projects
-                .first()
-                .is_some()
-        );
+        assert!(!state.settlements.get(id).unwrap().projects.is_empty());
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots = saved_stock;
         state
             .entities
@@ -228,13 +212,7 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
         attempt(&mut state, id, slot);
     }
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "evolution occurs mid-build"
     );
     assert_eq!(
@@ -272,15 +250,7 @@ fn foreign_replacement_of_a_completed_cell_does_not_pause_pending_portions() {
         }
         attempt(&mut state, id, slot);
     }
-    assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-    );
+    assert!(!state.settlements.get(id).unwrap().projects.is_empty());
     let before = executor::status(&state, id, &project.structure).unwrap();
     let writes = state.plugin_block_writes.len();
     state
@@ -418,13 +388,7 @@ fn a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies() {
         attempt(&mut state, id, slot);
     }
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "the log is placed mid-build"
     );
     state
@@ -481,15 +445,7 @@ fn a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_pr
         }
         attempt(&mut state, id, slot);
     }
-    assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-    );
+    assert!(!state.settlements.get(id).unwrap().projects.is_empty());
     complete_authored(&mut state, id, slot, &[(log, log_state)]);
     assert_eq!(state.settlements.get(id).unwrap().buildings.len(), 1);
     crate::plugin_structures::validate(&state).unwrap();

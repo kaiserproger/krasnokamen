@@ -1805,7 +1805,7 @@ fn pending_order_has_exact_native_material_icons_and_owner_only_cancel_review() 
     assert!(!details.has("project_cancel_review"));
     let denied = last_dialog(&click(&mut state, id, "project_cancel_pending", &[]));
     assert!(denied.body.contains("Only the owner or an operator"));
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
+    assert!(!state.settlements.get(id).unwrap().orders.is_empty());
     state.settlements.get_mut(id).unwrap().owner = Some(PLAYER.into());
     set_locale(&mut state, "ru_ru");
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
@@ -2258,12 +2258,14 @@ pub(super) fn parallel_ui_fixture(count: usize) -> (TickState, SettlementId) {
             bounds,
             vec![
                 PlannedCell {
+                    portion: crate::plugin_structures::PortionKind::Build,
                     at: origin,
                     state: stone,
                     resource: Some("minecraft:cobblestone".into()),
                     quantity: 1,
                 },
                 PlannedCell {
+                    portion: crate::plugin_structures::PortionKind::Build,
                     at: [origin[0], 202, origin[2]],
                     state: stone,
                     resource: Some("minecraft:cobblestone".into()),

@@ -51,9 +51,8 @@ pub(crate) fn prepare(
         } else {
             reserved_bounds(record).ok()
         };
-        let wanted = if same_settlement {
-            site
-        } else if record.snapshot.state == ScriptStructureState::Committed {
+        let wanted = if same_settlement || record.snapshot.state == ScriptStructureState::Committed
+        {
             site
         } else {
             bounds
@@ -1136,7 +1135,7 @@ pub(crate) fn site_bounds(
     handle: &str,
 ) -> Option<ScriptWorldBounds> {
     let ledger = ledger(state).ok()?;
-    let record = ledger.structures.get(handle)?;
+    let record = ledger.structures().get(handle)?;
     if record.settlement != Some(settlement) {
         return None;
     }
@@ -1644,27 +1643,6 @@ pub(crate) fn fetch(
         .collect();
     inventory::commit(state, changes)?;
     Ok(())
-}
-
-/// Return every resident builder's carried stock to canonical storage, so an
-/// order or cancellation never hides real materials inside a carry. Stacks
-/// that do not fit stay carried; nothing is lost or duplicated.
-pub(crate) fn return_carry(state: &mut TickState, id: SettlementId) {
-    let builders: Vec<uuid::Uuid> = crate::settlements::construction::residents(state, id)
-        .filter_map(|slot| {
-            let row = state.entities.row(slot);
-            row.villager
-                .as_ref()
-                .is_some_and(|v| {
-                    v.settlement == Some(id)
-                        && v.data.profession == crate::villager::VillagerProfession::Builder
-                })
-                .then_some(row.uuid)
-        })
-        .collect();
-    for uuid in builders {
-        let _ = return_carry_of(state, id, uuid);
-    }
 }
 
 /// What one addressable carry return achieved (D8 review SOL-6/R3-1).

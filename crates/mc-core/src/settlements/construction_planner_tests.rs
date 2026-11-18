@@ -322,18 +322,12 @@ fn funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer() {
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.projects.first().is_some() || record.construction_cursor != 0,
+        !record.projects.is_empty() || record.construction_cursor != 0,
         "the funded planner must search sites instead of returning at the gatherer guard"
     );
     plan_until_started(&mut state, id);
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "funded construction must not remain idle behind the priority gatherer guard"
     );
     state
@@ -497,7 +491,7 @@ fn pending_house_allows_only_its_own_furnace_prerequisite() {
         }
     }
     request_build(&mut state, id, "house").unwrap();
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
+    assert!(!state.settlements.get(id).unwrap().orders.is_empty());
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(iron_demand(&state, id, None), 2);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
@@ -534,7 +528,7 @@ fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
         .materials;
     assert!(funded_variant(&state, id, bill, &executor::source_images(&state, id)).is_some());
     request_build(&mut state, id, "farm").unwrap();
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
+    assert!(!state.settlements.get(id).unwrap().orders.is_empty());
     assert_eq!(
         iron_demand(&state, id, None),
         0,
@@ -645,14 +639,7 @@ fn later_order(state: &mut TickState, id: SettlementId, blueprint: &str) -> Opti
 fn plan_until_started(state: &mut TickState, id: SettlementId) {
     for _ in 0..2000 {
         plan(state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             return;
         }
     }
@@ -928,7 +915,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     let before = state.settlements.get(id).unwrap().clone();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     assert_eq!(
-        pending_reason(&state, id).as_deref(),
+        pending_reason_at(&state, id, 0).as_deref(),
         Some("waiting for a site")
     );
     assert_eq!(state.settlements.get(id).unwrap(), &before);
@@ -957,7 +944,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     state.world.fold_overlay();
     let before_reason = state.settlements.get(id).unwrap().clone();
     assert_eq!(
-        pending_reason(&state, id).as_deref(),
+        pending_reason_at(&state, id, 0).as_deref(),
         Some("waiting for a site")
     );
     assert_eq!(state.settlements.get(id).unwrap(), &before_reason);
@@ -1257,7 +1244,7 @@ fn an_already_funded_candidate_does_not_send_each_harvested_log_home() {
             start(&mut state, id, "storage", 1, None);
             assert!(super::super::construction_crafting::can_fund(
                 &state,
-                &active_project_bill(&state, id).unwrap(),
+                &joint_active_bill(&state, id).unwrap(),
                 &executor::source_images(&state, id),
             ));
         } else {
@@ -2243,16 +2230,7 @@ fn sole_resource_worker_changes_to_the_missing_housing_material_through_ticks() 
             .map(|stack| stack.count)
             .sum::<i32>()
             >= 43;
-        if mined
-            && (delivered
-                || state
-                    .settlements
-                    .get(id)
-                    .unwrap()
-                    .projects
-                    .first()
-                    .is_some())
-        {
+        if mined && (delivered || !state.settlements.get(id).unwrap().projects.is_empty()) {
             assert_eq!(
                 state
                     .entities

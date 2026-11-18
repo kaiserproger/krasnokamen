@@ -1194,7 +1194,7 @@ fn execute_operation(
                 settlement_builds::debit(
                     state,
                     settlement,
-                    &structure_id,
+                    structure_id,
                     reservation_ref,
                     &consumed,
                     portion,

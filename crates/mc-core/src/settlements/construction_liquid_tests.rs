@@ -188,8 +188,7 @@ fn a_waterlogged_supply_in_the_work_volume_is_not_a_fill_target() {
         &state,
         &mut liquids,
         &mut cost,
-        at[0],
-        at[2],
+        [at[0], at[2]],
         at[1] - 1,
         origin[1],
         false,
@@ -335,6 +334,7 @@ fn one_cell_project(
     at: [i32; 3],
 ) -> (Project, ScriptWorldBounds, Vec<executor::PlannedCell>) {
     let cells = vec![executor::PlannedCell {
+        portion: executor::PortionKind::Build,
         at,
         state: state.registry.states.dirt,
         resource: None,
@@ -711,7 +711,7 @@ fn closed_two_cell_plan(state: &mut TickState, id: SettlementId) -> ([i32; 3], [
     state.world.set_block(b[0], b[1], b[2], water);
     for x in 2..=7 {
         for z in 2..=4 {
-            if x < 3 || x > 6 || z < 3 || z > 3 {
+            if !(3..=6).contains(&x) || z != 3 {
                 state.world.set_block(x, 201, z, stone);
             }
         }
@@ -837,7 +837,7 @@ fn a_refused_resume_keeps_a_paid_cell_and_its_charge() {
     state.world.set_block(b[0], b[1], b[2], flowing);
     for x in 2..=7 {
         for z in 2..=4 {
-            if x < 3 || x > 6 || z < 3 || z > 3 {
+            if !(3..=6).contains(&x) || z != 3 {
                 state.world.set_block(x, 201, z, stone);
             }
         }
@@ -950,7 +950,7 @@ fn a_paid_cell_replaced_by_a_preserved_supply_refuses_the_resume() {
     state.world.set_block(b[0], b[1], b[2], flowing);
     for x in 2..=7 {
         for z in 2..=4 {
-            if x < 3 || x > 6 || z < 3 || z > 3 {
+            if !(3..=6).contains(&x) || z != 3 {
                 state.world.set_block(x, 201, z, stone);
             }
         }
@@ -1050,7 +1050,7 @@ fn a_new_water_source_beside_an_air_target_refuses_without_a_pause() {
     let air = state.registry.states.air;
     let handle = begin_plan(&mut state, id, vec![(at, air, None)]);
     let uuid = state.entities.row(slot).uuid;
-    executor::bind(&mut state, id, &handle, uuid, at);
+    super::tests::bind_project(&mut state, id, &handle, slot);
     let water = state.registry.states.water_levels[0];
     state
         .world
@@ -1118,7 +1118,7 @@ fn a_broken_liquid_ring_or_support_refuses_the_next_step_without_a_pause() {
             ],
         );
         let uuid = state.entities.row(slot).uuid;
-        executor::bind(&mut state, id, &handle, uuid, paid);
+        super::tests::bind_project(&mut state, id, &handle, slot);
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::EMPTY;
         state
             .entities

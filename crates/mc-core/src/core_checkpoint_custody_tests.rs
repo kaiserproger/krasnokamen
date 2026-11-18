@@ -3792,12 +3792,14 @@ fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
     };
     let cells = vec![
         crate::plugin_structures::settlement_builds::PlannedCell {
+            portion: crate::plugin_structures::PortionKind::Fill,
             at: a,
             state: dirt,
             resource: Some("minecraft:dirt".into()),
             quantity: 1,
         },
         crate::plugin_structures::settlement_builds::PlannedCell {
+            portion: crate::plugin_structures::PortionKind::Fill,
             at: b,
             state: dirt,
             resource: Some("minecraft:dirt".into()),

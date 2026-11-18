@@ -540,14 +540,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
     pin_lot(&mut state, id, "storage", &site);
     for _ in 0..128 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -837,14 +830,7 @@ fn autonomous_admission_takes_the_level_lot_over_a_foundation_lot() {
     let (mut state, id, near, far) = unfunded_near_foundation();
     for _ in 0..32 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -1362,14 +1348,7 @@ fn funded_mine_without_a_site_does_not_starve_a_legal_mason() {
     }
     for _ in 0..256 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
