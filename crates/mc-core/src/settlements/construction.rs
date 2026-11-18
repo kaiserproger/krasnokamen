@@ -1374,41 +1374,6 @@ pub(crate) fn excavatable(state: &TickState, block: u32) -> bool {
         })
 }
 
-/// A field: farmland and the crop standing on it. Inside the working
-/// settlement's territory a needed lot cuts it with its vanilla loot credited
-/// and re-places paid dirt where the plan needs ground (owner D27.4, fields
-/// included); outside the territory a field keeps refusing the lot.
-pub(crate) fn field(state: &TickState, block: u32) -> bool {
-    crop(state, block)
-        || state
-            .registry
-            .blocks
-            .by_id(mc_world::BlockStateId(block))
-            .is_some_and(|definition| definition.block.id.path() == "farmland")
-}
-
-/// A crop that grows on farmland.
-fn crop(state: &TickState, block: u32) -> bool {
-    state
-        .registry
-        .blocks
-        .by_id(mc_world::BlockStateId(block))
-        .is_some_and(|definition| {
-            matches!(
-                definition.block.id.path(),
-                "wheat"
-                    | "carrots"
-                    | "potatoes"
-                    | "beetroots"
-                    | "melon_stem"
-                    | "pumpkin_stem"
-                    | "attached_melon_stem"
-                    | "attached_pumpkin_stem"
-                    | "torchflower_crop"
-            )
-        })
-}
-
 /// Floor replacement permits solid ground or clearable fill space, but never
 /// fluids, paths, paid crops or authored non-ground blocks under an overhang.
 fn floor_replaceable(state: &TickState, block: u32) -> bool {
@@ -1738,7 +1703,7 @@ pub(super) fn surface_y_for_lot(
                         || clearance.clearable(state, [x, y + 1, z], lot)
                         // A crop on its field is space a needed lot clears.
                         || (lot.is_some()
-                            && crop(state, above)
+                            && preparation::crop(state, above)
                             && clearance.village_property(state, [x, y + 1, z]))
                 })
         })
@@ -3944,4 +3909,4 @@ pub(super) mod filler;
 
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;
-use preparation::planned_cells;
+use preparation::{field, planned_cells};

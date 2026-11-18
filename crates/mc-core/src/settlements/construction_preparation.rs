@@ -1,5 +1,41 @@
 //! Canonical preparation materialization and unpaid interference recovery.
 use super::*;
+
+/// A field: farmland and the crop standing on it. Inside the working
+/// settlement's territory a needed lot cuts it with its vanilla loot credited
+/// and re-places paid dirt where the plan needs soil (owner D27.4, fields
+/// included); outside the territory a field keeps refusing the lot.
+pub(crate) fn field(state: &TickState, block: u32) -> bool {
+    crop(state, block)
+        || state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .is_some_and(|definition| matches!(definition.block.id.path(), "farmland"))
+}
+
+/// A crop that grows on farmland.
+pub(super) fn crop(state: &TickState, block: u32) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .is_some_and(|definition| {
+            matches!(
+                definition.block.id.path(),
+                "wheat"
+                    | "carrots"
+                    | "potatoes"
+                    | "beetroots"
+                    | "melon_stem"
+                    | "pumpkin_stem"
+                    | "attached_melon_stem"
+                    | "attached_pumpkin_stem"
+                    | "torchflower_crop"
+            )
+        })
+}
+
 pub(super) fn planned_cells(
     state: &TickState,
     project: &Project,
@@ -32,7 +68,12 @@ pub(super) fn planned_cells(
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {
-        let dirt = state.registry.states.dirt;
+        let paid_dirt = |at: [i32; 3]| executor::PlannedCell {
+            at,
+            state: state.registry.states.dirt,
+            resource: Some("minecraft:dirt".into()),
+            quantity: 1,
+        };
         let authored = |at: [i32; 3]| {
             rotated
                 .blocks
@@ -66,12 +107,7 @@ pub(super) fn planned_cells(
                     });
                     if !crop(state, block) && y <= project.origin[1] && !authored([x, y, z]) {
                         bottom = bottom.min(y);
-                        cells.push(executor::PlannedCell {
-                            at: [x, y, z],
-                            state: dirt,
-                            resource: Some("minecraft:dirt".into()),
-                            quantity: 1,
-                        });
+                        cells.push(paid_dirt([x, y, z]));
                     }
                 }
                 for y in ground + 1..=project.origin[1] {
@@ -80,12 +116,7 @@ pub(super) fn planned_cells(
                         continue;
                     }
                     bottom = bottom.min(y);
-                    cells.push(executor::PlannedCell {
-                        at: [x, y, z],
-                        state: dirt,
-                        resource: Some("minecraft:dirt".into()),
-                        quantity: 1,
-                    });
+                    cells.push(paid_dirt([x, y, z]));
                 }
             }
         }

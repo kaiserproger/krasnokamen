@@ -709,7 +709,7 @@ pub(crate) fn plant_drops(
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
     if block == state.registry.states.air
         || !(super::construction::clearable(state, block)
-            || super::construction::field(state, block))
+            || super::construction::preparation::field(state, block))
     {
         return Ok(Vec::new());
     }
