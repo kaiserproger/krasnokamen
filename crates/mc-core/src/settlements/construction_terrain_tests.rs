@@ -687,34 +687,96 @@ fn a_foundation_shortfall_waits_as_collecting_material_then_finishes() {
     );
 }
 
-/// Cut attribution is the player's only if the log says so: it refuses the
-/// site at survey and again immediately before the debit.
+/// Move the settlement's territory far away and survey the same lot as a
+/// founding site: a founding site is outside the parent's territory (owner
+/// D27.4). The state's own record moves, since the clearance reads it.
+fn outside_territory(
+    state: &mut TickState,
+    id: SettlementId,
+    cell: [i32; 3],
+) -> FoundingExpedition {
+    let record = state.settlements.get_mut(id).unwrap();
+    assert!(record.contains(cell));
+    record.anchor = [1_000, FLOOR, 1_000];
+    record.radius = 8;
+    assert!(!record.contains(cell));
+    FoundingExpedition {
+        destination: [0, FLOOR - 2, 0],
+        household: String::new(),
+    }
+}
+
+fn survey(
+    state: &TickState,
+    id: SettlementId,
+    expedition: Option<&FoundingExpedition>,
+) -> Option<site_refusals::Reason> {
+    site_refusals::check(
+        state,
+        state.settlements.get(id).unwrap(),
+        [5, FLOOR, 5],
+        [3, 5, 3],
+        expedition,
+        &mut Default::default(),
+        None,
+    )
+    .err()
+}
+
+/// Owner D27.4: inside the settlement's territory a player's terrain edit is
+/// the village's property and no longer refuses the lot; the same edit on a
+/// founding site outside the territory still does.
 #[test]
-fn player_terrain_is_refused_at_survey_and_again_before_the_debit() {
+fn player_terrain_is_village_property_inside_the_territory_only() {
     let (mut state, id, _) = fixture();
-    let record = state.settlements.get(id).unwrap().clone();
-    let origin = [5, FLOOR, 5];
+    let cell = [6, FLOOR + 2, 6];
     let stone = state.registry.states.stone;
-    state.world.set_block(6, FLOOR + 2, 6, stone);
+    state.world.set_block(cell[0], cell[1], cell[2], stone);
     state.world.fold_overlay();
-    let check = |state: &TickState| {
-        site_refusals::check(
-            state,
-            &record,
-            origin,
-            [3, 5, 3],
-            None,
-            &mut Default::default(),
-            None,
-        )
-        .err()
-    };
-    assert_eq!(check(&state), None);
-    state.block_log = super::super::forestry::tests::player_history(&state, [6, FLOOR + 2, 6], 0);
+    assert_eq!(survey(&state, id, None), None);
+    state.block_log = super::super::forestry::tests::player_history(&state, cell, 0);
+    assert!(state.block_log.player_touched(cell));
+    assert_eq!(survey(&state, id, None), None, "inside: village property");
+    let expedition = outside_territory(&mut state, id, cell);
     assert_eq!(
-        check(&state),
-        Some(site_refusals::Reason::ProtectedObstruction)
+        survey(&state, id, Some(&expedition)),
+        Some(site_refusals::Reason::ProtectedObstruction),
+        "outside: the player's edit stays protected"
     );
+    state.block_log = Default::default();
+    assert_eq!(
+        survey(&state, id, Some(&expedition)),
+        None,
+        "the founding site itself is admissible"
+    );
+}
+
+/// Outside the territory a cut cell a player edited after admission stops the
+/// debit (owner D27.4 keeps the veto there).
+#[test]
+fn player_terrain_edited_after_admission_outside_the_territory_stops_the_debit() {
+    let (mut state, id, builder) = fixture();
+    let site = only_lot(&mut state, id);
+    let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
+    request_build(&mut state, id, "storage").unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(next, pillar.cells[0], "the pillar is the only clear cell");
+    state.block_log = super::super::forestry::tests::player_history(&state, next, 0);
+    let record = state.settlements.get_mut(id).unwrap();
+    record.anchor = [next[0] + 1_000, next[1], next[2]];
+    record.radius = 8;
+    let before = stock(&state, pillar.item);
+    super::tests::bind_project(&mut state, id, &project.structure, builder);
+    let uuid = state.entities.row(builder).uuid;
+    assert_eq!(
+        executor::advance(&mut state, id, &project.structure, uuid),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+    assert_eq!(name_of(&state, next), "stone");
+    assert_eq!(stock(&state, pillar.item), before);
 }
 
 #[test]

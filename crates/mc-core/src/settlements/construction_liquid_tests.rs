@@ -177,7 +177,7 @@ fn the_liquid_bound_refuses() {
 
 #[test]
 fn a_waterlogged_supply_in_the_work_volume_is_not_a_fill_target() {
-    let (mut state, _id, origin, _size, _floors) = pool_lot();
+    let (mut state, id, origin, _size, _floors) = pool_lot();
     let at = [origin[0], origin[1] - 1, origin[2]];
     let fence = block(&state, "minecraft:oak_fence", &[("waterlogged", "true")]);
     state.world.set_block(at[0], at[1], at[2], fence);
@@ -186,6 +186,7 @@ fn a_waterlogged_supply_in_the_work_volume_is_not_a_fill_target() {
     let mut cost = site_refusals::Cost::default();
     liquid::scan_column(
         &state,
+        state.settlements.get(id).unwrap(),
         &mut liquids,
         &mut cost,
         [at[0], at[2]],
@@ -441,21 +442,93 @@ fn fill_footprint(state: &mut TickState, origin: [i32; 3], size: [u8; 3], block:
     state.world.fold_overlay();
 }
 
+/// Owner D27.4: a player-attributed fluid fill cell is the village's property
+/// inside the territory; outside it (a founding site of a settlement whose
+/// territory lies far away) it is never a fill target.
 #[test]
-fn a_player_attributed_fluid_below_the_floor_refuses() {
+fn a_player_attributed_fluid_below_the_floor_refuses_outside_the_territory_only() {
     let (mut state, id, origin, size, floors) = pool_lot();
     let at = [origin[0], origin[1] - 1, origin[2]];
     state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
     assert!(state.block_log.player_touched(at));
+    assert!(state.settlements.get(id).unwrap().contains(at));
     let before = state.world.block_at(at[0], at[1], at[2]);
     let slots = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert!(
+        check_lot(&state, id, origin, size, &floors).is_ok(),
+        "inside the territory a player's water cell is an ordinary fill target"
+    );
+    let record = state.settlements.get_mut(id).unwrap();
+    record.anchor = [origin[0] + 1_000, origin[1], origin[2]];
+    record.radius = 8;
+    let expedition = FoundingExpedition {
+        destination: [
+            origin[0] - 1,
+            origin[1] + i32::from(size[1]) - 6,
+            origin[2] - 1,
+        ],
+        household: String::new(),
+    };
+    let record = state.settlements.get(id).unwrap();
+    assert!(!record.contains(at));
     assert_eq!(
-        check_lot(&state, id, origin, size, &floors),
+        site_refusals::check(
+            &state,
+            record,
+            origin,
+            size,
+            Some(&expedition),
+            &mut Default::default(),
+            Some(&floors),
+        ),
         Err(Reason::ProtectedObstruction),
-        "a player-attributed water cell is never a fill target"
+        "outside the territory a player-attributed water cell is never a fill target"
     );
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), before);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, slots);
+}
+
+/// Owner D27.4: a resume re-proves the certified envelope without reading
+/// block history inside the working settlement's territory; outside it a
+/// player-attributed cell in the envelope keeps refusing the resume.
+#[test]
+fn a_resume_reads_player_history_outside_the_territory_only() {
+    let (mut state, id, origin, size, _floors) = pool_lot();
+    let project = Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin,
+        rotation: 0,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    };
+    let (site, cells) =
+        super::preparation::planned_cells(&state, &project, "oak", &mut Default::default())
+            .expect("the pool lot plans");
+    let proof = liquid::proof(&state, &cells, site.min[1]).expect("a liquid plan has a proof");
+    let at = proof.cells[0];
+    state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+    assert!(state.block_log.player_touched(at));
+    let footprint = size.map(i32::from);
+    let mut record = state.settlements.get(id).unwrap().clone();
+    assert!(record.contains(at));
+    assert!(
+        liquid::revalidate(&state, Some(&record), &proof, origin, footprint).is_ok(),
+        "inside the territory the player's water cell is the village's"
+    );
+    record.anchor = [origin[0] + 1_000, origin[1], origin[2]];
+    record.radius = 8;
+    assert!(
+        matches!(
+            liquid::revalidate(&state, Some(&record), &proof, origin, footprint),
+            Err(mc_script::ScriptOperationFailure::Blocked)
+        ),
+        "outside the territory a player's block in the envelope refuses the resume"
+    );
 }
 
 #[test]
@@ -837,6 +910,72 @@ fn a_preserved_supply_in_a_paid_liquid_cell_refuses_the_next_step_without_a_paus
     assert_eq!(snapshot.watermark, 1);
     assert_eq!(snapshot.state, mc_script::ScriptStructureState::Running);
     assert_eq!(snapshot.pause_reason, None);
+}
+
+/// Owner D27.4: the per-advance envelope re-proof reads no player history
+/// inside the working settlement's territory, so a player-attributed fluid
+/// fill cell there is filled; outside the territory it refuses the step.
+#[test]
+fn each_advance_reads_player_history_in_the_envelope_outside_the_territory_only() {
+    for inside in [true, false] {
+        let (mut state, id, slot) = fixture();
+        let a = [3, 201, 3];
+        let b = [6, 201, 3];
+        let dirt_item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+            .unwrap();
+        let source = state.registry.states.water_levels[0];
+        let flowing = state.registry.states.water_levels[1];
+        let dirt = state.registry.states.dirt;
+        state.world.set_block(a[0], a[1], a[2], source);
+        state.world.set_block(b[0], b[1], b[2], flowing);
+        enclose_bowl(&mut state, a, b);
+        state.world.fold_overlay();
+        let handle = begin_plan(
+            &mut state,
+            id,
+            vec![
+                (a, dirt, Some("minecraft:dirt")),
+                (b, dirt, Some("minecraft:dirt")),
+            ],
+        );
+        super::tests::bind_project(&mut state, id, &handle, slot);
+        let uuid = state.entities.row(slot).uuid;
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory[0] = Some(mc_data::ItemStack::new(dirt_item, 2));
+        executor::advance(&mut state, id, &handle, uuid).unwrap();
+        assert_eq!(state.world.block_at(a[0], a[1], a[2]), Some(dirt));
+        state.block_log = crate::settlements::forestry::tests::player_history(&state, b, 0);
+        assert!(state.block_log.player_touched(b));
+        if !inside {
+            let record = state.settlements.get_mut(id).unwrap();
+            record.anchor = [b[0] + 1_000, b[1], b[2]];
+            record.radius = 8;
+        }
+        assert_eq!(state.settlements.get(id).unwrap().contains(b), inside);
+        let step = executor::advance(&mut state, id, &handle, uuid);
+        if inside {
+            assert!(
+                step.is_ok(),
+                "inside the territory the player's water cell is filled: {step:?}"
+            );
+            assert_eq!(state.world.block_at(b[0], b[1], b[2]), Some(dirt));
+        } else {
+            assert_eq!(
+                step,
+                Err(mc_script::ScriptOperationFailure::Blocked),
+                "outside the territory the player's water cell refuses the step"
+            );
+            assert_eq!(state.world.block_at(b[0], b[1], b[2]), Some(flowing));
+        }
+    }
 }
 
 #[test]

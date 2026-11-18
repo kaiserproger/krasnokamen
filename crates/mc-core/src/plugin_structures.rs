@@ -1122,6 +1122,7 @@ fn execute_operation(
             if let Some(proof) = &record.liquid {
                 crate::settlements::construction::preparation::liquid::revalidate(
                     target,
+                    record.settlement.and_then(|id| state.settlements.get(id)),
                     proof,
                     record.snapshot.origin,
                     record.snapshot.reserved_footprint,

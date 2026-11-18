@@ -104,8 +104,12 @@ pub(crate) fn ground_y_for_lot(
 /// Collect the fluid cells of one fill column and apply every per-cell veto.
 /// `height` is the discovered support, `floor` the authored floor. Dry fill
 /// cells are counted here so the caller never walks the column twice.
+/// `record` is the working settlement: inside its territory the player veto
+/// reads no history (owner D27.4).
+#[allow(clippy::too_many_arguments)]
 pub(in crate::settlements::construction) fn scan_column(
     state: &TickState,
+    record: &crate::settlements::SettlementRecord,
     liquids: &mut Liquids,
     cost: &mut site_refusals::Cost,
     column: [i32; 2],
@@ -122,8 +126,12 @@ pub(in crate::settlements::construction) fn scan_column(
             .physics_block_at(x, y, z)
             .ok_or(Reason::Unloaded)?;
         // The shared player veto covers every non-air cell, including fluid: a
-        // player-attributed water or lava cell is never overwritten by a fill.
-        if block != state.registry.states.air && state.block_log.player_touched(at) {
+        // player-attributed water or lava cell outside the territory is never
+        // overwritten by a fill.
+        if block != state.registry.states.air
+            && !record.contains(at)
+            && state.block_log.player_touched(at)
+        {
             return Err(Reason::ProtectedObstruction);
         }
         // A fluid at the authored floor row is above the fill work and stays a
@@ -291,13 +299,19 @@ pub(crate) fn proof(
 /// re-plans and never re-charges a cell that is already paid. A new supply, a
 /// mixed body, an opened shell, a player-attributed block or a removed support
 /// refuses the resume, and the plan stays paused for the owner to see.
+/// `territory` is the working settlement: inside it no block history is read
+/// (owner D27.4).
 pub(crate) fn revalidate(
     state: &TickState,
+    territory: Option<&crate::settlements::SettlementRecord>,
     proof: &crate::plugin_structures::LiquidProof,
     origin: [i32; 3],
     footprint: [i32; 3],
 ) -> Result<(), mc_script::ScriptOperationFailure> {
     use mc_script::ScriptOperationFailure as Failure;
+    let attributed = |at: [i32; 3]| {
+        !territory.is_some_and(|record| record.contains(at)) && state.block_log.player_touched(at)
+    };
     let mut liquids = Liquids::default();
     for at in &proof.cells {
         let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
@@ -306,9 +320,10 @@ pub(crate) fn revalidate(
         if block == state.registry.states.air {
             continue;
         }
-        // Admission refuses a player-attributed cell, fluid included; a block a
-        // player put into the certified volume is the same refusal on resume.
-        if state.block_log.player_touched(*at) {
+        // Admission refuses a player-attributed cell outside the territory,
+        // fluid included; a block a player put there into the certified volume
+        // is the same refusal on resume.
+        if attributed(*at) {
             return Err(Failure::Blocked);
         }
         match contained(state, block) {
@@ -341,7 +356,7 @@ pub(crate) fn revalidate(
         };
         if ground == state.registry.states.air
             || fluid_block(state, ground)
-            || state.block_log.player_touched([*x, *support, *z])
+            || attributed([*x, *support, *z])
         {
             return Err(Failure::Blocked);
         }

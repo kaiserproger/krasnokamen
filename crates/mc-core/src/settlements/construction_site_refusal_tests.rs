@@ -230,29 +230,71 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
     );
 }
 
+/// The same survey as a founding site of a settlement whose territory lies far
+/// away: a founding site is outside the territory (owner D27.4). The state's
+/// own record moves, since the clearance reads the territory from it.
+fn outside_territory(
+    state: &mut TickState,
+    id: SettlementId,
+    origin: [i32; 3],
+    size: [u8; 3],
+) -> Result<Cost, Reason> {
+    let original = state.settlements.get(id).unwrap().clone();
+    let record = state.settlements.get_mut(id).unwrap();
+    record.anchor = [origin[0] + 1_000, origin[1], origin[2]];
+    record.radius = 8;
+    let expedition = FoundingExpedition {
+        destination: [
+            origin[0] - 1,
+            origin[1] + i32::from(size[1]) - 6,
+            origin[2] - 1,
+        ],
+        household: String::new(),
+    };
+    let result = check(
+        state,
+        state.settlements.get(id).unwrap(),
+        origin,
+        size,
+        Some(&expedition),
+        &mut Default::default(),
+        None,
+    );
+    *state.settlements.get_mut(id).unwrap() = original;
+    result
+}
+
+/// Overlapping crowns are ambiguous only outside the territory: inside it the
+/// foreign (player) tree is the village's property too (owner D27.4).
 #[test]
-fn native_overlapping_crowns_report_ambiguous_foliage_not_a_clearable_site() {
+fn native_overlapping_crowns_report_ambiguous_foliage_outside_the_territory() {
     for connected in [false, true] {
-        let (state, id, _, witness) =
+        let (mut state, id, _, witness) =
             super::super::super::forestry::native_tree_tests::overlapping(connected);
-        assert_eq!(
+        let origin = [witness[0], 200, witness[2]];
+        assert!(
             check(
                 &state,
                 state.settlements.get(id).unwrap(),
-                [witness[0], 200, witness[2]],
+                origin,
                 [1, 12, 1],
                 None,
                 &mut Default::default(),
                 None,
-            ),
+            )
+            .is_ok(),
+            "inside, touching trunks: {connected}"
+        );
+        assert_eq!(
+            outside_territory(&mut state, id, origin, [1, 12, 1]),
             Err(Reason::AmbiguousFoliage),
-            "touching trunks: {connected}"
+            "outside, touching trunks: {connected}"
         );
     }
 }
 
 #[test]
-fn persistent_and_retained_player_foliage_report_protected_obstruction() {
+fn persistent_and_retained_player_foliage_report_protected_obstruction_outside_the_territory() {
     let (mut state, id, _, _, root, _) = super::super::super::forestry::tests::forest();
     state
         .settlements
@@ -274,7 +316,7 @@ fn persistent_and_retained_player_foliage_report_protected_obstruction() {
         } else {
             Default::default()
         };
-        assert_eq!(
+        assert!(
             check(
                 &state,
                 state.settlements.get(id).unwrap(),
@@ -283,11 +325,48 @@ fn persistent_and_retained_player_foliage_report_protected_obstruction() {
                 None,
                 &mut Default::default(),
                 None,
-            ),
+            )
+            .is_ok(),
+            "inside, retained edit: {retained}"
+        );
+        assert_eq!(
+            outside_territory(&mut state, id, origin, [1, 12, 1]),
             Err(Reason::ProtectedObstruction),
-            "retained edit: {retained}"
+            "outside, retained edit: {retained}"
         );
     }
+}
+
+/// Owner D27.4: inside the territory a refused tree cell is never named after
+/// player history or the persistent-leaf mark; a cell of the settlement's own
+/// planted crown still names the planting. Outside, the history names it.
+#[test]
+fn a_refused_tree_cell_is_named_without_player_history_inside_the_territory() {
+    let (mut state, id, _, _, root, _) = super::super::super::forestry::tests::forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0] + 1, root[1] + 4, root[2]];
+    let leaf = crate::settlements::allocator::tests::block(
+        &state,
+        "minecraft:birch_leaves",
+        &[("persistent", "true")],
+    );
+    state.world.set_block(at[0], at[1], at[2], leaf);
+    state.block_log = super::super::super::forestry::tests::player_history(&state, at, 0);
+    assert_eq!(
+        tree_refusal(&state, at, false),
+        Reason::ProtectedObstruction,
+        "outside the territory the player's edit names the refusal"
+    );
+    assert_eq!(
+        tree_refusal(&state, at, true),
+        Reason::AmbiguousFoliage,
+        "inside the territory the planted crown names it"
+    );
 }
 
 #[test]

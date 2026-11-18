@@ -485,6 +485,7 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
         .unwrap()
         .unwrap();
     retain_player_edit(&mut state, next);
+    territory_elsewhere(&mut state, id, next);
     let tree = state.world.block_at(root[0], root[1], root[2]);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     // A rotated builder may still carry an older load during preparation.
@@ -539,6 +540,7 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
         .unwrap()
         .unwrap();
     retain_player_edit(&mut state, next);
+    territory_elsewhere(&mut state, id, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
     // using the canonical persisted structure record, without changing its stage.
     let key = format!("structure/{}", project.structure);
@@ -641,7 +643,7 @@ fn planted_sapling_before_admission(corridor: bool) {
     }
     assert!(super::super::forestry::protected_tree(&state, root));
     assert!(
-        !super::super::forestry::clearable(&state, root),
+        !super::super::forestry::clearable(&state, root, true),
         "grown managed tree remains protected"
     );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
@@ -795,6 +797,15 @@ fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
     );
 }
 
+/// After admission, move the settlement's territory away from `at`: a player
+/// edit there is outside the territory and keeps its protection (owner D27.4).
+fn territory_elsewhere(state: &mut TickState, id: SettlementId, at: [i32; 3]) {
+    let record = state.settlements.get_mut(id).unwrap();
+    assert!(record.contains(at));
+    record.anchor = [at[0] + 1_000, at[1], at[2]];
+    record.radius = 8;
+}
+
 fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);
@@ -848,7 +859,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .insert(root);
     super::site_tests::pin_lot(&mut state, id, "spanish_fortress", &site);
     let bounds = super::super::forestry::lot_bounds(&state, &expected).unwrap();
-    assert!(!super::super::forestry::clearable(&state, root));
+    assert!(!super::super::forestry::clearable(&state, root, true));
     assert!(!super::super::forestry::Clearance::default().clearable(&state, root, None));
     assert!(super::super::forestry::Clearance::default().clearable(&state, root, Some(bounds)));
     assert_eq!(
@@ -870,12 +881,10 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     ));
     retain_player_edit(&mut state, root);
     assert!(!super::super::forestry::Clearance::default().clearable(&state, root, Some(bounds)));
-    assert!(!site_free(
-        &state,
-        state.settlements.get(id).unwrap(),
-        lot.origin,
-        size
-    ));
+    assert!(
+        site_free(&state, state.settlements.get(id).unwrap(), lot.origin, size),
+        "inside the territory the player's edit is the village's property (owner D27.4)"
+    );
     state.block_log = Default::default();
     fund(&mut state, "spanish_fortress", 1);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
@@ -920,10 +929,11 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .unwrap()
         .unwrap();
     let previous = state.world.block_at(next[0], next[1], next[2]);
-    // Outside village property, retained player history still protects a cell.
-    let anchor = state.settlements.get(id).unwrap().anchor;
-    state.settlements.get_mut(id).unwrap().anchor = [anchor[0] + 1000, anchor[1], anchor[2]];
     retain_player_edit(&mut state, next);
+    // Outside the territory the edit stops the debit (owner D27.4 keeps the
+    // veto there); inside it the debit credits the cell.
+    let record = state.settlements.get(id).unwrap().clone();
+    territory_elsewhere(&mut state, id, next);
     let uuid = state.entities.row(builder).uuid;
     // The executor only advances a project for its bound builder (P2-5).
     bind_project(&mut state, id, &project.structure, builder);
@@ -933,7 +943,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     );
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    state.settlements.get_mut(id).unwrap().anchor = anchor;
+    *state.settlements.get_mut(id).unwrap() = record;
     state.block_log = Default::default();
     let revision = state.settlements.get(id).unwrap().revision;
 
@@ -1154,13 +1164,26 @@ fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
     ] {
         let tree = block(&state, name, &[]);
         state.world.set_block(at[0], at[1], at[2], tree);
+        // Inside the territory (owner D27.4) the unproven cell is the
+        // village's property: clear work with conserved drops.
+        let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default())
+            .unwrap_or_else(|reason| panic!("inside the territory {name}: {reason:?}"));
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.at == at && cell.state == state.registry.states.air),
+            "inside the territory {name} is clear work"
+        );
+        let record = state.settlements.get(id).unwrap().clone();
+        territory_elsewhere(&mut state, id, at);
         assert!(
             matches!(
                 planned_cells(&state, &project, "oak", &mut Default::default()),
                 Err(site_refusals::Reason::ProtectedObstruction)
             ),
-            "a natural tree cell in the upgrade work diff is refused as ProtectedObstruction: {name}"
+            "outside the territory an unproven tree cell in the upgrade work diff is refused as ProtectedObstruction: {name}"
         );
+        *state.settlements.get_mut(id).unwrap() = record;
         assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(tree));
         assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     }
@@ -1238,10 +1261,15 @@ fn upgrade_beam() -> (
     (state, id, builder, project, beam)
 }
 
+/// Owner D27.4: inside the territory a retained player edit of the building's
+/// own beam is the village's property; outside it the attribution still
+/// refuses before the authored exemption, until the attribution expires.
 #[test]
-fn retained_identical_player_beam_refuses_upgrade_before_the_authored_exemption() {
+fn retained_identical_player_beam_refuses_upgrade_outside_the_territory_only() {
     let (mut state, id, _, project, beam) = upgrade_beam();
     retain_player_edit(&mut state, beam);
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
+    territory_elsewhere(&mut state, id, beam);
     assert!(matches!(
         planned_cells(&state, &project, "oak", &mut Default::default()),
         Err(site_refusals::Reason::ProtectedObstruction)
@@ -1262,8 +1290,8 @@ fn retained_identical_player_beam_refuses_upgrade_before_the_authored_exemption(
 }
 
 #[test]
-fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_beam() {
-    let (mut state, _, slot, project, beam) = upgrade_beam();
+fn disabled_history_with_live_player_refuses_upgrade_outside_the_territory_only() {
+    let (mut state, id, slot, project, beam) = upgrade_beam();
     let entity = state.entities.body(slot).id;
     let connection = crate::boundary::ConnectionId(999);
     state
@@ -1276,6 +1304,11 @@ fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_be
     );
     state.entities.set_pos(slot, beam.map(f64::from));
     assert!(!state.block_log.enabled());
+    assert!(
+        planned_cells(&state, &project, "oak", &mut Default::default()).is_ok(),
+        "inside the territory the live-player veto is not consulted (owner D27.4)"
+    );
+    territory_elsewhere(&mut state, id, beam);
     assert!(matches!(
         planned_cells(&state, &project, "oak", &mut Default::default()),
         Err(site_refusals::Reason::ProtectedObstruction)

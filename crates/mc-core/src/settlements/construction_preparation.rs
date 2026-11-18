@@ -31,6 +31,8 @@ pub(super) fn planned_cells(
         .settlements
         .get(project.settlement)
         .ok_or(Preparation)?;
+    // Owner D27.4: the plan reads no player history inside its own territory.
+    clearance.within(record);
     // Village paths and farmland a new site covers: the detour stands before
     // any old path cell is retired, so the walk stays connected at every tick.
     // An upgrade's lot is its own certified ground, never village work.

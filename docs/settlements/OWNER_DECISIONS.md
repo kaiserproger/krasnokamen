@@ -44,10 +44,12 @@ The supply recipes from the same decision (saddle, hay block) are implemented; s
 
 - Funded construction may physically clear natural forest from its lot and access path; admission itself changes no blocks.
 - Logs, saplings and other vanilla drops go to settlement storage without loss or duplication.
-- A block must have no retained player placement record. It must also match this
-  world's deterministic generator, and imported/unknown generator identities and
-  persisted lumberjack sapling roots remain protected after restart, except for
-  lumberjack trees on needed lots ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17)).
+- Outside the settlement's territory a block must have no retained player
+  placement record. It must also match this world's deterministic generator,
+  and imported/unknown generator identities and persisted lumberjack sapling
+  roots remain protected after restart, except for lumberjack trees on needed
+  lots ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17)).
+  Inside the territory see [village property](#village-property-inside-the-territory--owner-d27-p4-2026-11-18).
 - Water, lava, steep terrain and other existing terrain refusals remain refusals
   outside the settlement. Inside the settlement this is superseded by
   [lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17).
@@ -145,8 +147,9 @@ claims require the actual pinned-server run, not this design decision.
   levels, digs, fills or fells. This replaces the terrain refusals and the
   bell-elevation, frontage-step and footprint-height limits there.
 - Unchanged: item conservation (excavated material goes to storage, fill uses
-  real material), protection of player-placed blocks, and every rule outside the
-  settlement.
+  real material) and every rule outside the settlement. Protection of
+  player-placed blocks stays outside the territory only; inside it see
+  [village property](#village-property-inside-the-territory--owner-d27-p4-2026-11-18).
 
 > а че мешает лаву расчистить или ведра? создаём заказ на ведра, его исполняет
 > (нету - крафтит сам, нет припасов - ну пиздец тогда, закапываем блоками),
@@ -185,7 +188,8 @@ claims require the actual pinned-server run, not this design decision.
 - A grown planted lumberjack tree on a needed lot is felled as a whole tree,
   found by trunk connectivity from its registered root. Accepted risk: a player
   log touching that trunk, whose history has expired, is felled too, with its
-  drops conserved.
+  drops conserved. Inside the territory the player log is the village's
+  property anyway ([D27 p.4](#village-property-inside-the-territory--owner-d27-p4-2026-11-18)).
 
 ## Parallel construction — owner, 2026-11-17
 
@@ -228,6 +232,39 @@ the parallel behaviour lands,
   - drops go to settlement storage with no loss or duplication.
 - The upgrade rule refuses only what that fence protects: player-touched cells,
   persistent leaves, unknown or imported generator evidence, a protected root
-  halo, and the nearby-live-player veto when block history is disabled.
+  halo, and the nearby-live-player veto when block history is disabled. Since
+  D27 p.4 these player and provenance vetoes apply outside the territory only.
 - The order path stays FIFO; a refusal leaves the owner order pending.
 
+## Village property inside the territory — owner D27 p.4, 2026-11-18
+
+> Эээээ похуй, все построенное на территории деревни считается имуществом
+> деревни мухахахахаха
+
+> Ты всё верно понял.
+
+- Everything built on a village's territory is the village's property. Inside
+  the territory the settlement's planner and builders may clear or use any
+  block they work on regardless of who built it, fields (farmland and crops)
+  included. Block history and player attribution are not consulted there.
+- The territory is the settlement record's sphere (`SettlementRecord::contains`,
+  within `radius` of the anchor), decided per modified cell, and only the
+  working settlement's own territory counts.
+- A daughter's founding site lies outside its parent's territory, and so do
+  corridor, crown or fill cells beyond the sphere. There, as everywhere outside
+  the territory, every existing player protection stays.
+- A cleared block's vanilla drop goes to settlement storage exactly once. A
+  container cell is refused rather than emptied.
+- The settlement's own registered lumberjack plantings keep their protection
+  (2026-11-08, D4, D10).
+- Inside the territory this supersedes the retained-placement, generator-match
+  and persistent-leaf conditions of [forest site preparation](#forest-site-preparation--2026-11-08)
+  and [D18](#upgrade-clears-its-own-new-cells--owner-d18-2026-11-17) and the
+  protection of player-placed blocks in [lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17),
+  including player-attributed water or lava fill cells at admission and on a
+  liquid plan's resume. Fields and village paths on a needed lot are the D10
+  re-lay's own work, which reads no history inside the territory either. It
+  replaces the planned provenance lifetime (PrepLifecycle §2.3): nothing
+  tracks history coverage inside the territory.
+- Lumberjack wood harvest, residents clearing leaves at doors and farmers are
+  not the planner and keep their own rules.

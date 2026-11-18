@@ -444,11 +444,15 @@ pub(super) fn advance(
     }
 }
 
-fn tree_refusal(state: &TickState, at: [i32; 3]) -> Reason {
+/// `property`: the cell is inside the working settlement's territory (owner
+/// D27.4); there player history and the persistent-leaf mark name nothing.
+fn tree_refusal(state: &TickState, at: [i32; 3], property: bool) -> Reason {
     let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
         return Reason::Unloaded;
     };
-    if state.block_log.player_touched(at) || super::super::forestry::persistent(state, block) {
+    if !property
+        && (state.block_log.player_touched(at) || super::super::forestry::persistent(state, block))
+    {
         return Reason::ProtectedObstruction;
     }
     if super::super::forestry::planted_crown_overlaps(
@@ -514,6 +518,11 @@ pub(super) fn check(
     if founding::site_reserved(state, record.id, origin, size) {
         return Err(Reason::OutpostClaim);
     }
+    // Owner D27.4: inside this settlement's own territory, decided per modified
+    // cell with `record.contains`, its planner reads no player history or
+    // attribution. A founding site lies outside the parent's territory and
+    // keeps every protection.
+    clearance.within(record);
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     let lot = ScriptWorldBounds::new(origin, max).expect("blueprint bounds");
     // Support discovery is centered on the candidate floor, and the whole
@@ -559,7 +568,7 @@ pub(super) fn check(
                             })
                         })
                         .map_or(Reason::SurfaceUnavailable, |y| {
-                            tree_refusal(state, [x, y, z])
+                            tree_refusal(state, [x, y, z], record.contains([x, y, z]))
                         })
                 })?;
             lowest = lowest.min(height);
@@ -585,6 +594,7 @@ pub(super) fn check(
                 .world
                 .physics_block_at(x, floor, z)
                 .ok_or(Reason::Unloaded)?;
+            let floor_property = record.contains([x, floor, z]);
             // A fluid on the authored floor row is above the fill work: it is a
             // named liquid refusal, not a generic protected floor. On an
             // unfloored row the fluid block *is* the last fill cell and the plan
@@ -611,6 +621,7 @@ pub(super) fn check(
                 return Err(Reason::ProtectedFloor);
             }
             if floor_block != state.registry.states.air
+                && !floor_property
                 && state.block_log.player_touched([x, floor, z])
             {
                 return Err(Reason::ProtectedObstruction);
@@ -625,6 +636,7 @@ pub(super) fn check(
             // `liquid::finish`); an authored floor row may not hold fluid.
             liquid::scan_column(
                 state,
+                record,
                 &mut liquids,
                 &mut cost,
                 [x, z],
@@ -641,6 +653,7 @@ pub(super) fn check(
                 if liquid::has_fluid(state, block) {
                     return Err(Reason::LiquidInWork);
                 }
+                let property = record.contains([x, y, z]);
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 let tree_clearable = tree && clearance.clearable(state, [x, y, z], Some(lot));
                 // A lot crop and a retired village path cell are the
@@ -659,10 +672,10 @@ pub(super) fn check(
                     || (tree && !tree_clearable)
                     || (!clearable(state, block) && !excavatable(state, block) && !tree_clearable)
                 {
-                    return Err(tree_refusal(state, [x, y, z]));
+                    return Err(tree_refusal(state, [x, y, z], property));
                 }
                 if block != state.registry.states.air && !tree {
-                    if state.block_log.player_touched([x, y, z]) {
+                    if !property && state.block_log.player_touched([x, y, z]) {
                         return Err(Reason::ProtectedObstruction);
                     }
                     cost.cut += 1;
@@ -678,7 +691,7 @@ pub(super) fn check(
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 if tree {
                     if !clearance.clearable(state, [x, y, z], Some(lot)) {
-                        return Err(tree_refusal(state, [x, y, z]));
+                        return Err(tree_refusal(state, [x, y, z], record.contains([x, y, z])));
                     }
                     continue;
                 }
