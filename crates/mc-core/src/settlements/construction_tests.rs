@@ -261,34 +261,6 @@ pub(crate) fn start(
     ));
 }
 
-/// The planner binds a builder when it admits a project; fixtures that call the
-/// executor directly skip that pass, so bind the settlement's own Builder here.
-pub(crate) fn bind_native_builder(state: &mut TickState, id: SettlementId) {
-    let Some(slot) = crate::settlements::construction::residents(state, id).find(|slot| {
-        state.entities.body(*slot).alive
-            && state
-                .entities
-                .row(*slot)
-                .villager
-                .as_ref()
-                .is_some_and(|v| {
-                    v.settlement == Some(id) && v.data.profession == Profession::Builder
-                })
-    }) else {
-        return;
-    };
-    let uuid = state.entities.row(slot).uuid;
-    let Some(handle) = crate::settlements::construction::projects_of(&state.settlements, id)
-        .last()
-        .map(|project| project.structure.clone())
-    else {
-        return;
-    };
-    if let Some(mut record) = state.settlements.get_mut(id) {
-        crate::settlements::construction::bind_builder(&mut record, &handle, Some((uuid, None)));
-    }
-}
-
 pub(crate) fn fund(state: &mut TickState, blueprint: &str, level: u8) -> Vec<(u32, u32)> {
     fund_at(state, (1, 201, 1), blueprint, level)
 }
@@ -319,8 +291,6 @@ pub(crate) fn fund_at(
     materials
 }
 
-/// Bind `slot` to the project `handle`: a fixture that drives the executor
-/// directly stands in for the planner and must set the authority itself.
 pub(crate) fn bind_project(
     state: &mut TickState,
     id: SettlementId,

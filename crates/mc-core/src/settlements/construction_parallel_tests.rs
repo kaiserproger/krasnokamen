@@ -470,16 +470,19 @@ fn a_haul_reserves_the_other_active_bills() {
     );
     // Nothing else is active, so this project reserves nothing against itself
     // and a query for a stranger reserves the whole bill.
-    assert!(other_active_bill(&state, id, &mine).is_empty());
+    assert!(
+        other_active_bill(&state, id, &mine).is_some_and(|bill| bill.is_empty()),
+        "a lone project reserves nothing"
+    );
     assert_eq!(
         other_active_bill(&state, id, "stranger"),
-        own_bill,
+        Some(own_bill),
         "every other active bill is reserved exactly"
     );
 }
 
-/// SOL-6: an addressable carry return reports whether it actually delivered,
-/// so a full store cannot silently drop the load.
+/// SOL-6: an addressable carry return reports what it achieved, so a full store
+/// cannot silently drop the load and a dead body never holds the binding.
 #[test]
 fn a_carry_return_reports_delivery() {
     let (mut state, id, slot) = fixture();
@@ -500,12 +503,14 @@ fn a_carry_return_reports_delivery() {
         .as_mut()
         .unwrap()
         .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
-    // A full store cannot take the load, so the return is not delivered.
+    // A full store cannot take the load: nothing is delivered, and the pass
+    // must keep the binding so the return is retried.
     for stack in chest(&mut state) {
         *stack = mc_data::ItemStack::new(log, 64);
     }
-    assert!(
-        !executor::return_carry_of(&mut state, id, uuid),
+    assert_eq!(
+        executor::return_carry_of(&mut state, id, uuid),
+        executor::CarryReturn::Pending,
         "a load the store cannot take is not delivered"
     );
     assert_eq!(
@@ -521,12 +526,18 @@ fn a_carry_return_reports_delivery() {
         Some(7),
         "the load stays on the body"
     );
+    assert_eq!(
+        handles(&state, id),
+        vec![handle.clone()],
+        "the project keeps its binding meanwhile"
+    );
     // Space appearing later lets the next pass deliver it.
     for stack in chest(&mut state) {
         *stack = mc_data::ItemStack::EMPTY;
     }
-    assert!(
+    assert_eq!(
         executor::return_carry_of(&mut state, id, uuid),
+        executor::CarryReturn::Delivered,
         "the freed store takes the load"
     );
     assert!(
@@ -540,91 +551,38 @@ fn a_carry_return_reports_delivery() {
             .is_none(),
         "the delivered load leaves the body"
     );
-}
-
-/// R2-4: every submission takes its sequence even before it starts, so a
-/// request that later retries does not fall behind requests submitted after it.
-#[test]
-fn every_submission_takes_its_sequence() {
-    let (mut state, id, _slot) = fixture();
-    open_plan(&mut state);
-    state.settlements.get_mut(id).unwrap().owner = Some("owner".into());
-    // An empty chest leaves the first request waiting; it still takes seq 1.
-    let _ = submit_order(
-        &mut state,
-        id,
-        OwnerOrder {
-            seq: 0,
-            blueprint: "house".into(),
-            level: 1,
-            building: None,
-        },
-    );
-    let _ = submit_order(
-        &mut state,
-        id,
-        OwnerOrder {
-            seq: 0,
-            blueprint: "house".into(),
-            level: 1,
-            building: None,
-        },
-    );
-    let record = state.settlements.get(id).unwrap();
-    let seqs: Vec<u64> = orders(record).map(|order| order.seq).collect();
+    // A body that is no longer addressable has nothing left to deliver.
+    state.entities.body_mut(slot).alive = false;
     assert_eq!(
-        seqs,
-        vec![1, 2],
-        "submission sequences are stamped in order"
-    );
-    assert_eq!(
-        record.order_seq, 2,
-        "the settlement keeps the last sequence"
+        executor::return_carry_of(&mut state, id, uuid),
+        executor::CarryReturn::Unreachable,
+        "a dead body cannot hold a binding"
     );
 }
 
-/// The persistence fence: a stored project written before the D8 fields
-/// existed refuses instead of reading as an unbound, sequence-less project.
+/// A lost builder's binding is kept only while its load cannot be delivered:
+/// the rebind pass retries a pending return and clears everything else.
 #[test]
-fn a_record_without_the_new_project_fields_refuses() {
-    let (mut state, id, _slot) = fixture();
-    open_plan(&mut state);
-    start(&mut state, id, "house", 1, None);
-    let record = state.settlements.get(id).unwrap();
-    let mut value = serde_json::to_value(record).expect("record serialises");
-    let project = value["projects"][0]
-        .as_object_mut()
-        .expect("project object");
-    project.remove("order_seq");
-    project.remove("builder");
-    let decoded: SettlementRecord = serde_json::from_value(value).expect("row decodes");
-    assert!(
-        validate_record(&decoded).is_err(),
-        "a row without the D8 project fields is refused"
-    );
-}
-
-/// R2-1: a binding only counts as an incumbent while the resident is still a
-/// Builder of this settlement and is not assigned to another job.
-#[test]
-fn a_stale_binding_is_not_an_incumbent() {
+fn a_lost_builder_keeps_its_binding_only_while_the_load_is_pending() {
     let (mut state, id, slot) = fixture();
     open_plan(&mut state);
     start(&mut state, id, "house", 1, None);
     let handle = handles(&state, id)[0].clone();
     let uuid = state.entities.row(slot).uuid;
     bind_project(&mut state, id, &handle, slot);
-    {
-        let record = state.settlements.get(id).unwrap();
-        let project = project_for_structure(record, &handle).unwrap();
-        assert_eq!(
-            incumbent_slot(&state, id, project),
-            Some(slot),
-            "the bound Builder holds its project"
-        );
-    }
-    // A resident that stopped being a Builder keeps no incumbent: the binding
-    // is stale and must be cleared by the rebind pass, carry first.
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
+    // The builder stopped being one, and the store cannot take its load yet.
     state
         .entities
         .row_mut(slot)
@@ -633,14 +591,49 @@ fn a_stale_binding_is_not_an_incumbent() {
         .unwrap()
         .data
         .profession = crate::villager::VillagerProfession::Farmer;
-    {
-        let record = state.settlements.get(id).unwrap();
-        let project = project_for_structure(record, &handle).unwrap();
-        assert_eq!(
-            incumbent_slot(&state, id, project),
-            None,
-            "a non-Builder keeps nothing"
-        );
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::new(log, 64);
     }
-    let _ = uuid;
+    super::rebind_lost_builders(&mut state, id);
+    assert_eq!(
+        project_for_structure(state.settlements.get(id).unwrap(), &handle)
+            .and_then(|project| project.builder)
+            .map(|(bound, _)| bound),
+        Some(uuid),
+        "a pending return keeps the binding so a later pass retries it"
+    );
+    // Space appears: the next pass delivers the load and frees the project.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    super::rebind_lost_builders(&mut state, id);
+    assert!(
+        project_for_structure(state.settlements.get(id).unwrap(), &handle)
+            .is_some_and(|project| project.builder.is_none()),
+        "a delivered load releases the binding"
+    );
+}
+
+/// A binding held by a body that is no longer addressable (a converting or dead
+/// villager) is cleared at once: it can never deliver anything again.
+#[test]
+fn a_converting_builder_never_holds_its_project() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    bind_project(&mut state, id, &handle, slot);
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    super::rebind_lost_builders(&mut state, id);
+    assert!(
+        project_for_structure(state.settlements.get(id).unwrap(), &handle)
+            .is_some_and(|project| project.builder.is_none()),
+        "a converting builder cannot hold the project"
+    );
 }

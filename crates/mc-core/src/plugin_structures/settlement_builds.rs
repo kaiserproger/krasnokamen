@@ -1265,7 +1265,12 @@ pub(crate) fn fetch(
     let rules = state.registry.item_rules();
     // The rest of the settlement's active bills are not this haul's to spend
     // (D8 review SOL-3).
-    let neighbours = crate::settlements::construction::other_active_bill(state, id, handle);
+    let Some(neighbours) = crate::settlements::construction::other_active_bill(state, id, handle)
+    else {
+        // Another project's bill cannot be read, so its materials cannot be
+        // reserved: refuse the haul instead of spending them (SOL-3b).
+        return Err(Failure::Blocked);
+    };
     for (planned, wanted) in plan {
         // Craft the whole haul; on a shortfall settle for what stock can give.
         let mut amount = wanted;
@@ -1440,20 +1445,35 @@ pub(crate) fn return_carry(state: &mut TickState, id: SettlementId) {
     }
 }
 
+/// What one addressable carry return achieved (D8 review SOL-6/R3-1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CarryReturn {
+    /// The load reached storage, or the body carried nothing.
+    Delivered,
+    /// Storage could not take it all yet: a later pass retries.
+    Pending,
+    /// The body can no longer be addressed (dead, converting, gone): nothing
+    /// is left to return and the binding must not be held by it.
+    Unreachable,
+}
+
 /// Return one builder's load to settlement storage. Release, rebind and
 /// stalled-builder recovery address a single project's builder, never the
 /// whole settlement.
-/// True when the body no longer carries anything this settlement has to take
-/// back, so an addressable return is never dropped before delivery (SOL-6).
-pub(crate) fn return_carry_of(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
+pub(crate) fn return_carry_of(
+    state: &mut TickState,
+    id: SettlementId,
+    uuid: uuid::Uuid,
+) -> CarryReturn {
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
-        return false;
+        return CarryReturn::Pending;
     }
     let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
-        return false;
+        // The row is no longer addressable as a live villager.
+        return CarryReturn::Unreachable;
     };
     if carry.slots.iter().all(mc_data::ItemStack::is_empty) {
-        return true;
+        return CarryReturn::Delivered;
     }
     let images = source_images(state, id);
     let mut post: Vec<Vec<mc_data::ItemStack>> =
@@ -1475,14 +1495,22 @@ pub(crate) fn return_carry_of(state: &mut TickState, id: SettlementId, uuid: uui
         .collect();
     let delivered = after.iter().all(mc_data::ItemStack::is_empty);
     if changes.is_empty() {
-        return false;
+        return CarryReturn::Pending;
     }
     changes.push(inventory::Change {
         before: carry,
         after,
     });
-    let _ = inventory::commit(state, changes);
-    delivered
+    // A refused commit leaves the load on the body: report it as pending, not
+    // as delivered (D8 review R3-2).
+    if inventory::commit(state, changes).is_err() {
+        return CarryReturn::Pending;
+    }
+    if delivered {
+        CarryReturn::Delivered
+    } else {
+        CarryReturn::Pending
+    }
 }
 
 pub(crate) fn pickup_point(

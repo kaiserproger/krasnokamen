@@ -182,15 +182,6 @@ pub(super) fn planned_cells(
     Ok((bounds, cells))
 }
 
-pub(crate) fn active_lot(
-    state: &TickState,
-    record: &SettlementRecord,
-) -> Option<ScriptWorldBounds> {
-    projects(record)
-        .next()
-        .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
-}
-
 /// One project's own lot: parallel sites must not read the first project's
 /// bounds (D8 review R2-5).
 pub(crate) fn project_lot(
@@ -205,14 +196,6 @@ pub(crate) fn project_lot(
 /// One project's own floor level (D8 review R2-5).
 pub(crate) fn project_floor(record: &SettlementRecord, handle: &str) -> i32 {
     access::project_for_structure(record, handle)
-        .map_or(record.anchor[1], |project| project.origin[1])
-}
-
-/// The level ground discovery centres on: the active project's own floor, so a
-/// builder's footing and the fill plan agree, else the bell's elevation.
-pub(crate) fn active_floor(record: &SettlementRecord) -> i32 {
-    projects(record)
-        .next()
         .map_or(record.anchor[1], |project| project.origin[1])
 }
 
