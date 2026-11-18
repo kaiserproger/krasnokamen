@@ -228,8 +228,13 @@ for the entity checkpoint design.
 
 The checkpoint manifest carries a required `manifest` format version beside its
 per-domain entries, written into the root and both child images and compared for
-exact equality on recovery. Any incompatible manifest change bumps it; there is
-no converter, and a world written under another version refuses startup.
+exact equality on recovery. Every added, removed or reinterpreted persisted
+`CheckpointManifest` field bumps it, including a field `serde(default)` would
+otherwise supply. There is no converter and no previous-version read path: a
+world written under another version refuses startup. The constant lives in
+`crates/mc-core/src/native_checkpoint.rs` (`MANIFEST_VERSION`) and is mirrored
+by `crates/mc-world/src/native/checkpoint.rs` for readers that open a store
+without the core.
 
 Disk-full checkpoint drills wrap the real lease-holding native file backend.
 The injected writer and `NativeStore` retain the same `Arc<File>`, as the

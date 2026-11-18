@@ -209,13 +209,16 @@ pub fn dimension_id(dimension: Dimension) -> u32 {
     }
 }
 
+/// The manifest format this build writes. `crates/mc-world/src/native/checkpoint.rs`
+/// carries the same constant for readers that open a store without mc-core.
+pub const MANIFEST_VERSION: u32 = 1;
+
 /// Required manifest image versions. `manifest` versions the manifest schema
 /// itself: it is the only gate against a binary opening a manifest it does not
 /// understand, so any incompatible manifest change bumps it. There is no
 /// converter; a manifest written under another version refuses startup.
 pub fn domain_versions() -> BTreeMap<String, u32> {
-    [
-        "manifest",
+    let mut versions: BTreeMap<String, u32> = [
         "climate",
         "gamerules",
         "block_ticks",
@@ -229,7 +232,9 @@ pub fn domain_versions() -> BTreeMap<String, u32> {
     ]
     .into_iter()
     .map(|key| (key.into(), 1))
-    .collect()
+    .collect();
+    versions.insert("manifest".into(), MANIFEST_VERSION);
+    versions
 }
 
 pub fn record(tick: u64, payload: Vec<u8>) -> NativeDomainRecord {

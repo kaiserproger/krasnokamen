@@ -236,6 +236,66 @@ fn native_checkpoint_accepts_pre_plugin_manifests_without_plugin_records() {
 }
 
 #[test]
+fn native_checkpoint_reports_the_manifest_version_before_decoding_rows() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    let mut records = globals(0);
+    {
+        let record = records.get_mut("checkpoint").unwrap();
+        let mut manifest: Value = serde_json::from_slice(&record.payload).unwrap();
+        manifest["domain_versions"]["manifest"] = json!(2);
+        record.payload = serde_json::to_vec(&manifest).unwrap();
+    }
+    // Only a row decode could fail later; the version gate must answer first.
+    records.get_mut("scoreboard").unwrap().payload = vec![0xff; 8];
+    let error = commit(&store, 0, 0, &records, &[], &[])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("unsupported manifest format version"),
+        "{error}"
+    );
+}
+
+#[test]
+fn old_manifest_refuses_compact_and_carry_over_before_any_row() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    commit(&store, 0, 0, &globals(0), &[], &[]).unwrap();
+    // Rewrite the committed manifest the way a build without the version entry did.
+    let tx = store.database.begin_write().unwrap();
+    {
+        let definition: TableDefinition<&str, &[u8]> = TableDefinition::new("global");
+        let mut table = tx.open_table(definition).unwrap();
+        let record = table.get("checkpoint").unwrap().unwrap().value().to_vec();
+        let mut manifest: Value = serde_json::from_slice(&record[16..]).unwrap();
+        manifest["domain_versions"]
+            .as_object_mut()
+            .unwrap()
+            .remove("manifest");
+        let payload = serde_json::to_vec(&manifest).unwrap();
+        let mut bytes = record[..12].to_vec();
+        bytes.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(&payload);
+        table.insert("checkpoint", bytes.as_slice()).unwrap();
+    }
+    tx.commit().unwrap();
+    let error = store.repack_rows().unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported manifest format version"),
+        "{error}"
+    );
+    // The next checkpoint must not carry players over from an older manifest.
+    let error = commit(&store, 1, 0, &globals(1), &[], &[])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("unsupported manifest format version"),
+        "{error}"
+    );
+}
+
+#[test]
 fn native_checkpoint_requires_the_manifest_format_version() {
     let directory = tempfile::tempdir().unwrap();
     let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();

@@ -215,6 +215,9 @@ impl NativeStore {
     /// form. Every row is fully decoded first, so a corrupt row aborts the run
     /// instead of being copied. Returns how many rows were rewritten.
     pub fn repack_rows(&self) -> Result<u64, NativeError> {
+        // The manifest is the format gate: an old world refuses before any row
+        // is decoded or rewritten.
+        super::checkpoint::require_current_manifest(&self.database)?;
         let mut rewritten = 0;
         for table in [IMPORTED, METADATA] {
             let mut after: Option<Vec<u8>> = None;
