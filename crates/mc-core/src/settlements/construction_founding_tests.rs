@@ -1,7 +1,7 @@
 use super::*;
 use crate::journal::{JournalEntry, JournalWriter, Replay};
 use crate::settlements::allocator::tests::villager;
-use crate::settlements::construction::tests::{complete, fixture, fund};
+use crate::settlements::construction::tests::{complete, fixture, fund, open_plan};
 use crate::settlements::{households, persistence};
 use crate::{CoreConfig, dimensions::Dimension};
 
@@ -1049,6 +1049,8 @@ fn fund_sites(state: &mut TickState, sites: &[(&'static str, [i32; 3])]) {
         }
     }
     let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    // The bills of several sites exceed one chest; the test stock is a larger one.
+    slots.resize(54, mc_data::ItemStack::EMPTY);
     slots.fill(mc_data::ItemStack::EMPTY);
     let mut index = 0;
     for (item, mut quantity) in bill {
@@ -1153,6 +1155,48 @@ fn a_site_under_construction_is_never_admitted_twice() {
     );
     assert_eq!(projects(record).count(), 1, "the joint proof refuses more");
     assert_eq!(chest(&state), stock, "no new reservation or movement");
+}
+
+#[test]
+fn an_owner_order_starts_while_every_outpost_site_is_under_construction() {
+    let (mut state, parent, expedition) = prepared(0);
+    open_plan(&mut state);
+    fund_sites(&mut state, &expedition.sites());
+    for _ in 0..8 {
+        plan(&mut state, parent);
+    }
+    let record = state.settlements.get(parent).unwrap();
+    assert_eq!(
+        projects(record)
+            .filter(|project| owns_project(record, project))
+            .count(),
+        4,
+        "every site is admitted"
+    );
+    super::super::request_build(&mut state, parent, "storage").unwrap();
+    assert_eq!(orders(state.settlements.get(parent).unwrap()).count(), 1);
+    let mut stock: Vec<_> = expedition.sites().into_iter().collect();
+    stock.push(("storage", [0, 0, 0]));
+    fund_sites(&mut state, &stock);
+    // The site scan is bounded per pass and keeps a cursor.
+    for _ in 0..24 {
+        super::super::plan(&mut state, parent);
+        if orders(state.settlements.get(parent).unwrap()).next().is_none() {
+            break;
+        }
+    }
+    let record = state.settlements.get(parent).unwrap();
+    assert_eq!(
+        orders(record).count(),
+        0,
+        "the funded order started: {:?}",
+        pending_reason_at(&state, parent, 0)
+    );
+    assert!(
+        projects(record).any(|project| project.ordered && project.blueprint == "storage"),
+        "beside the outpost projects"
+    );
+    assert_eq!(projects(record).count(), 5);
 }
 
 #[test]

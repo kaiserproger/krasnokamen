@@ -431,6 +431,13 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
         };
         return begin(state, project, &species, color);
     }
+    // Every site is admitted. While the expedition's own projects build, the
+    // parent's owner orders and autonomy keep their free slots; the turn is
+    // held only for the final handover.
+    let record = state.settlements.get(parent).unwrap();
+    if projects(record).any(|project| owns_project(record, project)) {
+        return false;
+    }
     finish(state, parent, &expedition);
     true
 }
