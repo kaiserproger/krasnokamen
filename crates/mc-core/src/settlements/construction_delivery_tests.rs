@@ -182,7 +182,7 @@ fn production_and_builder_assignment_exclude_each_other_and_paused_debt_cannot_b
         ),
         Err(mc_script::ScriptOperationFailure::Busy)
     );
-    crate::plugin_structures::settlement_builds::return_carry(&mut state, id);
+    crate::plugin_structures::settlement_builds::return_carry_of(&mut state, id, uuid);
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
     assert!(
         crate::villager::building::work(

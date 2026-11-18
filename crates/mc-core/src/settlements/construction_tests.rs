@@ -79,13 +79,7 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
     ));
     let outcome = request_build(&mut state, id, "lumber_camp").unwrap();
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "funded admission: {outcome:?}"
     );
     for _ in 0..4096 {
@@ -298,8 +292,8 @@ pub(crate) fn bind_project(
     slot: EntitySlot,
 ) {
     let uuid = state.entities.row(slot).uuid;
-    if let Some(mut record) = state.settlements.get_mut(id) {
-        crate::settlements::construction::bind_builder(&mut record, handle, Some((uuid, None)));
+    if let Some(record) = state.settlements.get_mut(id) {
+        crate::settlements::construction::bind_builder(record, handle, Some((uuid, None)));
         record.revision = record.revision.saturating_add(1);
     }
 }
@@ -313,19 +307,19 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     let uuid = state.entities.row(slot).uuid;
     // Bind the resident to every unbound project: one resident cannot hold two,
     // so an already-bound project keeps its own builder (D8 review P1-2).
-    let bindings: Vec<(String, Option<(uuid::Uuid, Option<Profession>)>)> = state
+    let bindings: Vec<String> = state
         .settlements
         .get(id)
         .map(|record| {
             crate::settlements::construction::projects(record)
                 .filter(|project| project.builder.is_none())
-                .map(|project| (project.structure.clone(), Some((uuid, None))))
+                .map(|project| project.structure.clone())
                 .collect()
         })
         .unwrap_or_default();
-    if let Some(mut record) = state.settlements.get_mut(id) {
-        for (handle, binding) in bindings {
-            crate::settlements::construction::bind_builder(&mut record, &handle, binding);
+    if let Some(record) = state.settlements.get_mut(id) {
+        for handle in bindings {
+            crate::settlements::construction::bind_builder(record, &handle, Some((uuid, None)));
         }
     }
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
@@ -500,14 +494,7 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "storage", 1);
     for _ in 0..128 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -523,14 +510,7 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "house", 1);
     for _ in 0..4096 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -1008,14 +988,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     fund(&mut restored, "watch_tower", 1);
     for _ in 0..128 {
         plan(&mut restored, id);
-        if restored
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !restored.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }

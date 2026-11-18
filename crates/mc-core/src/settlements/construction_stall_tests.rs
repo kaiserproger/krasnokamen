@@ -330,9 +330,9 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
     state.entities.set_pos(builder, [8.5, 201.0, 8.5]);
     assert!(executor::clearing(&state, id, &structure));
     // The planner binds the builder; a direct work call needs the same authority.
-    if let Some(mut record) = state.settlements.get_mut(id) {
+    if let Some(record) = state.settlements.get_mut(id) {
         super::bind_builder(
-            &mut record,
+            record,
             &structure,
             Some((state.entities.row(builder).uuid, None)),
         );

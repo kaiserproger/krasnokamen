@@ -272,15 +272,7 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
         fund(&mut state, name, 1);
         state.tick = state.tick.div_ceil(20) * 20;
         construction::tick(&mut state);
-        assert!(
-            state
-                .settlements
-                .get(parent)
-                .unwrap()
-                .projects
-                .first()
-                .is_some()
-        );
+        assert!(!state.settlements.get(parent).unwrap().projects.is_empty());
         let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
         v.data.profession = VillagerProfession::Builder;
         v.activity = Activity::Work;

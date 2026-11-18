@@ -166,7 +166,6 @@ fn manifest(
     state: &TickState,
     id: SettlementId,
     lot: layout::Lot,
-    size: [u8; 3],
 ) -> (ScriptWorldBounds, Vec<PlannedCell>) {
     let project = super::super::Project {
         settlement: id,
@@ -210,7 +209,7 @@ fn road_crossing_lot_is_admitted_with_a_detour_and_stays_connected() {
     }
     // The manifest the executor walks, in its own order: detour first, then the
     // house's cells, then the retired village cells.
-    let (_, cells) = manifest(&state, id, lot, size);
+    let (_, cells) = manifest(&state, id, lot);
     let ordered = executor_order(&state, &cells);
     let first_house = ordered
         .iter()
@@ -732,7 +731,7 @@ fn a_pending_detour_keeps_the_network_walkable_for_the_next_plan() {
     let (front, normal, lot, size) = plateau(&mut state, id);
     let bounds = bounds_of(lot, size);
     crossing_road(&mut state, front, normal, size, bounds);
-    let (extent, cells) = manifest(&state, id, lot, size);
+    let (extent, cells) = manifest(&state, id, lot);
     // Project A holds a real pending structure: its detour is not laid yet and
     // its retired line is still in the world.
     let handle = crate::plugin_structures::settlement_builds::prepare(

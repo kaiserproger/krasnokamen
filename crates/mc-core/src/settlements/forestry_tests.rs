@@ -461,7 +461,7 @@ fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
         construction::request_build(&mut state, id, "storage").unwrap(),
         construction::OrderOutcome::Queued { .. }
     ));
-    assert!(state.settlements.get(id).unwrap().orders.first().is_some());
+    assert!(!state.settlements.get(id).unwrap().orders.is_empty());
     let active = state.world.chunks().map(|chunk| chunk.pos).collect();
     state.world.set_active_chunks(active, state.tick);
     let generator = state.world.generator();
@@ -475,14 +475,7 @@ fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
         }
         state.tick += 4;
         construction::tick(&mut state);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -931,15 +924,7 @@ fn protected_crown_above_access_headroom_stays_while_the_building_finishes() {
     assert!(!clearable(&state, at));
     fund(&mut state, "storage", 1);
     construction::request_build(&mut state, id, "storage").unwrap();
-    assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-    );
+    assert!(!state.settlements.get(id).unwrap().projects.is_empty());
     complete(&mut state, id, builder);
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(leaves));
 }

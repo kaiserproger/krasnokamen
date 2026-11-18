@@ -189,8 +189,7 @@ fn a_waterlogged_supply_in_the_work_volume_is_not_a_fill_target() {
         &state,
         &mut liquids,
         &mut cost,
-        at[0],
-        at[2],
+        [at[0], at[2]],
         at[1] - 1,
         origin[1],
         false,
@@ -696,7 +695,7 @@ fn closed_two_cell_plan(state: &mut TickState, id: SettlementId) -> ([i32; 3], [
     state.world.set_block(b[0], b[1], b[2], water);
     for x in 2..=7 {
         for z in 2..=4 {
-            if x < 3 || x > 6 || z < 3 || z > 3 {
+            if !(3..=6).contains(&x) || z != 3 {
                 state.world.set_block(x, 201, z, stone);
             }
         }
@@ -821,7 +820,7 @@ fn a_refused_resume_keeps_a_paid_cell_and_its_charge() {
     state.world.set_block(b[0], b[1], b[2], flowing);
     for x in 2..=7 {
         for z in 2..=4 {
-            if x < 3 || x > 6 || z < 3 || z > 3 {
+            if !(3..=6).contains(&x) || z != 3 {
                 state.world.set_block(x, 201, z, stone);
             }
         }
@@ -934,7 +933,7 @@ fn a_paid_cell_replaced_by_a_preserved_supply_refuses_the_resume() {
     state.world.set_block(b[0], b[1], b[2], flowing);
     for x in 2..=7 {
         for z in 2..=4 {
-            if x < 3 || x > 6 || z < 3 || z > 3 {
+            if !(3..=6).contains(&x) || z != 3 {
                 state.world.set_block(x, 201, z, stone);
             }
         }
