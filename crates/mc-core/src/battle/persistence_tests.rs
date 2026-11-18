@@ -564,3 +564,145 @@ fn battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements() {
         "exceeds capacity",
     );
 }
+
+/// The element with its guard deadline blanked: a change that moves nothing but
+/// `action.until` is a guard re-stamp, not a decision.
+fn without_hold(element: &serde_json::Value) -> serde_json::Value {
+    let mut stripped = element.clone();
+    // `Action` is an externally tagged enum: `{"Guard":{"until":N}}`.
+    if let Some(action) = stripped
+        .get_mut("action")
+        .and_then(|action| action.as_object_mut())
+    {
+        for variant in action.values_mut() {
+            if let Some(until) = variant.get_mut("until") {
+                *until = serde_json::Value::from(0);
+            }
+        }
+    }
+    stripped
+}
+
+/// Guard churn (D20, 2026-11-17): a routed man's guard deadline is dead state
+/// while he flees — the second pass skips him on `routing` before reading it —
+/// so a mass rout must not re-journal every fugitive's fighter record each
+/// tick. One stamp per flight, resolved when a pass can read it, and the
+/// folded records still reproduce the live image.
+#[test]
+fn battle_wal_does_not_rejournal_a_routing_fighter_every_tick() {
+    use crate::battle::combat::Action;
+    let mut state = started(100);
+    for _ in 0..20 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    journal_entries(&mut state, &mut Vec::new()).unwrap();
+    let tick = state.tick;
+    let rows = checkpoint_rows(&mut state, tick).unwrap();
+    let mut replay = Replay {
+        battle: checkpoint_image(&rows, state.dimension, tick).unwrap(),
+        ..Replay::default()
+    };
+    // A mass rout: break every regiment of one side, as `cavalry_tests` does.
+    for regiment in &mut state.hostile.battle.formation.regiments {
+        if regiment.spec.faction == 2 {
+            regiment.morale.broken = true;
+        }
+    }
+    let mut routed = 0;
+    for _ in 0..120 {
+        crate::tick::run_tick(&mut state, &[]);
+        routed = state
+            .hostile
+            .battle
+            .formation
+            .members
+            .iter()
+            .filter(|member| member.routing)
+            .count();
+        if routed > 8 {
+            break;
+        }
+    }
+    assert!(
+        routed > 8,
+        "the forced break must put men to flight: {routed}"
+    );
+    let mut mirror: Vec<serde_json::Value> = Vec::new();
+    let (mut elements, mut guard_only, mut held) = (0_usize, 0_usize, 0_usize);
+    for _ in 0..30 {
+        crate::tick::run_tick(&mut state, &[]);
+        let battle = &state.hostile.battle;
+        // Invariant of the change: a routed man outside the bounds' bay keeps a
+        // guard, so flight still suppresses his attack.
+        for bi in 0..battle.formation.members.len() {
+            let context = battle.formation.context_at(bi);
+            if context.routing && !battle.formation.cornered_at(bi) {
+                assert!(
+                    matches!(battle.combat.fighters[bi].action, Action::Guard { .. }),
+                    "a routing man {bi} holds a guard"
+                );
+                held += 1;
+            }
+        }
+        // Which fighters cannot act (`context.routing`) and are not at bay.
+        let holding: Vec<bool> = (0..battle.formation.members.len())
+            .map(|bi| {
+                let member = &battle.formation.members[bi];
+                (member.routing || !member.alive || member.wounded)
+                    && !battle.formation.cornered_at(bi)
+            })
+            .collect();
+        let mut entries = Vec::new();
+        journal_entries(&mut state, &mut entries).unwrap();
+        for entry in &entries {
+            match entry {
+                JournalEntry::Battle { value } => {
+                    let image: serde_json::Value = serde_json::from_str(value).unwrap();
+                    mirror = image["battle"]["combat"]["fighters"]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default();
+                }
+                JournalEntry::BattlePatch { value } => {
+                    for list in value["lists"].as_array().into_iter().flatten() {
+                        if list["list"] != "fighters" {
+                            continue;
+                        }
+                        let len = list["len"].as_u64().unwrap() as usize;
+                        mirror.resize(len, serde_json::Value::Null);
+                        for pair in list["set"].as_array().unwrap() {
+                            let index = pair[0].as_u64().unwrap() as usize;
+                            let element = &pair[1];
+                            elements += 1;
+                            let previous = mirror.get(index);
+                            let routing = holding.get(index).copied().unwrap_or(false);
+                            if routing
+                                && previous.is_some_and(|previous| {
+                                    !previous.is_null()
+                                        && without_hold(previous) == without_hold(element)
+                                })
+                            {
+                                guard_only += 1;
+                            }
+                            mirror[index] = element.clone();
+                        }
+                    }
+                }
+                other => panic!("unexpected battle record {other:?}"),
+            }
+        }
+        replay = crate::journal::apply_batch_images(replay, &[(state.tick, state.tick, entries)]);
+        assert!(replay.battle_fault.is_none(), "{:?}", replay.battle_fault);
+        assert!(
+            parsed(&image(&replay).unwrap()) == parsed(&encode(&state).unwrap()),
+            "tick {}: the folded records reproduce the live image",
+            state.tick
+        );
+    }
+    assert!(held > 8, "the rout must hold men in flight: {held}");
+    assert!(elements > 0, "the rout must journal fighter records");
+    assert_eq!(
+        guard_only, 0,
+        "{guard_only} of {elements} fighter elements changed nothing but `action.until` during a mass rout"
+    );
+}

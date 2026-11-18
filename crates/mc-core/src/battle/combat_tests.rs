@@ -666,3 +666,124 @@ fn a_broken_fugitive_at_bay_still_strikes_an_enemy_in_reach() {
         .count();
     assert!(swings > 0, "a cornered fugitive never turned at bay");
 }
+
+/// One combat pass with the actor's column forced out of the active set, which
+/// `prepare` cannot produce on demand.
+fn step_off_chunk(
+    state: &TickState,
+    battle: &mut BattleState,
+    tick: u64,
+    bi: usize,
+    off: bool,
+) -> Output {
+    prepare(state, battle, tick);
+    if off {
+        battle.columns.active[bi] = false;
+    }
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick,
+    };
+    let mut out = Output::default();
+    step(&frame, battle, &mut out);
+    out
+}
+
+/// A flight stamps its hold once. The two paths that can read it must see the
+/// deadline the old per-tick re-stamp left, or a man would be held longer than
+/// base holds him:
+/// - a pass that cannot visit him (chunk out of the active set) freezes the
+///   marker at `tick + 19`, base's value for the tick before, once;
+/// - a pass that can read it (pinned at bay) resolves the marker to the same
+///   value, so the hold does not slide forward.
+#[test]
+fn a_flight_hold_is_stamped_once_and_never_slides_forward() {
+    use super::super::formation::{Order, RegimentSpec};
+    let enter = |actor: EntityId, state: &TickState, battle: &mut BattleState| {
+        battle
+            .formation
+            .add_regiment(
+                RegimentSpec {
+                    id: 0,
+                    faction: 1,
+                    origin: state.entities.pos(slot(state, actor)),
+                    facing: [1.0, 0.0],
+                    files: 1,
+                    frontage: 1.0,
+                    order: Order::Hold,
+                },
+                &[actor],
+            )
+            .unwrap();
+        prepare(state, battle, 0);
+        let bi = index(state, battle, actor);
+        battle.formation.members[bi].routing = true;
+        battle.columns.targets[bi] = None;
+        bi
+    };
+
+    // Off the active set: base wrote 100 + 20 on tick 100 and nothing on tick
+    // 101, so the frozen value is exactly 120, however long the gap.
+    let (state, mut battle, actor, _victim) = pair();
+    let bi = enter(actor, &state, &mut battle);
+    step_off_chunk(&state, &mut battle, 100, bi, false);
+    let Action::Guard { until } = battle.combat.fighters[bi].action else {
+        panic!("a fugitive holds a guard");
+    };
+    assert!(
+        until > 120,
+        "a flight must not hold a deadline that expires on the next pass: {until}"
+    );
+    step_off_chunk(&state, &mut battle, 101, bi, true);
+    assert_eq!(
+        battle.combat.fighters[bi].action,
+        Action::Guard { until: 120 }
+    );
+    for tick in 102..=140 {
+        step_off_chunk(&state, &mut battle, tick, bi, true);
+    }
+    assert_eq!(
+        battle.combat.fighters[bi].action,
+        Action::Guard { until: 120 },
+        "an off-chunk fighter is not re-stamped every tick"
+    );
+    // He rallies and his chunk comes back. Base's guard expired at 120, so the
+    // return must not mint a fresh hold. The pass is pinned to one with no
+    // attack decision, so the guard is the only thing it could rewrite.
+    battle.formation.members[bi].routing = false;
+    let mut rally = 141;
+    while (rally + actor.0 as u64) % ATTACK_DECISION_TICKS == 0 {
+        rally += 1;
+    }
+    step_off_chunk(&state, &mut battle, rally, bi, false);
+    match battle.combat.fighters[bi].action {
+        Action::Guard { until } => assert_eq!(
+            until, 120,
+            "a rally after an off-chunk flight mints no fresh hold"
+        ),
+        other => panic!("a rally pass with no decision keeps the guard: {other:?}"),
+    }
+
+    // Pinned at bay on the very next pass: the marker resolves to 120, not to
+    // 101 + 19 + 19, and the pass stops on the hold before any decision.
+    let (state, mut battle, actor, _victim) = pair();
+    let bi = enter(actor, &state, &mut battle);
+    step_off_chunk(&state, &mut battle, 100, bi, false);
+    let at = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .set_bounds([at[0] - 1.0, at[2] - 50.0], [at[0] + 50.0, at[2] + 50.0])
+        .unwrap();
+    assert!(
+        battle.formation.cornered_at(bi),
+        "the bounds pin the fugitive"
+    );
+    step_off_chunk(&state, &mut battle, 101, bi, false);
+    assert_eq!(
+        battle.combat.fighters[bi].action,
+        Action::Guard { until: 120 },
+        "the hold resolves to base's deadline and does not slide forward"
+    );
+}
