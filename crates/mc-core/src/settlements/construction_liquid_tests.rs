@@ -8,6 +8,7 @@ use super::preparation::liquid;
 use super::site_refusals::{self, Reason};
 use super::tests::fixture;
 use super::*;
+use crate::entities::EntitySlot;
 use crate::settlements::allocator::tests::block;
 
 /// The storage blueprint's lot at `[3, 201, 3]`, with a one-deep water pool in
@@ -106,7 +107,14 @@ fn mixed_liquids_refuse() {
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &liquids, origin, size, origin[1] - 2, &[]),
+        liquid::finish(
+            &state,
+            &liquids,
+            origin,
+            max_of(origin, size),
+            origin[1] - 2,
+            &[]
+        ),
         Err(Reason::MixedLiquids)
     );
     // A preserved water source (waterlogged/bubble) counts as water for mixing.
@@ -116,7 +124,14 @@ fn mixed_liquids_refuse() {
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &preserved, origin, size, origin[1] - 2, &[]),
+        liquid::finish(
+            &state,
+            &preserved,
+            origin,
+            max_of(origin, size),
+            origin[1] - 2,
+            &[]
+        ),
         Err(Reason::MixedLiquids)
     );
 }
@@ -129,7 +144,14 @@ fn a_preserved_water_supply_alone_refuses() {
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &liquids, origin, size, origin[1] - 2, &[]),
+        liquid::finish(
+            &state,
+            &liquids,
+            origin,
+            max_of(origin, size),
+            origin[1] - 2,
+            &[]
+        ),
         Err(Reason::LiquidInWork)
     );
 }
@@ -142,7 +164,14 @@ fn the_liquid_bound_refuses() {
         ..Default::default()
     };
     assert_eq!(
-        liquid::finish(&state, &liquids, origin, size, origin[1] - 2, &[]),
+        liquid::finish(
+            &state,
+            &liquids,
+            origin,
+            max_of(origin, size),
+            origin[1] - 2,
+            &[]
+        ),
         Err(Reason::LiquidBeyondBound)
     );
 }
@@ -320,7 +349,7 @@ fn one_cell_project(
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
     };
     (project, bounds, cells)
 }
@@ -513,7 +542,7 @@ fn a_fluid_on_an_unfloored_floor_row_is_one_paid_fill() {
         building: None,
         structure: String::new(),
         ordered: false,
-        borrowed_builder: None,
+        builder: None,
     };
     let (_, cells) =
         super::preparation::planned_cells(&state, &project, "oak", &mut Default::default())
@@ -525,4 +554,333 @@ fn a_fluid_on_an_unfloored_floor_row_is_one_paid_fill() {
     assert_eq!(fill.state, state.registry.states.dirt);
     assert_eq!(fill.resource.as_deref(), Some("minecraft:dirt"));
     assert_eq!(fill.quantity, 1, "one paid fill block");
+}
+
+fn max_of(origin: [i32; 3], size: [u8; 3]) -> [i32; 3] {
+    std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1)
+}
+
+/// A material-free settlement plan over `cells`, the shape a road tile takes.
+fn begin_plan(
+    state: &mut TickState,
+    id: SettlementId,
+    cells: Vec<([i32; 3], u32, Option<&str>)>,
+) -> String {
+    let mut min = cells[0].0;
+    let mut max = cells[0].0;
+    let planned = cells
+        .into_iter()
+        .map(|(at, plan, resource)| {
+            for axis in 0..3 {
+                min[axis] = min[axis].min(at[axis]);
+                max[axis] = max[axis].max(at[axis]);
+            }
+            executor::PlannedCell {
+                at,
+                state: plan,
+                resource: resource.map(str::to_owned),
+                quantity: u32::from(resource.is_some()),
+            }
+        })
+        .collect();
+    let bounds = ScriptWorldBounds::new(min, max).expect("plan bounds");
+    let project = Project {
+        settlement: id,
+        blueprint: layout::ROAD.into(),
+        level: 1,
+        origin: [min[0], min[1] - 1, min[2]],
+        rotation: 0,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+        builder: None,
+    };
+    assert!(
+        begin_cells(state, project, bounds, planned),
+        "plan is admitted"
+    );
+    state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .last()
+        .unwrap()
+        .structure
+        .clone()
+}
+
+fn plan_stages(state: &TickState, id: SettlementId, handle: &str) -> Vec<String> {
+    executor::status(state, id, handle)
+        .expect("plan status")
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .collect()
+}
+
+#[test]
+fn a_source_fill_stage_runs_before_clear() {
+    let (mut state, id, _slot) = fixture();
+    let source = state.registry.states.water_levels[0];
+    let plant = block(&state, "minecraft:short_grass", &[]);
+    let fill = [3, 201, 3];
+    let clear = [5, 201, 3];
+    state.world.set_block(fill[0], fill[1], fill[2], source);
+    state.world.set_block(clear[0], clear[1], clear[2], plant);
+    state.world.fold_overlay();
+    let air = state.registry.states.air;
+    let dirt = state.registry.states.dirt;
+    let handle = begin_plan(&mut state, id, vec![(fill, dirt, None), (clear, air, None)]);
+    assert_eq!(
+        plan_stages(&state, id, &handle),
+        vec!["liquid".to_owned(), "clear".to_owned()],
+        "a source fill runs in its own stage before the clear stage"
+    );
+}
+
+#[test]
+fn flowing_lava_blocks_the_write_and_wakes_once() {
+    let (mut state, id, slot) = fixture();
+    let at = [3, 201, 3];
+    let flowing = state.registry.states.lava_levels[1];
+    state.world.set_block(at[0], at[1], at[2], flowing);
+    state.world.fold_overlay();
+    let dirt = state.registry.states.dirt;
+    begin_plan(&mut state, id, vec![(at, dirt, None)]);
+    let writes = state.plugin_block_writes.len();
+    super::tests::attempt(&mut state, id, slot);
+    assert_eq!(
+        state.plugin_block_writes.len(),
+        writes,
+        "a flowing lava cell is never written"
+    );
+    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(flowing));
+    assert!(
+        state.fluid_ticks.queued_around(crate::boundary::BlockPos {
+            x: at[0],
+            y: at[1],
+            z: at[2],
+        }),
+        "the waiting gate wakes the orphan flow"
+    );
+}
+
+#[test]
+fn water_is_written_without_a_gate() {
+    let (mut state, id, slot) = fixture();
+    let at = [3, 201, 3];
+    let water = state.registry.states.water_levels[1];
+    state.world.set_block(at[0], at[1], at[2], water);
+    state.world.fold_overlay();
+    let dirt = state.registry.states.dirt;
+    begin_plan(&mut state, id, vec![(at, dirt, None)]);
+    super::tests::attempt(&mut state, id, slot);
+    assert_eq!(
+        state.world.block_at(at[0], at[1], at[2]),
+        Some(dirt),
+        "water has no drain gate and is filled immediately"
+    );
+}
+
+/// A two-cell plan whose one-cell ring is solid, so the closed bowl holds.
+fn closed_two_cell_plan(state: &mut TickState, id: SettlementId) -> ([i32; 3], [i32; 3], String) {
+    let a = [3, 201, 3];
+    let b = [6, 201, 3];
+    let water = state.registry.states.water_levels[0];
+    let stone = state.registry.states.stone;
+    let dirt = state.registry.states.dirt;
+    state.world.set_block(b[0], b[1], b[2], water);
+    for x in 2..=7 {
+        for z in 2..=4 {
+            if x < 3 || x > 6 || z < 3 || z > 3 {
+                state.world.set_block(x, 201, z, stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let handle = begin_plan(state, id, vec![(a, dirt, None), (b, dirt, None)]);
+    (a, b, handle)
+}
+
+/// Pause the plan by editing a cell inside its fence.
+fn pause_plan(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
+    super::tests::attempt(state, id, slot);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    let paused = executor::status(state, id, &handle).expect("status").state
+        == mc_script::ScriptStructureState::Paused;
+    assert!(paused, "an edit inside the fence pauses the plan");
+}
+
+#[test]
+fn recover_refuses_an_open_shell() {
+    let (mut state, id, slot) = fixture();
+    let (a, b, handle) = closed_two_cell_plan(&mut state, id);
+    let stone = state.registry.states.stone;
+    // An edit inside the fence pauses the plan; the fill cells are still ahead.
+    state.world.set_block(b[0], b[1], b[2], stone);
+    state.world.fold_overlay();
+    pause_plan(&mut state, id, slot);
+    // A new fluid cell ahead of the plan with an opened ring: no resume.
+    let water = state.registry.states.water_levels[0];
+    let air = state.registry.states.air;
+    state.world.set_block(b[0], b[1], b[2], water);
+    state.world.set_block(2, 201, 3, air);
+    state.world.fold_overlay();
+    assert_eq!(
+        executor::recover(&mut state, id, &handle),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+    let _ = a;
+}
+
+#[test]
+fn recover_refuses_a_new_preserved_supply() {
+    let (mut state, id, slot) = fixture();
+    let (_a, b, handle) = closed_two_cell_plan(&mut state, id);
+    let stone = state.registry.states.stone;
+    state.world.set_block(b[0], b[1], b[2], stone);
+    state.world.fold_overlay();
+    pause_plan(&mut state, id, slot);
+    let fence = block(&state, "minecraft:oak_fence", &[("waterlogged", "true")]);
+    state.world.set_block(b[0], b[1], b[2], fence);
+    state.world.fold_overlay();
+    assert_eq!(
+        executor::recover(&mut state, id, &handle),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+}
+
+#[test]
+fn a_funded_fill_charges_once() {
+    let (mut state, id, slot) = fixture();
+    let a = [3, 201, 3];
+    let b = [6, 201, 3];
+    let dirt_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").expect("dirt id"))
+        .expect("dirt item");
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).expect("chest");
+    chest.slots[0] = mc_data::ItemStack::new(dirt_item, 2);
+    let dirt = state.registry.states.dirt;
+    let handle = begin_plan(
+        &mut state,
+        id,
+        vec![
+            (a, dirt, Some("minecraft:dirt")),
+            (b, dirt, Some("minecraft:dirt")),
+        ],
+    );
+    let stored = |state: &TickState| {
+        state.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+    };
+    for _ in 0..16 {
+        super::tests::attempt(&mut state, id, slot);
+    }
+    assert_eq!(state.world.block_at(a[0], a[1], a[2]), Some(dirt));
+    assert_eq!(state.world.block_at(b[0], b[1], b[2]), Some(dirt));
+    assert_eq!(
+        stored(&state),
+        0,
+        "exactly one storage block per paid fill cell"
+    );
+    assert!(
+        executor::status(&state, id, &handle).is_ok(),
+        "the plan is complete or still tracked without a second charge"
+    );
+}
+
+#[test]
+fn a_refused_resume_keeps_a_paid_cell_and_its_charge() {
+    let (mut state, id, slot) = fixture();
+    let a = [3, 201, 3];
+    let b = [6, 201, 3];
+    let dirt_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").expect("dirt id"))
+        .expect("dirt item");
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).expect("chest");
+    chest.slots[0] = mc_data::ItemStack::new(dirt_item, 2);
+    let stone = state.registry.states.stone;
+    // A flowing lava cell the gate will not write: the plan keeps a paid cell and
+    // a fluid cell ahead of it at the same time.
+    let flowing = state.registry.states.lava_levels[1];
+    let dirt = state.registry.states.dirt;
+    state.world.set_block(b[0], b[1], b[2], flowing);
+    for x in 2..=7 {
+        for z in 2..=4 {
+            if x < 3 || x > 6 || z < 3 || z > 3 {
+                state.world.set_block(x, 201, z, stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let handle = begin_plan(
+        &mut state,
+        id,
+        vec![
+            (a, dirt, Some("minecraft:dirt")),
+            (b, dirt, Some("minecraft:dirt")),
+        ],
+    );
+    for _ in 0..8 {
+        super::tests::attempt(&mut state, id, slot);
+    }
+    assert_eq!(state.world.block_at(a[0], a[1], a[2]), Some(dirt));
+    let dirt_units = |state: &TickState| {
+        let stored: i32 = state.block_entities[&(1, 201, 1)]
+            .slots
+            .iter()
+            .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
+            .map(|stack| stack.count)
+            .sum();
+        let carried: i32 = state.entities.row(slot).villager.as_ref().map_or(0, |v| {
+            v.inventory
+                .iter()
+                .flatten()
+                .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
+                .map(|stack| stack.count)
+                .sum()
+        });
+        stored + carried
+    };
+    assert_eq!(dirt_units(&state), 1, "one of two blocks paid for one cell");
+    // A ring edit inside the widened fence pauses the plan.
+    let air = state.registry.states.air;
+    state.world.set_block(2, 201, 3, air);
+    state.world.fold_overlay();
+    super::tests::attempt(&mut state, id, slot);
+    assert_eq!(
+        executor::status(&state, id, &handle).expect("status").state,
+        mc_script::ScriptStructureState::Paused
+    );
+    // The opened ring plus the fluid still ahead of the plan refuse the resume.
+    assert_eq!(
+        executor::recover(&mut state, id, &handle),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+    assert_eq!(
+        state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the placed cell survives the refusal"
+    );
+    assert_eq!(
+        executor::status(&state, id, &handle).expect("status").state,
+        mc_script::ScriptStructureState::Paused,
+        "a refused resume keeps the pause"
+    );
+    assert_eq!(
+        dirt_units(&state),
+        1,
+        "a refused resume charges nothing further"
+    );
 }

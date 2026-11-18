@@ -190,6 +190,26 @@ impl FluidTicks {
         }
         queue
     }
+    /// Any queued tick at `pos` or one of its six neighbours. A waiting gate
+    /// uses this to schedule an orphan flow exactly once: while a tick is still
+    /// outstanding for that neighbourhood there is nothing to wake.
+    pub(crate) fn queued_around(&self, pos: BlockPos) -> bool {
+        const STEPS: [[i32; 3]; 7] = [
+            [0, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 0, 1],
+            [0, 0, -1],
+        ];
+        self.queued.keys().any(|(at, _, _, _, _)| {
+            STEPS.iter().any(|step| {
+                at.x == pos.x + step[0] && at.y == pos.y + step[1] && at.z == pos.z + step[2]
+            })
+        })
+    }
+
     pub(crate) fn schedule(
         &mut self,
         pos: BlockPos,

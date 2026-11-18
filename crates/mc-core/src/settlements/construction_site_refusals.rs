@@ -686,7 +686,7 @@ pub(super) fn check(
     }
     // Fluid inside the work volume is a fill target only while its supply ends
     // inside this footprint (closed bowl) and it is a single fluid kind.
-    liquid::finish(state, &liquids, origin, size, lowest, &columns)?;
+    liquid::finish(state, &liquids, origin, max, lowest, &columns)?;
     cost.liquid = liquids.total();
     cost.water = liquids.water;
     cost.lava = liquids.lava;

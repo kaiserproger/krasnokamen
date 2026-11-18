@@ -74,9 +74,37 @@ pub(crate) fn prepare(
     }) {
         return Err(Failure::Blocked);
     }
-    let image = fingerprint(state, bounds, true)?;
     let revision = next(ledger.revision)?;
     let id = format!("settlement-{}-{revision}", settlement.0);
+    // D10: a fill cell that currently holds a real fluid source runs in a stage
+    // before `clear`, so a cut the lava beside it would block never waits on a
+    // supply that is filled later. A source cell belongs to exactly one stage,
+    // so no cell is placed or paid twice and the bill is unchanged.
+    let liquid_stage =
+        crate::settlements::construction::preparation::liquid::stage_cells(state, &cells);
+    // D10: a liquid plan's closed-bowl ring is one cell outside the footprint.
+    // Keep it inside the interference fence, so a ring change pauses the plan
+    // instead of letting the remaining flow leave the lot.
+    let liquid_work = cells.iter().any(|cell| {
+        state
+            .world
+            .block_at(cell.at[0], cell.at[1], cell.at[2])
+            .is_some_and(|block| {
+                crate::settlements::construction::preparation::liquid::has_fluid(state, block)
+            })
+    });
+    let bounds = if liquid_work {
+        ScriptWorldBounds::new(
+            [bounds.min[0] - 1, bounds.min[1], bounds.min[2] - 1],
+            [bounds.max[0] + 1, bounds.max[1], bounds.max[2] + 1],
+        )
+        .map_err(|_| Failure::InvalidRequest)?
+    } else {
+        bounds
+    };
+    // The image covers the whole fence, ring included: the first advance of a
+    // liquid plan must not read the expansion as a foreign edit.
+    let image = fingerprint(state, bounds, true)?;
     let cells: Vec<_> = cells
         .into_iter()
         .map(|cell| Cell {
@@ -91,13 +119,24 @@ pub(crate) fn prepare(
     }) {
         return Err(Failure::InvalidRequest);
     }
-    let (clear, build): (Vec<_>, Vec<_>) = cells
+    let mut liquid = Vec::with_capacity(liquid_stage.len());
+    let mut rest = Vec::with_capacity(cells.len());
+    let mut next_liquid = liquid_stage.into_iter().peekable();
+    for (index, cell) in cells.into_iter().enumerate() {
+        if next_liquid.peek() == Some(&index) {
+            next_liquid.next();
+            liquid.push(cell);
+        } else {
+            rest.push(cell);
+        }
+    }
+    let (clear, build): (Vec<_>, Vec<_>) = rest
         .into_iter()
         .partition(|cell| cell.state == state.registry.states.air);
     let mut counts = BTreeMap::new();
-    let mut stages = Vec::with_capacity(2);
-    let mut batches = Vec::with_capacity(2);
-    for (name, cells) in [("clear", clear), ("build", build)] {
+    let mut stages = Vec::with_capacity(3);
+    let mut batches = Vec::with_capacity(3);
+    for (name, cells) in [("liquid", liquid), ("clear", clear), ("build", build)] {
         if cells.is_empty() {
             continue;
         }
@@ -372,6 +411,26 @@ pub(crate) fn recover(
     }
     let bounds = bounds_of_structure(record)?;
     let image = fingerprint(target, bounds, true)?;
+    // D10: re-prove the liquid facts on the paused plan before it resumes. The
+    // fence now includes the one-cell shell, so a ring change already paused it;
+    // this refuses a resume into a world the admission no longer covers (a new
+    // supply, a mixed body, a player-attributed fluid cell) without re-planning
+    // or re-charging a cell that is already paid.
+    if record.settlement.is_some() {
+        let remaining = remaining_cells(record);
+        let lowest = remaining
+            .iter()
+            .map(|at| at[1])
+            .min()
+            .unwrap_or(bounds.min[1]);
+        crate::settlements::construction::preparation::liquid::revalidate(
+            target,
+            record.snapshot.origin,
+            record.snapshot.reserved_footprint,
+            lowest,
+            &remaining,
+        )?;
+    }
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
@@ -424,6 +483,25 @@ pub(crate) fn recover(
 
 /// Name of the final stage that re-places authored cells a foreign edit emptied.
 const REPAIR: &str = "repair";
+
+/// The plan tail in stage order: everything the executor has not written yet,
+/// skipping the completed prefix of the current stage.
+fn remaining_cells(record: &Structure) -> Vec<[i32; 3]> {
+    let current = record.snapshot.current_stage_index as usize;
+    let completed = record.snapshot.completed_work_units as usize;
+    let mut remaining = Vec::new();
+    for (index, cells) in record.cells.iter().enumerate() {
+        let skip = if index < current {
+            cells.len()
+        } else if index == current {
+            completed
+        } else {
+            0
+        };
+        remaining.extend(cells[skip..].iter().map(|cell| cell.at));
+    }
+    remaining
+}
 
 /// Completion check of a committed building structure: an authored
 /// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
@@ -692,6 +770,21 @@ pub(super) fn debit(
     let mut drops = Vec::new();
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
+    // D10 write gate: a flowing or falling lava cell is waited out (its source's
+    // remaining flow must drain first), an air write must not free a cell lava
+    // could flow into, and water is written immediately. A lava wait wakes an
+    // orphan flow; `liquid::wake` is a no-op while a fluid tick around that cell
+    // is still queued, so it only schedules when the wait starts.
+    for cell in cells {
+        if let Some(wait) = crate::settlements::construction::preparation::liquid::write_wait(
+            state, cell.at, cell.state,
+        ) {
+            if wait == "lava_draining" {
+                crate::settlements::construction::preparation::liquid::wake(state, cell.at);
+            }
+            return Err(Failure::Blocked);
+        }
+    }
     if preparing {
         for cell in cells
             .iter()

@@ -171,7 +171,7 @@ pub(crate) fn finish(
     state: &TickState,
     liquids: &Liquids,
     origin: [i32; 3],
-    size: [u8; 3],
+    max: [i32; 3],
     lowest: i32,
     columns: &[([i32; 2], i32)],
 ) -> Result<(), site_refusals::Reason> {
@@ -197,7 +197,6 @@ pub(crate) fn finish(
     // never flows up, fills only add solid blocks, and the stand stays outside
     // the footprint (`in_reach`), so a closed ring means nothing can reach it.
     // A flammable ring is not a retaining shell for lava: fire replaces it.
-    let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     for y in lowest..=top {
         for x in origin[0] - 1..=max[0] + 1 {
             for z in origin[2] - 1..=max[2] + 1 {
@@ -235,6 +234,66 @@ pub(crate) fn finish(
         }
     }
     Ok(())
+}
+
+/// Re-prove a paused plan's liquid facts before it resumes, without re-planning
+/// or re-charging a paid cell: only the cells that are still ahead are read.
+/// `remaining` is the plan tail in stage order; `footprint` is the authored
+/// size. A new supply, a mixed body, an open shell or a player-attributed fluid
+/// cell refuses the resume, and the plan stays paused for the owner to see.
+pub(crate) fn revalidate(
+    state: &TickState,
+    origin: [i32; 3],
+    footprint: [i32; 3],
+    lowest: i32,
+    remaining: &[[i32; 3]],
+) -> Result<(), mc_script::ScriptOperationFailure> {
+    use mc_script::ScriptOperationFailure as Failure;
+    let mut liquids = Liquids::default();
+    let mut deepest: std::collections::BTreeMap<[i32; 2], i32> = std::collections::BTreeMap::new();
+    for at in remaining {
+        let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
+            continue;
+        };
+        deepest
+            .entry([at[0], at[2]])
+            .and_modify(|y| *y = (*y).min(at[1]))
+            .or_insert(at[1]);
+        if block == state.registry.states.air {
+            continue;
+        }
+        if fluid_block(state, block) {
+            if state.block_log.player_touched(*at) {
+                return Err(Failure::Blocked);
+            }
+            match contained(state, block) {
+                Some((Fluid::Lava, _)) => liquids.lava += 1,
+                _ => liquids.water += 1,
+            }
+            liquids.top = Some(liquids.top.map_or(at[1], |top| top.max(at[1])));
+        } else if contained(state, block).is_some() {
+            liquids.preserved_water = true;
+        }
+    }
+    if liquids.total() > MAX_LIQUID_CELLS as u32 {
+        return Err(Failure::Blocked);
+    }
+    if liquids.lava > 0 && (liquids.water > 0 || liquids.preserved_water) {
+        return Err(Failure::Blocked);
+    }
+    if liquids.preserved_water {
+        return Err(Failure::Blocked);
+    }
+    if liquids.top.is_none() {
+        return Ok(());
+    }
+    // The deepest remaining cell of a column sits on that column's support.
+    let supports: Vec<([i32; 2], i32)> = deepest
+        .into_iter()
+        .map(|(column, y)| (column, y - 1))
+        .collect();
+    let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + footprint[axis] - 1);
+    finish(state, &liquids, origin, max, lowest, &supports).map_err(|_| Failure::Blocked)
 }
 
 /// A lot whose own door column holds fluid cannot be entered: the builder has
@@ -371,12 +430,16 @@ pub(crate) fn stand_safe(state: &TickState, at: [i32; 3]) -> bool {
 /// deadline and mark the checkpoint/journal dirty for no gain. The S3 wiring
 /// therefore calls it at the transition into `lava_draining`.
 pub(crate) fn wake(state: &mut TickState, at: [i32; 3]) {
-    crate::fluids::schedule_around(
-        state,
-        crate::boundary::BlockPos {
-            x: at[0],
-            y: at[1],
-            z: at[2],
-        },
-    );
+    let pos = crate::boundary::BlockPos {
+        x: at[0],
+        y: at[1],
+        z: at[2],
+    };
+    // A tick already outstanding for that neighbourhood is the wake: the gate
+    // stays a no-op until the drain consumes it, so a repeated wait costs no
+    // extra queue entry, chunk dirt or journal record.
+    if state.fluid_ticks.queued_around(pos) {
+        return;
+    }
+    crate::fluids::schedule_around(state, pos);
 }
