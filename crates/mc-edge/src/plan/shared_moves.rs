@@ -7,10 +7,12 @@
 //! diverge); only identical `(id, baseline)` pairs share a frame.
 //!
 //! Sharded `parking_lot::Mutex<FxHashMap>` keeps rayon viewers off a single
-//! lock. Parking-lot locks do not poison, so one panicking encode cannot brick
-//! every later viewer's frame. Below-threshold (`None`) moves are cached too,
-//! skipping repeated threshold math. A cache MUST be dropped with its
-//! snapshot: the entity image is the implicit half of every key.
+//! lock. The lock does not poison: a panic inside a shard leaves the cached
+//! frames usable for the rest of that snapshot (the panic itself still ends the
+//! pump task, which the accept loop treats as a server-wide failure).
+//! Below-threshold (`None`) moves are cached too, skipping repeated threshold
+//! math. A cache MUST be dropped with its snapshot: the entity image is the
+//! implicit half of every key.
 
 use super::*;
 use parking_lot::Mutex;

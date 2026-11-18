@@ -343,6 +343,17 @@ Connection admission:
 - `connection_throttle_ms` (minimum gap between accepted connections from one
   address) and `max_connections_per_ip` (concurrent cap), both default `0`
   (off); a refused connection closes before the handshake.
+- `max_pre_play_connections` bounds pre-play connections (handshake, Status and
+  Login, before the session reaches Play) server-wide, because the per-address
+  limits cannot stop a flood from many addresses: an IPv6 client controls a whole
+  /64 in practice, and one pre-play socket may hold up to 1 MiB of decoded input.
+  `0` derives `max_players * 2 + 64` from `[server] max_players`; a Play session
+  releases its slot, so the cap counts only peers still connecting. A connection
+  over it is closed before its handshake, and the log names `cap` and `live` at
+  most once per second. Tradeoff: during a flood every accepted socket holds a
+  slot for up to the 30-second pre-play deadline, so joining players wait; the cap
+  bounds memory at the cost of that delay, and it never refuses an established
+  player.
 - Independently, at most eight pre-play connections per socket IP are accepted
   for direct clients (Play sessions do not count). This is disabled in Velocity
   mode, where the proxy owns connection control.
@@ -569,7 +580,13 @@ explicit player or selector. Translatable feedback renders in English on stdout
 and RCON. Useful console commands: `help`, `list`, `op`, `deop`, `save-all`,
 `backup` (see [hot backup](#hot-backup-of-a-running-server)) and `stop`.
 `stop` and SIGINT/SIGTERM request a normal shutdown with a final durable
-checkpoint.
+checkpoint. A second SIGINT/SIGTERM while that shutdown runs — including during
+the final checkpoint, which can take minutes on a large dirty set — logs one line
+and exits with status `130` without the final checkpoint. That is safe but not
+free: the WAL is crash-consistent, so the next start replays its retained tail and
+rolls back only acknowledged work newer than the last durable batch, exactly as
+after a power loss. Use it when a stop seems stuck; otherwise let the first signal
+finish.
 
 Operators come from the vanilla `ops.json` beside the config. Access lists are
 vanilla files beside the config: `ops.json`, `banned-players.json`,

@@ -1701,17 +1701,13 @@ async fn serve_with_pump(
                     drop(stream);
                     continue;
                 }
-                let address = Some(peer.ip());
-                if let Some(address) = address
-                    && !addresses.admit(address)
-                {
-                    debug!(%peer, "connection refused by the per-address limit");
-                    drop(stream);
-                    continue;
-                }
-                // Server-wide backstop: the per-address knobs cannot bound a
-                // flood from many addresses. One line per second while
-                // saturated; the close itself is the answer to the client.
+                // Server-wide backstop first: the per-address knobs cannot
+                // bound a flood from many addresses. Taking the slot before
+                // `addresses.admit` keeps the two counters independent — every
+                // refusal path below drops the socket without holding an
+                // address slot, so no refusal can leak one. One line per
+                // second while saturated; the close itself is the answer to
+                // the client.
                 let Some(pre_play) = server.pre_play.try_acquire() else {
                     let now = Instant::now();
                     if last_refusal_log.is_none_or(|last: Instant| {
@@ -1728,6 +1724,15 @@ async fn serve_with_pump(
                     drop(stream);
                     continue;
                 };
+                let address = Some(peer.ip());
+                if let Some(address) = address
+                    && !addresses.admit(address)
+                {
+                    // `pre_play` drops here, before the task exists.
+                    debug!(%peer, "connection refused by the per-address limit");
+                    drop(stream);
+                    continue;
+                }
                 debug!(%peer, "accepted connection");
                 let server = Arc::clone(&server);
                 let addresses = Arc::clone(&addresses);

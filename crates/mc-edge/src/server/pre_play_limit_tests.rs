@@ -4,6 +4,10 @@ use super::pre_play_limit::{PrePlayLimit, derived_cap};
 use super::*;
 
 fn server(root: &std::path::Path, cap: u32) -> EdgeServer {
+    server_with_limits(root, cap, 0)
+}
+
+fn server_with_limits(root: &std::path::Path, cap: u32, max_per_ip: u32) -> EdgeServer {
     let mut config = mc_core::CoreConfig::new(root.join("world"), 42);
     config.vanilla_data_dir =
         Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
@@ -20,6 +24,7 @@ fn server(root: &std::path::Path, cap: u32) -> EdgeServer {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     cfg.auth.online_mode = false;
     cfg.network.max_pre_play_connections = cap;
+    cfg.network.max_connections_per_ip = max_per_ip;
     let data = crate::server::load_vanilla_data(&cfg).unwrap();
     let tags = crate::server::load_tags(&cfg, &data).unwrap();
     EdgeServer::new(core, data, tags, cfg).unwrap()
@@ -149,4 +154,61 @@ async fn wait_for_live(limit: &PrePlayLimit, want: usize) {
     })
     .await
     .expect("pre-play slots are accounted");
+}
+
+/// Connect from a chosen loopback source address, so one test can hold the
+/// server-wide cap from one address while knocking from another.
+async fn connect_from(local: &str, address: std::net::SocketAddr) -> TcpStream {
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.bind(format!("{local}:0").parse().unwrap()).unwrap();
+    socket.connect(address).await.unwrap()
+}
+
+/// A refusal by the server-wide cap must not consume a per-address slot: with
+/// `max_connections_per_ip > 0` one leaked slot per refusal locks the address
+/// out for the rest of the process, and with the default 0 the address map grows
+/// without bound — exactly the flood the cap exists to bound.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cap_refusal_keeps_the_address_admissible() {
+    use tokio::io::AsyncReadExt;
+    let dir = tempfile::tempdir().unwrap();
+    let server = Arc::new(server_with_limits(dir.path(), 1, 1));
+    let limiter = Arc::clone(&server.pre_play);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let serving = tokio::spawn(serve_with_pump(listener, Arc::clone(&server), false, None));
+
+    // Saturate the cap from another loopback address.
+    let holder = connect_from("127.0.0.2", address).await;
+    wait_for_live(&limiter, 1).await;
+
+    // Refused by the cap while this address's only per-address slot is free.
+    let mut refused = connect_from("127.0.0.1", address).await;
+    let mut byte = [0_u8; 1];
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(30), refused.read(&mut byte))
+        .await
+        .expect("the cap closes the over-cap socket");
+    match closed {
+        Ok(0) => {}
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+            ) => {}
+        other => panic!("over-cap socket must be closed without a byte, got {other:?}"),
+    }
+
+    // Free the cap; the same address must be admitted again.
+    drop(holder);
+    wait_for_live(&limiter, 0).await;
+    let mut admitted = connect_from("127.0.0.1", address).await;
+    wait_for_live(&limiter, 1).await;
+    let mut probe = [0_u8; 1];
+    assert!(
+        admitted.try_read(&mut probe).is_err(),
+        "an admitted pre-play socket stays open instead of being refused by a leaked address slot"
+    );
+
+    serving.abort();
+    server.hub.shutdown();
 }

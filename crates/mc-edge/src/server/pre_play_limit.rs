@@ -18,9 +18,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// burst of new joins while every player still holds a Play session.
 const HEADROOM: usize = 64;
 
-/// Cap derived from `max_players`: two connections per player (the Play
-/// session plus one status ping or reconnect in flight) plus [`HEADROOM`].
-/// The derivation is used when `[network] max_pre_play_connections` is 0.
+/// Cap derived from `max_players`: the cap counts pre-play connections only
+/// (handshake, status, login), and a Play session drops its slot, so the worst
+/// legitimate case is every configured player joining at once after a restart or
+/// a proxy reconnect, plus [`HEADROOM`] for status pings and join bursts. The
+/// derivation is used when `[network] max_pre_play_connections` is 0.
 pub(super) fn derived_cap(max_players: u32) -> usize {
     (max_players as usize)
         .saturating_mul(2)
