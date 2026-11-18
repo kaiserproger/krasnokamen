@@ -1,8 +1,14 @@
-//! D10 liquid tick liveness: a settlement executor write that replaces a liquid
-//! source must schedule the fluid ticks its remaining flow needs, because the
-//! executor writes after this tick's `fluids::schedule` has already run.
+//! D10 liquid lot preparation and execution safety. Two layers are covered:
+//! the S2 tick-order liveness (a settlement executor write schedules the fluid
+//! ticks its replaced source's flow needs) and the S1 admission/interface
+//! (closed bowl, source-first plan order, lava-only drain gate, stand veto).
+use std::collections::BTreeSet;
+
+use super::preparation::liquid;
+use super::site_refusals::{self, Reason};
 use super::tests::fixture;
 use super::*;
+use crate::settlements::allocator::tests::block;
 
 /// A one-cell material-free settlement plan at `at`, the shape a road tile
 /// takes, so the next admission is exactly one placement.

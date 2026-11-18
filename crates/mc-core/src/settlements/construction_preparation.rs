@@ -1,5 +1,8 @@
 //! Canonical preparation materialization and unpaid interference recovery.
 use super::*;
+
+#[path = "construction_liquid.rs"]
+pub(crate) mod liquid;
 pub(super) fn planned_cells(
     state: &TickState,
     project: &Project,
@@ -27,10 +30,11 @@ pub(super) fn planned_cells(
     let mut corridor = None;
     if project.building.is_none() {
         let dirt = state.registry.states.dirt;
+        let mut fill = Vec::new();
         for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
                 let ground =
-                    surface_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
+                    liquid::ground_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
                         .ok_or(Preparation)?;
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
@@ -43,7 +47,7 @@ pub(super) fn planned_cells(
                         continue;
                     }
                     bottom = bottom.min(y);
-                    cells.push(executor::PlannedCell {
+                    fill.push(executor::PlannedCell {
                         at: [x, y, z],
                         state: dirt,
                         resource: Some("minecraft:dirt".into()),
@@ -52,6 +56,10 @@ pub(super) fn planned_cells(
                 }
             }
         }
+        // A fluid source goes first, top-down within its column, so the supply
+        // stops before any cut that the lava beside it would block.
+        liquid::order(state, &mut fill);
+        cells.append(&mut fill);
     }
     let mut cuts = Vec::new();
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
