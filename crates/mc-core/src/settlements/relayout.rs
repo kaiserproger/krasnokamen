@@ -247,11 +247,14 @@ pub(crate) fn crop_drops(
     Ok(stacks)
 }
 
+/// One item by its vanilla path: the crop produce and seed names below are
+/// the registry's own, resolved once here instead of an inline id literal.
 fn item_id(state: &TickState, name: &str) -> Option<u32> {
     state
         .registry
         .items
-        .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).ok()?)
+        .iter()
+        .find_map(|(id, item)| (id.as_str().rsplit_once(':')?.1 == name).then_some(item))
 }
 
 fn name(state: &TickState, block: u32) -> Option<&str> {
@@ -393,6 +396,11 @@ fn bridge(
     reach: &HashSet<(i32, i32)>,
     start: (i32, i32),
 ) -> Option<(Nodes, Vec<PlannedCell>)> {
+    let fill_resource = state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(state.registry.states.dirt))
+        .map(|definition| definition.block.id.as_str().to_owned());
     let mut columns: HashMap<(i32, i32), Option<(i32, u32)>> = HashMap::default();
     let mut seen: HashSet<(i32, i32, i32)> = HashSet::default();
     let mut parent: HashMap<(i32, i32, i32), (i32, i32, i32)> = HashMap::default();
@@ -459,7 +467,7 @@ fn bridge(
             cells.push(PlannedCell {
                 at: [x, under, z],
                 state: state.registry.states.dirt,
-                resource: Some("minecraft:dirt".into()),
+                resource: fill_resource.clone(),
                 quantity: 1,
             });
         }
@@ -548,6 +556,7 @@ fn path_ok(state: &TickState, ground: Option<(i32, u32)>, (x, z): (i32, i32), le
 
 fn walk(state: &TickState, record: &SettlementRecord) -> Nodes {
     let anchor = record.anchor;
+    let path = layout::paved_state(state);
     let reach = i32::try_from(record.radius)
         .unwrap_or(i32::MAX)
         .max(layout::RING)
@@ -560,11 +569,8 @@ fn walk(state: &TickState, record: &SettlementRecord) -> Nodes {
                 continue;
             };
             let plan = layout::cell(anchor, x, z);
-            let paved = state
-                .world
-                .physics_block_at(x, y, z)
-                .and_then(|block| state.registry.blocks.by_id(mc_world::BlockStateId(block)))
-                .is_some_and(|definition| definition.block.id.path() == "dirt_path");
+            let paved =
+                path.is_some_and(|path| state.world.physics_block_at(x, y, z) == Some(path));
             if paved || matches!(plan, Cell::Road | Cell::Plaza | Cell::Verge) {
                 nodes.insert((x, z), y);
             }
@@ -616,8 +622,7 @@ fn within(nodes: &Nodes, seeds: &[(i32, i32)]) -> HashSet<(i32, i32)> {
 }
 
 fn dirt_path(state: &TickState) -> Option<u32> {
-    let id = mc_data::Identifier::parse("minecraft:dirt_path").ok()?;
-    Some(state.registry.blocks.block(&id)?.default.0)
+    layout::paved_state(state)
 }
 
 #[cfg(test)]

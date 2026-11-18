@@ -466,6 +466,11 @@ fn vacant(state: &TickState, block: u32) -> bool {
         })
 }
 
+/// The state street paving turns soil into: the one `dirt_path` block.
+pub(super) fn paved_state(state: &TickState) -> Option<u32> {
+    default_state(state, "minecraft:dirt_path")
+}
+
 fn default_state(state: &TickState, name: &str) -> Option<u32> {
     let id = mc_data::Identifier::parse(name).ok()?;
     Some(state.registry.blocks.block(&id)?.default.0)
@@ -941,7 +946,7 @@ impl<'a> Network<'a> {
     pub(crate) fn road_work(&mut self, tile: &Tile) -> Option<Work> {
         let state = self.state;
         let air = state.registry.states.air;
-        let path = default_state(state, "minecraft:dirt_path")?;
+        let path = paved_state(state)?;
         let mut cells = Vec::new();
         let (mut low, mut high) = (i32::MAX, i32::MIN);
         for x in tile.min[0]..=tile.max[0] {
