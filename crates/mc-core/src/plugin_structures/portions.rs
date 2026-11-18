@@ -3,6 +3,7 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum PortionKind {
+    Liquid,
     Saplings,
     Trees,
     Cut,
@@ -14,6 +15,7 @@ pub(crate) enum PortionKind {
 impl PortionKind {
     pub(crate) fn name(self) -> &'static str {
         match self {
+            Self::Liquid => "liquid",
             Self::Saplings => "saplings",
             Self::Trees => "trees",
             Self::Cut => "cut",
@@ -25,6 +27,7 @@ impl PortionKind {
 
     fn parse(name: &str) -> Option<Self> {
         match name {
+            "liquid" => Some(Self::Liquid),
             "saplings" => Some(Self::Saplings),
             "trees" => Some(Self::Trees),
             "cut" => Some(Self::Cut),

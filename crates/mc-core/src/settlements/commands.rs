@@ -79,9 +79,12 @@ pub enum SettlementCommand {
     },
     BuildingList,
     /// Start or queue an owner blueprint project in the executor's settlement.
-    /// The reserved `cancel` argument clears only its pending owner order.
     Build {
         blueprint: String,
+    },
+    /// Cancel a pending owner order; indices are one-based, absent means head.
+    BuildCancel {
+        index: Option<usize>,
     },
     /// Start or queue a blueprint upgrade for a globally addressed building,
     /// authorized against the enclosing settlement. Builders later apply
@@ -266,6 +269,15 @@ pub fn parse(args: &[&str]) -> Result<SettlementCommand, CommandError> {
             _ => Err(CommandError::Usage(usage)),
         },
         "build" => match rest {
+            ["cancel"] => Ok(SettlementCommand::BuildCancel { index: None }),
+            ["cancel", index] => {
+                let index = index
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|index| *index > 0)
+                    .ok_or(CommandError::Usage(usage))?;
+                Ok(SettlementCommand::BuildCancel { index: Some(index) })
+            }
             [blueprint] => Ok(SettlementCommand::Build {
                 blueprint: (*blueprint).to_owned(),
             }),

@@ -2,7 +2,7 @@
 //!
 //! A top-down grid of the live record: the territory disk (`anchor` ± `radius`
 //! in X/Z, the widest cut of the settlement sphere), every certified building's
-//! footprint, the active construction site (a building, road or lamp project,
+//! footprint, every active construction site (building, road or lamp project,
 //! as reserved in the structure ledger), the street plan ([`layout::street_features`]:
 //! the finished road and the road and lamp work the planner owes on the walks to
 //! standing buildings) and the viewer. North (-Z) is up, east (+X) right; each cell
@@ -233,7 +233,18 @@ pub(super) fn screen_at(
     let mut dialog = Dialog::multi_action(title, buttons)
         .columns(6)
         .text(cells_component(&grid, ctx.id));
-    if let Some(project) = crate::settlements::construction::projects(record).next() {
+    for project in crate::settlements::construction::projects(record) {
+        dialog = dialog.text(format!(
+            "{}: {} L{} · {}",
+            if ctx.lang == super::Lang::Ru {
+                "Стройплощадка"
+            } else {
+                "Active site"
+            },
+            blueprint_label(ctx, &project.blueprint),
+            project.level,
+            corner_text(project.origin),
+        ));
         let caption = match crate::plugin_structures::settlement_builds::status(
             state,
             ctx.id,
@@ -316,7 +327,7 @@ pub(super) fn pick(
         .string("page")
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(0);
-    let site = payload.string("site").unwrap_or("");
+    let sites = payload.string("sites").unwrap_or("");
     let centre = ["mx", "mz"].map(|key| {
         payload
             .string(key)
@@ -363,7 +374,7 @@ pub(super) fn pick(
     if streets.is_empty()
         && !ids.is_empty()
         && !ids.contains(',')
-        && site.is_empty()
+        && sites.is_empty()
         && let Ok(raw) = ids.parse::<u64>()
         && record.buildings.contains_key(&BuildingId(raw))
     {
@@ -384,16 +395,26 @@ pub(super) fn pick(
     }
     if streets.is_empty()
         && ids.is_empty()
-        && !site.is_empty()
-        && crate::settlements::construction::project_for_structure(record, &site).is_some()
+        && sites.lines().count() == 1
+        && crate::settlements::construction::project_for_structure(record, sites).is_some()
     {
         super::menus::project(state, connection, ctx);
         return;
     }
     let mut choices = Vec::new();
-    if !site.is_empty() {
-        if crate::settlements::construction::project_for_structure(record, &site).is_some() {
-            choices.push(button(ctx.t(Key::Status), "project_status", ctx.id));
+    for site in sites.lines() {
+        if let Some(project) = crate::settlements::construction::project_for_structure(record, site)
+        {
+            choices.push(button(
+                format!(
+                    "{} L{} · {}",
+                    blueprint_label(ctx, &project.blueprint),
+                    project.level,
+                    corner_text(project.origin)
+                ),
+                "project_status",
+                ctx.id,
+            ));
         } else {
             choices.push(view_button(
                 ctx,
@@ -456,7 +477,7 @@ pub(super) fn pick(
                 scale,
             )
             .with("bids", Tag::String(ids.to_owned()))
-            .with("site", Tag::String(site.to_owned()))
+            .with("sites", Tag::String(sites.to_owned()))
             .with("streets", Tag::String(streets.to_owned()))
             .with(
                 "cell",
@@ -554,11 +575,19 @@ fn grid_at(
             }
             lines.extend(
                 here.iter()
-                    .take(MAX_HOVER)
-                    .map(|feature| feature.label.clone()),
+                    .enumerate()
+                    .filter(|(index, feature)| {
+                        *index < MAX_HOVER || matches!(feature.click, Some(Click::Site(_)))
+                    })
+                    .map(|(_, feature)| feature.label.clone()),
             );
-            if here.len() > MAX_HOVER {
-                lines.push(ctx.f(Key::More, &[("n", &(here.len() - MAX_HOVER).to_string())]));
+            let omitted = here
+                .iter()
+                .skip(MAX_HOVER)
+                .filter(|feature| !matches!(feature.click, Some(Click::Site(_))))
+                .count();
+            if omitted > 0 {
+                lines.push(ctx.f(Key::More, &[("n", &omitted.to_string())]));
             }
             if here.is_empty() {
                 lines.push(if inside {
@@ -597,9 +626,9 @@ fn grid_at(
     if you_shown {
         legend.push((YOU, ctx.t(Key::MapYou).to_owned()));
     }
-    if let Some(feature) = features
+    for feature in features
         .iter()
-        .find(|feature| matches!(feature.click, Some(Click::Site(_))))
+        .filter(|feature| matches!(feature.click, Some(Click::Site(_))))
     {
         legend.push((feature.color, feature.label.clone()));
     }
@@ -645,10 +674,15 @@ fn features(ctx: &Ctx, state: &TickState, record: &SettlementRecord) -> Vec<Feat
         layout::PAVED => 2,
         _ => 1,
     });
-    let mut out = Vec::with_capacity(record.buildings.len() + planned.len() + 1);
-    if let Some(project) = crate::settlements::construction::projects(record).next()
-        && let Some(bounds) = layout::project_bounds(state, project)
-    {
+    let mut out = Vec::with_capacity(
+        record.buildings.len()
+            + planned.len()
+            + crate::settlements::construction::projects(record).count(),
+    );
+    for project in crate::settlements::construction::projects(record) {
+        let Some(bounds) = layout::project_bounds(state, project) else {
+            continue;
+        };
         let status = crate::plugin_structures::settlement_builds::status(
             state,
             record.id,
@@ -781,18 +815,19 @@ fn cells_component(grid: &Grid, id: SettlementId) -> Tag {
                     })
                     .collect::<Vec<_>>()
                     .join(",");
-                let site = cell
+                let sites = cell
                     .click
                     .iter()
-                    .find_map(|click| match click {
+                    .filter_map(|click| match click {
                         Click::Site(site) => Some(site.as_str()),
-                        _ => None,
+                        Click::Building(_) => None,
                     })
-                    .unwrap_or("");
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 let payload = vec![
                     ("s".to_owned(), Tag::String(id.0.to_string())),
                     ("bids".to_owned(), Tag::String(buildings)),
-                    ("site".to_owned(), Tag::String(site.to_owned())),
+                    ("sites".to_owned(), Tag::String(sites)),
                     ("mx".to_owned(), Tag::String(grid.centre[0].to_string())),
                     ("mz".to_owned(), Tag::String(grid.centre[1].to_string())),
                     ("ms".to_owned(), Tag::String(grid.scale.to_string())),

@@ -22,7 +22,7 @@ pub(crate) fn prepare(
     blueprint: String,
     bounds: ScriptWorldBounds,
     site: ScriptWorldBounds,
-    cells: Vec<PlannedCell>,
+    mut cells: Vec<PlannedCell>,
 ) -> Result<String, Failure> {
     if state.settlements.get(settlement).is_none() || cells.is_empty() || cells.len() > 32768 {
         return Err(Failure::InvalidRequest);
@@ -47,7 +47,7 @@ pub(crate) fn prepare(
         // (D8 parallel construction). Foreign and committed structures keep the
         // full reservation.
         let held = if same_settlement && record.snapshot.state != ScriptStructureState::Committed {
-            site_reservation(record).ok()
+            site_reservation(state, record).ok()
         } else {
             reserved_bounds(record).ok()
         };
@@ -76,7 +76,6 @@ pub(crate) fn prepare(
     }) {
         return Err(Failure::Blocked);
     }
-    let image = fingerprint(state, bounds, true)?;
     let revision = next(ledger.revision)?;
     let id = format!("settlement-{}-{revision}", settlement.0);
     if cells
@@ -85,12 +84,36 @@ pub(crate) fn prepare(
     {
         return Err(Failure::InvalidRequest);
     }
+    // Source fills lead all air cuts, including registered-tree clearing.
+    let liquid_stage =
+        crate::settlements::construction::preparation::liquid::stage_cells(state, &cells);
+    let liquid_proof =
+        crate::settlements::construction::preparation::liquid::proof(state, &cells, site.min[1]);
+    let bounds = match &liquid_proof {
+        Some(proof) => ScriptWorldBounds::new(
+            [
+                bounds.min[0] - 1,
+                bounds.min[1].min(proof.lowest),
+                bounds.min[2] - 1,
+            ],
+            [bounds.max[0] + 1, bounds.max[1], bounds.max[2] + 1],
+        )
+        .map_err(|_| Failure::InvalidRequest)?,
+        None => bounds,
+    };
+    let image = fingerprint(state, bounds, true)?;
+    if !liquid_stage.is_empty() {
+        for index in liquid_stage {
+            cells[index].portion = PortionKind::Liquid;
+        }
+        cells.sort_by_key(|cell| cell.portion);
+    }
     if cells.iter().any(|cell| {
         (0..3).any(|axis| cell.at[axis] < bounds.min[axis] || cell.at[axis] > bounds.max[axis])
     }) {
         return Err(Failure::InvalidRequest);
     }
-    let mut groups: Vec<(PortionKind, Vec<Cell>)> = Vec::with_capacity(5);
+    let mut groups: Vec<(PortionKind, Vec<Cell>)> = Vec::with_capacity(7);
     for cell in cells {
         if groups.last().is_none_or(|(kind, _)| *kind != cell.portion) {
             groups.push((cell.portion, Vec::new()));
@@ -157,6 +180,7 @@ pub(crate) fn prepare(
         Structure {
             owner: owner(settlement),
             settlement: Some(settlement),
+            liquid: liquid_proof,
             settlement_preparation: (bounds != site).then_some(bounds),
             snapshot,
             blueprint_hash: inventories::hash(&batches),
@@ -373,6 +397,14 @@ pub(crate) fn recover(
     if committed && repair.is_empty() {
         return Ok(false);
     }
+    if let Some(proof) = &record.liquid {
+        crate::settlements::construction::preparation::liquid::revalidate(
+            target,
+            proof,
+            record.snapshot.origin,
+            record.snapshot.reserved_footprint,
+        )?;
+    }
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
@@ -437,6 +469,37 @@ const REPAIR: &str = "repair";
 /// authored cell is not emptied and is never replaced.
 /// One pass over the structure's cells at completion, never per tick. Returns
 /// whether cells were queued (the building must not be certified yet).
+/// Whether a manifest cell is free soil work: no material was ever charged, so
+/// the cell only rewrites the ground already there.
+fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
+    cell.resource.is_none()
+        && state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(cell.state))
+            .is_some_and(|definition| matches!(definition.block.id.path(), "dirt" | "dirt_path"))
+}
+
+/// Free soil work can only rewrite the ground already present, never create
+/// ground or destroy a foreign block. Debit and publication share this gate.
+pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bool {
+    if cell.resource.is_some()
+        || state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .is_some_and(|definition| definition.has_fluid())
+    {
+        return false;
+    }
+    if cell.state == state.registry.states.dirt {
+        return !crate::settlements::construction::relayout::village_soil(state, current);
+    }
+    Some(cell.state) == crate::settlements::layout::paved_state(state)
+        && current != cell.state
+        && !crate::settlements::construction::relayout::soil(state, current)
+}
+
 pub(crate) fn reopen_emptied(
     state: &mut TickState,
     settlement: SettlementId,
@@ -463,7 +526,10 @@ pub(crate) fn reopen_emptied(
         .rev()
         .flat_map(|cells| cells.iter().rev())
     {
-        if cell.state == target.registry.states.air || !seen.insert(cell.at) {
+        if !seen.insert(cell.at)
+            || cell.state == target.registry.states.air
+            || free_soil_work(target, cell)
+        {
             continue;
         }
         let now = target
@@ -543,6 +609,22 @@ pub(crate) fn next_cell(
         .map(|cell| cell.at))
 }
 
+/// The planned world state of the next cell, for naming a wait: the gate reads
+/// the plan, not the block that is about to be replaced.
+pub(crate) fn next_plan_state(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<Option<u32>, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, &owner(settlement), handle)?;
+    Ok(record
+        .cells
+        .get(record.snapshot.current_stage_index as usize)
+        .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
+        .map(|cell| cell.state))
+}
+
 /// Borrow the canonical stage rather than inferring clearing from a live tree:
 /// leaves may decay before their already-planned removal cell is reached.
 pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str) -> bool {
@@ -571,6 +653,25 @@ pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str
         .and_then(|stage| stage.get("stage"))
         .and_then(serde_json::Value::as_str)
         .is_some_and(PortionKind::is_preparation)
+}
+
+#[cfg(test)]
+pub(crate) fn pause(
+    state: &mut TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<(), Failure> {
+    let revision = status(state, settlement, handle)?.revision;
+    execute_operation(
+        state,
+        &owner(settlement),
+        &ScriptWorldStructureOperation::PauseStructure {
+            operation_id: format!("settlement-pause-{revision}"),
+            structure_id: handle.into(),
+            expected_revision: revision,
+        },
+    )
+    .map(|_| ())
 }
 
 pub(crate) fn advance(
@@ -673,28 +774,44 @@ pub(super) fn debit(
         .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
         .ok_or(Failure::Forbidden)?;
     // A solid cell may not be placed through another project's builder: that
-    // body is not this site's to trap (D8 review SOL-4).
+    // body is not this site's to trap (D8 review SOL-4). The body is a box, not
+    // a column: at 0.6 wide it straddles a cell edge and at 1.95 tall it owns
+    // the cell above, so every non-air cell is tested against the whole box
+    // (D8 review R3-3).
+    let elsewhere: Vec<uuid::Uuid> = state
+        .settlements
+        .get(id)
+        .map(|record| {
+            crate::settlements::construction::projects(record)
+                .filter(|other| other.structure != handle)
+                .filter_map(|other| other.builder.map(|(bound, _)| bound))
+                .collect()
+        })
+        .unwrap_or_default();
     for cell in cells
         .iter()
         .filter(|cell| cell.state != state.registry.states.air)
     {
         for resident in crate::settlements::construction::residents(state, id) {
-            let pos = state.entities.pos(resident);
-            if [0, 1, 2]
-                .into_iter()
-                .any(|axis| pos[axis].floor() as i32 != cell.at[axis])
-            {
+            if !elsewhere.contains(&state.entities.row(resident).uuid) {
                 continue;
             }
             let body = state.entities.body(resident);
-            let uuid_here = state.entities.row(resident).uuid;
-            let bound_elsewhere = state.settlements.get(id).is_some_and(|record| {
-                crate::settlements::construction::projects(record).any(|other| {
-                    other.structure != handle
-                        && other.builder.is_some_and(|(bound, _)| bound == uuid_here)
-                })
+            if body.height <= 0.0 || body.half_width <= 0.0 {
+                continue;
+            }
+            let pos = state.entities.pos(resident);
+            let lo = [pos[0] - body.half_width, pos[1], pos[2] - body.half_width];
+            let hi = [
+                pos[0] + body.half_width,
+                pos[1] + body.height,
+                pos[2] + body.half_width,
+            ];
+            let intersects = (0..3).all(|axis| {
+                let min = f64::from(cell.at[axis]);
+                lo[axis] < min + 1.0 && hi[axis] > min
             });
-            if bound_elsewhere && body.height > 0.0 {
+            if intersects {
                 return Err(Failure::Blocked);
             }
         }
@@ -704,6 +821,22 @@ pub(super) fn debit(
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
     for (cell, expected) in cells.iter().zip(expected) {
+        let block = state
+            .world
+            .block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        if soil_work_noop(state, cell, block) {
+            continue;
+        }
+        // D10 source fills lead cuts; remaining lava must drain before a write.
+        if let Some(wait) = crate::settlements::construction::preparation::liquid::write_wait(
+            state, cell.at, cell.state,
+        ) {
+            if wait == "lava_draining" {
+                crate::settlements::construction::preparation::liquid::wake(state, cell.at);
+            }
+            return Err(Failure::Blocked);
+        }
         if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
             drops.extend(credit);
             continue;
@@ -711,10 +844,6 @@ pub(super) fn debit(
         if cell.state != state.registry.states.air {
             continue;
         }
-        let block = state
-            .world
-            .block_at(cell.at[0], cell.at[1], cell.at[2])
-            .ok_or(Failure::Unloaded)?;
         if crate::settlements::forestry::tree_or_sapling(state, block) {
             drops.extend(if portions::inside(state, id, cell.at) {
                 crate::settlements::forestry::roll(state, cell.at, block)?
@@ -775,6 +904,11 @@ pub(super) fn debit(
             }
             loot.extend(
                 crate::settlements::forestry::plant_drops(state, cell.at, block)?
+                    .into_iter()
+                    .map(|stack| (cell.at, stack)),
+            );
+            loot.extend(
+                crate::settlements::construction::relayout::crop_drops(state, block)
                     .into_iter()
                     .map(|stack| (cell.at, stack)),
             );
@@ -967,8 +1101,75 @@ pub(crate) fn missing_stock(
 /// Recover the exact authored floor from that top and the future footprint;
 /// do not treat arbitrary vertically overlapping buildings as the same site.
 /// The site a structure reserves, without its wide clear-stage window.
-fn site_reservation(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
-    bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
+fn site_reservation(state: &TickState, record: &Structure) -> Result<ScriptWorldBounds, Failure> {
+    let site = bounds(record.snapshot.origin, record.snapshot.reserved_footprint)?;
+    // An unfinished structure holds the whole detour it must lay before it
+    // retires the old line: a parallel lot may not take that corridor (P2-5).
+    let paved = crate::settlements::layout::paved_state(state);
+    let mut extent: Option<([i32; 3], [i32; 3])> = None;
+    for cell in record.cells.iter().flatten() {
+        if Some(cell.state) != paved {
+            continue;
+        }
+        let (mut min, mut max) = extent.unwrap_or((cell.at, cell.at));
+        for axis in 0..3 {
+            min[axis] = min[axis].min(cell.at[axis]);
+            max[axis] = max[axis].max(cell.at[axis]);
+        }
+        extent = Some((min, max));
+    }
+    let Some((min, max)) = extent else {
+        return Ok(site);
+    };
+    let min = std::array::from_fn(|axis| site.min[axis].min(min[axis]));
+    let max = std::array::from_fn(|axis| site.max[axis].max(max[axis]));
+    ScriptWorldBounds::new(min, max).map_err(|_| Failure::InvalidRequest)
+}
+
+/// The authored site box of one active project: the canonical reservation the
+/// structure was prepared with (origin plus reserved footprint). It exists for
+/// every project kind, including the infrastructure blueprints that are not in
+/// the catalog and so have no blueprint footprint (D8 review S2-2).
+pub(crate) fn site_bounds(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Option<ScriptWorldBounds> {
+    let ledger = ledger(state).ok()?;
+    let record = ledger.structures.get(handle)?;
+    if record.settlement != Some(settlement) {
+        return None;
+    }
+    site_reservation(state, record).ok()
+}
+
+/// Whether a body standing with its feet at `pos` (half width, height) would
+/// reach another active project's authored site, in another dimension or under
+/// another owner excluded by construction. The test is against the canonical
+/// site reservation, not the clear/felling envelope, and not a blueprint
+/// footprint: a road, lamp, meadow, perimeter or standalone furnace has no
+/// catalog footprint and must protect its site all the same (D8 review S2-2).
+pub(crate) fn body_in_other_site(
+    state: &TickState,
+    settlement: SettlementId,
+    except: &str,
+    pos: [f64; 3],
+    half_width: f64,
+    height: f64,
+) -> bool {
+    if half_width <= 0.0 || height <= 0.0 {
+        return false;
+    }
+    let lo = [pos[0] - half_width, pos[1], pos[2] - half_width];
+    let hi = [pos[0] + half_width, pos[1] + height, pos[2] + half_width];
+    crate::settlements::construction::projects_of(&state.settlements, settlement)
+        .filter(|other| other.structure != except)
+        .filter_map(|other| site_bounds(state, other.settlement, &other.structure))
+        .any(|site| {
+            (0..3).all(|axis| {
+                lo[axis] < f64::from(site.max[axis]) + 1.0 && hi[axis] > f64::from(site.min[axis])
+            })
+        })
 }
 
 fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {

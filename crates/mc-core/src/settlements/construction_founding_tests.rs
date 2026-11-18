@@ -1,7 +1,7 @@
 use super::*;
 use crate::journal::{JournalEntry, JournalWriter, Replay};
 use crate::settlements::allocator::tests::villager;
-use crate::settlements::construction::tests::{complete, fixture, fund};
+use crate::settlements::construction::tests::{complete, fixture, fund, open_plan};
 use crate::settlements::{households, persistence};
 use crate::{CoreConfig, dimensions::Dimension};
 
@@ -1041,3 +1041,325 @@ fn review_population_radius_growth_cannot_steal_a_founding_claim() {
 
 #[path = "construction_ledger_tests.rs"]
 mod ledger;
+
+/// Stock the bootstrap chest with exactly the level-1 bills of `sites`.
+fn fund_sites(state: &mut TickState, sites: &[(&'static str, [i32; 3])]) {
+    let mut bill = std::collections::BTreeMap::<u32, u32>::new();
+    for (name, _) in sites {
+        let blueprint = blueprints::get(&state.registry, name).unwrap();
+        for (item, quantity) in &blueprint.level(1).unwrap().materials {
+            *bill.entry(*item).or_default() += quantity;
+        }
+    }
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    // The bills of several sites exceed one chest; the test stock is a larger one.
+    slots.resize(54, mc_data::ItemStack::EMPTY);
+    slots.fill(mc_data::ItemStack::EMPTY);
+    let mut index = 0;
+    for (item, mut quantity) in bill {
+        while quantity > 0 {
+            let count = quantity.min(64);
+            slots[index] = mc_data::ItemStack::new(item, count as i32);
+            quantity -= count;
+            index += 1;
+        }
+    }
+}
+
+/// An ordinary parent project far from the expedition; returns its handle.
+fn unrelated_project(state: &mut TickState, parent: SettlementId) -> String {
+    let elsewhere = FoundingExpedition {
+        destination: [-96, 200, 0],
+        household: String::new(),
+    };
+    flat_site(state, &elsewhere);
+    assert!(begin(
+        state,
+        Project {
+            settlement: parent,
+            blueprint: "spanish_house".into(),
+            level: 1,
+            origin: elsewhere.destination,
+            rotation: 0,
+            building: None,
+            structure: String::new(),
+            ordered: false,
+            builder: None,
+            order_seq: None,
+        },
+        "oak",
+        0
+    ));
+    projects(state.settlements.get(parent).unwrap())
+        .last()
+        .unwrap()
+        .structure
+        .clone()
+}
+
+fn member_uuid(state: &TickState, parent: SettlementId, household: &str) -> uuid::Uuid {
+    let member = households::members(state, parent, household)[0];
+    state
+        .entities
+        .row(state.entities.slot_of(member).unwrap())
+        .uuid
+}
+
+fn chest(state: &TickState) -> Vec<mc_data::ItemStack> {
+    state.block_entities[&(1, 201, 1)].slots.clone()
+}
+
+#[test]
+fn outpost_sites_are_ordinary_projects_one_per_site() {
+    let (mut state, parent, expedition) = prepared(0);
+    fund_sites(&mut state, &expedition.sites()[..2]);
+    // One admission per pass; the joint proof funds exactly the two sites
+    // the stock covers together, so both run side by side.
+    for _ in 0..6 {
+        plan(&mut state, parent);
+    }
+    let record = state.settlements.get(parent).unwrap();
+    let owned: Vec<_> = projects(record)
+        .filter(|project| owns_project(record, project))
+        .collect();
+    assert_eq!(owned.len(), 2);
+    assert_eq!(owned.len(), projects(record).count());
+    let origins: std::collections::BTreeSet<_> = owned.iter().map(|p| p.origin).collect();
+    let handles: std::collections::BTreeSet<_> = owned.iter().map(|p| &p.structure).collect();
+    assert_eq!(origins.len(), owned.len(), "one project per site");
+    assert_eq!(handles.len(), owned.len(), "one structure per project");
+    for project in owned {
+        assert!(project_for_structure(record, &project.structure).is_some());
+    }
+}
+
+#[test]
+fn a_site_under_construction_is_never_admitted_twice() {
+    let (mut state, parent, expedition) = prepared(0);
+    let (name, origin) = expedition.sites()[0];
+    fund_sites(&mut state, &expedition.sites()[..1]);
+    assert!(plan(&mut state, parent));
+    let first = projects(state.settlements.get(parent).unwrap())
+        .map(|project| project.structure.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(first.len(), 1);
+    // The other sites are fundable alone but not jointly with the first.
+    let stock = chest(&state);
+    for _ in 0..4 {
+        plan(&mut state, parent);
+    }
+    let record = state.settlements.get(parent).unwrap();
+    assert!(
+        project_for_structure(record, &first[0]).is_some(),
+        "the first project is kept"
+    );
+    assert_eq!(
+        projects(record)
+            .filter(|project| is_site(project, name, origin))
+            .count(),
+        1,
+        "the site keeps its single project"
+    );
+    assert_eq!(projects(record).count(), 1, "the joint proof refuses more");
+    assert_eq!(chest(&state), stock, "no new reservation or movement");
+}
+
+#[test]
+fn an_owner_order_starts_while_every_outpost_site_is_under_construction() {
+    let (mut state, parent, expedition) = prepared(0);
+    open_plan(&mut state);
+    fund_sites(&mut state, &expedition.sites());
+    for _ in 0..8 {
+        plan(&mut state, parent);
+    }
+    let record = state.settlements.get(parent).unwrap();
+    assert_eq!(
+        projects(record)
+            .filter(|project| owns_project(record, project))
+            .count(),
+        4,
+        "every site is admitted"
+    );
+    super::super::request_build(&mut state, parent, "storage").unwrap();
+    assert_eq!(orders(state.settlements.get(parent).unwrap()).count(), 1);
+    let mut stock: Vec<_> = expedition.sites().into_iter().collect();
+    stock.push(("storage", [0, 0, 0]));
+    fund_sites(&mut state, &stock);
+    // The site scan is bounded per pass and keeps a cursor.
+    for _ in 0..24 {
+        super::super::plan(&mut state, parent);
+        if orders(state.settlements.get(parent).unwrap())
+            .next()
+            .is_none()
+        {
+            break;
+        }
+    }
+    let record = state.settlements.get(parent).unwrap();
+    assert_eq!(
+        orders(record).count(),
+        0,
+        "the funded order started: {:?}",
+        pending_reason_at(&state, parent, 0)
+    );
+    assert!(
+        projects(record).any(|project| project.ordered && project.blueprint == "storage"),
+        "beside the outpost projects"
+    );
+    assert_eq!(projects(record).count(), 5);
+}
+
+#[test]
+fn handover_refuses_while_a_household_member_builds_another_project() {
+    let (mut state, parent, expedition) = prepared(4);
+    let handle = unrelated_project(&mut state, parent);
+    let uuid = member_uuid(&state, parent, &expedition.household);
+    let record = state.settlements.get_mut(parent).unwrap();
+    assert!(access::bind_builder(record, &handle, Some((uuid, None))));
+    let before = civil_image(&state);
+    assert!(!finish(&mut state, parent, &expedition));
+    assert!(plan(&mut state, parent));
+    assert_eq!(
+        civil_image(&state),
+        before,
+        "the refusal changes nothing and does not unbind the member"
+    );
+    assert!(bound_builder(&state.settlements, uuid));
+    assert!(state.settlements.find("colony_2").is_none());
+    assert!(state.settlements.get(parent).unwrap().founding.is_some());
+    // Allowed again once the member is released.
+    let record = state.settlements.get_mut(parent).unwrap();
+    assert!(access::unbind_builder(record, uuid));
+    assert!(plan(&mut state, parent));
+    let child = state.settlements.find("colony_2").unwrap().id;
+    assert!(state.settlements.get(parent).unwrap().founding.is_none());
+    assert_eq!(state.settlements.member_count(child), 3);
+}
+
+#[test]
+fn handover_waits_for_a_member_to_return_owed_carry() {
+    let (mut state, parent, expedition) = prepared(4);
+    let uuid = member_uuid(&state, parent, &expedition.household);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .unwrap();
+    let record = state.settlements.get_mut(parent).unwrap();
+    record.carry_pending.insert(uuid, vec![(log, 3)]);
+    let before = civil_image(&state);
+    assert!(!finish(&mut state, parent, &expedition));
+    assert_eq!(civil_image(&state), before, "the refusal changes nothing");
+    assert!(state.settlements.find("colony_2").is_none());
+    // Allowed once the debt is closed.
+    let record = state.settlements.get_mut(parent).unwrap();
+    record.carry_pending.remove(&uuid);
+    assert!(finish(&mut state, parent, &expedition));
+    assert!(state.settlements.find("colony_2").is_some());
+}
+
+#[test]
+fn handover_waits_only_for_the_expeditions_own_projects() {
+    let (mut state, parent, expedition) = prepared(4);
+    let handle = unrelated_project(&mut state, parent);
+    // A non-member builds the unrelated project: the handover proceeds and
+    // leaves that project, and its builder, with the parent.
+    let builder = state.entities.slots().next().unwrap();
+    let uuid = state.entities.row(builder).uuid;
+    assert!(
+        !households::members(&state, parent, &expedition.household)
+            .contains(&state.entities.body(builder).id)
+    );
+    let record = state.settlements.get_mut(parent).unwrap();
+    assert!(access::bind_builder(record, &handle, Some((uuid, None))));
+    assert!(finish(&mut state, parent, &expedition));
+    let record = state.settlements.get(parent).unwrap();
+    assert!(project_for_structure(record, &handle).is_some());
+    assert!(bound_builder(&state.settlements, uuid));
+}
+
+#[test]
+fn handover_refuses_while_an_expedition_project_is_active() {
+    let (mut state, parent, expedition) = prepared(3);
+    let (name, origin) = expedition.sites()[3];
+    assert!(begin(
+        &mut state,
+        Project {
+            settlement: parent,
+            blueprint: name.into(),
+            level: 1,
+            origin,
+            rotation: 0,
+            building: None,
+            structure: String::new(),
+            ordered: false,
+            builder: None,
+            order_seq: None,
+        },
+        "oak",
+        0
+    ));
+    let before = civil_image(&state);
+    assert!(!finish(&mut state, parent, &expedition));
+    assert_eq!(civil_image(&state), before);
+}
+
+#[test]
+fn cancelling_an_expedition_cancels_every_project_it_owns() {
+    let (mut state, parent, expedition) = prepared(0);
+    let unrelated = unrelated_project(&mut state, parent);
+    for (name, origin) in expedition.sites().into_iter().take(2) {
+        assert!(begin(
+            &mut state,
+            Project {
+                settlement: parent,
+                blueprint: name.into(),
+                level: 1,
+                origin,
+                rotation: 0,
+                building: None,
+                structure: String::new(),
+                ordered: false,
+                builder: None,
+                order_seq: None,
+            },
+            "oak",
+            0
+        ));
+    }
+    let record = state.settlements.get(parent).unwrap();
+    let owned: Vec<String> = projects(record)
+        .filter(|project| owns_project(record, project))
+        .map(|project| project.structure.clone())
+        .collect();
+    assert_eq!(owned.len(), 2);
+    let builder = state.entities.slots().next().unwrap();
+    let uuid = state.entities.row(builder).uuid;
+    let record = state.settlements.get_mut(parent).unwrap();
+    assert!(access::bind_builder(record, &owned[1], Some((uuid, None))));
+    let stock = chest(&state);
+    let people = members(&state);
+    cancel(&mut state, parent);
+    let record = state.settlements.get(parent).unwrap();
+    assert!(record.founding.is_none());
+    assert_eq!(
+        projects(record)
+            .map(|project| project.structure.as_str())
+            .collect::<Vec<_>>(),
+        [unrelated.as_str()],
+        "only the unrelated project survives"
+    );
+    for handle in &owned {
+        assert_eq!(
+            executor::status(&state, parent, handle).unwrap().state,
+            ScriptStructureState::Cancelled
+        );
+    }
+    assert_ne!(
+        executor::status(&state, parent, &unrelated).unwrap().state,
+        ScriptStructureState::Cancelled
+    );
+    assert!(!bound_builder(&state.settlements, uuid), "builder released");
+    assert_eq!(chest(&state), stock, "cancel frees by construction");
+    assert_eq!(members(&state), people, "no item moved or created");
+}

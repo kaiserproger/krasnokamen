@@ -85,7 +85,7 @@ pub(super) fn plan(state: &mut TickState, id: SettlementId) -> bool {
                     builder: None,
                     order_seq: None,
                 };
-                if stand(state, &project, at).is_none() {
+                if stand(state, &project, at, None).is_none() {
                     continue;
                 }
                 return begin_cells(
@@ -106,15 +106,38 @@ pub(super) fn plan(state: &mut TickState, id: SettlementId) -> bool {
     false
 }
 
-pub(crate) fn stand(state: &TickState, project: &Project, next: [i32; 3]) -> Option<[i32; 3]> {
+/// A side column a builder can stand on to set the furnace at `next`: the first
+/// one that is physically free and, when `body` is given, whose whole body stays
+/// out of another active project's authored site. A vetoed side is skipped and
+/// the search continues, so a neighbour site on one side never costs the furnace
+/// its navigation target while another side is safe (D8 review S2-1). At
+/// planning time no builder is bound yet, so `body` is `None` and only physical
+/// freedom decides.
+pub(crate) fn stand(
+    state: &TickState,
+    project: &Project,
+    next: [i32; 3],
+    body: Option<(f64, f64)>,
+) -> Option<[i32; 3]> {
     let record = state.settlements.get(project.settlement)?;
     [(1, 0), (-1, 0), (0, 1), (0, -1)]
         .into_iter()
         .find_map(|(dx, dz)| {
             let (x, z) = (next[0] + dx, next[2] + dz);
             let y = surface_y(state, record.anchor[1], x, z)?;
-            (state.world.physics_block_at(x, y + 1, z) == Some(state.registry.states.air)
-                && state.world.physics_block_at(x, y + 2, z) == Some(state.registry.states.air))
-            .then_some([x, y + 1, z])
+            let at = [x, y + 1, z];
+            let free = state.world.physics_block_at(x, y + 1, z) == Some(state.registry.states.air)
+                && state.world.physics_block_at(x, y + 2, z) == Some(state.registry.states.air);
+            let clear = body.is_none_or(|(half_width, height)| {
+                !executor::body_in_other_site(
+                    state,
+                    project.settlement,
+                    &project.structure,
+                    [f64::from(x) + 0.5, f64::from(at[1]), f64::from(z) + 0.5],
+                    half_width,
+                    height,
+                )
+            });
+            (free && clear).then_some(at)
         })
 }

@@ -32,6 +32,9 @@ pub(super) mod founding;
 #[path = "construction_site_refusals.rs"]
 pub(super) mod site_refusals;
 
+#[path = "construction_upgrade.rs"]
+mod upgrade;
+
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
 /// planner scans, so the joint funding proof and the tick stay bounded.
@@ -161,11 +164,15 @@ pub(crate) fn owner_upgrade_level(
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
     let (blueprint, ..) = upgrade_blueprint(state, id, target)?;
-    // Several projects can target one building (D8), so the next level follows
-    // the highest level already in flight, not just the built one.
+    // A confirmed level is immutable, including while its predecessor waits.
     let current = access::projects(record)
         .filter(|project| project.building == Some(building))
         .map(|project| project.level)
+        .chain(
+            access::orders(record)
+                .filter(|order| order.building == Some(building))
+                .map(|order| order.level),
+        )
         .max()
         .unwrap_or(target.level)
         .max(target.level);
@@ -178,6 +185,9 @@ fn start_order(
     order: &OwnerOrder,
     planning_cursor: Option<u32>,
 ) -> Result<String, String> {
+    if upgrade::next_level(state, id, order).is_some_and(|next| next != order.level) {
+        return Err("Busy.".into());
+    }
     match order.building {
         Some(building) => start_upgrade(state, id, building),
         None => start_build(state, id, &order.blueprint, planning_cursor),
@@ -321,6 +331,9 @@ pub(crate) fn pending_reason_at(
     let order = orders(record).nth(index)?;
     let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
     let level = blueprint.level(order.level)?;
+    if let Some(reason) = upgrade::pending_reason(state, id, order) {
+        return Some(reason);
+    }
     if let Some(reason) = funding_error(state, id, &level.materials) {
         return Some(reason);
     }
@@ -381,7 +394,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     }
     // Funded candidates in queue order; the head is first when it is funded.
     let images = executor::source_images(state, id);
-    let mut candidates: Vec<(usize, u8)> = Vec::new();
+    let mut candidates = Vec::new();
     {
         let record = state.settlements.get(id).expect("settlement");
         for (index, order) in access::orders(record).enumerate() {
@@ -394,7 +407,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
                 continue;
             };
             if funded_variant(state, id, &level.materials, &images).is_some() {
-                candidates.push((index, level_number));
+                candidates.push(index);
             }
         }
     }
@@ -404,14 +417,13 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     }
     // A funded request that cannot start for lack of a site does not block the
     // next funded one; it stays where it is in the queue.
-    for (index, level_number) in candidates {
+    for index in candidates {
         let Some(record) = state.settlements.get_mut(id) else {
             return true;
         };
-        let Some(mut order) = access::take_order(record, index) else {
+        let Some(order) = access::take_order(record, index) else {
             continue;
         };
-        order.level = level_number;
         let cursor = state
             .settlements
             .get(id)
@@ -446,16 +458,16 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     true
 }
 
-/// The level an owner request would start at, if its target still allows one.
+/// A confirmed level remains unchanged even while its predecessor is missing.
 fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Option<u8> {
     let Some(building) = order.building else {
         return Some(1);
     };
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
-    blueprints::get(&state.registry, &order.blueprint)
-        .and_then(|blueprint| blueprint.level(target.level + 1))
-        .map(|_| target.level + 1)
+    let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
+    blueprint.level(target.level.saturating_add(1))?;
+    blueprint.level(order.level).map(|_| order.level)
 }
 
 fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {
@@ -756,7 +768,10 @@ fn joint_requirement(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u3
     joint_active_bill(state, id)
 }
 
-/// The authored footprint box of one project, for neighbour safety.
+/// The authored footprint box of one project. Only the neighbour tests read the
+/// authored box now: production stands and placements use the body AABB
+/// (`villager::building::in_other_body`), so this stays test-only (D8 merge).
+#[cfg(test)]
 pub(crate) fn footprint(
     state: &TickState,
     project: &Project,
@@ -772,8 +787,9 @@ pub(crate) fn footprint(
     mc_script::ScriptWorldBounds::new(min, max).ok()
 }
 
-/// Whether `at` falls inside another active project's footprint: no builder
-/// stands or places there (D8 review SOL-4).
+/// Whether `at` falls inside another active project's authored footprint.
+/// Test-only after the merge: the production rule is the body AABB.
+#[cfg(test)]
 pub(crate) fn in_other_footprint(
     state: &TickState,
     id: SettlementId,
@@ -1517,7 +1533,7 @@ fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> b
     begin_cells(state, project, bounds, cells)
 }
 
-fn begin_cells(
+pub(crate) fn begin_cells(
     state: &mut TickState,
     mut project: Project,
     bounds: ScriptWorldBounds,
@@ -1702,7 +1718,18 @@ pub(super) fn surface_y_for_lot(
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above) || clearance.clearable(state, [x, y + 1, z], lot)
+                    // A lot column may be covered by water or lava: the support
+                    // under it is the pond's own bottom and the fluid cells are
+                    // fill targets. Roads, frontage reach and layout pass
+                    // `lot: None` and keep refusing a fluid ground.
+                    clearable(state, above)
+                        || clearance.clearable(state, [x, y + 1, z], lot)
+                        || (lot.is_some()
+                            && (preparation::liquid::has_fluid(state, above)
+                                || preparation::liquid::contained(state, above).is_some()))
+                        // A field crop does not hide its farmland: a needed lot
+                        // surveys the soil under the plants it reaps (D10).
+                        || crate::settlements::construction::relayout::crop(state, above)
                 })
         })
 }
@@ -2788,9 +2815,10 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 /// each item the project's bill asked for. Only those exact amounts are owed,
 /// so a resident's own food or a later working load is never taken (R4-1).
 pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
-    let Some(bill) = project_bill(state, id, handle) else {
-        return;
-    };
+    // The full remaining bill, before any bound builder's carry is subtracted:
+    // `project_bill` drops a type once the builder already carries all of it,
+    // which is exactly the load that must be recorded (R4-1).
+    let bill = remaining_bill(state, id, handle);
     let Some(slot) = state.entities.slot_of_uuid(uuid) else {
         return;
     };
@@ -2800,7 +2828,11 @@ pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uui
     let mut owed: Vec<(u32, u32)> = Vec::new();
     for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
         let item = stack.item_id;
-        if !bill.iter().any(|(known, _)| *known == item) {
+        // Unreadable bill: fail closed on the whole load this builder was
+        // carrying, since it was bound to this project a moment ago.
+        if let Some(bill) = bill.as_ref()
+            && !bill.iter().any(|(known, _)| *known == item)
+        {
             continue;
         }
         let count = stack.count as u32;
@@ -3284,6 +3316,27 @@ fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, 
 
 /// One project's remaining bill, net of the carry of the builder bound to it.
 /// Another project's load never pays for these cells (D8).
+/// The project's remaining materials, not net of any builder carry: the set a
+/// released builder's load must be measured against (D8 review R4-1).
+pub(crate) fn remaining_bill(
+    state: &TickState,
+    id: SettlementId,
+    handle: &str,
+) -> Option<Vec<(u32, u32)>> {
+    let snapshot = executor::status(state, id, handle).ok()?;
+    snapshot
+        .remaining
+        .into_iter()
+        .map(|material| {
+            let name = mc_data::Identifier::parse(&material.resource).ok()?;
+            Some((
+                state.registry.items.id_of(&name)?,
+                u32::try_from(material.quantity).ok()?,
+            ))
+        })
+        .collect()
+}
+
 pub(crate) fn project_bill(
     state: &TickState,
     id: SettlementId,
@@ -3879,6 +3932,10 @@ mod queue_tests;
 mod parallel_tests;
 
 #[cfg(test)]
+#[path = "construction_parallel_tick_tests.rs"]
+mod parallel_tick_tests;
+
+#[cfg(test)]
 #[path = "construction_site_tests.rs"]
 mod site_tests;
 
@@ -3901,6 +3958,12 @@ mod growth_tests;
 #[path = "construction_filler.rs"]
 pub(super) mod filler;
 
+#[cfg(test)]
+#[path = "construction_liquid_tests.rs"]
+mod liquid_tests;
+
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;
+#[path = "relayout.rs"]
+pub(crate) mod relayout;
 use preparation::planned_cells;

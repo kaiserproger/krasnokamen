@@ -565,6 +565,20 @@ fn free_project(
     cells: Vec<executor::PlannedCell>,
 ) -> String {
     let bounds = ScriptWorldBounds::new([2, 201, 2], [14, 201, 14]).unwrap();
+    // Free paving transforms the soil in place: give each free dirt_path cell
+    // real soil to turn into a path (the executor no-ops a paving cell without
+    // it, SR3-2).
+    if let Some(path) = crate::settlements::layout::paved_state(state) {
+        let soil = super::super::allocator::tests::block(state, "minecraft:grass_block", &[]);
+        for cell in &cells {
+            if cell.state == path {
+                state
+                    .world
+                    .set_block(cell.at[0], cell.at[1], cell.at[2], soil);
+            }
+        }
+        state.world.fold_overlay();
+    }
     let structure = executor::prepare(state, id, blueprint.into(), bounds, bounds, cells).unwrap();
     state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,

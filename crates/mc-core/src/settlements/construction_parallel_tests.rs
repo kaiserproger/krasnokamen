@@ -847,3 +847,311 @@ fn an_indexed_cancel_takes_the_named_request() {
         Err("No pending construction order #6.".to_string())
     );
 }
+
+/// R4-1b: while a debt is open the debtor is not hired for a new project and
+/// its carry is not consumed; when the store frees, exactly the owed amount is
+/// delivered once and the debt closes.
+#[test]
+fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
+    // Full store: the return cannot be delivered, so the debt stays open.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::new(log, 64);
+    }
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    super::rebind_lost_builders(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, 7)]),
+        "the exact owed carry is recorded per item"
+    );
+    // A new project is admitted while the debt is open. The cured body is
+    // otherwise hirable (on shift, Builder), so only the debt can explain a
+    // refusal (R4-1b).
+    {
+        let v = state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .expect("villager row");
+        v.conversion_time = None;
+        v.data.profession = crate::villager::VillagerProfession::Builder;
+        v.activity = crate::villager::Activity::Work;
+    }
+    push_neighbour(&mut state, id, "second-house", [24, 200, 24]);
+    super::drain_carry_duties_for_test(&mut state, id);
+    super::assign_builder(&mut state, id);
+    // Neither the freshly admitted project nor the released one may take a
+    // debtor: the planner is refused for every binding, not just the new site.
+    assert!(
+        access::projects_of(&state.settlements, id)
+            .all(|project| project.builder.map(|(bound, _)| bound) != Some(uuid)),
+        "a debtor is not hired for any project"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .as_ref()
+            .map(|stack| stack.count),
+        Some(7),
+        "the owed carry is not consumed while the store is full"
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, 7)]),
+        "the debt survives a full store"
+    );
+    // The store frees: the exact amount is delivered once and the debt closes.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = None;
+    super::drain_carry_duties_for_test(&mut state, id);
+    let delivered: i32 = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(delivered, 7, "the exact owed carry reaches storage once");
+    assert!(
+        state.settlements.get(id).unwrap().carry_pending.is_empty(),
+        "the debt closes on delivery"
+    );
+    super::drain_carry_duties_for_test(&mut state, id);
+    let after_second = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum::<i32>();
+    assert_eq!(after_second, 7, "a drained debt is never delivered twice");
+}
+
+/// R4-1c: a builder carrying exactly the item the bill still asks for must
+/// still record that debt — the net-of-carry bill has no such type left.
+#[test]
+fn a_carry_equal_to_the_remainder_is_still_owed() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    let remaining = super::remaining_bill(&state, id, &handle).expect("bill");
+    let owed = remaining
+        .iter()
+        .find(|(item, _)| *item == log)
+        .map(|(_, count)| *count)
+        .expect("the house asks for logs");
+    assert!(owed > 0, "the fixture bill has logs to place");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, owed as i32));
+    // The live builder's own carry is subtracted from project_bill, so the
+    // type disappears there; the debt must come from the un-netted bill.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    super::rebind_lost_builders(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, owed)]),
+        "the whole remainder the builder carried is owed"
+    );
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = None;
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    super::drain_carry_duties_for_test(&mut state, id);
+    let delivered: i32 = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(delivered, owed as i32, "the owed amount is delivered once");
+    assert!(state.settlements.get(id).unwrap().carry_pending.is_empty());
+}
+
+/// R4-1d: a real infection, a record reopen and a real cure. The debt is taken
+/// when the builder stops being one, survives a checkpoint round trip, and is
+/// delivered exactly once after the conversion tick cures the body.
+#[test]
+fn an_infected_builders_debt_survives_a_reopen_and_delivers_after_a_real_cure() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
+    // A real zombie bite, not a hand-set timer.
+    let zombie_type = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .expect("zombie type");
+    // Hard difficulty makes the bite deterministic (conversion.rs).
+    state.difficulty = crate::survival::Difficulty::Hard;
+    let pos = state.entities.pos(slot);
+    let zombie = state.spawn_mob(zombie_type, [pos[0] + 1.0, pos[1], pos[2]], 20.0);
+    assert!(
+        crate::villager::conversion::infect(&mut state, slot, Some(zombie)),
+        "the villager is infected by a real bite"
+    );
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| v.conversion_time.is_some()),
+        "the bite starts the conversion timer"
+    );
+    super::rebind_lost_builders(&mut state, id);
+    assert!(
+        project_for_structure(state.settlements.get(id).unwrap(), &handle)
+            .is_some_and(|project| project.builder.is_none()),
+        "an infected builder releases its project"
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, 7)]),
+        "the exact load is owed"
+    );
+    // Checkpoint and reopen the record through its serialized image.
+    let image = state
+        .settlements
+        .images()
+        .into_iter()
+        .find(|image| image.id == id)
+        .expect("record image");
+    let row = serde_json::to_string(&image).expect("checkpoint row");
+    let reopened: crate::settlements::RecordImage =
+        serde_json::from_str(&row).expect("reopened row");
+    state.settlements.apply_image(reopened);
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, 7)]),
+        "the debt survives the reopen"
+    );
+    // A real cure: the conversion countdown reaches zero through its own tick.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(1);
+    for _ in 0..8 {
+        crate::villager::conversion::tick(&mut state);
+        if state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| v.conversion_time.is_none())
+        {
+            break;
+        }
+    }
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| v.conversion_time.is_none()),
+        "the body is cured"
+    );
+    // The planner pass delivers the reopened debt exactly once.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    state.tick = super::PLAN_CADENCE;
+    super::tick(&mut state);
+    let delivered: i32 = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(delivered, 7, "the exact load reaches storage");
+    assert!(
+        state.settlements.get(id).unwrap().carry_pending.is_empty(),
+        "the debt closes"
+    );
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .is_none(),
+        "the body hands its load over"
+    );
+}

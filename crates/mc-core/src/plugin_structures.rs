@@ -262,11 +262,27 @@ struct Cell {
 fn default_cell_quantity() -> u32 {
     1
 }
+/// D10 liquid proof envelope, persisted at admission so a resume re-proves the
+/// same volume: the discovered bottom, the support row of every column and the
+/// cells that held fluid when the bowl was certified (paid or not).
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub(crate) struct LiquidProof {
+    pub(crate) lowest: i32,
+    pub(crate) columns: Vec<([i32; 2], i32)>,
+    pub(crate) cells: Vec<[i32; 3]>,
+}
+
 /// One structure's record. Its advance receipts are returned to the caller and
 /// counted by `snapshot.watermark`; they are not kept here.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Structure {
+    /// The liquid proof of a plan admitted over fluid; null for a dry plan.
+    /// A required key that may be null: the ledger keeps no compatibility with
+    /// its own old saves (one reset, the LedgerSplit), so a record without it
+    /// refuses to load instead of silently reading as a dry plan.
+    #[serde(deserialize_with = "serde::Deserialize::deserialize")]
+    liquid: Option<LiquidProof>,
     owner: String,
     #[serde(default)]
     settlement: Option<crate::settlements::SettlementId>,
@@ -336,6 +352,34 @@ pub(crate) fn building_facts<'a>(
             }
         })
         .collect()
+}
+
+/// Cells of a pending structure the world does not have yet: the settlement
+/// network proof mounts a plan's unbuilt detour and drops its unretired path
+/// (D8 parallel projects, P2-5).
+pub(crate) fn pending_cells(
+    state: &TickState,
+    owner: &str,
+    handle: &str,
+) -> Result<Vec<([i32; 3], u32)>, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, owner, handle)?;
+    if record.snapshot.state == ScriptStructureState::Committed
+        || record.snapshot.state == ScriptStructureState::Cancelled
+    {
+        return Ok(Vec::new());
+    }
+    let current = record.snapshot.current_stage_index as usize;
+    let mut cells = Vec::new();
+    for (index, stage) in record.cells.iter().enumerate().skip(current) {
+        let offset = if index == current {
+            record.snapshot.completed_work_units as usize
+        } else {
+            0
+        };
+        cells.extend(stage.iter().skip(offset).map(|cell| (cell.at, cell.state)));
+    }
+    Ok(cells)
 }
 
 pub(crate) fn check_building(
@@ -1006,6 +1050,7 @@ fn execute_operation(
                 Structure {
                     owner: owner.to_owned(),
                     settlement: None,
+                    liquid: None,
                     settlement_preparation: None,
                     snapshot: snapshot.clone(),
                     blueprint_hash: blueprint.content_hash().to_owned(),
@@ -1074,6 +1119,14 @@ fn execute_operation(
                 return Err(Failure::Forbidden);
             }
             let target = world(state, &record.snapshot.dimension)?;
+            if let Some(proof) = &record.liquid {
+                crate::settlements::construction::preparation::liquid::revalidate(
+                    target,
+                    proof,
+                    record.snapshot.origin,
+                    record.snapshot.reserved_footprint,
+                )?;
+            }
             if let Some(reason) = portions::stale_reason(target, &record, portion)? {
                 record.snapshot.state = ScriptStructureState::Paused;
                 record.snapshot.pause_reason = Some(reason);
@@ -1090,11 +1143,22 @@ fn execute_operation(
                 ));
             }
             let mut consumed = BTreeMap::new();
+            // A village retirement and a free paving rewrite the soil already in
+            // place: when the world no longer holds that ground (a player dug it,
+            // the footprint changed and recovery resumed the same manifest) the
+            // cell is a no-op instead of a block from nothing or a foreign block
+            // overwritten without credit.
+            let mut retired_noop: BTreeSet<[i32; 3]> = BTreeSet::new();
             for cell in portion {
-                target
+                let current = target
                     .world
                     .block_at(cell.at[0], cell.at[1], cell.at[2])
                     .ok_or(Failure::Unloaded)?;
+                if record.settlement.is_some()
+                    && settlement_builds::soil_work_noop(target, cell, current)
+                {
+                    retired_noop.insert(cell.at);
+                }
                 if target
                     .block_entities
                     .get(&(cell.at[0], cell.at[1], cell.at[2]))
@@ -1148,6 +1212,9 @@ fn execute_operation(
             }
             let target = world_mut(state, &record.snapshot.dimension).expect("preflight dimension");
             for cell in portion {
+                if retired_noop.contains(&cell.at) {
+                    continue;
+                }
                 let pos = BlockPos {
                     x: cell.at[0],
                     y: cell.at[1],
@@ -1550,7 +1617,7 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                         (None, None) => cell.quantity == 0,
                         (Some(_), None) => {
                             cell.quantity == 0
-                                && record
+                                && (record
                                     .snapshot
                                     .blueprint_id
                                     .strip_prefix("krasnokamen-settlements:")
@@ -1559,6 +1626,15 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                                             state, blueprint, cell.state,
                                         )
                                     })
+                                    // A lot retires a path or a field into the
+                                    // soil already in place and paves its own
+                                    // detour soil: village work on a lot column.
+                                    || crate::settlements::construction::relayout::free_village_work(
+                                        state,
+                                        record.settlement,
+                                        cell.at,
+                                        cell.state,
+                                    ))
                         }
                         _ => false,
                     };
