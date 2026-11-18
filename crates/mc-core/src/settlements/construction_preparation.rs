@@ -184,11 +184,16 @@ pub(super) fn planned_cells(
     if let Some(village) = village {
         let mut taken: std::collections::HashSet<[i32; 3]> =
             cells.iter().map(|cell| cell.at).collect();
+        // The detour leads the build stage: executor order is the manifest's,
+        // so it stands before a single house cell can close the old line.
+        let mut detour = Vec::with_capacity(village.detour.len());
         for cell in village.detour.into_iter().chain(village.cleared) {
             if taken.insert(cell.at) {
-                cells.push(cell);
+                detour.push(cell);
             }
         }
+        detour.append(&mut cells);
+        cells = detour;
         // Old path and farmland cells go last: nothing walks the old line
         // until the detour that replaces it stands.
         for cell in village.retired {

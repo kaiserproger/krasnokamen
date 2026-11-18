@@ -25,15 +25,6 @@ use crate::tick::TickState;
 /// Highest detour level above the column's natural ground: one paid fill cell
 /// under the path, so a two-block dip can still be crossed.
 const DETOUR_RAISE: i32 = 2;
-/// Blocks whose removal credits the field's harvest, as a villager reaps them.
-const CROPS: [&str; 6] = [
-    "wheat",
-    "carrots",
-    "potatoes",
-    "beetroots",
-    "torchflower_crop",
-    "pitcher_crop",
-];
 /// Surfaces a detour turns into a dirt path, exactly as street paving does.
 const SOIL: [&str; 6] = [
     "grass_block",
@@ -53,8 +44,6 @@ pub(super) struct Relayout {
     /// Path and farmland cells replaced with the soil they are made of, after
     /// every detour cell stands.
     pub(super) retired: Vec<PlannedCell>,
-    /// Accepting lot floor by column `(x, z)`.
-    floor: HashSet<(i32, i32)>,
     /// Ground height by column, for a lot column whose crop hides the surface
     /// from the ordinary survey.
     ground: HashMap<(i32, i32), i32>,
@@ -63,11 +52,6 @@ pub(super) struct Relayout {
 }
 
 impl Relayout {
-    /// The plan owns this column's lot floor block.
-    pub(super) fn floor(&self, x: i32, z: i32) -> bool {
-        self.floor.contains(&(x, z))
-    }
-
     /// The plan removes this exact cell above the lot floor.
     pub(super) fn clears(&self, at: [i32; 3]) -> bool {
         self.cleared.iter().any(|cell| cell.at == at)
@@ -123,7 +107,12 @@ pub(super) fn plan(
                 let Some(block) = state.world.physics_block_at(x, above, z) else {
                     break;
                 };
-                if !name(state, block).is_some_and(|name| CROPS.contains(&name)) {
+                if !crop(state, block) {
+                    continue;
+                }
+                // A two-block plant is one crop: its lower half carries the
+                // yield, the upper half is the same plant (vanilla drops once).
+                if half(state, block).is_some_and(|half| half == "upper") {
                     continue;
                 }
                 if state.block_log.player_touched([x, above, z]) {
@@ -146,11 +135,9 @@ pub(super) fn plan(
     } else {
         reconnection(state, record, lot, &paths)?
     };
-    let mut floor = HashSet::default();
     let mut ground_by_column = HashMap::default();
     let mut retired = Vec::new();
     for (x, ground, z, _) in worked {
-        floor.insert((x, z));
         if cleared
             .iter()
             .any(|cell| cell.at[0] == x && cell.at[2] == z)
@@ -170,16 +157,17 @@ pub(super) fn plan(
         detour: detour.cells,
         cleared,
         retired,
-        floor,
         ground: ground_by_column,
         area: detour.area,
     }))
 }
 
-/// A lot retires a path or a field into the soil already in place: that soil
-/// cell is village work on the lot, not a fabricated material cell, so the
-/// canonical ledger admits it at no cost. Only a lot column qualifies.
-pub(crate) fn free_soil(
+/// Village work on a lot column is free: a retired path or field leaves the
+/// soil already in place (`dirt`), and a detour path only ever paves the soil
+/// at its own natural level (`dirt_path`, as a shovel does). A raised detour
+/// cell and every fill under it carry real material instead. Only a lot column
+/// of that settlement qualifies.
+pub(crate) fn free_village_work(
     state: &TickState,
     settlement: Option<crate::settlements::SettlementId>,
     at: [i32; 3],
@@ -188,7 +176,7 @@ pub(crate) fn free_soil(
     let Some(record) = settlement.and_then(|id| state.settlements.get(id)) else {
         return false;
     };
-    name(state, block).is_some_and(|name| name == "dirt")
+    name(state, block).is_some_and(|name| matches!(name, "dirt" | "dirt_path"))
         && matches!(layout::cell(record.anchor, at[0], at[2]), Cell::Lot)
 }
 
@@ -196,56 +184,60 @@ pub(crate) fn free_soil(
 /// with the lot, so its yield is settlement storage stock, exactly as the
 /// settlement's own farmers reap one (`villager::harvest`): a ripe plant gives
 /// its produce and one seed, an unripe one gives the seed back.
-pub(crate) fn crop_drops(
-    state: &TickState,
-    at: [i32; 3],
-    block: u32,
-) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
+pub(crate) fn crop_drops(state: &TickState, block: u32) -> Vec<mc_data::ItemStack> {
+    use crate::villager::harvest;
     let Some(path) = name(state, block) else {
-        return Ok(Vec::new());
+        return Vec::new();
     };
+    if !crop(state, block) {
+        return Vec::new();
+    }
     let Some((age, maximum)) = crate::farming::age_of(&state.registry.blocks, block) else {
-        return Ok(Vec::new());
+        return Vec::new();
     };
-    let ripe = age == maximum;
-    let (produce, seed) = match path {
-        "wheat" => (Some(("wheat", 1)), Some("wheat_seeds")),
-        "beetroots" => (ripe.then_some(("beetroot", 1)), Some("beetroot_seeds")),
-        "carrots" => (Some(("carrot", if ripe { 3 } else { 1 })), None),
-        "potatoes" => (Some(("potato", if ripe { 3 } else { 1 })), None),
-        "torchflower_crop" => (
-            ripe.then_some(("torchflower", 1)),
-            (!ripe).then_some("torchflower_seeds"),
-        ),
-        "pitcher_crop" => (
-            ripe.then_some(("pitcher_plant", 1)),
-            (!ripe).then_some("pitcher_pod"),
-        ),
-        _ => return Ok(Vec::new()),
+    let Some((produce, seed)) = harvest::crop_yield(path, age == maximum) else {
+        return Vec::new();
     };
     let mut stacks = Vec::new();
     if let Some((item, count)) = produce
-        && let Some(item) = item_id(state, item)
+        && let Some(item) = harvest::item_id(state, item)
     {
         stacks.push(mc_data::ItemStack::new(item, count));
     }
     if let Some(seed) = seed
-        && let Some(item) = item_id(state, seed)
+        && let Some(item) = harvest::item_id(state, seed)
     {
         stacks.push(mc_data::ItemStack::new(item, 1));
     }
-    let _ = at;
-    Ok(stacks)
+    stacks
 }
 
-/// One item by its vanilla path: the crop produce and seed names below are
-/// the registry's own, resolved once here instead of an inline id literal.
-fn item_id(state: &TickState, name: &str) -> Option<u32> {
+/// A block the lot's field removal reaps: a crop of the shared table.
+pub(crate) fn crop(state: &TickState, block: u32) -> bool {
+    name(state, block).is_some_and(|name| {
+        crate::villager::harvest::CROPS
+            .iter()
+            .any(|(crop, _, _)| *crop == name)
+            || matches!(name, "torchflower_crop" | "pitcher_crop")
+    })
+}
+
+/// A block a village retirement may rewrite: the path or the field itself.
+pub(crate) fn village_soil(state: &TickState, block: u32) -> bool {
+    state.registry.farming.is_farmland(block)
+        || name(state, block).is_some_and(|name| name == "dirt_path")
+}
+
+/// The `half` property of a two-block plant, if it has one.
+fn half(state: &TickState, block: u32) -> Option<&str> {
     state
         .registry
-        .items
+        .blocks
+        .by_id(mc_world::BlockStateId(block))?
+        .properties
         .iter()
-        .find_map(|(id, item)| (id.as_str().rsplit_once(':')?.1 == name).then_some(item))
+        .find(|(key, _)| key == "half")
+        .map(|(_, value)| value.as_str())
 }
 
 fn name(state: &TickState, block: u32) -> Option<&str> {
@@ -456,11 +448,18 @@ fn bridge(
             });
         }
         if let Some(path) = dirt_path(state) {
+            // Natural level paves the soil already there; a raised path cell
+            // stands on a fill of its own and costs one dirt like any block.
+            let (resource, quantity) = if level == natural {
+                (None, 0)
+            } else {
+                (fill_resource.clone(), 1)
+            };
             cells.push(PlannedCell {
                 at: [x, level, z],
                 state: path,
-                resource: None,
-                quantity: 0,
+                resource,
+                quantity,
             });
         }
         nodes.insert((x, z), level);

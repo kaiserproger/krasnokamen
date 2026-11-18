@@ -741,7 +741,7 @@ pub(super) fn debit(
                 // vanilla loot, not conserved stock, so full storage spills it
                 // at the cell as vanilla does.
                 loot.extend(
-                    crate::settlements::construction::relayout::crop_drops(state, cell.at, block)?
+                    crate::settlements::construction::relayout::crop_drops(state, block)
                         .into_iter()
                         .map(|stack| (cell.at, stack)),
                 );

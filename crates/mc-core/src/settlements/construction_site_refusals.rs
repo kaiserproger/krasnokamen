@@ -563,7 +563,9 @@ pub(super) fn check(
                 .physics_block_at(x, height, z)
                 .expect("loaded surface");
             if !floor_replaceable(state, ground)
-                && !relayout.as_ref().is_some_and(|plan| plan.floor(x, z))
+                && !relayout
+                    .as_ref()
+                    .is_some_and(|plan| plan.retires([x, height, z]))
             {
                 return Err(Reason::ProtectedFloor);
             }
@@ -586,7 +588,9 @@ pub(super) fn check(
                 return Err(Reason::ProtectedObstruction);
             }
             if !floor_replaceable(state, floor_block)
-                && !relayout.as_ref().is_some_and(|plan| plan.floor(x, z))
+                && !relayout
+                    .as_ref()
+                    .is_some_and(|plan| plan.retires([x, floor, z]))
             {
                 return Err(Reason::ProtectedFloor);
             }
@@ -669,6 +673,10 @@ pub(super) fn check(
             }
         }
     }
+    // A certified natural zone is terrain, not a building: it keeps only its own
+    // columns and is tested against the whole preparation volume — the authored
+    // footprint and the fill down to the lowest discovered ground. A zone below
+    // the floor that the fill would cross still refuses (owner D10, review 1.1).
     let prepared_min = lowest;
     if record.buildings.values().any(|building| {
         building.natural_zone

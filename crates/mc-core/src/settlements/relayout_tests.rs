@@ -2,7 +2,7 @@ use super::*;
 use crate::settlements::SettlementId;
 use crate::settlements::allocator::tests::block;
 use crate::settlements::blueprints::{self, Rotation};
-use crate::settlements::construction::tests::{complete, fixture, fund, open_plan};
+use crate::settlements::construction::tests::{attempt, complete, fixture, fund, open_plan};
 use crate::settlements::forestry::tests::player_history;
 
 /// Ground level of the flat fixture plateau.
@@ -145,6 +145,44 @@ fn stays_connected(state: &mut TickState, id: SettlementId, cells: &[PlannedCell
     }
 }
 
+/// The manifest the executor receives: the clear stage first (air cells), then
+/// the build stage in its own order.
+fn executor_order(state: &TickState, cells: &[PlannedCell]) -> Vec<PlannedCell> {
+    let air = state.registry.states.air;
+    cells
+        .iter()
+        .filter(|cell| cell.state == air)
+        .chain(cells.iter().filter(|cell| cell.state != air))
+        .map(|cell| PlannedCell {
+            at: cell.at,
+            state: cell.state,
+            resource: cell.resource.clone(),
+            quantity: cell.quantity,
+        })
+        .collect()
+}
+
+fn manifest(
+    state: &TickState,
+    id: SettlementId,
+    lot: layout::Lot,
+    size: [u8; 3],
+) -> (ScriptWorldBounds, Vec<PlannedCell>) {
+    let project = super::super::Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin: lot.origin,
+        rotation: lot.rotation,
+        building: None,
+        structure: String::new(),
+        ordered: true,
+        borrowed_builder: None,
+    };
+    super::super::planned_cells(state, &project, "oak", &mut Default::default())
+        .expect("the crossing lot is prepared")
+}
+
 #[test]
 fn road_crossing_lot_is_admitted_with_a_detour_and_stays_connected() {
     let (mut state, id, _) = fixture();
@@ -153,14 +191,13 @@ fn road_crossing_lot_is_admitted_with_a_detour_and_stays_connected() {
     let road = crossing_road(&mut state, front, normal, size, bounds);
     admit(&state, id, lot, size).expect("the crossing lot is admitted");
     let plan = plan(&state, state.settlements.get(id).unwrap(), bounds)
-        .expect("a cut village path is admitted")
+        .expect("the lot is admitted")
         .expect("the lot covers village work");
     assert!(
         !plan.detour.is_empty(),
         "a path cut on both sides needs a detour"
     );
     let detour: Vec<[i32; 3]> = plan.detour.iter().map(|cell| cell.at).collect();
-    let retired: Vec<[i32; 3]> = plan.retired.iter().map(|cell| cell.at).collect();
     for at in &detour {
         assert!(
             at[0] < bounds.min[0] - 1
@@ -170,18 +207,25 @@ fn road_crossing_lot_is_admitted_with_a_detour_and_stays_connected() {
             "the detour never runs over the lot or its clearance: {at:?}"
         );
     }
-    for at in &retired {
-        assert!(
-            (bounds.min[0]..=bounds.max[0]).contains(&at[0])
-                && (bounds.min[2]..=bounds.max[2]).contains(&at[2]),
-            "only lot cells are retired: {at:?}"
-        );
-    }
-    let mut cells = Vec::new();
-    cells.extend(plan.detour);
-    cells.extend(plan.cleared);
-    cells.extend(plan.retired);
-    stays_connected(&mut state, id, &cells);
+    // The manifest the executor walks, in its own order: detour first, then the
+    // house's cells, then the retired village cells.
+    let (_, cells) = manifest(&state, id, lot, size);
+    let ordered = executor_order(&state, &cells);
+    let first_house = ordered
+        .iter()
+        .position(|cell| {
+            name(&state, cell.state).is_some_and(|name| name != "dirt_path" && name != "dirt")
+        })
+        .expect("the house places cells");
+    let last_detour = ordered
+        .iter()
+        .rposition(|cell| name(&state, cell.state) == Some("dirt_path"))
+        .expect("the detour is in the manifest");
+    assert!(
+        last_detour < first_house,
+        "every detour cell stands before the first house cell"
+    );
+    stays_connected(&mut state, id, &ordered);
     for at in &detour {
         assert_eq!(
             name(&state, state.world.block_at(at[0], at[1], at[2]).unwrap()),
@@ -190,14 +234,41 @@ fn road_crossing_lot_is_admitted_with_a_detour_and_stays_connected() {
         );
     }
     for at in &road {
-        let inside = (bounds.min[0]..=bounds.max[0]).contains(&at[0])
-            && (bounds.min[2]..=bounds.max[2]).contains(&at[2]);
-        assert_eq!(
-            name(&state, state.world.block_at(at[0], at[1], at[2]).unwrap()),
-            Some(if inside { "dirt" } else { "dirt_path" }),
-            "village path cell {at:?}"
-        );
+        if (bounds.min[0]..=bounds.max[0]).contains(&at[0])
+            && (bounds.min[2]..=bounds.max[2]).contains(&at[2])
+        {
+            assert_ne!(
+                name(&state, state.world.block_at(at[0], at[1], at[2]).unwrap()),
+                Some("dirt_path"),
+                "the lot's own path cell is retired or built over: {at:?}"
+            );
+        }
     }
+}
+
+#[test]
+fn an_immature_field_leaves_only_its_seed() {
+    let (state, _, _) = fixture();
+    let seed = item_of(&state, "wheat_seeds");
+    let wheat = item_of(&state, "wheat");
+    let young = block(&state, "minecraft:wheat", &[("age", "0")]);
+    let ripe = block(&state, "minecraft:wheat", &[("age", "7")]);
+    let young = crop_drops(&state, young);
+    assert_eq!(
+        young
+            .iter()
+            .map(|stack| (stack.item_id, stack.count))
+            .collect::<Vec<_>>(),
+        vec![(seed, 1)],
+        "an unripe plant gives the seed back"
+    );
+    let ripe = crop_drops(&state, ripe);
+    assert!(
+        ripe.iter()
+            .any(|stack| stack.item_id == wheat && stack.count == 1)
+            && ripe.iter().any(|stack| stack.item_id == seed),
+        "a ripe plant gives wheat and its seed: {ripe:?}"
+    );
 }
 
 #[test]
@@ -316,14 +387,7 @@ fn farmland_removal_conserves_the_harvest() {
     );
     let loot: Vec<_> = crops
         .iter()
-        .flat_map(|&at| {
-            crop_drops(
-                &state,
-                at,
-                state.world.block_at(at[0], at[1], at[2]).unwrap(),
-            )
-            .unwrap()
-        })
+        .flat_map(|&at| crop_drops(&state, state.world.block_at(at[0], at[1], at[2]).unwrap()))
         .map(|stack| (stack.item_id, stack.count))
         .collect();
     assert!(

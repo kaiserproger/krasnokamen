@@ -1572,9 +1572,9 @@ pub(super) fn surface_y_for_lot(
                 .is_some_and(|above| {
                     clearable(state, above)
                         || clearance.clearable(state, [x, y + 1, z], lot)
-                        // A crop does not hide its field: a needed lot surveys
-                        // the farmland under the plants it removes (D10).
-                        || crate::farming::age_of(&state.registry.blocks, above).is_some()
+                        // A field crop does not hide its farmland: a needed lot
+                        // surveys the soil under the plants it reaps (D10).
+                        || crate::settlements::construction::relayout::crop(state, above)
                 })
         })
 }

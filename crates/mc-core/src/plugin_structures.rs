@@ -1090,11 +1090,30 @@ fn execute_operation(
             }
             let count = portion.len();
             let mut consumed = BTreeMap::new();
+            // A village retirement rewrites the soil already in place: when the
+            // world no longer holds that path or field (a player dug it, the
+            // footprint changed and recovery resumed the same manifest) the cell
+            // is a no-op instead of a block from nothing.
+            let mut retired_noop: BTreeSet<[i32; 3]> = BTreeSet::new();
             for cell in portion {
-                target
+                let current = target
                     .world
                     .block_at(cell.at[0], cell.at[1], cell.at[2])
                     .ok_or(Failure::Unloaded)?;
+                if record.settlement.is_some()
+                    && cell.resource.is_none()
+                    && cell.state == state.registry.states.dirt
+                    && !crate::settlements::construction::relayout::village_soil(state, current)
+                    // A fluid cell is the liquid rules' fill target, never a
+                    // retirement of the path or field itself.
+                    && !state
+                        .registry
+                        .blocks
+                        .by_id(mc_world::BlockStateId(current))
+                        .is_some_and(|definition| definition.has_fluid())
+                {
+                    retired_noop.insert(cell.at);
+                }
                 if target
                     .block_entities
                     .get(&(cell.at[0], cell.at[1], cell.at[2]))
@@ -1147,6 +1166,9 @@ fn execute_operation(
             }
             let target = world_mut(state, &record.snapshot.dimension).expect("preflight dimension");
             for cell in portion {
+                if retired_noop.contains(&cell.at) {
+                    continue;
+                }
                 let pos = BlockPos {
                     x: cell.at[0],
                     y: cell.at[1],
@@ -1533,9 +1555,9 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                                         )
                                     })
                                     // A lot retires a path or a field into the
-                                    // soil already in place: village work on
-                                    // its own lot column.
-                                    || crate::settlements::construction::relayout::free_soil(
+                                    // soil already in place and paves its own
+                                    // detour soil: village work on a lot column.
+                                    || crate::settlements::construction::relayout::free_village_work(
                                         state,
                                         record.settlement,
                                         cell.at,
