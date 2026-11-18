@@ -716,13 +716,20 @@ fn rain_wait_is_journaled_after_native_checkpoint_and_survives_anvil_export() {
         )
         .unwrap();
     drop(store);
-    // Clear the birth image; subsequent entries must be caused by flight ticks.
-    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+    // The checkpoint carries this tick and its capture cleared the emitter's
+    // bases, so the first journaled flight tick must emit the hook's image; a
+    // compact record here would be a delta of an image outside the tail.
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     for _ in 0..20 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-        assert!(entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::Entity { id: journal_id, .. } if *journal_id == id.0)));
+        // The hook's flight may ride the compact projectile record.
+        assert!(entries.iter().any(|entry| matches!(
+            entry,
+            crate::journal::JournalEntry::Entity { id: journal_id, .. }
+            | crate::journal::JournalEntry::ProjectileFlight { id: journal_id, .. }
+                if *journal_id == id.0
+        )));
         writer.append(state.tick, state.tick, &entries).unwrap();
     }
     writer.flush().unwrap();

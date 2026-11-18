@@ -629,9 +629,12 @@ fn absolute_manual_activation_costs_disable_and_equipment_are_disk_wal_replay_sa
             .iter()
             .any(|entry| matches!(entry, crate::journal::JournalEntry::Plugins { .. }))
     );
-    assert!(after.iter().any(
-        |entry| matches!(entry, crate::journal::JournalEntry::Entity { id, .. } if *id == npc.0)
-    ));
+    // Equipment and activation may ride the compact appearance record.
+    assert!(after.iter().any(|entry| matches!(
+        entry,
+        crate::journal::JournalEntry::Entity { id, .. }
+        | crate::journal::JournalEntry::EntityAppearance { id, .. } if *id == npc.0
+    )));
     assert!(
         after
             .iter()
