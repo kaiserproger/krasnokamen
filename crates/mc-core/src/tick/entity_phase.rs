@@ -2022,9 +2022,10 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             post.shots,
             post.grounded,
         );
+        crate::battle::probe_windups(state);
         let battle = state.hostile.battle.timings;
         eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={} stepped_battle_rows={} battle_rows={} {}",
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={} stepped_battle_rows={} battle_slots={} {}",
             battle.total_us,
             battle.counters_us,
             battle.formation_us,

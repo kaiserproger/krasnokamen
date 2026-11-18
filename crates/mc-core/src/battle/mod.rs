@@ -407,6 +407,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         ..Default::default()
     };
     if !battle.running {
+        battle.probe.reset();
         let sample = exposure::Sample {
             entities: &state.entities,
             formation: &battle.formation,
@@ -495,6 +496,14 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     battle.output = output;
     state.hostile.battle = battle;
     intents
+}
+
+/// Phase log only: this tick's windups, counted after the entity phase wrote
+/// the tick's rotations (probe.rs).
+pub(crate) fn probe_windups(state: &mut TickState) {
+    let mut probe = std::mem::take(&mut state.hostile.battle.probe);
+    probe.windups(state);
+    state.hostile.battle.probe = probe;
 }
 
 /// Vanilla `LivingEntity.DATA_LIVING_ENTITY_FLAGS` (javap 26.3): index 8, a
