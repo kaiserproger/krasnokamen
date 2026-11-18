@@ -40,8 +40,18 @@ fn registry() -> Arc<crate::registry::CoreRegistry> {
     )
 }
 
+/// `name` or `name[key=value,...]`.
 fn named(state: &TickState, name: &str) -> u32 {
-    crate::settlements::allocator::tests::block(state, name, &[])
+    let (name, props) = match name.split_once('[') {
+        Some((name, rest)) => (name, rest.trim_end_matches(']')),
+        None => (name, ""),
+    };
+    let props: Vec<(&str, &str)> = props
+        .split(',')
+        .filter(|pair| !pair.is_empty())
+        .map(|pair| pair.split_once('=').unwrap())
+        .collect();
+    crate::settlements::allocator::tests::block(state, name, &props)
 }
 
 fn item(state: &TickState, name: &str) -> u32 {
@@ -52,10 +62,33 @@ fn item(state: &TickState, name: &str) -> u32 {
         .unwrap()
 }
 
+/// Planned cell at an arbitrary position: portion, position, target, material.
+type SpecAt = (
+    executor::PortionKind,
+    [i32; 3],
+    &'static str,
+    Option<&'static str>,
+);
+
 /// The settlement on `state` (a native-store world when `dir` is given) with
 /// one admitted preparation structure over `specs`. `pre` is the world at
 /// admission; `roots` are registered planted-tree roots.
 fn scene(dir: Option<&Path>, pre: &[(i32, &str)], roots: &[i32], specs: &[Spec]) -> Scene {
+    let pre: Vec<([i32; 3], &str)> = pre.iter().map(|(x, name)| ([*x, Y, Z], *name)).collect();
+    let roots: Vec<[i32; 3]> = roots.iter().map(|x| [*x, Y, Z]).collect();
+    let specs: Vec<SpecAt> = specs
+        .iter()
+        .map(|(portion, x, target, resource)| (*portion, [*x, Y, Z], *target, *resource))
+        .collect();
+    scene_at(dir, &pre, &roots, &specs)
+}
+
+fn scene_at(
+    dir: Option<&Path>,
+    pre: &[([i32; 3], &str)],
+    roots: &[[i32; 3]],
+    specs: &[SpecAt],
+) -> Scene {
     let (mut state, id, slot) = match dir {
         Some(dir) => native_fixture(dir),
         None => crate::settlements::construction::tests::fixture(),
@@ -69,24 +102,26 @@ fn scene(dir: Option<&Path>, pre: &[(i32, &str)], roots: &[i32], specs: &[Spec])
             .mark_block_entity_dirty(crate::boundary::BlockPos { x: 1, y: Y, z: 1 });
     }
     let uuid = state.entities.row(slot).uuid;
-    for (x, name) in pre {
+    for (at, name) in pre {
         let block = named(&state, name);
-        state.world.set_block(*x, Y, Z, block);
+        state.world.set_block(at[0], at[1], at[2], block);
     }
     state
         .settlements
         .get_mut(id)
         .unwrap()
         .planted_trees
-        .extend(roots.iter().map(|x| [*x, Y, Z]));
-    let min = specs.iter().map(|spec| spec.1).min().unwrap();
-    let max = specs.iter().map(|spec| spec.1).max().unwrap();
-    let bounds = mc_script::ScriptWorldBounds::new([min, Y, Z], [max, Y, Z]).unwrap();
+        .extend(roots.iter().copied());
+    let low = |axis: usize| specs.iter().map(|spec| spec.1[axis]).min().unwrap();
+    let high = |axis: usize| specs.iter().map(|spec| spec.1[axis]).max().unwrap();
+    let bounds =
+        mc_script::ScriptWorldBounds::new([low(0), low(1), low(2)], [high(0), high(1), high(2)])
+            .unwrap();
     let cells = specs
         .iter()
-        .map(|(portion, x, target, resource)| executor::PlannedCell {
+        .map(|(portion, at, target, resource)| executor::PlannedCell {
             portion: *portion,
-            at: [*x, Y, Z],
+            at: *at,
             state: named(&state, target),
             quantity: u32::from(resource.is_some()),
             resource: resource.map(str::to_owned),
@@ -205,7 +240,20 @@ fn image(scene: &Scene) -> serde_json::Value {
             )
         })
         .collect();
-    let blocks: Vec<Option<u32>> = (0..16).map(|x| state.world.block_at(x, Y, Z)).collect();
+    let blocks: Vec<Option<u32>> = (0..16)
+        .map(|x| state.world.block_at(x, Y, Z))
+        .chain(
+            [
+                [0, Y, 1],
+                [1, Y, 1],
+                [2, Y, 1],
+                [1, Y, 0],
+                [1, Y, 2],
+                [8, Y, 1],
+            ]
+            .map(|at| state.world.block_at(at[0], at[1], at[2])),
+        )
+        .collect();
     serde_json::json!({
         "plugins": serde_json::to_value(&state.plugins).unwrap(),
         "chests": chests,
@@ -231,19 +279,23 @@ use executor::PortionKind::{Build, Cut, Fill, Saplings, Trees};
 // --- 1. a block changed after admission inside territory -------------------
 
 /// (block that appears after admission, canonical drop, count): hand-droppable.
-const CHANGED_HAND: [(&str, Option<&str>, i32); 4] = [
+const CHANGED_HAND: [(&str, Option<&str>, i32); 2] = [
     ("minecraft:oak_planks", Some("minecraft:oak_planks"), 1),
-    ("minecraft:dirt", Some("minecraft:dirt"), 1),
-    ("minecraft:grass_block", Some("minecraft:dirt"), 1),
     ("minecraft:glass", None, 0),
 ];
 
-/// The same, for blocks whose vanilla loot needs a suitable tool (D27 ruling:
-/// settlements roll with their canonical extraction tool, no silk or fortune).
-const CHANGED_TOOL: [(&str, Option<&str>, i32); 2] = [
-    ("minecraft:stone", Some("minecraft:cobblestone"), 1),
-    ("minecraft:cobblestone", Some("minecraft:cobblestone"), 1),
+/// Terrain class (planner ground set): credits 0 under a placement (A3).
+const CHANGED_TERRAIN: [(&str, Option<&str>, i32); 3] = [
+    ("minecraft:dirt", None, 0),
+    ("minecraft:grass_block", None, 0),
+    ("minecraft:stone", None, 0),
 ];
+
+/// The same, for non-terrain blocks whose vanilla loot needs a suitable tool
+/// (D27 ruling: settlements roll with their canonical extraction tool, no silk
+/// or fortune).
+const CHANGED_TOOL: [(&str, Option<&str>, i32); 1] =
+    [("minecraft:cobblestone", Some("minecraft:cobblestone"), 1)];
 
 fn changed_cases(table: &[(&str, Option<&str>, i32)]) -> Vec<String> {
     let mut failures = Vec::new();
@@ -312,6 +364,15 @@ fn changed_after_admission_inside_territory_credits_the_canonical_drop_exactly_o
 #[test]
 fn changed_tool_requiring_blocks_credit_the_drop_of_the_canonical_tool() {
     let failures = changed_cases(&CHANGED_TOOL);
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// A3: the planner's terrain class (dirt, grass, stone) under a placement is
+/// the village's ground: no drop is credited even when it changed since the
+/// survey (no new dirt or stone income per foundation cell).
+#[test]
+fn changed_terrain_class_under_a_placement_credits_nothing_inside_territory() {
+    let failures = changed_cases(&CHANGED_TERRAIN);
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
@@ -393,13 +454,14 @@ fn restart_credits_once(edits: [&str; 3], expect: &[(&str, i32)]) {
 
 #[test]
 fn an_edited_cell_is_credited_once_across_checkpoint_wal_replay_and_restart() {
+    // Terrain-class edits (dirt, grass) under a placement credit nothing (A3).
     restart_credits_once(
         [
             "minecraft:oak_planks",
             "minecraft:dirt",
             "minecraft:grass_block",
         ],
-        &[("minecraft:oak_planks", 1), ("minecraft:dirt", 2)],
+        &[("minecraft:oak_planks", 1)],
     );
 }
 
@@ -411,7 +473,7 @@ fn an_edited_tool_requiring_cell_is_credited_once_across_checkpoint_wal_replay_a
             "minecraft:oak_planks",
             "minecraft:cobblestone",
         ],
-        &[("minecraft:cobblestone", 2), ("minecraft:oak_planks", 1)],
+        &[("minecraft:cobblestone", 1), ("minecraft:oak_planks", 1)],
     );
 }
 
@@ -921,6 +983,314 @@ fn a_non_empty_container_in_a_placement_cell_still_refuses() {
         assert_eq!(stock(&s.state, "minecraft:chest"), 1);
         assert_eq!(total_stock(&s.state), 1);
     }
+}
+
+// --- A3: terrain class under a placement, unchanged or changed -------------
+
+#[test]
+fn unchanged_stone_under_a_placement_credits_nothing_inside_territory() {
+    let failures = unchanged_under_placement(&[("minecraft:stone", None)]);
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// The terrain exclusion is for placements only: cutting the same terrain to
+/// air still credits its drop, changed since the survey or not.
+#[test]
+fn terrain_under_a_cut_cell_still_credits_its_drop() {
+    for (block, drop) in [
+        ("minecraft:dirt", "minecraft:dirt"),
+        ("minecraft:stone", "minecraft:cobblestone"),
+    ] {
+        for changed in [false, true] {
+            let pre: &[(i32, &str)] = if changed { &[] } else { &[(5, block)] };
+            let mut s = scene(
+                None,
+                pre,
+                &[],
+                &[
+                    (Cut, 5, "minecraft:air", None),
+                    (Build, 6, "minecraft:oak_log", Some("minecraft:oak_log")),
+                ],
+            );
+            if changed {
+                set(&mut s, 5, block);
+            }
+            step(&mut s).unwrap();
+            assert_eq!(
+                (stock(&s.state, drop), total_stock(&s.state)),
+                (1, 1),
+                "{block} changed={changed}"
+            );
+            assert_eq!(at(&s, 5), Some(s.state.registry.states.air));
+        }
+    }
+}
+
+// --- A2: waterlogged is not a fluid block ------------------------------------
+
+fn put_entity(s: &mut Scene, at: [i32; 3]) {
+    s.state.block_entities.insert(
+        (at[0], at[1], at[2]),
+        crate::tick::BlockEntityState {
+            slots: vec![ItemStack::EMPTY; 27],
+            furnace: None,
+        },
+    );
+}
+
+#[test]
+fn waterlogged_blocks_under_a_placement_credit_their_normal_drop() {
+    let mut failures = Vec::new();
+    for (block, drop) in [
+        ("minecraft:chest[waterlogged=true]", "minecraft:chest"),
+        ("minecraft:oak_slab[waterlogged=true]", "minecraft:oak_slab"),
+    ] {
+        for changed in [false, true] {
+            let pre: &[(i32, &str)] = if changed { &[] } else { &[(6, block)] };
+            let mut s = scene(
+                None,
+                pre,
+                &[],
+                &[
+                    (Build, 5, "minecraft:oak_log", Some("minecraft:oak_log")),
+                    (Build, 6, "minecraft:oak_log", Some("minecraft:oak_log")),
+                    (Build, 7, "minecraft:oak_log", Some("minecraft:oak_log")),
+                ],
+            );
+            if changed {
+                set(&mut s, 6, block);
+            }
+            if block.contains("chest") {
+                put_entity(&mut s, [6, Y, Z]);
+            }
+            let log = named(&s.state, "minecraft:oak_log");
+            let label = format!("{block} changed={changed}");
+            let outcome = (|| -> Result<(), String> {
+                step(&mut s).map_err(|e| format!("{label}: first {e:?}"))?;
+                step(&mut s).map_err(|e| format!("{label}: waterlogged cell {e:?}"))?;
+                if at(&s, 6) != Some(log) {
+                    return Err(format!("{label}: not replaced"));
+                }
+                if (stock(&s.state, drop), total_stock(&s.state)) != (1, 1) {
+                    return Err(format!(
+                        "{label}: wanted one {drop}, got {} of it and {} in total",
+                        stock(&s.state, drop),
+                        total_stock(&s.state)
+                    ));
+                }
+                Ok(())
+            })();
+            if let Err(message) = outcome {
+                failures.push(message);
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+// --- A4: the receiving storage must survive the block write -----------------
+
+/// Chests of `s` outside `modified`: what a completed step can still hold.
+fn surviving_chests(s: &Scene, modified: &[[i32; 3]]) -> i32 {
+    let wanted = item(&s.state, "minecraft:chest");
+    s.state
+        .block_entities
+        .iter()
+        .filter(|(key, _)| !modified.contains(&[key.0, key.1, key.2]))
+        .flat_map(|(_, entity)| entity.slots.iter())
+        .filter(|stack| stack.item_id == wanted)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+/// A second physical storage the settlement can credit into.
+fn add_storage(s: &mut Scene, at: [i32; 3]) {
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    let chest = named(&s.state, "minecraft:chest");
+    s.state.world.set_block(at[0], at[1], at[2], chest);
+    put_entity(s, at);
+    let id = s.id;
+    let record = s.state.settlements.get_mut(id).unwrap();
+    record.building_sequence += 1;
+    let hut = BuildingId((id.0 << 32) | record.building_sequence);
+    record.buildings.insert(
+        hut,
+        Building {
+            id: hut,
+            settlement: id,
+            kind: BuildingKind::Storage,
+            level: 1,
+            bounds: mc_script::ScriptWorldBounds::new(at, at).unwrap(),
+            work_points: vec![at],
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+}
+
+/// Either the step refuses and nothing at all changed, or the chest item that
+/// the overwritten chest drops sits in a storage that survives the write.
+fn assert_refused_or_conserved(s: &mut Scene, modified: &[[i32; 3]], label: &str) -> bool {
+    let before = image(s);
+    let log = named(&s.state, "minecraft:oak_log");
+    match step(s) {
+        Err(failure) => {
+            assert_eq!(
+                image(s),
+                before,
+                "{label}: refused ({failure:?}) but changed state"
+            );
+            assert_eq!(status(s).pause_reason, None, "{label}: no persisted pause");
+            false
+        }
+        Ok(_) => {
+            for at in modified {
+                assert_eq!(
+                    s.state.world.block_at(at[0], at[1], at[2]),
+                    Some(log),
+                    "{label}: placed"
+                );
+            }
+            assert_eq!(
+                surviving_chests(s, modified),
+                1,
+                "{label}: the credited chest item was lost with the overwritten storage"
+            );
+            true
+        }
+    }
+}
+
+#[test]
+fn a_placement_over_the_only_storage_chest_refuses_before_any_commit() {
+    let mut s = scene_at(
+        None,
+        &[],
+        &[],
+        &[(
+            Build,
+            [1, Y, 1],
+            "minecraft:oak_log",
+            Some("minecraft:oak_log"),
+        )],
+    );
+    let chest = named(&s.state, "minecraft:chest");
+    assert_eq!(s.state.world.block_at(1, Y, 1), Some(chest));
+    let carried_before = carried(&s, "minecraft:oak_log");
+    let committed = assert_refused_or_conserved(&mut s, &[[1, Y, 1]], "bootstrap chest");
+    assert!(
+        !committed,
+        "no other storage exists: the step must refuse, not drop the chest item"
+    );
+    assert_eq!(carried(&s, "minecraft:oak_log"), carried_before);
+}
+
+#[test]
+fn a_placement_over_the_storage_chest_credits_into_another_storage() {
+    let mut s = scene_at(
+        None,
+        &[],
+        &[],
+        &[(
+            Build,
+            [1, Y, 1],
+            "minecraft:oak_log",
+            Some("minecraft:oak_log"),
+        )],
+    );
+    add_storage(&mut s, [8, Y, 1]);
+    let committed = assert_refused_or_conserved(&mut s, &[[1, Y, 1]], "bootstrap chest");
+    assert!(committed, "another storage fits: it receives the credit");
+    assert_eq!(
+        s.state.block_entities[&(8, Y, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == item(&s.state, "minecraft:chest"))
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        1
+    );
+    assert_eq!(carried(&s, "minecraft:oak_log"), 15);
+}
+
+/// The partner cell of a left chest at (1, Y, 1): the neighbour the registry's
+/// pairing rule accepts for a right chest with the same facing.
+fn double_chest_partner() -> [i32; 3] {
+    let (mut state, _, _) = crate::settlements::construction::tests::fixture();
+    state.registry = registry();
+    let left = named(&state, "minecraft:chest[type=left,facing=north]");
+    let right = named(&state, "minecraft:chest[type=right,facing=north]");
+    state.world.set_block(1, Y, 1, left);
+    for partner in [[0, Y, 1], [2, Y, 1], [1, Y, 0], [1, Y, 2]] {
+        state
+            .world
+            .set_block(partner[0], partner[1], partner[2], right);
+        let paired = crate::chests::storage_partner(
+            &state.registry.blocks,
+            crate::boundary::BlockPos { x: 1, y: Y, z: 1 },
+            &|p| state.world.block_at(p.x, p.y, p.z),
+        );
+        if paired.is_some_and(|(_, at)| [at.x, at.y, at.z] == partner) {
+            return partner;
+        }
+        state.world.set_block(
+            partner[0],
+            partner[1],
+            partner[2],
+            state.registry.states.air,
+        );
+    }
+    panic!("no neighbour pairs with the left chest");
+}
+
+fn double_chest_scene(extra_storage: bool) -> (Scene, [i32; 3]) {
+    let partner = double_chest_partner();
+    let mut s = scene_at(
+        None,
+        &[
+            ([1, Y, 1], "minecraft:chest[type=left,facing=north]"),
+            (partner, "minecraft:chest[type=right,facing=north]"),
+        ],
+        &[],
+        &[(
+            Build,
+            partner,
+            "minecraft:oak_log",
+            Some("minecraft:oak_log"),
+        )],
+    );
+    put_entity(&mut s, partner);
+    if extra_storage {
+        add_storage(&mut s, [8, Y, 1]);
+    }
+    (s, partner)
+}
+
+#[test]
+fn a_placement_over_one_half_of_the_only_double_chest_refuses_before_any_commit() {
+    let (mut s, partner) = double_chest_scene(false);
+    let committed = assert_refused_or_conserved(&mut s, &[partner], "double chest half");
+    assert!(
+        !committed,
+        "the damaged double chest is the only storage: refuse, do not credit into it"
+    );
+}
+
+#[test]
+fn a_placement_over_one_half_of_a_double_chest_credits_into_another_storage() {
+    let (mut s, partner) = double_chest_scene(true);
+    let committed = assert_refused_or_conserved(&mut s, &[partner], "double chest half");
+    assert!(committed, "another storage fits: it receives the credit");
+    assert_eq!(
+        s.state.block_entities[&(8, Y, 1)]
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == item(&s.state, "minecraft:chest"))
+            .map(|stack| stack.count)
+            .sum::<i32>(),
+        1,
+        "credited to the second storage, not the damaged pair"
+    );
 }
 
 // --- shared native helpers ---------------------------------------------------
