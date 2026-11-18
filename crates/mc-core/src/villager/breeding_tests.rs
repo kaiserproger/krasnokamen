@@ -839,12 +839,7 @@ fn far_house_village(near_spare: bool) -> (TickState, [EntitySlot; 2], [BlockPos
         .unwrap()
         .bootstrap_storage = Some([9, 64, 11]);
     state.world.fold_overlay();
-    let parents = [8.5, 10.5].map(|x| {
-        let slot = villager(&mut state, [x, 64.0, 8.5]);
-        let id = state.entities.body(slot).id;
-        crate::settlements::bind(&mut state, settlement, id).unwrap();
-        slot
-    });
+    let parents = [8.5, 10.5].map(|x| bound_resident(&mut state, settlement, x));
     let far = [7, 9].map(|z| BlockPos { x: 118, y: 64, z });
     (state, parents, far)
 }
@@ -925,4 +920,113 @@ fn a_nearby_uncertified_bed_stays_the_spare_bed_over_a_far_certified_house() {
         "an uncertified dwelling's bed: {home:?}"
     );
     assert!(!parent_homes(&state, parents).contains(&home));
+}
+
+/// Clears the second bed (z = 9) of the `shelter` at `x`.
+fn drop_second_bed(state: &mut TickState, x: i32) {
+    let air = state.registry.states.air;
+    state.world.set_block(x - 1, 64, 9, air);
+    state.world.set_block(x, 64, 9, air);
+    state.world.fold_overlay();
+}
+
+/// A certified one-bed house at `x`. With `walled`, stone fills the two cells
+/// in front of its door, outside the certified bounds, so no route reaches it.
+fn one_bed_house(
+    state: &mut TickState,
+    settlement: crate::settlements::SettlementId,
+    x: i32,
+    walled: bool,
+) -> BlockPos {
+    crate::settlements::migration::return_tests::shelter(state, x);
+    drop_second_bed(state, x);
+    if walled {
+        let stone = state.registry.states.stone;
+        state.world.set_block(x + 4, 64, 8, stone);
+        state.world.set_block(x + 4, 65, 8, stone);
+        state.world.fold_overlay();
+    }
+    crate::settlements::buildings::certify(
+        state,
+        settlement,
+        crate::settlements::buildings::BuildingKind::House,
+        mc_script::ScriptWorldBounds::new([x - 3, 63, 5], [x + 3, 67, 11]).unwrap(),
+    )
+    .expect("a one-bed house certifies");
+    BlockPos { x, y: 64, z: 7 }
+}
+
+fn bound_resident(
+    state: &mut TickState,
+    settlement: crate::settlements::SettlementId,
+    x: f64,
+) -> EntitySlot {
+    let slot = villager(state, [x, 64.0, 8.5]);
+    let id = state.entities.body(slot).id;
+    crate::settlements::bind(state, settlement, id).unwrap();
+    slot
+}
+
+fn home_of(state: &TickState, slot: EntitySlot) -> Option<BlockPos> {
+    state.entities.row(slot).villager.as_ref().unwrap().home
+}
+
+/// Steps the village until every resident in `slots` holds a home bed.
+fn settle_homes(state: &mut TickState, slots: &[EntitySlot]) {
+    for _ in 0..400 {
+        if slots.iter().all(|&slot| home_of(state, slot).is_some()) {
+            return;
+        }
+        crate::settlements::migration::return_tests::step(state);
+    }
+    panic!(
+        "residents never claimed their homes: {:?}",
+        slots
+            .iter()
+            .map(|&slot| home_of(state, slot))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// The far search routes at most two beds per search. Two unreachable nearer
+/// beds must not hide a reachable farther one from every later search.
+#[test]
+fn a_far_spare_bed_search_reaches_past_unreachable_nearer_beds() {
+    use crate::settlements::migration::return_tests::{fixture, shelter, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    drop_second_bed(&mut state, 20);
+    let walled = [80, 100].map(|x| one_bed_house(&mut state, settlement, x, true));
+    let open = one_bed_house(&mut state, settlement, 130, false);
+    let slot = bound_resident(&mut state, settlement, 8.5);
+    settle_homes(&mut state, &[slot]);
+    assert_eq!(home_of(&state, slot).map(|bed| bed.x), Some(20));
+    let mut found = Vec::new();
+    for _ in 0..4 {
+        state.tick += 40;
+        begin_brain_tick(&mut state);
+        let mut cache = std::mem::take(&mut state.villager_pois);
+        let mut path = Vec::new();
+        found.push(crate::settlements::allocator::free_bed(
+            &mut state, &mut cache, slot, &mut path,
+        ));
+        state.villager_pois = cache;
+    }
+    for bed in &walled {
+        assert!(
+            distance(state.entities.pos(slot), centre(*bed)) > 48.0 * 48.0,
+            "the walled beds are far candidates"
+        );
+    }
+    assert!(
+        found
+            .iter()
+            .all(|bed| bed.is_none_or(|bed| !walled.contains(&bed))),
+        "a walled bed is never a spare bed: {found:?}"
+    );
+    assert!(
+        found[..3].contains(&Some(open)),
+        "the reachable far bed within three searches: {found:?}"
+    );
 }

@@ -89,6 +89,9 @@ pub(crate) struct PoiCache {
     pub(crate) search_due: BTreeSet<(u64, EntityId)>,
     pub(crate) search_needs: FxHashMap<EntityId, (u64, usize, SearchProgress)>,
     pub(crate) home_search: FxHashMap<EntityId, HomeSearch>,
+    /// Far spare beds whose route failed, per resident: `free_bed` tries them
+    /// again only after every other far candidate has failed.
+    pub(crate) far_bed_tried: FxHashMap<EntityId, Vec<BlockPos>>,
     pub(crate) search_ready: BTreeSet<(u64, EntityId)>,
     pub(crate) search_ready_order: FxHashMap<EntityId, u64>,
     pub(crate) next_search_order: u64,
@@ -1798,6 +1801,17 @@ pub(crate) fn free_bed(
         b.0.total_cmp(&a.0)
             .then_with(|| (b.1.pos.x, b.1.pos.y, b.1.pos.z).cmp(&(a.1.pos.x, a.1.pos.y, a.1.pos.z)))
     });
+    // A bed whose route failed waits until every other candidate has had its
+    // try: two unreachable nearest beds would otherwise hide every farther bed
+    // on each search. The memory forgets beds that left the candidate set and
+    // starts over once every candidate has failed.
+    if let Some(tried) = cache.far_bed_tried.get_mut(&owner) {
+        tried.retain(|bed| candidates.iter().any(|(_, poi)| poi.pos == *bed));
+        if candidates.iter().all(|(_, poi)| tried.contains(&poi.pos)) {
+            tried.clear();
+        }
+        candidates.retain(|(_, poi)| !tried.contains(&poi.pos));
+    }
     cache.candidates = candidates;
     for _ in 0..FAR_BED_ROUTES {
         let (_, poi) = cache.candidates.pop()?;
@@ -1817,13 +1831,15 @@ pub(crate) fn free_bed(
             &mut ctx, cache, pos, poi.pos, half_width, height, path, false, horizontal, vertical,
             true,
         ) {
+            cache.far_bed_tried.remove(&owner);
             return Some(poi.pos);
         }
-        if ctx
+        let exhausted = ctx
             .budget
             .allowance(ctx.dimension, ctx.consumer, Kind::PathNode)
-            == 0
-        {
+            == 0;
+        cache.far_bed_tried.entry(owner).or_default().push(poi.pos);
+        if exhausted {
             cache.search_deferred = true;
             return None;
         }
