@@ -1234,3 +1234,184 @@ fn a_queued_upgrade_reports_the_cell_and_recovers_when_it_is_cleared() {
         "no notification is stored until the queue actually retries and fails"
     );
 }
+
+/// Every item the village holds at the end of a build: chest storage plus what
+/// the builder still carries, so a credit is counted wherever it landed.
+fn holdings(
+    state: &TickState,
+    builder: crate::entities::EntitySlot,
+) -> std::collections::BTreeMap<u32, i32> {
+    let mut counts = stock(state);
+    if let Some(villager) = state.entities.row(builder).villager.as_ref() {
+        for stack in villager.inventory.iter().flatten() {
+            *counts.entry(stack.item_id).or_default() += stack.count;
+        }
+    }
+    counts
+}
+
+/// A completed level-two house, for the control half of a credit comparison.
+fn completed_upgrade() -> (
+    crate::entities::EntitySlot,
+    std::collections::BTreeMap<u32, i32>,
+) {
+    let (mut state, id, builder, project) = certified_house();
+    fund(&mut state, "house", 2);
+    start(&mut state, id, "house", 2, Some(project.building.unwrap()));
+    complete(&mut state, id, builder);
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the control upgrade certifies"
+    );
+    (builder, holdings(&state, builder))
+}
+
+#[test]
+fn upgrade_credits_player_blocks_once_and_air_nothing() {
+    // Control: the same house and bill with nothing in the cells.
+    let (_, control) = completed_upgrade();
+
+    // Variant: a player-built block on three placement cells inside the
+    // territory (owner D27: village property, cleared and credited), and one
+    // placement cell that is already air (credits nothing).
+    let (mut state, id, builder, project) = certified_house();
+    let air = state.registry.states.air;
+    let (_, plan) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let mut placements: Vec<[i32; 3]> = plan
+        .iter()
+        .filter(|cell| cell.state != air && cell.at[1] > project.origin[1])
+        .map(|cell| cell.at)
+        .collect();
+    placements.dedup();
+    let mut empty_cell = None;
+    let mut chosen = Vec::new();
+    for at in placements {
+        let live = state.world.block_at(at[0], at[1], at[2]).unwrap();
+        if live == air {
+            empty_cell.get_or_insert(at);
+            continue;
+        }
+        if chosen.len() < 3 {
+            chosen.push(at);
+        }
+    }
+    assert_eq!(chosen.len(), 3, "three placement cells to fill");
+    let names = [
+        "minecraft:spruce_planks",
+        "minecraft:cobblestone",
+        "minecraft:glass",
+    ];
+    let mut placed = Vec::new();
+    for (at, name) in chosen.iter().zip(names) {
+        let block = block(&state, name, &[]);
+        state.world.set_block(at[0], at[1], at[2], block);
+        state.block_log = crate::settlements::forestry::tests::player_history(&state, *at, 0);
+        placed.push((*at, block));
+    }
+    let empty = empty_cell.expect("a placement cell that is already air");
+    // The last cell's history survives the reassignment; all three are the same
+    // player-authored kind.
+    assert!(state.block_log.player_touched(chosen[2]));
+
+    fund(&mut state, "house", 2);
+    start(&mut state, id, "house", 2, Some(project.building.unwrap()));
+    complete(&mut state, id, builder);
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the upgrade certifies through the player's blocks"
+    );
+    let after = holdings(&state, builder);
+    for (at, block) in placed {
+        // Exactly the block's own drop, once: the variant minus the control is
+        // the credit, because the build consumes and places the same bill.
+        for drop in crate::settlements::forestry::roll(&state, at, block).unwrap() {
+            let name = state
+                .registry
+                .items
+                .name_of(drop.item_id)
+                .map_or_else(|| "?".into(), |name| name.to_string());
+            let got = after.get(&drop.item_id).copied().unwrap_or(0)
+                - control.get(&drop.item_id).copied().unwrap_or(0);
+            assert!(
+                got >= drop.count,
+                "the cleared block's drop reaches the village: {name} x{} (got {got})",
+                drop.count
+            );
+        }
+    }
+    // Nothing was mined out of the air cell: no item appears for it.
+    assert_eq!(
+        state.world.block_at(empty[0], empty[1], empty[2]),
+        Some(
+            plan.iter()
+                .filter(|cell| cell.at == empty && cell.state != air)
+                .map(|cell| cell.state)
+                .next()
+                .expect("the air cell is a placement")
+        ),
+        "the already-air cell is simply built on"
+    );
+}
+
+#[test]
+fn player_dirt_inside_refuses_without_a_blocked_loop() {
+    // Owner D27-4 forbids paying the village for its own ground, and `debit`
+    // cannot tell a fence clear from a site cut, so the fence refuses terrain
+    // instead of mining it: no admissible plan, no mid-project `Blocked` loop.
+    let (mut state, id, _, project) = certified_house();
+    let (at, authored_state, _) = replaced_cell(&state, &project);
+    assert_ne!(
+        raw(&state, authored_state),
+        raw(&state, block(&state, "minecraft:dirt", &[]))
+    );
+    let dirt = state.registry.states.dirt;
+    state.world.set_block(at[0], at[1], at[2], dirt);
+    state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+    assert_eq!(
+        refusal_at(&state, &project),
+        Some(site_refusals::Reason::PreviousBuildDiverged),
+        "terrain-class ground is neither mined for income nor a mid-plan Blocked loop"
+    );
+    fund(&mut state, "house", 2);
+    let before = stock(&state);
+    assert_eq!(
+        start_upgrade(&mut state, id, project.building.unwrap()),
+        Err(format!(
+            "Construction admission refused: PreviousBuildDiverged at {},{},{}.",
+            at[0], at[1], at[2]
+        ))
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    assert_eq!(stock(&state), before);
+    // Clearing it by hand makes the same queue ready again.
+    state.world.set_block(at[0], at[1], at[2], authored_state);
+    assert_eq!(refusal_at(&state, &project), None);
+}
+
+#[test]
+fn a_completed_upgrade_is_not_credited_twice_by_reopen() {
+    let (mut state, id, builder, project) = certified_house();
+    let (at, authored_state, _) = replaced_cell(&state, &project);
+    let foreign = block(&state, "minecraft:bricks", &[]);
+    assert_ne!(raw(&state, foreign), raw(&state, authored_state));
+    state.world.set_block(at[0], at[1], at[2], foreign);
+    fund(&mut state, "house", 2);
+    start(&mut state, id, "house", 2, Some(project.building.unwrap()));
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    complete(&mut state, id, builder);
+    let after = holdings(&state, builder);
+    // Reopening a completed record queues nothing: every authored cell is in
+    // place, and no clear cell is ever re-queued, so no drop is credited twice.
+    assert!(!executor::reopen_emptied(&mut state, id, &handle).unwrap());
+    assert_eq!(holdings(&state, builder), after, "no second credit");
+    // And a plan rebuilt now carries no clear cell for an already-clear cell.
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    assert!(
+        !cells
+            .iter()
+            .any(|cell| cell.at == at && cell.state == state.registry.states.air),
+        "the cleared cell is not planned as work again"
+    );
+}

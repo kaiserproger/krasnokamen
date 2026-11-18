@@ -513,6 +513,19 @@ fn placement_actions(
                 }));
                 continue;
             }
+            // Terrain-class blocks (the planner's own ground set) would be mined
+            // and their drop credited by `debit`, i.e. new dirt income the owner
+            // refused (D27-4). `debit` cannot tell a fence clear from a site cut
+            // without a new marker in PrepPortions' slice, so the fence keeps
+            // refusing them instead of paying the village for its own ground.
+            if excavatable(state, live) {
+                actions.push(Action::Refuse(Divergence {
+                    reason: site_refusals::Reason::PreviousBuildDiverged,
+                    at: cell.at,
+                    live: Some(live),
+                }));
+                continue;
+            }
             actions.push(Action::Clear(cell.at));
             continue;
         }
