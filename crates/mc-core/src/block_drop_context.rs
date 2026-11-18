@@ -229,7 +229,7 @@ pub(crate) fn player_drops(
         {
             // ShulkerBoxBlock.playerWillDestroy preserves nonempty creative
             // boxes by dropping one item with the collected BE components.
-            return roll(state, pos, block, &mc_data::ItemStack::EMPTY, state.tick);
+            return roll(state, pos, block, &mc_data::ItemStack::EMPTY, state.tick, true);
         }
         return Ok(Vec::new());
     }
