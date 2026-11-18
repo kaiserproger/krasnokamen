@@ -929,6 +929,10 @@ pub fn recover_with_reader(
             ))
         })?;
         crate::mounts::persistence::validate_replay(replay)?;
+        // Offline recovery is a shared entry point (export, conversion, census):
+        // a compact entity record without its tail image must refuse here too,
+        // not only in the live startup path.
+        crate::journal::validate_replay(replay)?;
         crate::battle::persistence::validate_replay(replay, &registry)?;
     }
     let root = &dimensions[&Dimension::Overworld];

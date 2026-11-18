@@ -1152,8 +1152,9 @@ pub(crate) fn apply_batch_images(
                     appearance,
                 } => {
                     // A delta needs an image in this tail, not merely a record
-                    // (a checkpoint fills `entities` without one).
-                    if !replay.tail_images.contains(id) {
+                    // (a checkpoint fills `entities` without one), and a dead
+                    // body is a removal that keeps the image path.
+                    if *alive == false || !replay.tail_images.contains(id) {
                         compact_fault(&mut replay, *id);
                         continue;
                     }
@@ -1196,7 +1197,6 @@ pub(crate) fn apply_batch_images(
                     age,
                     health,
                     alive,
-                    pickup_delay,
                     active_effects,
                     appearance,
                     pos,
@@ -1209,8 +1209,10 @@ pub(crate) fn apply_batch_images(
                     state,
                 } => {
                     // A delta needs an image in this tail, a record, and the
-                    // retained projectile that image carried.
-                    if !replay.tail_images.contains(id)
+                    // retained projectile that image carried; a dead body is a
+                    // removal that keeps the image path.
+                    if *alive == false
+                        || !replay.tail_images.contains(id)
                         || !replay
                             .entities
                             .get(id)
@@ -1225,8 +1227,6 @@ pub(crate) fn apply_batch_images(
                     }
                     appearance.apply(&mut record.appearance);
                     record.health = *health;
-                    record.alive = *alive;
-                    record.pickup_delay = *pickup_delay;
                     record.active_effects = active_effects.clone();
                     record.pos = *pos;
                     record.vel = *vel;

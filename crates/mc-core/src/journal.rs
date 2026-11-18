@@ -372,7 +372,6 @@ pub enum JournalEntry {
         age: u32,
         health: f32,
         alive: bool,
-        pickup_delay: u32,
         #[serde(default)]
         active_effects: crate::effects::ActiveEffects,
         appearance: EntityAppearanceDelta,
@@ -1382,10 +1381,11 @@ pub struct EntityAppearanceDelta {
 }
 
 impl EntityAppearanceDelta {
-    /// The parts of `live` that differ from the image `base`, borrowing the live
-    /// row: only changed values are cloned.
+    /// The parts of `live` that differ from the image `base`, borrowing both
+    /// native appearances: only changed payloads are cloned, and nothing is
+    /// materialised for an unchanged field or an unchanged metadata entry.
     pub(crate) fn diff(
-        base: &EntityAppearanceImage,
+        base: &crate::boundary::EntityAppearance,
         live: &crate::boundary::EntityAppearance,
     ) -> Self {
         let mut delta = Self {
@@ -1403,52 +1403,49 @@ impl EntityAppearanceDelta {
             extra: None,
             extra_changes: Vec::new(),
         };
-        if base.equipment.len() != live.equipment.len()
-            || !base
-                .equipment
-                .iter()
-                .zip(live.equipment.iter())
-                .all(|(old, new)| old == new)
-        {
+        if base.equipment != live.equipment {
             delta.equipment = Some(live.equipment.to_vec());
         }
-        // Position, not set equality: a re-added entry moves to the end, which a
-        // per-index update cannot express without rewriting the whole list.
-        let base_indices: Vec<u8> = base.extra.iter().map(|(index, _)| *index).collect();
-        let live_indices: Vec<u8> = live.extra.iter().map(|(index, _)| *index).collect();
-        let surviving: Vec<u8> = live_indices
-            .iter()
-            .copied()
-            .filter(|index| base_indices.contains(index))
-            .collect();
-        let base_order: Vec<u8> = base_indices
-            .iter()
-            .copied()
-            .filter(|index| surviving.contains(index))
-            .collect();
-        let reordered = surviving != base_order
-            || duplicates(&base.extra)
-            || live_indices
+        // Per-index updates are exact when the entries that survive keep their
+        // relative order: existing indices update in place, new ones append in
+        // the order they appear here. A reordered or duplicated list needs the
+        // whole image instead. No temporary index vectors.
+        let mut reordered = false;
+        let mut previous: Option<usize> = None;
+        for (index, _) in &live.extra {
+            let Some(position) = base.extra.iter().position(|(other, _)| other == index) else {
+                continue;
+            };
+            if previous.is_some_and(|previous| position <= previous) {
+                reordered = true;
+                break;
+            }
+            previous = Some(position);
+        }
+        let duplicated = |entries: &[(u8, crate::boundary::EntityDataValue)]| {
+            entries
                 .iter()
                 .enumerate()
-                .any(|(at, index)| live_indices[..at].contains(index));
-        if reordered {
-            let whole: Vec<(u8, EntityDataValueImage)> = live
-                .extra
-                .iter()
-                .map(|(index, value)| (*index, EntityDataValueImage::from(value)))
-                .collect();
-            if whole != base.extra {
-                delta.extra = Some(whole);
+                .any(|(at, (index, _))| entries[..at].iter().any(|(other, _)| other == index))
+        };
+        if reordered || duplicated(&base.extra) || duplicated(&live.extra) {
+            let differs = base.extra.len() != live.extra.len()
+                || live
+                    .extra
+                    .iter()
+                    .any(|(index, value)| !base_has(base, *index, value));
+            if differs {
+                delta.extra = Some(
+                    live.extra
+                        .iter()
+                        .map(|(index, value)| (*index, EntityDataValueImage::from(value)))
+                        .collect(),
+                );
             }
             return delta;
         }
         for (index, value) in &live.extra {
-            let kept = base
-                .extra
-                .iter()
-                .any(|(other, old)| other == index && *old == EntityDataValueImage::from(value));
-            if !kept {
+            if !base_has(base, *index, value) {
                 delta
                     .extra_changes
                     .push((*index, Some(EntityDataValueImage::from(value))));
@@ -1510,11 +1507,16 @@ impl EntityAppearanceDelta {
     }
 }
 
-fn duplicates(extra: &[(u8, EntityDataValueImage)]) -> bool {
-    extra
+/// Whether the baseline carries this metadata entry with this value. Both sides
+/// are native values, so no image is built for an unchanged entry.
+fn base_has(
+    base: &crate::boundary::EntityAppearance,
+    index: u8,
+    live: &crate::boundary::EntityDataValue,
+) -> bool {
+    base.extra
         .iter()
-        .enumerate()
-        .any(|(index, (at, _))| extra[..index].iter().any(|(other, _)| other == at))
+        .any(|(other, value)| *other == index && value == live)
 }
 
 impl From<&crate::boundary::EntityAppearance> for EntityAppearanceImage {

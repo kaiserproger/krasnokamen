@@ -1294,6 +1294,11 @@ fn compact_entity_records_survive_a_crash_after_the_published_batch() {
     drill.append(&compact).unwrap();
     let durable_tick = drill.state.tick;
     let expected = shield_pose(&drill.state, member);
+    let expected_health = drill
+        .state
+        .entities
+        .row(drill.state.entities.slot_of(member).unwrap())
+        .health;
     // The next tick stays unpublished, exactly like a kill during the tick.
     let unpublished = drill.capture_tick(&[]);
     assert_eq!(unpublished.tick, durable_tick + 1);
@@ -1327,4 +1332,79 @@ fn compact_entity_records_survive_a_crash_after_the_published_batch() {
     recovered = recovered.crash();
     assert_eq!(recovered.state.tick, durable);
     assert_eq!(shield_pose(&recovered.state, member), expected);
+}
+
+/// Offline recovery is a shared entry point (export, conversion, census): it must
+/// refuse a compact record whose full image is not in the tail — both when the
+/// body exists only in the checkpoint and when it exists nowhere.
+#[test]
+fn offline_recovery_refuses_a_compact_record_without_its_tail_image() {
+    use crate::native_checkpoint::recover_offline;
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let member = drill.state.hostile.battle.formation.members[0].id;
+    let tick = drill.state.tick + 1;
+    let compact = |id: i32| JournalEntry::EntityAppearance {
+        id,
+        tick,
+        age: 0,
+        health: 20.0,
+        alive: true,
+        active_effects: Default::default(),
+        appearance: Default::default(),
+    };
+    // `prepared` checkpointed this body, so it exists in `Replay.entities` with no
+    // tail image: existence must not count as a base.
+    drill
+        .append(&Batch {
+            tick,
+            entries: vec![compact(member.0), compact(2_000_000)],
+        })
+        .unwrap();
+    // The drill holds the native store open; offline recovery opens its own.
+    let config = drill.config.clone();
+    drop(drill);
+    let error = match recover_offline(&config) {
+        Ok(_) => panic!("no tail image must refuse"),
+        Err(error) => error,
+    };
+    assert!(
+        format!("{error}").contains("without an earlier full image"),
+        "{error}"
+    );
+}
+
+/// Control for the refusal above: the same body with its image in the tail
+/// recovers offline, and the compact record folds.
+#[test]
+fn offline_recovery_accepts_a_compact_record_with_its_tail_image() {
+    use crate::native_checkpoint::recover_offline;
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let member = drill.state.hostile.battle.formation.members[0].id;
+    let raised = shield_pose(&drill.state, member).unwrap_or(0) != 0;
+    shield(&mut drill.state, member, !raised);
+    let image = drill.capture_tick(&[]);
+    assert!(
+        image
+            .entries
+            .iter()
+            .any(|entry| matches!(entry, JournalEntry::Entity { id, .. } if *id == member.0))
+    );
+    drill.append(&image).unwrap();
+    shield(&mut drill.state, member, raised);
+    let compact = drill.capture_tick(&[]);
+    assert!(compact.entries.iter().any(
+        |entry| matches!(entry, JournalEntry::EntityAppearance { id, .. } if *id == member.0)
+    ));
+    drill.append(&compact).unwrap();
+    let config = drill.config.clone();
+    drop(drill);
+    let recovered = match recover_offline(&config) {
+        Ok(recovered) => recovered,
+        Err(error) => panic!("an image-then-delta tail must recover: {error}"),
+    };
+    let record =
+        &recovered.dimensions[&crate::dimensions::Dimension::Overworld].entities[&member.0];
+    assert!(record.alive);
 }

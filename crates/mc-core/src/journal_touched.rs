@@ -107,31 +107,82 @@ fn body_type_id(body: &crate::entities::Body) -> Option<u32> {
 
 /// Whether `live` matches `base` in every projectile field a compact record can
 /// leave out. `age` always rides the record; `landing` also skips the landing
-/// transition.
+/// transition. Destructured without `..` on both sides, so a new
+/// `ProjectileState` field stops compiling here instead of silently diverging.
 fn projectile_rest_matches(
     base: &crate::projectiles::ProjectileState,
     live: &crate::projectiles::ProjectileState,
     landing: bool,
 ) -> bool {
-    base.owner == live.owner
-        && base.kind == live.kind
-        && base.ground_lifetime == live.ground_lifetime
-        && base.pickup == live.pickup
-        && base.stack == live.stack
-        && base.damage == live.damage
-        && base.punch == live.punch
-        && base.flame == live.flame
-        && base.piercing == live.piercing
-        && base.hit == live.hit
-        && base.data == live.data
-        && base.critical == live.critical
-        && base.mob_damage == live.mob_damage
-        && base.returning == live.returning
-        && base.shot_at_angle == live.shot_at_angle
-        && base.fired_from_weapon == live.fired_from_weapon
-        && base.crossbow_kills == live.crossbow_kills
-        && base.acceleration_power == live.acceleration_power
-        && (!landing || base.stuck == live.stuck && base.grounded_at_age == live.grounded_at_age)
+    use crate::projectiles::ProjectileState;
+    let ProjectileState {
+        owner,
+        kind,
+        age: _,
+        stuck,
+        grounded_at_age,
+        ground_lifetime,
+        pickup,
+        stack,
+        damage,
+        punch,
+        flame,
+        piercing,
+        hit,
+        data,
+        critical,
+        mob_damage,
+        returning,
+        shot_at_angle,
+        fired_from_weapon,
+        crossbow_kills,
+        // Runtime-only and never serialized: the stored base keeps it cleared.
+        attached_to: _,
+        acceleration_power,
+    } = base;
+    let ProjectileState {
+        owner: live_owner,
+        kind: live_kind,
+        age: _,
+        stuck: live_stuck,
+        grounded_at_age: live_grounded_at_age,
+        ground_lifetime: live_ground_lifetime,
+        pickup: live_pickup,
+        stack: live_stack,
+        damage: live_damage,
+        punch: live_punch,
+        flame: live_flame,
+        piercing: live_piercing,
+        hit: live_hit,
+        data: live_data,
+        critical: live_critical,
+        mob_damage: live_mob_damage,
+        returning: live_returning,
+        shot_at_angle: live_shot_at_angle,
+        fired_from_weapon: live_fired_from_weapon,
+        crossbow_kills: live_crossbow_kills,
+        attached_to: _,
+        acceleration_power: live_acceleration_power,
+    } = live;
+    owner == live_owner
+        && kind == live_kind
+        && ground_lifetime == live_ground_lifetime
+        && pickup == live_pickup
+        && stack == live_stack
+        && damage == live_damage
+        && punch == live_punch
+        && flame == live_flame
+        && piercing == live_piercing
+        && hit == live_hit
+        && data == live_data
+        && critical == live_critical
+        && mob_damage == live_mob_damage
+        && returning == live_returning
+        && shot_at_angle == live_shot_at_angle
+        && fired_from_weapon == live_fired_from_weapon
+        && crossbow_kills == live_crossbow_kills
+        && acceleration_power == live_acceleration_power
+        && (!landing || (stuck == live_stuck && grounded_at_age == live_grounded_at_age))
 }
 
 /// Journal-side entity caches that live next to the baseline images.
@@ -575,8 +626,12 @@ fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<Journ
     }
     let body = *state.entities.body(slot);
     let type_id = body_type_id(&body)?;
+    let row = state.entities.row(slot);
     let chunk = chunk_position(state, slot);
-    let (base_appearance, base_uuid, base_type_id, base_villager, base_pickup, base_projectile) = {
+    // The delta is computed against the borrowed base; nothing is copied until a
+    // payload actually changed, and the borrow ends before the base is replaced.
+    let mut landing = None;
+    let appearance = {
         let baseline = state.journal_scan.fields.get(&id)?;
         if state
             .journaled_entity_state
@@ -587,49 +642,31 @@ fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<Journ
             // across chunk-clock authority.
             return None;
         }
-        if baseline.uuid != state.entities.row(slot).uuid || baseline.type_id != type_id {
-            // A changed identity retires the old record on replay.
+        if baseline.uuid != row.uuid
+            || baseline.type_id != type_id
+            || baseline.villager != row.villager.is_some()
+            || baseline.pickup_delay != body.pickup_delay
+            || baseline.projectile.is_some() != row.projectile.is_some()
+        {
+            // A changed identity, villager custody, pickup delay or projectile
+            // presence is a whole-image change.
             return None;
         }
-        (
-            Arc::clone(&baseline.appearance),
-            baseline.uuid,
-            baseline.type_id,
-            baseline.villager,
-            baseline.pickup_delay,
-            baseline.projectile.clone(),
-        )
-    };
-    let row = state.entities.row(slot);
-    if base_uuid != row.uuid
-        || base_type_id != type_id
-        || base_villager != row.villager.is_some()
-        || base_pickup != body.pickup_delay
-        || base_projectile.is_some() != row.projectile.is_some()
-    {
-        // Villager custody, the pickup delay, a gained or lost projectile and a
-        // changed identity are whole-image changes.
-        return None;
-    }
-    let base_image = crate::journal::EntityAppearanceImage::from(&*base_appearance);
-    let appearance = crate::journal::EntityAppearanceDelta::diff(&base_image, &row.appearance);
-    let entry = match &row.projectile {
-        Some(projectile) => {
-            // The pose and the age ride every flight tick; the landing rides the
-            // tick it happens; anything else keeps the whole retained state.
-            let base = base_projectile.as_deref()?;
-            let landing = !projectile_rest_matches(base, projectile, true);
-            let rest_changed = landing && !projectile_rest_matches(base, projectile, false);
-            let (stuck, grounded_at_age, retained) = if rest_changed {
-                // A payload, ledger or custody field changed: keep the state.
+        let appearance =
+            crate::journal::EntityAppearanceDelta::diff(&baseline.appearance, &row.appearance);
+        if let Some(projectile) = &row.projectile {
+            // The pose, the age and (on its tick) the landing ride every flight
+            // record; anything else keeps the whole retained state.
+            let base = baseline.projectile.as_deref()?;
+            let landing_changed = !projectile_rest_matches(base, projectile, true);
+            let rest_changed = landing_changed && !projectile_rest_matches(base, projectile, false);
+            landing = Some(if rest_changed {
                 (
                     None,
                     crate::journal::DeltaValue::Unchanged,
                     Some(projectile.clone()),
                 )
-            } else if landing {
-                // Only the landing transition moved: a set now, a clear when the
-                // arrow leaves the ground again.
+            } else if landing_changed {
                 let grounded_at_age = match projectile.grounded_at_age {
                     Some(age) => crate::journal::DeltaValue::Set(age),
                     None => crate::journal::DeltaValue::Clear,
@@ -637,26 +674,31 @@ fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<Journ
                 (Some(projectile.stuck), grounded_at_age, None)
             } else {
                 (None, crate::journal::DeltaValue::Unchanged, None)
-            };
-            JournalEntry::ProjectileFlight {
-                id: entity_id_int(body.id),
-                tick,
-                age: row.age,
-                health: row.health,
-                alive: body.alive,
-                pickup_delay: body.pickup_delay,
-                active_effects: row.active_effects.clone(),
-                appearance,
-                pos: state.entities.pos(slot),
-                vel: state.entities.vel(slot),
-                yaw: state.entities.rot(slot)[0],
-                pitch: state.entities.rot(slot)[1],
-                projectile_age: projectile.age,
-                stuck,
-                grounded_at_age,
-                state: retained,
-            }
+            });
         }
+        appearance
+    };
+    let entry = match landing {
+        Some((stuck, grounded_at_age, retained)) => JournalEntry::ProjectileFlight {
+            id: entity_id_int(body.id),
+            tick,
+            age: row.age,
+            health: row.health,
+            alive: body.alive,
+            active_effects: row.active_effects.clone(),
+            appearance,
+            pos: state.entities.pos(slot),
+            vel: state.entities.vel(slot),
+            yaw: state.entities.rot(slot)[0],
+            pitch: state.entities.rot(slot)[1],
+            projectile_age: row
+                .projectile
+                .as_deref()
+                .map_or(0, |projectile| projectile.age),
+            stuck,
+            grounded_at_age,
+            state: retained,
+        },
         None => JournalEntry::EntityAppearance {
             id: entity_id_int(body.id),
             tick,
@@ -792,6 +834,20 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
             body.id,
             crate::journal::EntityStateImage::from_row(body, row),
         );
+        if let Some(baseline) = state.journal_scan.fields.get(&body.id) {
+            assert!(
+                baseline.appearance == row.appearance,
+                "entity {:?} has an appearance change that no record carries\n  baseline {:?}\n  live     {:?}",
+                body.id,
+                baseline.appearance,
+                row.appearance,
+            );
+            assert_eq!(
+                baseline.pickup_delay, body.pickup_delay,
+                "entity {:?} changed its pickup delay without a full image",
+                body.id
+            );
+        }
     }
 }
 

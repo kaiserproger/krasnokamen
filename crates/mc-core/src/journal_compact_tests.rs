@@ -16,6 +16,22 @@ fn shield(state: &mut TickState, id: EntityId, raised: bool) {
     state.appearance_changed.push(id);
 }
 
+/// Flip the shield byte from whatever the body shows now.
+fn toggle_shield(state: &mut TickState, id: EntityId) {
+    let slot = state.entities.slot_of(id).expect("live body");
+    let raised = state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .any(|(index, value)| {
+            *index == crate::battle::LIVING_FLAGS
+                && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if *flags != 0)
+        });
+    shield(state, id, !raised);
+}
+
 fn entry_bytes(entry: &JournalEntry) -> usize {
     serde_json::to_vec(entry).unwrap().len() + 1
 }
@@ -244,7 +260,48 @@ fn scenario(force_full: bool) -> Vec<(u64, u64, Vec<JournalEntry>)> {
     let slot = state.entities.slot_of(husk).unwrap();
     state.entities.row_mut(slot).persistent = true;
     state.entities.row_mut(slot).controls.no_ai = true;
+    // Bodies whose clocks are still running: a baby with child ticks, a breeding
+    // cow with a breed cooldown, a chicken on its harvest clock and a wandering
+    // villager whose age decays. Appearance changes land mid-countdown, so the
+    // state/villager projection in both fold paths is exercised, not just held.
+    let baby = state.spawn_mob(state.registry.cow_type_id, [10.5, 65.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(baby).unwrap();
+    let row = state.entities.row_mut(slot);
+    row.persistent = true;
+    row.controls.no_ai = true;
+    Arc::make_mut(&mut row.appearance).baby = true;
+    row.entity_life.child_ticks = 400;
+    let breeding = state.spawn_mob(state.registry.cow_type_id, [12.5, 65.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(breeding).unwrap();
+    let row = state.entities.row_mut(slot);
+    row.persistent = true;
+    row.controls.no_ai = true;
+    row.breed_cooldown = 200;
+    row.love = 100;
+    let chicken_type = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:chicken").unwrap())
+        .unwrap();
+    let chicken = state.spawn_mob(chicken_type, [14.5, 65.0, 8.5], 4.0);
+    let slot = state.entities.slot_of(chicken).unwrap();
+    let row = state.entities.row_mut(slot);
+    row.persistent = true;
+    row.controls.no_ai = true;
+    row.entity_life.harvest_ticks = 200;
+    let villager = state.spawn_mob(villager_type(&state), [6.5, 65.0, 10.5], 20.0);
+    let slot = state.entities.slot_of(villager).unwrap();
+    let row = state.entities.row_mut(slot);
+    row.persistent = true;
+    let mut state_villager = crate::villager::VillagerState::default();
+    state_villager.wandering = true;
+    state_villager.age = 50;
+    row.villager = Some(Box::new(state_villager));
     state.appearance_changed.push(husk);
+    state.appearance_changed.push(baby);
+    state.appearance_changed.push(breeding);
+    state.appearance_changed.push(chicken);
+    state.appearance_changed.push(villager);
     let sword = state
         .registry
         .items
@@ -252,6 +309,23 @@ fn scenario(force_full: bool) -> Vec<(u64, u64, Vec<JournalEntry>)> {
         .unwrap();
     let mut batches = Vec::new();
     for index in 0..14u64 {
+        if index == 3 || index == 9 || index == 12 {
+            // Mid-countdown metadata changes on the running-clock bodies.
+            for id in [baby, breeding, chicken, villager] {
+                if state.entities.slot_of(id).is_some() {
+                    toggle_shield(&mut state, id);
+                }
+            }
+        }
+        if index == 11 {
+            // The chunk leaves residency; its clocks stop until reactivation.
+            state.tickets.clear();
+            state.refresh_active_chunks(state.tick);
+        }
+        if index == 13 {
+            state.tickets.insert("kms:compact".into(), (chunk, 0));
+            state.refresh_active_chunks(state.tick);
+        }
         match index {
             2 | 6 | 10 => shield(&mut state, husk, index % 8 == 2),
             4 => {
@@ -429,7 +503,7 @@ fn compact_record_without_its_base_refuses_recovery() {
             age: 0,
             health: 1.0,
             alive: true,
-            pickup_delay: 0,
+
             active_effects: Default::default(),
             appearance: Default::default(),
             pos: [0.0; 3],
@@ -478,7 +552,7 @@ fn delta_values_round_trip_through_a_batch() {
             age: 7,
             health: 1.0,
             alive: true,
-            pickup_delay: 0,
+
             active_effects: Default::default(),
             appearance: Default::default(),
             pos: [1.0, 2.0, 3.0],
@@ -635,4 +709,52 @@ fn projectile_flight_compact_and_full_tails_replay_to_the_same_state() {
     assert!(crate::journal::validate_replay(&full_replay).is_ok());
     assert!(crate::journal::validate_replay(&compact_replay).is_ok());
     assert_same_state(&canonical(&compact_replay), &canonical(&full_replay));
+}
+
+/// The test-only fence must see an appearance write that no mark carries.
+#[test]
+fn unmarked_appearance_change_is_caught_by_the_fence() {
+    let mut state = fixture();
+    let cow = spawn_idle_cow(&mut state, 8.5);
+    state.appearance_changed.push(cow);
+    let _ = step(&mut state);
+    // The tick drains the marks; this write leaves no mark behind.
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    let slot = state.entities.slot_of(cow).unwrap();
+    assert!(crate::hostile::set_extra(
+        &mut state,
+        slot,
+        crate::battle::LIVING_FLAGS,
+        crate::boundary::EntityDataValue::Byte(0),
+        crate::boundary::EntityDataValue::Byte(3),
+    ));
+    let _ = journal_entries_for_tick(&mut state, &output).unwrap();
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        crate::journal_touched::assert_baselines_complete(&state, output.tick)
+    }));
+    assert!(
+        caught.is_err(),
+        "an appearance change with no record must fail the fence"
+    );
+}
+
+/// The pickup-delay guard: the compact record cannot carry it, so a change is a
+/// whole image.
+#[test]
+fn pickup_delay_change_forces_a_full_image() {
+    let mut state = fixture();
+    let cow = spawn_idle_cow(&mut state, 8.5);
+    state.appearance_changed.push(cow);
+    step(&mut state);
+    let slot = state.entities.slot_of(cow).unwrap();
+    state.entities.body_mut(slot).pickup_delay = 40;
+    state.entities.row_mut(slot).health = 9.0;
+    state.appearance_changed.push(cow);
+    let entries = step(&mut state);
+    assert_eq!(
+        images(&entries, cow),
+        1,
+        "a pickup-delay change keeps the image"
+    );
+    assert!(compacts(&entries, cow).is_empty());
 }
