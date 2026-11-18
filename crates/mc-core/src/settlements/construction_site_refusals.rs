@@ -2,6 +2,7 @@
 //! sweeps, not cursor batches, determine whether the reason has changed.
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::preparation::liquid;
 use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,11 +23,15 @@ pub(super) enum Reason {
     CutBeyondEnvelope,
     LiquidInWork,
     LavaShell,
+    LiquidOpenShell,
+    MixedLiquids,
+    LiquidBeyondBound,
+    LiquidAccess,
     ExecutorReservation,
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 18] = [
+const REASONS: [Reason; 22] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -42,6 +47,10 @@ const REASONS: [Reason; 18] = [
     Reason::CutBeyondEnvelope,
     Reason::LiquidInWork,
     Reason::LavaShell,
+    Reason::LiquidOpenShell,
+    Reason::MixedLiquids,
+    Reason::LiquidBeyondBound,
+    Reason::LiquidAccess,
     Reason::ExecutorReservation,
     Reason::Preparation,
     Reason::MaterialBill,
@@ -139,15 +148,29 @@ pub(super) fn observe(state: &mut TickState, id: SettlementId, blueprint: &str, 
 
 /// Solid work the bounded terrain window would rewrite on this lot: cells the
 /// plan fills below the authored floor plus cells it excavates inside the
-/// authored volume. Lot ranking compares this sum; only the winner is planned.
+/// authored volume. A fluid fill cell is a fill cell and belongs to exactly one
+/// of `liquid`/`water`/`lava`, never also to `fill`: the material is counted
+/// once and the liquid figures only rank equal work. `lava` first, then `water`,
+/// break the tie, so the queue head is not parked on a pool it must drain.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Cost {
     pub(super) cut: u32,
     pub(super) fill: u32,
+    pub(super) liquid: u32,
+    pub(super) water: u32,
+    pub(super) lava: u32,
 }
 impl Cost {
+    /// Cells of work; a fluid fill is one cell, exactly like a dry fill.
     pub(super) fn total(self) -> u32 {
-        self.cut.saturating_add(self.fill)
+        self.cut
+            .saturating_add(self.fill)
+            .saturating_add(self.liquid)
+    }
+    /// Ranking key inside one completed sweep: least work, then the least lava,
+    /// then the least water.
+    pub(super) fn rank(self) -> (u32, u32, u32) {
+        (self.total(), self.lava, self.water)
     }
 }
 
@@ -161,7 +184,7 @@ struct Sweep {
     topology: u64,
     start: u32,
     next: u32,
-    best: Option<([i32; 3], u8, u32)>,
+    best: Option<([i32; 3], u8, Cost)>,
 }
 
 /// Per-settlement live sweeps, keyed by blueprint id.
@@ -342,7 +365,14 @@ pub(super) fn advance(
         report.examined += 1;
         let (front, normal) = fronts[index as usize];
         let Some(lot) = network.lot(blueprint, front, normal) else {
-            report.reject(Reason::LotGeometry, front);
+            // The lot's own door or verge column holds fluid: the builder
+            // cannot reach it. Named separately from a plain geometry miss so
+            // the backlog item is visible in the refusal report (owner D21).
+            if liquid::door_fluid(state, front, normal, record.anchor[1]) {
+                report.reject(Reason::LiquidAccess, front);
+            } else {
+                report.reject(Reason::LotGeometry, front);
+            }
             continue;
         };
         let rotation = lot.rotation;
@@ -358,19 +388,23 @@ pub(super) fn advance(
         ) {
             Err(reason) => report.reject(reason, lot.origin),
             Ok(cost) => {
-                let cost = cost.total();
                 // Ties go to the lot nearest the settlement's anchor, then to
                 // its own block position: both are functions of the lot alone,
                 // so a restart cannot change the winner, and flat ground grows
                 // the village from its bell rather than from a plan edge.
                 let key = (
-                    cost,
+                    cost.rank(),
                     distance_sq(lot.origin, record.anchor),
                     lot.origin,
                     rotation,
                 );
                 if sweep.best.is_none_or(|(origin, rotation, known)| {
-                    key < (known, distance_sq(origin, record.anchor), origin, rotation)
+                    key < (
+                        known.rank(),
+                        distance_sq(origin, record.anchor),
+                        origin,
+                        rotation,
+                    )
                 }) {
                     sweep.best = Some((lot.origin, rotation, cost));
                 }
@@ -401,7 +435,7 @@ pub(super) fn advance(
         clearance,
         Some(&floors[usize::from(rotation) % 4]),
     ) {
-        Ok(cost) if cost.total() == stored => Advance::Cheapest(origin, rotation),
+        Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
         Ok(_) | Err(_) => Advance::Incomplete(0),
     }
 }
@@ -432,17 +466,9 @@ fn tree_refusal(state: &TickState, at: [i32; 3]) -> Reason {
     }
 }
 
-fn definition(state: &TickState, block: u32) -> Option<&mc_world::BlockState> {
-    state.registry.blocks.by_id(mc_world::BlockStateId(block))
-}
-
 /// Deepest foundation this slice pays for under one column. A deeper column
 /// would be a retaining wall the settlement may not level (committee ruling).
 const MAX_FILL_DEPTH: i32 = 4;
-
-fn fluid(state: &TickState, block: u32) -> bool {
-    definition(state, block).is_some_and(|definition| definition.has_fluid())
-}
 
 /// One-cell shell around the work volume: a fluid there would flow into a cut.
 fn shell_fluid(state: &TickState, volume: ScriptWorldBounds) -> bool {
@@ -455,7 +481,7 @@ fn shell_fluid(state: &TickState, volume: ScriptWorldBounds) -> bool {
                 state
                     .world
                     .physics_block_at(x, y, z)
-                    .is_some_and(|block| fluid(state, block))
+                    .is_some_and(|block| liquid::has_fluid(state, block))
             };
             if !edge {
                 if wet(y0) || wet(y1) {
@@ -492,6 +518,7 @@ pub(super) fn check(
     let floor = origin[1];
     let mut lowest = floor;
     let mut cost = Cost::default();
+    let mut liquids = liquid::Liquids::default();
     if record.buildings.values().any(|building| {
         !building.natural_zone
             && [0, 2].into_iter().all(|axis| {
@@ -511,8 +538,8 @@ pub(super) fn check(
             {
                 return Err(Reason::Territory);
             }
-            let height =
-                surface_y_for_lot(state, floor, x, z, Some(lot), clearance).ok_or_else(|| {
+            let height = liquid::ground_y_for_lot(state, floor, x, z, Some(lot), clearance)
+                .ok_or_else(|| {
                     (floor - SITE_BAND + 1..=floor + SITE_BAND + 1)
                         .find(|&y| {
                             state.world.physics_block_at(x, y, z).is_some_and(|block| {
@@ -541,7 +568,10 @@ pub(super) fn check(
                 .world
                 .physics_block_at(x, floor, z)
                 .ok_or(Reason::Unloaded)?;
-            if fluid(state, floor_block) {
+            // A fluid on the authored floor row is above the fill work: it is a
+            // named liquid refusal, not a generic protected floor. A fluid on an
+            // unfloored floor row is the last fill cell and is scanned below.
+            if authored_floor && liquid::contained(state, floor_block).is_some() {
                 return Err(Reason::LiquidInWork);
             }
             if state.block_entities.contains_key(&(x, floor, z)) {
@@ -560,37 +590,26 @@ pub(super) fn check(
             if floor - height > MAX_FILL_DEPTH {
                 return Err(Reason::HeightVariance);
             }
-            // Fill: real blocks in air, liquid-free cells between the support
-            // and the floor. A solid there is a cut this window does not own,
-            // and a fluid would be overwritten by a written block.
-            for y in height + 1..floor {
-                let block = state
-                    .world
-                    .physics_block_at(x, y, z)
-                    .ok_or(Reason::Unloaded)?;
-                if fluid(state, block) {
-                    return Err(Reason::LiquidInWork);
-                }
-                if !clearable(state, block) {
-                    return Err(Reason::CutBeyondEnvelope);
-                }
-                if block != state.registry.states.air && state.block_log.player_touched([x, y, z]) {
-                    return Err(Reason::ProtectedObstruction);
-                }
-                cost.fill += 1;
-            }
-            if height < floor && !authored_floor {
-                // The floor cell itself is one more real dirt; floor_replaceable
-                // already allowed solid ground there.
-                cost.fill += 1;
-            }
+            // Fill: real blocks between the support and the floor. A fluid cell
+            // there is a fill target (its supply is proved closed by
+            // `liquid::finish`); an authored floor row may not hold fluid.
+            liquid::scan_column(
+                state,
+                &mut liquids,
+                &mut cost,
+                x,
+                z,
+                height,
+                floor,
+                authored_floor,
+            )?;
             // Authored volume: the only place this slice may cut terrain.
             for y in floor + 1..=max[1] {
                 let block = state
                     .world
                     .physics_block_at(x, y, z)
                     .ok_or(Reason::Unloaded)?;
-                if fluid(state, block) {
+                if liquid::has_fluid(state, block) {
                     return Err(Reason::LiquidInWork);
                 }
                 let tree = super::super::forestry::tree_or_sapling(state, block);
@@ -644,9 +663,17 @@ pub(super) fn check(
         return Err(Reason::BuildingBuffer);
     }
     let volume = ScriptWorldBounds::new([origin[0], lowest, origin[2]], max).expect("work volume");
+    // A fluid in the one-cell shell refuses before the bowl name: its supply is
+    // outside this footprint, which is a different failure from an open ring.
     if shell_fluid(state, volume) {
         return Err(Reason::LavaShell);
     }
+    // Fluid inside the work volume is a fill target only while its supply ends
+    // inside this footprint (closed bowl) and it is a single fluid kind.
+    liquid::finish(state, &liquids, origin, size, lowest)?;
+    cost.liquid = liquids.total();
+    cost.water = liquids.water;
+    cost.lava = liquids.lava;
     if executor::area_reserved(state, volume) {
         return Err(Reason::ExecutorReservation);
     }
