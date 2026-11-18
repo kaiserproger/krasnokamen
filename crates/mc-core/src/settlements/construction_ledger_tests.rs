@@ -800,7 +800,7 @@ fn preparation_portion_boundary_and_mid_portion_recover_exact_physical_evidence(
             .filter(|stack| stack.item_id == dirt_item)
             .map(|stack| stack.count)
             .sum::<i32>(),
-        stock_before + 1
+        stock_before
     );
     restored.tick_control.set_frozen(true);
     let (output, _, _) = crate::tick::run_tick(&mut restored, &[]);

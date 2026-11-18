@@ -384,7 +384,7 @@ fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
             );
         } else {
             assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
-            assert_eq!(stock(&state, "minecraft:dirt"), 1);
+            assert_eq!(stock(&state, "minecraft:dirt"), 0);
         }
     }
 }

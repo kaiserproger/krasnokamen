@@ -527,17 +527,16 @@ fn a_captured_admission_beyond_script_world_time_refuses_startup() {
         .structure
         .clone();
     let set = |state: &mut TickState, since: u64| {
-        let mut ledger = state
+        let key = format!("structure/{handle}");
+        let mut record = state
             .plugins
-            .get_domain("@native-structures", "ledger")
+            .get_domain("@native-structures", &key)
             .unwrap()
             .clone();
-        let admission = &mut ledger["structures"][&handle]["admission"];
+        let admission = &mut record["admission"];
         assert!(admission.get("captured").is_some(), "{admission}");
         *admission = serde_json::json!({ "captured": { "since": since } });
-        state
-            .plugins
-            .set_domain("@native-structures", "ledger", ledger);
+        state.plugins.set_domain("@native-structures", &key, record);
     };
     set(&mut lot.state, mc_script::MAX_SCRIPT_WORLD_TIME);
     crate::plugin_structures::validate(&lot.state).unwrap();

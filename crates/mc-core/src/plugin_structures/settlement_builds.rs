@@ -369,7 +369,7 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed).rev() {
-            if free_soil_work(target, cell) || !seen.insert(cell.at) {
+            if !seen.insert(cell.at) || free_soil_work(target, cell) {
                 continue;
             }
             let now = target
@@ -524,9 +524,9 @@ pub(crate) fn reopen_emptied(
         .rev()
         .flat_map(|cells| cells.iter().rev())
     {
-        if free_soil_work(target, cell)
-            || !seen.insert(cell.at)
+        if !seen.insert(cell.at)
             || cell.state == target.registry.states.air
+            || free_soil_work(target, cell)
         {
             continue;
         }

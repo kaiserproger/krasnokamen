@@ -727,9 +727,8 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
     state.day_time = 3000;
     for _ in 0..80_000 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        // Deterministic work budget for the whole run (closure uses about
-        // 20,000 full proofs and 870,000 recipe candidates). Disabling the
-        // recipe index, dependency admission or the funding memo exceeds it.
+        // Deterministic work budget for the whole run. Disabling the recipe
+        // index, dependency admission or the funding memo exceeds it.
         // PrepLifecycle changes the deterministic preparation/build/stock
         // schedule: 1a598ebf1 closes with 19,942 proofs and 1,770,358 candidates
         // (2026-11-18). Disabling unchanged-placement loot gives exactly the
