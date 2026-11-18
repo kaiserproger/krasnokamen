@@ -74,9 +74,36 @@ pub(crate) fn prepare(
     }) {
         return Err(Failure::Blocked);
     }
-    let image = fingerprint(state, bounds, true)?;
     let revision = next(ledger.revision)?;
     let id = format!("settlement-{}-{revision}", settlement.0);
+    // D10: a fill cell that currently holds a real fluid source runs in a stage
+    // before `clear`, so a cut the lava beside it would block never waits on a
+    // supply that is filled later. A source cell belongs to exactly one stage,
+    // so no cell is placed or paid twice and the bill is unchanged.
+    let liquid_stage =
+        crate::settlements::construction::preparation::liquid::stage_cells(state, &cells);
+    // D10: a liquid plan's proof is the volume the admission certified, so the
+    // interference fence keeps the closed-bowl ring (one cell outside the
+    // footprint) and the discovered bottom, supports included. A ring or
+    // support change then pauses the plan instead of letting the remaining flow
+    // leave the lot.
+    let liquid_proof =
+        crate::settlements::construction::preparation::liquid::proof(state, &cells, site.min[1]);
+    let bounds = match &liquid_proof {
+        Some(proof) => ScriptWorldBounds::new(
+            [
+                bounds.min[0] - 1,
+                bounds.min[1].min(proof.lowest),
+                bounds.min[2] - 1,
+            ],
+            [bounds.max[0] + 1, bounds.max[1], bounds.max[2] + 1],
+        )
+        .map_err(|_| Failure::InvalidRequest)?,
+        None => bounds,
+    };
+    // The image covers the whole fence, ring included: the first advance of a
+    // liquid plan must not read the expansion as a foreign edit.
+    let image = fingerprint(state, bounds, true)?;
     let cells: Vec<_> = cells
         .into_iter()
         .map(|cell| Cell {
@@ -91,13 +118,24 @@ pub(crate) fn prepare(
     }) {
         return Err(Failure::InvalidRequest);
     }
-    let (clear, build): (Vec<_>, Vec<_>) = cells
+    let mut liquid = Vec::with_capacity(liquid_stage.len());
+    let mut rest = Vec::with_capacity(cells.len());
+    let mut next_liquid = liquid_stage.into_iter().peekable();
+    for (index, cell) in cells.into_iter().enumerate() {
+        if next_liquid.peek() == Some(&index) {
+            next_liquid.next();
+            liquid.push(cell);
+        } else {
+            rest.push(cell);
+        }
+    }
+    let (clear, build): (Vec<_>, Vec<_>) = rest
         .into_iter()
         .partition(|cell| cell.state == state.registry.states.air);
     let mut counts = BTreeMap::new();
-    let mut stages = Vec::with_capacity(2);
-    let mut batches = Vec::with_capacity(2);
-    for (name, cells) in [("clear", clear), ("build", build)] {
+    let mut stages = Vec::with_capacity(3);
+    let mut batches = Vec::with_capacity(3);
+    for (name, cells) in [("liquid", liquid), ("clear", clear), ("build", build)] {
         if cells.is_empty() {
             continue;
         }
@@ -148,6 +186,7 @@ pub(crate) fn prepare(
         Structure {
             owner: owner(settlement),
             settlement: Some(settlement),
+            liquid: liquid_proof,
             settlement_preparation: (bounds != site).then_some(bounds),
             snapshot,
             blueprint_hash: inventories::hash(&batches),
@@ -372,6 +411,19 @@ pub(crate) fn recover(
     }
     let bounds = bounds_of_structure(record)?;
     let image = fingerprint(target, bounds, true)?;
+    // D10: re-prove the certified liquid envelope before the plan resumes. The
+    // fence includes the shell and the supports, so a change already paused it;
+    // this refuses a resume into a world the admission no longer covers (a new
+    // supply, a mixed body, an opened shell, a player block, a removed support)
+    // without re-planning or re-charging a cell that is already paid.
+    if let Some(proof) = record.liquid.clone() {
+        crate::settlements::construction::preparation::liquid::revalidate(
+            target,
+            &proof,
+            record.snapshot.origin,
+            record.snapshot.reserved_footprint,
+        )?;
+    }
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
@@ -529,6 +581,22 @@ pub(crate) fn next_cell(
         .get(record.snapshot.current_stage_index as usize)
         .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
         .map(|cell| cell.at))
+}
+
+/// The planned world state of the next cell, for naming a wait: the gate reads
+/// the plan, not the block that is about to be replaced.
+pub(crate) fn next_plan_state(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<Option<u32>, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, &owner(settlement), handle)?;
+    Ok(record
+        .cells
+        .get(record.snapshot.current_stage_index as usize)
+        .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
+        .map(|cell| cell.state))
 }
 
 /// Borrow the canonical stage rather than inferring clearing from a live tree:
@@ -708,6 +776,21 @@ pub(super) fn debit(
     let mut drops = Vec::new();
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
+    // D10 write gate: a flowing or falling lava cell is waited out (its source's
+    // remaining flow must drain first), an air write must not free a cell lava
+    // could flow into, and water is written immediately. A lava wait wakes an
+    // orphan flow; `liquid::wake` is a no-op while a fluid tick around that cell
+    // is still queued, so it only schedules when the wait starts.
+    for cell in cells {
+        if let Some(wait) = crate::settlements::construction::preparation::liquid::write_wait(
+            state, cell.at, cell.state,
+        ) {
+            if wait == "lava_draining" {
+                crate::settlements::construction::preparation::liquid::wake(state, cell.at);
+            }
+            return Err(Failure::Blocked);
+        }
+    }
     if preparing {
         for cell in cells
             .iter()

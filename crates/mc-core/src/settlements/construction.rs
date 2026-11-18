@@ -1521,7 +1521,7 @@ fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> b
     begin_cells(state, project, bounds, cells)
 }
 
-fn begin_cells(
+pub(crate) fn begin_cells(
     state: &mut TickState,
     mut project: Project,
     bounds: ScriptWorldBounds,
@@ -1703,7 +1703,15 @@ pub(super) fn surface_y_for_lot(
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above) || clearance.clearable(state, [x, y + 1, z], lot)
+                    // A lot column may be covered by water or lava: the support
+                    // under it is the pond's own bottom and the fluid cells are
+                    // fill targets. Roads, frontage reach and layout pass
+                    // `lot: None` and keep refusing a fluid ground.
+                    clearable(state, above)
+                        || clearance.clearable(state, [x, y + 1, z], lot)
+                        || (lot.is_some()
+                            && (preparation::liquid::has_fluid(state, above)
+                                || preparation::liquid::contained(state, above).is_some()))
                 })
         })
 }
@@ -3931,6 +3939,10 @@ mod growth_tests;
 
 #[path = "construction_filler.rs"]
 pub(super) mod filler;
+
+#[cfg(test)]
+#[path = "construction_liquid_tests.rs"]
+mod liquid_tests;
 
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;

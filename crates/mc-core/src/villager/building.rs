@@ -204,7 +204,18 @@ pub(super) fn preparation_stand(
             let distance = (here[0] - f64::from(at.x) - 0.5).powi(2)
                 + (here[1] - f64::from(at.y)).powi(2)
                 + (here[2] - f64::from(at.z) - 0.5).powi(2);
-            if stands && dry && reaches && best.as_ref().is_none_or(|(known, _)| distance < *known)
+            // D10: a felling stand beside lava is unsafe even when the cell
+            // itself is dry; the body rows and their four neighbours must be
+            // lava-free.
+            let lava_safe = crate::settlements::construction::preparation::liquid::stand_safe(
+                state,
+                [at.x, at.y, at.z],
+            );
+            if stands
+                && dry
+                && lava_safe
+                && reaches
+                && best.as_ref().is_none_or(|(known, _)| distance < *known)
             {
                 best = Some((distance, at));
             }
@@ -453,6 +464,18 @@ pub(crate) fn wait_reason(
         .is_some_and(|(item, count)| !carried(v, item, count))
     {
         return "collecting_material";
+    }
+    // D10: name the world-state wait instead of a generic stalled placement. The
+    // gate reads the plan entry's state, so a clear cell beside lava names the
+    // wait the debit would take, not a wait that block never takes.
+    let planned = executor::next_plan_state(state, project.settlement, &project.structure)
+        .ok()
+        .flatten()
+        .unwrap_or(state.registry.states.air);
+    if let Some(wait) =
+        crate::settlements::construction::preparation::liquid::write_wait(state, next, planned)
+    {
+        return wait;
     }
     if !in_reach(state, slot, project, next) {
         return "worksite_unreached";

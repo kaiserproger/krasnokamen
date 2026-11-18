@@ -267,8 +267,23 @@ struct Cell {
 fn default_cell_quantity() -> u32 {
     1
 }
+/// D10 liquid proof envelope, persisted at admission so a resume re-proves the
+/// same volume: the discovered bottom, the support row of every column and the
+/// cells that held fluid when the bowl was certified (paid or not).
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub(crate) struct LiquidProof {
+    pub(crate) lowest: i32,
+    pub(crate) columns: Vec<([i32; 2], i32)>,
+    pub(crate) cells: Vec<[i32; 3]>,
+}
 #[derive(Clone, Serialize, Deserialize)]
 struct Structure {
+    /// The liquid proof of a plan admitted over fluid; null for a dry plan.
+    /// A required key that may be null: the ledger keeps no compatibility with
+    /// its own old saves (one reset, the LedgerSplit), so a record without it
+    /// refuses to load instead of silently reading as a dry plan.
+    #[serde(deserialize_with = "serde::Deserialize::deserialize")]
+    liquid: Option<LiquidProof>,
     owner: String,
     #[serde(default)]
     settlement: Option<crate::settlements::SettlementId>,
@@ -1008,6 +1023,7 @@ fn execute_operation(
                 Structure {
                     owner: owner.to_owned(),
                     settlement: None,
+                    liquid: None,
                     settlement_preparation: None,
                     snapshot: snapshot.clone(),
                     blueprint_hash: blueprint.content_hash().to_owned(),
