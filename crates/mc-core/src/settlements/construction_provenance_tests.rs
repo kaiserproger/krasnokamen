@@ -272,3 +272,187 @@ fn an_uncaptured_survey_keeps_the_documented_residual() {
     );
     assert_eq!(lot.sand_held(), lot.cut());
 }
+
+/// Opus PP-3: outside the territory a retained player edit refuses a plant
+/// cut, which has no debit veto of its own, even while the survey is covered.
+#[test]
+fn covered_plant_cell_with_retained_player_edit_refuses() {
+    let mut lot = lot(true, true);
+    history(&mut lot.state, 0, &[lot.plant]);
+    assert!(
+        lot.work_until_cut(lot.below),
+        "the sand cuts before it proceed"
+    );
+    for _ in 0..ATTEMPTS {
+        attempt(&mut lot.state, lot.id, lot.builder);
+    }
+    let at = lot.plant;
+    assert_ne!(
+        lot.state.world.block_at(at[0], at[1], at[2]),
+        Some(lot.state.registry.states.air),
+        "the player's grass stays"
+    );
+    let handle = lot.state.settlements.get(lot.id).unwrap().projects[0]
+        .structure
+        .clone();
+    assert_eq!(
+        executor::next_cell(&lot.state, lot.id, &handle).unwrap(),
+        Some(lot.plant)
+    );
+}
+
+/// Main decision PP-2, an accepted residual for an identical identity only:
+/// once coverage lapses, the re-admission is a fresh survey and cannot see a
+/// player edit the log has already evicted when the live block still has the
+/// survey's identity (sand replaced by sand here). A changed identity under
+/// lapsed coverage is refused by the portions' survey check, which consults
+/// `provenance::covered`. Only retained edits veto.
+#[test]
+fn evicted_identical_player_edit_after_lapse() {
+    let mut lot = lot(true, true);
+    let edit = |seq: u64, pos: [i32; 3]| Record {
+        seq,
+        tick: Some(1),
+        time: 0,
+        actor: Arc::from("player"),
+        pos,
+        change: Change::Block {
+            before: lot.state.registry.states.air,
+            after: lot.sand,
+            entity: None,
+        },
+        rolled_back: false,
+    };
+    // The player's identical edit at `first` came after the survey and was
+    // evicted by count; one later record remains.
+    let records = vec![edit(0, lot.first), edit(1, [1_000, 64, 1_000])];
+    lot.state.block_log = BlockLog::restore(
+        BlockLogSettings {
+            enabled: true,
+            retention_secs: 0,
+            max_records: 1,
+        },
+        vec![Delta {
+            records,
+            marks: Vec::new(),
+            coverage: 0,
+        }],
+    );
+    assert!(!lot.state.block_log.player_touched(lot.first));
+    assert!(
+        lot.work_until_cut(lot.first),
+        "the residual: the evicted edit is not protected"
+    );
+    assert_eq!(lot.sand_held(), lot.cut());
+}
+
+/// Text lines queued for `connection`, burst lines included.
+fn chat(state: &TickState, connection: crate::boundary::ConnectionId) -> Vec<String> {
+    fn lines(change: &crate::boundary::PlayerChange, out: &mut Vec<String>) {
+        match change {
+            crate::boundary::PlayerChange::Chat { message } => out.push(message.clone()),
+            crate::boundary::PlayerChange::TextBurst { lines: burst } => {
+                for change in burst {
+                    lines(change, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for change in state.outbox.get(&connection).into_iter().flatten() {
+        lines(change, &mut out);
+    }
+    out
+}
+
+/// Sol S-2: a paid remainder refused for provenance waits while the player's
+/// edit stays in the log, which with time eviction off is forever. The owner
+/// is told the blocking cell once per stall episode.
+#[test]
+fn a_paid_remainder_refused_for_provenance_notifies_the_owner_once() {
+    let mut lot = lot(true, true);
+    let handle = lot.state.settlements.get(lot.id).unwrap().projects[0]
+        .structure
+        .clone();
+    let paid = |state: &TickState| {
+        !executor::status(state, lot.id, &handle)
+            .unwrap()
+            .consumed
+            .is_empty()
+    };
+    for _ in 0..ATTEMPTS * 32 {
+        if paid(&lot.state) {
+            break;
+        }
+        attempt(&mut lot.state, lot.id, lot.builder);
+    }
+    assert!(paid(&lot.state), "materials were paid");
+    // The player fills the next placement cell; the edit stays in the log.
+    let at = executor::next_cell(&lot.state, lot.id, &handle)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        lot.state.world.block_at(at[0], at[1], at[2]),
+        Some(lot.state.registry.states.air)
+    );
+    lot.state.world.set_block(at[0], at[1], at[2], lot.sand);
+    history(&mut lot.state, 0, &[at]);
+    let owner = uuid::Uuid::from_u128(77);
+    let connection = crate::boundary::ConnectionId(77);
+    lot.state.settlements.get_mut(lot.id).unwrap().owner = Some(owner.to_string());
+    lot.state.connections.insert(
+        connection,
+        crate::boundary::EntityId(77),
+        owner,
+        "Owner".into(),
+    );
+    // Two stall windows on shift: the episode reports twice, notifies once.
+    lot.state.day_time = 2_000;
+    for _ in 0..=300 {
+        crate::villager::building::tick(&mut lot.state, lot.id);
+        lot.state.tick += 20;
+        lot.state.day_time += 20;
+        assign_builder(&mut lot.state, lot.id);
+    }
+    let cell = format!("{} {} {}", at[0], at[1], at[2]);
+    let notices = chat(&lot.state, connection);
+    assert_eq!(
+        notices.iter().filter(|line| line.contains(&cell)).count(),
+        1,
+        "{notices:?}"
+    );
+    assert!(lot.is_sand(at), "the player's block stays");
+    assert_eq!(
+        executor::next_cell(&lot.state, lot.id, &handle).unwrap(),
+        Some(at),
+        "the paid remainder waits at the blocking cell"
+    );
+}
+
+/// Sol S-3: a captured admission's sequence is bounded like every other ledger
+/// counter by `MAX_SCRIPT_WORLD_TIME`; a larger one refuses startup.
+#[test]
+fn a_captured_admission_beyond_script_world_time_refuses_startup() {
+    let mut lot = lot(true, true);
+    let handle = lot.state.settlements.get(lot.id).unwrap().projects[0]
+        .structure
+        .clone();
+    let set = |state: &mut TickState, since: u64| {
+        let mut ledger = state
+            .plugins
+            .get_domain("@native-structures", "ledger")
+            .unwrap()
+            .clone();
+        let admission = &mut ledger["structures"][&handle]["admission"];
+        assert!(admission.get("captured").is_some(), "{admission}");
+        *admission = serde_json::json!({ "captured": { "since": since } });
+        state
+            .plugins
+            .set_domain("@native-structures", "ledger", ledger);
+    };
+    set(&mut lot.state, mc_script::MAX_SCRIPT_WORLD_TIME);
+    crate::plugin_structures::validate(&lot.state).unwrap();
+    set(&mut lot.state, mc_script::MAX_SCRIPT_WORLD_TIME + 1);
+    assert!(crate::plugin_structures::validate(&lot.state).is_err());
+}

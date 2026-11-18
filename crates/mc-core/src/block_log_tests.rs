@@ -1311,10 +1311,10 @@ fn capture_off_restart_killed_before_checkpoint_keeps_the_gap() {
         vec![rows()],
         Vec::new(),
     );
-    assert_eq!(
-        off.records.len(),
-        2,
-        "history stays queryable without capture"
+    assert_eq!(state.block_log.records.len(), 1, "history stays queryable");
+    assert!(
+        !state.block_log.covers(since),
+        "nothing is proven without capture"
     );
     let mut entries = Vec::new();
     journal(&mut state, 1, &mut entries);
