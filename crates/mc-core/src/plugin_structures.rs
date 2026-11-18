@@ -1498,6 +1498,8 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
             || record.snapshot.revision > ledger.revision
             || record.cells.len() != record.snapshot.stages.len()
             || record.settlement.is_some() == (record.admission == provenance::Admission::Plugin)
+            || matches!(record.admission, provenance::Admission::Captured { since }
+                if since > MAX_SCRIPT_WORLD_TIME)
         {
             return Err(malformed());
         }

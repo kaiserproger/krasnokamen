@@ -11,9 +11,9 @@ use crate::entities::EntitySlot;
 
 const ATTEMPTS: usize = 64;
 
-/// A house lot holding three sand cuts: `first` (top of a two-high pillar,
-/// cut first because cuts run top-down), `below` it, and a lone `later`
-/// block in the far corner.
+/// A house lot holding three sand cuts, `first` (top of a two-high pillar,
+/// cut first because cuts run top-down), `below` it and a lone `later` block
+/// in the far corner, plus a grass `plant` cut after `below`.
 struct Lot {
     state: TickState,
     id: SettlementId,
@@ -21,6 +21,7 @@ struct Lot {
     first: [i32; 3],
     below: [i32; 3],
     later: [i32; 3],
+    plant: [i32; 3],
     sand: u32,
     item: u32,
 }
@@ -42,9 +43,12 @@ fn lot(capture: bool, outside: bool) -> Lot {
         origin[1] + 1,
         origin[2] + i32::from(size[2]) - 1,
     ];
+    let plant = [origin[0] + 1, origin[1] + 1, origin[2]];
     for at in [first, below, later] {
         state.world.set_block(at[0], at[1], at[2], sand);
     }
+    let grass = super::super::allocator::tests::block(&state, "minecraft:short_grass", &[]);
+    state.world.set_block(plant[0], plant[1], plant[2], grass);
     state.world.fold_overlay();
     state.block_log = BlockLog::new(BlockLogSettings {
         enabled: capture,
@@ -63,7 +67,7 @@ fn lot(capture: bool, outside: bool) -> Lot {
         record.contains([1, 201, 1]),
         "storage stays in the territory"
     );
-    for at in [first, below, later] {
+    for at in [first, below, later, plant] {
         assert_eq!(record.contains(at), !outside);
     }
     let item = state
@@ -78,6 +82,7 @@ fn lot(capture: bool, outside: bool) -> Lot {
         first,
         below,
         later,
+        plant,
         sand,
         item,
     }
@@ -118,6 +123,7 @@ fn history(state: &mut TickState, evicted: u64, touched: &[[i32; 3]]) {
         vec![Delta {
             records,
             marks: Vec::new(),
+            coverage: 0,
         }],
     );
 }

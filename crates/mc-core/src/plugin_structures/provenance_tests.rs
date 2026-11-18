@@ -40,6 +40,7 @@ fn history(state: &TickState, coverage: u64, touched: &[[i32; 3]]) -> BlockLog {
         vec![Delta {
             records,
             marks: Vec::new(),
+            coverage: 0,
         }],
     )
 }
@@ -70,6 +71,13 @@ fn outside_cells_need_covering_history_or_a_clean_readmission() {
         admit(&state, id, surveyed, &cells, [0, 0], first),
         Ok(None),
         "covering history keeps the admission"
+    );
+
+    state.block_log = history(&state, 0, &[outside]);
+    assert_eq!(
+        admit(&state, id, surveyed, &cells, [0, 0], first),
+        Err(Failure::Blocked),
+        "a retained player edit refuses an outside cell even under coverage"
     );
 
     state.block_log = history(&state, 1, &[]);
@@ -104,6 +112,20 @@ fn outside_cells_need_covering_history_or_a_clean_readmission() {
         admit(&state, id, Admission::Uncaptured, &cells, [0, 0], first),
         Ok(None),
         "a manifest surveyed without capture keeps the documented residual"
+    );
+
+    state.block_log = BlockLog::restore(
+        BlockLogSettings {
+            enabled: false,
+            ..BlockLogSettings::default()
+        },
+        Vec::new(),
+    );
+    assert!(!cell_ok(&state, id, surveyed, outside));
+    assert_eq!(
+        admit(&state, id, surveyed, &cells, [0, 0], first),
+        Ok(None),
+        "a re-admission without capture keeps the captured survey"
     );
 }
 

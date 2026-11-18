@@ -532,6 +532,28 @@ pub(crate) fn next_cell(
         .map(|cell| cell.at))
 }
 
+/// The cell outside the territory whose retained player edit refuses this
+/// structure's next one-cell commit (PrepLifecycle §2.3), if any.
+pub(crate) fn provenance_refusal(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Option<[i32; 3]> {
+    let ledger = ledger(state).ok()?;
+    let record = structure(&ledger, &owner(settlement), handle).ok()?;
+    let index = record.snapshot.current_stage_index as usize;
+    let offset = record.snapshot.completed_work_units as usize;
+    let next = record.cells.get(index)?.get(offset..offset + 1)?;
+    provenance::refused_cell(
+        state,
+        settlement,
+        record.admission,
+        &record.cells,
+        [index, offset],
+        next,
+    )
+}
+
 /// Borrow the canonical stage rather than inferring clearing from a live tree:
 /// leaves may decay before their already-planned removal cell is reached.
 pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str) -> bool {

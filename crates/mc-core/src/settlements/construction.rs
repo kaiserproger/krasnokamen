@@ -2587,6 +2587,22 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
             format!("{} could not be retried: {error}", project.blueprint),
         );
     }
+    // A paid remainder refused for provenance outside the territory waits
+    // until the blocking player edit leaves the log, which never happens with
+    // time eviction off: the owner is told the cell once per episode (Sol S-2).
+    if report
+        && !snapshot.consumed.is_empty()
+        && let Some([x, y, z]) = executor::provenance_refusal(state, id, &project.structure)
+    {
+        notify_owner(
+            state,
+            id,
+            format!(
+                "{} is waiting: a player's block at {x} {y} {z} outside the village is in the way.",
+                project.blueprint
+            ),
+        );
+    }
     let recovery = if preparation.as_ref().is_some_and(|result| result.is_ok()) {
         "preparation_cancelled"
     } else if snapshot.pause_reason.is_some() {

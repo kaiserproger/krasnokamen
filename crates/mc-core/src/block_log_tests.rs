@@ -542,6 +542,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
                 Delta {
                     records: vec![stone(0), stone(1)],
                     marks: Vec::new(),
+                    coverage: 0,
                 },
             ),
             (
@@ -549,6 +550,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
                 Delta {
                     records: vec![stone(0)],
                     marks: Vec::new(),
+                    coverage: 0,
                 },
             ),
         ],
@@ -565,6 +567,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
             Delta {
                 records: Vec::new(),
                 marks: vec![(1, true)],
+                coverage: 0,
             },
         )],
         floors: vec![
@@ -577,8 +580,8 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
     let store = mc_world::native::NativeStore::open(&directory.path().join("state.redb"), [7; 32])
         .expect("reopen");
     let rows = load(&store.checkpoint_reader().expect("reader"), &blocks, &items).expect("rows");
-    assert_eq!(rows[&Dimension::Nether].0.records, [stone(0)]);
-    let overworld = rows[&Dimension::Overworld].0.clone();
+    assert_eq!(rows[&Dimension::Nether].records, [stone(0)]);
+    let overworld = rows[&Dimension::Overworld].clone();
     assert_eq!(
         overworld.records.iter().map(|r| r.seq).collect::<Vec<_>>(),
         [1]
@@ -588,6 +591,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
     let tail = Delta {
         records: vec![stone(2)],
         marks: vec![(1, false), (7, true)],
+        coverage: 0,
     };
     let log = BlockLog::restore(BlockLogSettings::default(), vec![overworld, tail]);
     assert_eq!(
@@ -641,6 +645,7 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
         value: Box::new(Delta {
             records: vec![record(1, 99)],
             marks: Vec::new(),
+            coverage: 0,
         }),
     };
     let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).expect("wal");
@@ -681,7 +686,7 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
     drop(store);
     let store = mc_world::native::NativeStore::open(&path, [7; 32]).expect("reopen");
     let rows = load(&store.checkpoint_reader().expect("reader"), &blocks, &items).expect("rows");
-    assert_eq!(rows[&Dimension::Overworld].0.records[0].tick, None);
+    assert_eq!(rows[&Dimension::Overworld].records[0].tick, None);
 }
 
 #[test]
@@ -690,6 +695,7 @@ fn wal_tick_that_is_present_must_be_a_tick() {
         value: Box::new(Delta {
             records: vec![record(1, 99)],
             marks: Vec::new(),
+            coverage: 0,
         }),
     })
     .expect("entry json");
@@ -797,6 +803,7 @@ fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
         value: Box::new(Delta {
             records: vec![old, new],
             marks: Vec::new(),
+            coverage: 0,
         }),
     };
     let mut wal = crate::journal::JournalWriter::open(world.path(), 1).expect("wal");
@@ -815,7 +822,6 @@ fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
         let records = &rows
             .get(&Dimension::Overworld)
             .unwrap_or_else(|| panic!("{stage}: no overworld block-log rows"))
-            .0
             .records;
         let tick = |seq| {
             records
@@ -1018,6 +1024,7 @@ fn table_row_with_unknown_name_fails_load() {
                     },
                 ],
                 marks: Vec::new(),
+                coverage: 0,
             },
         )],
         floors: vec![(Dimension::Nether, pruned_at(0))],
@@ -1026,7 +1033,6 @@ fn table_row_with_unknown_name_fails_load() {
     let reader = || store.checkpoint_reader().expect("reader");
     assert_eq!(
         load(&reader(), &blocks, &items).expect("known rows")[&Dimension::Nether]
-            .0
             .records
             .len(),
         2
@@ -1205,6 +1211,7 @@ fn coverage_floor_survives_full_eviction_and_restart() {
     log.unpersisted.push(Delta {
         records: log.records.iter().cloned().collect(),
         marks: Vec::new(),
+        coverage: 0,
     });
     let mut backlog = Backlog::default();
     let checkpoint = |log: &mut BlockLog, backlog: &mut Backlog| {
@@ -1235,9 +1242,9 @@ fn coverage_floor_survives_full_eviction_and_restart() {
     let rows = load(&reader, &blocks, &items).expect("rows");
     // A dimension whose rows were all pruned reads like a world that never
     // wrote one: only the coverage row can remember the floor.
-    let (delta, coverage) = rows.get(&Dimension::Overworld).cloned().unwrap_or_default();
+    let delta = rows.get(&Dimension::Overworld).cloned().unwrap_or_default();
     assert!(delta.records.is_empty(), "every record row was pruned");
-    let restored = BlockLog::restore_replay(settings, vec![delta], Vec::new(), coverage);
+    let restored = BlockLog::restore_replay(settings, vec![delta], Vec::new());
     assert!(
         !restored.covers(since),
         "a restart must not forget that history since the admission was evicted"
@@ -1248,39 +1255,81 @@ fn coverage_floor_survives_full_eviction_and_restart() {
     );
 }
 
-/// A restart with capture off is a gap: an admission taken before it stays
-/// uncovered after capture comes back, while a new admission is covered.
+/// PP-1: a restart with capture off is a gap, durable before the next
+/// checkpoint. The first tick after a capture-off recovery journals it, so a
+/// kill before any checkpoint still restores an uncovered admission once
+/// capture is back, while history stays queryable and a new admission is
+/// covered.
 #[test]
-fn a_capture_off_restart_uncovers_earlier_admissions_for_good() {
-    let mut log = BlockLog::new(capturing(0, 100));
-    seal(&mut log, 1_000);
-    let since = log.admission_seq().expect("capture is on");
-    seal(&mut log, 1_001);
-    assert!(log.covers(since));
-    let rows = Delta {
-        records: log.records.iter().cloned().collect(),
-        marks: Vec::new(),
+fn capture_off_restart_killed_before_checkpoint_keeps_the_gap() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let store =
+        mc_world::native::NativeStore::create(&directory.path().join("state.redb"), [7; 32])
+            .expect("store");
+    let mut state = test_state();
+    let blocks = Arc::clone(&state.registry.blocks);
+    let items = state.registry.items.clone();
+    let air = blocks.block(&id("minecraft:air")).expect("air").default.0;
+    let stone = blocks
+        .block(&id("minecraft:stone"))
+        .expect("stone")
+        .default
+        .0;
+    let since = state.block_log.admission_seq().expect("capture is on");
+    let seq = state.block_log.next_seq;
+    state.block_log.next_seq += 1;
+    let edit = Record {
+        change: Change::Block {
+            before: stone,
+            after: air,
+            entity: None,
+        },
+        ..record(seq, unix_now())
     };
-    let off = BlockLog::restore_replay(
+    state.block_log.push_record(edit.clone());
+    state.block_log.unpersisted.push(Delta {
+        records: vec![edit],
+        ..Delta::default()
+    });
+    // The survey's world is checkpointed: rows plus the coverage row.
+    let mut backlog = Backlog::default();
+    backlog.absorb(checkpoint(&mut state));
+    backlog.write(&store, &blocks, &items).expect("write");
+    let rows = || {
+        load(&store.checkpoint_reader().expect("reader"), &blocks, &items)
+            .expect("rows")
+            .remove(&Dimension::Overworld)
+            .expect("overworld rows")
+    };
+    // Recovery with capture off, then one tick, then a kill before any
+    // checkpoint: the WAL holds that tick's entries, the table the old floor.
+    state.block_log = BlockLog::restore_replay(
         BlockLogSettings {
             enabled: false,
-            ..capturing(0, 100)
+            ..BlockLogSettings::default()
         },
-        vec![rows.clone()],
+        vec![rows()],
         Vec::new(),
-        log.coverage,
     );
     assert_eq!(
         off.records.len(),
         2,
         "history stays queryable without capture"
     );
-    assert!(!off.covers(since), "nothing is proven while capture is off");
-    let on = BlockLog::restore_replay(capturing(0, 100), vec![rows], Vec::new(), off.coverage);
+    let mut entries = Vec::new();
+    journal(&mut state, 1, &mut entries);
+    let tail: Vec<Delta> = entries
+        .into_iter()
+        .filter_map(|entry| match entry {
+            crate::journal::JournalEntry::BlockLog { value } => Some(*value),
+            _ => None,
+        })
+        .collect();
+    let back = BlockLog::restore_replay(BlockLogSettings::default(), vec![rows()], tail);
     assert!(
-        !on.covers(since),
+        !back.covers(since),
         "edits made while capture was off were never recorded"
     );
-    let fresh = on.admission_seq().expect("capture is on again");
-    assert!(on.covers(fresh), "an admission after the gap is covered");
+    let fresh = back.admission_seq().expect("capture is on again");
+    assert!(back.covers(fresh), "an admission after the gap is covered");
 }

@@ -92,6 +92,14 @@ pub struct Delta {
     pub records: Vec<Record>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub marks: Vec<(u64, bool)>,
+    /// Coverage floor this delta raises the log to: a capture-off start in
+    /// the WAL, the checkpointed floor in table rows; zero otherwise.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub coverage: u64,
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 #[derive(Debug)]
@@ -125,6 +133,9 @@ pub struct BlockLog {
     /// and is checkpointed per dimension, so construction provenance can
     /// prove continuous history since its admission ([`Self::covers`]).
     coverage: u64,
+    /// A capture-off start not yet journaled: the next tick's WAL carries it,
+    /// so the gap is durable before any unlogged edit can be.
+    gap_unjournaled: bool,
     names: HashSet<Arc<str>>,
     blocks: Vec<PendingBlock>,
     noted: HashSet<BlockPos>,
@@ -154,6 +165,7 @@ impl BlockLog {
             player_blocks: HashMap::default(),
             next_seq: 0,
             coverage: 0,
+            gap_unjournaled: false,
             names: HashSet::default(),
             blocks: Vec::new(),
             noted: HashSet::default(),
@@ -165,28 +177,10 @@ impl BlockLog {
         }
     }
 
-    /// Fixture rebuild from rows and tail without a checkpointed coverage floor.
-    #[cfg(test)]
+    /// Rebuild from table rows followed by the WAL tail, in order.
     pub(crate) fn restore(settings: BlockLogSettings, deltas: Vec<Delta>) -> Self {
-        Self::rebuild(settings, deltas, 0)
-    }
-
-    /// Retain the recovered tail until the native writer durably upserts it.
-    /// `coverage` is the checkpointed floor (0 when the world never wrote one).
-    pub(crate) fn restore_replay(
-        settings: BlockLogSettings,
-        mut rows: Vec<Delta>,
-        tail: Vec<Delta>,
-        coverage: u64,
-    ) -> Self {
-        rows.extend(tail.iter().cloned());
-        let mut log = Self::rebuild(settings, rows, coverage);
-        log.unpersisted = tail;
-        log
-    }
-
-    fn rebuild(settings: BlockLogSettings, deltas: Vec<Delta>, coverage: u64) -> Self {
         let mut records = BTreeMap::new();
+        let coverage = deltas.iter().map(|delta| delta.coverage).max().unwrap_or(0);
         // A WAL-tail mark may outlive its evicted record, and a fully evicted
         // log keeps its floor: never reuse a sequence either way.
         let mut next_seq = coverage;
@@ -215,7 +209,20 @@ impl BlockLog {
             // admission taken before it stays uncovered after capture resumes.
             log.next_seq += 1;
             log.coverage = log.next_seq;
+            log.gap_unjournaled = true;
         }
+        log
+    }
+
+    /// Retain the recovered tail until the native writer durably upserts it.
+    pub(crate) fn restore_replay(
+        settings: BlockLogSettings,
+        mut rows: Vec<Delta>,
+        tail: Vec<Delta>,
+    ) -> Self {
+        rows.extend(tail.iter().cloned());
+        let mut log = Self::restore(settings, rows);
+        log.unpersisted = tail;
         log
     }
 
@@ -463,7 +470,11 @@ pub(crate) fn journal(
     entries: &mut Vec<crate::journal::JournalEntry>,
 ) {
     let log = &state.block_log;
-    if log.blocks.is_empty() && log.containers.is_empty() && log.marks.is_empty() {
+    if log.blocks.is_empty()
+        && log.containers.is_empty()
+        && log.marks.is_empty()
+        && !log.gap_unjournaled
+    {
         return;
     }
     let now = unix_now();
@@ -521,8 +532,13 @@ pub(crate) fn journal(
     let delta = Delta {
         records,
         marks: std::mem::take(&mut log.marks),
+        coverage: if std::mem::take(&mut log.gap_unjournaled) {
+            log.coverage
+        } else {
+            0
+        },
     };
-    if delta.records.is_empty() && delta.marks.is_empty() {
+    if delta.records.is_empty() && delta.marks.is_empty() && delta.coverage == 0 {
         return;
     }
     entries.push(crate::journal::JournalEntry::BlockLog {
@@ -650,16 +666,16 @@ fn key(kind: u8, dimension: Dimension, seq: u64) -> Vec<u8> {
     key
 }
 
-/// Checkpointed rows per dimension, records before marks, plus its coverage
-/// floor (0 when the world never wrote one). Like the native block
-/// dictionary, a row naming a block state or item this version does not know,
-/// or a malformed row, fails closed.
+/// Checkpointed rows per dimension, records before marks, with the coverage
+/// floor in [`Delta::coverage`] (0 when the world never wrote one). Like the
+/// native block dictionary, a row naming a block state or item this version
+/// does not know, or a malformed row, fails closed.
 pub(crate) fn load(
     reader: &mc_world::native::NativeCheckpointReader,
     blocks: &mc_world::BlockRegistry,
     items: &mc_data::items::ItemRegistry,
-) -> Result<BTreeMap<Dimension, (Delta, u64)>, CoreError> {
-    let mut out: BTreeMap<Dimension, (Delta, u64)> = BTreeMap::new();
+) -> Result<BTreeMap<Dimension, Delta>, CoreError> {
+    let mut out: BTreeMap<Dimension, Delta> = BTreeMap::new();
     reader
         .visit_block_log(|key, value| {
             let invalid = |reason: &str| {
@@ -676,7 +692,7 @@ pub(crate) fn load(
                 2 => Dimension::End,
                 _ => return Err(invalid("dimension")),
             };
-            let (delta, coverage) = out.entry(dimension).or_default();
+            let delta = out.entry(dimension).or_default();
             match (*kind, value) {
                 (RECORD_ROW, _) => delta.records.push(
                     decode_record(value, seq, blocks, items)
@@ -684,7 +700,7 @@ pub(crate) fn load(
                 ),
                 (MARK_ROW, [flag @ (0 | 1)]) => delta.marks.push((seq, *flag == 1)),
                 (COVERAGE_ROW, floor) if seq == 0 => {
-                    *coverage = u64::from_be_bytes(
+                    delta.coverage = u64::from_be_bytes(
                         floor.try_into().map_err(|_| invalid("coverage length"))?,
                     );
                 }

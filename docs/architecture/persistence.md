@@ -42,7 +42,10 @@ the next checkpoint can prune their batches, including rollback marks.
 Each dimension also checkpoints one coverage row (row kind 2): the lowest
 sequence from which the log is complete. Eviction raises it past the evicted
 record, and a restart with capture off reserves a sequence and moves it there.
-Restore never assigns a sequence below it. Each settlement structure record
+The first tick after such a restart journals that floor in its block-log delta
+(`coverage`), so the gap is durable before any unlogged edit; recovery takes the
+highest floor of the row and the WAL tail. Restore never assigns a sequence below it.
+Each settlement structure record
 carries a required `admission` (capture off, or the log sequence at its survey),
 and construction provenance outside village territory is judged against it.
 

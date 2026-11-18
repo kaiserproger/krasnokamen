@@ -226,7 +226,6 @@ pub(super) fn load_dimension_state(
         config.block_log,
         replay.block_log,
         replay.block_log_tail,
-        replay.block_log_coverage,
     );
 
     // Replay player + entity records. Full player state (inventory,

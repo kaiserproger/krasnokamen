@@ -713,6 +713,7 @@ fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
                 rolled_back: false,
             }],
             marks: Vec::new(),
+            coverage: 0,
         }],
     );
     assert!(!state.block_log.player_touched(root));
@@ -760,6 +761,7 @@ fn retained_player_placement_vetoes_an_identical_worldgen_log() {
                 rolled_back: false,
             }],
             marks: Vec::new(),
+            coverage: 0,
         }],
     );
     assert!(!clearable(&state, root));
@@ -926,6 +928,7 @@ fn protected_crown_above_access_headroom_stays_while_the_building_finishes() {
                 rolled_back: false,
             }],
             marks: Vec::new(),
+            coverage: 0,
         }],
     );
     assert!(!clearable(&state, at));
@@ -1004,6 +1007,7 @@ pub(crate) fn player_history(
                 rolled_back: false,
             }],
             marks: Vec::new(),
+            coverage: 0,
         }],
     )
 }
