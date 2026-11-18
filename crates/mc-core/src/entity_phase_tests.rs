@@ -955,7 +955,7 @@ fn full_step_with_period(
             states: &state.players,
             locked: state
                 .require_plugin_login
-                .then_some(state.locked_sessions.as_set()),
+                .then_some(&*state.locked_sessions),
         },
         dolphin_toys: &[],
         villagers: crate::target_grid::TargetGrid::for_consumers(&targets, 0),

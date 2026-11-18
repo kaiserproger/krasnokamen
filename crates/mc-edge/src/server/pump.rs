@@ -442,6 +442,12 @@ pub(super) fn route_outbox_batches(
                 )
                 .is_err()
         {
+            // Move the registry generation so the next refresh cannot
+            // re-adopt this connection with a viewer that never got its
+            // command tree.
+            server
+                .connections
+                .close(connection, "command-tree-send-failed");
             connections.remove(&connection);
             viewers.remove(&connection);
             continue;

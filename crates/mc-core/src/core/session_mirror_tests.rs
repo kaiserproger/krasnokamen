@@ -85,7 +85,7 @@ fn lock_set_generation_only_advances_on_a_real_change() {
     assert_eq!(stamp(&state), locked, "a duplicate lock is not a change");
     state.locked_sessions.remove(&connection);
     assert_ne!(stamp(&state), locked);
-    assert_eq!(state.locked_sessions.as_set().len(), 0);
+    assert_eq!(state.locked_sessions.len(), 0);
 }
 
 #[test]

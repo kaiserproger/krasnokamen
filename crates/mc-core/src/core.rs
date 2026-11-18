@@ -389,7 +389,7 @@ mod recovery;
 pub(crate) use recovery::*;
 
 mod moderation_selector;
-mod session_mirror;
+pub(crate) mod session_mirror;
 mod tick_loop;
 /// A currently joined player selected for an edge moderation command.
 pub type ModerationPlayer = (ConnectionId, uuid::Uuid, String);

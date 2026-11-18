@@ -11,14 +11,17 @@ use crate::boundary::ConnectionId;
 use crate::tick::TickState;
 use std::collections::BTreeSet;
 use std::sync::Arc;
+#[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Shared with the edge: a reader clones one `Arc` under the read lock and
-/// then tests membership without holding it.
+/// Shared with the edge: a reader tests membership under the read guard, and
+/// the published set is replaced whole, never mutated.
 #[derive(Debug)]
 pub(super) struct SessionMirror {
     unlocked: parking_lot::RwLock<Arc<BTreeSet<ConnectionId>>>,
-    /// Published projections. An unchanged tick publishes none.
+    /// Published projections. An unchanged tick publishes none. Test-only: it
+    /// exists so a regression can count projections instead of timing them.
+    #[cfg(test)]
     projections: AtomicU64,
 }
 
@@ -26,18 +29,23 @@ impl SessionMirror {
     pub(super) fn new() -> Self {
         Self {
             unlocked: parking_lot::RwLock::new(Arc::default()),
+            #[cfg(test)]
             projections: AtomicU64::new(0),
         }
     }
 
     /// Whether the tick observed this exact session joined and unlocked.
     pub(super) fn contains(&self, connection: ConnectionId) -> bool {
-        Arc::clone(&*self.unlocked.read()).contains(&connection)
+        self.unlocked.read().contains(&connection)
     }
 
-    /// Replace the projection; built by the tick outside this lock.
+    /// Replace the projection; built by the tick outside this lock. The
+    /// replaced `Arc` is freed outside the lock, so a reader holding it never
+    /// makes the tick wait for a deallocation of the whole set.
     pub(super) fn publish(&self, unlocked: BTreeSet<ConnectionId>) {
-        *self.unlocked.write() = Arc::new(unlocked);
+        let replaced = std::mem::replace(&mut *self.unlocked.write(), Arc::new(unlocked));
+        drop(replaced);
+        #[cfg(test)]
         self.projections.fetch_add(1, Ordering::Relaxed);
     }
 

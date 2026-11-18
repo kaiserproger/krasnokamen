@@ -12,7 +12,7 @@
 //! per-connection queues (never skipped; overflow disconnects).
 
 use mc_physics::mth;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use mc_data::statistics::StatType;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -74,6 +74,10 @@ pub(crate) mod mining_tests;
 #[cfg(test)]
 #[path = "auth_gate_tests.rs"]
 mod auth_gate_tests;
+
+#[cfg(test)]
+#[path = "tick/mirror_tests.rs"]
+mod mirror_tests;
 
 #[cfg(test)]
 #[path = "crowd_pen_tests.rs"]

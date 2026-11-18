@@ -109,8 +109,10 @@ fn routing_snapshot_copies_handles_only_on_change() {
 
 /// Informative microbench (debug build, shared host): per-tick routing cost at
 /// K = 1000 connections — the previous per-tick clone of every handle versus
-/// one generation compare. No threshold; it prints both numbers.
+/// one generation compare. No threshold; it prints both numbers. Ignored by
+/// default: it is a measurement, not a gate (`cargo test -- --ignored`).
 #[test]
+#[ignore = "informative microbench, not a gate"]
 fn routing_snapshot_tick_cost_at_1k() {
     const K: usize = 1000;
     const TICKS: u32 = 100;

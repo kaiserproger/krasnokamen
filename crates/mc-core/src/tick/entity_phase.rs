@@ -1770,7 +1770,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             states: &state.players,
             locked: state
                 .require_plugin_login
-                .then_some(state.locked_sessions.as_set()),
+                .then_some(&*state.locked_sessions),
         },
         dolphin_toys: &dolphin_toys,
         villagers: villager_grid,

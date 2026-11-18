@@ -32,12 +32,8 @@ impl SessionLocks {
         removed
     }
 
-    /// The authoritative set, for read-only callers (plugin events, entity
-    /// phase) that take it as a plain `BTreeSet`.
-    pub(crate) fn as_set(&self) -> &BTreeSet<ConnectionId> {
-        &self.locked
-    }
-
+    /// The authoritative set through [`Deref`](std::ops::Deref), for read-only
+    /// callers (plugin events, entity phase).
     #[must_use]
     pub(crate) fn generation(&self) -> u64 {
         self.generation
