@@ -221,6 +221,13 @@ pub(crate) static PANIC_CHECKPOINT_COMMIT: parking_lot::Mutex<Option<std::path::
 static FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT: std::sync::Mutex<Option<std::path::PathBuf>> =
     std::sync::Mutex::new(None);
 
+/// Per-world fault injection: the next checkpoint marker write for each armed
+/// world fails once, after a successful native commit. The writer must then
+/// send no positive ACK, prune nothing and stop (fail closed).
+#[cfg(test)]
+pub(crate) static FAIL_CHECKPOINT_MARKER: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
 /// Test hook: when armed with a world dir, every [`JournalWriter::append`]
 /// for THAT dir fails with a storage error (simulates a torn/failed WAL
 /// batch). The journal thread returns (receiver dropped); the tick loop's
@@ -898,6 +905,21 @@ impl Core {
         }
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
+        // Books R4-P1: before any replay, refuse a store that the checkpoint
+        // marker proves lost a committed checkpoint. A store ahead of the
+        // marker is the crash window between the commit and the marker write;
+        // it is accepted and the marker is rewritten.
+        let store_tick = store
+            .checkpoint_tick()
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
+            |error| {
+                CoreError::Storage(format!(
+                    "world {}: {error}; refusing to open",
+                    config.world_dir.display()
+                ))
+            },
+        )?;
         let base_registry = Arc::clone(&registry);
         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
             &config,

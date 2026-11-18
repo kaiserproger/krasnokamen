@@ -119,6 +119,10 @@ pub(crate) fn fixture_store(config: &CoreConfig) -> Result<Arc<NativeStore>, Cor
             &registry.items,
         )
         .map_err(storage)?;
+    // A real world always carries the checkpoint marker of its committed
+    // checkpoint; `Core::open` refuses a store that has one without it.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0)
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
     Ok(store)
 }
 
@@ -198,6 +202,8 @@ pub(crate) fn write_manifest(
             &registry.blocks,
             &registry.items,
         )
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), manifest.tick)
         .map_err(|e| CoreError::Storage(e.to_string()))
 }
 

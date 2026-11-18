@@ -152,6 +152,14 @@ fn decode(bytes: &[u8]) -> Result<NativeDomainRecord, NativeError> {
         payload: payload.to_vec(),
     })
 }
+
+/// Captured tick of the committed checkpoint row, if one exists.
+fn checkpoint_tick_from(tx: &redb::ReadTransaction) -> Result<Option<u64>, NativeError> {
+    let global = db(tx.open_table(GLOBAL))?;
+    db(global.get("checkpoint"))?
+        .map(|record| decode_envelope(record.value()).map(|(_, captured_tick, _)| captured_tick))
+        .transpose()
+}
 pub(super) fn initialize(tx: &redb::WriteTransaction) -> Result<(), NativeError> {
     db(tx.open_table(GLOBAL))?;
     db(tx.open_table(PLAYERS))?;
@@ -816,6 +824,29 @@ impl NativeStore {
         let tx = db(self.database.begin_read())?;
         let global = db(tx.open_table(GLOBAL))?;
         Ok(db(global.get("checkpoint"))?.is_some())
+    }
+
+    /// Tick of the committed checkpoint row, if any, without decoding the
+    /// manifest. This is the tick the checkpoint marker witnesses.
+    pub fn checkpoint_tick(&self) -> Result<Option<u64>, NativeError> {
+        checkpoint_tick_from(&db(self.database.begin_read())?)
+    }
+
+    /// Offline operator path: the store id and committed checkpoint tick of a
+    /// stopped world, without validating the store against a configuration.
+    /// Used to check a restored or copied world against its checkpoint marker.
+    pub fn read_marker_fields(
+        path: &std::path::Path,
+    ) -> Result<([u8; 16], Option<u64>), NativeError> {
+        let database = super::read_only_database(path, super::DB_CACHE_BYTES)?;
+        let tx = db(database.begin_read())?;
+        let header = db(tx.open_table(super::HEADER))?;
+        let store_uuid = db(header.get("store_uuid"))?
+            .ok_or_else(|| failure("world/store_uuid", "missing"))?
+            .value()
+            .try_into()
+            .map_err(|_| failure("world/store_uuid", "invalid length"))?;
+        Ok((store_uuid, checkpoint_tick_from(&tx)?))
     }
 
     pub fn commit_checkpoint(

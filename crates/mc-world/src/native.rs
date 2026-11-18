@@ -213,6 +213,7 @@ pub struct NativeRecordCounts {
 pub struct NativeStore {
     database: Database,
     identity: [u8; 32],
+    store_uuid: [u8; 16],
     file: std::sync::Arc<std::fs::File>,
 }
 
@@ -274,7 +275,6 @@ impl NativeReadOnlyStore {
         validate_header(&db(database.begin_read())?, identity)?;
         Ok(Self { database })
     }
-
     pub fn block_origin(
         &self,
         dimension: u32,
@@ -476,6 +476,14 @@ impl NativeStore {
         self.identity
     }
 
+    /// Immutable random id of this store instance, written once at creation.
+    /// The checkpoint marker repeats it so a marker and a store from different
+    /// worlds cannot be paired (Books R4-P3).
+    #[must_use]
+    pub fn store_uuid(&self) -> [u8; 16] {
+        self.store_uuid
+    }
+
     /// Read durable database bytes through its lease-holding handle.
     /// The caller must serialize the entire read with all database writes and
     /// use it only after an Immediate commit, with no write transaction open.
@@ -513,11 +521,15 @@ impl NativeStore {
         let mut builder = database_builder(cache_bytes);
         builder.set_repair_callback(|_| {});
         let database = db(builder.create_with_backend(backend))?;
+        // Immutable instance identity: random, written once, never derived from
+        // the world seed or the build (Books R4-P3).
+        let store_uuid = *uuid::Uuid::new_v4().as_bytes();
         let mut transaction = db(database.begin_write())?;
         db(transaction.set_durability(Durability::Immediate))?;
         {
             let mut header = db(transaction.open_table(HEADER))?;
             db(header.insert("identity", identity.as_slice()))?;
+            db(header.insert("store_uuid", store_uuid.as_slice()))?;
             db(header.insert("schema", NATIVE_PROTOTYPE_SCHEMA.to_be_bytes().as_slice()))?;
             drop(header);
             db(transaction.open_table(IMPORTED))?;
@@ -534,6 +546,7 @@ impl NativeStore {
         Ok(Self {
             database,
             identity,
+            store_uuid,
             file,
         })
     }
@@ -561,13 +574,14 @@ impl NativeStore {
         }
         let file = std::sync::Arc::clone(&backend.0);
         let database = db(database_builder(cache_bytes).create_with_backend(backend))?;
-        {
+        let store_uuid = {
             let transaction = db(database.begin_read())?;
-            validate_header(&transaction, identity)?;
-        }
+            validate_header(&transaction, identity)?
+        };
         Ok(Self {
             database,
             identity,
+            store_uuid,
             file,
         })
     }
@@ -1106,7 +1120,7 @@ fn compose(
 fn validate_header(
     transaction: &redb::ReadTransaction,
     identity: [u8; 32],
-) -> Result<(), NativeError> {
+) -> Result<[u8; 16], NativeError> {
     let header = db(transaction.open_table(HEADER))?;
     let schema = db(header.get("schema"))?.ok_or(NativeError::Invalid("native schema missing"))?;
     let schema = u32::from_be_bytes(
@@ -1121,6 +1135,14 @@ fn validate_header(
     if db(header.get("identity"))?.is_none_or(|value| value.value() != identity) {
         return Err(NativeError::Invalid("identity mismatch"));
     }
+    // Required: an absent id means a store written before this format, which is
+    // refused rather than given a fresh identity (a repaired or later world
+    // must never be able to adopt one, Books R4-P3).
+    let store_uuid: [u8; 16] = db(header.get("store_uuid"))?
+        .ok_or(NativeError::Invalid("native store id missing"))?
+        .value()
+        .try_into()
+        .map_err(|_| NativeError::Invalid("invalid native store id"))?;
     db(transaction.open_table(IMPORTED))?;
     db(transaction.open_table(OVERLAYS))?;
     db(transaction.open_table(METADATA))?;
@@ -1130,7 +1152,7 @@ fn validate_header(
     db(transaction.open_table(state::INITIALIZED))?;
     db(transaction.open_table(state::ENTITY_LSN))?;
     checkpoint::validate_tables(transaction)?;
-    Ok(())
+    Ok(store_uuid)
 }
 
 fn count_records(transaction: &redb::ReadTransaction) -> Result<NativeRecordCounts, NativeError> {

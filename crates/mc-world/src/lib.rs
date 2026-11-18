@@ -13,6 +13,7 @@ pub mod native;
 pub mod plant_rules_26_1_2;
 pub mod section;
 pub mod storage;
+pub mod store_marker;
 pub mod structure_starts;
 pub mod wire;
 

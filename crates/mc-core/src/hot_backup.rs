@@ -90,6 +90,30 @@ pub(crate) fn copy_world(
         NATIVE_DATABASE.to_owned(),
         copy_reader_hashed(database, &out.join(NATIVE_DATABASE))?,
     );
+    // Books R4-P1: the marker travels with the store it witnesses, so a
+    // restored copy is checked against the same (store id, checkpoint tick)
+    // pair. It is read here, on the writer thread, after the commit that it
+    // describes; a store with a checkpoint always has one.
+    let marker_path = mc_world::store_marker::path(world_dir);
+    let marker = std::fs::read(&marker_path)
+        .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
+    let marker = mc_world::store_marker::StoreMarker::decode(&marker).map_err(|error| {
+        CoreError::Storage(format!(
+            "{}: {error}",
+            mc_world::store_marker::path(world_dir).display()
+        ))
+    })?;
+    if marker.checkpoint_tick > checkpoint_tick {
+        return Err(CoreError::Storage(format!(
+            "hot backup: checkpoint marker records {}, ahead of the committed checkpoint {}; \
+             the store rolled back and the copy would be refused on restore",
+            marker.checkpoint_tick, checkpoint_tick
+        )));
+    }
+    files.insert(
+        mc_world::store_marker::MARKER_FILE.to_owned(),
+        copy_reader_hashed(&mut marker.as_slice(), &out.join(mc_world::store_marker::MARKER_FILE))?,
+    );
 
     let mut batches = Vec::new();
     for entry in std::fs::read_dir(world_dir.join("journal")).map_err(io)? {

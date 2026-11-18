@@ -423,6 +423,23 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         }
     }
     mc_world::atomic_file::sync_parent_dir(&target)?;
+    // Books R4-P1: the copied marker and the copied store must agree — the same
+    // store id and a store checkpoint at or after the marker's tick. A backup
+    // that pairs one world's marker with another's store, or a store rolled back
+    // behind its marker, is refused instead of restored as a valid world.
+    let restored_database = target.join(NATIVE_DATABASE);
+    let pair = mc_world::native::NativeStore::read_marker_fields(&restored_database)
+        .map_err(|error| format!("restored {}: {error}", restored_database.display()))
+        .and_then(|(store_uuid, store_tick)| {
+            mc_world::store_marker::check(&target, store_uuid, store_tick)
+                .map_err(|error| error.to_string())
+        });
+    if let Err(error) = pair {
+        for name in files.keys() {
+            let _ = std::fs::remove_file(target.join(name));
+        }
+        bail!("restored world is inconsistent: {error}; nothing was kept");
+    }
     println!(
         "restore of {} into {} complete: {} files verified",
         from.display(),

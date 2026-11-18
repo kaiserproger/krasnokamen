@@ -27,6 +27,8 @@ fn fake_world() -> tempfile::TempDir {
     std::fs::create_dir_all(world.path().join("native")).unwrap();
     std::fs::create_dir_all(world.path().join("journal")).unwrap();
     std::fs::write(world.path().join("native/state.redb"), b"database").unwrap();
+    // The marker travels with the store; a store with a checkpoint always has one.
+    mc_world::store_marker::write(world.path(), [9; 16], 10).unwrap();
     world
 }
 
@@ -52,6 +54,7 @@ fn copy_takes_database_and_only_the_wal_between_checkpoint_and_through() {
     assert_eq!(
         names,
         [
+            "checkpoint.marker",
             "journal/batch-00000000000000000011-00000000000000000011.bin",
             "journal/batch-00000000000000000012-00000000000000000012.bin",
             "native/state.redb",
@@ -60,6 +63,11 @@ fn copy_takes_database_and_only_the_wal_between_checkpoint_and_through() {
     assert_eq!(
         std::fs::read(out.path().join("native/state.redb")).unwrap(),
         b"database"
+    );
+    assert_eq!(
+        mc_world::store_marker::read(out.path()).unwrap(),
+        mc_world::store_marker::read(world.path()).unwrap(),
+        "the marker travels with the store"
     );
     use sha2::{Digest, Sha256};
     assert_eq!(
