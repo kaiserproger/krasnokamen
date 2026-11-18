@@ -932,7 +932,6 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
     let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
         site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
     });
-    let mut clearance = super::super::forestry::Clearance::default();
     let mut sweeps = site_refusals::Sweeps::default();
     let mut report = site_refusals::Report::default();
     // A: the flat plan's winner. The first pass examines A alone.
@@ -949,7 +948,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
         &mut network,
         blueprint,
         &floors,
-        &mut clearance,
+        &mut site_refusals::Survey::default(),
         &mut sweeps,
         a.front,
         &mut budget,
@@ -995,7 +994,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut site_refusals::Survey::default(),
             &mut sweeps,
             0,
             &mut budget,
@@ -1081,7 +1080,6 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
     let column = reorder.expect("a plaza hole moves the winner's frontage earlier");
     assert_eq!(fronts(&state), before, "the plaza is whole again");
     // The first pass examines every frontage before the winner's.
-    let mut clearance = super::super::forestry::Clearance::default();
     let mut sweeps = site_refusals::Sweeps::default();
     let mut report = site_refusals::Report::default();
     let mut network = layout::Network::for_construction(&state, &record);
@@ -1092,7 +1090,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
         &mut network,
         blueprint,
         &floors,
-        &mut clearance,
+        &mut site_refusals::Survey::default(),
         &mut sweeps,
         0,
         &mut budget,
@@ -1111,7 +1109,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut site_refusals::Survey::default(),
             &mut sweeps,
             0,
             &mut budget,
@@ -1146,7 +1144,6 @@ fn a_restart_keeps_the_tie_winner() {
     let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
         site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
     });
-    let mut clearance = super::super::forestry::Clearance::default();
     let mut report = site_refusals::Report::default();
     let mut winner = |start: u32, sweeps: &mut site_refusals::Sweeps| {
         let mut network = layout::Network::for_construction(&state, &record);
@@ -1157,7 +1154,7 @@ fn a_restart_keeps_the_tie_winner() {
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut site_refusals::Survey::default(),
             sweeps,
             start,
             &mut budget,
