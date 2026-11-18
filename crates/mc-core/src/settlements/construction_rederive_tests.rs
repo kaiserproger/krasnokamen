@@ -1570,3 +1570,266 @@ fn a_terrain_stage_restart_pays_planks_once_and_dirt_nothing() {
     );
     crate::plugin_structures::validate(&restored.state).unwrap();
 }
+
+#[test]
+fn planned_upgrade_cut_and_terrain_credits_survive_a_native_restart_before_build() {
+    use crate::settlements::construction::tests::{complete, fund, start};
+
+    let work = tempfile::tempdir().unwrap();
+    let names = [
+        "minecraft:spruce_planks",
+        "minecraft:cobblestone",
+        "minecraft:glass",
+        "minecraft:dirt",
+    ];
+    let balances = |s: &Scene| names.map(|name| stock(&s.state, name) + carried(s, name));
+    let mut control: Option<([i32; 4], [i32; 4])> = None;
+    for player_blocks in [false, true] {
+        let live = work
+            .path()
+            .join(if player_blocks { "player" } else { "control" });
+        std::fs::create_dir_all(&live).unwrap();
+        let (mut state, id, builder) = native_fixture(&live);
+        state.registry = registry();
+        start(&mut state, id, "house", 1, None);
+        let origin = state.settlements.get(id).unwrap().projects[0].origin;
+        fund(&mut state, "house", 1);
+        complete(&mut state, id, builder);
+        assert!(state.settlements.get(id).unwrap().projects.is_empty());
+        let building = *state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .keys()
+            .next()
+            .unwrap();
+        let project = Project {
+            settlement: id,
+            blueprint: "house".into(),
+            level: 2,
+            origin,
+            rotation: 0,
+            building: Some(building),
+            structure: String::new(),
+            ordered: true,
+            builder: None,
+            order_seq: None,
+        };
+        let mut placed = Vec::new();
+        if player_blocks {
+            let (_, plan) = crate::settlements::construction::preparation::planned_cells(
+                &state,
+                &project,
+                "oak",
+                &mut Default::default(),
+            )
+            .unwrap();
+            let mut records = Vec::new();
+            for (index, name) in names.iter().enumerate() {
+                let foreign = named(&state, name);
+                let at = plan
+                    .iter()
+                    .find(|cell| {
+                        cell.portion == Build
+                            && cell.at[1] > origin[1]
+                            && !placed.contains(&cell.at)
+                            && state
+                                .registry
+                                .blocks
+                                .by_id(mc_world::BlockStateId(cell.state))
+                                .unwrap()
+                                .block
+                                .raw_id
+                                != state
+                                    .registry
+                                    .blocks
+                                    .by_id(mc_world::BlockStateId(foreign))
+                                    .unwrap()
+                                    .block
+                                    .raw_id
+                    })
+                    .unwrap_or_else(|| panic!("a distinct placement cell for {name}"))
+                    .at;
+                assert!(state.settlements.get(id).unwrap().contains(at));
+                let before = state.world.block_at(at[0], at[1], at[2]).unwrap();
+                state.world.set_block(at[0], at[1], at[2], foreign);
+                records.push(crate::block_log::Record {
+                    seq: index as u64 + 1,
+                    tick: Some(1),
+                    time: 0,
+                    actor: Arc::from("player"),
+                    pos: at,
+                    change: crate::block_log::Change::Block {
+                        before,
+                        after: foreign,
+                        entity: None,
+                    },
+                    rolled_back: false,
+                });
+                placed.push(at);
+            }
+            state.block_log = crate::block_log::BlockLog::restore(
+                crate::config::BlockLogSettings {
+                    enabled: true,
+                    retention_secs: 0,
+                    max_records: 1_000,
+                },
+                vec![crate::block_log::Delta {
+                    records,
+                    marks: Vec::new(),
+                    coverage: 0,
+                }],
+            );
+            let (_, plan) = crate::settlements::construction::preparation::planned_cells(
+                &state,
+                &project,
+                "oak",
+                &mut Default::default(),
+            )
+            .unwrap();
+            for (index, at) in placed.iter().enumerate() {
+                assert!(state.block_log.player_touched(*at));
+                let kind = if index == 3 {
+                    executor::PortionKind::Terrain
+                } else {
+                    Cut
+                };
+                assert!(
+                    plan.iter()
+                        .any(|cell| cell.at == *at && cell.portion == kind),
+                    "{} belongs to the real planner's {kind:?} portion",
+                    names[index]
+                );
+            }
+        }
+        fund(&mut state, "house", 2);
+        start(&mut state, id, "house", 2, Some(building));
+        let handle = state.settlements.get(id).unwrap().projects[0]
+            .structure
+            .clone();
+        let mut s = Scene {
+            builder: state.entities.row(builder).uuid,
+            state,
+            id,
+            handle,
+        };
+        let build = status(&s)
+            .stages
+            .iter()
+            .position(|stage| stage.stage == "build")
+            .unwrap();
+        if player_blocks {
+            for stage in ["cut", "terrain"] {
+                assert!(
+                    status(&s)
+                        .stages
+                        .iter()
+                        .position(|plan| plan.stage == stage)
+                        .unwrap()
+                        < build
+                );
+            }
+        }
+        s.state.tick_control.set_frozen(true);
+        let (output, _, _) = crate::tick::run_tick(&mut s.state, &[]);
+        crate::core::journal_entries_for_tick(&mut s.state, &output).unwrap();
+        s.state
+            .world
+            .mark_block_entity_dirty(crate::boundary::BlockPos { x: 1, y: Y, z: 1 });
+        checkpoint(&mut s.state, &CoreConfig::new(live.clone(), 42));
+        let mut writer = JournalWriter::open(&live, 1).unwrap();
+        for _ in 0..4096 {
+            if status(&s).current_stage_index as usize >= build {
+                break;
+            }
+            journaled_attempt(&mut s.state, id, builder, &mut writer);
+        }
+        let stopped = status(&s);
+        assert_eq!(
+            (
+                stopped.current_stage_index as usize,
+                stopped.completed_work_units
+            ),
+            (build, 0)
+        );
+        let before_restart = balances(&s);
+        if let Some((before, _)) = control {
+            // Ordinary extraction has no Silk Touch: glass has no item drop.
+            assert_eq!(
+                std::array::from_fn::<_, 4, _>(|i| before_restart[i] - before[i]),
+                [1, 1, 0, 0],
+                "Cut pays each ordinary drop once; Terrain pays no dirt"
+            );
+            for at in &placed {
+                assert_eq!(
+                    s.state.world.block_at(at[0], at[1], at[2]),
+                    Some(s.state.registry.states.air)
+                );
+            }
+        }
+        drop(writer);
+        let saved = live.with_extension("restart");
+        copy_world(&live, &saved);
+        let mut restored = restore(&s, &saved);
+        assert_eq!(
+            balances(&restored),
+            before_restart,
+            "storage plus carry survives native replay"
+        );
+        let reopened = status(&restored);
+        assert_eq!(
+            (reopened.current_stage_index, reopened.completed_work_units),
+            (stopped.current_stage_index, 0),
+            "replay resumes before the first Build publication"
+        );
+        crate::plugin_structures::validate(&restored.state).unwrap();
+        let builder = restored
+            .state
+            .entities
+            .slot_of_uuid(restored.builder)
+            .unwrap();
+        let mut writer = JournalWriter::open(&saved, 1).unwrap();
+        for _ in 0..4096 {
+            if restored
+                .state
+                .settlements
+                .get(id)
+                .unwrap()
+                .projects
+                .is_empty()
+            {
+                break;
+            }
+            journaled_attempt(&mut restored.state, id, builder, &mut writer);
+        }
+        assert!(
+            restored
+                .state
+                .settlements
+                .get(id)
+                .unwrap()
+                .projects
+                .is_empty(),
+            "upgrade certifies"
+        );
+        assert_eq!(status(&restored).state, ScriptStructureState::Committed);
+        let after = balances(&restored);
+        if let Some((_, completed)) = control {
+            assert_eq!(
+                std::array::from_fn::<_, 4, _>(|i| after[i] - completed[i]),
+                [1, 1, 0, 0],
+                "Build neither loses nor recredits the player's drops; dirt pays nothing"
+            );
+        } else {
+            control = Some((before_restart, after));
+        }
+        assert!(!executor::reopen_emptied(&mut restored.state, id, &restored.handle).unwrap());
+        assert_eq!(
+            balances(&restored),
+            after,
+            "completion retry has no second credit"
+        );
+        crate::plugin_structures::validate(&restored.state).unwrap();
+    }
+}
