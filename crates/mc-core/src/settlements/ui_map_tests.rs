@@ -323,7 +323,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
     let (mut state, id, _) = fixture();
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
+    crate::settlements::construction::tests::request_started(&mut state, id, "storage");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!((project.origin, project.rotation), ([11, 200, 13], 1));
     let grid = grid(&ctx(id), &state, state.settlements.get(id).unwrap(), None);

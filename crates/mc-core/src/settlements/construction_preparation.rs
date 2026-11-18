@@ -416,7 +416,8 @@ pub(super) fn upgrade_refusal(
 
 /// Report a queued request's admission refusal once per distinct reason: the
 /// request keeps its FIFO slot and is retried on every planning pass, so a
-/// repeating reason must not page the owner or the log each time. Runtime only.
+/// repeating reason must not page the owner or the log each time. A site
+/// sweep that is still running is no refusal at all. Runtime only.
 pub(super) fn note_order_refusal(
     state: &mut TickState,
     id: SettlementId,
@@ -428,7 +429,7 @@ pub(super) fn note_order_refusal(
         .order_refusal
         .get(&(id, seq))
         .is_some_and(|previous| *previous == reason);
-    if repeated {
+    if repeated || reason == super::site_refusals::WAITING_FOR_SITE {
         return;
     }
     state

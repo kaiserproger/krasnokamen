@@ -169,3 +169,137 @@ fn the_joint_proof_keeps_a_second_project_out_of_the_first_ones_stock() {
         "the refused request keeps its place in the queue"
     );
 }
+
+/// The fixture town with its owner joined inside it, a house funded after the
+/// join tick (whose planning pass then has no sweep to start), and the number
+/// of street frontages its site sweep walks.
+fn owner_in_open_plan() -> (TickState, SettlementId, usize) {
+    const CONN: crate::boundary::ConnectionId = crate::boundary::ConnectionId(7);
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection: CONN,
+            uuid: uuid::Uuid::nil(),
+            name: "Mayor".into(),
+            permission_level: 0,
+        }],
+    );
+    state.settlements.get_mut(id).unwrap().owner = Some(uuid::Uuid::nil().to_string());
+    let entity = state.connections.entity_of(CONN).unwrap();
+    let slot = state.entities.slot_of(entity).unwrap();
+    state.entities.set_pos(slot, [8.5, 201.0, 8.5]);
+    fund(&mut state, "house", 1);
+    assert_eq!(examined(&state, id), None);
+    let frontages = layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
+        .frontage()
+        .len();
+    assert!(
+        frontages > 2 * SITE_ATTEMPTS as usize,
+        "the sweep must outlast two slices: {frontages} frontages"
+    );
+    (state, id, frontages)
+}
+
+fn examined(state: &TickState, id: SettlementId) -> Option<u32> {
+    state
+        .settlements
+        .site_sweep
+        .get(&id)
+        .and_then(|sweeps| sweeps.examined("house"))
+}
+
+/// Pin 7e421d34c060: `/settlement build spanish_plaza` on the seed-100 village
+/// swept every street frontage inside its command tick (4.3 s). The command
+/// tick examines one planner slice and answers at once; planner passes finish
+/// the same resumable sweep, one slice each, and start the order.
+#[test]
+fn an_owner_order_examines_one_sweep_slice_in_its_command_tick() {
+    let (mut state, id, frontages) = owner_in_open_plan();
+    // No planning pass shares the command tick.
+    assert!(
+        !state.tick.is_multiple_of(PLAN_CADENCE) && !(state.tick + 1).is_multiple_of(PLAN_CADENCE)
+    );
+    let (_, outbox, _) = crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Command {
+            connection: crate::boundary::ConnectionId(7),
+            command: "settlement build house".into(),
+            permission_level: 0,
+        }],
+    );
+    let chat: Vec<String> = outbox
+        .into_iter()
+        .flat_map(|(_, changes)| changes)
+        .filter_map(|change| match change {
+            crate::boundary::PlayerChange::Chat { message } => Some(message),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(chat, ["Queued house: waiting for a site"]);
+    assert_eq!(examined(&state, id), Some(SITE_ATTEMPTS));
+    let record = state.settlements.get(id).unwrap();
+    assert!(record.projects.is_empty());
+    assert_eq!(
+        access::orders(record)
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["house"]
+    );
+    let mut passes = 0;
+    while state.settlements.get(id).unwrap().projects.is_empty() {
+        let before = examined(&state, id).unwrap_or(0);
+        plan(&mut state, id);
+        passes += 1;
+        if let Some(after) = examined(&state, id) {
+            assert!(after - before <= SITE_ATTEMPTS, "one slice per pass");
+        }
+        assert!(passes <= frontages, "the planner must finish the sweep");
+    }
+    assert!(passes >= frontages / SITE_ATTEMPTS as usize - 1);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.projects[0].blueprint, "house");
+    assert!(record.projects[0].ordered);
+    assert_eq!(access::orders(record).count(), 0);
+}
+
+/// The sweep is runtime scratch: a restart mid-sweep keeps only the saved
+/// order, whose next planning pass re-derives the sweep from its first slice
+/// and still starts it.
+#[test]
+fn a_restart_mid_sweep_rederives_the_search_and_starts_the_order() {
+    let (mut state, id, frontages) = owner_in_open_plan();
+    assert_eq!(
+        request_build(&mut state, id, "house").unwrap(),
+        OrderOutcome::Queued {
+            reason: site_refusals::WAITING_FOR_SITE.into()
+        }
+    );
+    plan(&mut state, id);
+    assert_eq!(examined(&state, id), Some(2 * SITE_ATTEMPTS));
+    let restored: crate::settlements::SettlementRecord =
+        serde_json::from_slice(&serde_json::to_vec(state.settlements.get(id).unwrap()).unwrap())
+            .unwrap();
+    crate::settlements::validate_record(&restored).unwrap();
+    state.settlements.site_sweep.clear();
+    state.settlements.site_watch.clear();
+    state.settlements.order_refusal.clear();
+    state
+        .settlements
+        .apply_image(crate::settlements::RecordImage {
+            id,
+            value: Some(restored),
+        });
+    plan(&mut state, id);
+    assert_eq!(examined(&state, id), Some(SITE_ATTEMPTS));
+    for _ in 0..frontages {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            break;
+        }
+        plan(&mut state, id);
+    }
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.projects[0].blueprint, "house");
+    assert_eq!(access::orders(record).count(), 0);
+}

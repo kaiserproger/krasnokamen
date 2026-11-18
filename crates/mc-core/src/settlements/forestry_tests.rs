@@ -209,7 +209,7 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
     fund(&mut state, "storage", 1);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let log = state.world.block_at(root[0], root[1], root[2]).unwrap();
-    construction::request_build(&mut state, id, "storage").unwrap();
+    construction::tests::request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.origin, expected.origin);
     assert_eq!(
@@ -798,7 +798,7 @@ fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
         "owner-approved indistinguishable historical replacement"
     );
     fund(&mut state, "storage", 1);
-    construction::request_build(&mut state, id, "storage").unwrap();
+    construction::tests::request_started(&mut state, id, "storage");
     let before = count(&state, "minecraft:birch_log");
     for _ in 0..100 {
         if count(&state, "minecraft:birch_log") - before == 8 {
@@ -893,7 +893,7 @@ fn imported_world_without_matching_generator_identity_clears_nothing() {
 fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
     let (mut state, id, builder, _, _, _) = forest();
     fund(&mut state, "storage", 1);
-    construction::request_build(&mut state, id, "storage").unwrap();
+    construction::tests::request_started(&mut state, id, "storage");
     let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();

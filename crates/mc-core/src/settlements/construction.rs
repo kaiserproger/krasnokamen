@@ -264,7 +264,8 @@ fn submit_order(
         Err(reason)
             if reason == "Busy."
                 || reason.starts_with("not enough:")
-                || reason == "waiting for forest evidence" =>
+                || reason == "waiting for forest evidence"
+                || reason == site_refusals::WAITING_FOR_SITE =>
         {
             let record = state
                 .settlements
@@ -344,7 +345,7 @@ pub(crate) fn pending_reason_at(
     }
     Some(
         if order.building.is_none() {
-            "waiting for a site"
+            site_refusals::WAITING_FOR_SITE
         } else {
             "ready"
         }
@@ -978,9 +979,11 @@ fn start_build(
         return Err(error);
     }
     let images = executor::source_images(state, id);
-    // A direct owner request searches once for immediate admission. Retried
-    // pending work shares the autonomous planner's bounded, resumable scan.
-    let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
+    // A direct owner request and retried pending work examine the same bounded,
+    // resumable sweep slice: never the whole street plan inside one tick (pin
+    // 7e421d34c060: one 4.3 s command tick). A sweep the slice does not finish
+    // waits for a site; the planner continues it on later passes.
+    let (start, attempts) = (planning_cursor.unwrap_or(0), SITE_ATTEMPTS);
     let forest_misses = state
         .settlements
         .forest
@@ -1005,6 +1008,7 @@ fn start_build(
         site,
         cursor,
         report,
+        running,
         ..
     } = pass;
     let Some(mut site) = site else {
@@ -1023,11 +1027,10 @@ fn start_build(
             let record = state.settlements.get_mut(id).expect("planned settlement");
             record.construction_cursor = cursor;
             record.revision = record.revision.saturating_add(1);
-            site_refusals::observe(state, id, &blueprint.id, report);
         }
-        return Err(
-            "No free loaded construction site is available within the material budget.".into(),
-        );
+        // Every examined slice belongs to the refusal watch's sweep total.
+        site_refusals::observe(state, id, &blueprint.id, report);
+        return Err(site_refusals::miss(running));
     };
     site.project.ordered = true;
     // The admitted project's own handle is the authority, not a search by
@@ -1645,8 +1648,8 @@ pub(crate) fn upgrade_available(state: &TickState, id: SettlementId, building: B
         .is_some_and(|building| upgrade_blueprint(state, id, building).is_some())
 }
 
-/// Lot candidates examined per autonomous planning pass; an owner order
-/// examines every candidate of the street plan once.
+/// Lot candidates examined per planning pass, and by an owner order in the
+/// tick that admits it.
 const SITE_ATTEMPTS: u32 = 64;
 /// Ground may differ this much from the bell's elevation and still be a site.
 pub(super) const SITE_BAND: i32 = 8;

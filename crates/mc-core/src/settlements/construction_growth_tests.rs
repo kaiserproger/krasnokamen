@@ -1,5 +1,6 @@
 use super::tests::{
-    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, start,
+    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, request_started,
+    start,
 };
 use super::*;
 use crate::settlements::allocator::tests::block;
@@ -149,10 +150,7 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
 fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
     let (mut state, id) = housing_fixture(true);
     stock_buildings(&mut state, &[("spanish_church", 1)]);
-    assert_eq!(
-        request_build(&mut state, id, "spanish_church").unwrap(),
-        OrderOutcome::Started
-    );
+    request_started(&mut state, id, "spanish_church");
     assert_eq!(
         state.settlements.get(id).unwrap().projects[0].blueprint,
         "spanish_church"
@@ -218,10 +216,7 @@ fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
 #[test]
 fn a_house_without_a_site_does_not_hold_a_direct_farm_order() {
     let (mut state, id) = house_without_site();
-    assert_eq!(
-        request_build(&mut state, id, "farm").unwrap(),
-        OrderOutcome::Started
-    );
+    request_started(&mut state, id, "farm");
 }
 
 #[test]
@@ -890,7 +885,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     fund(&mut state, "spanish_fortress", 1);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let original = state.world.block_at(root[0], root[1], root[2]);
-    request_build(&mut state, id, "spanish_fortress").unwrap();
+    request_started(&mut state, id, "spanish_fortress");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(
         (project.origin, project.rotation),

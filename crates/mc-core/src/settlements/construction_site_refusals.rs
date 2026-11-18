@@ -154,6 +154,20 @@ pub(super) fn observe(state: &mut TickState, id: SettlementId, blueprint: &str, 
     }
 }
 
+/// Queue reason of a funded new-building order whose bounded site sweep is
+/// still running: later planning passes continue it.
+pub(super) const WAITING_FOR_SITE: &str = "waiting for a site";
+
+/// Admission refusal of a pass that found no site: a sweep that is still
+/// running waits for a site, a finished one has no free lot.
+pub(super) fn miss(running: bool) -> String {
+    if running {
+        WAITING_FOR_SITE.into()
+    } else {
+        "No free loaded construction site is available within the material budget.".into()
+    }
+}
+
 /// Solid work the bounded terrain window would rewrite on this lot: cells the
 /// plan fills below the authored floor plus cells it excavates inside the
 /// authored volume. A fluid fill cell is a fill cell and belongs to exactly one
@@ -210,6 +224,12 @@ impl Sweeps {
     /// Some unfinished sweep already holds a legal candidate.
     pub(super) fn waiting(&self) -> bool {
         self.live.values().any(|sweep| sweep.best.is_some())
+    }
+
+    /// Candidates this blueprint's live sweep has examined (test observer).
+    #[cfg(test)]
+    pub(super) fn examined(&self, blueprint: &str) -> Option<u32> {
+        self.live.get(blueprint).map(|sweep| sweep.next)
     }
 }
 

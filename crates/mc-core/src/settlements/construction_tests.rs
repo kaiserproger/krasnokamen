@@ -82,11 +82,8 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
         &bill,
         &executor::source_images(&state, id)
     ));
-    let outcome = request_build(&mut state, id, "lumber_camp").unwrap();
-    assert!(
-        !state.settlements.get(id).unwrap().projects.is_empty(),
-        "funded admission: {outcome:?}"
-    );
+    // Funded admission.
+    request_started(&mut state, id, "lumber_camp");
     for _ in 0..4096 {
         if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
@@ -151,7 +148,7 @@ fn storage_order_uses_acacia_logs_without_oak() {
     {
         chest.slots[slot] = ItemStack::new(item, count);
     }
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(project.blueprint, "storage");
     complete(&mut state, id, builder);
@@ -217,6 +214,36 @@ pub(crate) fn open_plan(state: &mut TickState) {
         }
     }
     state.world.fold_overlay();
+}
+
+/// Planning passes until no owner order still waits for its site: the
+/// admitting tick examines one bounded slice of the sweep, later passes finish
+/// it (pin 7e421d34c060 order stall). A started order needs no pass.
+pub(crate) fn finish_sweep(state: &mut TickState, id: SettlementId) {
+    let waiting = |state: &TickState| {
+        (0..access::orders(state.settlements.get(id).unwrap()).count()).any(|index| {
+            pending_reason_at(state, id, index).as_deref() == Some(site_refusals::WAITING_FOR_SITE)
+        })
+    };
+    for _ in 0..64 {
+        if !waiting(state) {
+            return;
+        }
+        plan(state, id);
+    }
+    panic!("a queued owner order still waits for its site after 64 planning passes");
+}
+
+/// An owner order run to its start: the admitting call examines one bounded
+/// slice of the site sweep, planning passes finish it.
+pub(crate) fn request_started(state: &mut TickState, id: SettlementId, blueprint: &str) {
+    match request_build(state, id, blueprint).unwrap() {
+        OrderOutcome::Started => {}
+        OrderOutcome::Queued { reason } if reason == site_refusals::WAITING_FOR_SITE => {
+            finish_sweep(state, id);
+        }
+        other => panic!("{blueprint} was not admitted: {other:?}"),
+    }
 }
 
 /// World position of the first oak log the project's rotated level places.
@@ -472,7 +499,7 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[25] =
             ItemStack::new(acacia_planks, 64);
         if ordered {
-            request_build(&mut state, id, "storage").expect("oak bill funds owner order");
+            request_started(&mut state, id, "storage");
         } else {
             plan_until_project(&mut state, id);
         }

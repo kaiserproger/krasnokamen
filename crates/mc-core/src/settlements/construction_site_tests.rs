@@ -1,4 +1,4 @@
-use super::tests::{fixture, fund, open_plan, start};
+use super::tests::{fixture, fund, open_plan, request_started, start};
 use super::*;
 
 // The acceptance window is part of the seed-24 regression, not its implementation.
@@ -238,7 +238,7 @@ fn owner_order_takes_the_cheapest_free_lot() {
     let (near, far) = near_and_far(&state, id);
     street_plateau(&mut state, id, &[near, far]);
     let expected = ranking_lot(&state, id, "storage");
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
@@ -307,7 +307,7 @@ fn owner_order_in_a_cluttered_village_finds_the_clearing_at_once() {
         }
     }
     state.world.fold_overlay();
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     let size = blueprints::get(&state.registry, "storage")
         .unwrap()
@@ -846,8 +846,8 @@ fn autonomous_admission_takes_the_level_lot_over_a_foundation_lot() {
 #[test]
 fn owner_order_takes_the_cheaper_level_lot_over_a_foundation_lot() {
     let (mut state, id, _, far) = unfunded_near_foundation();
-    // The owner order scans the whole plan once and takes the level lot.
-    request_build(&mut state, id, "storage").expect("a whole sweep admits the level lot");
+    // The owner order's sweep covers the whole plan and takes the level lot.
+    request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
@@ -916,7 +916,7 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     let site = first_legal_lot(&state, id, "storage");
     assert_eq!((site.lot.origin, site.lot.rotation), ([11, 200, 13], 1));
     pin_lot(&mut state, id, "storage", &site);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let storage = state.settlements.get(id).unwrap().projects[0].clone();
     complete(&mut state, id, slot);
     assert_eq!((storage.origin, storage.rotation), ([11, 200, 13], 1));
@@ -1046,7 +1046,7 @@ fn funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge() {
         }
         state.world.fold_overlay();
         fund(&mut state, name, 1);
-        request_build(&mut state, id, name).unwrap();
+        request_started(&mut state, id, name);
         let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, name);
         assert_eq!(project.origin, site.lot.origin);
@@ -1075,7 +1075,7 @@ fn active_street_fixture() -> (TickState, SettlementId, crate::entities::EntityS
     }
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
     assert_eq!(
@@ -1132,7 +1132,7 @@ fn street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds() {
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
     stock_seeds(&mut state, 12);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
     assert_eq!(
@@ -1188,7 +1188,7 @@ fn meadow_fixture() -> (TickState, SettlementId, crate::entities::EntitySlot) {
     }
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     super::tests::complete(&mut state, id, slot);
     (state, id, slot)
 }

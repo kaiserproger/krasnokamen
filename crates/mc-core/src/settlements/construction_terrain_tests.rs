@@ -1,6 +1,6 @@
 //! B-min: bounded solid terrain, whole-sweep lot ranking, credited cuts.
 use super::site_tests::{Site, storage_lots, street_plateau};
-use super::tests::{attempt, complete, fixture, fund, open_plan};
+use super::tests::{attempt, complete, fixture, fund, open_plan, request_started};
 use super::*;
 use crate::settlements::allocator::tests::block;
 
@@ -563,7 +563,7 @@ fn excavated_solids_are_credited_once_and_the_fill_is_debited() {
         slots[free] = mc_data::ItemStack::new(dirt_item, 8);
     }
     let dirt = dirt + 8;
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     let project = state
         .settlements
         .get(id)
@@ -608,7 +608,7 @@ fn a_full_store_waits_without_editing_or_losing_the_excavated_block() {
             *slot = mc_data::ItemStack::new(sticks, 64);
         }
     }
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     for _ in 0..3 {
         attempt(&mut state, id, builder);
     }
@@ -645,8 +645,8 @@ fn a_foundation_shortfall_waits_as_collecting_material_then_finishes() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     dig(&mut state, &site, 2);
-    request_build(&mut state, id, "storage")
-        .expect("admission is decided on the authored bill, not the foundation");
+    // Admission is decided on the authored bill, not the foundation.
+    request_started(&mut state, id, "storage");
     let project = state
         .settlements
         .get(id)
@@ -758,7 +758,7 @@ fn player_terrain_edited_after_admission_outside_the_territory_stops_the_debit()
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     let next = executor::next_cell(&state, id, &project.structure)
         .unwrap()
@@ -786,7 +786,7 @@ fn player_terrain_edits_inside_the_territory_are_cut_and_credited_at_debit() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     state.block_log = super::super::forestry::tests::player_history(&state, pillar.cells[0], 0);
     let before = stock(&state, pillar.item);
     let uuid = state.entities.row(builder).uuid;
@@ -832,7 +832,7 @@ fn terrain_is_cut_top_down_and_no_step_drops_more_than_one_block() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 3);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = state
         .settlements
         .get(id)
@@ -1232,7 +1232,7 @@ fn a_flat_tie_goes_to_the_lot_nearest_the_anchor() {
         distance < near(westmost.0),
         "premise: the westmost tie {westmost:?} is not the nearest {origin:?}"
     );
-    request_build(&mut state, id, "storage").expect("a legal storage lot");
+    request_started(&mut state, id, "storage");
     let project = state.settlements.get(id).unwrap().projects.first().unwrap();
     assert_eq!(
         (project.origin, project.rotation),
@@ -1252,7 +1252,7 @@ fn a_cut_credit_block_and_cursor_survive_the_record_round_trip() {
     let pillar = pillar(&mut state, &site, "sand", "sand", 1);
     let cuts = pillar.cells.len();
     let sand = stock(&state, pillar.item);
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     complete(&mut state, id, builder);
     assert_eq!(stock(&state, pillar.item), sand + cuts as i64);
     let credited = stock(&state, pillar.item);
@@ -1308,7 +1308,7 @@ fn a_credited_cut_survives_a_journal_reopen() {
     state.refresh_active_chunks(0);
     let pillar = pillar(&mut state, &site, "sand", "sand", 1);
     let cut_at = pillar.cells[0];
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     let structure = state
         .settlements
         .get(id)

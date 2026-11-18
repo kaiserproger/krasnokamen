@@ -1382,7 +1382,8 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     assert_eq!(state.world.block_at(8, 201, 8), before_block);
     assert_eq!(poor.title, page.title);
 
-    // Funded stock starts the single project immediately, with no debit or edit.
+    // Funded stock queues the order while its bounded site sweep runs; planning
+    // passes start the single project, with no debit or edit.
     crate::settlements::construction::tests::fund(&mut state, "watch_tower", 1);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let ordered = last_dialog(&click(
@@ -1392,10 +1393,13 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         &[("blueprint", string("watch_tower"))],
     ));
     assert!(
-        ordered.body.contains("Started Watchtower construction."),
+        ordered
+            .body
+            .contains("Queued Watchtower: waiting for a site"),
         "{}",
         ordered.body
     );
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let project = state
         .settlements
         .get(id)
@@ -1403,7 +1407,7 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         .projects
         .first()
         .cloned()
-        .expect("funded order starts immediately");
+        .expect("funded order starts");
     assert_eq!(project.blueprint, "watch_tower");
     assert_eq!(project.level, 1);
     assert!(!project.structure.is_empty());
@@ -1463,6 +1467,7 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                 "project_order",
                 &[("blueprint", string("spanish_plaza"))],
             );
+            crate::settlements::construction::tests::finish_sweep(&mut state, id);
             let project = &state.settlements.get(id).unwrap().projects[0];
             assert_eq!(project.blueprint, "spanish_plaza");
             let snapshot =
@@ -1949,6 +1954,7 @@ fn project_status_active_shows_readable_progress() {
         "project_order",
         &[("blueprint", string("watch_tower"))],
     );
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let project = state
         .settlements
         .get(id)
