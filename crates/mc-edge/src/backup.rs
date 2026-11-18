@@ -239,6 +239,17 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
     if !files.contains_key(NATIVE_DATABASE) {
         bail!("backup requires a native-v2 world with {NATIVE_DATABASE}");
     }
+    // Books R4-P1: a backup of a store that disagrees with its checkpoint marker
+    // would preserve an already lost world. The pair is verified, not rewritten;
+    // a store redb must repair is repaired here first, as the next serve would.
+    // This opens the database through its own handle, so it runs before the
+    // exclusive byte-range lease on that file (which also denies a second handle
+    // on Windows).
+    let (store_uuid, store_tick) =
+        mc_world::native::NativeStore::read_marker_fields(&world.join(NATIVE_DATABASE))
+            .map_err(|error| anyhow::anyhow!("backup source store: {error}"))?;
+    mc_world::store_marker::verify(&world, store_uuid, store_tick)
+        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
     let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
     require_empty(&out)?;
     std::fs::create_dir_all(&out)?;
@@ -405,6 +416,7 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         }
     }
     std::fs::create_dir_all(&target)?;
+    let created_target = target_lease.is_none();
     let _target_lease = match target_lease {
         Some(lease) => lease,
         None => ExclusiveLease::acquire(&target)?,
@@ -423,6 +435,42 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         }
     }
     mc_world::atomic_file::sync_parent_dir(&target)?;
+    // Books R4-P1: the copied marker and the copied store must agree — the same
+    // store id and a store checkpoint at or after the marker's tick — and the
+    // marker must be present: every world this build writes has one, so a backup
+    // without it is not restorable. A backup that pairs one world's marker with
+    // another's store, or a store rolled back behind its marker, is refused
+    // instead of restored as a valid world.
+    let restored_database = target.join(NATIVE_DATABASE);
+    let pair = match mc_world::store_marker::read(&target) {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err("the backup has no checkpoint marker".to_owned()),
+        Err(error) => Err(error.to_string()),
+    }
+    .and_then(|()| {
+        mc_world::native::NativeStore::read_marker_fields(&restored_database)
+            .map_err(|error| format!("restored {}: {error}", restored_database.display()))
+    })
+    .and_then(|(store_uuid, store_tick)| {
+        mc_world::store_marker::verify(&target, store_uuid, store_tick)
+            .map_err(|error| error.to_string())
+    });
+    if let Err(error) = pair {
+        // Nothing the restore created survives a refusal: the whole target when
+        // this restore made it, otherwise the files it copied and the data
+        // directories it created under an existing empty target.
+        if created_target {
+            let _ = std::fs::remove_dir_all(&target);
+        } else {
+            for name in files.keys() {
+                let _ = std::fs::remove_file(target.join(name));
+            }
+            for directory in ["native", "journal"] {
+                let _ = std::fs::remove_dir(target.join(directory));
+            }
+        }
+        bail!("restored world is inconsistent: {error}; nothing was kept");
+    }
     println!(
         "restore of {} into {} complete: {} files verified",
         from.display(),

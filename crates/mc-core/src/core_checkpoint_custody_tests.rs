@@ -345,6 +345,7 @@ impl World {
             &self.config.world_dir,
             &crate::native_checkpoint::tests::fixture_store(&self.config).unwrap(),
             &std::sync::atomic::AtomicU64::new(self.manifest.tick),
+            &std::sync::atomic::AtomicBool::new(false),
             &mut self.manifest,
             &mut Default::default(),
         );

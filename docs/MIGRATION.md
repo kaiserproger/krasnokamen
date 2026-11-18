@@ -339,10 +339,20 @@ config, content and deployment with the native world.
 ### Downgrading the Krasnokamen binary
 
 Never open a world with an older binary than the one that last wrote it. Native
-manifests and WAL records are forward-only: an older reader either defaults
-newer state away (the checkpoint manifest has no format version and
-`serde(default)` on every newer field) or refuses the tail, and either way the
-world it opens is not the world that was saved.
+manifests and WAL records are forward-only: a reader from another manifest
+format version refuses the checkpoint and an older reader refuses a WAL tail it
+does not decode; an unknown newer field is also defaulted away by
+`serde(default)`, and either way the world it opens is not the world that was
+saved.
+
+The native store also carries a store id and the world directory a
+`checkpoint.marker` (`(store id, checkpoint tick)`). There is no converter: a
+world written before those keys, backed up without them, or whose store rolled
+back behind the marker refuses startup instead of being rewritten, and a restore
+that pairs a marker with another store is refused before the target is kept.
+Create the world with this build (`Core::open` on an empty directory, or `world
+import-anvil` from an export) and keep the whole world directory together in
+every copy and backup.
 
 Do not run an older Krasnokamen binary on a world that a build with cow, pig,
 chicken and zombie-nautilus variant persistence has served. The tick WAL refuses

@@ -23,6 +23,9 @@ const DOMAINS: &[&str] = &[
     "conversion_extras",
 ];
 const PLUGIN_DOMAINS: &[&str] = &["plugins", "plugin_startup"];
+/// The manifest format this build reads and writes; mirrors
+/// `mc_core::native_checkpoint::MANIFEST_VERSION`.
+pub(super) const MANIFEST_VERSION: u32 = 1;
 const VERSIONS: &[u8] = b"chunk=1;dictionary=1;entity=1;tick=1;global=1;player=1";
 const LIMIT: usize = 16 * 1024 * 1024;
 
@@ -81,6 +84,25 @@ fn micros(started: std::time::Instant) -> u64 {
 
 fn failure(domain: &str, detail: impl std::fmt::Display) -> NativeError {
     NativeError::Source(format!("native {domain}: {detail}"))
+}
+/// Refuse a manifest whose format this build does not read. Checked before any
+/// other row is decoded so an old world names its version, not a decode error.
+fn require_manifest_version(value: &Value) -> Result<(), NativeError> {
+    if value["domain_versions"]["manifest"].as_u64() != Some(u64::from(MANIFEST_VERSION)) {
+        return Err(failure("checkpoint", "unsupported manifest format version"));
+    }
+    Ok(())
+}
+/// Refuse a committed store whose manifest this build does not read, before
+/// decoding anything else. Offline maintenance opens a store without the
+/// reader path, so it needs this check on its own.
+pub(super) fn require_current_manifest(database: &redb::Database) -> Result<(), NativeError> {
+    let transaction = db(database.begin_read())?;
+    let global = db(transaction.open_table(GLOBAL))?;
+    let Some(record) = db(global.get("checkpoint"))? else {
+        return Ok(());
+    };
+    require_manifest_version(&json("checkpoint", &decode(record.value())?)?)
 }
 fn json(domain: &str, record: &NativeDomainRecord) -> Result<Value, NativeError> {
     let value: Value = serde_json::from_slice(&record.payload).map_err(|e| failure(domain, e))?;
@@ -151,6 +173,25 @@ fn decode(bytes: &[u8]) -> Result<NativeDomainRecord, NativeError> {
         captured_tick,
         payload: payload.to_vec(),
     })
+}
+
+/// Captured tick of the committed checkpoint row, if one exists.
+pub(super) fn tick_from(tx: &redb::ReadTransaction) -> Result<Option<u64>, NativeError> {
+    let global = db(tx.open_table(GLOBAL))?;
+    db(global.get("checkpoint"))?
+        .map(|record| decode_envelope(record.value()).map(|(_, captured_tick, _)| captured_tick))
+        .transpose()
+}
+
+/// Store id from the native header and the committed checkpoint tick.
+fn marker_fields_from(tx: &redb::ReadTransaction) -> Result<([u8; 16], Option<u64>), NativeError> {
+    let header = db(tx.open_table(super::HEADER))?;
+    let store_uuid = db(header.get("store_uuid"))?
+        .ok_or_else(|| failure("world/store_uuid", "missing"))?
+        .value()
+        .try_into()
+        .map_err(|_| failure("world/store_uuid", "invalid length"))?;
+    Ok((store_uuid, tick_from(tx)?))
 }
 pub(super) fn initialize(tx: &redb::WriteTransaction) -> Result<(), NativeError> {
     db(tx.open_table(GLOBAL))?;
@@ -265,6 +306,7 @@ fn validate_globals(
         .get("checkpoint")
         .ok_or_else(|| failure("checkpoint", "missing"))?;
     let checkpoint = json("checkpoint", checkpoint_record)?;
+    require_manifest_version(&checkpoint)?;
     let versions = checkpoint["domain_versions"]
         .as_object()
         .ok_or_else(|| failure("checkpoint", "missing domain versions"))?;
@@ -447,6 +489,7 @@ fn validate_globals(
         ));
     }
     let names = [
+        "manifest",
         "climate",
         "gamerules",
         "block_ticks",
@@ -467,6 +510,7 @@ fn validate_globals(
     Ok(checkpoint)
 }
 fn validate_manifest(value: &Value, tick: u64) -> Result<(), NativeError> {
+    require_manifest_version(value)?;
     for key in [
         "tick",
         "dimensions",
@@ -814,6 +858,35 @@ impl NativeStore {
         Ok(db(global.get("checkpoint"))?.is_some())
     }
 
+    /// Tick of the committed checkpoint row, if any, without decoding the
+    /// manifest. This is the tick the checkpoint marker witnesses.
+    pub fn checkpoint_tick(&self) -> Result<Option<u64>, NativeError> {
+        tick_from(&db(self.database.begin_read())?)
+    }
+
+    /// Offline operator path: the store id and committed checkpoint tick of a
+    /// stopped world, without validating the store against a configuration.
+    /// Used to check a restored or copied world against its checkpoint marker.
+    /// A clean database is read-only; a copy that redb would repair on first
+    /// serve (a hot backup of a live store, an unclean stop) is opened
+    /// writable, exactly as recovery will, because only then is its committed
+    /// tick readable. Nothing but redb's own repair bytes changes.
+    pub fn read_marker_fields(
+        path: &std::path::Path,
+    ) -> Result<([u8; 16], Option<u64>), NativeError> {
+        let read = |database: &redb::ReadOnlyDatabase| -> Result<_, NativeError> {
+            marker_fields_from(&db(database.begin_read())?)
+        };
+        match super::read_only_database(path, super::DB_CACHE_BYTES) {
+            Ok(database) => read(&database),
+            Err(NativeError::Source(_)) => {
+                let database = db(super::database_builder(super::DB_CACHE_BYTES).open(path))?;
+                marker_fields_from(&db(database.begin_read())?)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn commit_checkpoint(
         &self,
         image: NativeCheckpoint<'_>,
@@ -915,6 +988,7 @@ impl NativeStore {
             }
             if let Some(previous) = &previous {
                 let previous = json("checkpoint", previous)?;
+                require_manifest_version(&previous)?;
                 let old = previous["players"]
                     .as_object()
                     .ok_or_else(|| failure("checkpoint/players", "invalid previous map"))?;

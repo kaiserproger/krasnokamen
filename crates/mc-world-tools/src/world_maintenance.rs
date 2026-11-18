@@ -75,9 +75,9 @@ fn stopped_world(config: &CoreConfig) -> Result<StoppedWorld, CoreError> {
     })
 }
 
-fn open_store(config: &CoreConfig, world: &StoppedWorld) -> Result<NativeStore, CoreError> {
-    NativeStore::open(
-        &world.path,
+fn open_store(config: &CoreConfig) -> Result<NativeStore, CoreError> {
+    NativeStore::open_checked(
+        &config.world_dir,
         mc_core::native_checkpoint::native_identity(config),
     )
     .map_err(|error| mc_core::native_checkpoint::open_refusal(config, &config.world_dir, error))
@@ -132,7 +132,7 @@ fn prune_stopped(
 ) -> Result<PruneReport, CoreError> {
     let world = stopped_world(config)?;
     let bytes_before = file_bytes(&world.path)?;
-    let store = open_store(config, &world)?;
+    let store = open_store(config)?;
     // Drop the read transaction before classification: compaction refuses while
     // one is open.
     let manifest_tick = {
@@ -168,7 +168,7 @@ fn prune_stopped(
 pub fn compact_world(config: &CoreConfig) -> Result<CompactReport, CoreError> {
     let world = stopped_world(config)?;
     let bytes_before = file_bytes(&world.path)?;
-    let store = open_store(config, &world)?;
+    let store = open_store(config)?;
     let rewritten_rows = store.repack_rows().map_err(storage)?;
     store.compact().map_err(storage)?;
     Ok(CompactReport {

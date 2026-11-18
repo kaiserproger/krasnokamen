@@ -221,6 +221,13 @@ pub(crate) static PANIC_CHECKPOINT_COMMIT: parking_lot::Mutex<Option<std::path::
 static FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT: std::sync::Mutex<Option<std::path::PathBuf>> =
     std::sync::Mutex::new(None);
 
+/// Per-world fault injection: the next checkpoint marker write for each armed
+/// world fails once, after a successful native commit. The writer must then
+/// send no positive ACK, prune nothing and stop (fail closed).
+#[cfg(test)]
+pub(crate) static FAIL_CHECKPOINT_MARKER: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
 /// Test hook: when armed with a world dir, every [`JournalWriter::append`]
 /// for THAT dir fails with a storage error (simulates a torn/failed WAL
 /// batch). The journal thread returns (receiver dropped); the tick loop's
@@ -898,6 +905,42 @@ impl Core {
         }
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
+        // Books R4-P1: before any replay, refuse a store that the checkpoint
+        // marker proves lost a committed checkpoint. A store ahead of the
+        // marker is the crash window between the commit and the marker write;
+        // it is accepted and the marker is rewritten.
+        let store_tick = store
+            .checkpoint_tick()
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        // A first start interrupted between its tick-0 commit and the first
+        // marker write never served a player. The first-start file is the
+        // bootstrap proof: exactly that state (first-start present, no marker,
+        // checkpoint 0) publishes the pair once from the store it just created.
+        // Every other missing or corrupt marker is refused by the check below.
+        if resumed
+            && store_tick == Some(0)
+            && mc_world::store_marker::read(&config.world_dir)
+                .map_err(|e| CoreError::Storage(e.to_string()))?
+                .is_none()
+        {
+            mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).map_err(
+                |error| {
+                    CoreError::Storage(format!(
+                        "world {}: interrupted first start could not publish its checkpoint \
+                         marker: {error}",
+                        config.world_dir.display()
+                    ))
+                },
+            )?;
+        }
+        mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
+            |error| {
+                CoreError::Storage(format!(
+                    "world {}: {error}; refusing to open",
+                    config.world_dir.display()
+                ))
+            },
+        )?;
         let base_registry = Arc::clone(&registry);
         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
             &config,
@@ -1686,6 +1729,10 @@ mod native_checkpoint_crash_tests;
 #[cfg(test)]
 #[path = "core_checkpoint_custody_tests.rs"]
 mod checkpoint_custody_tests;
+
+#[cfg(test)]
+#[path = "store_marker_tests.rs"]
+mod store_marker_tests;
 
 #[cfg(test)]
 #[path = "native_component_26_3_tests.rs"]

@@ -230,6 +230,7 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
             directory.path(),
             &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
             &std::sync::atomic::AtomicU64::new(manifest.tick),
+            &std::sync::atomic::AtomicBool::new(false),
             &mut manifest,
             &mut Default::default(),
         );

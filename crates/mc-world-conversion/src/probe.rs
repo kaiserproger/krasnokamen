@@ -149,6 +149,9 @@ fn probe(
     let store =
         NativeReadOnlyStore::open_with_cache(&path, native_identity(&config), 16 * 1024 * 1024)
             .map_err(storage)?;
+    // Books R4-P1: a probe of a store that lost a committed checkpoint would
+    // report the older world as truth; refuse before reading it.
+    store.verify_marker(&config.world_dir).map_err(storage)?;
     let reader = store.checkpoint_reader().map_err(storage)?;
     let image = reader.read_checkpoint_metadata().map_err(storage)?;
     let manifest: CheckpointManifest = serde_json::from_slice(&image.globals["checkpoint"].payload)

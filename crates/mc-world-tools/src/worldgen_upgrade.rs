@@ -54,6 +54,10 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
         return Err(mc_core::native_checkpoint::import_required(config));
     }
     let current = mc_worldgen::WORLDGEN_REVISION;
+    // Books R4-P1: the revision upgrade rewrites the store, so the pair check
+    // runs before redb recovery metadata or any contract row changes. The stored
+    // identity is read after it because the upgrade is allowed to change it.
+    NativeStore::check_marker_file(&config.world_dir, &path).map_err(storage)?;
     let stored_identity = NativeStore::read_identity_for_update(&path).map_err(storage)?;
     let Some(stored) = revision_only_difference(config, stored_identity) else {
         return Err(CoreError::Storage(
@@ -88,6 +92,10 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
         &contract(config, current)?,
     )
     .map_err(storage)?;
+    // No marker write here: the marker holds only the store id and the
+    // checkpoint tick, and the revision rewrite keeps both (it changes the
+    // identity and generation payloads, not the committed checkpoint). Only
+    // server start publishes a marker for a store ahead of it.
     Ok(WorldgenUpgrade {
         from_revision: stored,
         to_revision: current,

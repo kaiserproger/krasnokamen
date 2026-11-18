@@ -119,6 +119,10 @@ pub(crate) fn fixture_store(config: &CoreConfig) -> Result<Arc<NativeStore>, Cor
             &registry.items,
         )
         .map_err(storage)?;
+    // A real world always carries the checkpoint marker of its committed
+    // checkpoint; `Core::open` refuses a store that has one without it.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0)
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
     Ok(store)
 }
 
@@ -198,6 +202,8 @@ pub(crate) fn write_manifest(
             &registry.blocks,
             &registry.items,
         )
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), manifest.tick)
         .map_err(|e| CoreError::Storage(e.to_string()))
 }
 
@@ -1426,6 +1432,9 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
             &registry.items,
         )
         .unwrap();
+    // A world this build wrote always has its checkpoint marker; the subject
+    // here is the pre-plugin domain set, not the store identity.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).unwrap();
     drop(store);
     let core = crate::Core::open(config.clone()).unwrap();
     core.shutdown();
@@ -1439,6 +1448,84 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
     for domain in ["plugins", "plugin_startup"] {
         assert_eq!(manifest.domain_versions.get(domain), Some(&1));
         assert!(upgraded.globals.contains_key(domain));
+    }
+}
+
+#[test]
+fn manifest_format_version_is_required_in_root_and_children() {
+    let mut manifest = CheckpointManifest {
+        domain_versions: domain_versions(),
+        world_spawn: Some([0, 80, 0]),
+        ..Default::default()
+    };
+    for dimension in [Dimension::Nether, Dimension::End] {
+        manifest.dimensions.insert(
+            dimension,
+            Box::new(CheckpointManifest {
+                domain_versions: domain_versions(),
+                world_spawn: Some([0, 80, 0]),
+                ..Default::default()
+            }),
+        );
+    }
+    validate_manifest(&manifest).unwrap();
+
+    let mut missing = manifest.clone();
+    missing.domain_versions.remove("manifest");
+    let error = validate_manifest(&missing).unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported required domain versions"),
+        "{error}"
+    );
+
+    let mut child_missing = manifest.clone();
+    child_missing
+        .dimensions
+        .get_mut(&Dimension::Nether)
+        .unwrap()
+        .domain_versions
+        .remove("manifest");
+    assert!(validate_manifest(&child_missing).is_err());
+
+    let mut wrong = manifest.clone();
+    wrong.domain_versions.insert("manifest".into(), 2);
+    let error = validate_manifest(&wrong).unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported required domain versions"),
+        "{error}"
+    );
+
+    let mut child_wrong = manifest.clone();
+    child_wrong
+        .dimensions
+        .get_mut(&Dimension::End)
+        .unwrap()
+        .domain_versions
+        .insert("manifest".into(), 2);
+    assert!(validate_manifest(&child_wrong).is_err());
+}
+
+#[test]
+fn manifest_format_version_round_trips_through_the_writer() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    write_manifest(
+        &config,
+        &CheckpointManifest {
+            world_spawn: Some([0, 80, 0]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let persisted = read_manifest(&config).unwrap();
+    assert_eq!(persisted.domain_versions.get("manifest"), Some(&1));
+    assert_eq!(persisted.dimensions.len(), 2);
+    for (dimension, child) in &persisted.dimensions {
+        assert_eq!(
+            child.domain_versions.get("manifest"),
+            Some(&1),
+            "{dimension:?}"
+        );
     }
 }
 
