@@ -367,7 +367,7 @@ class CoverageClassTest(unittest.TestCase):
             row = take['wire']['episode_rows'][0]
             self.assertEqual(row['coverage_class'], 'lost')
             self.assertEqual(row['coverage_end'], 5145)
-            self.assertEqual(take['wire']['episodes_without_wire_step'], 1)
+            self.assertEqual(take['wire']['episodes_without_wire_step'], 0, 'the window holds a step')
             self.assertFalse(take['usable_for_d1'])
             self.assertTrue(any('lost' in gap for gap in take['coverage_gaps']))
 
@@ -389,6 +389,46 @@ class CoverageClassTest(unittest.TestCase):
         kind, end, _ = window_coverage({'motion': [5857, 7272]},
                                        self.evidence(spawn=2400, removed=[4359], positions=(5000, 6000)))
         self.assertEqual((kind, end), ('tracked', 7272))
+
+    def test_a_stepped_window_without_a_recording_blocks_the_take(self):
+        # the fail-open repro: window 5143-5149, last step at 5144, no --recording at all. The step
+        # witnesses 5140-5144 only; nothing witnesses 5145-5149, so the take cannot be bound.
+        positions = {'battle_start_tick': 5000, 'ids': {'1076': [
+            [5140, 0, 0, 0], [5144, round(4 * 4096), 0, 0], [5200, round(4 * 4096), 0, 0]]}}
+        with tempfile.TemporaryDirectory() as root:
+            take = analyse_take('take', take_directory(root, '\n'.join([episode_line(), summary_line()])),
+                                positions_file(root, positions), None, None, None)
+            row = take['wire']['episode_rows'][0]
+            self.assertEqual(row['coverage_class'], 'unresolved')
+            self.assertFalse(take['usable_for_d1'])
+            self.assertTrue(any('unjudged' in gap and 'no recording' in gap
+                                for gap in take['coverage_gaps']), take['coverage_gaps'])
+            self.assertEqual(take['wire']['windows_without_recording_evidence'], 1)
+
+    def test_an_id_absent_from_the_recording_blocks_the_take(self):
+        # a recording that never saw the id is not evidence that its window was observed
+        positions = {'battle_start_tick': 5000, 'ids': {'1076': [
+            [5140, 0, 0, 0], [5144, round(4 * 4096), 0, 0]]}}
+        with tempfile.TemporaryDirectory() as root:
+            take = analyse_take('take', take_directory(root, '\n'.join([episode_line(), summary_line()])),
+                                positions_file(root, positions), None, None, {})
+            self.assertEqual(take['wire']['episode_rows'][0]['coverage_class'], 'unresolved')
+            self.assertFalse(take['usable_for_d1'])
+            self.assertTrue(any('id absent from recording' in gap for gap in take['coverage_gaps']))
+
+    def test_a_stepped_window_with_tracking_evidence_stays_covered(self):
+        # control for the repro: the recording tracks the body through the window's end, so the
+        # steps it holds cover it and the take is bindable
+        positions = {'battle_start_tick': 5000, 'ids': {'1076': [
+            [5140, 0, 0, 0], [5144, round(4 * 4096), 0, 0], [5200, round(4 * 4096), 0, 0]]}}
+        evidence = {1076: {'spawn': 5100, 'removed': [], 'death': [], 'positions': [5140, 5144],
+                           'teleports': []}}
+        with tempfile.TemporaryDirectory() as root:
+            take = analyse_take('take', take_directory(root, '\n'.join([episode_line(), summary_line()])),
+                                positions_file(root, positions), None, None, evidence)
+            self.assertEqual(take['wire']['episode_rows'][0]['coverage_class'], 'covered')
+            self.assertTrue(take['usable_for_d1'])
+            self.assertEqual(take['coverage_gaps'], [])
 
     def test_a_teleport_in_a_stepped_window_blocks_the_take(self):
         positions = {'battle_start_tick': 5000, 'ids': {'1076': [

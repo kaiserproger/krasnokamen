@@ -21,8 +21,9 @@ usage:
   movement packet: spawn (`add_entity`), removal (`remove_entities`), death (`entity_event` 3) and
   position packets by entity id. `observed_zero` (tracked, never removed, no packet inside the
   window = it did not move) covers the window with zero motion; `lost`, `unobserved` and
-  `unresolved` keep the take unusable and name the reason. Without `--recording` every such episode
-  is `unresolved`.
+  `unresolved` keep the take unusable and name the reason. Without `--recording` — or when the id has
+  no evidence in the recording — no window can be judged, so every window is `unresolved` and the take
+  is unusable: a step inside a window witnesses its own interval only.
 
 Exit status: 0 = report written; 1 = malformed log (the offending line is named); 2 = at least one
 take has no exposure records (fail closed: absence of records is not zero exposure, and this tool
@@ -30,9 +31,10 @@ never reports a pass). A take that started a run always writes a summary, so a s
 broken or filtered log, not a clean battle.
 
 `complete` judges the log (one summary, agreeing with its lines, nothing suppressed or capped).
-`usable_for_d1` additionally needs every counted window joinable: no uncovered wire tail, no
-episode without a wire step, no `unsettled` close, no exposure id the wire never carried and no
-episode starting before its body's wire dismount. Both are reported per take and aggregated in
+`usable_for_d1` additionally needs every counted window judged over its whole span: a recording for
+every take, evidence for every exposed id, no window that is `lost`, `unobserved` or `unresolved`,
+no uncovered wire tail, no `unsettled` close, no exposure id the wire never carried and no episode
+starting before its body's wire dismount. Both are reported per take and aggregated in
 `pooled`.
 
 The report never decides the D1 verdict: it states the server-confirmed at-risk bodies and
@@ -475,19 +477,21 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             kind, coverage_end, note = window_coverage(episode, body)
             if kind == 'tracked':
                 classification = 'covered' if steps else 'observed_zero'
-            elif kind == 'unresolved' and body is None and steps:
-                # No recording evidence at all, but the window itself carries motion: the steps are
-                # the observation. Its tail stays unwitnessed, which is counted for the reviewer.
-                classification = 'covered'
-                take['_tail_unwitnessed'] = take.get('_tail_unwitnessed', 0) + 1
             else:
+                # No recording, no evidence for this id, a teleport, or a loss: a step inside the
+                # window only witnesses its own interval, never the window's whole span, so the
+                # window stays `unresolved`/`lost` and blocks the take. Fail closed, name it.
                 classification = kind
+                if body is None:
+                    missing = take.setdefault('_no_evidence', Counter())
+                    missing['no recording' if evidence is None else 'id absent from recording'] += 1
             if classification == 'lost' and coverage_end is not None:
                 note = (f"{note}; the window is covered only to tick {coverage_end}, "
                         f"its last {episode['motion'][1] - coverage_end} ticks are not observed")
-            if classification not in ('covered', 'observed_zero'):
+            if not steps and classification != 'observed_zero':
+                # A window with no step is only a hole when the recording does not show a tracked,
+                # never-removed body: `observed_zero` is the legitimate zero-motion case.
                 uncorrelated.append(episode['id'])
-                take.setdefault('_uncovered', Counter())[classification] += 1
             by_class[classification] += 1
             last_wire = take['coverage']['last_recorded_tick']
             if last_wire is not None and episode['motion'][1] > last_wire:
@@ -510,7 +514,7 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             'episodes_without_wire_step': len(uncorrelated),
             'episodes_past_the_last_packet': tail,
             'coverage_by_class': dict(by_class),
-            'windows_without_recording_evidence': take.pop('_tail_unwitnessed', 0),
+            'windows_without_recording_evidence': sum(take.get('_no_evidence', Counter()).values()),
             'observed_zero_episodes': by_class.get('observed_zero', 0),
             'episode_rows': rows,
         }
@@ -546,13 +550,21 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
                 f"uncovered wire tail: {tail_ticks} ticks past the last packet "
                 f"({take['wire']['episodes_past_the_last_packet']} episodes)")
         if take['wire']['episodes_without_wire_step']:
-            unobserved = {
-                name: count for name, count in take['wire']['coverage_by_class'].items()
-                if name in ('lost', 'unobserved', 'unresolved')
-            }
             coverage_gaps.append(
-                f"{take['wire']['episodes_without_wire_step']} episodes without a wire step "
-                f"({unobserved or 'unclassified'})")
+                f"{take['wire']['episodes_without_wire_step']} episodes without a wire step")
+        unobserved = {
+            name: count for name, count in take['wire']['coverage_by_class'].items()
+            if name in ('lost', 'unobserved', 'unresolved')
+        }
+        if unobserved:
+            coverage_gaps.append(
+                f"{sum(unobserved.values())} exposure windows not fully observed ({unobserved})")
+    no_evidence = take.pop('_no_evidence', Counter())
+    if no_evidence:
+        reasons = ', '.join(f"{count} {reason}" for reason, count in sorted(no_evidence.items()))
+        coverage_gaps.append(
+            f"{sum(no_evidence.values())} exposure windows unjudged: {reasons} "
+            f"(--recording supplies the take's own spawn/removal/teleport evidence)")
     unsettled = take['outcomes'].get('unsettled', 0)
     if unsettled:
         coverage_gaps.append(f"{unsettled} episodes closed without a final sample (unsettled)")
