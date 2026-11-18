@@ -46,7 +46,8 @@ fn implicit_preparation_tools_use_the_lowest_suitable_ordinary_tier() {
             tool_name
         );
         assert!(tool.enchantments.is_empty());
-        let drops = conserved_drops(&state, [8, 201, 4], block).unwrap();
+        let drops = conserved_drops(&state, [8, 201, 4], block)
+            .unwrap_or_else(|failure| panic!("{name}: {failure:?}"));
         assert!(!drops.is_empty(), "{name} must yield normal mining loot");
         assert!(drops.iter().all(|stack| {
             stack.count > 0

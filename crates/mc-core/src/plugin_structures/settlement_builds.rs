@@ -356,7 +356,7 @@ pub(crate) fn recover(
     let mut repair = Vec::new();
     let mut seen = BTreeSet::new();
     for (index, stage) in record.snapshot.stages.iter().enumerate().rev() {
-        if !matches!(stage.stage.as_str(), "fill" | "build") {
+        if !matches!(stage.stage.as_str(), "liquid" | "fill" | "build") {
             continue;
         }
         let current = record.snapshot.current_stage_index as usize;
@@ -368,6 +368,9 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed).rev() {
+            if !seen.insert(cell.at) || free_soil_work(target, cell) {
+                continue;
+            }
             let now = target
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
@@ -384,8 +387,7 @@ pub(crate) fn recover(
                 .ok_or(Failure::InvalidRequest)?;
             // Only an emptied cell is re-placed, as in `reopen_emptied`: a
             // solid foreign block in a placed cell keeps its place.
-            if seen.insert(cell.at)
-                && actual.block.raw_id != expected.block.raw_id
+            if actual.block.raw_id != expected.block.raw_id
                 && crate::settlements::construction::clearable(target, now)
             {
                 repair.push(cell.clone());
@@ -460,14 +462,6 @@ pub(crate) fn recover(
 /// Name of the final stage that re-places authored cells a foreign edit emptied.
 const REPAIR: &str = "repair";
 
-/// Completion check of a committed building structure: an authored
-/// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
-/// the blueprint needs a block) is queued into the `repair` stage, which the
-/// ordinary placement loop then re-places, paying the cell's material again;
-/// the structure leaves `Committed` for `Running`. A solid foreign block in an
-/// authored cell is not emptied and is never replaced.
-/// One pass over the structure's cells at completion, never per tick. Returns
-/// whether cells were queued (the building must not be certified yet).
 /// Whether a manifest cell is free soil work: no material was ever charged, so
 /// the cell only rewrites the ground already there.
 fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
@@ -499,6 +493,14 @@ pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bo
         && !crate::settlements::construction::relayout::soil(state, current)
 }
 
+/// Completion check of a committed building structure: an authored
+/// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
+/// the blueprint needs a block) is queued into the `repair` stage, which the
+/// ordinary placement loop then re-places, paying the cell's material again;
+/// the structure leaves `Committed` for `Running`. A solid foreign block in an
+/// authored cell is not emptied and is never replaced.
+/// One pass over the structure's cells at completion, never per tick. Returns
+/// whether cells were queued (the building must not be certified yet).
 pub(crate) fn reopen_emptied(
     state: &mut TickState,
     settlement: SettlementId,
@@ -652,25 +654,6 @@ pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str
         .and_then(|stage| stage.get("stage"))
         .and_then(serde_json::Value::as_str)
         .is_some_and(PortionKind::is_preparation)
-}
-
-#[cfg(test)]
-pub(crate) fn pause(
-    state: &mut TickState,
-    settlement: SettlementId,
-    handle: &str,
-) -> Result<(), Failure> {
-    let revision = status(state, settlement, handle)?.revision;
-    execute_operation(
-        state,
-        &owner(settlement),
-        &ScriptWorldStructureOperation::PauseStructure {
-            operation_id: format!("settlement-pause-{revision}"),
-            structure_id: handle.into(),
-            expected_revision: revision,
-        },
-    )
-    .map(|_| ())
 }
 
 pub(crate) fn advance(
@@ -835,6 +818,10 @@ pub(super) fn debit(
                 crate::settlements::construction::preparation::liquid::wake(state, cell.at);
             }
             return Err(Failure::Blocked);
+        }
+        // Paving and field retirement reshape existing soil without mining it.
+        if free_soil_work(state, cell) {
+            continue;
         }
         if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
             drops.extend(credit);

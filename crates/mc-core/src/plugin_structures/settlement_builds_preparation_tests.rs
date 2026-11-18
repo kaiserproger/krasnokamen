@@ -195,6 +195,12 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
 #[test]
 fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    state.registry = Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
     let site = ScriptWorldBounds::new(
         [root[0] - 2, root[1], root[2] - 2],
         [root[0] + 3, root[1] + 5, root[2] + 3],
@@ -221,7 +227,27 @@ fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
         debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
         Ok(())
     );
+    let dirt_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    let stored_soil = |state: &TickState| -> i32 {
+        state
+            .block_entities
+            .values()
+            .flat_map(|entity| entity.slots.iter())
+            .filter(|stack| stack.item_id == dirt_item && !stack.is_empty())
+            .map(|stack| stack.count)
+            .sum()
+    };
+    let before = stored_soil(&state);
     assert!(advance(&mut state, id, &handle, uuid).expect("the stage advances"));
+    assert_eq!(
+        stored_soil(&state),
+        before,
+        "free soil work keeps its ground, not a second dirt item"
+    );
     // The house stood; the player digs the free retirement cell out afterwards.
     state
         .world

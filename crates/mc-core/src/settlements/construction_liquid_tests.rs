@@ -326,6 +326,20 @@ fn the_liquid_stage_is_the_work_volume_sources_only() {
     );
 }
 
+/// A real one-block-high retaining shell around the fixture's work volume.
+fn enclose_bowl(state: &mut TickState, min: [i32; 3], max: [i32; 3]) {
+    let stone = state.registry.states.stone;
+    for x in min[0] - 1..=max[0] + 1 {
+        for z in min[2] - 1..=max[2] + 1 {
+            if x < min[0] || x > max[0] || z < min[2] || z > max[2] {
+                for y in min[1]..=max[1] {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+        }
+    }
+}
+
 /// A one-cell material-free settlement plan at `at`, the shape a road tile
 /// takes, so the next admission is exactly one placement.
 fn one_cell_project(
@@ -362,11 +376,13 @@ fn lava_source_and_flow_after_one_settlement_write() -> (TickState, [i32; 3], [i
     let (mut state, id, _slot) = fixture();
     let at = [3, 201, 3];
     let flow = [4, 201, 3];
-    let (project, bounds, cells) = one_cell_project(&state, id, at);
+    let (project, _, cells) = one_cell_project(&state, id, at);
+    let bounds = ScriptWorldBounds::new(at, flow).expect("source and draining flow volume");
     let source = state.registry.states.lava_levels[0];
     let flowing = state.registry.states.lava_levels[1];
     state.world.set_block(at[0], at[1], at[2], source);
     state.world.set_block(flow[0], flow[1], flow[2], flowing);
+    enclose_bowl(&mut state, at, flow);
     state.world.fold_overlay();
     // The structure image is taken here, so the lava is part of the certified
     // footprint and the next advance is not a `footprint_changed` pause.
@@ -655,6 +671,7 @@ fn flowing_lava_blocks_the_write_and_wakes_once() {
     let at = [3, 201, 3];
     let flowing = state.registry.states.lava_levels[1];
     state.world.set_block(at[0], at[1], at[2], flowing);
+    enclose_bowl(&mut state, at, at);
     state.world.fold_overlay();
     let dirt = state.registry.states.dirt;
     begin_plan(&mut state, id, vec![(at, dirt, None)]);
@@ -698,77 +715,6 @@ fn water_is_written_without_a_gate() {
         state.world.block_at(at[0], at[1], at[2]),
         Some(dirt),
         "water has no drain gate and is filled immediately"
-    );
-}
-
-/// A two-cell plan whose one-cell ring is solid, so the closed bowl holds.
-fn closed_two_cell_plan(state: &mut TickState, id: SettlementId) -> ([i32; 3], [i32; 3], String) {
-    let a = [3, 201, 3];
-    let b = [6, 201, 3];
-    let water = state.registry.states.water_levels[0];
-    let stone = state.registry.states.stone;
-    let dirt = state.registry.states.dirt;
-    state.world.set_block(b[0], b[1], b[2], water);
-    for x in 2..=7 {
-        for z in 2..=4 {
-            if !(3..=6).contains(&x) || z != 3 {
-                state.world.set_block(x, 201, z, stone);
-            }
-        }
-    }
-    state.world.fold_overlay();
-    let handle = begin_plan(state, id, vec![(a, dirt, None), (b, dirt, None)]);
-    (a, b, handle)
-}
-
-/// Recovery tests use an explicit owner pause, not a removed whole-box fence.
-fn pause_plan(state: &mut TickState, id: SettlementId) {
-    let handle = state.settlements.get(id).unwrap().projects[0]
-        .structure
-        .clone();
-    executor::pause(state, id, &handle).expect("the owner explicitly pauses");
-    assert_eq!(
-        executor::status(state, id, &handle).unwrap().state,
-        mc_script::ScriptStructureState::Paused
-    );
-}
-
-#[test]
-fn recover_refuses_an_open_shell() {
-    let (mut state, id, _) = fixture();
-    let (a, b, handle) = closed_two_cell_plan(&mut state, id);
-    let stone = state.registry.states.stone;
-    // Change the certified volume, then explicitly pause before recovery.
-    state.world.set_block(b[0], b[1], b[2], stone);
-    state.world.fold_overlay();
-    pause_plan(&mut state, id);
-    // A new fluid cell ahead of the plan with an opened ring: no resume.
-    let water = state.registry.states.water_levels[0];
-    let air = state.registry.states.air;
-    state.world.set_block(b[0], b[1], b[2], water);
-    state.world.set_block(2, 201, 3, air);
-    state.world.fold_overlay();
-    assert_eq!(
-        executor::recover(&mut state, id, &handle),
-        Err(mc_script::ScriptOperationFailure::Blocked)
-    );
-    let _ = a;
-}
-
-#[test]
-fn recover_refuses_a_new_preserved_supply() {
-    let (mut state, id, _) = fixture();
-    let (_a, b, handle) = closed_two_cell_plan(&mut state, id);
-    let stone = state.registry.states.stone;
-    state.world.set_block(b[0], b[1], b[2], stone);
-    state.world.fold_overlay();
-    pause_plan(&mut state, id);
-    let fence = block(&state, "minecraft:oak_fence", &[("waterlogged", "true")]);
-    state.world.set_block(b[0], b[1], b[2], fence);
-    state.world.fold_overlay();
-    assert_eq!(
-        executor::recover(&mut state, id, &handle),
-        Err(mc_script::ScriptOperationFailure::Blocked)
     );
 }
 
@@ -818,30 +764,21 @@ fn a_funded_fill_charges_once() {
 }
 
 #[test]
-fn a_refused_resume_keeps_a_paid_cell_and_its_charge() {
+fn a_preserved_supply_in_a_paid_liquid_cell_refuses_the_next_step_without_a_pause() {
     let (mut state, id, slot) = fixture();
     let a = [3, 201, 3];
     let b = [6, 201, 3];
     let dirt_item = state
         .registry
         .items
-        .id_of(&mc_data::Identifier::parse("minecraft:dirt").expect("dirt id"))
-        .expect("dirt item");
-    let chest = state.block_entities.get_mut(&(1, 201, 1)).expect("chest");
-    chest.slots[0] = mc_data::ItemStack::new(dirt_item, 2);
-    let stone = state.registry.states.stone;
-    // A flowing lava cell the gate will not write: the plan keeps a paid cell and
-    // a fluid cell ahead of it at the same time.
-    let flowing = state.registry.states.lava_levels[1];
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    let source = state.registry.states.water_levels[0];
+    let flowing = state.registry.states.water_levels[1];
     let dirt = state.registry.states.dirt;
+    state.world.set_block(a[0], a[1], a[2], source);
     state.world.set_block(b[0], b[1], b[2], flowing);
-    for x in 2..=7 {
-        for z in 2..=4 {
-            if !(3..=6).contains(&x) || z != 3 {
-                state.world.set_block(x, 201, z, stone);
-            }
-        }
-    }
+    enclose_bowl(&mut state, a, b);
     state.world.fold_overlay();
     let handle = begin_plan(
         &mut state,
@@ -851,144 +788,164 @@ fn a_refused_resume_keeps_a_paid_cell_and_its_charge() {
             (b, dirt, Some("minecraft:dirt")),
         ],
     );
-    for _ in 0..8 {
-        super::tests::attempt(&mut state, id, slot);
-    }
+    super::tests::bind_project(&mut state, id, &handle, slot);
+    let uuid = state.entities.row(slot).uuid;
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::EMPTY;
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(dirt_item, 2));
+    executor::advance(&mut state, id, &handle, uuid).unwrap();
     assert_eq!(state.world.block_at(a[0], a[1], a[2]), Some(dirt));
-    let dirt_units = |state: &TickState| {
-        let stored: i32 = state.block_entities[&(1, 201, 1)]
-            .slots
-            .iter()
-            .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
-            .map(|stack| stack.count)
-            .sum();
-        let carried: i32 = state.entities.row(slot).villager.as_ref().map_or(0, |v| {
-            v.inventory
-                .iter()
-                .flatten()
-                .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
-                .map(|stack| stack.count)
-                .sum()
-        });
-        stored + carried
-    };
-    assert_eq!(dirt_units(&state), 1, "one of two blocks paid for one cell");
-    // Explicitly pause after the ring edit to exercise owner recovery.
-    let air = state.registry.states.air;
-    state.world.set_block(2, 201, 3, air);
+    let fence = block(&state, "minecraft:oak_fence", &[("waterlogged", "true")]);
+    state.world.set_block(a[0], a[1], a[2], fence);
     state.world.fold_overlay();
-    pause_plan(&mut state, id);
+    let before = serde_json::to_value(&state.plugins).unwrap();
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let carry = state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory
+        .clone();
+    let writes = state.plugin_block_writes.len();
     assert_eq!(
-        executor::status(&state, id, &handle).expect("status").state,
-        mc_script::ScriptStructureState::Paused
+        executor::advance(&mut state, id, &handle, uuid),
+        Err(mc_script::ScriptOperationFailure::Blocked)
     );
-    // The opened ring plus the fluid still ahead of the plan refuse the resume.
+    assert_eq!(serde_json::to_value(&state.plugins).unwrap(), before);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory,
+        carry
+    );
+    assert_eq!(state.plugin_block_writes.len(), writes);
+    assert_eq!(state.world.block_at(a[0], a[1], a[2]), Some(fence));
+    assert_eq!(state.world.block_at(b[0], b[1], b[2]), Some(flowing));
+    let snapshot = executor::status(&state, id, &handle).unwrap();
+    assert_eq!(snapshot.watermark, 1);
+    assert_eq!(snapshot.state, mc_script::ScriptStructureState::Running);
+    assert_eq!(snapshot.pause_reason, None);
+}
+
+#[test]
+fn a_committed_liquid_plan_rechecks_the_bowl_before_real_repair() {
+    let (mut state, id, slot) = fixture();
+    let a = [3, 201, 3];
+    let b = [6, 201, 3];
+    let dirt = state.registry.states.dirt;
+    let water = state.registry.states.water_levels[0];
+    let dirt_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    state.world.set_block(a[0], a[1], a[2], water);
+    enclose_bowl(&mut state, a, b);
+    state.world.fold_overlay();
+    let handle = begin_plan(
+        &mut state,
+        id,
+        vec![
+            (a, dirt, Some("minecraft:dirt")),
+            (b, dirt, Some("minecraft:dirt")),
+        ],
+    );
+    super::tests::bind_project(&mut state, id, &handle, slot);
+    let uuid = state.entities.row(slot).uuid;
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = mc_data::ItemStack::EMPTY;
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(dirt_item, 2));
+    executor::advance(&mut state, id, &handle, uuid).unwrap();
+    assert!(executor::advance(&mut state, id, &handle, uuid).unwrap());
+    assert_eq!(
+        executor::status(&state, id, &handle).unwrap().state,
+        mc_script::ScriptStructureState::Committed
+    );
+    state.world.set_block(a[0], a[1], a[2], water);
+    state
+        .world
+        .set_block(b[0], b[1], b[2], state.registry.states.air);
+    state.world.set_block(2, 201, 3, state.registry.states.air);
+    state.world.fold_overlay();
+    let before = serde_json::to_value(&state.plugins).unwrap();
+    let writes = state.plugin_block_writes.len();
     assert_eq!(
         executor::recover(&mut state, id, &handle),
         Err(mc_script::ScriptOperationFailure::Blocked)
     );
+    assert_eq!(serde_json::to_value(&state.plugins).unwrap(), before);
+    assert_eq!(state.plugin_block_writes.len(), writes);
+    assert_eq!(
+        executor::status(&state, id, &handle).unwrap().pause_reason,
+        None
+    );
+    enclose_bowl(&mut state, a, b);
+    state
+        .world
+        .set_block(a[0], a[1], a[2], state.registry.states.air);
+    state.world.set_block(b[0], b[1], b[2], dirt);
+    state.world.fold_overlay();
+    assert!(executor::recover(&mut state, id, &handle).unwrap());
+    assert_eq!(
+        executor::status(&state, id, &handle)
+            .unwrap()
+            .stages
+            .last()
+            .unwrap()
+            .stage,
+        "repair"
+    );
     assert_eq!(
         state.world.block_at(a[0], a[1], a[2]),
-        Some(dirt),
-        "the placed cell survives the refusal"
+        Some(state.registry.states.air)
     );
     assert_eq!(
-        executor::status(&state, id, &handle).expect("status").state,
-        mc_script::ScriptStructureState::Paused,
-        "a refused resume keeps the pause"
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0],
+        None
     );
-    assert_eq!(
-        dirt_units(&state),
-        1,
-        "a refused resume charges nothing further"
-    );
-}
-
-#[test]
-fn removing_a_support_under_remaining_liquid_refuses_the_resume() {
-    let (mut state, id, _) = fixture();
-    let (a, b, handle) = closed_two_cell_plan(&mut state, id);
-    let stone = state.registry.states.stone;
-    // Pause explicitly: the plan has fluid ahead and no paid cell yet.
-    state.world.set_block(b[0], b[1], b[2], stone);
-    state.world.fold_overlay();
-    pause_plan(&mut state, id);
-    // Put the fluid back but take its ground away: the certified support is
-    // inside the fence and the resume reads it.
-    let water = state.registry.states.water_levels[0];
-    let air = state.registry.states.air;
-    state.world.set_block(b[0], b[1], b[2], water);
-    state.world.set_block(b[0], b[1] - 1, b[2], air);
-    state.world.fold_overlay();
-    assert_eq!(
-        executor::recover(&mut state, id, &handle),
-        Err(mc_script::ScriptOperationFailure::Blocked),
-        "a removed support under remaining liquid refuses the resume"
-    );
-    let _ = a;
-}
-
-#[test]
-fn a_paid_cell_replaced_by_a_preserved_supply_refuses_the_resume() {
-    let (mut state, id, slot) = fixture();
-    let a = [3, 201, 3];
-    let b = [6, 201, 3];
-    let dirt_item = state
-        .registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:dirt").expect("dirt id"))
-        .expect("dirt item");
-    let chest = state.block_entities.get_mut(&(1, 201, 1)).expect("chest");
-    chest.slots[0] = mc_data::ItemStack::new(dirt_item, 2);
-    let stone = state.registry.states.stone;
-    let flowing = state.registry.states.lava_levels[1];
-    let source = state.registry.states.water_levels[0];
-    let dirt = state.registry.states.dirt;
-    // A holds a real source at admission, so it belongs to the certified
-    // envelope; B holds the flowing lava that keeps the plan unfinished.
-    state.world.set_block(a[0], a[1], a[2], source);
-    state.world.set_block(b[0], b[1], b[2], flowing);
-    for x in 2..=7 {
-        for z in 2..=4 {
-            if !(3..=6).contains(&x) || z != 3 {
-                state.world.set_block(x, 201, z, stone);
-            }
-        }
-    }
-    state.world.fold_overlay();
-    let handle = begin_plan(
-        &mut state,
-        id,
-        vec![
-            (a, dirt, Some("minecraft:dirt")),
-            (b, dirt, Some("minecraft:dirt")),
-        ],
-    );
-    for _ in 0..8 {
-        super::tests::attempt(&mut state, id, slot);
-    }
+    crate::plugin_structures::validate(&state).unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(dirt_item, 1));
+    assert!(executor::advance(&mut state, id, &handle, uuid).unwrap());
     assert_eq!(state.world.block_at(a[0], a[1], a[2]), Some(dirt));
-    // The paid cell becomes a preserved supply; the ring stays closed and the
-    // flowing lava ahead is untouched, so only the whole-envelope read can see
-    // this refusal.
-    let fence = block(&state, "minecraft:oak_fence", &[("waterlogged", "true")]);
-    state.world.set_block(a[0], a[1], a[2], fence);
-    state.world.fold_overlay();
-    pause_plan(&mut state, id);
     assert_eq!(
-        state.world.block_at(b[0], b[1], b[2]),
-        Some(flowing),
-        "the fluid ahead is untouched"
+        executor::status(&state, id, &handle)
+            .unwrap()
+            .consumed
+            .iter()
+            .map(|material| material.quantity)
+            .sum::<u64>(),
+        3
     );
-    assert_eq!(
-        executor::recover(&mut state, id, &handle),
-        Err(mc_script::ScriptOperationFailure::Blocked),
-        "a paid cell replaced by a supply refuses the resume"
-    );
-    assert_eq!(
-        executor::status(&state, id, &handle).expect("status").state,
-        mc_script::ScriptStructureState::Paused
-    );
+    crate::plugin_structures::validate(&state).unwrap();
 }
 
 #[test]
@@ -1017,6 +974,7 @@ fn a_repeated_wait_schedules_once() {
     let at = [3, 201, 3];
     let flowing = state.registry.states.lava_levels[1];
     state.world.set_block(at[0], at[1], at[2], flowing);
+    enclose_bowl(&mut state, at, at);
     state.world.fold_overlay();
     let dirt = state.registry.states.dirt;
     begin_plan(&mut state, id, vec![(at, dirt, None)]);
