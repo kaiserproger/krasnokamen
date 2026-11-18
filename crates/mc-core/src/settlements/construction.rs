@@ -18,8 +18,8 @@ pub(crate) use availability::gatherer_for_item;
 #[path = "construction_access.rs"]
 mod access;
 pub(crate) use access::{
-    bound_builder, head_order, idle, orders, project_for_structure, project_of_builder, projects,
-    record_heap_bytes, upgrading,
+    bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
+    project_of_builder, projects, record_heap_bytes, upgrading,
 };
 pub(crate) use access::{head_order_of, projects_of};
 
@@ -33,9 +33,9 @@ pub(super) mod founding;
 pub(super) mod site_refusals;
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
-/// Active projects a settlement may hold at once. S1b keeps one until the
-/// executor addresses every lookup by binding (S2 raises it to 8).
-pub(crate) const MAX_PROJECTS: usize = 1;
+/// Active projects a settlement may hold at once: one per builder candidate the
+/// planner scans, so the joint funding proof and the tick stay bounded.
+pub(crate) const MAX_PROJECTS: usize = 8;
 /// Owner requests kept in the queue; a request beyond it is refused by name.
 pub(crate) const MAX_ORDERS: usize = 8;
 
@@ -145,13 +145,14 @@ pub(crate) fn owner_upgrade_level(
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
     let (blueprint, ..) = upgrade_blueprint(state, id, target)?;
-    let current = if claim_slot(state, id).is_err() {
-        access::projects(record)
-            .find(|project| project.building == Some(building))
-            .map_or(target.level, |project| project.level)
-    } else {
-        target.level
-    };
+    // Several projects can target one building (D8), so the next level follows
+    // the highest level already in flight, not just the built one.
+    let current = access::projects(record)
+        .filter(|project| project.building == Some(building))
+        .map(|project| project.level)
+        .max()
+        .unwrap_or(target.level)
+        .max(target.level);
     blueprint.level(current + 1).map(|_| current + 1)
 }
 
@@ -178,7 +179,7 @@ fn submit_order(
         .is_none_or(|record| access::orders(record).count() >= MAX_ORDERS)
     {
         return Err(format!(
-            "Construction queue is full: {MAX_ORDERS} orders are pending. Cancel one before another order."
+            "Construction queue is full: MAX_ORDERS={MAX_ORDERS}."
         ));
     }
     match start_order(state, id, &order, None) {
@@ -217,16 +218,44 @@ pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<
     Ok(())
 }
 
+/// Cancel one queued request by zero-based position; the error names the
+/// one-based position the player asked for.
+pub(crate) fn cancel_pending_at(
+    state: &mut TickState,
+    id: SettlementId,
+    index: usize,
+) -> Result<(), String> {
+    let record = state
+        .settlements
+        .get_mut(id)
+        .ok_or("Settlement not found.")?;
+    access::take_order(record, index)
+        .ok_or_else(|| format!("No pending construction order #{}.", index + 1))?;
+    record.revision = record.revision.saturating_add(1);
+    state.settlements.site_watch.remove(&id);
+    Ok(())
+}
+
 pub(crate) fn pending_reason(state: &TickState, id: SettlementId) -> Option<String> {
+    pending_reason_at(state, id, 0)
+}
+
+/// The waiting reason of one queued request (zero-based). Funding is checked
+/// before the slot, so an unfunded request is never reported as merely busy.
+pub(crate) fn pending_reason_at(
+    state: &TickState,
+    id: SettlementId,
+    index: usize,
+) -> Option<String> {
     let record = state.settlements.get(id)?;
-    let order = orders(record).next()?;
-    if claim_slot(state, id).is_err() {
-        return Some("busy".into());
-    }
+    let order = orders(record).nth(index)?;
     let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
     let level = blueprint.level(order.level)?;
     if let Some(reason) = funding_error(state, id, &level.materials) {
         return Some(reason);
+    }
+    if claim_slot(state, id).is_err() {
+        return Some("busy".into());
     }
     Some(
         if order.building.is_none() {
@@ -610,10 +639,30 @@ fn funded_variant<'a>(
     images: &[super::inventory::Image],
 ) -> Option<(&'a str, u8)> {
     let (colors, count) = bed_colors(state, id, materials, images);
+    let joint = joint_requirement(state, id);
     colors[..count].iter().copied().find_map(|color| {
         let bill = bed_bill(state, materials, color)?;
+        let bill = with_joint(bill.into_owned(), &joint);
         select_species(state, &bill, images, false).map(|species| (species, color))
     })
+}
+
+/// Materials already promised to the other active projects, per item, net of
+/// each project's own bound builder carry. Admission reserves them so a later
+/// project never funds itself out of an earlier one's stock (D8, joint proof).
+fn joint_requirement(state: &TickState, id: SettlementId) -> Vec<(u32, u32)> {
+    joint_active_bill(state, id)
+}
+
+/// Append the joint requirement to a candidate bill, keeping one entry per item.
+fn with_joint(mut bill: Vec<(u32, u32)>, joint: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    for &(item, count) in joint {
+        match bill.iter_mut().find(|(known, _)| *known == item) {
+            Some((_, sum)) => *sum = sum.saturating_add(count),
+            None => bill.push((item, count)),
+        }
+    }
+    bill
 }
 
 fn selected_bill<'a>(
@@ -656,9 +705,10 @@ pub(crate) fn candidate_funded_by_delivery(
         return false;
     }
     let mut images = executor::source_images(state, id);
-    let active_bill = access::projects(record)
-        .next()
-        .and_then(|_| active_project_bill(state, id));
+    let active_bill = {
+        let bill = joint_active_bill(state, id);
+        (!bill.is_empty()).then_some(bill)
+    };
     let funded = |images: &[super::inventory::Image]| {
         if access::projects(record).next().is_some() {
             active_bill
@@ -1602,7 +1652,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     let Some(record) = state.settlements.get(id) else {
         return;
     };
-    if access::projects(record).next().is_some() {
+    if claim_slot(state, id).is_err() {
         return;
     }
     let residents = state.settlements.member_count(id);
@@ -1979,20 +2029,98 @@ pub(crate) struct BuilderWatch {
     shunned: Vec<(uuid::Uuid, u64)>,
 }
 
+/// The first active project with no bound builder.
+fn unbound_project(state: &TickState, id: SettlementId) -> Option<String> {
+    access::projects_of(&state.settlements, id)
+        .find(|project| project.builder.is_none())
+        .map(|project| project.structure.clone())
+}
+
+/// Bind an already-working native Builder to the first unbound project.
+fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: crate::entities::EntitySlot) {
+    let Some(target) = unbound_project(state, id) else {
+        return;
+    };
+    let binding = Some((state.entities.row(slot).uuid, None));
+    if let Some(mut record) = state.settlements.get_mut(id)
+        && access::bind_builder(&mut record, &target, binding)
+    {
+        record.revision = record.revision.saturating_add(1);
+    }
+}
+
+/// Drop a binding whose villager died, left, converted or stopped being a
+/// Builder. The project keeps its slot and is rebound on a later pass, and the
+/// loser's load goes back to storage before the binding is cleared.
+fn rebind_lost_builders(state: &mut TickState, id: SettlementId) {
+    let lost: Vec<(String, uuid::Uuid)> = access::projects_of(&state.settlements, id)
+        .filter_map(|project| {
+            project
+                .builder
+                .map(|(uuid, _)| (project.structure.clone(), uuid))
+        })
+        .filter(|(_, uuid)| !live_builder(state, id, *uuid))
+        .collect();
+    for (handle, uuid) in lost {
+        executor::return_carry_of(state, id, uuid);
+        let Some(mut record) = state.settlements.get_mut(id) else {
+            return;
+        };
+        access::unbind_builder(&mut record, uuid);
+        record.revision = record.revision.saturating_add(1);
+        let _ = handle;
+    }
+}
+
+/// A bound villager is still a living Builder of this settlement.
+fn live_builder(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
+    state.entities.slot_of_uuid(uuid).is_some_and(|slot| {
+        let row = state.entities.row(slot);
+        let body = state.entities.body(slot);
+        body.alive
+            && row.villager.as_ref().is_some_and(|v| {
+                v.settlement == Some(id)
+                    && v.data.profession == Profession::Builder
+                    && v.conversion_time.is_none()
+            })
+    })
+}
+
 /// Replace the builder of a running project that has not advanced a cell for
 /// [`BUILDER_STALL_SHIFT_TICKS`] of shift: another resident takes it, whose
 /// route may not cross whatever stopped the first.
 fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
-    let Some(project) = state
-        .settlements
-        .get(id)
-        .and_then(|record| access::projects(record).next().cloned())
-    else {
-        state.settlements.builder_watch.remove(&id);
+    let handles: Vec<String> = access::projects_of(&state.settlements, id)
+        .map(|project| project.structure.clone())
+        .collect();
+    if handles.is_empty() {
+        state
+            .settlements
+            .builder_watch
+            .retain(|(settlement, _), _| *settlement != id);
         return;
-    };
+    }
+    for handle in handles {
+        let Some(project) = state
+            .settlements
+            .get(id)
+            .and_then(|record| access::project_for_structure(record, &handle))
+            .cloned()
+        else {
+            continue;
+        };
+        // A cancelled or finished project takes the rest of the pass with it.
+        if watch_project(state, id, &project) {
+            break;
+        }
+    }
+}
+
+/// The per-project stall episode: progress, refusal and recovery are watched
+/// separately for every active project (D8).
+fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> bool {
     let Ok(snapshot) = executor::status(state, id, &project.structure) else {
-        return;
+        return false;
     };
     let progress = (
         project.structure.clone(),
@@ -2004,7 +2132,7 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
     let watch = state
         .settlements
         .builder_watch
-        .entry(id)
+        .entry((id, project.structure.clone()))
         .or_insert_with(|| BuilderWatch {
             progress: progress.clone(),
             seen: tick,
@@ -2022,14 +2150,14 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         watch.reported = false;
         watch.refusal = None;
         watch.recovery = None;
-        return;
+        return false;
     }
     if !on_shift {
-        return;
+        return false;
     }
     watch.idle += elapsed;
     if watch.idle < BUILDER_STALL_SHIFT_TICKS {
-        return;
+        return false;
     }
     watch.idle = 0;
     let report = !watch.reported;
@@ -2109,7 +2237,11 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         "project_paused"
     } else if let Some(slot) = incumbent {
         if release_incumbent(state, id, slot) {
-            if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+            if let Some(watch) = state
+                .settlements
+                .builder_watch
+                .get_mut(&(id, project.structure.clone()))
+            {
                 watch.shunned.retain(|&(_, until)| tick < until);
                 watch.shunned.push((
                     state.entities.row(slot).uuid,
@@ -2124,7 +2256,11 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
         "no_builder"
     };
     if report {
-        if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+        if let Some(watch) = state
+            .settlements
+            .builder_watch
+            .get_mut(&(id, project.structure.clone()))
+        {
             watch.recovery = Some(recovery);
         }
         tracing::warn!(settlement = id.0, blueprint = %project.blueprint,
@@ -2143,14 +2279,20 @@ fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
             shift_ticks = BUILDER_STALL_SHIFT_TICKS,
             "settlement_construction_recovery_failed");
     }
+    preparation.is_some_and(|result| result.is_ok())
 }
 
 pub(crate) fn note_build_refusal(
     state: &mut TickState,
     id: SettlementId,
+    handle: &str,
     reason: mc_script::ScriptOperationFailure,
 ) {
-    if let Some(watch) = state.settlements.builder_watch.get_mut(&id) {
+    if let Some(watch) = state
+        .settlements
+        .builder_watch
+        .get_mut(&(id, handle.to_owned()))
+    {
         watch.refusal = Some(match reason {
             mc_script::ScriptOperationFailure::Blocked => "executor_blocked",
             mc_script::ScriptOperationFailure::Busy => "reserved_worker",
@@ -2167,7 +2309,9 @@ pub(crate) fn retry_preparation(
     id: SettlementId,
     project: &Project,
 ) -> Result<(), String> {
-    executor::return_carry(state, id);
+    if let Some((uuid, _)) = project.builder {
+        executor::return_carry_of(state, id, uuid);
+    }
     cancel_project(state, id, &project.structure)?;
     let record = state
         .settlements
@@ -2262,22 +2406,43 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
     if release_trapped_builder(state, id) {
         return;
     }
+    rebind_lost_builders(state, id);
+    let Some(target) = unbound_project(state, id) else {
+        return;
+    };
+    // Extraction workers are lent to construction one at a time and only while
+    // the settlement holds a single project; from two projects on, gathering
+    // keeps its workers and parallel sites recruit ordinary residents (D8).
+    let may_borrow = access::projects_of(&state.settlements, id).count() == 1;
     let protected = state.settlements.get(id).and_then(|record| {
         access::projects(record).next().and_then(|project| {
             let images = executor::source_images(state, id);
-            active_project_bill(state, id)
-                .and_then(|bill| {
-                    super::construction_crafting::needed_gatherer(state, &bill, &images)
-                })
-                .or_else(|| {
-                    if project.ordered {
-                        return None;
-                    }
-                    gatherer_demand(state, record, &images)
-                        .filter(|profession| has_staffed_gatherer(state, id, *profession))
-                })
+            let bill = joint_active_bill(state, id);
+            super::construction_crafting::needed_gatherer(state, &bill, &images).or_else(|| {
+                if project.ordered {
+                    return None;
+                }
+                gatherer_demand(state, record, &images)
+                    .filter(|profession| has_staffed_gatherer(state, id, *profession))
+            })
         })
     });
+    // A native Builder already on the settlement takes the first unbound
+    // project directly; no recruitment and no profession change.
+    let ready = residents(state, id).find(|slot| {
+        let row = state.entities.row(*slot);
+        state.entities.body(*slot).alive
+            && !access::bound_builder(&state.settlements, row.uuid)
+            && row.villager.as_ref().is_some_and(|v| {
+                v.settlement == Some(id)
+                    && v.data.profession == Profession::Builder
+                    && v.conversion_time.is_none()
+            })
+    });
+    if let Some(slot) = ready {
+        bind_first_unbound(state, id, slot);
+        return;
+    }
     let mut candidates = Vec::new();
     for slot in residents(state, id) {
         if !resident_simulated(state, slot)
@@ -2297,8 +2462,16 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
             continue;
         }
         if body.alive && v.settlement == Some(id) && v.age >= 0 && v.conversion_time.is_none() {
-            if v.data.profession == Profession::Builder {
-                return;
+            let uuid = state.entities.row(slot).uuid;
+            if v.data.profession == Profession::Builder
+                || access::bound_builder(&state.settlements, uuid)
+                || (!may_borrow
+                    && matches!(
+                        v.data.profession,
+                        Profession::Miner | Profession::Lumberjack
+                    ))
+            {
+                continue;
             }
             let priority = match v.data.profession {
                 Profession::None => Some(0),
@@ -2328,7 +2501,7 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
                 let shunned = state
                     .settlements
                     .builder_watch
-                    .get(&id)
+                    .get(&(id, target.clone()))
                     .is_some_and(|watch| {
                         watch.shunned.iter().any(|&(uuid, until)| {
                             uuid == state.entities.row(slot).uuid && state.tick < until
@@ -2365,24 +2538,10 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         _ => None,
     };
     let binding = Some((state.entities.row(slot).uuid, borrowed));
-    let handle = state
-        .settlements
-        .get(id)
-        .and_then(|record| access::projects(record).next())
-        .map(|project| project.structure.clone());
-    let rebind = state.settlements.get(id).is_some_and(|record| {
-        access::projects(record)
-            .next()
-            .is_some_and(|project| project.builder != binding)
-    });
-    if let (true, Some(handle)) = (rebind, handle) {
-        let record = state
-            .settlements
-            .get_mut(id)
-            .expect("builder binding settlement");
-        if access::bind_builder(record, &handle, binding) {
-            record.revision = record.revision.saturating_add(1);
-        }
+    if let Some(mut record) = state.settlements.get_mut(id)
+        && access::bind_builder(&mut record, &target, binding)
+    {
+        record.revision = record.revision.saturating_add(1);
     }
     let v = state
         .entities
@@ -2628,7 +2787,18 @@ pub(crate) struct WaitingNeed {
 /// Remaining physical project requirements after subtracting exact items in
 /// builder carry. Ingredients in carry are not craftable until deposited.
 fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u32)>> {
-    let project = access::projects_of(&state.settlements, id).next()?;
+    let handle = access::projects_of(&state.settlements, id)
+        .next()?
+        .structure
+        .clone();
+    project_bill(state, id, &handle)
+}
+
+/// One project's remaining bill, net of the carry of the builder bound to it.
+/// Another project's load never pays for these cells (D8).
+fn project_bill(state: &TickState, id: SettlementId, handle: &str) -> Option<Vec<(u32, u32)>> {
+    let project =
+        access::projects_of(&state.settlements, id).find(|project| project.structure == handle)?;
     let snapshot = executor::status(state, id, &project.structure).ok()?;
     let mut bill: Vec<_> = snapshot
         .remaining
@@ -2641,13 +2811,11 @@ fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, 
             ))
         })
         .collect::<Option<_>>()?;
-    for slot in residents(state, id) {
-        let Some(v) = state.entities.row(slot).villager.as_ref() else {
-            continue;
-        };
-        if v.data.profession != Profession::Builder {
-            continue;
-        }
+    if let Some((bound, _)) = project.builder
+        && let Some(slot) =
+            residents(state, id).find(|slot| state.entities.row(*slot).uuid == bound)
+        && let Some(v) = state.entities.row(slot).villager.as_ref()
+    {
         for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
             if let Some((_, count)) = bill.iter_mut().find(|(item, _)| *item == stack.item_id) {
                 *count = count.saturating_sub(stack.count as u32);
@@ -2658,13 +2826,37 @@ fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, 
     Some(bill)
 }
 
+/// Every active project's bill, summed per item: the demand every worker query
+/// uses once a settlement builds more than one project at a time.
+pub(crate) fn joint_active_bill(state: &TickState, id: SettlementId) -> Vec<(u32, u32)> {
+    let mut total: Vec<(u32, u32)> = Vec::new();
+    for handle in access::projects_of(&state.settlements, id)
+        .map(|project| project.structure.clone())
+        .collect::<Vec<_>>()
+    {
+        let Some(bill) = project_bill(state, id, &handle) else {
+            continue;
+        };
+        for (item, count) in bill {
+            match total.iter_mut().find(|(known, _)| *known == item) {
+                Some((_, sum)) => *sum = sum.saturating_add(count),
+                None => total.push((item, count)),
+            }
+        }
+    }
+    total
+}
+
 /// One real bill drives gathering, including a previously funded project
 /// whose stock was spent or withdrawn after admission.
 pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Profession> {
     let record = state.settlements.get(id)?;
     let images = executor::source_images(state, id);
     if access::projects(record).next().is_some() {
-        let bill = active_project_bill(state, id)?;
+        let bill = joint_active_bill(state, id);
+        if bill.is_empty() {
+            return None;
+        }
         super::construction_crafting::needed_gatherer(state, &bill, &images)
     } else {
         gatherer_demand(state, record, &images)
@@ -2673,7 +2865,10 @@ pub(crate) fn needed_gatherer(state: &TickState, id: SettlementId) -> Option<Pro
 
 /// The active blueprint's fixed wood family while it needs more logs.
 pub(crate) fn active_project_wood(state: &TickState, id: SettlementId) -> Option<&str> {
-    let bill = active_project_bill(state, id)?;
+    let bill = joint_active_bill(state, id);
+    if bill.is_empty() {
+        return None;
+    }
     let images = executor::source_images(state, id);
     if super::construction_crafting::needed_gatherer(state, &bill, &images)
         != Some(Profession::Lumberjack)

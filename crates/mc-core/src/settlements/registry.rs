@@ -105,9 +105,10 @@ pub struct Registry {
     /// Exact-input funding and wood-reservation proof results; derived,
     /// bounded and never persisted (a hit re-checks the whole key).
     pub(super) funding: std::sync::Mutex<super::construction_crafting::FundingMemo>,
-    /// The active project's work counter per settlement, for replacing a
-    /// builder that cannot advance it; runtime only, never persisted.
-    pub(super) builder_watch: BTreeMap<SettlementId, super::construction::BuilderWatch>,
+    /// Stalled-work watch, one entry per active project: progress, refusal and
+    /// recovery are per project so one stuck site never masks another.
+    /// Runtime only, never persisted.
+    pub(super) builder_watch: BTreeMap<(SettlementId, String), super::construction::BuilderWatch>,
     /// Pending-site refusal sweeps, derived and never persisted.
     pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit

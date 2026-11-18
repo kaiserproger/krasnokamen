@@ -128,8 +128,11 @@ fn a_real_fetch_refusal_is_retained_for_the_stall_report_without_debiting_stock(
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     release_stalled_builder(&mut state, id);
     crate::villager::building::tick(&mut state, id);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
     assert_eq!(
-        state.settlements.builder_watch[&id].refusal,
+        state.settlements.builder_watch[&(id, handle)].refusal,
         Some("executor_capacity")
     );
     let text = log_stall(&mut state, id);

@@ -1399,7 +1399,7 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     assert_eq!(state.world.block_at(8, 201, 8), before_block);
     assert_eq!(ordered.title, page.title);
 
-    // A second order is queued while the active project is busy.
+    // A second order queues for materials the joint proof leaves over (D8).
     let busy = last_dialog(&click(
         &mut state,
         id,
@@ -1408,10 +1408,14 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     ));
     assert!(busy.body.contains("House"), "{}", busy.body);
     assert!(busy.has("project_status"));
-    assert!(busy.body.contains("busy"), "{}", busy.body);
+    assert!(busy.body.contains("waiting for materials"), "{}", busy.body);
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
     assert!(status.body.contains("Pending: House L1"), "{}", status.body);
-    assert!(status.body.contains("busy"), "{}", status.body);
+    assert!(
+        status.body.contains("waiting for materials"),
+        "{}",
+        status.body
+    );
     assert_eq!(
         state
             .settlements

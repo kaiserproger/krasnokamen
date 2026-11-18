@@ -248,7 +248,11 @@ pub(crate) fn work(
         return None;
     }
     let id = v.settlement?;
-    let project = crate::settlements::construction::projects_of(&state.settlements, id).next()?;
+    let uuid = state.entities.row(slot).uuid;
+    let project = state
+        .settlements
+        .get(id)
+        .and_then(|record| crate::settlements::construction::project_of_builder(record, uuid))?;
     let next = executor::next_cell(state, id, &project.structure).ok()??;
     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
         && !carried(v, item, count)
@@ -358,14 +362,72 @@ pub(crate) fn wait_reason(
     "placement_not_advancing"
 }
 
+/// A member this admission may advance a project with: alive, not reserved by
+/// another job, working, and of this settlement.
+fn builder_ready(state: &TickState, id: SettlementId, slot: EntitySlot) -> bool {
+    state.entities.body(slot).alive
+        && !crate::settlements::economy::worker_reserved(
+            state,
+            Some(id),
+            state.entities.row(slot).uuid,
+        )
+        && state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| v.settlement == Some(id) && working(state, v))
+}
+
 /// Called once per construction admission, before the brain detaches carry.
 /// One transfer OR budgeted canonical cell advances, never both in an attempt.
 pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
+    // One project per admission, round-robin over the active set: a tick still
+    // writes one structure-registry image (D8).
+    let count = crate::settlements::construction::projects_of(&state.settlements, id).count();
+    if count == 0 {
+        return;
+    }
+    let turn = (state.tick / 4) as usize % count;
     let Some(project) = crate::settlements::construction::projects_of(&state.settlements, id)
-        .next()
+        .nth(turn)
         .cloned()
     else {
         return;
+    };
+    // A founding handover admits a project before the planner binds anyone; the
+    // first admission binds the resident it is about to advance, so arrival
+    // order never leaves a paid project with no authority to advance it.
+    let candidate = match project.builder {
+        Some((uuid, _)) => Some(uuid),
+        None => construction::residents(state, id)
+            .find(|slot| builder_ready(state, id, *slot))
+            .map(|slot| state.entities.row(slot).uuid),
+    };
+    let bound = match (project.builder.map(|(uuid, _)| uuid), candidate) {
+        (Some(uuid), _) => Some(uuid),
+        (None, Some(uuid)) => {
+            let borrowed = state
+                .entities
+                .slot_of_uuid(uuid)
+                .and_then(|slot| state.entities.row(slot).villager.as_ref())
+                .map(|v| v.data.profession);
+            let borrowed = match borrowed {
+                Some(VillagerProfession::Miner | VillagerProfession::Lumberjack) => borrowed,
+                _ => None,
+            };
+            if let Some(mut record) = state.settlements.get_mut(id) {
+                if construction::bind_builder(
+                    &mut record,
+                    &project.structure,
+                    Some((uuid, borrowed)),
+                ) {
+                    record.revision = record.revision.saturating_add(1);
+                }
+            }
+            Some(uuid)
+        }
+        (None, None) => None,
     };
     // A paused footprint is re-snapshotted and resumed on the next admission.
     if executor::recover(state, id, &project.structure) == Ok(true) {
@@ -383,20 +445,12 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
             }
             Err(_) => return,
         };
-        let Some(slot) = construction::residents(state, id).find(|slot| {
-            state.entities.body(*slot).alive
-                && !crate::settlements::economy::worker_reserved(
-                    state,
-                    Some(id),
-                    state.entities.row(*slot).uuid,
-                )
-                && state
-                    .entities
-                    .row(*slot)
-                    .villager
-                    .as_ref()
-                    .is_some_and(|v| v.settlement == Some(id) && working(state, v))
-        }) else {
+        // Only the builder bound to this project advances it; an unbound or
+        // stale binding is the planner's business, not this tick's.
+        let Some(slot) = construction::residents(state, id)
+            .find(|slot| builder_ready(state, id, *slot))
+            .filter(|slot| bound.is_some_and(|uuid| state.entities.row(*slot).uuid == uuid))
+        else {
             return;
         };
         let Ok(item) = executor::next_material(state, id, &project.structure) else {
@@ -421,7 +475,7 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
                     [point.x, point.y, point.z],
                     item,
                 ) {
-                    construction::note_build_refusal(state, id, reason);
+                    construction::note_build_refusal(state, id, &project.structure, reason);
                 }
             }
             return;
@@ -437,7 +491,7 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
             }
             Ok(false) => {}
             Err(reason) => {
-                construction::note_build_refusal(state, id, reason);
+                construction::note_build_refusal(state, id, &project.structure, reason);
                 return;
             }
         }

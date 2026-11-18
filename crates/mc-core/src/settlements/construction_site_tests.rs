@@ -1,4 +1,4 @@
-use super::tests::{fixture, fund, open_plan};
+use super::tests::{fixture, fund, open_plan, start};
 use super::*;
 
 // The acceptance window is part of the seed-24 regression, not its implementation.
@@ -211,6 +211,7 @@ fn profession(state: &TickState, slot: crate::entities::EntitySlot) -> Professio
 fn trapped_builder_on_shift_is_replaced_by_a_resident_who_reaches_storage() {
     use crate::settlements::allocator::tests::villager;
     let (mut state, id, trapped) = fixture();
+    start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
     // Shut the fixture's builder in a stone cell at (10, 201..202, 10).
     for x in 9..=11 {
@@ -522,7 +523,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
 
 #[test]
 fn flat_site_keeps_bill_origin_and_same_site_upgrade() {
-    use super::tests::{complete, start};
+    use super::tests::complete;
     let (mut state, id, builder) = fixture();
     let materials = fund(&mut state, "storage", 1);
     start(&mut state, id, "storage", 1, None);

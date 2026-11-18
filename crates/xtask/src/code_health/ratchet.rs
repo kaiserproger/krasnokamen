@@ -72,9 +72,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // D8 moved the record's construction fields behind
         // `settlements/construction_access.rs`; 1028 after the split, measured
         // on the D8 branch, 2026-11-17. The store flip and the queue rules
-        // (S1b: project/order vectors, funded-first plan, binding liveness) add
-        // 30: 1058.
-        ("settlements/construction.rs", 1_058),
+        // (S1b) took it to 1058. S2 (joint per-project bills, binding liveness,
+        // per-project stall watch, addressed queue API) adds 69: 1127. The next
+        // extraction candidate is the stall watch, which is now per project.
+        ("settlements/construction.rs", 1_127),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

@@ -42,7 +42,6 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
         "the resident must actually claim its bed"
     );
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
-    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_church", 1)]);
     (state, id)
 }
 
@@ -74,6 +73,9 @@ fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
+    // One house's worth of stock: the later church is refused by the joint
+    // proof, so the earlier house keeps its slot (D8).
+    stock_buildings(&mut state, &[("spanish_house", 1)]);
     plan(&mut state, id);
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "spanish_house");
@@ -147,6 +149,7 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
 #[test]
 fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
     let (mut state, id) = housing_fixture(true);
+    stock_buildings(&mut state, &[("spanish_church", 1)]);
     assert_eq!(
         request_build(&mut state, id, "spanish_church").unwrap(),
         OrderOutcome::Started

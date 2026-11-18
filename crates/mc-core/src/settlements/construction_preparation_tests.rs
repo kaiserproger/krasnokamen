@@ -105,6 +105,16 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
     );
     let renewed = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(renewed.origin, expected.origin);
+    // Retiring the superseded manifest returned the builder to its career; the
+    // recertified lot is admitted with a working builder again.
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Builder;
     let (_, cells) = planned_cells(&state, &renewed, "oak", &mut Default::default()).unwrap();
     for &(at, _) in &grown {
         assert!(
@@ -138,9 +148,9 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
             logs += 1;
         }
         attempt(&mut state, id, builder);
+        let actual = stock(&state);
         assert_eq!(
-            stock(&state),
-            expected_stock,
+            actual, expected_stock,
             "every recertified tree drop at {at:?}"
         );
     }

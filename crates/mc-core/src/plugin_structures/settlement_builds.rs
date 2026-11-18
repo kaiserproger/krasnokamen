@@ -52,7 +52,11 @@ pub(crate) fn prepare(
                     },
                 )
             })
+            // Only a *committed* structure on the same lot may be rebuilt or
+            // upgraded in place; an in-flight structure on that lot blocks a
+            // second admission (D8).
             && !(record.settlement == Some(settlement)
+                && record.snapshot.state == ScriptStructureState::Committed
                 && same_site(state, record, origin)
                 && record
                     .snapshot
@@ -636,13 +640,17 @@ pub(super) fn debit(
     }) {
         return Err(Failure::Forbidden);
     }
-    // The handle names the project this step belongs to, and the builder must
-    // be the one bound to it: a parallel settlement's builder cannot pay for
-    // another project's cells (S1b/S2).
-    let project = state.settlements.get(id).and_then(|record| {
-        crate::settlements::construction::project_of_builder(record, uuid)
-            .filter(|project| project.structure == handle)
-    });
+    // The handle names the project this step belongs to, and only the builder
+    // bound to it may pay for its cells (S2). A step for another project's
+    // handle is refused rather than run as an unowned advance, which would move
+    // blocks without the clear-stage drop credit.
+    let project = state
+        .settlements
+        .get(id)
+        .and_then(|record| crate::settlements::construction::project_for_structure(record, handle));
+    if project.is_some_and(|project| project.builder.is_some_and(|(bound, _)| bound != uuid)) {
+        return Err(Failure::Forbidden);
+    }
     // A new site and an upgrade both carry clear-stage cells: an upgrade that
     // clears natural forest or a registered tree must credit the same drops.
     let preparing = project.is_some();
@@ -1330,42 +1338,49 @@ pub(crate) fn return_carry(state: &mut TickState, id: SettlementId) {
         })
         .collect();
     for uuid in builders {
-        if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
-            continue;
-        }
-        let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
-            continue;
-        };
-        if carry.slots.iter().all(mc_data::ItemStack::is_empty) {
-            continue;
-        }
-        let images = source_images(state, id);
-        let mut post: Vec<Vec<mc_data::ItemStack>> =
-            images.iter().map(|image| image.slots.clone()).collect();
-        let mut after = carry.slots.clone();
-        for stack in after.iter_mut().filter(|stack| !stack.is_empty()) {
-            let mut trial = post.clone();
-            if crate::settlements::construction_crafting::add_stack(state, &mut trial, stack) {
-                post = trial;
-                *stack = mc_data::ItemStack::EMPTY;
-            }
-        }
-        let mut changes: Vec<_> = images
-            .into_iter()
-            .zip(post)
-            .filter_map(|(before, after)| {
-                (before.slots != after).then_some(inventory::Change { before, after })
-            })
-            .collect();
-        if changes.is_empty() {
-            continue;
-        }
-        changes.push(inventory::Change {
-            before: carry,
-            after,
-        });
-        let _ = inventory::commit(state, changes);
+        return_carry_of(state, id, uuid);
     }
+}
+
+/// Return one builder's load to settlement storage. Release, rebind and
+/// stalled-builder recovery address a single project's builder, never the
+/// whole settlement.
+pub(crate) fn return_carry_of(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid) {
+    if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
+        return;
+    }
+    let Ok(carry) = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid }) else {
+        return;
+    };
+    if carry.slots.iter().all(mc_data::ItemStack::is_empty) {
+        return;
+    }
+    let images = source_images(state, id);
+    let mut post: Vec<Vec<mc_data::ItemStack>> =
+        images.iter().map(|image| image.slots.clone()).collect();
+    let mut after = carry.slots.clone();
+    for stack in after.iter_mut().filter(|stack| !stack.is_empty()) {
+        let mut trial = post.clone();
+        if crate::settlements::construction_crafting::add_stack(state, &mut trial, stack) {
+            post = trial;
+            *stack = mc_data::ItemStack::EMPTY;
+        }
+    }
+    let mut changes: Vec<_> = images
+        .into_iter()
+        .zip(post)
+        .filter_map(|(before, after)| {
+            (before.slots != after).then_some(inventory::Change { before, after })
+        })
+        .collect();
+    if changes.is_empty() {
+        return;
+    }
+    changes.push(inventory::Change {
+        before: carry,
+        after,
+    });
+    let _ = inventory::commit(state, changes);
 }
 
 pub(crate) fn pickup_point(
