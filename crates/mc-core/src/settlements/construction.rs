@@ -3895,6 +3895,10 @@ mod fortification_tests;
 #[path = "construction_growth_tests.rs"]
 mod growth_tests;
 
+#[cfg(test)]
+#[path = "construction_provenance_tests.rs"]
+mod provenance_tests;
+
 #[path = "construction_filler.rs"]
 pub(super) mod filler;
 

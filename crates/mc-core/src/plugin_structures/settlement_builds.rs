@@ -152,6 +152,7 @@ pub(crate) fn prepare(
             snapshot,
             blueprint_hash: inventories::hash(&batches),
             image,
+            admission: provenance::Admission::survey(state),
             cells: batches,
             receipts: Vec::new(),
         },

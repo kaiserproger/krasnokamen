@@ -907,9 +907,12 @@ pub fn recover_with_reader(
         dimensions.insert(dimension, replay);
     }
     // Checkpointed block-log rows precede the WAL-tail deltas folded below.
-    for (dimension, rows) in crate::block_log::load(&reader, &registry.blocks, &registry.items)? {
+    for (dimension, (rows, coverage)) in
+        crate::block_log::load(&reader, &registry.blocks, &registry.items)?
+    {
         if let Some(replay) = dimensions.get_mut(&dimension) {
             replay.block_log.push(rows);
+            replay.block_log_coverage = coverage;
         }
     }
     reader

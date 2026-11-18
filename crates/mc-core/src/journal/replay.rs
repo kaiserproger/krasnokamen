@@ -60,6 +60,8 @@ pub struct Replay {
     pub(crate) battle_fault: Option<String>,
     /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
+    /// Checkpointed block-log coverage floor (0 when none was written).
+    pub(crate) block_log_coverage: u64,
     /// Recovered WAL tail, which must be persisted before the WAL is pruned.
     pub(crate) block_log_tail: Vec<crate::block_log::Delta>,
     /// Highest tick seen.
