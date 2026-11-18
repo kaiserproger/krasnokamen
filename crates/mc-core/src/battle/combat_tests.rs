@@ -749,6 +749,22 @@ fn a_flight_hold_is_stamped_once_and_never_slides_forward() {
         Action::Guard { until: 120 },
         "an off-chunk fighter is not re-stamped every tick"
     );
+    // He rallies and his chunk comes back. Base's guard expired at 120, so the
+    // return must not mint a fresh hold. The pass is pinned to one with no
+    // attack decision, so the guard is the only thing it could rewrite.
+    battle.formation.members[bi].routing = false;
+    let mut rally = 141;
+    while (rally + actor.0 as u64) % ATTACK_DECISION_TICKS == 0 {
+        rally += 1;
+    }
+    step_off_chunk(&state, &mut battle, rally, bi, false);
+    match battle.combat.fighters[bi].action {
+        Action::Guard { until } => assert_eq!(
+            until, 120,
+            "a rally after an off-chunk flight mints no fresh hold"
+        ),
+        other => panic!("a rally pass with no decision keeps the guard: {other:?}"),
+    }
 
     // Pinned at bay on the very next pass: the marker resolves to 120, not to
     // 101 + 19 + 19, and the pass stops on the hold before any decision.
