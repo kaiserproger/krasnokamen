@@ -702,6 +702,7 @@ pub(crate) fn roll_with_tool(
         block,
         tool,
         seed,
+        true,
     )
     .map_err(|_| mc_script::ScriptOperationFailure::Blocked)
 }

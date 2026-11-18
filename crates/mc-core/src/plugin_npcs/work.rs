@@ -909,6 +909,7 @@ fn prepare_break_block(
         native,
         tool_stack,
         state.tick ^ u64::from(index),
+        true,
     )
     .map_err(|_| ScriptWorkPauseReason::Unsupported)?;
     let carry_endpoint = carry(&record.handle);

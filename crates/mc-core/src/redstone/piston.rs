@@ -87,6 +87,7 @@ pub(super) fn apply_edits(
                     old,
                     &mc_data::ItemStack::EMPTY,
                     state.tick,
+                    false,
                 ) {
                     Ok(stacks) => {
                         drops.extend(stacks.into_iter().map(|stack| (edit.pos, stack)));

@@ -5,6 +5,30 @@ use crate::settlements::{SettlementId, construction::Project};
 use mc_data::ItemStack;
 
 #[test]
+fn settlement_extraction_credits_canonical_snow_layers_without_silk() {
+    // Canonical table: data/vanilla/26.3/data/minecraft/loot_table/blocks/snow.json:7-200.
+    let (state, _, _, _) = plan();
+    let snowball = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:snowball").unwrap())
+        .unwrap();
+    for layers in 1..=8 {
+        let layer = layers.to_string();
+        let raw = block(&state, "minecraft:snow", &[("layers", &layer)]);
+        assert_eq!(
+            conserved_drops(&state, [8, 201, 4], raw).unwrap(),
+            vec![ItemStack::new(snowball, layers)]
+        );
+    }
+    let raw = block(&state, "minecraft:snow_block", &[]);
+    assert_eq!(
+        conserved_drops(&state, [8, 201, 4], raw).unwrap(),
+        vec![ItemStack::new(snowball, 4)]
+    );
+}
+
+#[test]
 fn implicit_preparation_tools_use_the_lowest_suitable_ordinary_tier() {
     let (state, _, _, _) = plan();
     for (name, tool_name, drop_name) in [

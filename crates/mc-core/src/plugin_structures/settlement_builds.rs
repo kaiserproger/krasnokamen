@@ -880,6 +880,7 @@ pub(super) fn debit(
             drops.push(mc_data::ItemStack::new(item, count));
         } else if portions::inside(state, id, cell.at)
             && !crate::settlements::construction::clearable(state, block)
+            && !crate::settlements::construction::relayout::crop(state, block)
         {
             drops.extend(portions::conserved_drops(state, cell.at, block)?);
         } else {

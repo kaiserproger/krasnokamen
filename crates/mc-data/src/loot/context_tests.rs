@@ -32,6 +32,80 @@ fn block_context<'a>(
 }
 
 #[test]
+fn an_empty_this_entity_predicate_requires_an_acting_entity() {
+    // Vanilla source: data/vanilla/26.3/data/minecraft/loot_table/blocks/snow.json:7-10.
+    for predicate in [
+        serde_json::json!({}),
+        serde_json::json!({"type":"minecraft:pig"}),
+    ] {
+        let supported = predicate.as_object().unwrap().is_empty();
+        let raw = serde_json::json!({
+            "type":"minecraft:block",
+            "pools":[{
+                "conditions":[{"condition":"minecraft:entity_properties",
+                    "entity":"this", "predicate":predicate}],
+                "entries":[{"type":"minecraft:item", "name":"minecraft:fragment"}],
+                "rolls":1.0
+            }]
+        })
+        .to_string();
+        let loot = load_block_table("fragment", &raw);
+        let block = id("minecraft:fragment");
+        let tool = LootContextItem::empty();
+        let context = block_context(&block, &[], &tool, None, 7);
+        if supported {
+            assert_eq!(loot.evaluate_block(&context).unwrap(), Some(Vec::new()));
+            assert_eq!(
+                loot.evaluate_block(&context.with_this_entity()).unwrap(),
+                Some(vec![LootDrop::single(block.clone())])
+            );
+        } else {
+            assert!(loot.block_loot(&block).is_none());
+            assert!(loot.block_drop_stacks(&block).is_none());
+            assert_eq!(loot.evaluate_block(&context).unwrap(), None);
+            assert_eq!(
+                loot.evaluate_block(&context.with_this_entity()).unwrap(),
+                None
+            );
+        }
+    }
+}
+
+#[test]
+fn vanilla_snow_layers_keep_entity_and_nested_tool_conditions() {
+    // Parse the actual table, including entity_properties at :7 and nested
+    // no-Silk alternatives at :15-200, not a snow-specific extraction rule.
+    let raw = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/vanilla/26.3/data/minecraft/loot_table/blocks/snow.json"),
+    )
+    .unwrap();
+    let loot = load_block_table("snow", &raw);
+    let block = id("minecraft:snow");
+    let tool = LootContextItem::new(id("minecraft:wooden_shovel"));
+    let silk = tool.clone().with_enchantments(
+        LootEnchantments::try_from_levels([(id("minecraft:silk_touch"), 1)]).unwrap(),
+    );
+    for layers in 1..=8 {
+        let properties = [("layers".into(), layers.to_string())];
+        let context = block_context(&block, &properties, &tool, Some("minecraft:blocks/snow"), 7);
+        assert_eq!(loot.evaluate_block(&context).unwrap(), Some(Vec::new()));
+        assert_eq!(
+            loot.evaluate_block(&context.with_this_entity()).unwrap(),
+            Some(vec![LootDrop::fixed(id("minecraft:snowball"), layers)])
+        );
+        let context = block_context(&block, &properties, &silk, Some("minecraft:blocks/snow"), 7)
+            .with_this_entity();
+        let expected = if layers == 8 {
+            LootDrop::single(id("minecraft:snow_block"))
+        } else {
+            LootDrop::fixed(block.clone(), layers)
+        };
+        assert_eq!(loot.evaluate_block(&context).unwrap(), Some(vec![expected]));
+    }
+}
+
+#[test]
 fn vanilla_slab_conditional_count_preserves_single_and_double_drops() {
     let loot = load_block_table(
         "oak_slab",
