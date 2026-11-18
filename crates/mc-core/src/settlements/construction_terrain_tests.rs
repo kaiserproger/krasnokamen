@@ -715,6 +715,10 @@ fn player_terrain_is_refused_at_survey_and_again_before_the_debit() {
         check(&state),
         Some(site_refusals::Reason::ProtectedObstruction)
     );
+}
+
+#[test]
+fn player_terrain_edits_inside_the_territory_are_cut_and_credited_at_debit() {
     // Inside village property, a history-only edit after admission is cleared
     // and credits the certified stone once.
     let (mut state, id, builder) = fixture();
