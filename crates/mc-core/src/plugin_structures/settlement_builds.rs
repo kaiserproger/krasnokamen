@@ -999,6 +999,54 @@ pub(crate) fn built_at(
     })
 }
 
+/// Every committed revision of `(settlement, blueprint, same site)`, oldest
+/// first: a blueprint level stores only its diff against the level below, so
+/// the executed evidence for an upgrade is the whole chain, not the newest
+/// record alone. Records are read as they stand committed *now*: `recover` and
+/// `reopen_emptied` rewrite them, and admission takes the current image.
+fn committed_chain<'a>(
+    state: &TickState,
+    ledger: &'a Ledger,
+    id: SettlementId,
+    blueprint: &str,
+    origin: [i32; 3],
+) -> Vec<&'a Structure> {
+    let mut chain: Vec<&Structure> = ledger
+        .structures
+        .values()
+        .filter(|record| {
+            record.settlement == Some(id)
+                && record
+                    .snapshot
+                    .blueprint_id
+                    .strip_prefix("krasnokamen-settlements:")
+                    == Some(blueprint)
+                && same_site(state, record, origin)
+                && record.snapshot.state == ScriptStructureState::Committed
+        })
+        .collect();
+    chain.sort_by_key(|record| record.snapshot.revision);
+    chain
+}
+
+/// The previous build's own evidence, addressed by position: the last
+/// committed state every record of the executed chain wrote there, folded
+/// oldest first so a later level that did not touch a cell cannot hide what an
+/// earlier level placed. A `Cancelled` record is not evidence.
+pub(crate) fn previous_committed(
+    state: &TickState,
+    id: SettlementId,
+    blueprint: &str,
+    origin: [i32; 3],
+) -> Result<BTreeMap<[i32; 3], u32>, Failure> {
+    let ledger = ledger(state)?;
+    Ok(committed_chain(state, &ledger, id, blueprint, origin)
+        .into_iter()
+        .flat_map(|record| record.cells.iter().flatten())
+        .map(|cell| (cell.at, cell.state))
+        .collect())
+}
+
 /// Upgrade tree cells follow the same fence as a new site: a player-touched or
 /// persistent cell, unknown generator evidence, a protected root halo or a live
 /// player with capture disabled refuses; a previous committed building's exact
@@ -1013,21 +1061,9 @@ pub(crate) fn upgrade_trees_clear(
     lot: Option<mc_script::ScriptWorldBounds>,
     clearance: &mut crate::settlements::forestry::Clearance,
 ) -> Result<Vec<PlannedCell>, Failure> {
-    let ledger = ledger(state)?;
-    let previous = ledger
-        .structures
-        .values()
-        .filter(|record| {
-            record.settlement == Some(id)
-                && record
-                    .snapshot
-                    .blueprint_id
-                    .strip_prefix("krasnokamen-settlements:")
-                    == Some(blueprint)
-                && same_site(state, record, origin)
-                && record.snapshot.state == ScriptStructureState::Committed
-        })
-        .max_by_key(|record| record.snapshot.revision);
+    // The whole executed chain, so an earlier level's beam is still the
+    // building's own cell when the newest level did not touch it.
+    let previous = previous_committed(state, id, blueprint, origin)?;
     let mut cleared = Vec::new();
     for cell in cells {
         let block = state
@@ -1045,13 +1081,7 @@ pub(crate) fn upgrade_trees_clear(
         if crate::settlements::forestry::persistent(state, block) {
             return Err(Failure::Blocked);
         }
-        if previous.is_some_and(|record| {
-            record
-                .cells
-                .iter()
-                .flatten()
-                .any(|authored| authored.at == cell.at && authored.state == block)
-        }) {
+        if previous.get(&cell.at) == Some(&block) {
             // The building's own authored beam; the upgrade replaces it.
             continue;
         }

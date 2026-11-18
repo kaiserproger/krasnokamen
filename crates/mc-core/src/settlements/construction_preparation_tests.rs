@@ -1,4 +1,4 @@
-use super::super::tests::{attempt, complete, fund};
+use super::super::tests::{attempt, complete, fund, start};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use crate::settlements::forestry;
@@ -545,5 +545,314 @@ fn outpost_begin_reserves_the_brick_chain_for_its_fill() {
     assert_eq!(
         stone_left, 0,
         "the admitted outpost bill never asks for stone: the fill kept cobblestone"
+    );
+}
+
+/// Authored cells of one blueprint level, addressed in the world: the level's
+/// own diff, which for level 1 is the whole building.
+fn authored(
+    state: &TickState,
+    project: &Project,
+    level: u8,
+) -> std::collections::BTreeMap<[i32; 3], u32> {
+    let blueprint = blueprints::get(&state.registry, &project.blueprint).unwrap();
+    let rotated = blueprint
+        .level(level)
+        .unwrap()
+        .rotated(Rotation::from_quarter_turns(project.rotation));
+    rotated
+        .blocks
+        .iter()
+        .map(|(offset, id)| (rotated.world(project.origin, *offset), id.0))
+        .collect()
+}
+
+fn cleared(
+    state: &TickState,
+    project: &Project,
+    level: u8,
+) -> std::collections::BTreeSet<[i32; 3]> {
+    let blueprint = blueprints::get(&state.registry, &project.blueprint).unwrap();
+    let rotated = blueprint
+        .level(level)
+        .unwrap()
+        .rotated(Rotation::from_quarter_turns(project.rotation));
+    rotated
+        .removals
+        .iter()
+        .map(|offset| rotated.world(project.origin, *offset))
+        .collect()
+}
+
+fn raw(state: &TickState, block: u32) -> i32 {
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .expect("known block state")
+        .block
+        .raw_id
+}
+
+/// A level-one cell level two replaces, with level one's state there and a
+/// sibling state of the same raw block: a different silhouette or interaction
+/// of one and the same block, as an opened door is to a closed one. Tree and
+/// sapling cells are D18's fence, not this one, so they are skipped.
+fn replaced_cell(state: &TickState, project: &Project) -> ([i32; 3], u32, u32) {
+    let previous = authored(state, project, 1);
+    for (at, id) in authored(state, project, 2) {
+        let Some(&old) = previous.get(&at) else {
+            continue;
+        };
+        if old == id || crate::settlements::forestry::tree_or_sapling(state, old) {
+            continue;
+        }
+        let raw_id = raw(state, old);
+        if let Some(sibling) = state
+            .registry
+            .blocks
+            .states()
+            .find(|state| state.block.raw_id == raw_id && state.id.0 != old)
+        {
+            return (at, old, sibling.id.0);
+        }
+    }
+    panic!("level two replaces an authored level-one block with a sibling state");
+}
+
+/// A certified level-one house and its level-two project: the upgrade's only
+/// evidence is the committed level-one record.
+fn certified_house() -> (
+    TickState,
+    SettlementId,
+    crate::entities::EntitySlot,
+    Project,
+) {
+    let (mut state, id, builder) = super::super::tests::fixture();
+    start(&mut state, id, "house", 1, None);
+    let origin = state.settlements.get(id).unwrap().projects[0].origin;
+    fund(&mut state, "house", 1);
+    complete(&mut state, id, builder);
+    let record = state.settlements.get(id).unwrap();
+    assert!(record.projects.is_empty(), "level one certifies");
+    let building = *record.buildings.keys().next().expect("a certified building");
+    let project = Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 2,
+        origin,
+        rotation: 0,
+        building: Some(building),
+        structure: String::new(),
+        ordered: true,
+        builder: None,
+        order_seq: None,
+    };
+    (state, id, builder, project)
+}
+
+fn foreign_block(state: &TickState, different: u32) -> u32 {
+    ["minecraft:cobblestone", "minecraft:stone", "minecraft:bricks"]
+        .into_iter()
+        .map(|name| block(state, name, &[]))
+        .find(|id| raw(state, *id) != raw(state, different))
+        .expect("a foreign solid block")
+}
+
+#[test]
+fn upgrade_refuses_a_divergent_previous_build_cell() {
+    let (mut state, id, _, project) = certified_house();
+    let (at, authored_state, _) = replaced_cell(&state, &project);
+    let live = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    assert_eq!(
+        raw(&state, live),
+        raw(&state, authored_state),
+        "level one's own block still stands at the replaced cell"
+    );
+    let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
+        .expect("the committed record is the evidence");
+    assert!(evidence.contains_key(&at));
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    assert!(
+        cells
+            .iter()
+            .any(|cell| cell.at == at && cell.state != state.registry.states.air),
+        "level two places a block here"
+    );
+    assert_eq!(
+        previous_build_divergence(&state, &cells, &evidence, project.origin[1]),
+        None,
+        "the previous build's own cell is never a divergence"
+    );
+
+    let foreign = foreign_block(&state, authored_state);
+    state.world.set_block(at[0], at[1], at[2], foreign);
+    assert_eq!(
+        previous_build_divergence(&state, &cells, &evidence, project.origin[1]),
+        Some((at, Some(foreign))),
+        "the refusal names the divergent cell"
+    );
+    assert!(
+        matches!(
+            planned_cells(&state, &project, "oak", &mut Default::default()),
+            Err(site_refusals::Reason::PreviousBuildDiverged)
+        ),
+        "a foreign block on a planned placement cell refuses the upgrade"
+    );
+
+    // Admission, not the executor: no project, no block write, no receipt and
+    // no ledger change.
+    fund(&mut state, "house", 2);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let ledger = state
+        .plugins
+        .get_domain("@native-structures", "ledger")
+        .cloned();
+    assert_eq!(
+        start_upgrade(&mut state, id, project.building.unwrap()),
+        Err("Construction admission refused: PreviousBuildDiverged.".into())
+    );
+    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(foreign));
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "nothing was admitted"
+    );
+    assert_eq!(
+        state
+            .plugins
+            .get_domain("@native-structures", "ledger")
+            .cloned(),
+        ledger,
+        "no receipt and no record write before the refusal"
+    );
+}
+
+#[test]
+fn a_state_only_change_is_not_a_previous_build_divergence() {
+    let (mut state, id, _, project) = certified_house();
+    let (at, authored_state, sibling) = replaced_cell(&state, &project);
+    state.world.set_block(at[0], at[1], at[2], sibling);
+    assert_eq!(
+        raw(&state, sibling),
+        raw(&state, authored_state),
+        "the sibling changes only the state, never the block"
+    );
+    let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
+        .expect("the committed record is the evidence");
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).expect(
+        "a stair reshaped, a door opened, a fence connected or a furnace lit is still the same block",
+    );
+    assert!(cells.iter().any(|cell| cell.at == at));
+    assert_eq!(
+        previous_build_divergence(&state, &cells, &evidence, project.origin[1]),
+        None
+    );
+
+    let foreign = foreign_block(&state, authored_state);
+    state.world.set_block(at[0], at[1], at[2], foreign);
+    assert!(
+        matches!(
+            planned_cells(&state, &project, "oak", &mut Default::default()),
+            Err(site_refusals::Reason::PreviousBuildDiverged)
+        ),
+        "a different raw block in the same cell still refuses"
+    );
+}
+
+#[test]
+fn an_earlier_levels_untouched_cell_is_upgrade_evidence() {
+    let (mut state, id, builder, project) = certified_house();
+    // Level two certifies on top of level one.
+    fund(&mut state, "house", 2);
+    start(
+        &mut state,
+        id,
+        "house",
+        2,
+        Some(project.building.unwrap()),
+    );
+    complete(&mut state, id, builder);
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "level two certifies"
+    );
+    let third = Project {
+        level: 3,
+        ..project.clone()
+    };
+    // Level three replaces a cell only level one ever wrote: level two's diff
+    // and removals both leave it alone, so newest-only evidence has nothing.
+    let first = authored(&state, &third, 1);
+    let second = authored(&state, &third, 2);
+    let second_cleared = cleared(&state, &third, 2);
+    let at = authored(&state, &third, 3)
+        .into_iter()
+        .find(|(at, id)| {
+            first.get(at).is_some_and(|old| old != id && !clearable(&state, *old))
+                && !second.contains_key(at)
+                && !second_cleared.contains(at)
+        })
+        .map(|(at, _)| at)
+        .expect("level three replaces a cell level two never wrote");
+    let live = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    assert_eq!(
+        raw(&state, live),
+        raw(&state, first[&at]),
+        "level one's block still stands where level two wrote nothing"
+    );
+    let evidence = executor::previous_committed(&state, id, &third.blueprint, third.origin)
+        .expect("the committed chain is the evidence");
+    assert_eq!(
+        raw(&state, evidence[&at]),
+        raw(&state, live),
+        "the whole executed chain, not the newest record, proves the cell"
+    );
+    let (_, cells) = planned_cells(&state, &third, "oak", &mut Default::default())
+        .expect("an earlier level's authored cell is the building's own");
+    assert!(
+        cells.iter().any(|cell| cell.at == at),
+        "level three places its block on level one's cell"
+    );
+}
+
+#[test]
+fn committed_records_are_upgrade_evidence_after_a_journal_replay() {
+    use crate::journal::JournalEntry;
+    let (mut state, id, _, project) = certified_house();
+    let (at, _, _) = replaced_cell(&state, &project);
+    assert!(executor::built_at(&state, id, &project.blueprint, project.origin));
+    let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
+        .expect("evidence before the cycle");
+    assert!(evidence.contains_key(&at));
+
+    let mut entries = Vec::new();
+    crate::plugin::journal(&mut state, &mut entries);
+    let JournalEntry::Plugins { value } = entries.pop().expect("the ledger's post-image")
+    else {
+        panic!("the plugin domain journal entry")
+    };
+    let (mut replayed, again, _) = super::super::tests::fixture();
+    assert_eq!(again, id, "the fixture settles the same settlement");
+    replayed.plugins.apply_delta(&value);
+
+    assert!(
+        executor::built_at(&replayed, id, &project.blueprint, project.origin),
+        "the replayed committed record still certifies the site"
+    );
+    assert_eq!(
+        executor::previous_committed(&replayed, id, &project.blueprint, project.origin)
+            .expect("evidence after the replay"),
+        evidence,
+        "the prepared-cell lookup resolves the same image from persisted evidence"
+    );
+
+    // A cancelled record is not evidence.
+    executor::cancel(&mut replayed, id).expect("the settlement's records cancel");
+    assert!(
+        executor::previous_committed(&replayed, id, &project.blueprint, project.origin)
+            .expect("a cancelled ledger still reads")
+            .is_empty(),
+        "only committed records are upgrade evidence"
     );
 }

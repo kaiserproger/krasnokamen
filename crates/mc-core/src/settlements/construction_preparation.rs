@@ -159,6 +159,27 @@ pub(super) fn planned_cells(
             cleared.append(&mut cells);
             cells = cleared;
         }
+        // D7 §2.4: an upgrade may only write where the previous build wrote or
+        // where the world is empty. The evidence is the last committed state of
+        // every position the building's executed chain wrote, read at admission
+        // time; nothing is debited, receipted or placed before this refuses.
+        let evidence = executor::previous_committed(
+            state,
+            project.settlement,
+            &project.blueprint,
+            project.origin,
+        )
+        .map_err(|_| Preparation)?;
+        if let Some((at, live)) = previous_build_divergence(state, &cells, &evidence, project.origin[1])
+        {
+            tracing::warn!(settlement = project.settlement.0, blueprint = %project.blueprint,
+                level = project.level, cell = ?at, ?live,
+                "settlement_upgrade_previous_build_diverged");
+            return Err(match live {
+                Some(_) => site_refusals::Reason::PreviousBuildDiverged,
+                None => site_refusals::Reason::Unloaded,
+            });
+        }
     }
     // Include the whole placement extent (roof crowns/yards) in executor
     // interference fencing; certification uses the narrower authored bounds.
@@ -180,6 +201,66 @@ pub(super) fn planned_cells(
     }
     let bounds = ScriptWorldBounds::new(min, max).map_err(|_| Preparation)?;
     Ok((bounds, cells))
+}
+
+/// The first planned placement cell an upgrade may not write: its live block is
+/// neither air — the plan itself empties that position earlier, or the world is
+/// already empty there — nor the previous build's own last committed block at
+/// that position. Identity is compared by raw block id, as `reopen_emptied`
+/// does: an opened door, a connected fence or a lit furnace is the same block,
+/// not a divergence. `None` as the live state means the world is unloaded.
+///
+/// The foundation row, `floor`, is the site's own ground: there the floor layer
+/// replaces the surface block by construction, and a new site's admission grants
+/// exactly that with [`floor_replaceable`] plus the player-touch veto, so an
+/// upgrade inherits the grant instead of calling the ground it stands on foreign.
+fn previous_build_divergence(
+    state: &TickState,
+    cells: &[executor::PlannedCell],
+    evidence: &std::collections::BTreeMap<[i32; 3], u32>,
+    floor: i32,
+) -> Option<([i32; 3], Option<u32>)> {
+    let identity = |block: u32| {
+        state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .map(|definition| definition.block.raw_id)
+    };
+    let air = state.registry.states.air;
+    let mut emptied = std::collections::BTreeSet::new();
+    for cell in cells {
+        if cell.state == air {
+            emptied.insert(cell.at);
+            continue;
+        }
+        // An earlier air cell at this position is applied first, so the cell is
+        // placed on air the plan created (Opus F10).
+        if emptied.contains(&cell.at) {
+            continue;
+        }
+        let Some(live) = state
+            .world
+            .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
+        else {
+            return Some((cell.at, None));
+        };
+        if live == air {
+            continue;
+        }
+        let own = evidence.get(&cell.at).copied().and_then(identity);
+        if own.is_some() && own == identity(live) {
+            continue;
+        }
+        if cell.at[1] == floor
+            && floor_replaceable(state, live)
+            && !state.block_log.player_touched(cell.at)
+        {
+            continue;
+        }
+        return Some((cell.at, Some(live)));
+    }
+    None
 }
 
 pub(crate) fn active_lot(
