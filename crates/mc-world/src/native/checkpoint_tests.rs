@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 mod player_duplicate_custody;
 
 pub(super) fn globals(tick: u64) -> BTreeMap<String, NativeDomainRecord> {
-    let manifest = json!({"tick":tick,"dimensions":{},"end_fight":null,"raids":null,"tickets":{},"players":{},"world_spawn":[0,64,0],"world_spawn_rotation":[0,0],"generated_entity_claims":[],"climate":{},"border":{},"difficulty":"Normal","block_ticks":{"next_sequence":0,"chunks":[]},"fluid_ticks":{"next_sequence":0,"covered":[],"due":[]},"gamerules":{},"domain_versions":{"climate":1,"gamerules":1,"block_ticks":1,"fluid_ticks":1,"claims":1,"tickets":1,"raids":1,"end_fight":1}});
+    let manifest = json!({"tick":tick,"dimensions":{},"end_fight":null,"raids":null,"tickets":{},"players":{},"world_spawn":[0,64,0],"world_spawn_rotation":[0,0],"generated_entity_claims":[],"climate":{},"border":{},"difficulty":"Normal","block_ticks":{"next_sequence":0,"chunks":[]},"fluid_ticks":{"next_sequence":0,"covered":[],"due":[]},"gamerules":{},"domain_versions":{"manifest":1,"climate":1,"gamerules":1,"block_ticks":1,"fluid_ticks":1,"claims":1,"tickets":1,"raids":1,"end_fight":1}});
     let mut manifest = manifest;
     manifest["domain_versions"]["plugins"] = json!(1);
     manifest["domain_versions"]["plugin_startup"] = json!(1);
@@ -233,6 +233,66 @@ fn native_checkpoint_accepts_pre_plugin_manifests_without_plugin_records() {
     let upgraded = store.read_checkpoint().unwrap();
     assert!(upgraded.globals.contains_key("plugins"));
     assert!(upgraded.globals.contains_key("plugin_startup"));
+}
+
+#[test]
+fn native_checkpoint_requires_the_manifest_format_version() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    for wrong in [None, Some(2u64)] {
+        let mut records = globals(0);
+        let record = records.get_mut("checkpoint").unwrap();
+        let mut manifest: Value = serde_json::from_slice(&record.payload).unwrap();
+        match wrong {
+            None => {
+                manifest["domain_versions"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("manifest");
+            }
+            Some(version) => manifest["domain_versions"]["manifest"] = json!(version),
+        }
+        record.payload = serde_json::to_vec(&manifest).unwrap();
+        let error = commit(&store, 0, 0, &records, &[], &[])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("unsupported manifest format version"),
+            "{error}"
+        );
+    }
+    // A child image is a manifest too: an old Nether image refuses even when
+    // the root carries the current version.
+    let mut child = globals(0);
+    let record = child.get_mut("checkpoint").unwrap();
+    let mut manifest: Value = serde_json::from_slice(&record.payload).unwrap();
+    manifest["dimensions"]["minecraft:the_nether"]["domain_versions"]
+        .as_object_mut()
+        .unwrap()
+        .remove("manifest");
+    record.payload = serde_json::to_vec(&manifest).unwrap();
+    let error = commit(&store, 0, 0, &child, &[], &[])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("unsupported manifest format version"),
+        "{error}"
+    );
+}
+
+#[test]
+fn native_checkpoint_round_trips_the_manifest_format_version() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    commit(&store, 0, 0, &globals(0), &[], &[]).unwrap();
+    let image = store.read_checkpoint().unwrap();
+    let manifest: Value = serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
+    assert_eq!(manifest["domain_versions"]["manifest"], json!(1));
+    let children = manifest["dimensions"].as_object().unwrap();
+    assert_eq!(children.len(), 2);
+    for (name, child) in children {
+        assert_eq!(child["domain_versions"]["manifest"], json!(1), "{name}");
+    }
 }
 
 #[test]

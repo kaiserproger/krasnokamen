@@ -226,6 +226,11 @@ Explicit saves queue behind the current checkpoint. Shutdown requests a final
 checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)
 for the entity checkpoint design.
 
+The checkpoint manifest carries a required `manifest` format version beside its
+per-domain entries, written into the root and both child images and compared for
+exact equality on recovery. Any incompatible manifest change bumps it; there is
+no converter, and a world written under another version refuses startup.
+
 Disk-full checkpoint drills wrap the real lease-holding native file backend.
 The injected writer and `NativeStore` retain the same `Arc<File>`, as the
 production database and its backup reader do; failure injection never reopens

@@ -447,6 +447,7 @@ fn validate_globals(
         ));
     }
     let names = [
+        "manifest",
         "climate",
         "gamerules",
         "block_ticks",
@@ -467,6 +468,9 @@ fn validate_globals(
     Ok(checkpoint)
 }
 fn validate_manifest(value: &Value, tick: u64) -> Result<(), NativeError> {
+    if value["domain_versions"]["manifest"].as_u64() != Some(1) {
+        return Err(failure("checkpoint", "unsupported manifest format version"));
+    }
     for key in [
         "tick",
         "dimensions",

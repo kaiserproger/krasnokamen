@@ -1442,6 +1442,84 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
     }
 }
 
+#[test]
+fn manifest_format_version_is_required_in_root_and_children() {
+    let mut manifest = CheckpointManifest {
+        domain_versions: domain_versions(),
+        world_spawn: Some([0, 80, 0]),
+        ..Default::default()
+    };
+    for dimension in [Dimension::Nether, Dimension::End] {
+        manifest.dimensions.insert(
+            dimension,
+            Box::new(CheckpointManifest {
+                domain_versions: domain_versions(),
+                world_spawn: Some([0, 80, 0]),
+                ..Default::default()
+            }),
+        );
+    }
+    validate_manifest(&manifest).unwrap();
+
+    let mut missing = manifest.clone();
+    missing.domain_versions.remove("manifest");
+    let error = validate_manifest(&missing).unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported required domain versions"),
+        "{error}"
+    );
+
+    let mut child_missing = manifest.clone();
+    child_missing
+        .dimensions
+        .get_mut(&Dimension::Nether)
+        .unwrap()
+        .domain_versions
+        .remove("manifest");
+    assert!(validate_manifest(&child_missing).is_err());
+
+    let mut wrong = manifest.clone();
+    wrong.domain_versions.insert("manifest".into(), 2);
+    let error = validate_manifest(&wrong).unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported required domain versions"),
+        "{error}"
+    );
+
+    let mut child_wrong = manifest.clone();
+    child_wrong
+        .dimensions
+        .get_mut(&Dimension::End)
+        .unwrap()
+        .domain_versions
+        .insert("manifest".into(), 2);
+    assert!(validate_manifest(&child_wrong).is_err());
+}
+
+#[test]
+fn manifest_format_version_round_trips_through_the_writer() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    write_manifest(
+        &config,
+        &CheckpointManifest {
+            world_spawn: Some([0, 80, 0]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let persisted = read_manifest(&config).unwrap();
+    assert_eq!(persisted.domain_versions.get("manifest"), Some(&1));
+    assert_eq!(persisted.dimensions.len(), 2);
+    for (dimension, child) in &persisted.dimensions {
+        assert_eq!(
+            child.domain_versions.get("manifest"),
+            Some(&1),
+            "{dimension:?}"
+        );
+    }
+}
+
 /// Opening a world whose store carries `identity` fails; return the refusal.
 fn open_refusal_text(identity: impl FnOnce(&CoreConfig) -> [u8; 32]) -> String {
     let directory = tempfile::tempdir().unwrap();

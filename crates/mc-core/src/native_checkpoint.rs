@@ -209,8 +209,13 @@ pub fn dimension_id(dimension: Dimension) -> u32 {
     }
 }
 
+/// Required manifest image versions. `manifest` versions the manifest schema
+/// itself: it is the only gate against a binary opening a manifest it does not
+/// understand, so any incompatible manifest change bumps it. There is no
+/// converter; a manifest written under another version refuses startup.
 pub fn domain_versions() -> BTreeMap<String, u32> {
     [
+        "manifest",
         "climate",
         "gamerules",
         "block_ticks",
