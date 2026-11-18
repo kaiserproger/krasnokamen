@@ -7496,3 +7496,370 @@ source = "BattleYawHold residual 2026-11-17 (receipts/BattleYawHold/RESULTS.md:4
 repro = "client"
 regression = []
 failing_first = "not recorded"
+
+# Books audit rows (owner D31, 2026-11-18, BooksLedger): every gap of receipts/Books/REPORT-R1..R6.md still open on main 5bdc02911.
+# Gap-to-row table, skipped gaps and their closing commits: receipts/Books/LEDGER-FILING.md. Ideas live in receipts/Perf1M/BOOKS-IDEAS.md.
+# Severity: the reports rank classes, not blocker/major/minor. Data loss, corruption and security gaps file as major; perf and hygiene gaps as minor.
+
+[[bug]]
+id = "WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT"
+title = "redb's unattended repair can roll the store back to the previous commit behind an acknowledged checkpoint whose WAL was already pruned, and nothing durable records that the newer checkpoint ever existed, so the server serves the older world."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R4.md section 1 R4-P1 (OSTEP 45.6 lost writes, 42.3 forcing writes; data loss). Mechanism read from redb 3.1.0 [INFERENCE]: crates/mc-world/src/native.rs opens the store with the default builder, and when the newest commit slot fails its checksum redb swaps to the older slot; the WAL is pruned right after the commit (crates/mc-core/src/core/journal.rs prune_batches_through iff committed), so no WAL covers the lost interval (up to checkpoint_every_ticks = 1200 ticks, about 60 s of play: players, entities, plugin domains and block edits vanish with no refusal). Partly addressed on main: 4e060c76c / 970060909 install a repair callback that counts repairs and the serving path logs ERROR 'redb repaired ...' (native.rs redb_repairs), so the rollback is now visible. NOT closed: no durable marker of the last acknowledged checkpoint tick exists, so startup cannot tell a rollback of a durable checkpoint from a clean open and does not refuse. Fix direction in the report: write <world>/native/checkpoint-tick (File::create + write + sync_all + rename + sync_parent_dir via atomic_file.rs) after a successful commit and before prune, and refuse startup when the store's committed tick is below it (a crash between commit and marker is harmless: marker <= store tick by construction). Regression sketch: native/checkpoint_drill_tests.rs corrupts the newest commit slot after a committed and pruned checkpoint, reopens, and requires a refusal. Recovery-contract change; the report keeps it out of the pre-announcement freeze."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "WAL-BATCH-HAS-NO-STORE-IDENTITY"
+title = "WAL batch frames carry magic, version, tick range, length and CRC but no identity of the store they belong to, so a journal directory copied from another world or copy of the same world replays into a store that validates its own 32-byte identity, with every check passing and nothing logged."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R4.md section 1 R4-P3 (OSTEP 45.5 misdirected writes, 42.3 block reuse; corruption, operator-triggered). The batch frame is [magic][version][tick_lo][tick_hi][length][crc] (crates/mc-core/src/journal.rs BATCH_VERSION = 1, decode_batch cross-checks the file name and the CRC), so a file moved to another name refuses, but ownership is not recorded: redb validates a 32-byte identity (crates/mc-world/src/native.rs validate_header on every open), the journal does not. Two worlds both number batches from tick 1, so a foreign journal/ directory satisfies every check against another world's checkpoint (visit_complete_batches_after needs only contiguous, CRC-clean ticks above the manifest). Scenario: restoring only the database into a world whose journal/ is newer or foreign, or copying a world's journal/ between two copies of the same world; recovery folds post-images and tombstones of different chunks, entities and players without a message. Verified open on main 5bdc02911 (BATCH_VERSION still 1, no identity in the frame). Fix direction: put the first 16 bytes of the store identity in the header, bump BATCH_VERSION to 2, require it in decode_batch, accept v1 once with a warn! naming the file and stop writing v1; document the never-mix rule in docs/OPERATING.md and persistence.md Backup. Regression sketch: a batch with identity A in a world whose store has identity B must refuse naming both. A durable frame-version bump is not a freeze change in the report's reading."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "CHECKPOINT-MANIFEST-HAS-NO-FORMAT-VERSION"
+title = "The checkpoint manifest JSON has no format version and its domain_versions gate covers 10 of about 25 fields, so an older binary opens a newer world, defaults the unknown fields and writes them back erased at its next checkpoint (default game mode, scheduled functions, world spawn)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R5.md section 1 G1 (Petrov ch. 3 versioning p. 57-58, ch. 5 p. 90; data loss on a binary downgrade). CheckpointManifest (crates/mc-core/src/journal.rs) derives Serialize and Deserialize with no version field and every newer field is serde(default); the only gate is native_checkpoint::validate_manifest comparing domain_versions() for equality (crates/mc-core/src/native_checkpoint.rs, a ten-name list: climate, gamerules, block_ticks, fluid_ticks, claims, tickets, raids, end_fight, plugins, plugin_startup), mirrored by the redb header VERSIONS (crates/mc-world/src/native/checkpoint.rs). Fields outside the list (world_spawn, scheduled_functions, default_game_mode, difficulty, border, inhabited_time, debt, generated_entity_claims, ...) are protected by nothing; unknown fields are ignored. Scenario: the operator rolls the pin back one build; the older binary passes the gate, supplies GameMode::default() = Survival, and its next checkpoint writes the manifest without the field; the newer binary reopens a world whose default mode flipped to survival, scheduled command blocks stopped and spawn moved, with no log line. Verified open on main 5bdc02911 (no manifest_version, domain_versions() still ten names). Fix direction and the trap: add the missing names to domain_versions() as a one-way upgrade (accept both the old and the new list on read, as plugins/plugin_startup already do, always write the new one, keep the redb VERSIONS constant in step), then add manifest_version: u32 (serde default 0, refuse > CURRENT) for future fields; about 25 lines + 3 tests (old-list manifest upgrades, newer manifest_version refuses, written manifest carries the new list)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED"
+title = "A hot backup hashes the bytes it copies of state.redb but never checks that the source store is intact or that the copy opens, so a backup of a damaged store is taken, reported successful and refused only at restore time."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R5.md section 1 G3 (Petrov ch. 3 checksumming p. 59: do not propagate corrupt data; the backup must be restorable). The report's journal half is CLOSED on main by 4e060c76c: copy_world (crates/mc-core/src/hot_backup.rs) now runs journal::verify_batch_file (decode_batch + CRC) on every WAL batch it copies and fails the backup naming the batch. NOT closed [INFERENCE: residual of the same class, not a separate report scenario]: the checkpoint database is copied with copy_reader_hashed (hot_backup.rs, a SHA-256 of the copied bytes only); nothing opens the copy, runs redb check_integrity or validates the header and manifest, so a bit flip or bad block in state.redb is copied faithfully, the manifest digest matches the corrupt bytes, and run_restore (crates/mc-edge/src/backup.rs) re-hashes the same bytes and succeeds on the digest while the store is unusable; the disaster-time failure the report describes for batches remains for the database. Verified on main 5bdc02911. Fix direction: open the copied state.redb read-only (inspect_read_only path in crates/mc-world/src/native.rs, which neither writes nor repairs) and validate header, tick and tables before the backup is reported complete; one test that flips a byte in a temp world's database and expects a refused backup. Additive, no running-server behaviour change."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "WAL-BLOCK-STATE-IDS-HAVE-NO-PALETTE-IDENTITY"
+title = "The WAL stores block states as raw vanilla state ids with no palette or data-version fingerprint in the batch header or the manifest, so a tail written by one build and replayed by another silently remaps blocks."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R5.md section 1 G5 (Petrov ch. 5 p. 91, ch. 3 versioning p. 57-58; silent corruption of the WAL tail). JournalEntry::Block { state: u32 } (crates/mc-core/src/journal.rs) is the vanilla global block-state id from the parsed blocks.json report (crates/mc-world/src/block.rs BlockRegistry::from_report); replay applies it with no identity check (journal/replay.rs, core/recovery.rs, world.rs overlay compares families only, an out-of-range id is stored and fails later at dictionary encode); the batch header and CheckpointManifest carry no fingerprint. The checkpointed store is name-anchored (validate_tables, block dictionary) and block_log rows encode {Name, Properties}, so the WAL tail is the only numeric surface. Scenario: a hard kill leaves a non-empty tail (a checkpoint is only every 1200 ticks), the operator starts the next pin whose blocks.json renumbers states [INFERENCE: vanilla renumbers states between versions], and up to one checkpoint interval of edits replay as the wrong blocks. Verified open on main 5bdc02911 (no fingerprint anywhere in journal.rs or native_checkpoint.rs). Fix direction needs Main's call, it is a format change: (a) BATCH_VERSION 2 with a u64 palette fingerprint (hash of the id, name, properties list) verified at decode, or (b) a registry_fingerprint in the manifest compared at startup only when a WAL tail exists (missing fingerprint plus non-empty tail = unknown palette: warn, or refuse under a strict key); clean shutdowns prune the tail so (b) does not inconvenience normal upgrades. About 30 lines + a refusal test."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "CONSOLE-WAIT-DRAINED-LOSES-WAKEUP"
+title = "ConsoleState::wait_drained creates its Notified future before checking the drained tick but only registers it on first poll, so a drained() notification in that window is lost and an RCON or console command waits for the next published tick (and up to the 30 s IO timeout if none comes)."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R4.md section 1 R4-P4 (OSTEP 32.2 order violations; Bos Notified::enable pattern, tokio 1.54.1 notify.rs). crates/mc-edge/src/console.rs wait_drained: let ready = self.ready.notified(); if drained.load(Acquire) >= tick { break } ready.await; the future is registered only when first polled, and drained() does store(tick, Release) then notify_waiters(), which stores no permit. Today the pump calls drained(out.tick) every published tick (crates/mc-edge/src/server/pump.rs), so the cost is at most one extra tick (50 ms) of console latency; unbounded when no further tick is published (stop, stalled tick): the RCON client waits out the session timeout instead of getting its output. Bounded, no data path. Verified open on main 5bdc02911 (the code is unchanged). Fix direction: tokio::pin! the future and call ready.as_mut().enable() before the predicate load, or use tokio::sync::watch::channel(0u64). Regression sketch: a paused-time tokio::test that stores and notifies between future creation and first poll and asserts the wait completes without a second notification."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION"
+title = "An LOD tile sampled in the old dimension can be queued after the viewer's dimension switch with the new generation stamp, so the world-queue fence keeps it and a Distant Horizons client in the new dimension receives a wrong-dimension tile."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R4.md section 1 R4-P5 (OSTEP 32.2 atomicity violations; Bos ch. 2 fetch_add is a total order, not a critical section). The fence added by docs/bugs/fix-patches/DIMENSION-SWITCH-KNOCKBACK-DISCONNECT.patch is WorldSender::reset() = generation.fetch_add(1, AcqRel) and try_send / try_send_chunk_batch stamp the frame with generation.load(Acquire) at enqueue time (crates/mc-edge/src/server/world_queue.rs); reset() is called by the pump on PlayerChange::DimensionChanged. crates/mc-edge/src/lod.rs sends LOD tiles from a tokio task after a spawn_blocking sample of the world, so a task that sampled the overworld can send after reset() and its frame carries the new generation; the session_locked check in lod.rs runs before the send and does not close the window. Consequence is presentational (a wrong-dimension tile in the DH cache), not stateful. Verified open on main 5bdc02911 (generation still loaded at try_send). Fix direction: capture the generation before the blocking work and pass it in (try_send_at(generation, frame)) or re-check the viewer's dimension inside the enqueue critical section. Regression sketch: a WorldQueue unit test where reset() between a captured generation and a send discards the frame."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PLUGIN-OPERATION-RECEIPTS-GROW-WITHOUT-BOUND"
+title = "Plugin operation receipts form a dedup table keyed by an opaque plugin-chosen id with no expiry, watermark or cap, and every checkpoint re-serialises all of them, so a guest that mints one id per action grows RSS, checkpoint payload and commit time for the life of the world."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R5.md section 2b G4 (Petrov ch. 8 p. 184-185 deduplication needs a monotonic sequence and a watermark; ch. 12 p. 243). PluginDelta.receipts: BTreeMap<owner, BTreeMap<operation_id, OperationReceipt>> (crates/mc-core/src/plugin.rs) is keyed by an opaque guest string (crates/mc-script/src/inventory_operations.rs, npc_operations.rs); nothing removes a receipt (grep finds only a test harness), the whole state is serialised into the plugins native domain on every checkpoint (crates/mc-core/src/core/journal.rs serde_json::to_vec(plugins)) and priced into the journal queue budget (plugin.rs heap estimate). About 200-800 B per receipt, permanent; chest custody and NPC adoption are the likely minters [INFERENCE: the default plugin set is not in this tree]. Slow growth, no loss or crash; the report keeps it out of the freeze but wants it recorded because every default-plugin action during the announcement is permanent. Verified open on main 5bdc02911. Fix options in the report: (a) monotonic u64 per owner with a watermark (plugin ABI break), (b) wall-clock TTL keeping ids opaque, (c) a [plugins] max_receipts cap that refuses new operations. Measure by logging the receipt count at checkpoint next to entity_payload_bytes."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER"
+title = "broadcast_to answers 'is this recipient a spectator and may it see this entity' by scanning player_roster linearly, twice, for every visible player entity of every viewer on every publish, so the cost is O(viewers x visible players x roster) with a new cache line per step."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R3.md rule table R3-19 (Fabian, Searching / Tables: never re-derive a relation by scanning when it can be an index; perf). crates/mc-edge/src/plan/entity_interest.rs broadcast_to scans snapshot.player_roster (RosterPlayer carries a String name, about 56 B, crates/mc-core/src/dimensions_globals.rs), called from changed() and enter_leave(); the answer is a pure function of per-snapshot data. Verified open on main 5bdc02911 (player_roster iterated in entity_interest.rs). Fix direction: build a per-snapshot game-mode index once per publish. Measure fanout-thread self time (perf record -g) at 100 and 1000 observers with many players. No loss, crash or security consequence; Perf1M scale item, not freeze-relevant."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-MOVEMENT-DUE-DIVIDES-BY-UNGUARDED-UPDATE-INTERVAL"
+title = "entity_movement_due takes the vanilla per-type update_interval as a modulus without the .max(1) guard its sibling entity_interest::completed applies, so a future data row with interval 0 panics a rayon worker inside the fanout on every publish (unreachable with today's rows)."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R3.md rule table R3-37 (Fabian, Existential Processing / Complexity: make the invariant impossible to violate, not merely currently true; hygiene, latent panic). crates/mc-edge/src/plan.rs entity_movement_due uses u64::from(contract.update_interval) in tick % interval and i64::from(...) in rem_euclid, while crates/mc-edge/src/plan/entity_interest.rs completed guards the same value with .max(1). Today no row has 0 (minimum 1, area_effect_cloud is i32::MAX), so it cannot fire; a future contract row with 0 divides by zero on every publish. Verified open on main 5bdc02911 (plan.rs:1574-1577 unguarded). Fix: apply the same .max(1) guard (or reject 0 at the contract table) and pin it with a test."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC"
+title = "spawn_mob (the /summon, fixture and plugin path) never asks the world whether the new body overlaps a collision box, and natural spawning gates on other bodies only, so a mob placed inside a block is created silently and suffocates at a fixed position with nothing to name the writer."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R6.md section 1 G5 (Ericson 11.1 p. 428 degeneracies; 2.7.1 p. 20 log the arguments of failing queries; perf/hygiene). crates/mc-core/src/tick/entity_lifecycle.rs spawn_mob has no clearance test; crates/mc-core/src/natural_spawn.rs SpawnCensus::overlaps refuses a spawn overlapping another body but never asks the world for a block; the Perf1M fixture history (tools/coreperf/profiles.py sand-collapse note) records an animal summoned into sand that suffocated. Vanilla /summon does place a mob inside a block [INFERENCE: report did not re-read Entity.checkSpawnObstruction], so the report deliberately asks for a count or log when the new AABB already overlaps a collision box, not a refusal, which would change a public command. Verified open on main 5bdc02911 (no overlap query in spawn_mob). Fix direction: one sampler query in spawn_mob that counts and logs (tick, slot, type, pos, half width, writer) on overlap; about 10 lines. Related but separate: ENTITY-CROWD-PUSH-INTO-WALL (its cause was the physics band, closed by e282a959b / 7cca1476d; this row is the missing placement diagnostic)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "BATTLE-SEPARATION-CELL-CAP-DROPS-NEIGHBOURS-UNREPORTED"
+title = "The battle crowd separation grid packs at most CELL_CAP = 8 bodies per one-block sub-cell and silently drops the rest, and the overflow counter never reaches FormationWork, so no gate receipt can say whether the 3 % and 15 % heap limits were measured with candidates missing."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R6.md section 1 G6 (Ericson 7.1.1 p. 287: the per-cell bound follows from non-interpenetration, which a heap breaks; 7.7.2 time stamping; measurement gap, not a proved defect). crates/mc-core/src/battle/steering.rs SeparationGrid::rebuild drops bodies past CELL_CAP and increments self.overflow (asserted in steering_tests.rs but never added to FormationWork, crates/mc-core/src/battle/formation.rs), and nearest_where searches only packed indices, so in a dense heap the bodies it most needs to separate from are the ones it cannot see. BATTLE-OBLIQUE-GAP-REOPEN and BATTLE-BOUNDARY-REOPENS-GAP are fixed with heap 4.51 % -> 1.12 % (foot) and 6.01 % -> 6.04 % (horse); the cap may bias exactly that metric. Verified open on main 5bdc02911 (overflow absent from formation.rs). Fix direction: expose overflow in the work counters (about one line in steering.rs) and re-run the 1000-a-side fixture; if overflow is 0 in the residual heaps the cap is exonerated by data, otherwise pack every body and de-duplicate the query (time stamping) instead of dropping data."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-RECEIPT-OMITS-CPU-SATURATION"
+title = "Host telemetry parses cpu.stat for usage_usec only, so nr_throttled and throttled_usec under the CPUQuota are never recorded and no receipt can separate 'expensive code' from 'not enough CPU'."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-1 and section F3 (Gregg 2.5.9 USE: check saturation, 6.3.10; perf). HostSample (crates/mc-edge/src/host_telemetry.rs) carries cgroup_cpu_usage_usec, cpu_total_ticks, cpu_steal_ticks and RSS; cpu.stat is parsed for usage_usec only, while the Perf1M box runs CPUQuota=800 % with tick, journal, native writer, rayon and tokio threads in 4 logical CPUs (receipts/Perf1M/RECEIPT-8192.md), and docs/development/heavy-commands-and-memory.md already tells the analyst to check nr_throttled. Verified open on main 5bdc02911 (no nr_throttled or throttled_usec in host_telemetry.rs or tools/coreperf). Fix direction: add nr_throttled and throttled_usec deltas to HostSample and to the profiles.py receipt; then read the 8k and 16k phase tables as on-CPU ms plus waiting ms. Additive fields only."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT"
+title = "Tick phase laps are Instant wall time only and the tick thread's run-queue delay (schedstat field 2) is never sampled, so a phase cost can be pure descheduling and no receipt can tell."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-2 and section F3 (Gregg 5.4.2 off-CPU analysis, 2.5.13 latency analysis; perf). crates/mc-core/src/tick/phase_laps.rs laps are Instant wall times; tools/coreperf/profiles.py has no per-thread CPU field (only lscpu and affinity), although docs/development/performance-windows-and-profiling.md requires per-thread /proc/self/task/*/stat CPU per tick and tools/coreperf/capacity_ladder.py implements it for the capacity ladder only. Without it an optimisation round cannot say whether a win is work removed or waiting redistributed. Verified open on main 5bdc02911 (no schedstat read anywhere). Fix direction: sample /proc/<pid>/task/<tid>/schedstat field 2 for the tick thread about once per second in host_telemetry (about two file reads per second) and add per-thread CPU seconds to the profiles.py receipt; the one-off check is perf stat --per-thread -p <pid> -e task-clock -- sleep 60."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF1M-LADDER-DOUBLES-RESIDENTS-AND-OBSERVERS"
+title = "The Perf1M scale ladder changes two factors at once (observer count K = ceil(N/1024) grows with the resident count N), so the published 3.87x wall-cost ratio for 2x residents cannot be attributed to a shared-resource ceiling and roadmap lever 1 rests on a confounded pair."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-3 and section F1 (Gregg 12.1.3 failure 10 changing multiple factors, 2.5.11 workload characterization; the report's top finding, it invalidates a published ranking; perf). receipts/Perf1M/SCALE-CURVE.md:27-28 gives K = ceil(N/1024) (pens of 1,024 residents, tools/coreperf/profiles.py), so the pair (8,192, K=8) -> (16,384, K=16) doubles both; receipts/Perf1M/ROADMAP.md:147 ranks superlinear tick growth as lever 1 and concludes the cost is a shared resource, while its own control (16k, no observer 0.85 ms vs 35.66 ms with 16 observers, ROADMAP.md:156) and SCALE-CURVE.md:85-87 point at observers x visible entities. The controls now exist (--scale-residents, --scale-view-distance, 2c043ef82 / 91ceac94c) but the confound is not resolved: ROADMAP.md still lists the K sweep as a next step. Fix is a changed measurement recipe, not code: 16,384 residents at K=8 and 8,192 at K=16 on the same box, pin and lane, one A/B pair each; report cost(N,2K)/cost(N,K) per phase (a phase with ratio about 2 at fixed N is observer-bound) and remove its share from the per-entity column before any 100 ns/entity claim. Gates the next roadmap revision."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF1M-LADDER-LEGS-RAN-WITHOUT-QUIET-WINDOW"
+title = "The Perf1M ladder legs state 'no -x, no -p' and ran while other builds and tests were live (host CPU pressure some avg60 11.35 %), which docs/development/performance-windows-and-profiling.md calls diagnostic only, yet a capacity-shaped 3.87x ratio is built on them."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-4 and section F2 (Gregg 12.1.3 failure 9 ignoring perturbations, 12.3.2 active benchmarking; perf). receipts/Perf1M/RECEIPT-8192.md:6 and RECEIPT-16384.md:6 record no -x and no -p; the host's /proc/pressure/cpu some avg60 was 11.35 % (avg300 16.72 %) when the report read it; docs/development/performance-windows-and-profiling.md: a contaminated run is diagnostic only, including its ratios, and capacity claims use the scheduled quiet lane. The leading shared-resource explanation (LLC and memory bandwidth) is what a co-tenant build shares most. Fix: repeat one rung (8,192, K=8) in a -x window and quote both numbers side by side; if the quiet number is within the A-vs-A spread the contamination was benign and the claim survives."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED"
+title = "No receipt records WAL fsync service time, fsync count, WAL bytes per tick or journal device utilisation; only the tick-side journal_queue_us exists, so the 15 ms journal budget row and the 1M durability story have no measurement behind them."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-5 and section F5 (Gregg 8.5.2 file system latency analysis, 9.5.2 disk USE; perf/durability). crates/mc-core/src/journal.rs appends one file per tick (File::create, write_all, sync_all, rename, directory fsync every fsync_every batches); the dashboard exposes journal_build_us and journal_queue_us (crates/mc-edge/src/dashboard.rs), which are queue and backpressure, not service time; the WAL creates 20 files/s (1.7 M files/day in one directory) and at 1M the batch size grows with the entity count; the 128-batch queue absorbs a slow fsync until it fills and then the tick blocks with a cause invisible in every current receipt. Verified open on main 5bdc02911 (no fsync latency or batch-byte counter in dashboard.rs). Measurement (no rebuild needed): bpftrace on vfs_fsync per thread name for p50/p99/p999, biolatency-bpfcc and iostat -x 5 for the device, WAL bytes/tick from new batch files or a counter beside journal_build_us, correlated with journal_queue_us p99. Related R1 idea I-9 (WAL micro-benchmark) is in receipts/Perf1M/BOOKS-IDEAS.md."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-RECEIPT-OMITS-CPU-GOVERNOR-AND-FREQUENCY"
+title = "Perf receipts record lscpu but not scaling_governor, energy_performance_preference, scaling min/max or current frequency, so two runs on the same pin can differ by clock state alone (the host runs powersave at about 88 % of 5.39 GHz)."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-7 and section F6 (Gregg 6.9.4 scaling governors: pin a fixed governor for benchmarking; hygiene). tools/coreperf/profiles.py records lscpu and affinity only (around :1242-1247); the report read scaling_governor=powersave and a 3-4 GHz swing across a 120 s window that changes cycles per tick and IPC and is not covered by the pin or tree fingerprint. Verified open on main 5bdc02911 (no governor or EPP read in tools/coreperf; tools/bench/common.py reads the governor for a different tool). Fix: record scaling_governor, energy_performance_preference, scaling_min/max_freq, cpuinfo_cur_freq and perf stat's percent time enabled/running in every receipt (read-only file reads) and record the governor pair with every A/B."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-WINDOW-READS-AMD-L2-ALIAS-AS-LAST-LEVEL-MISS-RATE"
+title = "The box perf window counts the generic cache-references and cache-misses aliases, which on AMD64 map to L2 events, and the roadmap reads the 16.8 % as a last-level miss rate; the true last-level number in the same window is ls_dmnd_fills_from_sys."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-8 and section F6 (Gregg 13 perf counter semantics, 6.3.7 IPC; hygiene). receipts/Perf1M/perf-window.sh counts cache-references and cache-misses beside ls_dmnd_fills_from_sys.all (line 97); receipts/Perf1M/ROADMAP.md item 2 quotes '1.32 G cache-misses / 7.87 G references = 16.8 %' as a last-level statement. An optimisation could be accepted or rejected on an L2 story. Verified open (the counter set in perf-window.sh is unchanged). Fix: replace the aliases with the explicit AMD events (l2_request_g1.all, l2_misses.all, ls_dmnd_fills_from_sys.all), correct the roadmap sentence, and take the top-down verdict now: perf stat -M PipelineL1 --per-thread -p <pid> -- sleep 60 (the host advertises PipelineL1/PipelineL2, l3_cache, data_fabric)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-WINDOW-HAS-NO-CALL-GRAPH-AND-NO-MAINTAINED-SCRIPT"
+title = "The box profiling recipe runs perf record without -g and lives only in receipts/Perf1M/perf-window.sh, with no maintained script under tools/, so captures give self time only and cannot say which caller causes the cache fills."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-9 and section F7 (Gregg 6.5.4 profiling, 6.7.3 flame graphs, 12.3.3 profile the benchmark target and its software; tooling). receipts/Perf1M/perf-window.sh records perf record -p <pid> -F 999 without -g and reports --sort dso,symbol; docs/development/performance-windows-and-profiling.md requires the frame-pointer pin plus -g for inclusive attribution; nothing under tools/ reproduces the counter set, so a different counter set makes the next number incomparable. Verified open on main 5bdc02911 (no perf-window script in tools/dev). Fix: add -g / --call-graph fp against a pin-release built with RUSTFLAGS=-C force-frame-pointers=yes, add --per-thread, and promote the script to tools/dev/perf-window.sh with the counter set and a self-test; kernel frames stay unknown until kernel.kptr_restrict=0 (owner action, see receipts/Perf1M/BOOKS-IDEAS.md I-3)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-RECEIPT-HAS-NO-CLIENT-OBSERVED-TICK-ARRIVAL"
+title = "Rung receipts carry no distribution of client-observed tick arrival: server MSPT excludes pacing sleep by design and the keepalive RTT is a smoothed per-player gauge, so what a player feels is unmeasured."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-10 (Gregg 2.5.11 workload characterisation, variance; perf). docs/performance/PROFILES.md 'Windows and metric definitions' defines server-side nearest-rank percentiles from exact source ticks; crates/mc-edge/src/dashboard.rs (around :1180) exposes keepalive RTT as a smoothed gauge; bot reports carry packets and bytes, not arrival intervals. Verified open on main 5bdc02911. Fix direction: record the inter-arrival of a per-tick packet at the bot clients per window and report its p50/p95/p99/max beside MSPT in the rung receipt."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-RECEIPT-OMITS-MEMORY-PRESSURE"
+title = "Receipts keep VmHWM and memory.current but never /proc/pressure/memory or the cgroup memory.pressure, so memory saturation is unrecorded while the 8 GiB cap is the binding constraint of the 1M target."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-11 (Gregg 7.5.2 PSI as memory saturation; perf). HostSample (crates/mc-edge/src/host_telemetry.rs) has RSS and cgroup usage but no pressure field; docs/performance/PROFILES.md RSS definitions are capacity only. Verified open on main 5bdc02911 (no /proc/pressure or memory.pressure reader in crates/mc-edge/src or tools/coreperf). Fix: add some/full avg10 and total deltas of the cgroup memory.pressure (and the host CPU and IO PSI the receipts already cite informally) to HostSample and the receipt."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP"
+title = "No per-resource error-counter rollup reaches the receipt: retried or soft errors, socket drops and short writes are not counted anywhere a receipt can cite, and the 'edge items:' line has no error field."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-12 (Gregg 2.5.9 USE: errors; hygiene). crates/mc-edge/src/fanout.rs (around :268) prints the edge items line without an error field; fsync and rename failures are fatal by design, but soft errors, drops and short writes are not counted. Verified open on main 5bdc02911. Fix: add a per-window error rollup (socket drops and short writes, retried I/O, input drops already on the dashboard) to the rung receipt; pair with the per-socket snapshot idea I-4 in receipts/Perf1M/BOOKS-IDEAS.md."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-COLD-ROW-READ-IN-FULL-PER-ADMITTED-ENTITY-TICK"
+title = "ColdRow is 760 B and read_row takes it unconditionally for every admitted entity, touching 6-8 of its cache lines per entity per tick (about 0.4-0.5 KB per entity, 400-500 MB per tick at 1M), an order of magnitude over the tens-of-bytes hot footprint the 2-core 1M budget allows."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-1 and section 5 (Bakhvalov 8.1, Drepper 6.2.1, Slotin AoS vs SoA; perf, Perf1M H5, ranked first by effect). crates/mc-core/src/entities.rs ColdRow = 760 B (receipts/M3FixState/r3/scoped-green-final.log:370); EntityStore::row returns &self.cold[slot] and tick/entity_phase.rs read_row reads loot.slime_size, controls, active_effects, speed, sight_range, attack_reach, attack_damage, love, breed_cooldown, entity_life.* and special_mob for every admitted slot; only resting rows are spared (the hot flag). Verified open on main 5bdc02911 (read_row signature unchanged, entity_body_tests.rs ratchets Body only). Fix shape (design, needs Main's review): a HotRow column of at most 64 B holding exactly the fields read_row reads, wide state left in ColdRow for the rare paths (RarePrep already draws that boundary); fence: a test that the HotRow projection equals the ColdRow fields. Measure ls_any_fills_from_sys.dram_io_all per entity per tick (expect 8-12 before, 1-2 after) and backend_bound_memory."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-BODY-72-BYTE-STRIDE-STRADDLES-CACHE-LINES"
+title = "Body is 72 B in a plain Vec<Body> with 16-byte malloc alignment, so its 'contact set in the first cache line' ratchet holds for only 3 of every 8 rows and a random body lookup by slot costs two line fills where the ratchet promises one."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-2 (Drepper 6.2.1 p. 52: an unaligned object makes field reordering worthless; perf, H5). crates/mc-core/src/entity_body_tests.rs body_layout_contact_set_in_first_cache_line asserts size 72, align 8 and contact_end <= 64, while the column is a plain Vec<Body> (crates/mc-core/src/entities.rs) so row i starts at 72i + b with b in {0,16,32,48} and the contact set [0,41) crosses a line boundary whenever (72i + b) mod 64 > 23, 5 of 8 rows; Body is read at random by slot after id_index (battle::faction::live_unit, hostile::zombie_arms_update). Verified open on main 5bdc02911 (ratchet still asserts 72). Fix shape: (a) shrink Body to 64 B (11 free bytes in the contact set; move one u32 such as air_supply, pickup_delay, attack_cooldown or hurt_at out) and assert stride == 64, or (b) 64-byte align the column. Measure fills on an id-resolution-dominated leg versus a dense-iteration leg."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-READ-ROW-248-BYTES-COPIED-PER-ENTITY-TICK"
+title = "A 248-byte ReadRow is built into out.rows and then copied by value into step_entity for every entity every tick (about 500 MB of snapshot traffic per tick at 1M), on top of an admission and snapshot pass measured at about 11.6 ms per tick at 1M rows."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-3 (Bakhvalov 8.1, Drepper; perf, H5). ReadRow = 248 B (PREP_MICRO size_of_read_row=248, receipts/CritiqueTriage/prep-100k.log:4, prep-1m.log:4); prepare_rows (crates/mc-core/src/tick/entity_phase.rs) fills out.rows and tick/system_graph.rs runs step_entity(*row, ctx) by value per entity; the repo micro parallel_row_prep_algorithm_micro measured 46.267 ms (parallel) / 88.081 ms (serial) over 4 iterations at 1M rows (prep-1m.log:7-8). Verified open on main 5bdc02911 (system_graph.rs: |row: &ReadRow| row.alive.then(|| step_entity(*row, ctx)); worker_snapshot_keeps_rare_state_in_entity_store asserts only <= 256 B). Fix shape: (a) take &ReadRow in the closure and step_entity (only three passive_follow::idle call sites keep a *row copy), (b) move the two Option<[f64;3]> target fields (32 B each) into a rare side vector (64 B off the row); tighten the 256 B assertion into a real ratchet."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "RELEASE-BUILD-HAS-NO-TARGET-CPU"
+title = ".cargo/config.toml sets only the mold link argument, so the shipped x86-64 build targets the SSE2 baseline and no AVX2/FMA vector code can be emitted, which leaves the SIMD experiment (Perf1M H1) not even runnable."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-4 (Bakhvalov 6.1.2, 5.6.1 llvm-mca; perf). .cargo/config.toml has rustflags = link-arg=-fuse-ld=mold only; an earlier profile put floor at 5.23 % self (.analysis/committee/q008/opus.md:60). The report records the global flag as a measured non-lever: ABBench variant C with -C target-cpu=x86-64-v3 gave tick_mean 0.990 / 0.969 and p99 0.961 (1-3 %, inside the two-rep noise band, .analysis/codex-logs/ABBench/report.md), and SimdEval got 1.175x on one quiet kernel with no live tick gain, so the row is about making the H1 experiment possible (a target_feature(enable = avx2) or multiversioned kernel, or a release-profile decision), not about a global speedup. Verified open on main 5bdc02911. Any H1 kernel must show YMM/ZMM in cargo asm, an llvm-mca ceiling and an A/B on one pin, seed and view distance."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "PHYSICS-READER-MEMO-REBUILT-PER-ENTITY-STEP"
+title = "step_entity constructs a fresh PhysicsReader per entity per tick, discarding its last-chunk and last-section memo exactly where a pen of mobs sharing one or two chunks would hit it, so each entity's first block probe pays a HashMap<ChunkPos, Arc<Chunk>> lookup."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-5 (Bakhvalov 8.1, Drepper; perf). crates/mc-core/src/world.rs PhysicsReader caches the last chunk and the last 16-high section and documents that it is never retained across entity steps; tick/entity_phase.rs step_entity starts with let reader = ctx.world.physics_reader(); the probe is inlined into PhysicsReader::block_at (2.21 % self in the measured leg). Verified open on main 5bdc02911. Fix: rows.par_iter().map_init(|| ctx.world.physics_reader(), |reader, row| ...) (or for_each_init), one reader per rayon worker; the type is Cell-based and single-owner and the world is immutable during the phase (world.rs states the invariant); keep the warm-versus-fresh reader test (world_tests.rs:1476-1490). Measure by wall-clock A/B of the entity phase and l1_data_cache_fills_from_memory."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "OBSERVATION-WALK-BTREE-DESCENT-AND-HASH-PROBES-PER-VIEWER"
+title = "Each viewer's observation walk does a persistent-B-tree descent (OrdMap, then OrdSet) per chunk of its window and three hash probes per visible entity, about 300 k tree-descent cache misses and 3 M hash probes per tick at 1,000 observers."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-6 (Slotin pointer chasing vs implicit layout; perf, H5; the report marks the fix shape idea-grade). crates/mc-core/src/entity_views.rs in_chunk is chunks.get(&pos) on OrdMap<ChunkKey, OrdSet<EntityId>>, then ids.iter(), then self.get(id) into rows: Arc<FxHashMap<EntityId, usize>>; crates/mc-edge/src/plan/entity_candidates.rs collect runs that for every (2d+1)^2 chunk of every viewer each tick the view revision changed, plus viewer.tracked_entities.get_mut(id) per visible entity. [est] 81 chunks x 1,000 observers = 81 k descents (about 300 k misses) plus 3 M hash probes into 1M-entry tables, the mechanism behind a 17.5 % fan-out share with no dominant symbol (ROADMAP: with_previous 1.51 % + wire_view 1.32 % + plan_entities 0.98 % + delta 0.90 %). Verified open on main 5bdc02911. Fix shape: keep the COW pages and add a dense chunk directory rebuilt from the changed list (sorted Vec<(ChunkKey, start, len)> with each chunk's slots contiguous); medium risk, must rebuild on the page-COW budget. Measure fills per viewer per tick (perf stat --per-thread on the fan-out threads)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-WIRE-VIEW-CLONES-APPEARANCE-ARC-PER-DIRTY-ENTITY"
+title = "wire_view clones the appearance Arc for every published row although the edge only compares the pointer, so each dirty entity per tick costs two atomic RMWs and an extra cache line on a separate allocation (about 2 M atomics and 64 MB per tick at 1M)."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-7 (Drepper 6.4.2 atomicity, Bakhvalov 13.4 cache coherence; perf). crates/mc-core/src/entities.rs wire_view does Arc::clone(&row.appearance) per published row (line 1229 on main 5bdc02911), and crates/mc-edge/src/plan.rs appearance_stale only compares the pointer. Verified open on main 5bdc02911. Fix: keep the Arc in a parallel Vec consulted on spawn and metadata change only, or store a u32 appearance id into a side table, preserving the appearance_stale pointer-equality contract exactly (Arc::ptr_eq on the same allocation). Measure fills on an all-active versus an idle leg and the Arc drop path (perf c2c cannot resolve symbols with kptr_restrict=1, so argue from layout plus fills)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-COLUMNS-NEVER-REQUEST-HUGE-PAGES"
+title = "Transparent huge pages are madvise on the host and the tree never calls madvise(MADV_HUGEPAGE), so every entity column, the id_index and rows hash tables and the cold column run on 4 KiB pages although the access pattern is sparse reads."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-8 (Slotin Impact of Huge Pages: 10-15 % latency for arrays beyond L2, almost never hurts; Bakhvalov 8.4.2; Drepper 4.3.2; perf). /sys/kernel/mm/transparent_hugepage/enabled is 'always [madvise] never' on the box and a grep for madvise, MADV_ and hugepage over crates/ finds nothing (verified again on main 5bdc02911); the Perf1M prep log banner shows allow_large_os_pages: 0. Measure first: perf stat -t $tid -e ls_l1_d_tlb_miss.tlb_reload_2m_l2_hit,ls_l1_d_tlb_miss.tlb_reload_4k_l2_hit (2 MiB reloads near zero means THP is not in effect), with a zero-build arm LD_PRELOAD=libmimalloc.so.3 MIMALLOC_ALLOW_LARGE_OS_PAGES=1; the build arm is a one-line madvise on the big columns behind a feature flag (post-freeze). Report p95, not only the mean: defrag=madvise can stall on compaction."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-ADMISSION-SCRATCH-ALLOCATED-PER-CHUNK-EACH-TICK"
+title = "prepare_rows builds a fresh Vec<Admission> per tick with three Vecs per 2048-slot chunk (about 2 k allocations per tick at 1M slots), allocated on rayon workers and dropped on the calling thread, while the rest of the phase reuses scratch."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-9 (Bakhvalov 8.2 dynamic allocation, 13.4; Drepper 6.4.2; perf). crates/mc-core/src/tick/entity_phase.rs prepare_rows (around :771-800 in the report's tree, let parts: Vec<Admission> at line 800 on main 5bdc02911) allocates kept, specials and resting per chunk and drops them on the tick thread; EntityPhaseScratch (entity_phase.rs:99-108) already exists for reuse and unzip_into_vecs avoids per-chunk row vectors. Verified open on main 5bdc02911. Fix: pool the per-chunk Admission vecs in EntityPhaseScratch sized to the chunk count and reused tick to tick; fence: the concat order must stay slot order (entity_phase.rs:803-810). Measure page-faults and the phase wall time before and after."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC"
+title = "coreperf_slot_region runs per slot in the measured legs and reads a late ColdRow line plus dereferences the EntityAppearance Arc to compare a name string, so the profile it attributes contains memory traffic the un-instrumented server never generates and any H5 ranking built on those legs carries an unknown positive memory bias."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-15 (measurement validity of the Perf1M attribution; Bakhvalov 5.4). crates/mc-core/src/tick/entity_phase.rs coreperf_slot_region (with KRASNOKAMEN_COREPERF_REGIONS set) does chunk_of(slot), a HashMap<(i32,i32), usize> probe, then state.entities.row(slot).appearance.custom_name == marker; it is 6.48 % of samples plus coreperf_region 2.26 % (ROADMAP item 3 records the 8.7 % total), and the inflation of measured fills per entity and backend_bound_memory lands on whatever symbol the sampler hits, not on coreperf_*. Verified open on main 5bdc02911 (the row read is still there). Fix: run one leg with KRASNOKAMEN_COREPERF_REGIONS unset on the same population and compare tick ms and fills per entity; if the difference is material key the attribution on chunk_of(slot) alone or build a per-chunk histogram at the chunk boundary."
+regression = []
+failing_first = "not recorded"
