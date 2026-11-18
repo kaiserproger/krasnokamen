@@ -236,6 +236,64 @@ fn battle_resume_first_tick_reset_survives_wal_only_recovery() {
     );
 }
 
+/// D36 3.4a: the facing state is runtime-only, so the contract is the same
+/// result from the same start state. Checkpoint plus WAL replay in the middle
+/// of the fight restores yaw and pitch as journaled (the head is not persisted
+/// and comes back on the yaw), the projection starts again from them with every
+/// head inside its cone, and the resumed soldiers land new strikes.
+#[test]
+fn battle_resume_rebuilds_facing_from_the_journaled_pose() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let rotations = |state: &TickState| -> BTreeMap<i32, [f32; 3]> {
+        state
+            .hostile
+            .battle
+            .formation
+            .members
+            .iter()
+            .filter_map(|member| {
+                let slot = state.entities.slot_of(member.id)?;
+                Some((member.id.0, state.entities.rot(slot)))
+            })
+            .collect()
+    };
+    for _ in 0..5 {
+        drill.run(&[]).unwrap();
+    }
+    let before = rotations(&drill.state);
+    drill = drill.crash();
+    let after = rotations(&drill.state);
+    assert_eq!(before.len(), after.len());
+    for (id, [yaw, pitch, head]) in &after {
+        let [old_yaw, old_pitch, _] = before[id];
+        assert_eq!(
+            [yaw.to_bits(), pitch.to_bits()],
+            [old_yaw.to_bits(), old_pitch.to_bits()],
+            "{id}: yaw and pitch are journaled"
+        );
+        assert_eq!(
+            head.to_bits(),
+            yaw.to_bits(),
+            "{id}: the head restarts on the yaw"
+        );
+    }
+    // The cone below is around the drawn body, which is the yaw under A.
+    drill.state.hostile.battle.facing.policy = crate::battle::facing::Policy::Body;
+    hydrate_battle(&mut drill.state);
+    for _ in 0..40 {
+        drill.run(&[]).unwrap();
+        for (id, [yaw, _, head]) in rotations(&drill.state) {
+            let off = (head - yaw + 180.0).rem_euclid(360.0) - 180.0;
+            assert!(
+                off.abs() <= 75.0 + 1.0e-3,
+                "{id}: head {head} off its yaw {yaw}"
+            );
+        }
+    }
+    continues(&mut drill);
+}
+
 /// Serialized bytes of a tick's battle records (full image or patch), by the
 /// WAL's own JSON, so the measurement does not depend on the record variant.
 fn battle_record_bytes(entries: &[JournalEntry]) -> usize {

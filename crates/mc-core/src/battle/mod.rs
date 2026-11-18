@@ -7,6 +7,10 @@
 //! not swing. It covers every battle row that is not standing: foot soldiers,
 //! horses and mounted riders. Remaining cavalry residual: horse turns at
 //! gallop speed are steering and still swing.
+//!
+//! A battle row with a target and zero drive takes its facing from `facing.rs`
+//! (D36): head and body apart, published once per tick for both the rest guard
+//! and the step.
 
 pub(crate) mod archery;
 pub(crate) mod cavalry;
@@ -14,6 +18,7 @@ mod columns;
 pub(crate) mod exposure;
 pub(crate) use columns::Columns;
 pub(crate) mod combat;
+pub(crate) mod facing;
 mod faction;
 pub(crate) mod formation;
 mod ground;
@@ -60,6 +65,9 @@ pub(crate) struct BattleState {
     pub combat: combat::CombatRuntime,
     #[serde(skip)]
     pub columns: Columns,
+    /// Facing of standing soldiers (D36), rebuilt from the rows after a restore.
+    #[serde(skip)]
+    pub facing: facing::FacingState,
     #[serde(skip)]
     grid: TargetGrid,
     #[serde(skip)]
@@ -402,6 +410,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         battle.exposure.halt(Some(&sample));
         battle.columns.drive_by_slot.clear();
         battle.columns.look_by_slot.clear();
+        battle.facing.clear();
         battle.output = output;
         timings.total_us = start.map_or(0, |start| start.elapsed().as_micros() as u64);
         battle.timings = timings;
@@ -441,6 +450,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     morale::step(&frame, &mut battle, &mut output);
     timings.morale_us = phase_us(&mut mark);
     battle.columns.project();
+    facing::project(&frame, &battle.columns, &battle.combat, &mut battle.facing);
     timings.projection_us = phase_us(&mut mark);
     #[cfg(test)]
     if battle.trace.is_some() {
@@ -496,50 +506,6 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
     ) {
         state.appearance_changed.push(id);
     }
-}
-
-/// Half of one wire rotation quantum (a full turn is 256 steps, so one step is
-/// 360/256 = 1.40625 degrees). The edge packs angles with `floor`, so even a
-/// sub-quantum turn can change the packed byte: this is a bounded angular error
-/// the rest accepts, not an invisible one.
-const REST_TURN_QUANTUM: f32 = 0.703_125;
-
-/// Whether a rested battle row's skipped step would still turn it toward its
-/// look target, i.e. whether the rest is not the identity for this row.
-///
-/// `entity_motion::look` is the step's own rotation rule, evaluated at the zero
-/// velocity every row that reaches the rest has (`early_entity_rest` checks
-/// ground, velocity and drive first). A row that already faces its target keeps
-/// resting; one whose facing is behind takes the ordinary step until it faces
-/// it (BATTLE-REST-SKIPS-TARGET-FACING).
-///
-/// The comparison is a half wire quantum, not exact equality: a battle target
-/// moves almost every tick (`columns.rs` re-projects `target.pos`), and a
-/// measured census of a 300-per-side staged battle found 91% of the refused
-/// turns below one 1.40625-degree quantum and 99.5% caused by that jitter, so
-/// exact equality would spend a whole step on every sub-quantum turn
-/// (receipts/BattleRest/BOUNDS-REST-TAKES.md). Everything at or above half a
-/// quantum still steps, so a resting row's stored facing stays within half a
-/// quantum of the step's; after the edge's `floor` packing its drawn facing can
-/// be up to almost 1.5 quanta from the target bearing.
-pub(crate) fn rest_turns_toward_target(
-    columns: &Columns,
-    slot: crate::entities::EntitySlot,
-    rotation: [f32; 3],
-    position: [f64; 3],
-) -> bool {
-    let Some(target) = columns.look_by_slot.get(slot.0 as usize).copied().flatten() else {
-        return false;
-    };
-    let turned = crate::entity_motion::look(
-        rotation,
-        mc_physics::Vec3::new(position[0], position[1], position[2]),
-        mc_physics::Vec3::ZERO,
-        Some(target),
-    );
-    let yaw = (turned[0] - rotation[0] + 180.0).rem_euclid(360.0) - 180.0;
-    let pitch = turned[1] - rotation[1];
-    yaw.abs() >= REST_TURN_QUANTUM || pitch.abs() >= REST_TURN_QUANTUM
 }
 
 #[cfg(test)]

@@ -23,6 +23,10 @@ const MIN_WANTED_STEP: f64 = 5.0e-4;
 const HEAD_TURN: f32 = 10.0;
 /// Vanilla `Mob.getMaxHeadYRot`: a head never looks further off the body.
 const MAX_HEAD_YAW: f32 = 75.0;
+/// Vanilla `BodyRotationControl.isMoving` (and the native client's copy): an
+/// xz displacement squared above this is a moving body, whose drawn body is
+/// the sent yaw.
+pub(crate) const MOVING: f64 = 2.500_000_277_905_201e-7;
 
 pub(crate) struct MotionInput {
     pub body: EntityBody,
@@ -32,6 +36,9 @@ pub(crate) struct MotionInput {
     pub impulse: [f64; 2],
     pub rotation: [f32; 3],
     pub look_target: Option<[f64; 3]>,
+    /// The rotation a battle row's facing projection publishes for this tick
+    /// (`battle::facing`, D36). It overrides every rule below.
+    pub facing: Option<Facing>,
     /// A battle body that is *eligible* for the hold: without a look target its
     /// facing follows [`battle_holds_facing`]. Standing rows never had the hold.
     pub battle_facing: bool,
@@ -61,6 +68,39 @@ pub(crate) struct MotionResult {
     pub drowning: bool,
     /// Actual loaded-wall contact, including a climb clipped by a ceiling.
     pub wall_climbing: bool,
+}
+
+/// A battle row's facing for one tick, published once by `battle::facing::project`
+/// and read by both the rest guard and the step, so the two never disagree.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Facing {
+    /// A projected row: the step writes `rotation`; on a tick the body really
+    /// moves (vanilla `BodyRotationControl.isMoving`) the client takes the sent
+    /// yaw as the drawn body, so the step writes `body` as the yaw.
+    Set { rotation: [f32; 3], body: f32 },
+    /// A row leaving the projection whose stored yaw is not its drawn body
+    /// (lazy yaw): its own rule starts from this yaw.
+    From { yaw: f32 },
+}
+
+impl Facing {
+    /// The rest guard: the skipped step would write exactly `stored`.
+    pub(crate) fn rests(self, stored: [f32; 3]) -> bool {
+        matches!(self, Facing::Set { rotation, .. } if rotation.map(f32::to_bits) == stored.map(f32::to_bits))
+    }
+
+    fn written(self, before: &EntityBody, after: &EntityBody) -> Option<[f32; 3]> {
+        let Facing::Set { rotation, body } = self else {
+            return None;
+        };
+        let dx = after.position.x - before.position.x;
+        let dz = after.position.z - before.position.z;
+        Some(if dx * dx + dz * dz > MOVING {
+            [body, rotation[1], rotation[2]]
+        } else {
+            rotation
+        })
+    }
 }
 
 pub(crate) fn unit(id: i32, epoch: u64) -> f64 {
@@ -356,10 +396,13 @@ fn move_look(
 }
 
 pub(crate) fn step<S: BlockSampler>(
-    input: MotionInput,
+    mut input: MotionInput,
     sampler: &S,
     loaded: impl Fn(i32, i32) -> bool,
 ) -> MotionResult {
+    if let Some(Facing::From { yaw }) = input.facing {
+        input.rotation[0] = yaw;
+    }
     let mut body = input.body;
     let mut impulse = input.impulse;
     if !loaded(floor_i32(body.position.x), floor_i32(body.position.z)) {
@@ -395,7 +438,9 @@ pub(crate) fn step<S: BlockSampler>(
     };
     if input.movement == MovementClass::Stationary {
         body.velocity = Vec3::ZERO;
-        let rotation = if input.look_target.is_some() {
+        let rotation = if let Some(Facing::Set { rotation, .. }) = input.facing {
+            rotation
+        } else if input.look_target.is_some() {
             look(input.rotation, body.position, Vec3::ZERO, input.look_target)
         } else {
             move_look(
@@ -549,19 +594,30 @@ pub(crate) fn step<S: BlockSampler>(
     }
     // The battle policy is frozen for this freeze (the candidate A/B measured
     // more rotation and head traffic on the A1 scene): battle rows keep facing
-    // the resolved velocity, the hold above unchanged.
-    let rotation = if input.battle_facing
+    // the resolved velocity, the hold above unchanged. A projected battle row
+    // writes its published facing (D36).
+    let rotation = if let Some(rotation) = input
+        .facing
+        .and_then(|facing| facing.written(&input.body, &body))
+    {
+        rotation
+    } else if input.battle_facing
         && input.look_target.is_none()
         && battle_holds_facing(&input.body, &body)
     {
-        input.rotation
+        recentred(input.rotation, input.rotation)
     } else if input.legacy_facing {
-        look(
+        let turned = look(
             input.rotation,
             body.position,
             body.velocity,
             input.look_target,
-        )
+        );
+        if input.look_target.is_some() {
+            turned
+        } else {
+            recentred(input.rotation, turned)
+        }
     } else if input.look_target.is_some() {
         look(input.rotation, body.position, Vec3::ZERO, input.look_target)
     } else {
@@ -579,6 +635,18 @@ pub(crate) fn step<S: BlockSampler>(
         air_supply,
         drowning,
         wall_climbing,
+    }
+}
+
+/// A battle row whose head the facing projection left off its body, with
+/// nothing projected now (no target, battle stopped or paused): the head
+/// returns to the body with the vanilla head rule (D36 design 3.4.3). A head
+/// on its body keeps the rule it had.
+fn recentred(before: [f32; 3], after: [f32; 3]) -> [f32; 3] {
+    if before[2].to_bits() == before[0].to_bits() {
+        after
+    } else {
+        [after[0], after[1], follow_head(before[2], after[0])]
     }
 }
 

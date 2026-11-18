@@ -481,12 +481,20 @@ pub(super) fn early_entity_rest(
     targets_empty: bool,
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
-    // A head still settling toward the body is motion the footprint shortcut
-    // cannot see: refuse the rest before it, on every activation period. A body
-    // whose head is on its body (a settled row, or one whose controller keeps it
-    // there) is unaffected, so nothing wakes without a head to settle.
+    // The rotation the skipped step would write must be the stored one. A
+    // projected battle row's step writes its published facing, so it rests
+    // exactly when that facing is bit-identical to the stored rotation (D36;
+    // BATTLE-REST-SKIPS-TARGET-FACING). Any other body rests only with its head
+    // on its body: a head still settling is motion the footprint shortcut
+    // cannot see, refused before it on every activation period.
     let rotation = view.rotations[slot.0 as usize];
-    if rotation[2] != rotation[0] {
+    if !view
+        .hostile
+        .battle
+        .facing
+        .of(slot)
+        .map_or(rotation[2] == rotation[0], |facing| facing.rests(rotation))
+    {
         return false;
     }
     let battle = crate::battle::battle_row(view.bodies[slot.0 as usize].faction);
@@ -539,17 +547,6 @@ pub(super) fn early_entity_rest(
         || body
             .hurt_at
             .is_some_and(|at| view.tick.saturating_sub(at) < 100)
-        // The skipped step is what turns a battle row toward its look target,
-        // so a targeted row that is not yet facing it must not rest
-        // (BATTLE-REST-SKIPS-TARGET-FACING). After the cheap vetoes, because it
-        // evaluates the step's rotation at the zero velocity established above.
-        || battle
-            && crate::battle::rest_turns_toward_target(
-                &view.hostile.battle.columns,
-                slot,
-                view.rotations[slot.0 as usize],
-                view.positions[slot.0 as usize],
-            )
     {
         return false;
     }
@@ -713,6 +710,7 @@ pub(super) fn idle_wander_motion_unchanged(view: &PrepView, slot: EntitySlot) ->
             impulse: view.impulses[slot.0 as usize],
             rotation,
             look_target: None,
+            facing: None,
             battle_facing: false,
             legacy_facing: false,
             head_follows_body: capabilities.head_follows_body,
@@ -2586,6 +2584,9 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             impulse: row.horizontal_impulse,
             rotation: row.rotation,
             look_target,
+            facing: (row.battle && !row.standing)
+                .then(|| ctx.battle.facing.of(row.slot))
+                .flatten(),
             battle_facing: row.battle && !row.standing,
             legacy_facing: row.battle,
             head_follows_body: row.head_follows_body,
