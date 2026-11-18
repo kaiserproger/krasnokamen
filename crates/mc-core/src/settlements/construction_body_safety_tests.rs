@@ -67,6 +67,39 @@ fn site_project(state: &TickState, id: SettlementId, handle: &str) -> constructi
         .clone()
 }
 
+/// A prepared project whose canonical site reservation is exactly `site`. The
+/// safety predicates read that reservation, so a fixture that only pushes the
+/// project into the record leaves no box to protect.
+fn prepared_site(
+    state: &mut TickState,
+    id: SettlementId,
+    blueprint: &str,
+    site: ScriptWorldBounds,
+) -> String {
+    let air = state.registry.states.air;
+    executor::prepare(
+        state,
+        id,
+        blueprint.into(),
+        site,
+        site,
+        vec![executor::PlannedCell {
+            at: site.min,
+            state: air,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap()
+}
+
+/// Whether cell `at` falls inside the project's canonical site reservation.
+fn inside_site(state: &TickState, id: SettlementId, handle: &str, at: [i32; 3]) -> bool {
+    executor::site_bounds(state, id, handle).is_some_and(|site| {
+        (0..3).all(|axis| site.min[axis] <= at[axis] && at[axis] <= site.max[axis])
+    })
+}
+
 /// The state a refusal must leave untouched: the persisted structure ledger, the
 /// settlement's storage, the acting builder's carry and the cell the step would
 /// have written.
@@ -247,9 +280,10 @@ fn a_cell_clear_of_the_neighbour_body_still_places() {
     assert_eq!(carried, 0, "the placement paid from the carry");
 }
 
-/// A clearing site whose own stand is available: the neighbour's lot covers the
-/// nearest stand cell, so the chosen stand must be the next one outside it.
-fn clearing_site() -> (TickState, SettlementId, EntitySlot, String) {
+/// A clearing site whose own stand is available: the neighbour's prepared lot
+/// covers the nearest stand cell, so the chosen stand must be the next one
+/// outside it.
+fn clearing_site() -> (TickState, SettlementId, EntitySlot, String, String) {
     let (mut state, id, slot) = fixture();
     let air = state.registry.states.air;
     let site = ScriptWorldBounds::new([5, 201, 5], [9, 204, 9]).unwrap();
@@ -268,21 +302,24 @@ fn clearing_site() -> (TickState, SettlementId, EntitySlot, String) {
     )
     .unwrap();
     push_project(&mut state, id, &handle, "house", [5, 201, 5]);
-    // The neighbour's authored box x 0..6, z 5..11 is adjacent to this lot and
+    // The neighbour's authored site x 0..4, z 4..7 is adjacent to this lot and
     // owns the stand cell at [4,201,5] nearest to the builder.
-    push_project(&mut state, id, "neighbour-lot", "house", [-2, 201, 5]);
+    let neighbour = ScriptWorldBounds::new([0, 201, 4], [4, 203, 7]).unwrap();
+    let origin = neighbour.min;
+    let neighbour = prepared_site(&mut state, id, "house", neighbour);
+    push_project(&mut state, id, &neighbour, "house", origin);
     state.entities.set_pos(slot, [4.5, 201.0, 5.5]);
-    (state, id, slot, handle)
+    (state, id, slot, handle, neighbour)
 }
 
 /// R3-4: `preparation_stand` never returns a stand inside another active
 /// project's future body, while a stand outside it stays available.
 #[test]
 fn a_stand_is_never_chosen_inside_a_neighbour_lot_while_clearing() {
-    let (state, id, slot, handle) = clearing_site();
+    let (state, id, slot, handle, neighbour) = clearing_site();
     let project = site_project(&state, id, &handle);
     assert!(
-        construction::in_other_footprint(&state, id, &handle, [4, 201, 5]),
+        inside_site(&state, id, &neighbour, [4, 201, 5]),
         "fixture: the neighbour lot owns the nearest stand cell"
     );
     let base = BlockPos { x: 5, y: 201, z: 5 };
@@ -303,7 +340,7 @@ fn a_stand_is_never_chosen_inside_a_neighbour_lot_while_clearing() {
 /// a neighbour's future body, however close the trunk it would fell.
 #[test]
 fn in_reach_refuses_a_builder_inside_a_neighbour_body_while_clearing() {
-    let (state, id, slot, handle) = clearing_site();
+    let (state, id, slot, handle, _neighbour) = clearing_site();
     let project = site_project(&state, id, &handle);
     let base = BlockPos { x: 5, y: 201, z: 5 };
     assert!(
@@ -327,12 +364,14 @@ fn in_reach_refuses_a_builder_inside_a_neighbour_body_while_clearing() {
     );
 }
 
-/// A road project beside a house lot at `neighbour_origin`, with the builder on
-/// the boundary between them.
-fn road_site(neighbour_origin: [i32; 3]) -> (TickState, SettlementId, EntitySlot) {
+/// A road project beside a prepared house site, with the builder on the
+/// boundary between them.
+fn road_site(neighbour: ScriptWorldBounds) -> (TickState, SettlementId, EntitySlot) {
     let (mut state, id, slot) = fixture();
     push_project(&mut state, id, "road-site", "road", [7, 201, 7]);
-    push_project(&mut state, id, "neighbour-lot", "house", neighbour_origin);
+    let origin = neighbour.min;
+    let handle = prepared_site(&mut state, id, "house", neighbour);
+    push_project(&mut state, id, &handle, "house", origin);
     state.entities.set_pos(slot, [4.5, 201.0, 5.5]);
     (state, id, slot)
 }
@@ -341,7 +380,7 @@ fn road_site(neighbour_origin: [i32; 3]) -> (TickState, SettlementId, EntitySlot
 #[test]
 fn in_reach_refuses_a_builder_inside_a_neighbour_body_on_infrastructure() {
     let next = BlockPos { x: 7, y: 201, z: 7 };
-    let (state, id, slot) = road_site([-2, 201, 5]);
+    let (state, id, slot) = road_site(ScriptWorldBounds::new([0, 201, 4], [4, 203, 7]).unwrap());
     let project = site_project(&state, id, "road-site");
     assert!(layout::infra(&project.blueprint), "fixture: a road project");
     assert!(
@@ -353,7 +392,7 @@ fn in_reach_refuses_a_builder_inside_a_neighbour_body_on_infrastructure() {
         "a body inside the neighbour's lot is not in reach of a road cell"
     );
     // Control: the same builder and cell with the neighbour lot moved away.
-    let (state, id, slot) = road_site([-2, 201, 12]);
+    let (state, id, slot) = road_site(ScriptWorldBounds::new([0, 201, 12], [4, 203, 15]).unwrap());
     let project = site_project(&state, id, "road-site");
     assert!(
         in_reach(&state, slot, &project, [7, 201, 7]),
@@ -365,7 +404,7 @@ fn in_reach_refuses_a_builder_inside_a_neighbour_body_on_infrastructure() {
 /// neighbour lot one level up still owns the stand the builder's head reaches.
 #[test]
 fn site_target_never_picks_a_stand_whose_body_reaches_a_neighbour_lot() {
-    let (state, id, slot) = road_site([4, 202, 4]);
+    let (state, id, slot) = road_site(ScriptWorldBounds::new([4, 202, 4], [10, 204, 10]).unwrap());
     let project = site_project(&state, id, "road-site");
     let body = state.entities.body(slot);
     assert_eq!(
@@ -393,7 +432,7 @@ fn site_target_never_picks_a_stand_whose_body_reaches_a_neighbour_lot() {
         "a stand inside the neighbour's body is not a target"
     );
     // Control: the same stand with the neighbour lot moved away.
-    let (state, id, slot) = road_site([4, 202, 20]);
+    let (state, id, slot) = road_site(ScriptWorldBounds::new([9, 202, 4], [15, 204, 10]).unwrap());
     let project = site_project(&state, id, "road-site");
     assert_eq!(
         site_target(&state, &project, [7, 201, 7], slot, None),
@@ -406,14 +445,16 @@ fn site_target_never_picks_a_stand_whose_body_reaches_a_neighbour_lot() {
 /// neighbour's box, including the head above a feet column that is outside it.
 #[test]
 fn in_reach_uses_the_body_not_the_feet_column_at_a_blueprint_site() {
-    let site = |neighbour: [i32; 3]| {
+    let site = |neighbour: ScriptWorldBounds| {
         let (mut state, id, slot) = fixture();
         push_project(&mut state, id, "house-site", "house", [5, 201, 5]);
-        push_project(&mut state, id, "neighbour-lot", "house", neighbour);
+        let origin = neighbour.min;
+        let handle = prepared_site(&mut state, id, "house", neighbour);
+        push_project(&mut state, id, &handle, "house", origin);
         state.entities.set_pos(slot, [4.5, 201.0, 5.5]);
         (state, id, slot)
     };
-    let (state, id, slot) = site([0, 202, 0]);
+    let (state, id, slot) = site(ScriptWorldBounds::new([0, 202, 0], [6, 204, 6]).unwrap());
     let project = site_project(&state, id, "house-site");
     let body = state.entities.body(slot);
     assert!(
@@ -435,11 +476,131 @@ fn in_reach_uses_the_body_not_the_feet_column_at_a_blueprint_site() {
         "a body reaching a neighbour's box is not in reach"
     );
     // Control: the same builder and cell with the neighbour lot moved away.
-    let (state, id, slot) = site([0, 201, 12]);
+    let (state, id, slot) = site(ScriptWorldBounds::new([0, 201, 10], [4, 203, 12]).unwrap());
     let project = site_project(&state, id, "house-site");
     assert!(
         in_reach(&state, slot, &project, [8, 201, 8]),
         "outside every neighbour body the site is in reach"
+    );
+}
+
+/// S2-2: the neighbour box comes from the canonical site reservation, so a
+/// project whose blueprint is not in the catalog still protects its site. A
+/// lamp column on the cell a house builder would stand on is such a case.
+#[test]
+fn a_neighbour_furnace_or_lamp_site_protects_itself() {
+    let site = |lamp: ScriptWorldBounds| {
+        let (mut state, id, slot) = fixture();
+        // This lot is past its clear stage, so `in_reach` decides on the
+        // blueprint perimeter rule, not on felling reach.
+        let stone = state.registry.states.stone;
+        let mine = ScriptWorldBounds::new([2, 201, 8], [6, 204, 12]).unwrap();
+        let handle = executor::prepare(
+            &mut state,
+            id,
+            "house".into(),
+            mine,
+            mine,
+            vec![executor::PlannedCell {
+                at: [2, 201, 8],
+                state: stone,
+                resource: None,
+                quantity: 0,
+            }],
+        )
+        .unwrap();
+        push_project(&mut state, id, &handle, "house", [2, 201, 8]);
+        let origin = lamp.min;
+        let lamp = prepared_site(&mut state, id, layout::LAMP, lamp);
+        push_project(&mut state, id, &lamp, layout::LAMP, origin);
+        state.entities.set_pos(slot, [2.5, 201.0, 7.5]);
+        (state, id, slot, handle, lamp)
+    };
+    let (state, id, slot, mine, lamp) =
+        site(ScriptWorldBounds::new([2, 201, 7], [2, 203, 7]).unwrap());
+    let project = site_project(&state, id, &mine);
+    let body = state.entities.body(slot);
+    let neighbour = site_project(&state, id, &lamp);
+    assert!(
+        construction::footprint(&state, &neighbour).is_none(),
+        "fixture: a lamp has no catalog footprint"
+    );
+    assert!(
+        executor::site_bounds(&state, id, &lamp).is_some(),
+        "fixture: its canonical site exists"
+    );
+    assert!(
+        in_other_body(
+            &state,
+            &project,
+            state.entities.pos(slot),
+            body.half_width,
+            body.height
+        ),
+        "fixture: the body stands in the lamp's site"
+    );
+    assert!(
+        !in_reach(&state, slot, &project, [2, 201, 10]),
+        "a body inside a lamp site is not in reach"
+    );
+    // Control: the same builder and cell with the lamp moved away.
+    let (state, id, slot, mine, _lamp) =
+        site(ScriptWorldBounds::new([8, 201, 7], [8, 203, 7]).unwrap());
+    let project = site_project(&state, id, &mine);
+    assert!(
+        in_reach(&state, slot, &project, [2, 201, 10]),
+        "outside every neighbour site the lot is in reach"
+    );
+}
+
+/// S2-1: the furnace side search applies the veto per side and keeps going, so
+/// a neighbour site on the first free side does not cost the furnace its target.
+#[test]
+fn a_furnace_stand_skips_a_neighbour_side_and_keeps_searching() {
+    let (mut state, id, slot) = fixture();
+    let next = [2, 201, 8];
+    push_project(
+        &mut state,
+        id,
+        "furnace-site",
+        construction::furnace::NAME,
+        next,
+    );
+    // The first side `furnace::stand` tries is (+1, 0): this lot owns it.
+    let origin = [3, 201, 8];
+    let handle = prepared_site(
+        &mut state,
+        id,
+        "house",
+        ScriptWorldBounds::new(origin, [9, 204, 14]).unwrap(),
+    );
+    push_project(&mut state, id, &handle, "house", origin);
+    let project = site_project(&state, id, "furnace-site");
+    let body = state.entities.body(slot);
+    assert!(
+        in_other_body(
+            &state,
+            &project,
+            [3.5, 201.0, 8.5],
+            body.half_width,
+            body.height
+        ),
+        "fixture: the first free side is inside the neighbour lot"
+    );
+    assert!(
+        !in_other_body(
+            &state,
+            &project,
+            [1.5, 201.0, 8.5],
+            body.half_width,
+            body.height
+        ),
+        "fixture: the opposite side is free"
+    );
+    assert_eq!(
+        site_target(&state, &project, next, slot, None),
+        Some(BlockPos { x: 1, y: 201, z: 8 }),
+        "the vetoed side is skipped and the opposite side is chosen"
     );
 }
 

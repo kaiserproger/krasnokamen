@@ -978,6 +978,52 @@ fn site_reservation(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
     bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
 }
 
+/// The authored site box of one active project: the canonical reservation the
+/// structure was prepared with (origin plus reserved footprint). It exists for
+/// every project kind, including the infrastructure blueprints that are not in
+/// the catalog and so have no blueprint footprint (D8 review S2-2).
+pub(crate) fn site_bounds(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Option<ScriptWorldBounds> {
+    let ledger = ledger(state).ok()?;
+    let record = ledger.structures.get(handle)?;
+    if record.settlement != Some(settlement) {
+        return None;
+    }
+    site_reservation(record).ok()
+}
+
+/// Whether a body standing with its feet at `pos` (half width, height) would
+/// reach another active project's authored site, in another dimension or under
+/// another owner excluded by construction. The test is against the canonical
+/// site reservation, not the clear/felling envelope, and not a blueprint
+/// footprint: a road, lamp, meadow, perimeter or standalone furnace has no
+/// catalog footprint and must protect its site all the same (D8 review S2-2).
+pub(crate) fn body_in_other_site(
+    state: &TickState,
+    settlement: SettlementId,
+    except: &str,
+    pos: [f64; 3],
+    half_width: f64,
+    height: f64,
+) -> bool {
+    if half_width <= 0.0 || height <= 0.0 {
+        return false;
+    }
+    let lo = [pos[0] - half_width, pos[1], pos[2] - half_width];
+    let hi = [pos[0] + half_width, pos[1] + height, pos[2] + half_width];
+    crate::settlements::construction::projects_of(&state.settlements, settlement)
+        .filter(|other| other.structure != except)
+        .filter_map(|other| site_bounds(state, other.settlement, &other.structure))
+        .any(|site| {
+            (0..3).all(|axis| {
+                lo[axis] < f64::from(site.max[axis]) + 1.0 && hi[axis] > f64::from(site.min[axis])
+            })
+        })
+}
+
 fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
     let Some(blueprint) = record
         .snapshot

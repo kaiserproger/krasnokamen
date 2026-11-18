@@ -93,10 +93,11 @@ fn preparation_target(
 }
 
 /// Whether a body standing with its feet at `pos` and these dimensions overlaps
-/// another active project's authored box. A villager is a box, not a column:
+/// another active project's authored site. A villager is a box, not a column:
 /// 0.6 wide it straddles a cell edge, and 1.95 tall it owns the cell above, so
 /// a feet-column test lets a neighbour lot's walls cross it (D8 review SOL-4,
-/// R3-4/R3-5). The own-site test already uses the body this way.
+/// R3-4/R3-5). The site comes from the canonical reservation, so a road, lamp
+/// or standalone furnace protects its site too (D8 review S2-2).
 fn in_other_body(
     state: &TickState,
     project: &construction::Project,
@@ -104,20 +105,14 @@ fn in_other_body(
     half_width: f64,
     height: f64,
 ) -> bool {
-    if half_width <= 0.0 || height <= 0.0 {
-        return false;
-    }
-    let lo = [pos[0] - half_width, pos[1], pos[2] - half_width];
-    let hi = [pos[0] + half_width, pos[1] + height, pos[2] + half_width];
-    construction::projects_of(&state.settlements, project.settlement)
-        .filter(|other| other.structure != project.structure)
-        .filter_map(|other| construction::footprint(state, other))
-        .any(|bounds| {
-            (0..3).all(|axis| {
-                lo[axis] < f64::from(bounds.max[axis]) + 1.0
-                    && hi[axis] > f64::from(bounds.min[axis])
-            })
-        })
+    executor::body_in_other_site(
+        state,
+        project.settlement,
+        &project.structure,
+        pos,
+        half_width,
+        height,
+    )
 }
 
 /// The same test for a stand on the centre of cell `at`.
@@ -233,9 +228,17 @@ fn site_target(
         return Some(stand);
     }
     if project.blueprint == construction::furnace::NAME {
-        return construction::furnace::stand(state, project, next)
-            .map(block_pos)
-            .filter(|at| !standing_in_other_body(state, project, slot, *at));
+        let body = state.entities.body(slot);
+        // The veto lives inside the side loop: refusing the first free side
+        // without trying the others left the furnace with no target while the
+        // opposite side was safe (D8 review S2-1).
+        return construction::furnace::stand(
+            state,
+            project,
+            next,
+            Some((body.half_width, body.height)),
+        )
+        .map(block_pos);
     }
     if layout::infra(&project.blueprint) {
         return layout::stand(state, project, next)
