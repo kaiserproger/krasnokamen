@@ -306,6 +306,52 @@ fn ration_trip_completes_when_storage_is_beyond_the_spare_bed_scan() {
     );
 }
 
+/// Spain seed 100 (trace pin 3068dfb1b857-b30a9c2b, ticks 85800-86850): two
+/// builders walking to sites 110 blocks from storage turned back for a
+/// breeding ration 20-60 blocks short, and the stall watch released both. A
+/// bound Builder takes its ration after its shift instead.
+#[test]
+fn a_bound_builder_takes_its_breeding_ration_after_its_shift() {
+    use crate::settlements::construction::{projects_of, tests};
+    let (mut state, id, slot) = tests::fixture();
+    tests::start(&mut state, id, "house", 1, None);
+    let handle = projects_of(&state.settlements, id)
+        .next()
+        .unwrap()
+        .structure
+        .clone();
+    tests::bind_project(&mut state, id, &handle, slot);
+    let home = roofed_bed(&mut state, 12, 12);
+    roofed_bed(&mut state, 14, 14);
+    state.world.fold_overlay();
+    let bread = item(&state, "minecraft:bread");
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = ItemStack::new(bread, 6);
+    state.entities.row_mut(slot).villager.as_mut().unwrap().home = Some(home);
+    assert_eq!(state.day_time, 3000, "fixture: the builder is on shift");
+    for _ in 0..600 {
+        step(&mut state);
+    }
+    assert_eq!(
+        (
+            food_count(&state, slot, bread),
+            state.block_entities[&(1, 201, 1)].slots[0].count
+        ),
+        (0, 6),
+        "no ration during the shift"
+    );
+    state.day_time = 9_500;
+    for _ in 0..1_200 {
+        step(&mut state);
+        if food_count(&state, slot, bread) == 3 {
+            return;
+        }
+    }
+    panic!(
+        "the builder never took its ration after the shift: resident={:?}",
+        state.entities.row(slot).villager
+    );
+}
+
 #[test]
 fn bound_village_uses_reachable_food_when_nearest_chest_is_blocked() {
     let (mut state, parents, bread) = stored_food_village(3);
