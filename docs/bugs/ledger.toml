@@ -7354,6 +7354,28 @@ fix_commit = "patch:3908dbf5ba2e061d4158ce2d05c1b55226bc342b0b87cac4a0971edf6061
 promotion = "docs/bugs/promotions/BATTLE-REST-SKIPS-TARGET-FACING.json"
 
 [[bug]]
+id = "BATTLE-TARGET-LOOK-TURNS-WHOLE-BODY"
+title = "A battle soldier with a look target turns its whole body every step instead of its head, so standing soldiers spin bodily toward each nearby enemy"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Owner D36 (2026-11-18, receipts/Stage3/OWNER-DECISIONS-20261117-1000.md, point 1: the head/body split is the missing baseline, not a design variant) and the BattleTurnCap cause runs (GO #4/#6/#7, receipts/BattleTurnCapCause/CADENCE-DESIGN.md: rotation traffic and engaged/near sway grow in the foot classes). entity_motion::look (crates/mc-core/src/entity_motion.rs:312-330), used whenever a row has a look target (callers at lines 399, 559, 566), returns [yaw, pitch, yaw]: body yaw turns toward the target by up to 90 degrees per tick and head yaw is set equal to body yaw. The vanilla-like head lag (follow_head: HEAD_TURN 10 deg/tick, head clamped to a MAX_HEAD_YAW 75 deg cone around the body) exists only in the no-target path (move_look). Expected: with a target the head tracks it and the body turns only when the head would leave its cone. Fix: the D36 facing slice after the 19:50 cut (PLAN post-cut item 9), merged only after the owner's own look in the client."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "SETTLEMENT-AUTONOMY-SCAN-GROWTH-AFTER-PREP-UNEXPLAINED"
+title = "After the Prep integration the adopted-village shears autonomy test needs about 4% more recipe-candidate scans to close, for a reason not yet established"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Found 2026-11-18 by PrepTerritory's A/B and PrepPortions (receipts/PrepPortions/shears-budget/): villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds exceeded its 1,700,000 candidate budget on the integrated Prep head 1a598ebf1 (closure tick 48105, 19,942 full proofs, 1,770,358 candidates; the pre-Prep head closed by tick 44541 within budget). Disabling only the unchanged-placement credits leaves the counts identical, so that change is not the cause; the cause is not established. For the 2026-11-18 candidate the test budget was raised to 1,900,000 (PrepPortions adb7fc3a6) without a funding-code change. Expected: find which Prep change adds the scans and either justify the work or remove it, then lower the budget again."
+repro = "cargo"
+regression = []
+failing_first = "reported"
+
+[[bug]]
 id = "BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT"
 title = "A cavalry husk whose horse died skates across the battlefield at 45-107 blocks per second toward its regiment's sweep point"
 area = "gameplay"
