@@ -60,9 +60,32 @@ red, one stays green.
 - `core::store_marker_tests::*` go red at `store_marker_tests.rs:21` and `:296`, the expectation that a world
   with a checkpoint has a marker: the writer publishes none. That is the "nothing durable records the newer
   checkpoint" half of the symptom, but it fails before the rolled-back reopen, so the startup refusal itself
-  (`Core::open`) is proved by the green restore run, not by a distinct red assertion; it is not relied on as
-  the proving assertion.
+  (`Core::open`) is proved by the targeted startup control below, not by these refs in the main control.
 - `mc-world store_marker_tests::store_behind_the_marker_is_refused_and_names_both_ticks` tests the pure kept
   module and stays green by design.
 
 Not carried because it is not this row: the manifest-format-version commits `9742adeba` and `13deed939`.
+
+## Targeted startup control (the `Core::open` refusal alone)
+
+The main control reverses the writer's marker publish too, so the reopen never reaches the startup refusal.
+This second control, on `fc156f3ed`, disables only that refusal and keeps the marker write/publish path, the
+first-start bootstrap publish and every offline check intact.
+
+Control diff (`WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT.startup-control/control.diff`), `crates/mc-core/src/core.rs:936-943`:
+`store_marker::check(...)` still runs (it keeps its side effect of rewriting a marker the store is ahead of),
+but its `Err` is dropped (`let _ = ... .map_err(...);` instead of `...?;`).
+
+Red run (receipt `WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT.startup-control/red.log`, full log
+`.analysis/validation/startup-control/red.log`; `cargo nextest run -p mc-core`, the three core refs):
+- `core::store_marker_tests::a_store_rolled_back_behind_the_marker_is_refused_before_replay`: FAIL at
+  `store_marker_tests.rs:207`, `expect_err("a store behind its marker must not open")`: `Core::open` succeeded on
+  the rolled-back store, i.e. the server serves the older world. This is the row's symptom, at the refusal
+  assertion, with the marker present (the setup `expect` at `:21` passed).
+- `core::store_marker_tests::an_interrupted_first_start_publishes_the_marker_once_and_then_refuses`: FAIL at
+  `store_marker_tests.rs:324`, `expect_err("a served world without its marker is refused")`.
+- `core::store_marker_tests::a_marker_write_failure_prunes_nothing_and_halts_the_world`: PASS. It exercises the
+  writer's fail-closed path, not the startup check; the main control proves that one.
+
+Restore (`core.rs` back to `fc156f3ed`; receipt `.startup-control/green.log`, full log
+`.analysis/validation/startup-control/green.log`): all three PASS (3 run, 3 passed).
