@@ -23,6 +23,9 @@ const DOMAINS: &[&str] = &[
     "conversion_extras",
 ];
 const PLUGIN_DOMAINS: &[&str] = &["plugins", "plugin_startup"];
+/// The manifest format this build reads and writes; mirrors
+/// `mc_core::native_checkpoint::MANIFEST_VERSION`.
+pub(super) const MANIFEST_VERSION: u32 = 1;
 const VERSIONS: &[u8] = b"chunk=1;dictionary=1;entity=1;tick=1;global=1;player=1";
 const LIMIT: usize = 16 * 1024 * 1024;
 
@@ -81,6 +84,25 @@ fn micros(started: std::time::Instant) -> u64 {
 
 fn failure(domain: &str, detail: impl std::fmt::Display) -> NativeError {
     NativeError::Source(format!("native {domain}: {detail}"))
+}
+/// Refuse a manifest whose format this build does not read. Checked before any
+/// other row is decoded so an old world names its version, not a decode error.
+fn require_manifest_version(value: &Value) -> Result<(), NativeError> {
+    if value["domain_versions"]["manifest"].as_u64() != Some(u64::from(MANIFEST_VERSION)) {
+        return Err(failure("checkpoint", "unsupported manifest format version"));
+    }
+    Ok(())
+}
+/// Refuse a committed store whose manifest this build does not read, before
+/// decoding anything else. Offline maintenance opens a store without the
+/// reader path, so it needs this check on its own.
+pub(super) fn require_current_manifest(database: &redb::Database) -> Result<(), NativeError> {
+    let transaction = db(database.begin_read())?;
+    let global = db(transaction.open_table(GLOBAL))?;
+    let Some(record) = db(global.get("checkpoint"))? else {
+        return Ok(());
+    };
+    require_manifest_version(&json("checkpoint", &decode(record.value())?)?)
 }
 fn json(domain: &str, record: &NativeDomainRecord) -> Result<Value, NativeError> {
     let value: Value = serde_json::from_slice(&record.payload).map_err(|e| failure(domain, e))?;
@@ -265,6 +287,7 @@ fn validate_globals(
         .get("checkpoint")
         .ok_or_else(|| failure("checkpoint", "missing"))?;
     let checkpoint = json("checkpoint", checkpoint_record)?;
+    require_manifest_version(&checkpoint)?;
     let versions = checkpoint["domain_versions"]
         .as_object()
         .ok_or_else(|| failure("checkpoint", "missing domain versions"))?;
@@ -468,9 +491,7 @@ fn validate_globals(
     Ok(checkpoint)
 }
 fn validate_manifest(value: &Value, tick: u64) -> Result<(), NativeError> {
-    if value["domain_versions"]["manifest"].as_u64() != Some(1) {
-        return Err(failure("checkpoint", "unsupported manifest format version"));
-    }
+    require_manifest_version(value)?;
     for key in [
         "tick",
         "dimensions",
@@ -919,6 +940,7 @@ impl NativeStore {
             }
             if let Some(previous) = &previous {
                 let previous = json("checkpoint", previous)?;
+                require_manifest_version(&previous)?;
                 let old = previous["players"]
                     .as_object()
                     .ok_or_else(|| failure("checkpoint/players", "invalid previous map"))?;
