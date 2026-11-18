@@ -81,17 +81,15 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // wave-1 site refactor (SpainLevel's whole-plan sweep, SpainD7Rest's
         // candidate ranking) merged in adds 23: 1150. Review round 1
         // (binding-only incumbent, a joint gate for walls and lamps, and a
-        // submission-sequenced retry) adds 51: 1201. The next extraction
-        // candidate is the stall watch, which is now per project.
-        // D8 review round 2 adds 54: the neighbour-footprint helpers, the
-        // per-project summary split, the submission-sequence stamp and the
-        // joint-proof funding cause. The next extraction candidate is the
-        // admission/queue block, which now owns submit_order's sequence.
-        // D8 review round 4 adds 41: the persisted carry debt (owe/drain/
-        // debtor) and its comments live with the planner they serve. The next
-        // extraction candidate is the stall watch plus carry recovery, which
-        // belong in a construction_recovery module.
-        ("settlements/construction.rs", 1_296),
+        // submission-sequenced retry) adds 51: 1201. The relayout slice
+        // (SpainRoads, D10 village re-lay) adds its module declaration and the
+        // re-lay vetoes inside the scan: 1214. D8 review round 2 adds 54 (the
+        // neighbour-footprint helpers, the per-project summary split, the
+        // submission-sequence stamp, the joint-proof funding cause), round 4
+        // adds 41 (the persisted carry debt) and the liquid ledger key adds its
+        // scan hooks: 1320. The next extraction candidate is the stall watch
+        // plus carry recovery, which belong in a construction_recovery module.
+        ("settlements/construction.rs", 1_320),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

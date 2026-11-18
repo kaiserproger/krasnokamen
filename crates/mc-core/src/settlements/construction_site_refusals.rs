@@ -28,11 +28,12 @@ pub(super) enum Reason {
     CombustibleShell,
     LiquidBeyondBound,
     LiquidAccess,
+    NoPathDetour,
     ExecutorReservation,
     Preparation,
     MaterialBill,
 }
-const REASONS: [Reason; 23] = [
+const REASONS: [Reason; 24] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -53,6 +54,7 @@ const REASONS: [Reason; 23] = [
     Reason::CombustibleShell,
     Reason::LiquidBeyondBound,
     Reason::LiquidAccess,
+    Reason::NoPathDetour,
     Reason::ExecutorReservation,
     Reason::Preparation,
     Reason::MaterialBill,
@@ -536,6 +538,9 @@ pub(super) fn check(
     if super::super::forestry::off_lot_sapling_overlaps(state, lot) {
         return Err(Reason::PlantingProvenance);
     }
+    // Village paths and farmland the lot covers: a path that carries the road
+    // network is re-laid around the lot, so those cells are not refusals.
+    let relayout = super::relayout::plan(state, record, lot)?;
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
             if distance_sq([x, max[1], z], record.anchor) > i64::from(record.radius).pow(2)
@@ -544,6 +549,7 @@ pub(super) fn check(
                 return Err(Reason::Territory);
             }
             let height = liquid::ground_y_for_lot(state, floor, x, z, Some(lot), clearance)
+                .or_else(|| relayout.as_ref().and_then(|plan| plan.height(x, z)))
                 .ok_or_else(|| {
                     (floor - SITE_BAND + 1..=floor + SITE_BAND + 1)
                         .find(|&y| {
@@ -562,7 +568,12 @@ pub(super) fn check(
                 .world
                 .physics_block_at(x, height, z)
                 .expect("loaded surface");
-            if !floor_replaceable(state, ground) {
+            // Only a retired path is the re-layout's own work at the support: a
+            // crop there is still a paid obstacle for a generic site.
+            let relayout_support = relayout
+                .as_ref()
+                .is_some_and(|plan| plan.retires([x, height, z]));
+            if !floor_replaceable(state, ground) && !relayout_support {
                 return Err(Reason::ProtectedFloor);
             }
             let authored_floor =
@@ -593,7 +604,10 @@ pub(super) fn check(
             if state.block_entities.contains_key(&(x, floor, z)) {
                 return Err(Reason::ProtectedObstruction);
             }
-            if !floor_replaceable(state, floor_block) && !floor_fluid_fill {
+            let relayout_floor = relayout
+                .as_ref()
+                .is_some_and(|plan| plan.retires([x, floor, z]));
+            if !floor_replaceable(state, floor_block) && !floor_fluid_fill && !relayout_floor {
                 return Err(Reason::ProtectedFloor);
             }
             if floor_block != state.registry.states.air
@@ -630,6 +644,18 @@ pub(super) fn check(
                 }
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 let tree_clearable = tree && clearance.clearable(state, [x, y, z], Some(lot));
+                // A lot crop and a retired village path cell are the
+                // re-layout's own removal work, never a refusal.
+                // A retired village path is always the re-layout's work. A lot
+                // crop is its work only when the candidate's authored plan is
+                // known (`floors: Some`, the real admission path): a generic
+                // footprint probe still refuses a paid crop.
+                let relayout_work = relayout
+                    .as_ref()
+                    .is_some_and(|plan| plan.retires([x, y, z]) || plan.clears([x, y, z]));
+                if relayout_work {
+                    continue;
+                }
                 if state.block_entities.contains_key(&(x, y, z))
                     || (tree && !tree_clearable)
                     || (!clearable(state, block) && !excavatable(state, block) && !tree_clearable)
@@ -690,7 +716,14 @@ pub(super) fn check(
     cost.liquid = liquids.total();
     cost.water = liquids.water;
     cost.lava = liquids.lava;
-    if executor::area_reserved(state, volume) {
+    // The re-laid village detour is executor work too: its own reservation
+    // refuses the lot exactly like the prepared volume.
+    if executor::area_reserved(state, volume)
+        || relayout
+            .as_ref()
+            .and_then(|plan| plan.area())
+            .is_some_and(|area| executor::area_reserved(state, area))
+    {
         return Err(Reason::ExecutorReservation);
     }
     Ok(cost)

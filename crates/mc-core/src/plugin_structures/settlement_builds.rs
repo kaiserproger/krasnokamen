@@ -45,7 +45,7 @@ pub(crate) fn prepare(
         // (D8 parallel construction). Foreign and committed structures keep the
         // full reservation.
         let held = if same_settlement && record.snapshot.state != ScriptStructureState::Committed {
-            site_reservation(record).ok()
+            site_reservation(state, record).ok()
         } else {
             reserved_bounds(record).ok()
         };
@@ -485,6 +485,17 @@ const REPAIR: &str = "repair";
 /// authored cell is not emptied and is never replaced.
 /// One pass over the structure's cells at completion, never per tick. Returns
 /// whether cells were queued (the building must not be certified yet).
+/// Whether a manifest cell is free soil work: no material was ever charged, so
+/// the cell only rewrites the ground already there.
+fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
+    cell.resource.is_none()
+        && state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(cell.state))
+            .is_some_and(|definition| matches!(definition.block.id.path(), "dirt" | "dirt_path"))
+}
+
 pub(crate) fn reopen_emptied(
     state: &mut TickState,
     settlement: SettlementId,
@@ -506,7 +517,15 @@ pub(crate) fn reopen_emptied(
     let mut seen = BTreeSet::new();
     let mut stale = Vec::new();
     for cell in record.cells.iter().flatten() {
-        if cell.state == target.registry.states.air || !seen.insert(cell.at) {
+        if cell.state == target.registry.states.air
+            // Free soil work rewrites the ground already in place: a village
+            // retirement re-soils the path or field it found, a detour or a
+            // road paves the soil under it. Nothing was consumed, so a cell the
+            // player dug out has nothing to restore — reopening it would repair
+            // a cell the executor no-ops for ever and never certify the house.
+            || free_soil_work(target, cell)
+            || !seen.insert(cell.at)
+        {
             continue;
         }
         let now = target
@@ -863,6 +882,14 @@ pub(super) fn debit(
                         .into_iter()
                         .map(|stack| (cell.at, stack)),
                 );
+                // A lot crop leaves its field with the lot: its harvest is
+                // vanilla loot, not conserved stock, so full storage spills it
+                // at the cell as vanilla does.
+                loot.extend(
+                    crate::settlements::construction::relayout::crop_drops(state, block)
+                        .into_iter()
+                        .map(|stack| (cell.at, stack)),
+                );
             }
         }
     }
@@ -1057,8 +1084,29 @@ pub(crate) fn missing_stock(
 /// Recover the exact authored floor from that top and the future footprint;
 /// do not treat arbitrary vertically overlapping buildings as the same site.
 /// The site a structure reserves, without its wide clear-stage window.
-fn site_reservation(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
-    bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
+fn site_reservation(state: &TickState, record: &Structure) -> Result<ScriptWorldBounds, Failure> {
+    let site = bounds(record.snapshot.origin, record.snapshot.reserved_footprint)?;
+    // An unfinished structure holds the whole detour it must lay before it
+    // retires the old line: a parallel lot may not take that corridor (P2-5).
+    let paved = crate::settlements::layout::paved_state(state);
+    let mut extent: Option<([i32; 3], [i32; 3])> = None;
+    for cell in record.cells.iter().flatten() {
+        if Some(cell.state) != paved {
+            continue;
+        }
+        let (mut min, mut max) = extent.unwrap_or((cell.at, cell.at));
+        for axis in 0..3 {
+            min[axis] = min[axis].min(cell.at[axis]);
+            max[axis] = max[axis].max(cell.at[axis]);
+        }
+        extent = Some((min, max));
+    }
+    let Some((min, max)) = extent else {
+        return Ok(site);
+    };
+    let min = std::array::from_fn(|axis| site.min[axis].min(min[axis]));
+    let max = std::array::from_fn(|axis| site.max[axis].max(max[axis]));
+    ScriptWorldBounds::new(min, max).map_err(|_| Failure::InvalidRequest)
 }
 
 /// The authored site box of one active project: the canonical reservation the
@@ -1075,7 +1123,7 @@ pub(crate) fn site_bounds(
     if record.settlement != Some(settlement) {
         return None;
     }
-    site_reservation(record).ok()
+    site_reservation(state, record).ok()
 }
 
 /// Whether a body standing with its feet at `pos` (half width, height) would

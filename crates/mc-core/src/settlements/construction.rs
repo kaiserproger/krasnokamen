@@ -1712,6 +1712,9 @@ pub(super) fn surface_y_for_lot(
                         || (lot.is_some()
                             && (preparation::liquid::has_fluid(state, above)
                                 || preparation::liquid::contained(state, above).is_some()))
+                        // A field crop does not hide its farmland: a needed lot
+                        // surveys the soil under the plants it reaps (D10).
+                        || crate::settlements::construction::relayout::crop(state, above)
                 })
         })
 }
@@ -3946,4 +3949,6 @@ mod liquid_tests;
 
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;
+#[path = "relayout.rs"]
+pub(crate) mod relayout;
 use preparation::planned_cells;

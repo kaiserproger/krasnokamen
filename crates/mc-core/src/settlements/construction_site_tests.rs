@@ -181,7 +181,8 @@ pub(super) fn first_legal_lot(state: &TickState, id: SettlementId, blueprint_nam
 
 /// Leave `keep` the only legal lot of `blueprint_name`: one column of every
 /// other frontage lot, outside `keep`'s footprint and as far from it as that
-/// lot reaches, gets a dirt-path floor the survey refuses as `ProtectedFloor`.
+/// lot reaches, gets a torch the survey refuses as `ProtectedFloor` (a dirt path
+/// is village work now and would not refuse the lot, owner D10).
 /// The ground stays walkable and the test's own terrain is untouched; the
 /// ranked sweep must then agree that `keep` is the winner.
 pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &str, keep: &Site) {
@@ -212,7 +213,7 @@ pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &
         marks.push([mark.0, floor, mark.1]);
     }
     drop(network);
-    let path = crate::settlements::allocator::tests::block(state, "minecraft:dirt_path", &[]);
+    let path = crate::settlements::allocator::tests::block(state, "minecraft:torch", &[]);
     for [x, y, z] in marks {
         state.world.set_block(x, y, z, path);
     }
@@ -783,11 +784,10 @@ fn terrain_preparation_accepts_a_bounded_pillar_and_rejects_protected_cells() {
     for y in 201..=205 {
         state.world.set_block(6, y, 6, state.registry.states.air);
     }
-    for name in [
-        "minecraft:oak_planks",
-        "minecraft:dirt_path",
-        "minecraft:water",
-    ] {
+    // A dirt path is village work now, not a refusal: the lot re-lays it
+    // around the footprint (owner D10, `relayout::plan`). Authored blocks and
+    // fluids stay protected floors.
+    for name in ["minecraft:oak_planks", "minecraft:water", "minecraft:lava"] {
         let block = crate::settlements::allocator::tests::block(&state, name, &[]);
         state.world.set_block(6, 203, 6, block);
         assert!(
@@ -877,14 +877,7 @@ fn hillside_review_floor_under_overhang_preserves_fluids_and_protected_blocks() 
         site_free(&state, state.settlements.get(id).unwrap(), origin, size),
         "solid natural ground below the overhang is replaceable"
     );
-    for name in [
-        "minecraft:water",
-        "minecraft:lava",
-        "minecraft:dirt_path",
-        "minecraft:farmland",
-        "minecraft:wheat",
-        "minecraft:torch",
-    ] {
+    for name in ["minecraft:water", "minecraft:lava", "minecraft:torch"] {
         let block = crate::settlements::allocator::tests::block(&state, name, &[]);
         state.world.set_block(6, 200, 6, block);
         assert!(

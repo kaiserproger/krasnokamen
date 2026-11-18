@@ -26,6 +26,18 @@ pub(super) fn planned_cells(
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
     let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
+    let record = state
+        .settlements
+        .get(project.settlement)
+        .ok_or(Preparation)?;
+    // Village paths and farmland a new site covers: the detour stands before
+    // any old path cell is retired, so the walk stays connected at every tick.
+    // An upgrade's lot is its own certified ground, never village work.
+    let village = if project.building.is_none() {
+        super::relayout::plan(state, record, lot).map_err(|_| Preparation)?
+    } else {
+        None
+    };
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {
@@ -35,6 +47,7 @@ pub(super) fn planned_cells(
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
                 let ground =
                     liquid::ground_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
+                        .or_else(|| village.as_ref().and_then(|plan| plan.height(x, z)))
                         .ok_or(Preparation)?;
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
@@ -166,6 +179,27 @@ pub(super) fn planned_cells(
             });
             cleared.append(&mut cells);
             cells = cleared;
+        }
+    }
+    if let Some(village) = village {
+        let mut taken: std::collections::HashSet<[i32; 3]> =
+            cells.iter().map(|cell| cell.at).collect();
+        // The detour leads the build stage: executor order is the manifest's,
+        // so it stands before a single house cell can close the old line.
+        let mut detour = Vec::with_capacity(village.detour.len());
+        for cell in village.detour.into_iter().chain(village.cleared) {
+            if taken.insert(cell.at) {
+                detour.push(cell);
+            }
+        }
+        detour.append(&mut cells);
+        cells = detour;
+        // Old path and farmland cells go last: nothing walks the old line
+        // until the detour that replaces it stands.
+        for cell in village.retired {
+            if taken.insert(cell.at) {
+                cells.push(cell);
+            }
         }
     }
     // Include the whole placement extent (roof crowns/yards) in executor
