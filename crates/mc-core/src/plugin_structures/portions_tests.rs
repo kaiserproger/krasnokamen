@@ -29,6 +29,63 @@ fn settlement_extraction_credits_canonical_snow_layers_without_silk() {
 }
 
 #[test]
+fn waterlogged_and_aquatic_blocks_keep_their_canonical_loot() {
+    // P1-3: `has_fluid` covers waterlogged blocks, kelp and seagrass, which are
+    // solids. Only a pure water/lava block pays nothing; everything else rolls
+    // its canonical loot, exactly as it would for a player mining it.
+    let (state, _, _, _) = plan();
+    for (name, props, item) in [
+        (
+            "minecraft:oak_stairs",
+            &[("waterlogged", "true")][..],
+            "minecraft:oak_stairs",
+        ),
+        ("minecraft:kelp", &[][..], "minecraft:kelp"),
+    ] {
+        let raw = block(&state, name, props);
+        let definition = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(raw))
+            .unwrap();
+        assert!(
+            definition.has_fluid(),
+            "{name} is a solid that holds fluid, not a fluid block"
+        );
+        assert!(
+            !crate::settlements::construction::preparation::liquid::fluid_block(&state, raw),
+            "{name} is not a pure fluid block"
+        );
+        let drops = conserved_drops(&state, [8, 201, 4], raw)
+            .unwrap_or_else(|failure| panic!("{name}: {failure:?}"));
+        assert!(
+            drops.iter().any(|stack| stack.count > 0
+                && state
+                    .registry
+                    .items
+                    .name_of(stack.item_id)
+                    .unwrap()
+                    .as_str()
+                    == item),
+            "{name} pays its own loot, not nothing"
+        );
+    }
+    // A pure fluid block still pays nothing.
+    for (name, props) in [
+        ("minecraft:water", &[("level", "0")][..]),
+        ("minecraft:lava", &[("level", "0")][..]),
+    ] {
+        let raw = block(&state, name, props);
+        assert!(
+            conserved_drops(&state, [8, 201, 4], raw)
+                .unwrap()
+                .is_empty(),
+            "{name} is not village income"
+        );
+    }
+}
+
+#[test]
 fn implicit_preparation_tools_use_the_lowest_suitable_ordinary_tier() {
     let (state, _, _, _) = plan();
     for (name, tool_name, drop_name) in [
@@ -232,11 +289,12 @@ fn upgrade_registered_sapling_is_still_the_first_disposition() {
         quantity: 1,
     };
     let lot = ScriptWorldBounds::new(cell.at, cell.at).unwrap();
+    // The fence's evidence comes from the committed chain; this fixture has no
+    // committed record at the cell, so nothing is the building's own.
+    let previous = builds::previous_committed(&state, id, "house", cell.at).unwrap();
     let cleared = builds::upgrade_trees_clear(
         &state,
-        id,
-        "house",
-        cell.at,
+        &previous,
         &[cell],
         Some(lot),
         &mut crate::settlements::forestry::Clearance::default(),

@@ -122,6 +122,10 @@ pub struct Registry {
     pub(super) builder_watch: BTreeMap<(SettlementId, String), super::construction::BuilderWatch>,
     /// Pending-site refusal sweeps, derived and never persisted.
     pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
+    /// Last refusal reported to the owner per queued request, so a queue slot
+    /// retried every planning pass pages the owner once per distinct reason.
+    /// Runtime only, never persisted.
+    pub(super) order_refusal: BTreeMap<(SettlementId, u64), String>,
     /// Whole-sweep cheapest-lot scratch, derived and never persisted. A restart
     /// discards it and restarts the sweep from the persisted cursor.
     pub(super) site_sweep: BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>,
@@ -656,6 +660,8 @@ impl Registry {
         self.economic_active.remove(&id);
         self.site_watch.remove(&id);
         self.site_sweep.remove(&id);
+        self.order_refusal
+            .retain(|(settlement, _), _| *settlement != id);
         self.resident_settlement.retain(|_, sid| *sid != id);
         self.resident_ids.remove(&id);
         self.household_counts.remove(&id);
@@ -706,6 +712,8 @@ impl Registry {
             self.economic_active.remove(&image.id);
             self.site_watch.remove(&image.id);
             self.site_sweep.remove(&image.id);
+            self.order_refusal
+                .retain(|(settlement, _), _| *settlement != image.id);
             if let Some(record) = self.records.remove(&image.id) {
                 for household in record.households.keys() {
                     self.household_sizes.remove(household);

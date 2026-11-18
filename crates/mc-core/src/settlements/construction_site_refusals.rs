@@ -32,8 +32,11 @@ pub(super) enum Reason {
     ExecutorReservation,
     Preparation,
     MaterialBill,
+    /// The upgrade's placement cell holds neither air nor the previous build's
+    /// own last committed block: the world there is someone else's.
+    PreviousBuildDiverged,
 }
-const REASONS: [Reason; 24] = [
+const REASONS: [Reason; 25] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -58,6 +61,7 @@ const REASONS: [Reason; 24] = [
     Reason::ExecutorReservation,
     Reason::Preparation,
     Reason::MaterialBill,
+    Reason::PreviousBuildDiverged,
 ];
 
 #[derive(Default)]

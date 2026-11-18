@@ -7,6 +7,9 @@ pub(crate) enum PortionKind {
     Saplings,
     Trees,
     Cut,
+    /// A village clear of the planner's own ground set (owner D27-4): the block
+    /// is removed, and its drop is not village income.
+    Terrain,
     Fill,
     Build,
     Repair,
@@ -19,6 +22,7 @@ impl PortionKind {
             Self::Saplings => "saplings",
             Self::Trees => "trees",
             Self::Cut => "cut",
+            Self::Terrain => "terrain",
             Self::Fill => "fill",
             Self::Build => "build",
             Self::Repair => "repair",
@@ -31,11 +35,18 @@ impl PortionKind {
             "saplings" => Some(Self::Saplings),
             "trees" => Some(Self::Trees),
             "cut" => Some(Self::Cut),
+            "terrain" => Some(Self::Terrain),
             "fill" => Some(Self::Fill),
             "build" => Some(Self::Build),
             "repair" => Some(Self::Repair),
             _ => None,
         }
+    }
+
+    /// The persisted marker of a village clear that pays nothing for the ground
+    /// it removes (owner D27-4). Unknown names are not terrain.
+    pub(crate) fn is_terrain(name: &str) -> bool {
+        Self::parse(name) == Some(Self::Terrain)
     }
 
     pub(crate) fn is_preparation(name: &str) -> bool {
@@ -317,7 +328,7 @@ pub(super) fn conserved_drops(
         .by_id(mc_world::BlockStateId(block))
         .ok_or(Failure::InvalidRequest)?;
     if matches!(definition.block.id.path(), "air" | "cave_air" | "void_air")
-        || definition.has_fluid()
+        || crate::settlements::construction::preparation::liquid::fluid_block(state, block)
     {
         return Ok(Vec::new());
     }

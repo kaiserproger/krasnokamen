@@ -45,7 +45,8 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
             &builder,
             &BTreeMap::new(),
             &cells,
-            &before_ids
+            &before_ids,
+            false,
         ),
         Ok(())
     );
@@ -62,6 +63,58 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
             .unwrap()
             .planted_trees
             .contains(&root)
+    );
+}
+
+#[test]
+fn an_upgrade_clear_cell_credits_a_foreign_blocks_drop_exactly_once() {
+    use crate::settlements::allocator::tests::block;
+    // Owner D27: inside the village's territory a player-built block is cleared
+    // like any other, and its own vanilla drop is the village's — the debit must
+    // credit a plain solid block, not only foliage.
+    let (mut state, id, builder) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    let mut project = state.settlements.get(id).unwrap().projects[0].clone();
+    project.building = Some(crate::settlements::buildings::BuildingId(1));
+    let handle = project.structure.clone();
+    let uuid = state.entities.row(builder).uuid;
+    project.builder = Some((uuid, None));
+    state.settlements.get_mut(id).unwrap().projects = vec![project];
+    let builder = uuid.to_string();
+    let at = [8, 204, 8];
+    let stone = block(&state, "minecraft:stone", &[]);
+    state.world.set_block(at[0], at[1], at[2], stone);
+    let before = counts(&state);
+    let mut expected = before.clone();
+    for drop in crate::settlements::forestry::roll(&state, at, stone).unwrap() {
+        assert!(!drop.is_empty());
+        *expected.entry(drop.item_id).or_default() += drop.count;
+    }
+    assert_ne!(expected, before, "a solid block drops something");
+    let cells = [super::super::Cell {
+        at,
+        state: state.registry.states.air,
+        resource: None,
+        quantity: 0,
+    }];
+    let expected_identity = [portions::identity(&state, stone).unwrap()];
+    assert_eq!(
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &BTreeMap::new(),
+            &cells,
+            &expected_identity,
+            false,
+        ),
+        Ok(())
+    );
+    assert_eq!(
+        counts(&state),
+        expected,
+        "a foreign solid block's drop is credited exactly once"
     );
 }
 
@@ -104,7 +157,8 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
                 &builder,
                 &BTreeMap::new(),
                 &cells,
-                &expected
+                &expected,
+                false,
             ),
             Err(Failure::Blocked),
             "{name}"
@@ -191,7 +245,8 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
                 &builder,
                 &BTreeMap::new(),
                 &cells,
-                &admitted
+                &admitted,
+                false,
             ),
             Ok(()),
             "one-cell grove debit at {:?}",
@@ -328,7 +383,8 @@ fn late_player_log_in_an_admitted_manifest_is_not_felled() {
             &builder,
             &BTreeMap::new(),
             &cells,
-            &admitted
+            &admitted,
+            false,
         ),
         Err(Failure::Blocked),
         "a late player block is not felled"
@@ -448,7 +504,8 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
                 &builder,
                 &BTreeMap::new(),
                 &cells,
-                &admitted
+                &admitted,
+                false,
             ),
             Ok(()),
             "one-cell debit at {:?}",
@@ -516,7 +573,7 @@ fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     let builder = uuid.to_string();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
         Ok(()),
         "the debit is not where the dug cell is refused"
     );
@@ -555,7 +612,7 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
         Ok(())
     );
     advance(&mut state, id, &handle, uuid).expect("the stage advances past the foreign cell");
@@ -598,7 +655,7 @@ fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
         Ok(())
     );
     let dirt_item = state

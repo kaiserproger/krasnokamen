@@ -731,6 +731,9 @@ pub(super) fn debit(
     required: &BTreeMap<String, u64>,
     cells: &[super::Cell],
     expected: &[u32],
+    // The stage being debited is the persisted `terrain` portion: ground-set
+    // blocks are cleared and pay nothing (owner D27-4).
+    uncredited: bool,
 ) -> Result<(), Failure> {
     if cells.len() != expected.len() {
         return Err(Failure::InvalidRequest);
@@ -827,6 +830,15 @@ pub(super) fn debit(
         }
         // Paving and field retirement reshape existing soil without mining it.
         if free_soil_work(state, cell) {
+            continue;
+        }
+        // Owner D27-4: a village clear of the planner's own ground removes the
+        // block and pays nothing for removing it, whatever the player left there
+        // (dirt, grass_block, coarse_dirt). The marker is the persisted `terrain`
+        // portion: a record without that stage behaves exactly as before, and a
+        // binary that does not know the name refuses the record. A player's
+        // non-terrain block still pays its own drop through the paths below.
+        if uncredited && crate::settlements::construction::excavatable(state, block) {
             continue;
         }
         if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
@@ -1188,25 +1200,34 @@ pub(crate) fn built_at(
     })
 }
 
-/// Upgrade tree cells follow the same fence as a new site: a player-touched or
-/// persistent cell, unknown generator evidence, a protected root halo or a live
-/// player with capture disabled refuses; a previous committed building's exact
-/// authored state is a beam, not forest; every other tree or sapling cell becomes
-/// clear-stage work, so the executor cuts it with conserved drops.
-pub(crate) fn upgrade_trees_clear(
+/// Creation revision of a settlement structure handle, `settlement-{id}-{rev}`.
+/// `snapshot.revision` moves on every change (a repair, a pause, a reopen) and a
+/// founding transfer stamps one revision on every record it moves, so only the
+/// handle orders two levels of one site. Records without the suffix fall back to
+/// their last revision.
+fn created_at(handle: &str, record: &Structure) -> u64 {
+    handle
+        .rsplit_once('-')
+        .and_then(|(_, revision)| revision.parse().ok())
+        .unwrap_or(record.snapshot.revision)
+}
+
+/// Every committed revision of `(settlement, blueprint, same site)`, oldest
+/// first: a blueprint level stores only its diff against the level below, so
+/// the executed evidence for an upgrade is the whole chain, not the newest
+/// record alone. Records are read as they stand committed *now*: `recover` and
+/// `reopen_emptied` rewrite them, and admission takes the current image.
+fn committed_chain<'a>(
     state: &TickState,
+    ledger: &'a Ledger,
     id: SettlementId,
     blueprint: &str,
     origin: [i32; 3],
-    cells: &[PlannedCell],
-    lot: Option<mc_script::ScriptWorldBounds>,
-    clearance: &mut crate::settlements::forestry::Clearance,
-) -> Result<Vec<PlannedCell>, Failure> {
-    let ledger = ledger(state)?;
-    let previous = ledger
+) -> Vec<&'a Structure> {
+    let mut chain: Vec<(u64, u64, &Structure)> = ledger
         .structures()
-        .values()
-        .filter(|record| {
+        .iter()
+        .filter(|(_, record)| {
             record.settlement == Some(id)
                 && record
                     .snapshot
@@ -1216,7 +1237,43 @@ pub(crate) fn upgrade_trees_clear(
                 && same_site(state, record, origin)
                 && record.snapshot.state == ScriptStructureState::Committed
         })
-        .max_by_key(|record| record.snapshot.revision);
+        .map(|(handle, record)| (created_at(handle, record), record.snapshot.revision, record))
+        .collect();
+    chain.sort_by_key(|(created, revision, _)| (*created, *revision));
+    chain.into_iter().map(|(_, _, record)| record).collect()
+}
+
+/// The previous build's own evidence, addressed by position: the last
+/// committed state every record of the executed chain wrote there, folded
+/// oldest first so a later level that did not touch a cell cannot hide what an
+/// earlier level placed. A `Cancelled` record is not evidence.
+pub(crate) fn previous_committed(
+    state: &TickState,
+    id: SettlementId,
+    blueprint: &str,
+    origin: [i32; 3],
+) -> Result<BTreeMap<[i32; 3], u32>, Failure> {
+    let ledger = ledger(state)?;
+    Ok(committed_chain(state, &ledger, id, blueprint, origin)
+        .into_iter()
+        .flat_map(|record| record.cells.iter().flatten())
+        .map(|cell| (cell.at, cell.state))
+        .collect())
+}
+
+/// Upgrade tree cells follow the same fence as a new site: a player-touched or
+/// persistent cell, unknown generator evidence, a protected root halo or a live
+/// player with capture disabled refuses; the previous build's own authored
+/// state is a beam, not forest; every other tree or sapling cell becomes
+/// clear-stage work, so the executor cuts it with conserved drops. The caller
+/// passes the evidence once per attempt, shared with the placement fence.
+pub(crate) fn upgrade_trees_clear(
+    state: &TickState,
+    previous: &BTreeMap<[i32; 3], u32>,
+    cells: &[PlannedCell],
+    lot: Option<mc_script::ScriptWorldBounds>,
+    clearance: &mut crate::settlements::forestry::Clearance,
+) -> Result<Vec<PlannedCell>, Failure> {
     let mut cleared = Vec::new();
     for cell in cells {
         let block = state
@@ -1237,13 +1294,7 @@ pub(crate) fn upgrade_trees_clear(
         if !property && crate::settlements::forestry::persistent(state, block) {
             return Err(Failure::Blocked);
         }
-        if previous.is_some_and(|record| {
-            record
-                .cells
-                .iter()
-                .flatten()
-                .any(|authored| authored.at == cell.at && authored.state == block)
-        }) {
+        if previous.get(&cell.at) == Some(&block) {
             // The building's own authored beam; the upgrade replaces it.
             continue;
         }

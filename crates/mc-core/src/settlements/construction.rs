@@ -336,6 +336,12 @@ pub(crate) fn pending_reason_at(
     if claim_slot(state, id).is_err() {
         return Some("busy".into());
     }
+    // A queued upgrade whose site diverged says so, with the cell: the owner must
+    // know which block to clear, and the answer comes back to "ready" on its own
+    // once it is cleared.
+    if let Some(reason) = preparation::queued_refusal(state, id, order) {
+        return Some(reason);
+    }
     Some(
         if order.building.is_none() {
             "waiting for a site"
@@ -442,12 +448,20 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
                         record.revision = record.revision.saturating_add(1);
                     }
                 }
+                // A start clears the refusal it was waiting on, so a later one
+                // is news again.
+                state.settlements.order_refusal.remove(&(id, seq));
                 notify_owner(state, id, OrderOutcome::Started.message(&order.blueprint));
                 return true;
             }
-            Err(_) => {
+            Err(reason) => {
+                // The queue keeps its FIFO slot and this slot is retried, so the
+                // owner hears a refusal once per distinct reason instead of every
+                // planning pass. Runtime only: the reason disappears from the
+                // status by itself once the world is fixed.
                 let record = state.settlements.get_mut(id).expect("pending settlement");
                 access::insert_order(record, index, order);
+                preparation::note_order_refusal(state, id, seq, reason);
             }
         }
     }
@@ -1090,7 +1104,7 @@ fn start_upgrade(
         order_seq: None,
     };
     let (bounds, mut cells) = planned_cells(state, &project, &species, &mut Default::default())
-        .map_err(|reason| format!("Construction admission refused: {reason:?}."))?;
+        .map_err(|reason| preparation::refusal_text(state, &project, &species, reason))?;
     apply_bed_color(state, &mut cells, color).ok_or("Construction bed color unavailable.")?;
     if !begin_cells(state, project, bounds, cells) {
         return Err("Construction admission failed.".into());
@@ -1642,36 +1656,6 @@ pub(crate) fn upgrade_available(state: &TickState, id: SettlementId, building: B
         .is_some_and(|building| upgrade_blueprint(state, id, building).is_some())
 }
 
-fn upgrade_project(
-    state: &TickState,
-    record: &SettlementRecord,
-    images: &[super::inventory::Image],
-) -> Option<(Project, String, u8)> {
-    record.buildings.values().find_map(|building| {
-        let (blueprint, origin, rotation) = upgrade_blueprint(state, record.id, building)?;
-        let level = building.level + 1;
-        let (species, color) =
-            funded_variant(state, record.id, &blueprint.level(level)?.materials, images)?;
-        let species = species.to_owned();
-        Some((
-            Project {
-                settlement: record.id,
-                blueprint: blueprint.id.clone(),
-                level,
-                origin,
-                rotation,
-                building: Some(building.id),
-                structure: String::new(),
-                ordered: false,
-                builder: None,
-                order_seq: None,
-            },
-            species,
-            color,
-        ))
-    })
-}
-
 /// Lot candidates examined per autonomous planning pass; an owner order
 /// examines every candidate of the street plan once.
 const SITE_ATTEMPTS: u32 = 64;
@@ -2040,7 +2024,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     // A funded new building may have no legal lot. Existing houses must still
     // be able to gain beds through their reserved upgrade footprint.
     let record = state.settlements.get(id).expect("planned settlement");
-    if let Some((project, species, color)) = upgrade_project(state, record, &images)
+    if let Some((project, species, color)) = preparation::upgrade_project(state, record, &images)
         && begin(state, project, &species, color)
     {
         return;
@@ -3636,7 +3620,7 @@ fn funded_candidate(
             .is_some_and(|level| {
                 funded_variant(state, record.id, &level.materials, images).is_some()
             })
-    }) || upgrade_project(state, record, images).is_some()
+    }) || preparation::upgrade_project(state, record, images).is_some()
 }
 
 /// Needed authored kinds the settlement cannot fund yet, one entry per kind.
