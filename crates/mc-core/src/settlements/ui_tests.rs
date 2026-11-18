@@ -1590,24 +1590,26 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     click(&mut state, id, "project_cancel_pending", &[]);
 
-    // Funded L2 stock starts the upgrade immediately, with no debit.
+    // Funded L2 stock queues the upgrade at once, with no debit; its order
+    // turn admits it (owner D42).
     // The fixture captures block history (the production default), so the
     // building's own authored beams pass the upgrade fence as authored state
     // instead of tripping the disabled-history live-player veto.
     state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
     crate::settlements::construction::tests::fund(&mut state, "house", 2);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
-    let started = last_dialog(&click(
+    let ordered = last_dialog(&click(
         &mut state,
         id,
         "project_upgrade",
         &[("b", string(&building.0.to_string()))],
     ));
     assert!(
-        started.body.contains("Started House construction."),
+        ordered.body.contains("Queued House L2: ready"),
         "{}",
-        started.body
+        ordered.body
     );
+    crate::settlements::construction::tests::plan_until_project(&mut state, id);
     let project = state
         .settlements
         .get(id)
@@ -1615,7 +1617,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         .projects
         .first()
         .cloned()
-        .expect("funded upgrade starts immediately");
+        .expect("the order turn admits the funded upgrade");
     assert_eq!(project.building, Some(building));
     assert_eq!(project.level, 2);
     assert!(!project.structure.is_empty());

@@ -2,6 +2,20 @@ use super::*;
 use crate::settlements::allocator::tests::block;
 use crate::settlements::construction::tests::{open_plan, start};
 
+/// Replant at the worker's target as a lumberjack does: one proof per tick
+/// with that tick's site budget, until the verdict releases the stump (owner
+/// D42: a proof without an answer yet keeps it).
+fn replant_settled(state: &mut TickState, changes: &mut ChangeSet, worker: &mut VillagerState) {
+    for _ in 0..32 {
+        crate::settlements::construction::tests::fresh_site_budget(state);
+        replant(state, changes, worker);
+        if !worker.lumber_progress.has_target {
+            return;
+        }
+    }
+    panic!("the replanting proof kept the stump for 32 ticks");
+}
+
 #[test]
 fn replanting_respects_the_future_crown_around_an_active_house() {
     for (dx, dz, planted) in [
@@ -46,7 +60,7 @@ fn replanting_respects_the_future_crown_around_an_active_house() {
         worker.lumber_progress.sapling = sapling;
         worker.lumber_progress.has_target = true;
         let mut changes = ChangeSet::default();
-        replant(&mut state, &mut changes, &mut worker);
+        replant_settled(&mut state, &mut changes, &mut worker);
         assert_eq!(
             state.world.block_at(base[0], base[1], base[2]) == Some(sapling),
             planted,
@@ -116,7 +130,7 @@ fn replanting_respects_admitted_corridors_without_reserving_the_whole_world() {
             worker.lumber_progress.base = base;
             worker.lumber_progress.sapling = sapling;
             worker.lumber_progress.has_target = true;
-            replant(&mut state, &mut ChangeSet::default(), &mut worker);
+            replant_settled(&mut state, &mut ChangeSet::default(), &mut worker);
             assert_eq!(
                 state.world.block_at(base[0], base[1], base[2]) == Some(sapling),
                 planted,
@@ -156,17 +170,13 @@ fn repeated_lumber_replants_leave_a_reachable_funded_house_lot() {
         worker.lumber_progress.base = *base;
         worker.lumber_progress.sapling = sapling;
         worker.lumber_progress.has_target = true;
-        replant(&mut state, &mut ChangeSet::default(), &mut worker);
-        assert!(!worker.lumber_progress.has_target);
+        replant_settled(&mut state, &mut ChangeSet::default(), &mut worker);
     }
     state.world.fold_overlay();
     state.entities.row_mut(slot).villager = Some(worker);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert_eq!(
-        construction::request_build(&mut state, id, "spanish_house")
-            .expect("many lumber plantings must leave a reachable fully funded house lot"),
-        construction::OrderOutcome::Started,
-    );
+    // Many lumber plantings must leave a reachable fully funded house lot.
+    construction::tests::request_started(&mut state, id, "spanish_house");
     let town = state.settlements.get(id).unwrap();
     assert_eq!(town.projects[0].blueprint, "spanish_house");
     assert!(town.planted_trees.len() >= 10, "not a blanket planting ban");
@@ -203,7 +213,7 @@ fn unused_street_does_not_discard_renewable_timber_or_the_last_house_lot() {
     worker.lumber_progress.sapling = sapling;
     worker.lumber_progress.has_target = true;
     let mut changes = ChangeSet::default();
-    replant(&mut state, &mut changes, &mut worker);
+    replant_settled(&mut state, &mut changes, &mut worker);
     assert_eq!(
         state.world.block_at(root[0], root[1], root[2]),
         Some(sapling)

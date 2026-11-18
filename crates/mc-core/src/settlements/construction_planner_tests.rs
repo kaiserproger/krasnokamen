@@ -1,4 +1,6 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, request_started, start};
+use super::tests::{
+    attempt, complete, fixture, fund, open_plan, request_started, start, upgrade_started,
+};
 use super::*;
 use mc_script::ScriptWorldBounds;
 
@@ -1065,10 +1067,7 @@ fn queued_upgrade_targets_next_level_after_active_upgrade_finishes() {
         .next()
         .unwrap();
     fund(&mut state, "house", 2);
-    assert_eq!(
-        request_upgrade(&mut state, id, building).unwrap(),
-        OrderOutcome::Started
-    );
+    upgrade_started(&mut state, id, building);
     let active = state.settlements.get(id).unwrap().projects.first().cloned();
     assert_eq!(active.as_ref().unwrap().level, 2);
     assert!(
@@ -1288,8 +1287,11 @@ fn invalid_or_stale_owner_targets_leave_no_request_to_obstruct_planning() {
     );
 }
 
+/// D42: the order is queued at once and its command examines no lot; the
+/// search later finds no free site, says so once, leaves the order turn and
+/// touches neither the stock nor the plan.
 #[test]
-fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
+fn funded_owner_order_without_a_free_site_is_refused_by_its_search_without_debit() {
     let (mut state, id, _) = fixture();
     fund(&mut state, "watch_tower", 1);
     // No lot fits the fixture's one loaded chunk, and the plaza and roads are
@@ -1304,22 +1306,31 @@ fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
         }
     }
     state.world.fold_overlay();
-    let record = state.settlements.get(id).unwrap();
-    let revision = record.revision;
-    let cursor = record.construction_cursor;
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    state.settlements.take_images();
-    let error = request_build(&mut state, id, "watch_tower").unwrap_err();
-    assert!(
-        error.contains("No free loaded construction site"),
-        "{error}"
+    assert_eq!(
+        request_build(&mut state, id, "watch_tower").unwrap(),
+        OrderOutcome::Queued {
+            reason: site_refusals::WAITING_FOR_SITE.into()
+        }
     );
+    assert!(state.settlements.site_orders.contains_key(&id));
+    plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(record.projects.is_empty());
-    assert_eq!(record.revision, revision);
-    assert_eq!(record.construction_cursor, cursor);
+    let seq = orders(record)
+        .next()
+        .expect("the request keeps its place")
+        .seq;
+    let refusal = state.settlements.order_refusal.get(&(id, seq));
+    assert!(
+        refusal.is_some_and(|reason| reason.contains("No free loaded construction site")),
+        "{refusal:?}"
+    );
+    assert!(
+        !state.settlements.site_orders.contains_key(&id),
+        "a refused sweep leaves the order turn"
+    );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert!(state.settlements.take_images().is_empty());
 }
 
 #[test]
@@ -1917,8 +1928,8 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
     );
     // D8 admits the ordered house beside the autonomous project.
     let admitted = later_order(&mut state, id, "house");
-    // The admitting call examined one bounded slice of the site sweep;
-    // planning passes finish it and start the house or refuse its lot.
+    // The order's command only queued it (owner D42); planning passes search
+    // its site and start the house or refuse its lot.
     for _ in 0..64 {
         let record = state.settlements.get(id).unwrap();
         if record
@@ -1981,7 +1992,7 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
     // The row is orderable and the upgraded house offers L3 the same way.
     for level in [2, 3] {
         fund(&mut state, "house", level);
-        request_upgrade(&mut state, id, bid).unwrap();
+        upgrade_started(&mut state, id, bid);
         complete(&mut state, id, slot);
         let upgraded = &state.settlements.get(id).unwrap().buildings[&bid];
         assert_eq!(upgraded.level, level);

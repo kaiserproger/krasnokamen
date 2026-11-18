@@ -699,7 +699,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
         .id;
     assert!(upgrade_available(&state, id, building));
     fund(&mut state, "storage", 2);
-    request_upgrade(&mut state, id, building).unwrap();
+    tests::upgrade_started(&mut state, id, building);
     complete(&mut state, id, builder);
     assert_eq!(
         state.settlements.get(id).unwrap().buildings[&building].level,
@@ -746,7 +746,7 @@ fn flat_site_keeps_bill_origin_and_same_site_upgrade() {
         [project.origin[0], project.origin[1] + 1, project.origin[2]]
     ));
     fund(&mut state, "storage", 2);
-    request_upgrade(&mut state, id, building).unwrap();
+    tests::upgrade_started(&mut state, id, building);
     complete(&mut state, id, builder);
     assert_eq!(
         state.settlements.get(id).unwrap().buildings[&building].level,
@@ -1384,9 +1384,23 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
         [root[0] + radius, root[1] + 64, root[2] + radius],
     )
     .unwrap();
+    // The proofs' shared budget, refilled per tick as the server does: a
+    // proof whose crown takes a free lot finishes its scan over several.
+    let mut budget = site_turn::SiteBudget::default();
+    let mut settled =
+        |state: &TickState, verdict: &dyn Fn(&TickState, &mut site_turn::SiteBudget) -> Replant| {
+            (0..32)
+                .map(|_| {
+                    budget.refill();
+                    verdict(state, &mut budget)
+                })
+                .find(|verdict| *verdict != Replant::NotYet)
+                .expect("the proof settles")
+        };
     let misses = state.settlements.forest.lock().unwrap().misses();
-    assert!(
-        !replant_conflicts(&state, root),
+    assert_eq!(
+        settled(&state, &|state, budget| replant_check(state, root, budget)),
+        Replant::Plant,
         "far B cannot veto A's safe renewal"
     );
     assert_eq!(
@@ -1396,11 +1410,15 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
     );
     // Prove the cold foreign town would refuse this unrelated planting if
     // queried: it has no proved house lot and needs fresh forest evidence.
-    assert!(layout::planting_blocks_access(
-        &state,
-        state.settlements.get(b).unwrap(),
-        crown
-    ));
+    assert_ne!(
+        layout::planting_verdict(
+            &state,
+            state.settlements.get(b).unwrap(),
+            crown,
+            &mut site_turn::SiteBudget::default()
+        ),
+        Replant::Plant
+    );
     assert!(state.settlements.forest.lock().unwrap().misses() > misses);
 
     let town = state.settlements.get_mut(b).unwrap();
@@ -1425,17 +1443,28 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
             .is_empty(),
         "B has a reachable standing-building corridor before the proposed crown"
     );
-    assert!(!layout::planting_blocks_access(
-        &state,
-        state.settlements.get(a).unwrap(),
-        crown
-    ));
-    assert!(
-        layout::planting_blocks_access(&state, state.settlements.get(b).unwrap(), crown),
+    assert_eq!(
+        settled(&state, &|state, budget| layout::planting_verdict(
+            state,
+            state.settlements.get(a).unwrap(),
+            crown,
+            budget
+        )),
+        Replant::Plant
+    );
+    assert_eq!(
+        layout::planting_verdict(
+            &state,
+            state.settlements.get(b).unwrap(),
+            crown,
+            &mut site_turn::SiteBudget::default()
+        ),
+        Replant::Refused,
         "the adjacent crown covers B's plaza and cuts its building off"
     );
-    assert!(
-        replant_conflicts(&state, root),
+    assert_eq!(
+        settled(&state, &|state, budget| replant_check(state, root, budget)),
+        Replant::Refused,
         "nearby B's access still vetoes A's planting"
     );
 }

@@ -355,25 +355,37 @@ fn within_radius(state: &TickState, v: &VillagerState, base: BlockPos) -> bool {
 
 /// Plant the stored sapling into cleared air over valid soil, then release
 /// the target. Soil or space lost mid-trunk skips the planting, never loops.
+/// A house-lot proof still waiting for site budget keeps the stump: the
+/// worker asks again on its next brain run (owner D42).
 fn replant(state: &mut TickState, changes: &mut ChangeSet, v: &mut VillagerState) {
+    use crate::settlements::construction::{Replant, replant_verdict};
     let [x, y, z] = v.lumber_progress.base;
     let sapling = v.lumber_progress.sapling;
-    drop_target(v);
-    v.lumber_progress.search_origin = None;
-    v.lumber_progress.cursor = 0;
     let empty = matches!(
         block_path(state, x, y, z),
         Some("air" | "cave_air" | "void_air")
     );
     let soil = block_path(state, x, y - 1, z).is_some_and(is_soil);
-    if empty && soil && !crate::settlements::construction::replant_conflicts(state, [x, y, z]) {
-        mining::replace(state, changes, BlockPos { x, y, z }, sapling);
-        if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
-            && record.planted_trees.insert([x, y, z])
-        {
-            record.revision = record.revision.saturating_add(1);
+    if empty && soil {
+        match replant_verdict(state, [x, y, z]) {
+            Replant::NotYet => {
+                v.harvest_at = state.tick + 1;
+                return;
+            }
+            Replant::Plant => {
+                mining::replace(state, changes, BlockPos { x, y, z }, sapling);
+                if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
+                    && record.planted_trees.insert([x, y, z])
+                {
+                    record.revision = record.revision.saturating_add(1);
+                }
+            }
+            Replant::Refused => {}
         }
     }
+    drop_target(v);
+    v.lumber_progress.search_origin = None;
+    v.lumber_progress.cursor = 0;
 }
 
 pub(super) fn work(
