@@ -7889,13 +7889,79 @@ regression = []
 failing_first = "not recorded"
 
 [[bug]]
-id = "PLAYER-ACTIONS-READ-AND-WRITE-COLD-CHUNK-OVERLAY"
-title = "Player actions and later tick phases decide from, and write into, overlay cells of chunks that are not resident, so an action next to a still-loading or quarantined chunk can spend an item or change progress on state the server has not loaded."
+id = "COPPER-HONEYCOMB-WAXES-ACROSS-COLD-CHUNK-EDGE"
+title = "Using honeycomb (or an axe) on copper whose cell lies in a non-resident chunk's overlay waxes or scrapes it and debits the item, and a double copper chest with its other half in a cold chunk is changed one half only."
 area = "gameplay"
 repro = "source"
 severity = "minor"
 status = "open"
-source = "receipts/ArchDesign/RESIDENCY-CONSUMERS.md appendices [R7]-[R15] and DESIGN-RESIDENCY-R16.md (consumer audit, read-only, closed by committee-astra in VOTE-RESIDENCY-R16-astra.md). World::block_at returns the overlay first even when the chunk is not resident (crates/mc-core/src/world.rs:951-965) and client_build_refused checks reach, spawn protection and plugin zones but not residency (crates/mc-core/src/tick/build.rs:462-480). Read on main 3068dfb1b: honeycomb on copper across a chunk edge writes and debits (copper.rs:235-254,322-334; double copper chest copper.rs:289-308); the dragon egg accepts overlay air of a cold chunk and writes there (vanilla_interact.rs:126-134); an open ender chest menu passes a click to personal storage through a cold overlay (tick/input/inventory.rs:234-248; ender_chest.rs:97-109); the brush reset pass writes dusted into a cold overlay (brushing.rs:280-297); damage_anvil writes the anvil at the menu coordinate (tick/stations.rs:143,184); without an overlay mining progress and a deferred finish with its authorization are wiped (tick/mining.rs:76-84); a refused SwapHands with the partner half of a double chest cold sends 27 slots as a 54-slot menu (tick/containers.rs:274-284; chests.rs:149-179). Fix: the S1 slice of DESIGN-RESIDENCY-R16 (per-entry trail frames from packet coordinates before the first world read, per-operation ray checks, menu-source check with the expected chest partner, O5 via close_player_menu) with the T16i scenes as regressions."
+source = "receipts/ArchDesign/RESIDENCY-CONSUMERS.md appendices [R10]-[R11] (read-only consumer audit; GATE-V1 closed in VOTE-RESIDENCY-R16-astra.md). On main 3068dfb1b UseItemOn calls copper::use_on directly from input (crates/mc-core/src/tick/input/interact.rs:144-175); it reads World::block_at, which returns the overlay first even when the chunk is not resident (world.rs:951-965), then writes and debits (copper.rs:235-254,322-334); client_build_refused checks reach, spawn protection and zones, not residency (tick/build.rs:462-480); a cold partner half collapses storage_cells to one cell (chests.rs:149-181; copper.rs:289-308). Fix and scenes: DESIGN-RESIDENCY-R13/R16 entry frame (click +-2) before the first world read; T16i-3/T16i-4 (top-face click, cold half with and without overlay)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY"
+title = "A clicked dragon egg accepts overlay air of a non-resident chunk as its teleport target and writes itself there."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/RESIDENCY-CONSUMERS-R11.md and DESIGN-RESIDENCY-R12.md (read-only audit). On main 3068dfb1b the target search reads block_at over +-15 (crates/mc-core/src/vanilla_interact.rs:110,126-134; entries tick/input/interact.rs:87,180) and block_at serves the overlay of a non-resident chunk (world.rs:951-965). Fix and scene: DESIGN-RESIDENCY-R12/R16 wide frame +-15 checked before the target search; T16i wide-frame scenes (T16i-6..8)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY"
+title = "With an ender chest menu open, a click reaches personal ender storage when the chest's chunk is no longer resident but its overlay still holds an ender_chest state."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 4 and DESIGN-RESIDENCY-R14.md (read-only audit). On main 3068dfb1b handler selection calls ender_chest::is_open, which checks the block at the stored menu coordinate through block_at (crates/mc-core/src/tick/input/inventory.rs:234-248; ender_chest.rs:97-109,242-266; world.rs:951-965). Fix and scene: DESIGN-RESIDENCY-R14/R16 menu-source check before handler selection (cold -> close_player_menu with item return); T16i-23."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "BRUSH-RESET-WRITES-DUSTED-INTO-COLD-CHUNK"
+title = "The brushing reset pass rereads every in-progress cell; with the chunk non-resident it either drops the progress (no overlay) or decrements it and writes the dusted state into the cold overlay."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 3 and DESIGN-RESIDENCY-R14.md (read-only audit). On main 3068dfb1b brushing::run's progress.retain rereads each cell and calls set_dusted on a due reset (crates/mc-core/src/brushing.rs:19-31,52-80,280-297) through block_at, which serves a cold overlay (world.rs:951-965). Fix and scene: has_chunk of the cell before brushable in the reset pass; T16i-17 (non-zero progress, reset due, cold chunk with and without overlay)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ANVIL-DAMAGE-WRITES-AT-COLD-MENU-COORDINATE"
+title = "Using an anvil menu can damage the anvil block at the stored menu coordinate after that chunk stopped being resident, writing into the cold overlay."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/DESIGN-RESIDENCY-R14.md (found beyond the R13 vote; read-only audit). On main 3068dfb1b damage_anvil writes the anvil state at the menu coordinate (crates/mc-core/src/tick/stations.rs:143,184) without a residency check. Fix: DESIGN-RESIDENCY-R14/R16 menu-source check before handler selection for every menu input (cold -> close_player_menu, input not applied)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "MINING-PROGRESS-AND-DEFERRED-FINISH-WIPED-ON-COLD-TARGET"
+title = "When the mined block's chunk stops being resident, mining progress and a queued (native or authorized) finish are wiped, or accrue from a cold overlay, instead of pausing until the chunk is admitted again."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 2, VOTE-RESIDENCY-R14-astra.md item 2 and DESIGN-RESIDENCY-R15.md (read-only audit). On main 3068dfb1b mining::advance runs before apply_inputs, reads the target and accrues progress for normal and deferred mining, and without an overlay drops both (crates/mc-core/src/tick/mining.rs:26-85,76-84,96-121; tick.rs:1495-1500); the speed computation reads the eye cell (effects.rs:1114-1128). Fix and scenes: freeze in advanced while the target or eye chunk is cold; peek, check the delivery frame (target +-2 plus player chunk), then take; T16i-21, T16i-22, T16i-25."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY"
+title = "With a 54-slot double chest open and the partner half's chunk non-resident, a refused inventory operation (reserved SwapHands, book edit) resends the menu as 27 real slots plus 27 empty ones, or includes records of the cold half from the overlay."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/VOTE-RESIDENCY-R15-astra.md and DESIGN-RESIDENCY-R16.md (read-only audit). On main 3068dfb1b inventory_transition_refused rebuilds container_cells (crates/mc-core/src/tick/containers.rs:274-284); storage_partner misses a cold partner and storage_cells returns one cell (chests.rs:149-179); missing slots are sent EMPTY (player_reservations.rs:165-174; inventory.rs:532-541); unload keeps overlay records (tick/hydration.rs:73-76); debug_menu_snapshot has the same fork (tick/containers.rs:209-230). Fix and scene: expected-partner chunk check before reading it, refusal via close_player_menu; T16i-26 (a)-(zh) plus the resident control."
 regression = []
 failing_first = "not recorded"
 
