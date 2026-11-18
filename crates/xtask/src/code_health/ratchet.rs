@@ -59,7 +59,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // existing loot and falling-block sites reuse: no headroom taken.
     // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
     // reuse and the already-resolved dirt state remove one net literal, 2026-11-17: 2631.
-    vanilla_id_literals: 2_631,
+    // canonical extraction-tool data table (31 tools), PrepPortions 2026-11-18;
+    // moves to mc-data with typed CoreRegistry resolution after the 19:00 cut
+    // (PLAN post-cut queue).
+    vanilla_id_literals: 2_660,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
@@ -89,7 +92,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // adds 41 (the persisted carry debt) and the liquid ledger key adds its
         // scan hooks: 1320. The next extraction candidate is the stall watch
         // plus carry recovery, which belong in a construction_recovery module.
-        ("settlements/construction.rs", 1_320),
+        // D8S3's extracted upgrade guard adds six residual statements/items: 1326.
+        ("settlements/construction.rs", 1_326),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

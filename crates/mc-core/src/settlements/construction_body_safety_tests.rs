@@ -84,6 +84,7 @@ fn prepared_site(
         site,
         site,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: site.min,
             state: air,
             resource: None,
@@ -171,6 +172,7 @@ fn two_sites(feet: [f64; 3], cell: [i32; 3]) -> TwoSites {
         mine,
         mine,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: cell,
             state: stone,
             resource: Some("minecraft:stone".into()),
@@ -186,6 +188,7 @@ fn two_sites(feet: [f64; 3], cell: [i32; 3]) -> TwoSites {
         theirs,
         theirs,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: [12, 201, 7],
             state: air,
             resource: None,
@@ -294,6 +297,7 @@ fn clearing_site() -> (TickState, SettlementId, EntitySlot, String, String) {
         site,
         site,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: [5, 201, 5],
             state: air,
             resource: None,
@@ -502,6 +506,7 @@ fn a_neighbour_furnace_or_lamp_site_protects_itself() {
             mine,
             mine,
             vec![executor::PlannedCell {
+                portion: executor::PortionKind::Build,
                 at: [2, 201, 8],
                 state: stone,
                 resource: None,

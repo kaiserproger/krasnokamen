@@ -32,12 +32,21 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
         quantity: 0,
     }];
     let block = state.world.block_at(root[0], root[1], root[2]).unwrap();
+    let before_ids = [portions::identity(&state, block).unwrap()];
     let mut expected = before.clone();
     for drop in crate::settlements::forestry::roll(&state, root, block).unwrap() {
         *expected.entry(drop.item_id).or_default() += drop.count;
     }
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &BTreeMap::new(),
+            &cells,
+            &before_ids
+        ),
         Ok(())
     );
     assert_eq!(counts(&state), expected, "upgrade clear drops once");
@@ -82,8 +91,17 @@ fn an_upgrade_clear_cell_credits_a_foreign_blocks_drop_exactly_once() {
         resource: None,
         quantity: 0,
     }];
+    let expected_identity = [portions::identity(&state, stone).unwrap()];
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &BTreeMap::new(),
+            &cells,
+            &expected_identity
+        ),
         Ok(())
     );
     assert_eq!(
@@ -103,9 +121,11 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
         .clone();
     let uuid = state.entities.row(builder).uuid;
     // The executor only pays for the project's bound builder (P2-5).
-    if let Some(mut record) = state.settlements.get_mut(id) {
+    if let Some(record) = state.settlements.get_mut(id) {
         record.projects[0].builder = Some((uuid, None));
     }
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    state.settlements.get_mut(id).unwrap().anchor = [0, 201, 0];
     let builder = uuid.to_string();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let cells = [super::super::Cell {
@@ -121,8 +141,17 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     ] {
         let value = block(&state, name, &[]);
         state.world.set_block(root[0], root[1], root[2], value);
+        let expected = [portions::identity(&state, value).unwrap()];
         assert_eq!(
-            debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
+            debit(
+                &mut state,
+                id,
+                &handle,
+                &builder,
+                &BTreeMap::new(),
+                &cells,
+                &expected
+            ),
             Err(Failure::Blocked),
             "{name}"
         );
@@ -142,6 +171,7 @@ fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
     let path = block(&state, "minecraft:dirt_path", &[]);
     let dirt = state.registry.states.dirt;
     let planned = PlannedCell {
+        portion: PortionKind::Build,
         at: root,
         state: path,
         resource: None,
@@ -163,7 +193,7 @@ fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     let builder = uuid.to_string();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
         Ok(()),
         "the debit is not where the dug cell is refused"
     );
@@ -187,6 +217,7 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
     let path = block(&state, "minecraft:dirt_path", &[]);
     let planks = block(&state, "minecraft:oak_planks", &[]);
     let planned = PlannedCell {
+        portion: PortionKind::Build,
         at: root,
         state: path,
         resource: None,
@@ -201,7 +232,7 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
         Ok(())
     );
     advance(&mut state, id, &handle, uuid).expect("the stage advances past the foreign cell");
@@ -215,6 +246,12 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
 #[test]
 fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    state.registry = Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
     let site = ScriptWorldBounds::new(
         [root[0] - 2, root[1], root[2] - 2],
         [root[0] + 3, root[1] + 5, root[2] + 3],
@@ -222,6 +259,7 @@ fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     .expect("the lot bounds");
     let dirt = state.registry.states.dirt;
     let planned = PlannedCell {
+        portion: PortionKind::Build,
         at: root,
         state: dirt,
         resource: None,
@@ -237,10 +275,30 @@ fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
         Ok(())
     );
+    let dirt_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    let stored_soil = |state: &TickState| -> i32 {
+        state
+            .block_entities
+            .values()
+            .flat_map(|entity| entity.slots.iter())
+            .filter(|stack| stack.item_id == dirt_item && !stack.is_empty())
+            .map(|stack| stack.count)
+            .sum()
+    };
+    let before = stored_soil(&state);
     assert!(advance(&mut state, id, &handle, uuid).expect("the stage advances"));
+    assert_eq!(
+        stored_soil(&state),
+        before,
+        "free soil work keeps its ground, not a second dirt item"
+    );
     // The house stood; the player digs the free retirement cell out afterwards.
     state
         .world
@@ -284,6 +342,7 @@ fn a_pending_detour_holds_its_corridor_against_a_neighbour_lot() {
     )
     .expect("the placement bounds cover the detour");
     let cell = |at: [i32; 3]| PlannedCell {
+        portion: PortionKind::Build,
         at,
         state: path,
         resource: None,

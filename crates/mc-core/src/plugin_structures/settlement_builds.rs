@@ -1,5 +1,6 @@
 //! Settlement sources for the canonical structure ledger and executor. This
 //! adapter owns neither a placement cursor nor a second placement loop.
+pub(crate) use super::portions::PortionKind;
 use super::*;
 use crate::settlements::{SettlementId, inventory};
 
@@ -12,6 +13,7 @@ pub(crate) struct PlannedCell {
     pub state: u32,
     pub resource: Option<String>,
     pub quantity: u32,
+    pub portion: PortionKind,
 }
 
 pub(crate) fn prepare(
@@ -20,7 +22,7 @@ pub(crate) fn prepare(
     blueprint: String,
     bounds: ScriptWorldBounds,
     site: ScriptWorldBounds,
-    cells: Vec<PlannedCell>,
+    mut cells: Vec<PlannedCell>,
 ) -> Result<String, Failure> {
     if state.settlements.get(settlement).is_none() || cells.is_empty() || cells.len() > 32768 {
         return Err(Failure::InvalidRequest);
@@ -38,7 +40,7 @@ pub(crate) fn prepare(
         return Err(Failure::Blocked);
     }
     let ledger = ledger(state)?;
-    if ledger.structures.values().any(|record| {
+    if ledger.structures().values().any(|record| {
         let same_settlement = record.settlement == Some(settlement);
         // An in-flight structure of this settlement holds its own site, not the
         // wide clear-stage window: a neighbour lot may be prepared beside it
@@ -49,9 +51,8 @@ pub(crate) fn prepare(
         } else {
             reserved_bounds(record).ok()
         };
-        let wanted = if same_settlement {
-            site
-        } else if record.snapshot.state == ScriptStructureState::Committed {
+        let wanted = if same_settlement || record.snapshot.state == ScriptStructureState::Committed
+        {
             site
         } else {
             bounds
@@ -76,17 +77,15 @@ pub(crate) fn prepare(
     }
     let revision = next(ledger.revision)?;
     let id = format!("settlement-{}-{revision}", settlement.0);
-    // D10: a fill cell that currently holds a real fluid source runs in a stage
-    // before `clear`, so a cut the lava beside it would block never waits on a
-    // supply that is filled later. A source cell belongs to exactly one stage,
-    // so no cell is placed or paid twice and the bill is unchanged.
+    if cells
+        .windows(2)
+        .any(|pair| pair[0].portion > pair[1].portion)
+    {
+        return Err(Failure::InvalidRequest);
+    }
+    // Source fills lead all air cuts, including registered-tree clearing.
     let liquid_stage =
         crate::settlements::construction::preparation::liquid::stage_cells(state, &cells);
-    // D10: a liquid plan's proof is the volume the admission certified, so the
-    // interference fence keeps the closed-bowl ring (one cell outside the
-    // footprint) and the discovered bottom, supports included. A ring or
-    // support change then pauses the plan instead of letting the remaining flow
-    // leave the lot.
     let liquid_proof =
         crate::settlements::construction::preparation::liquid::proof(state, &cells, site.min[1]);
     let bounds = match &liquid_proof {
@@ -101,41 +100,34 @@ pub(crate) fn prepare(
         .map_err(|_| Failure::InvalidRequest)?,
         None => bounds,
     };
-    // The image covers the whole fence, ring included: the first advance of a
-    // liquid plan must not read the expansion as a foreign edit.
     let image = fingerprint(state, bounds, true)?;
-    let cells: Vec<_> = cells
-        .into_iter()
-        .map(|cell| Cell {
-            at: cell.at,
-            state: cell.state,
-            resource: cell.resource,
-            quantity: cell.quantity,
-        })
-        .collect();
+    if !liquid_stage.is_empty() {
+        for index in liquid_stage {
+            cells[index].portion = PortionKind::Liquid;
+        }
+        cells.sort_by_key(|cell| cell.portion);
+    }
     if cells.iter().any(|cell| {
         (0..3).any(|axis| cell.at[axis] < bounds.min[axis] || cell.at[axis] > bounds.max[axis])
     }) {
         return Err(Failure::InvalidRequest);
     }
-    let mut liquid = Vec::with_capacity(liquid_stage.len());
-    let mut rest = Vec::with_capacity(cells.len());
-    let mut next_liquid = liquid_stage.into_iter().peekable();
-    for (index, cell) in cells.into_iter().enumerate() {
-        if next_liquid.peek() == Some(&index) {
-            next_liquid.next();
-            liquid.push(cell);
-        } else {
-            rest.push(cell);
+    let mut groups: Vec<(PortionKind, Vec<Cell>)> = Vec::with_capacity(7);
+    for cell in cells {
+        if groups.last().is_none_or(|(kind, _)| *kind != cell.portion) {
+            groups.push((cell.portion, Vec::new()));
         }
+        groups.last_mut().expect("portion group").1.push(Cell {
+            at: cell.at,
+            state: cell.state,
+            resource: cell.resource,
+            quantity: cell.quantity,
+        });
     }
-    let (clear, build): (Vec<_>, Vec<_>) = rest
-        .into_iter()
-        .partition(|cell| cell.state == state.registry.states.air);
     let mut counts = BTreeMap::new();
-    let mut stages = Vec::with_capacity(3);
-    let mut batches = Vec::with_capacity(3);
-    for (name, cells) in [("liquid", liquid), ("clear", clear), ("build", build)] {
+    let mut stages = Vec::with_capacity(groups.len());
+    let mut batches = Vec::with_capacity(groups.len());
+    for (kind, cells) in groups {
         if cells.is_empty() {
             continue;
         }
@@ -147,13 +139,14 @@ pub(crate) fn prepare(
             }
         }
         stages.push(ScriptStructureStagePlan::new(
-            name.into(),
+            kind.name().into(),
             cells.len() as u32,
             cells.len() as u64,
             materials(&stage_counts),
         ));
         batches.push(cells);
     }
+    let portions = portions::certify(state, &batches)?;
     let plan = resource_plan(&stages);
     if !material_free(&stages) {
         plan.validate().map_err(|_| Failure::InvalidRequest)?;
@@ -181,7 +174,7 @@ pub(crate) fn prepare(
     snapshot.validate().map_err(|_| Failure::InvalidRequest)?;
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
-    ledger.structures.insert(
+    ledger.insert_structure(
         id.clone(),
         Structure {
             owner: owner(settlement),
@@ -191,18 +184,18 @@ pub(crate) fn prepare(
             snapshot,
             blueprint_hash: inventories::hash(&batches),
             image,
+            portions,
             cells: batches,
-            receipts: Vec::new(),
         },
     );
     ledger.revision = revision;
-    save(state, &ledger);
+    save(state, ledger);
     Ok(id)
 }
 
 pub(crate) fn area_reserved(state: &TickState, bounds: ScriptWorldBounds) -> bool {
     ledger(state).map_or(true, |ledger| {
-        ledger.structures.values().any(|record| {
+        ledger.structures().values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
                 && reserved_bounds(record).is_ok_and(|existing| overlaps(existing, bounds))
@@ -231,7 +224,7 @@ fn spent_free_work(record: &Structure) -> bool {
 /// [`area_reserved`] without the spent free work of [`spent_free_work`].
 pub(crate) fn area_held(state: &TickState, bounds: ScriptWorldBounds) -> bool {
     ledger(state).map_or(true, |ledger| {
-        ledger.structures.values().any(|record| {
+        ledger.structures().values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
                 && !spent_free_work(record)
@@ -242,7 +235,7 @@ pub(crate) fn area_held(state: &TickState, bounds: ScriptWorldBounds) -> bool {
 
 pub(crate) fn cancel(state: &mut TickState, id: SettlementId) -> Result<(), Failure> {
     let ledger = ledger(state)?;
-    if !ledger.structures.values().any(|record| {
+    if !ledger.structures().values().any(|record| {
         record.settlement == Some(id) && record.snapshot.state != ScriptStructureState::Cancelled
     }) {
         return Ok(());
@@ -250,18 +243,14 @@ pub(crate) fn cancel(state: &mut TickState, id: SettlementId) -> Result<(), Fail
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let revision = next(ledger.revision)?;
-    for record in ledger
-        .structures
-        .values_mut()
-        .filter(|record| record.settlement == Some(id))
-    {
+    for record in ledger.structures_mut_where(|record| record.settlement == Some(id)) {
         record.snapshot.state = ScriptStructureState::Cancelled;
         record.snapshot.revision = revision;
         record.snapshot.pause_reason = None;
         record.snapshot.reservation_ref = None;
     }
     ledger.revision = revision;
-    save(state, &ledger);
+    save(state, ledger);
     Ok(())
 }
 
@@ -275,13 +264,13 @@ pub(crate) fn cancel_structure(
     let mut ledger = ledger_mut(state)?;
     structure(&ledger, &owner(settlement), handle)?;
     let revision = next(ledger.revision)?;
-    let record = ledger.structures.get_mut(handle).ok_or(Failure::NotFound)?;
+    let record = ledger.structure_mut(handle).ok_or(Failure::NotFound)?;
     record.snapshot.state = ScriptStructureState::Cancelled;
     record.snapshot.revision = revision;
     record.snapshot.pause_reason = None;
     record.snapshot.reservation_ref = None;
     ledger.revision = revision;
-    save(state, &ledger);
+    save(state, ledger);
     Ok(())
 }
 
@@ -296,14 +285,11 @@ pub(crate) fn status(
         .clone())
 }
 
-/// A foreign edit inside a native site pauses the structure as
-/// `footprint_changed`. The clear stage is cancelled and its owner order retried
-/// only for its own stale-tree hazard: nothing has been felled yet, the clear
-/// manifest still holds a registered root that is no longer a sapling, and the
-/// order keeps its place in the queue. Everything else, including natural leaf
-/// decay and any started felling, re-snapshots the footprint and resumes: a
-/// placed cell that the edit emptied is queued again at completion by
-/// [`reopen_emptied`], while a solid foreign block in a placed cell is left alone.
+/// N3 alone pauses a grown certified sapling as `footprint_changed`. Before
+/// any felling, its owner order may be cancelled and requeued in the same FIFO
+/// slot. Otherwise recovery resumes with the pending per-cell evidence intact.
+/// Completed fill/build damage is appended as a newly certified repair portion;
+/// a solid foreign replacement of an already-processed cell is left alone.
 /// Returns whether recovery resumed or cancelled the structure.
 pub(crate) fn recover(
     state: &mut TickState,
@@ -328,7 +314,7 @@ pub(crate) fn recover(
             .snapshot
             .stages
             .get(record.snapshot.current_stage_index as usize)
-            .is_some_and(|stage| stage.stage == "clear")
+            .is_some_and(|stage| PortionKind::is_preparation(&stage.stage))
         // Only a registered root that grew out of its certified sapling, and
         // only while the order keeps its queue slot, may cancel.
         && crate::settlements::construction::preparation::stale_tree_certification(
@@ -367,13 +353,12 @@ pub(crate) fn recover(
         return Ok(true);
     }
     let target = world(state, &record.snapshot.dimension)?;
-    let build = record
-        .snapshot
-        .stages
-        .iter()
-        .position(|stage| stage.stage == "build");
     let mut repair = Vec::new();
-    if let Some(index) = build {
+    let mut seen = BTreeSet::new();
+    for (index, stage) in record.snapshot.stages.iter().enumerate().rev() {
+        if !matches!(stage.stage.as_str(), "liquid" | "fill" | "build") {
+            continue;
+        }
         let current = record.snapshot.current_stage_index as usize;
         let completed = if current > index {
             record.cells[index].len()
@@ -382,7 +367,10 @@ pub(crate) fn recover(
         } else {
             0
         };
-        for cell in record.cells[index].iter().take(completed) {
+        for cell in record.cells[index].iter().take(completed).rev() {
+            if !seen.insert(cell.at) || free_soil_work(target, cell) {
+                continue;
+            }
             let now = target
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
@@ -406,20 +394,14 @@ pub(crate) fn recover(
             }
         }
     }
+    repair.reverse();
     if committed && repair.is_empty() {
         return Ok(false);
     }
-    let bounds = bounds_of_structure(record)?;
-    let image = fingerprint(target, bounds, true)?;
-    // D10: re-prove the certified liquid envelope before the plan resumes. The
-    // fence includes the shell and the supports, so a change already paused it;
-    // this refuses a resume into a world the admission no longer covers (a new
-    // supply, a mixed body, an opened shell, a player block, a removed support)
-    // without re-planning or re-charging a cell that is already paid.
-    if let Some(proof) = record.liquid.clone() {
+    if let Some(proof) = &record.liquid {
         crate::settlements::construction::preparation::liquid::revalidate(
             target,
-            &proof,
+            proof,
             record.snapshot.origin,
             record.snapshot.reserved_footprint,
         )?;
@@ -437,6 +419,7 @@ pub(crate) fn recover(
     {
         record.snapshot.stages.truncate(index);
         record.cells.truncate(index);
+        record.portions.truncate(index);
         if record.snapshot.current_stage_index as usize >= index {
             record.snapshot.current_stage_index = index as u32;
             record.snapshot.completed_work_units = 0;
@@ -455,12 +438,14 @@ pub(crate) fn recover(
             repair.len() as u64,
             materials(&counts),
         ));
+        record
+            .portions
+            .extend(portions::certify(state, std::slice::from_ref(&repair))?);
         record.cells.push(repair);
     }
     record.snapshot.resource_plan_hash =
         inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
     record.snapshot.remaining = remaining(&record);
-    record.image = image;
     record.snapshot.state = if record.snapshot.current_stage_index as usize == record.cells.len() {
         ScriptStructureState::Committed
     } else {
@@ -469,22 +454,14 @@ pub(crate) fn recover(
     record.snapshot.pause_reason = None;
     ledger.revision = next(ledger.revision)?;
     record.snapshot.revision = ledger.revision;
-    ledger.structures.insert(handle.to_owned(), record);
-    save(state, &ledger);
+    ledger.insert_structure(handle.to_owned(), record);
+    save(state, ledger);
     Ok(true)
 }
 
 /// Name of the final stage that re-places authored cells a foreign edit emptied.
 const REPAIR: &str = "repair";
 
-/// Completion check of a committed building structure: an authored
-/// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
-/// the blueprint needs a block) is queued into the `repair` stage, which the
-/// ordinary placement loop then re-places, paying the cell's material again;
-/// the structure leaves `Committed` for `Running`. A solid foreign block in an
-/// authored cell is not emptied and is never replaced.
-/// One pass over the structure's cells at completion, never per tick. Returns
-/// whether cells were queued (the building must not be certified yet).
 /// Whether a manifest cell is free soil work: no material was ever charged, so
 /// the cell only rewrites the ground already there.
 fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
@@ -496,6 +473,34 @@ fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
             .is_some_and(|definition| matches!(definition.block.id.path(), "dirt" | "dirt_path"))
 }
 
+/// Free soil work can only rewrite the ground already present, never create
+/// ground or destroy a foreign block. Debit and publication share this gate.
+pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bool {
+    if cell.resource.is_some()
+        || state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .is_some_and(|definition| definition.has_fluid())
+    {
+        return false;
+    }
+    if cell.state == state.registry.states.dirt {
+        return !crate::settlements::construction::relayout::village_soil(state, current);
+    }
+    Some(cell.state) == crate::settlements::layout::paved_state(state)
+        && current != cell.state
+        && !crate::settlements::construction::relayout::soil(state, current)
+}
+
+/// Completion check of a committed building structure: an authored
+/// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
+/// the blueprint needs a block) is queued into the `repair` stage, which the
+/// ordinary placement loop then re-places, paying the cell's material again;
+/// the structure leaves `Committed` for `Running`. A solid foreign block in an
+/// authored cell is not emptied and is never replaced.
+/// One pass over the structure's cells at completion, never per tick. Returns
+/// whether cells were queued (the building must not be certified yet).
 pub(crate) fn reopen_emptied(
     state: &mut TickState,
     settlement: SettlementId,
@@ -516,15 +521,15 @@ pub(crate) fn reopen_emptied(
     };
     let mut seen = BTreeSet::new();
     let mut stale = Vec::new();
-    for cell in record.cells.iter().flatten() {
-        if cell.state == target.registry.states.air
-            // Free soil work rewrites the ground already in place: a village
-            // retirement re-soils the path or field it found, a detour or a
-            // road paves the soil under it. Nothing was consumed, so a cell the
-            // player dug out has nothing to restore — reopening it would repair
-            // a cell the executor no-ops for ever and never certify the house.
+    for cell in record
+        .cells
+        .iter()
+        .rev()
+        .flat_map(|cells| cells.iter().rev())
+    {
+        if !seen.insert(cell.at)
+            || cell.state == target.registry.states.air
             || free_soil_work(target, cell)
-            || !seen.insert(cell.at)
         {
             continue;
         }
@@ -544,6 +549,7 @@ pub(crate) fn reopen_emptied(
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    let certificate = portions::certify(state, std::slice::from_ref(&stale))?.remove(0);
     let mut counts = BTreeMap::new();
     for cell in &stale {
         if let Some(resource) = &cell.resource {
@@ -566,11 +572,13 @@ pub(crate) fn reopen_emptied(
         Some(index) => {
             record.snapshot.stages[index] = plan;
             record.cells[index] = stale;
+            record.portions[index] = certificate;
             index
         }
         None => {
             record.snapshot.stages.push(plan);
             record.cells.push(stale);
+            record.portions.push(certificate);
             record.snapshot.stages.len() - 1
         }
     };
@@ -583,8 +591,8 @@ pub(crate) fn reopen_emptied(
     record.blueprint_hash = inventories::hash(&record.cells);
     ledger.revision = next(ledger.revision)?;
     record.snapshot.revision = ledger.revision;
-    ledger.structures.insert(handle.to_owned(), record);
-    save(state, &ledger);
+    ledger.insert_structure(handle.to_owned(), record);
+    save(state, ledger);
     Ok(true)
 }
 
@@ -623,9 +631,7 @@ pub(crate) fn next_plan_state(
 pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str) -> bool {
     let Some(record) = state
         .plugins
-        .get_domain(OWNER, KEY)
-        .and_then(|ledger| ledger.get("structures"))
-        .and_then(|structures| structures.get(handle))
+        .get_domain(OWNER, &ledger::structure_key(handle))
     else {
         return false;
     };
@@ -647,7 +653,7 @@ pub(crate) fn clearing(state: &TickState, settlement: SettlementId, handle: &str
         .and_then(|stages| stages.get(index))
         .and_then(|stage| stage.get("stage"))
         .and_then(serde_json::Value::as_str)
-        == Some("clear")
+        .is_some_and(PortionKind::is_preparation)
 }
 
 pub(crate) fn advance(
@@ -723,7 +729,11 @@ pub(super) fn debit(
     builder: &str,
     required: &BTreeMap<String, u64>,
     cells: &[super::Cell],
+    expected: &[u32],
 ) -> Result<(), Failure> {
+    if cells.len() != expected.len() {
+        return Err(Failure::InvalidRequest);
+    }
     let uuid = uuid::Uuid::parse_str(builder).map_err(|_| Failure::InvalidRequest)?;
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
         return Err(Failure::Busy);
@@ -745,9 +755,6 @@ pub(super) fn debit(
         .and_then(|record| crate::settlements::construction::project_for_structure(record, handle))
         .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
         .ok_or(Failure::Forbidden)?;
-    // A new site and an upgrade both carry clear-stage cells: an upgrade that
-    // clears natural forest or a registered tree must credit the same drops.
-    let preparing = true;
     // A solid cell may not be placed through another project's builder: that
     // body is not this site's to trap (D8 review SOL-4). The body is a box, not
     // a column: at 0.6 wide it straddles a cell edge and at 1.95 tall it owns
@@ -795,12 +802,15 @@ pub(super) fn debit(
     let mut drops = Vec::new();
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
-    // D10 write gate: a flowing or falling lava cell is waited out (its source's
-    // remaining flow must drain first), an air write must not free a cell lava
-    // could flow into, and water is written immediately. A lava wait wakes an
-    // orphan flow; `liquid::wake` is a no-op while a fluid tick around that cell
-    // is still queued, so it only schedules when the wait starts.
-    for cell in cells {
+    for (cell, expected) in cells.iter().zip(expected) {
+        let block = state
+            .world
+            .block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        if soil_work_noop(state, cell, block) {
+            continue;
+        }
+        // D10 source fills lead cuts; remaining lava must drain before a write.
         if let Some(wait) = crate::settlements::construction::preparation::liquid::write_wait(
             state, cell.at, cell.state,
         ) {
@@ -809,94 +819,90 @@ pub(super) fn debit(
             }
             return Err(Failure::Blocked);
         }
-    }
-    if preparing {
-        for cell in cells
-            .iter()
-            .filter(|cell| cell.state == state.registry.states.air)
-        {
-            let block = state
-                .world
-                .block_at(cell.at[0], cell.at[1], cell.at[2])
-                .ok_or(Failure::Unloaded)?;
-            if crate::settlements::forestry::tree_or_sapling(state, block) {
-                drops.extend(crate::settlements::forestry::drops(
-                    state,
-                    cell.at,
-                    block,
-                    lot,
-                    &mut clearance,
-                )?);
-            } else if crate::settlements::construction::excavatable(state, block) {
-                // Bounded terrain cut: recheck the cell the survey certified
-                // immediately before the debit, credit its own mining drop in
-                // this same transaction, and never write fluid or lava in.
-                if state.block_log.player_touched(cell.at) {
-                    return Err(Failure::Blocked);
-                }
-                let path = state
-                    .registry
-                    .blocks
-                    .by_id(mc_world::BlockStateId(block))
-                    .map(|definition| definition.block.id.path())
-                    .ok_or(Failure::Blocked)?;
-                let item = crate::villager::mining::item_id(
-                    state,
-                    crate::villager::mining::drop_name(path),
-                )
-                .ok_or(Failure::Blocked)?;
-                let count = crate::villager::mining::drop_count(path);
-                for (dx, dy, dz) in [
-                    (1, 0, 0),
-                    (-1, 0, 0),
-                    (0, 1, 0),
-                    (0, -1, 0),
-                    (0, 0, 1),
-                    (0, 0, -1),
-                ] {
-                    let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
-                    let neighbour = state
-                        .world
-                        .block_at(at[0], at[1], at[2])
-                        .ok_or(Failure::Unloaded)?;
-                    // Lava or water next to the cell would flow into the cut.
-                    if state.registry.states.lava_levels.contains(&neighbour)
-                        || state
-                            .registry
-                            .blocks
-                            .by_id(mc_world::BlockStateId(neighbour))
-                            .is_some_and(|definition| definition.has_fluid())
-                    {
-                        return Err(Failure::Blocked);
-                    }
-                }
-                drops.push(mc_data::ItemStack::new(item, count));
+        // Paving and field retirement reshape existing soil without mining it.
+        if free_soil_work(state, cell) {
+            continue;
+        }
+        if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
+            drops.extend(credit);
+            continue;
+        }
+        if cell.state != state.registry.states.air {
+            continue;
+        }
+        if crate::settlements::forestry::tree_or_sapling(state, block) {
+            drops.extend(if portions::inside(state, id, cell.at) {
+                crate::settlements::forestry::roll(state, cell.at, block)?
             } else {
-                // A log-tag variant excluded from tree ownership must never
-                // pass through the flora path with an empty drop list.
-                if state.registry.tree_logs.get(block as usize) == Some(&true) {
+                crate::settlements::forestry::drops(state, cell.at, block, lot, &mut clearance)?
+            });
+        } else if crate::settlements::construction::excavatable(state, block) {
+            // Bounded terrain cut: recheck the cell the survey certified
+            // immediately before the debit, credit its own mining drop in
+            // this same transaction, and never write fluid or lava in.
+            if !portions::inside(state, id, cell.at) && state.block_log.player_touched(cell.at) {
+                return Err(Failure::Blocked);
+            }
+            let path = state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(block))
+                .map(|definition| definition.block.id.path())
+                .ok_or(Failure::Blocked)?;
+            let item =
+                crate::villager::mining::item_id(state, crate::villager::mining::drop_name(path))
+                    .ok_or(Failure::Blocked)?;
+            let count = crate::villager::mining::drop_count(path);
+            for (dx, dy, dz) in [
+                (1, 0, 0),
+                (-1, 0, 0),
+                (0, 1, 0),
+                (0, -1, 0),
+                (0, 0, 1),
+                (0, 0, -1),
+            ] {
+                let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
+                let neighbour = state
+                    .world
+                    .block_at(at[0], at[1], at[2])
+                    .ok_or(Failure::Unloaded)?;
+                // Lava or water next to the cell would flow into the cut.
+                if state.registry.states.lava_levels.contains(&neighbour)
+                    || state
+                        .registry
+                        .blocks
+                        .by_id(mc_world::BlockStateId(neighbour))
+                        .is_some_and(|definition| definition.has_fluid())
+                {
                     return Err(Failure::Blocked);
                 }
-                loot.extend(
-                    crate::settlements::forestry::plant_drops(state, cell.at, block)?
-                        .into_iter()
-                        .map(|stack| (cell.at, stack)),
-                );
-                // A lot crop leaves its field with the lot: its harvest is
-                // vanilla loot, not conserved stock, so full storage spills it
-                // at the cell as vanilla does.
-                loot.extend(
-                    crate::settlements::construction::relayout::crop_drops(state, block)
-                        .into_iter()
-                        .map(|stack| (cell.at, stack)),
-                );
             }
+            drops.push(mc_data::ItemStack::new(item, count));
+        } else if portions::inside(state, id, cell.at)
+            && !crate::settlements::construction::clearable(state, block)
+            && !crate::settlements::construction::relayout::crop(state, block)
+        {
+            drops.extend(portions::conserved_drops(state, cell.at, block)?);
+        } else {
+            // A log-tag variant excluded from tree ownership must never
+            // pass through the flora path with an empty drop list.
+            if state.registry.tree_logs.get(block as usize) == Some(&true) {
+                return Err(Failure::Blocked);
+            }
+            loot.extend(
+                crate::settlements::forestry::plant_drops(state, cell.at, block)?
+                    .into_iter()
+                    .map(|stack| (cell.at, stack)),
+            );
+            loot.extend(
+                crate::settlements::construction::relayout::crop_drops(state, block)
+                    .into_iter()
+                    .map(|stack| (cell.at, stack)),
+            );
         }
     }
     if required.is_empty() && drops.is_empty() && loot.is_empty() {
-        if preparing {
-            retire_cleared_roots(state, cells);
-        }
+        retire_cleared_roots(state, cells);
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -954,9 +960,7 @@ pub(super) fn debit(
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
     inventory::commit(state, changes)?;
-    if preparing {
-        retire_cleared_roots(state, cells);
-    }
+    retire_cleared_roots(state, cells);
     for (at, stack) in spilled {
         crate::tick::spawn_item_entity(
             state,
@@ -1119,7 +1123,7 @@ pub(crate) fn site_bounds(
     handle: &str,
 ) -> Option<ScriptWorldBounds> {
     let ledger = ledger(state).ok()?;
-    let record = ledger.structures.get(handle)?;
+    let record = ledger.structures().get(handle)?;
     if record.settlement != Some(settlement) {
         return None;
     }
@@ -1175,9 +1179,9 @@ fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
     })
 }
 
-/// Resolve a town's workstation reference without deserializing the world's
-/// cell/receipt ledger on every villager admission. The borrowed JSON is the
-/// canonical ledger itself; the settlement handle grants no custody alone.
+/// Resolve a town's workstation reference without decoding the world's
+/// structure ledger on every villager admission. The borrowed JSON is the
+/// canonical record itself; the settlement handle grants no custody alone.
 pub(crate) fn furnace_workstation(
     state: &TickState,
     id: SettlementId,
@@ -1185,9 +1189,7 @@ pub(crate) fn furnace_workstation(
 ) -> Option<[i32; 3]> {
     let record = state
         .plugins
-        .get_domain(OWNER, KEY)?
-        .get("structures")?
-        .get(handle)?;
+        .get_domain(OWNER, &ledger::structure_key(handle))?;
     if record.get("settlement")?.as_u64()? != id.0 {
         return None;
     }
@@ -1210,7 +1212,7 @@ pub(crate) fn built_at(
     origin: [i32; 3],
 ) -> bool {
     ledger(state).is_ok_and(|ledger| {
-        ledger.structures.values().any(|record| {
+        ledger.structures().values().any(|record| {
             record.settlement == Some(id)
                 && record
                     .snapshot
@@ -1248,7 +1250,7 @@ fn committed_chain<'a>(
     origin: [i32; 3],
 ) -> Vec<&'a Structure> {
     let mut chain: Vec<(u64, u64, &Structure)> = ledger
-        .structures
+        .structures()
         .iter()
         .filter(|(_, record)| {
             record.settlement == Some(id)
@@ -1322,6 +1324,20 @@ pub(crate) fn upgrade_trees_clear(
             return Err(Failure::Blocked);
         }
         cleared.push(PlannedCell {
+            portion: if state
+                .settlements
+                .records()
+                .any(|record| record.planted_trees.contains(&cell.at))
+                && state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .is_some_and(|definition| definition.block.id.path().ends_with("_sapling"))
+            {
+                PortionKind::Saplings
+            } else {
+                PortionKind::Trees
+            },
             at: cell.at,
             state: state.registry.states.air,
             resource: None,
@@ -1656,27 +1672,6 @@ pub(crate) fn fetch(
     Ok(())
 }
 
-/// Return every resident builder's carried stock to canonical storage, so an
-/// order or cancellation never hides real materials inside a carry. Stacks
-/// that do not fit stay carried; nothing is lost or duplicated.
-pub(crate) fn return_carry(state: &mut TickState, id: SettlementId) {
-    let builders: Vec<uuid::Uuid> = crate::settlements::construction::residents(state, id)
-        .filter_map(|slot| {
-            let row = state.entities.row(slot);
-            row.villager
-                .as_ref()
-                .is_some_and(|v| {
-                    v.settlement == Some(id)
-                        && v.data.profession == crate::villager::VillagerProfession::Builder
-                })
-                .then_some(row.uuid)
-        })
-        .collect();
-    for uuid in builders {
-        let _ = return_carry_of(state, id, uuid);
-    }
-}
-
 /// What one addressable carry return achieved (D8 review SOL-6/R3-1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CarryReturn {
@@ -1882,7 +1877,7 @@ pub(crate) fn founding_claim_clear(
 ) -> bool {
     let source_owner = owner(source);
     ledger(state).is_ok_and(|ledger| {
-        ledger.structures.values().all(|record| {
+        ledger.structures().values().all(|record| {
             record.snapshot.dimension != state.dimension.name()
                 || record.snapshot.state == ScriptStructureState::Cancelled
                 || spent_free_work(record)
@@ -1933,7 +1928,7 @@ pub(crate) fn prepare_founding_transfer(
             })
     };
     for (name, origin) in sites {
-        if !ledger.structures.values().any(|record| {
+        if !ledger.structures().values().any(|record| {
             matches(record)
                 && record.snapshot.state == ScriptStructureState::Committed
                 && record
@@ -1946,7 +1941,11 @@ pub(crate) fn prepare_founding_transfer(
             return Err(Failure::Blocked);
         }
     }
-    for record in ledger.structures.values().filter(|record| matches(record)) {
+    for record in ledger
+        .structures()
+        .values()
+        .filter(|record| matches(record))
+    {
         if record.snapshot.dimension != state.dimension.name()
             || record.cells.iter().flatten().any(|cell| {
                 cell.state != state.registry.states.air
@@ -1971,13 +1970,9 @@ pub(crate) fn prepare_founding_transfer(
         }
     }
     let revision = next(ledger.revision)?;
-    for record in ledger
-        .structures
-        .values_mut()
-        .filter(|record| matches(record))
-    {
-        // Stable opaque structure IDs and original payment receipts remain the
-        // construction history; only the one live owner/provenance changes.
+    for record in ledger.structures_mut_where(|record| matches(record)) {
+        // Stable opaque structure IDs remain the construction history; only
+        // the one live owner/provenance changes.
         record.owner = owner(destination);
         record.settlement = Some(destination);
         record.snapshot.revision = revision;
@@ -1987,7 +1982,7 @@ pub(crate) fn prepare_founding_transfer(
 }
 
 pub(crate) fn commit_founding_transfer(state: &mut TickState, prepared: PreparedFoundingTransfer) {
-    save(state, &prepared.0);
+    save(state, prepared.0);
 }
 
 #[cfg(test)]

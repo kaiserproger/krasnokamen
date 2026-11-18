@@ -1002,6 +1002,7 @@ impl TickState {
                     broken,
                     &mc_data::ItemStack::EMPTY,
                     self.tick ^ ((pos.x as u64) << 40) ^ ((pos.z as u64) << 16) ^ pos.y as u64,
+                    false,
                 )
             } else {
                 Ok(Vec::new())

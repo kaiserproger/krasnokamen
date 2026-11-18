@@ -17,11 +17,11 @@ pub(crate) use availability::gatherer_for_item;
 
 #[path = "construction_access.rs"]
 mod access;
+pub(crate) use access::projects_of;
 pub(crate) use access::{
     bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
     project_of_builder, projects, record_heap_bytes, upgrading,
 };
-pub(crate) use access::{head_order_of, projects_of};
 
 #[path = "construction_furnace.rs"]
 pub(crate) mod furnace;
@@ -31,6 +31,9 @@ pub(super) mod founding;
 
 #[path = "construction_site_refusals.rs"]
 pub(super) mod site_refusals;
+
+#[path = "construction_upgrade.rs"]
+mod upgrade;
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
@@ -161,11 +164,15 @@ pub(crate) fn owner_upgrade_level(
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
     let (blueprint, ..) = upgrade_blueprint(state, id, target)?;
-    // Several projects can target one building (D8), so the next level follows
-    // the highest level already in flight, not just the built one.
+    // A confirmed level is immutable, including while its predecessor waits.
     let current = access::projects(record)
         .filter(|project| project.building == Some(building))
         .map(|project| project.level)
+        .chain(
+            access::orders(record)
+                .filter(|order| order.building == Some(building))
+                .map(|order| order.level),
+        )
         .max()
         .unwrap_or(target.level)
         .max(target.level);
@@ -178,6 +185,9 @@ fn start_order(
     order: &OwnerOrder,
     planning_cursor: Option<u32>,
 ) -> Result<String, String> {
+    if upgrade::next_level(state, id, order).is_some_and(|next| next != order.level) {
+        return Err("Busy.".into());
+    }
     match order.building {
         Some(building) => start_upgrade(state, id, building),
         None => start_build(state, id, &order.blueprint, planning_cursor),
@@ -306,10 +316,6 @@ pub(crate) fn cancel_pending_at(
     Ok(())
 }
 
-pub(crate) fn pending_reason(state: &TickState, id: SettlementId) -> Option<String> {
-    pending_reason_at(state, id, 0)
-}
-
 /// The waiting reason of one queued request (zero-based). Funding is checked
 /// before the slot, so an unfunded request is never reported as merely busy.
 pub(crate) fn pending_reason_at(
@@ -321,6 +327,9 @@ pub(crate) fn pending_reason_at(
     let order = orders(record).nth(index)?;
     let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
     let level = blueprint.level(order.level)?;
+    if let Some(reason) = upgrade::pending_reason(state, id, order) {
+        return Some(reason);
+    }
     if let Some(reason) = funding_error(state, id, &level.materials) {
         return Some(reason);
     }
@@ -387,7 +396,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     }
     // Funded candidates in queue order; the head is first when it is funded.
     let images = executor::source_images(state, id);
-    let mut candidates: Vec<(usize, u8)> = Vec::new();
+    let mut candidates = Vec::new();
     {
         let record = state.settlements.get(id).expect("settlement");
         for (index, order) in access::orders(record).enumerate() {
@@ -400,7 +409,7 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
                 continue;
             };
             if funded_variant(state, id, &level.materials, &images).is_some() {
-                candidates.push((index, level_number));
+                candidates.push(index);
             }
         }
     }
@@ -410,14 +419,13 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     }
     // A funded request that cannot start for lack of a site does not block the
     // next funded one; it stays where it is in the queue.
-    for (index, level_number) in candidates {
+    for index in candidates {
         let Some(record) = state.settlements.get_mut(id) else {
             return true;
         };
-        let Some(mut order) = access::take_order(record, index) else {
+        let Some(order) = access::take_order(record, index) else {
             continue;
         };
-        order.level = level_number;
         let cursor = state
             .settlements
             .get(id)
@@ -460,16 +468,16 @@ fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
     true
 }
 
-/// The level an owner request would start at, if its target still allows one.
+/// A confirmed level remains unchanged even while its predecessor is missing.
 fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Option<u8> {
     let Some(building) = order.building else {
         return Some(1);
     };
     let record = state.settlements.get(id)?;
     let target = record.buildings.get(&building)?;
-    blueprints::get(&state.registry, &order.blueprint)
-        .and_then(|blueprint| blueprint.level(target.level + 1))
-        .map(|_| target.level + 1)
+    let blueprint = blueprints::get(&state.registry, &order.blueprint)?;
+    blueprint.level(target.level.saturating_add(1))?;
+    blueprint.level(order.level).map(|_| order.level)
 }
 
 fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {
@@ -1539,8 +1547,11 @@ pub(crate) fn begin_cells(
     state: &mut TickState,
     mut project: Project,
     bounds: ScriptWorldBounds,
-    cells: Vec<executor::PlannedCell>,
+    mut cells: Vec<executor::PlannedCell>,
 ) -> bool {
+    if !cells.is_sorted_by_key(|cell| cell.portion) {
+        cells.sort_by_key(|cell| cell.portion);
+    }
     let site = blueprints::get(&state.registry, &project.blueprint)
         .map(|blueprint| {
             let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
@@ -2369,8 +2380,8 @@ fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: crate::enti
         return;
     };
     let binding = Some((state.entities.row(slot).uuid, None));
-    if let Some(mut record) = state.settlements.get_mut(id)
-        && access::bind_builder(&mut record, &target, binding)
+    if let Some(record) = state.settlements.get_mut(id)
+        && access::bind_builder(record, &target, binding)
     {
         record.revision = record.revision.saturating_add(1);
     }
@@ -2396,10 +2407,10 @@ fn rebind_lost_builders(state: &mut TickState, id: SettlementId) {
         if executor::return_carry_of(state, id, uuid) != executor::CarryReturn::Delivered {
             owe_carry(state, id, uuid, &handle);
         }
-        let Some(mut record) = state.settlements.get_mut(id) else {
+        let Some(record) = state.settlements.get_mut(id) else {
             return;
         };
-        access::unbind_builder(&mut record, uuid);
+        access::unbind_builder(record, uuid);
         record.revision = record.revision.saturating_add(1);
         let _ = handle;
     }
@@ -2518,11 +2529,11 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
-    let lot = super::forestry::lot_bounds(state, &project);
+    let lot = super::forestry::lot_bounds(state, project);
     let protected = snapshot
         .stages
         .get(snapshot.current_stage_index as usize)
-        .is_some_and(|stage| stage.stage == "clear")
+        .is_some_and(|stage| executor::PortionKind::is_preparation(&stage.stage))
         && next.is_some_and(|at| {
             state
                 .world
@@ -2535,7 +2546,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     } else if let Some(reason) = snapshot.pause_reason.as_deref() {
         reason
     } else if let Some((slot, next)) = incumbent.zip(next) {
-        let waiting = crate::villager::building::wait_reason(state, slot, &project, next);
+        let waiting = crate::villager::building::wait_reason(state, slot, project, next);
         if waiting == "placement_not_advancing" {
             refusal.unwrap_or(waiting)
         } else {
@@ -2575,7 +2586,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // slot of unpaid work, as a protected tree does: rotating builders that
     // cannot reach the worksite would otherwise hold the only slot forever.
     let preparation = ((protected || !report) && snapshot.consumed.is_empty())
-        .then(|| retry_preparation(state, id, &project));
+        .then(|| retry_preparation(state, id, project));
     // A retry the queue refused is the owner's to act on: the paid request is
     // still in flight, so the reason reaches them instead of only the log
     // (D8 review R2-6).
@@ -2813,7 +2824,7 @@ pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uui
     if owed.is_empty() {
         return;
     }
-    let Some(mut record) = state.settlements.get_mut(id) else {
+    let Some(record) = state.settlements.get_mut(id) else {
         return;
     };
     record.carry_pending.insert(uuid, owed);
@@ -2834,7 +2845,7 @@ fn drain_carry_duties(state: &mut TickState, id: SettlementId) {
         .collect();
     for (uuid, owed) in debts {
         let residual = executor::return_owed_carry(state, id, uuid, &owed);
-        let Some(mut record) = state.settlements.get_mut(id) else {
+        let Some(record) = state.settlements.get_mut(id) else {
             return;
         };
         match residual {
@@ -2866,11 +2877,6 @@ fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
         .is_some_and(|record| record.carry_pending.contains_key(&uuid))
 }
 
-/// Test hook: drain one settlement's return duties outside the clock.
-pub(crate) fn drain_carry_duties_for_test(state: &mut TickState, id: SettlementId) {
-    drain_carry_duties(state, id);
-}
-
 fn assign_builder(state: &mut TickState, id: SettlementId) {
     drain_carry_duties(state, id);
     release_stalled_builder(state, id);
@@ -2894,9 +2900,7 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         .is_some_and(|project| project.ordered);
     let protected = state.settlements.get(id).and_then(|record| {
         let images = executor::source_images(state, id);
-        let Some(bill) = joint_active_bill(state, id) else {
-            return None;
-        };
+        let bill = joint_active_bill(state, id)?;
         super::construction_crafting::needed_gatherer(state, &bill, &images).or_else(|| {
             if ordered {
                 return None;
@@ -3024,8 +3028,8 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
         _ => None,
     };
     let binding = Some((state.entities.row(slot).uuid, borrowed));
-    if let Some(mut record) = state.settlements.get_mut(id)
-        && access::bind_builder(&mut record, &target, binding)
+    if let Some(record) = state.settlements.get_mut(id)
+        && access::bind_builder(record, &target, binding)
     {
         record.revision = record.revision.saturating_add(1);
     }
@@ -3258,6 +3262,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
 /// One needed blueprint kind whose level-one bill the settlement cannot fund.
 #[derive(Debug)]
 pub(crate) struct WaitingKind {
+    #[cfg(test)]
     pub(crate) blueprint: String,
     /// Unfunded bill entries, in bill order.
     pub(crate) needs: Vec<WaitingNeed>,
@@ -3271,16 +3276,6 @@ pub(crate) struct WaitingNeed {
     pub(crate) total: u64,
     pub(crate) source_item: Option<String>,
     pub(crate) no_source: Option<SourceReason>,
-}
-
-/// Remaining physical project requirements after subtracting exact items in
-/// builder carry. Ingredients in carry are not craftable until deposited.
-fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u32)>> {
-    let handle = access::projects_of(&state.settlements, id)
-        .next()?
-        .structure
-        .clone();
-    project_bill(state, id, &handle)
 }
 
 /// One project's remaining bill, net of the carry of the builder bound to it.
@@ -3686,6 +3681,7 @@ pub(crate) fn waiting(state: &TickState, id: SettlementId) -> Vec<WaitingKind> {
         }
         if !needs.is_empty() {
             kinds.push(WaitingKind {
+                #[cfg(test)]
                 blueprint: blueprint.id.clone(),
                 needs,
             });
@@ -3746,6 +3742,7 @@ pub(crate) fn project_summary(state: &TickState, id: SettlementId) -> Vec<String
 }
 
 /// One project's status lines, from its own ledger and material proof.
+#[cfg(test)]
 fn project_lines(state: &TickState, id: SettlementId, project: &Project) -> Vec<String> {
     let Ok(snapshot) = executor::status(state, id, &project.structure) else {
         return vec!["Project ledger unavailable; paused.".into()];

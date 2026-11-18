@@ -24,7 +24,7 @@ use mc_data::ItemStack;
 
 const CHEST: (i32, i32, i32) = (1, 201, 1);
 const SHIFT_DAY_TIME: i64 = 3_000;
-const OWNER: uuid::Uuid = uuid::Uuid::from_u128(0x0d8_0e5_7_a1);
+const OWNER: uuid::Uuid = uuid::Uuid::from_u128(0x0000_d80e_57a1);
 
 fn chest_slots(state: &mut TickState) -> &mut Vec<ItemStack> {
     &mut state

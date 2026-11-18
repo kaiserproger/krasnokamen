@@ -361,7 +361,7 @@ fn construction_accesses_count_only_outside_the_owner_and_children() {
         &[
             (
                 "lib.rs",
-                "mod settlements; mod other; fn f() { show!(r.project); }",
+                "mod settlements; mod other; fn f() { show!(r.projects); }",
             ),
             (
                 "settlements.rs",
@@ -370,24 +370,27 @@ fn construction_accesses_count_only_outside_the_owner_and_children() {
             ),
             (
                 "settlements/construction.rs",
-                "mod child; fn f() { r.project; r.pending_order; }",
+                "mod child; fn f() { r.projects; r.orders; }",
             ),
-            ("settlements/construction/child.rs", "fn f() { r.project; }"),
+            (
+                "settlements/construction/child.rs",
+                "fn f() { r.projects; }",
+            ),
             (
                 "settlements/construction_extra.rs",
-                "#[path = \"legacy_child.rs\"] mod child; fn f() { r.project; }",
+                "#[path = \"legacy_child.rs\"] mod child; fn f() { r.projects; }",
             ),
-            ("settlements/legacy_child.rs", "fn f() { r.pending_order; }"),
+            ("settlements/legacy_child.rs", "fn f() { r.orders; }"),
             (
                 "settlements/registry.rs",
                 r#"
-                fn f() { r.project; r.pending_order; }
-                #[cfg(test)] fn hidden() { r.project; }
-                const TEXT: &str = "r.project r.pending_order";
+                fn f() { r.projects; r.orders; }
+                #[cfg(test)] fn hidden() { r.projects; }
+                const TEXT: &str = "r.projects r.orders";
                 "#,
             ),
             ("other.rs", "mod construction;"),
-            ("other/construction.rs", "fn f() { r.project; }"),
+            ("other/construction.rs", "fn f() { r.projects; }"),
         ],
     );
     assert_eq!(fixture.facts().total(Counter::ConstructionFieldAccess), 4);
@@ -418,8 +421,8 @@ fn construction_accesses_count_only_outside_the_owner_and_children() {
         "construction-inline",
         &[(
             "lib.rs",
-            "mod settlements { mod construction { mod child { fn f() { r.project; } } } \
-             mod registry { fn f() { r.pending_order; } } }",
+            "mod settlements { mod construction { mod child { fn f() { r.projects; } } } \
+             mod registry { fn f() { r.orders; } } }",
         )],
     );
     assert_eq!(inline.facts().total(Counter::ConstructionFieldAccess), 1);

@@ -184,8 +184,8 @@ fn an_outpost_builder_outside_the_civil_radius_still_places_paid_cells() {
         .unwrap();
     let uuid = state.entities.row(builder).uuid;
     // The executor only hauls for the project's bound builder (P2-5).
-    if let Some(mut record) = state.settlements.get_mut(parent) {
-        super::super::bind_builder(&mut record, &project.structure, Some((uuid, None)));
+    if let Some(record) = state.settlements.get_mut(parent) {
+        super::super::bind_builder(record, &project.structure, Some((uuid, None)));
     }
     executor::fetch(&mut state, uuid, &project.structure, [1, 201, 1], item).unwrap();
     state
@@ -482,15 +482,7 @@ fn queue_unfunded_order(state: &mut TickState, parent: SettlementId, blueprint: 
         .slots
         .fill(mc_data::ItemStack::EMPTY);
     super::super::request_build(state, parent, blueprint).unwrap();
-    assert!(
-        state
-            .settlements
-            .get(parent)
-            .unwrap()
-            .orders
-            .first()
-            .is_some()
-    );
+    assert!(!state.settlements.get(parent).unwrap().orders.is_empty());
     assert!(state.settlements.get(parent).unwrap().projects.is_empty());
 }
 
@@ -1038,6 +1030,9 @@ fn review_population_radius_growth_cannot_steal_a_founding_claim() {
     checkpoint(&mut state, &config);
     crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
 }
+
+#[path = "construction_ledger_tests.rs"]
+mod ledger;
 
 /// Stock the bootstrap chest with exactly the level-1 bills of `sites`.
 fn fund_sites(state: &mut TickState, sites: &[(&'static str, [i32; 3])]) {

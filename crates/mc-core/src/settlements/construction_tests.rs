@@ -6,7 +6,12 @@ use crate::villager::{Activity, building};
 use mc_data::ItemStack;
 
 pub(crate) fn fixture() -> (TickState, SettlementId, EntitySlot) {
-    let mut state = test_state();
+    fixture_in(test_state())
+}
+
+/// The builder settlement on `state`, whose chunk 0,0 is resident with a stone
+/// floor at y=200.
+pub(crate) fn fixture_in(mut state: TickState) -> (TickState, SettlementId, EntitySlot) {
     for x in 0..16 {
         for z in 0..16 {
             for y in 201..224 {
@@ -79,13 +84,7 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
     ));
     let outcome = request_build(&mut state, id, "lumber_camp").unwrap();
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "funded admission: {outcome:?}"
     );
     for _ in 0..4096 {
@@ -262,6 +261,15 @@ pub(crate) fn start(
 }
 
 pub(crate) fn fund(state: &mut TickState, blueprint: &str, level: u8) -> Vec<(u32, u32)> {
+    if level > 1 {
+        // Upgrade removal tests require the real world's canonical loot tables.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
+    }
     fund_at(state, (1, 201, 1), blueprint, level)
 }
 
@@ -298,8 +306,8 @@ pub(crate) fn bind_project(
     slot: EntitySlot,
 ) {
     let uuid = state.entities.row(slot).uuid;
-    if let Some(mut record) = state.settlements.get_mut(id) {
-        crate::settlements::construction::bind_builder(&mut record, handle, Some((uuid, None)));
+    if let Some(record) = state.settlements.get_mut(id) {
+        crate::settlements::construction::bind_builder(record, handle, Some((uuid, None)));
         record.revision = record.revision.saturating_add(1);
     }
 }
@@ -313,19 +321,19 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     let uuid = state.entities.row(slot).uuid;
     // Bind the resident to every unbound project: one resident cannot hold two,
     // so an already-bound project keeps its own builder (D8 review P1-2).
-    let bindings: Vec<(String, Option<(uuid::Uuid, Option<Profession>)>)> = state
+    let bindings: Vec<String> = state
         .settlements
         .get(id)
         .map(|record| {
             crate::settlements::construction::projects(record)
                 .filter(|project| project.builder.is_none())
-                .map(|project| (project.structure.clone(), Some((uuid, None))))
+                .map(|project| project.structure.clone())
                 .collect()
         })
         .unwrap_or_default();
-    if let Some(mut record) = state.settlements.get_mut(id) {
-        for (handle, binding) in bindings {
-            crate::settlements::construction::bind_builder(&mut record, &handle, binding);
+    if let Some(record) = state.settlements.get_mut(id) {
+        for handle in bindings {
+            crate::settlements::construction::bind_builder(record, &handle, Some((uuid, None)));
         }
     }
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
@@ -500,14 +508,7 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "storage", 1);
     for _ in 0..128 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -523,14 +524,7 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "house", 1);
     for _ in 0..4096 {
         plan(&mut state, id);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -959,10 +953,10 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     ));
     let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
     let ledger = serde_json::to_vec(
-        state
+        &state
             .plugins
-            .get_domain("@native-structures", "ledger")
-            .unwrap(),
+            .domain_entries("@native-structures")
+            .collect::<std::collections::BTreeMap<_, _>>(),
     )
     .unwrap();
     let carry = serde_json::to_vec(state.entities.row(slot).villager.as_ref().unwrap()).unwrap();
@@ -977,11 +971,13 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
         id.0,
     )
     .unwrap();
-    restored.plugins.set_domain(
-        "@native-structures",
-        "ledger",
-        serde_json::from_slice(&ledger).unwrap(),
-    );
+    let ledger: std::collections::BTreeMap<String, serde_json::Value> =
+        serde_json::from_slice(&ledger).unwrap();
+    for (key, value) in ledger {
+        restored
+            .plugins
+            .set_domain("@native-structures", &key, value);
+    }
     restored.entities.row_mut(restored_slot).villager =
         Some(serde_json::from_slice(&carry).unwrap());
     crate::settlements::rebuild_counts(&mut restored);
@@ -1008,14 +1004,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     fund(&mut restored, "watch_tower", 1);
     for _ in 0..128 {
         plan(&mut restored, id);
-        if restored
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !restored.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }

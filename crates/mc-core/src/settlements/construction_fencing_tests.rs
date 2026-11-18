@@ -20,15 +20,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             state.world.block_at(cell[0], cell[1], cell[2]),
             Some(expected)
         );
-        assert!(
-            state
-                .settlements
-                .get(id)
-                .unwrap()
-                .projects
-                .first()
-                .is_some()
-        );
+        assert!(!state.settlements.get(id).unwrap().projects.is_empty());
         let log = state
             .registry
             .items
@@ -104,15 +96,7 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             state.world.block_at(cell[0], cell[1], cell[2]),
             Some(state.registry.states.air)
         );
-        assert!(
-            state
-                .settlements
-                .get(id)
-                .unwrap()
-                .projects
-                .first()
-                .is_some()
-        );
+        assert!(!state.settlements.get(id).unwrap().projects.is_empty());
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots = saved_stock;
         state
             .entities
@@ -124,11 +108,11 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
 
         if restart {
             let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
-            let ledger = state
+            let ledger: Vec<(String, serde_json::Value)> = state
                 .plugins
-                .get_domain("@native-structures", "ledger")
-                .unwrap()
-                .clone();
+                .domain_entries("@native-structures")
+                .map(|(key, value)| (key.to_owned(), value.clone()))
+                .collect();
             let carry = state.entities.row(slot).villager.clone();
             let (mut restored, restored_id, restored_slot) = fixture();
             assert_eq!(restored_id, id);
@@ -140,9 +124,11 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
                 id.0,
             )
             .unwrap();
-            restored
-                .plugins
-                .set_domain("@native-structures", "ledger", ledger);
+            for (key, value) in ledger {
+                restored
+                    .plugins
+                    .set_domain("@native-structures", &key, value);
+            }
             restored.entities.row_mut(restored_slot).villager = carry;
             crate::settlements::rebuild_counts(&mut restored);
             restored.block_entities.get_mut(&(1, 201, 1)).unwrap().slots =
@@ -226,13 +212,7 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
         attempt(&mut state, id, slot);
     }
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "evolution occurs mid-build"
     );
     assert_eq!(
@@ -258,7 +238,7 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
 }
 
 #[test]
-fn foreign_plank_replacement_pauses_without_debit_then_next_admission_resumes_and_completes() {
+fn foreign_replacement_of_a_completed_cell_does_not_pause_pending_portions() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
@@ -270,40 +250,26 @@ fn foreign_plank_replacement_pauses_without_debit_then_next_admission_resumes_an
         }
         attempt(&mut state, id, slot);
     }
-    assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-    );
+    assert!(!state.settlements.get(id).unwrap().projects.is_empty());
     let before = executor::status(&state, id, &project.structure).unwrap();
     let writes = state.plugin_block_writes.len();
     state
         .world
         .set_block(plank[0], plank[1], plank[2], state.registry.states.stone);
-    // The executor still refuses to place over a changed footprint.
-    let mut paused = before.clone();
+    // Evidence is local to pending cells; a replaced completed cell neither
+    // rewinds payment nor freezes unrelated work.
     for _ in 0..8 {
         attempt(&mut state, id, slot);
-        paused = executor::status(&state, id, &project.structure).unwrap();
-        if paused.state == ScriptStructureState::Paused {
-            break;
-        }
+        assert_ne!(
+            executor::status(&state, id, &project.structure)
+                .unwrap()
+                .state,
+            ScriptStructureState::Paused
+        );
     }
-    assert_eq!(paused.state, ScriptStructureState::Paused);
-    assert_eq!(paused.pause_reason.as_deref(), Some("footprint_changed"));
-    assert_eq!(paused.completed_work_units, before.completed_work_units);
-    assert_eq!(paused.consumed, before.consumed);
-    assert_eq!(state.plugin_block_writes.len(), writes);
-    // The next construction admission re-snapshots the footprint and resumes.
-    attempt(&mut state, id, slot);
-    let resumed = executor::status(&state, id, &project.structure).unwrap();
-    assert_ne!(resumed.state, ScriptStructureState::Paused);
-    assert_eq!(resumed.pause_reason, None);
-    assert_eq!(resumed.completed_work_units, before.completed_work_units);
+    let continued = executor::status(&state, id, &project.structure).unwrap();
+    assert!(continued.watermark > before.watermark);
+    assert!(state.plugin_block_writes.len() > writes);
     complete(&mut state, id, slot);
     assert_eq!(
         state.world.block_at(plank[0], plank[1], plank[2]),
@@ -422,13 +388,7 @@ fn a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies() {
         attempt(&mut state, id, slot);
     }
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "the log is placed mid-build"
     );
     state
@@ -485,15 +445,7 @@ fn a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_pr
         }
         attempt(&mut state, id, slot);
     }
-    assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-    );
+    assert!(!state.settlements.get(id).unwrap().projects.is_empty());
     complete_authored(&mut state, id, slot, &[(log, log_state)]);
     assert_eq!(state.settlements.get(id).unwrap().buildings.len(), 1);
     crate::plugin_structures::validate(&state).unwrap();

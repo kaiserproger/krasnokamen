@@ -323,6 +323,7 @@ fn a_wall_is_refused_against_an_active_underfunded_project() {
     let stored = {
         let images = executor::source_images(&state, id);
         let cells = vec![executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: [2, 201, 2],
             state: state.registry.states.air,
             resource: Some("minecraft:oak_log".into()),
@@ -532,9 +533,7 @@ fn a_carry_return_reports_delivery() {
         "the project keeps its binding meanwhile"
     );
     // Space appearing later lets the next pass deliver it.
-    for stack in chest(&mut state) {
-        *stack = mc_data::ItemStack::EMPTY;
-    }
+    chest(&mut state).fill(mc_data::ItemStack::EMPTY);
     assert_eq!(
         executor::return_carry_of(&mut state, id, uuid),
         executor::CarryReturn::Delivered,
@@ -610,11 +609,9 @@ fn a_lost_builder_keeps_its_binding_only_while_the_load_is_pending() {
         "a pending return becomes a recorded duty so a later pass retries it"
     );
     // Space appears: the next pass delivers the load and frees the project.
-    for stack in chest(&mut state) {
-        *stack = mc_data::ItemStack::EMPTY;
-    }
+    chest(&mut state).fill(mc_data::ItemStack::EMPTY);
     super::rebind_lost_builders(&mut state, id);
-    super::drain_carry_duties_for_test(&mut state, id);
+    super::drain_carry_duties(&mut state, id);
     assert!(
         state.settlements.get(id).unwrap().carry_pending.is_empty(),
         "a delivered load clears the duty"
@@ -902,7 +899,7 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         v.activity = crate::villager::Activity::Work;
     }
     push_neighbour(&mut state, id, "second-house", [24, 200, 24]);
-    super::drain_carry_duties_for_test(&mut state, id);
+    super::drain_carry_duties(&mut state, id);
     super::assign_builder(&mut state, id);
     // Neither the freshly admitted project nor the released one may take a
     // debtor: the planner is refused for every binding, not just the new site.
@@ -930,9 +927,7 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         "the debt survives a full store"
     );
     // The store frees: the exact amount is delivered once and the debt closes.
-    for stack in chest(&mut state) {
-        *stack = mc_data::ItemStack::EMPTY;
-    }
+    chest(&mut state).fill(mc_data::ItemStack::EMPTY);
     state
         .entities
         .row_mut(slot)
@@ -940,7 +935,7 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         .as_mut()
         .unwrap()
         .conversion_time = None;
-    super::drain_carry_duties_for_test(&mut state, id);
+    super::drain_carry_duties(&mut state, id);
     let delivered: i32 = chest(&mut state)
         .iter()
         .filter(|stack| stack.item_id == log)
@@ -951,7 +946,7 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         state.settlements.get(id).unwrap().carry_pending.is_empty(),
         "the debt closes on delivery"
     );
-    super::drain_carry_duties_for_test(&mut state, id);
+    super::drain_carry_duties(&mut state, id);
     let after_second = chest(&mut state)
         .iter()
         .filter(|stack| stack.item_id == log)
@@ -1011,10 +1006,8 @@ fn a_carry_equal_to_the_remainder_is_still_owed() {
         .as_mut()
         .unwrap()
         .conversion_time = None;
-    for stack in chest(&mut state) {
-        *stack = mc_data::ItemStack::EMPTY;
-    }
-    super::drain_carry_duties_for_test(&mut state, id);
+    chest(&mut state).fill(mc_data::ItemStack::EMPTY);
+    super::drain_carry_duties(&mut state, id);
     let delivered: i32 = chest(&mut state)
         .iter()
         .filter(|stack| stack.item_id == log)
@@ -1127,9 +1120,7 @@ fn an_infected_builders_debt_survives_a_reopen_and_delivers_after_a_real_cure() 
         "the body is cured"
     );
     // The planner pass delivers the reopened debt exactly once.
-    for stack in chest(&mut state) {
-        *stack = mc_data::ItemStack::EMPTY;
-    }
+    chest(&mut state).fill(mc_data::ItemStack::EMPTY);
     state.tick = super::PLAN_CADENCE;
     super::tick(&mut state);
     let delivered: i32 = chest(&mut state)

@@ -535,6 +535,7 @@ fn drop(state: &mut TickState, pos: BlockPos, block: u32, spawned: &mut Vec<Enti
         &mc_data::ItemStack::EMPTY,
         state.tick,
         None,
+        false,
     ) {
         Ok(stacks) => stacks,
         Err(error) => {

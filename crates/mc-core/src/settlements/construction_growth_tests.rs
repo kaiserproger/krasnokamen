@@ -102,14 +102,7 @@ fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_ord
     );
     for _ in 0..40 {
         crate::tick::run_tick(&mut state, &[]);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -141,14 +134,7 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
     state.day_time = 0;
     for _ in 0..256 {
         crate::tick::run_tick(&mut state, &[]);
-        if state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
-        {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
@@ -284,6 +270,14 @@ fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
 fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
     for level in 1..=2 {
         let (mut state, id, builder) = fixture();
+        // Autonomous upgrades bypass fund(level > 1), but still need real
+        // canonical destruction loot for the standing house's replaced cells.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
         open_plan(&mut state);
         fund(&mut state, "spanish_house", 1);
         start(&mut state, id, "spanish_house", 1, None);
@@ -546,17 +540,16 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
         .unwrap();
     retain_player_edit(&mut state, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
-    // using the canonical persisted ledger image, without changing its stage.
-    let mut ledger = state
+    // using the canonical persisted structure record, without changing its stage.
+    let key = format!("structure/{}", project.structure);
+    let mut record = state
         .plugins
-        .get_domain("@native-structures", "ledger")
+        .get_domain("@native-structures", &key)
         .unwrap()
         .clone();
-    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+    record["snapshot"]["consumed"] =
         serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
-    state
-        .plugins
-        .set_domain("@native-structures", "ledger", ledger);
+    state.plugins.set_domain("@native-structures", &key, record);
     let before = executor::status(&state, id, &project.structure).unwrap();
     assert!(!before.consumed.is_empty());
     assert!(executor::clearing(&state, id, &project.structure));
@@ -927,6 +920,9 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .unwrap()
         .unwrap();
     let previous = state.world.block_at(next[0], next[1], next[2]);
+    // Outside village property, retained player history still protects a cell.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    state.settlements.get_mut(id).unwrap().anchor = [anchor[0] + 1000, anchor[1], anchor[2]];
     retain_player_edit(&mut state, next);
     let uuid = state.entities.row(builder).uuid;
     // The executor only advances a project for its bound builder (P2-5).
@@ -937,6 +933,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     );
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    state.settlements.get_mut(id).unwrap().anchor = anchor;
     state.block_log = Default::default();
 
     for _ in 0..4096 {
@@ -1036,6 +1033,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     let at = [8, 203, 8];
     let lot = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
     let cell = executor::PlannedCell {
+        portion: executor::PortionKind::Trees,
         at,
         state: state.registry.states.air,
         resource: None,

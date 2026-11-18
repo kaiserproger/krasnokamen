@@ -123,14 +123,10 @@ pub(crate) fn head_order(record: &SettlementRecord) -> Option<&OwnerOrder> {
     orders(record).next()
 }
 
-/// [`head_order`] for a settlement id.
-pub(crate) fn head_order_of(settlements: &Registry, id: SettlementId) -> Option<&OwnerOrder> {
-    settlements.get(id).and_then(head_order)
-}
-
 /// Append an owner request, stamping its submission sequence. The queue stays
 /// sorted by that sequence, so restoring a request after others were removed
 /// keeps FIFO against the requests submitted around it.
+#[cfg(test)]
 pub(crate) fn push_order(record: &mut SettlementRecord, mut order: OwnerOrder) {
     order.seq = record.order_seq.saturating_add(1);
     record.order_seq = order.seq;

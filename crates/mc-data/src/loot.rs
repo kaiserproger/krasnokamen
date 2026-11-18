@@ -117,11 +117,15 @@ struct BlockStateCount {
 struct BlockStatePredicate {
     block: Option<Identifier>,
     properties: BTreeMap<String, String>,
+    this_entity: bool,
+    silk_touch: Option<bool>,
 }
 
 impl BlockStatePredicate {
     fn matches(&self, block: &Identifier, properties: &[(String, String)]) -> bool {
-        self.block.as_ref().is_none_or(|expected| expected == block)
+        !self.this_entity
+            && self.silk_touch != Some(true)
+            && self.block.as_ref().is_none_or(|expected| expected == block)
             && self.properties.iter().all(|(key, value)| {
                 properties
                     .iter()
@@ -130,13 +134,46 @@ impl BlockStatePredicate {
     }
 
     fn matches_context(&self, context: &BlockLootContext<'_>) -> bool {
-        self.block
-            .as_ref()
-            .is_none_or(|expected| expected == context.block())
+        (!self.this_entity || context.has_this_entity())
+            && self
+                .silk_touch
+                .is_none_or(|silk| silk == (context.tool().silk_touch_level() > 0))
+            && self
+                .block
+                .as_ref()
+                .is_none_or(|expected| expected == context.block())
             && self
                 .properties
                 .iter()
                 .all(|(key, value)| context.property(key) == Some(value.as_str()))
+    }
+
+    fn inherit(mut self, parent: &Self) -> Option<Self> {
+        if let Some(block) = &parent.block {
+            if self.block.as_ref().is_some_and(|local| local != block) {
+                return None;
+            }
+            if self.block.is_none() {
+                self.block = Some(block.clone());
+            }
+        }
+        for (key, value) in &parent.properties {
+            if let Some(local) = self.properties.get(key) {
+                if local != value {
+                    return None;
+                }
+            } else {
+                self.properties.insert(key.clone(), value.clone());
+            }
+        }
+        self.this_entity |= parent.this_entity;
+        if let Some(silk) = parent.silk_touch {
+            if self.silk_touch.is_some_and(|local| local != silk) {
+                return None;
+            }
+            self.silk_touch = Some(silk);
+        }
+        Some(self)
     }
 }
 
@@ -1120,9 +1157,11 @@ fn block_loot_from_table(
             let Some((pool_rolls, pool_bonus_rolls)) = parse_pool_rolls(pool) else {
                 return Ok(None);
             };
-            if let Some(pool) = block_state_loot_pool(path, pool, pool_rolls, pool_bonus_rolls)? {
-                conditional_pools.push(pool);
-            }
+            let Some(pool) = block_state_loot_pool(path, pool, pool_rolls, pool_bonus_rolls)?
+            else {
+                return Ok(None);
+            };
+            conditional_pools.push(pool);
             continue;
         }
         // Glass, ice, and similar blocks put their Silk Touch predicate on
@@ -1212,10 +1251,12 @@ fn contains_block_state_condition(value: &serde_json::Value) -> bool {
         .and_then(serde_json::Value::as_array)
         .is_some_and(|conditions| {
             conditions.iter().any(|condition| {
-                condition
-                    .get("condition")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("minecraft:block_state_property")
+                matches!(
+                    condition
+                        .get("condition")
+                        .and_then(serde_json::Value::as_str),
+                    Some("minecraft:block_state_property" | "minecraft:entity_properties")
+                )
             })
         })
         || ["entries", "children", "functions"]
@@ -1247,28 +1288,16 @@ fn block_state_loot_pool(
         return Ok(None);
     };
     let mut parsed = Vec::new();
-    match entry.get("type").and_then(serde_json::Value::as_str) {
-        Some("minecraft:item") => {
-            if let Some(entry) =
-                block_state_loot_entry(path, entry, pool_count, pool_rolls, pool_bonus_rolls)?
-            {
-                parsed.push(entry);
-            }
-        }
-        Some("minecraft:alternatives") if entry.get("features").is_none() => {
-            let Some(children) = entry.get("children").and_then(serde_json::Value::as_array) else {
-                return Ok(None);
-            };
-            for child in children {
-                let Ok(Some(entry)) =
-                    block_state_loot_entry(path, child, pool_count, pool_rolls, pool_bonus_rolls)
-                else {
-                    return Ok(None);
-                };
-                parsed.push(entry);
-            }
-        }
-        _ => return Ok(None),
+    if !append_block_state_entries(
+        path,
+        entry,
+        pool_count,
+        pool_rolls,
+        pool_bonus_rolls,
+        &BlockStatePredicate::default(),
+        &mut parsed,
+    )? {
+        return Ok(None);
     }
     for entry in &mut parsed {
         entry.drop.survives_explosion |= has_survives_explosion_condition(pool);
@@ -1278,6 +1307,59 @@ fn block_state_loot_pool(
         predicate,
         entries: parsed,
     }))
+}
+
+fn append_block_state_entries(
+    path: &Path,
+    entry: &serde_json::Value,
+    pool_count: Option<LootCount>,
+    pool_rolls: LootCount,
+    pool_bonus_rolls: LootCount,
+    parent: &BlockStatePredicate,
+    output: &mut Vec<BlockStateLootEntry>,
+) -> Result<bool, LootError> {
+    if entry.get("type").and_then(serde_json::Value::as_str) == Some("minecraft:alternatives") {
+        if entry.as_object().is_none_or(|fields| {
+            fields
+                .keys()
+                .any(|key| !matches!(key.as_str(), "type" | "children" | "conditions"))
+        }) {
+            return Ok(false);
+        }
+        let Some(predicate) = block_state_predicate(path, entry, false)?
+            .and_then(|predicate| predicate.inherit(parent))
+        else {
+            return Ok(false);
+        };
+        let Some(children) = entry.get("children").and_then(serde_json::Value::as_array) else {
+            return Ok(false);
+        };
+        for child in children {
+            if !append_block_state_entries(
+                path,
+                child,
+                pool_count,
+                pool_rolls,
+                pool_bonus_rolls,
+                &predicate,
+                output,
+            )? {
+                return Ok(false);
+            }
+        }
+    } else {
+        let Some(mut parsed) =
+            block_state_loot_entry(path, entry, pool_count, pool_rolls, pool_bonus_rolls)?
+        else {
+            return Ok(false);
+        };
+        let Some(predicate) = parsed.predicate.inherit(parent) else {
+            return Ok(false);
+        };
+        parsed.predicate = predicate;
+        output.push(parsed);
+    }
+    Ok(true)
 }
 
 fn block_state_loot_entry(
@@ -1448,6 +1530,31 @@ fn block_state_predicate(
         {
             Some("minecraft:survives_explosion") => {}
             Some("minecraft:random_chance") if allow_random_chance => {}
+            Some("minecraft:entity_properties")
+                if condition.get("entity").and_then(serde_json::Value::as_str) == Some("this")
+                    && condition
+                        .get("predicate")
+                        .and_then(serde_json::Value::as_object)
+                        .is_some_and(serde_json::Map::is_empty)
+                    && condition.as_object().is_some_and(|fields| {
+                        fields
+                            .keys()
+                            .all(|key| matches!(key.as_str(), "condition" | "entity" | "predicate"))
+                    }) =>
+            {
+                predicate.this_entity = true;
+            }
+            Some("minecraft:match_tool") if has_silk_touch_condition(value) => {
+                predicate.silk_touch = Some(true);
+            }
+            Some("minecraft:inverted")
+                if condition.get("term").is_some_and(is_silk_touch_condition)
+                    && condition
+                        .as_object()
+                        .is_some_and(|fields| fields.len() == 2) =>
+            {
+                predicate.silk_touch = Some(false);
+            }
             Some("minecraft:block_state_property") => {
                 let Some(block) = condition.get("block").and_then(serde_json::Value::as_str) else {
                     return Ok(None);
@@ -1637,29 +1744,55 @@ fn has_silk_touch_condition(entry: &serde_json::Value) -> bool {
     if conditions.len() != 1 {
         return false;
     }
-    let condition = &conditions[0];
+    is_silk_touch_condition(&conditions[0])
+}
+
+fn is_silk_touch_condition(condition: &serde_json::Value) -> bool {
     if condition
         .get("condition")
         .and_then(serde_json::Value::as_str)
         != Some("minecraft:match_tool")
+        || condition.as_object().is_none_or(|fields| fields.len() != 2)
     {
         return false;
     }
-    condition
-        .pointer("/predicate/predicates/minecraft:enchantments")
+    let Some(predicate) = condition
+        .get("predicate")
+        .and_then(serde_json::Value::as_object)
+        .filter(|fields| fields.len() == 1)
+    else {
+        return false;
+    };
+    let Some(predicates) = predicate
+        .get("predicates")
+        .and_then(serde_json::Value::as_object)
+        .filter(|fields| fields.len() == 1)
+    else {
+        return false;
+    };
+    let Some(enchantments) = predicates
+        .get("minecraft:enchantments")
         .and_then(serde_json::Value::as_array)
-        .is_some_and(|enchantments| {
-            enchantments.iter().any(|enchantment| {
-                enchantment
-                    .get("enchantments")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("minecraft:silk_touch")
-                    && enchantment
-                        .pointer("/levels/min")
-                        .and_then(supported_count_bound)
-                        .is_some_and(|min| min >= 1)
-            })
-        })
+    else {
+        return false;
+    };
+    let [enchantment] = enchantments.as_slice() else {
+        return false;
+    };
+    enchantment
+        .as_object()
+        .is_some_and(|fields| fields.len() == 2)
+        && enchantment
+            .get("enchantments")
+            .and_then(serde_json::Value::as_str)
+            == Some("minecraft:silk_touch")
+        && enchantment
+            .get("levels")
+            .and_then(serde_json::Value::as_object)
+            .filter(|fields| fields.len() == 1)
+            .and_then(|fields| fields.get("min"))
+            .and_then(supported_count_bound)
+            == Some(1)
 }
 
 fn fortune_bonus_from_functions(value: &serde_json::Value) -> Option<Option<FortuneBonus>> {

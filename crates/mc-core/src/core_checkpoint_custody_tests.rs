@@ -3728,12 +3728,22 @@ fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
     let a = [11, 201, 11];
     let b = [11, 201, 12];
     let chest = [12, 201, 11];
-    let stand = [12, 201, 10];
-    for at in [[11, 200, 11], [11, 200, 12], [12, 200, 11], [12, 200, 10]] {
-        state.world.set_block(at[0], at[1], at[2], stone);
+    let stand = [13, 201, 10];
+    for x in 10..=14 {
+        for z in 9..=14 {
+            state.world.set_block(x, 200, z, stone);
+            for y in 201..=203 {
+                state.world.set_block(x, y, z, air);
+            }
+        }
     }
-    for at in [stand, [12, 202, 10]] {
-        state.world.set_block(at[0], at[1], at[2], air);
+    // A closed shell is part of the real liquid proof, not a skipped fence.
+    for x in 10..=12 {
+        for z in 10..=13 {
+            if x != 11 || !(11..=12).contains(&z) {
+                state.world.set_block(x, 201, z, stone);
+            }
+        }
     }
     let chest_block = block(state, "minecraft:chest", &[]);
     state
@@ -3792,12 +3802,14 @@ fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
     };
     let cells = vec![
         crate::plugin_structures::settlement_builds::PlannedCell {
+            portion: crate::plugin_structures::settlement_builds::PortionKind::Fill,
             at: a,
             state: dirt,
             resource: Some("minecraft:dirt".into()),
             quantity: 1,
         },
         crate::plugin_structures::settlement_builds::PlannedCell {
+            portion: crate::plugin_structures::settlement_builds::PortionKind::Fill,
             at: b,
             state: dirt,
             resource: Some("minecraft:dirt".into()),

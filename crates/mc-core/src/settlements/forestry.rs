@@ -92,6 +92,7 @@ impl Clearance {
                     continue;
                 }
                 cells.push(crate::plugin_structures::settlement_builds::PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                     at,
                     state: state.registry.states.air,
                     resource: None,
@@ -677,6 +678,15 @@ pub(crate) fn roll(
     at: [i32; 3],
     block: u32,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
+    roll_with_tool(state, at, block, &mc_data::ItemStack::EMPTY)
+}
+
+pub(crate) fn roll_with_tool(
+    state: &TickState,
+    at: [i32; 3],
+    block: u32,
+    tool: &mc_data::ItemStack,
+) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
     let seed = at
         .into_iter()
         .fold(state.world.seed() as u64 ^ state.tick, |seed, value| {
@@ -690,8 +700,9 @@ pub(crate) fn roll(
             z: at[2],
         },
         block,
-        &mc_data::ItemStack::EMPTY,
+        tool,
         seed,
+        true,
     )
     .map_err(|_| mc_script::ScriptOperationFailure::Blocked)
 }
@@ -802,6 +813,7 @@ pub(crate) fn cells(
                 continue;
             }
             cells.push(PlannedCell {
+                portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                 at: [x, y, z],
                 state: state.registry.states.air,
                 resource: None,
@@ -825,6 +837,8 @@ pub(crate) fn cells(
                         .is_some_and(|block| block.block.id.path().ends_with("_sapling"))
                 })
         {
+            cells[index].portion =
+                crate::plugin_structures::settlement_builds::PortionKind::Saplings;
             // Stable: keep the corridor cells first and the manifest's own order.
             cells[first..=index].rotate_right(1);
             first += 1;

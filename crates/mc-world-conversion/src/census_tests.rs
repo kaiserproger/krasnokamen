@@ -3,6 +3,9 @@ use crate::test_support::{fixture_store, read_manifest, write_manifest};
 use mc_core::dimensions::Dimension;
 use mc_core::journal::JournalWriter;
 use mc_core::native_checkpoint::record;
+use mc_core::settlements::households::{Household, HouseholdOrigin};
+use mc_core::settlements::persistence::Row;
+use mc_core::settlements::{Registry, SettlementId};
 use mc_nbt::{ListTag, Tag, tag_type};
 use mc_world::native::{NativeCheckpoint, NativeEntitySnapshot};
 use mc_world::{BlockStateId, Chunk, ChunkPos};
@@ -42,17 +45,33 @@ pub(crate) fn member(
 }
 
 fn settlement_row(id: u64) -> Vec<u8> {
-    serde_json::to_vec(&serde_json::json!({
-        "dimension": Dimension::Overworld,
-        "value": {
-            "id": id, "name": "Falcon", "owner": "operator", "anchor": [0, 80, 0],
-            "radius": 32, "revision": 1, "household_sequence": 1,
-            "households": {format!("{id}-1"): {
-                "id": format!("{id}-1"), "revision": 1, "origin": "adoption",
-                "home": null, "needs": null, "policy": null
-            }}
-        }
-    }))
+    let mut settlements = Registry::default();
+    let mut sequence = id - 1;
+    let created = settlements
+        .create(
+            &mut sequence,
+            "Falcon".into(),
+            "operator".into(),
+            [0, 80, 0],
+            32,
+        )
+        .unwrap();
+    assert_eq!(created, SettlementId(id));
+    let mut value = settlements.get(created).unwrap().clone();
+    let household = Household {
+        id: format!("{id}-1"),
+        revision: 1,
+        origin: HouseholdOrigin::Adoption,
+        home: None,
+        needs: None,
+        policy: None,
+    };
+    value.household_sequence = 1;
+    value.households.insert(household.id.clone(), household);
+    serde_json::to_vec(&Row {
+        dimension: Dimension::Overworld,
+        value,
+    })
     .unwrap()
 }
 

@@ -93,6 +93,7 @@ pub(super) fn plan(state: &mut TickState, id: SettlementId) -> bool {
                     project,
                     bounds,
                     vec![executor::PlannedCell {
+                        portion: executor::PortionKind::Build,
                         at,
                         state: block,
                         resource: Some(name.to_string()),

@@ -35,6 +35,7 @@ fn cell_plan(
         .removals
         .iter()
         .map(|offset| executor::PlannedCell {
+            portion: executor::PortionKind::Cut,
             at: rotated.world(project.origin, *offset),
             state: state.registry.states.air,
             resource: None,
@@ -78,6 +79,7 @@ fn cell_plan(
                     }
                     bottom = bottom.min(y);
                     fill.push(executor::PlannedCell {
+                        portion: executor::PortionKind::Fill,
                         at: [x, y, z],
                         state: dirt,
                         resource: Some("minecraft:dirt".into()),
@@ -102,6 +104,7 @@ fn cell_plan(
                     && !cells.iter().any(|cell| cell.at == [x, y, z])
                 {
                     cuts.push(executor::PlannedCell {
+                        portion: executor::PortionKind::Cut,
                         at: [x, y, z],
                         state: state.registry.states.air,
                         resource: None,
@@ -139,6 +142,7 @@ fn cell_plan(
                 (None, 0)
             };
         cells.push(executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: rotated.world(project.origin, *offset),
             state: placed.0,
             resource,
@@ -229,6 +233,7 @@ fn cell_plan(
                                 continue;
                             }
                             cuts.push(executor::PlannedCell {
+                                portion: executor::PortionKind::Cut,
                                 at,
                                 state: state.registry.states.air,
                                 resource: None,
@@ -267,6 +272,7 @@ fn cell_plan(
             }
         }
     }
+    cells.sort_by_key(|cell| cell.portion);
     // Include the whole placement extent (roof crowns/yards) in executor
     // interference fencing; certification uses the narrower authored bounds.
     let mut min = [project.origin[0], bottom, project.origin[2]];

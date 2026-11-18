@@ -715,18 +715,30 @@ fn player_terrain_is_refused_at_survey_and_again_before_the_debit() {
         check(&state),
         Some(site_refusals::Reason::ProtectedObstruction)
     );
-    // The same cell edited after admission stops the debit.
+}
+
+#[test]
+fn player_terrain_edits_inside_the_territory_are_cut_and_credited_at_debit() {
+    // Inside village property, a history-only edit after admission is cleared
+    // and credits the certified stone once.
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
     request_build(&mut state, id, "storage").unwrap();
     state.block_log = super::super::forestry::tests::player_history(&state, pillar.cells[0], 0);
     let before = stock(&state, pillar.item);
-    for _ in 0..3 {
-        attempt(&mut state, id, builder);
-    }
-    assert_eq!(name_of(&state, pillar.cells[0]), "stone");
-    assert_eq!(stock(&state, pillar.item), before);
+    let uuid = state.entities.row(builder).uuid;
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    bind_builder(
+        state.settlements.get_mut(id).unwrap(),
+        &handle,
+        Some((uuid, None)),
+    );
+    executor::advance(&mut state, id, &handle, uuid).unwrap();
+    assert_eq!(name_of(&state, pillar.cells[0]), "air");
+    assert_eq!(stock(&state, pillar.item), before + 1);
 }
 
 /// Lava arriving beside a planned cut blocks the write in the same preflight.

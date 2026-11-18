@@ -530,7 +530,7 @@ fn outpost_begin_reserves_the_brick_chain_for_its_fill() {
         "the chain's stone is stocked before admission"
     );
     assert!(super::super::begin(&mut state, project, "oak", 0));
-    let bill = super::super::active_project_bill(&state, id).expect("active bill");
+    let bill = super::super::joint_active_bill(&state, id).expect("active bill");
     let stone_left = bill
         .iter()
         .find(|(item, _)| {
@@ -1073,6 +1073,7 @@ fn an_unloaded_placement_cell_refuses_as_unloaded() {
     let (state, id, _, project) = certified_house();
     let far = [30_000, project.origin[1] + 3, 30_000];
     let cells = [executor::PlannedCell {
+        portion: executor::PortionKind::Build,
         at: far,
         state: state.registry.states.stone,
         resource: None,
@@ -1106,6 +1107,7 @@ fn the_foundation_grant_keeps_the_site_searches_vetoes_outside_the_territory() {
     let mut evidence = std::collections::BTreeMap::new();
     evidence.insert(at, dirt);
     let cells = [executor::PlannedCell {
+        portion: executor::PortionKind::Build,
         at,
         state: planks,
         resource: None,

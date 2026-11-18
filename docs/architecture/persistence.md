@@ -161,6 +161,64 @@ another recovery.
   `krasnokamen_journal_prune_retained_bytes` are on `/metrics` and under
   `journal` in `/stats`. A directory that cannot be written at all still halts
   the world on the next append.
+### Structure ledger keys
+
+The native structure ledger lives in the `@native-structures` plugin domain as
+one key per record: `structure/<id>`, `survey/<token>` and `worksite/<id>`,
+plus the meta key `ledger` = `{schema: 2, revision}`. A write marks only the
+records it changes; the tick journals those keys and the meta key, never the
+whole ledger, so the bytes of a write do not depend on how many other records
+the ledger holds. All keys of one tick come from one sealed plugin delta, so a
+recovered ledger is always a tick boundary. The checkpoint stores every key.
+
+Startup refuses the ledger, before any checkpoint, WAL batch or prune, when:
+
+- the meta key has the single-image format of older binaries (a `structures`
+  field), whether the checkpoint or a WAL tail carries it;
+- the schema is not 2, records exist without the meta key, a key has an
+  unknown prefix, or a record has an unknown field;
+- a record's revision exceeds the meta revision, or its watermark exceeds its
+  own revision. An advance sets the record's revision to a new global revision
+  and adds one to its watermark; no transition lowers either.
+
+An older binary refuses a new world too: its ledger decoder needs the fields
+the meta key no longer has. See OPERATING
+[Structure ledger format](../OPERATING.md#structure-ledger-format).
+
+Structure work receipts are not stored. `snapshot.watermark` is the only
+stored count of advances; the next advance numbers its receipt `watermark + 1`
+and returns it to the caller in the `AdvanceStructure` result. With the stored
+list gone, startup no longer checks per receipt that its sequence is its index
+plus one, that its `structure_id` names the record, that its revision lies
+within the record's revision, or its own fields (stage, work units,
+materials); nor that the list length equals the watermark. What remains is the
+cheap bound `watermark <= snapshot.revision`: a wrong watermark within that
+bound is not detected. The watermark is not the sum of the current stages'
+work either: repair and replanning rewrite the stages.
+
+Every structure record requires a `portions` field. Native settlement structures
+carry one certificate per stage, with raw-block expected-before IDs parallel to
+its cells and sorted registered roots (read by grown-sapling recertification).
+Generic plugin structures carry an explicit empty array and
+retain exact whole-box fencing. Missing certificates, mismatched stage/cell/ID
+counts, invalid raw IDs, invalid roots or non-disposition stage order refuse
+startup; there is no old-record fallback and no global `plugins` version bump.
+This shape ships in the same schema-2 reset as LedgerSplit and D8: pre-split
+survey/worksite-only ledgers also refuse; worlds without those old records or
+old settlement rows are unaffected.
+
+Each settlement advance checks the next unprocessed cell against its durable
+expected-before identity, not against cells already worked. Inside its owner's
+per-cell 3D territory a mismatch re-derives that cell from live state; outside it,
+the same re-derivation retains per-cell forestry/history vetoes. A veto returns
+`Blocked` without storing a stale pause. Destruction loot and placement payment
+share one custody transaction before block writes; then cursor, root retirement
+and watermark publish with the structure/meta keys in the same tick. Failures
+publish no partial effects. Original expected-before evidence is retained behind
+the cursor, not rewritten or rehashed. Repair certificates come from live state
+and replace/truncate alongside their cell and stage arrays. Checkpoint stores
+these records unchanged; WAL replay never
+reconstructs certificates from a later world image.
 
 ### Recovery evidence and clocks
 

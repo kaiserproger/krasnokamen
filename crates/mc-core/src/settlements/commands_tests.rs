@@ -323,4 +323,26 @@ fn build_order_parses_blueprint_and_upgrade_and_refuses_shapes() {
         command,
         crate::commands::Command::Settlement(SettlementCommand::BuildUpgrade { .. })
     ));
+    assert_eq!(
+        parse(&["build", "cancel"]).unwrap(),
+        SettlementCommand::BuildCancel { index: None }
+    );
+    assert_eq!(
+        parse(&["build", "cancel", "2"]).unwrap(),
+        SettlementCommand::BuildCancel { index: Some(2) }
+    );
+    for args in [
+        vec!["cancel", "0"],
+        vec!["cancel", "-1"],
+        vec!["cancel", "nope"],
+        vec!["cancel", "2", "extra"],
+    ] {
+        let mut words = vec!["build"];
+        words.extend(args);
+        assert!(parse(&words).is_err());
+    }
+    assert!(matches!(
+        crate::commands::parse("settlement build cancel 2", false).unwrap(),
+        crate::commands::Command::Settlement(SettlementCommand::BuildCancel { index: Some(2) })
+    ));
 }
