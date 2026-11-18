@@ -45,7 +45,8 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
             &builder,
             &BTreeMap::new(),
             &cells,
-            &before_ids
+            &before_ids,
+            false,
         ),
         Ok(())
     );
@@ -100,7 +101,8 @@ fn an_upgrade_clear_cell_credits_a_foreign_blocks_drop_exactly_once() {
             &builder,
             &BTreeMap::new(),
             &cells,
-            &expected_identity
+            &expected_identity,
+            false,
         ),
         Ok(())
     );
@@ -150,7 +152,8 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
                 &builder,
                 &BTreeMap::new(),
                 &cells,
-                &expected
+                &expected,
+                false,
             ),
             Err(Failure::Blocked),
             "{name}"
@@ -193,7 +196,7 @@ fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     let builder = uuid.to_string();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
         Ok(()),
         "the debit is not where the dug cell is refused"
     );
@@ -232,7 +235,7 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
         Ok(())
     );
     advance(&mut state, id, &handle, uuid).expect("the stage advances past the foreign cell");
@@ -275,7 +278,7 @@ fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
         Ok(())
     );
     let dirt_item = state

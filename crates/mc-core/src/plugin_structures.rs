@@ -1199,6 +1199,7 @@ fn execute_operation(
                     &consumed,
                     portion,
                     &record.portions[index].expected[offset..offset + count],
+                    portions::PortionKind::is_terrain(&record.snapshot.stages[index].stage),
                 )?;
             } else {
                 let reservation = inventories::reservation(state, owner, reservation_ref)?;

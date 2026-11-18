@@ -473,6 +473,35 @@ fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
             .is_some_and(|definition| matches!(definition.block.id.path(), "dirt" | "dirt_path"))
 }
 
+/// A fluid or lava next to a cut cell would flow into the hole the clear opens,
+/// so the debit refuses the step (owner D27-4 keeps this for uncredited clears).
+fn fluid_adjacent(state: &TickState, at: [i32; 3]) -> Result<(), Failure> {
+    for (dx, dy, dz) in [
+        (1, 0, 0),
+        (-1, 0, 0),
+        (0, 1, 0),
+        (0, -1, 0),
+        (0, 0, 1),
+        (0, 0, -1),
+    ] {
+        let at = [at[0] + dx, at[1] + dy, at[2] + dz];
+        let neighbour = state
+            .world
+            .block_at(at[0], at[1], at[2])
+            .ok_or(Failure::Unloaded)?;
+        if state.registry.states.lava_levels.contains(&neighbour)
+            || state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(neighbour))
+                .is_some_and(|definition| definition.has_fluid())
+        {
+            return Err(Failure::Blocked);
+        }
+    }
+    Ok(())
+}
+
 /// Free soil work can only rewrite the ground already present, never create
 /// ground or destroy a foreign block. Debit and publication share this gate.
 pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bool {
@@ -730,6 +759,9 @@ pub(super) fn debit(
     required: &BTreeMap<String, u64>,
     cells: &[super::Cell],
     expected: &[u32],
+    // The stage being debited is the persisted `terrain` portion: ground-set
+    // blocks are cleared and pay nothing (owner D27-4).
+    uncredited: bool,
 ) -> Result<(), Failure> {
     if cells.len() != expected.len() {
         return Err(Failure::InvalidRequest);
@@ -821,6 +853,16 @@ pub(super) fn debit(
         }
         // Paving and field retirement reshape existing soil without mining it.
         if free_soil_work(state, cell) {
+            continue;
+        }
+        // Owner D27-4: a village clear of the planner's own ground removes the
+        // block and pays nothing for removing it, whatever the player left there
+        // (dirt, grass_block, coarse_dirt). The marker is the persisted `terrain`
+        // portion: a record without that stage behaves exactly as before, and a
+        // binary that does not know the name refuses the record. A player's
+        // non-terrain block still pays its own drop through the paths below.
+        if uncredited && crate::settlements::construction::excavatable(state, block) {
+            fluid_adjacent(state, cell.at)?;
             continue;
         }
         if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {

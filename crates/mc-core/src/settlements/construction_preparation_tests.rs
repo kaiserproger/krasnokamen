@@ -717,7 +717,7 @@ fn upgrade_refuses_a_divergent_cell_outside_the_territory() {
         .into_iter()
         .find_map(|action| match action {
             Action::Refuse(divergence) => Some(divergence),
-            Action::Clear(_) => None,
+            Action::Clear(_) | Action::ClearTerrain(_) => None,
         })
         .expect("a foreign block outside the territory refuses the upgrade");
     assert_eq!(
@@ -773,7 +773,7 @@ fn upgrade_refuses_a_divergent_cell_outside_the_territory() {
 fn a_fluid_on_a_placement_cell_refuses_at_admission() {
     // A fluid is the executor's liquid work, not village property a cut may
     // remove: admitting it would stall the paid project on `Blocked` mid-plan.
-    let (mut state, id, _, project) = certified_house();
+    let (mut state, _, _, project) = certified_house();
     let (at, authored_state, _) = replaced_cell(&state, &project);
     assert_ne!(
         raw(&state, authored_state),
@@ -798,7 +798,7 @@ fn a_fluid_on_a_placement_cell_refuses_at_admission() {
 
 #[test]
 fn a_cleared_door_takes_both_halves_and_credits_one_drop() {
-    let (mut state, id, _, project) = certified_house();
+    let (mut state, _, _, project) = certified_house();
     // A door at a placement cell whose cell above is not itself a placement: the
     // second half then comes from the door, never from the plan.
     let (_, plan) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
@@ -1083,7 +1083,7 @@ fn an_unloaded_placement_cell_refuses_as_unloaded() {
         .into_iter()
         .find_map(|action| match action {
             Action::Refuse(divergence) => Some(divergence),
-            Action::Clear(_) => None,
+            Action::Clear(_) | Action::ClearTerrain(_) => None,
         })
         .expect("a cell in an unloaded chunk is a refusal");
     assert_eq!(divergence.reason, site_refusals::Reason::Unloaded);
@@ -1118,7 +1118,7 @@ fn the_foundation_grant_keeps_the_site_searches_vetoes_outside_the_territory() {
             .into_iter()
             .find_map(|action| match action {
                 Action::Refuse(divergence) => Some(divergence.reason),
-                Action::Clear(_) => None,
+                Action::Clear(_) | Action::ClearTerrain(_) => None,
             })
     };
     state.world.set_block(at[0], at[1], at[2], grass);
@@ -1332,9 +1332,9 @@ fn upgrade_credits_player_blocks_once_and_air_nothing() {
                 .map_or_else(|| "?".into(), |name| name.to_string());
             let got = after.get(&drop.item_id).copied().unwrap_or(0)
                 - control.get(&drop.item_id).copied().unwrap_or(0);
-            assert!(
-                got >= drop.count,
-                "the cleared block's drop reaches the village: {name} x{} (got {got})",
+            assert_eq!(
+                got, drop.count,
+                "the cleared block's drop reaches the village exactly once: {name} x{} (got {got})",
                 drop.count
             );
         }
@@ -1354,38 +1354,83 @@ fn upgrade_credits_player_blocks_once_and_air_nothing() {
 }
 
 #[test]
-fn player_dirt_inside_refuses_without_a_blocked_loop() {
-    // Owner D27-4 forbids paying the village for its own ground, and `debit`
-    // cannot tell a fence clear from a site cut, so the fence refuses terrain
-    // instead of mining it: no admissible plan, no mid-project `Blocked` loop.
-    let (mut state, id, _, project) = certified_house();
-    let (at, authored_state, _) = replaced_cell(&state, &project);
-    assert_ne!(
-        raw(&state, authored_state),
-        raw(&state, block(&state, "minecraft:dirt", &[]))
-    );
-    let dirt = state.registry.states.dirt;
-    state.world.set_block(at[0], at[1], at[2], dirt);
-    state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
-    assert_eq!(
-        refusal_at(&state, &project),
-        Some(site_refusals::Reason::PreviousBuildDiverged),
-        "terrain-class ground is neither mined for income nor a mid-plan Blocked loop"
-    );
-    fund(&mut state, "house", 2);
-    let before = stock(&state);
-    assert_eq!(
-        start_upgrade(&mut state, id, project.building.unwrap()),
-        Err(format!(
-            "Construction admission refused: PreviousBuildDiverged at {},{},{}.",
-            at[0], at[1], at[2]
-        ))
-    );
-    assert!(state.settlements.get(id).unwrap().projects.is_empty());
-    assert_eq!(stock(&state), before);
-    // Clearing it by hand makes the same queue ready again.
-    state.world.set_block(at[0], at[1], at[2], authored_state);
-    assert_eq!(refusal_at(&state, &project), None);
+fn player_terrain_inside_is_cleared_without_income() {
+    // Owner D27-4: the village clears its own ground set to build and pays
+    // nothing for it. A player's dirt, grass or coarse dirt on a placement cell
+    // inside the territory is one of those clears: the block goes, no dirt item
+    // is credited, and the upgrade still certifies.
+    let (_, control) = completed_upgrade();
+    for name in [
+        "minecraft:dirt",
+        "minecraft:grass_block",
+        "minecraft:coarse_dirt",
+    ] {
+        let (mut state, id, builder, project) = certified_house();
+        let (at, authored_state, _) = replaced_cell(&state, &project);
+        let ground = block(&state, name, &[]);
+        assert_ne!(raw(&state, ground), raw(&state, authored_state), "{name}");
+        state.world.set_block(at[0], at[1], at[2], ground);
+        state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+        assert_eq!(
+            refusal_at(&state, &project),
+            None,
+            "{name} inside the territory is a village clear, not a divergence"
+        );
+        fund(&mut state, "house", 2);
+        start(&mut state, id, "house", 2, Some(project.building.unwrap()));
+        let handle = state.settlements.get(id).unwrap().projects[0]
+            .structure
+            .clone();
+        let mid = holdings(&state, builder);
+        complete(&mut state, id, builder);
+        assert!(
+            state.settlements.get(id).unwrap().projects.is_empty(),
+            "{name}: the upgrade certifies through its own ground"
+        );
+        assert_ne!(
+            state.world.block_at(at[0], at[1], at[2]),
+            Some(ground),
+            "{name}: the ground is cleared for the build"
+        );
+        // No income for the ground: the exact delta of its own drop against the
+        // control run is zero.
+        let after = holdings(&state, builder);
+        for drop in crate::settlements::forestry::roll(&state, at, ground).unwrap() {
+            let got = after.get(&drop.item_id).copied().unwrap_or(0)
+                - control.get(&drop.item_id).copied().unwrap_or(0);
+            assert_eq!(
+                got, 0,
+                "{name} pays nothing for the ground it clears (got {got})"
+            );
+        }
+        // Retrying the completed project pays nothing a second time.
+        assert!(!executor::reopen_emptied(&mut state, id, &handle).unwrap());
+        assert_eq!(holdings(&state, builder), after, "{name}: no second effect");
+        assert_eq!(
+            holdings(&state, builder)
+                .get(
+                    &state
+                        .registry
+                        .items
+                        .id_of(&mc_data::Identifier::parse("dirt").unwrap())
+                        .unwrap()
+                )
+                .copied()
+                .unwrap_or(0),
+            control
+                .get(
+                    &state
+                        .registry
+                        .items
+                        .id_of(&mc_data::Identifier::parse("dirt").unwrap())
+                        .unwrap()
+                )
+                .copied()
+                .unwrap_or(0),
+            "{name}: the village still holds exactly the control's dirt"
+        );
+        let _ = mid;
+    }
 }
 
 #[test]

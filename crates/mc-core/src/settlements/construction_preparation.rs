@@ -232,6 +232,16 @@ fn cell_plan(
                             if cuts.iter().any(|cell| cell.at == at) {
                                 continue;
                             }
+                            // The other half is village property only where the
+                            // village owns the ground: a door reaching over the
+                            // fence line is cleared on the inside alone.
+                            if !state
+                                .settlements
+                                .get(project.settlement)
+                                .is_some_and(|record| record.contains(at))
+                            {
+                                continue;
+                            }
                             cuts.push(executor::PlannedCell {
                                 portion: executor::PortionKind::Cut,
                                 at,
@@ -240,6 +250,20 @@ fn cell_plan(
                                 quantity: 0,
                             });
                         }
+                    }
+                    Action::ClearTerrain(at) => {
+                        // The planner's own ground: its own portion, so `debit`
+                        // removes the block and pays nothing (D27-4).
+                        if cuts.iter().any(|cell| cell.at == at) {
+                            continue;
+                        }
+                        cuts.push(executor::PlannedCell {
+                            portion: executor::PortionKind::Terrain,
+                            at,
+                            state: state.registry.states.air,
+                            resource: None,
+                            quantity: 0,
+                        });
                     }
                 }
             }
@@ -331,7 +355,7 @@ pub(super) fn refusal(state: &TickState, project: &Project, species: &str) -> Op
     .into_iter()
     .find_map(|action| match action {
         Action::Refuse(divergence) => Some(divergence),
-        Action::Clear(_) => None,
+        Action::Clear(_) | Action::ClearTerrain(_) => None,
     })
 }
 
@@ -420,6 +444,9 @@ pub(super) fn note_order_refusal(
 pub(super) enum Action {
     Refuse(Divergence),
     Clear([i32; 3]),
+    /// A village clear of the planner's own ground set: the block is removed,
+    /// and `debit` pays nothing for it (owner D27-4).
+    ClearTerrain([i32; 3]),
 }
 
 /// Classify every planned placement cell of an upgrade against the previous
@@ -513,20 +540,14 @@ fn placement_actions(
                 }));
                 continue;
             }
-            // Terrain-class blocks (the planner's own ground set) would be mined
-            // and their drop credited by `debit`, i.e. new dirt income the owner
-            // refused (D27-4). `debit` cannot tell a fence clear from a site cut
-            // without a new marker in PrepPortions' slice, so the fence keeps
-            // refusing them instead of paying the village for its own ground.
-            if excavatable(state, live) {
-                actions.push(Action::Refuse(Divergence {
-                    reason: site_refusals::Reason::PreviousBuildDiverged,
-                    at: cell.at,
-                    live: Some(live),
-                }));
-                continue;
-            }
-            actions.push(Action::Clear(cell.at));
+            // Terrain-class ground is the planner's own set (owner D27-4): the
+            // village clears it to build and pays nothing for it, which the
+            // terrain portion carries into `debit`.
+            actions.push(if excavatable(state, live) {
+                Action::ClearTerrain(cell.at)
+            } else {
+                Action::Clear(cell.at)
+            });
             continue;
         }
         actions.push(Action::Refuse(Divergence {
