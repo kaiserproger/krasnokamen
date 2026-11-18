@@ -209,6 +209,31 @@ class VillageAutonomyQaTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "pending order list"):
             qa._pending_dialog(full, clipped_ok=True)
 
+    def test_spanish_construction_dialog_passes_every_parser(self) -> None:
+        # Laptop 2026-11-18 22:35, pin 38c3f1cdf358: culture blueprints have no display
+        # name in settlements/ui.rs blueprint_label, so the dialog shows the raw id.
+        projects = ("spanish_house L1 · Building\n3/40\n120 70 7", "spanish_church L1 · Prepared\n0/90\n140 70 7",
+                    "Gate L1 · Building\n2/12\n100 70 7", "Road L1 · Prepared\n0/9\n115 68 4")
+        orders = ("spanish_plaza L1 · waiting for forest evidence", "spanish_fortress L1 · busy")
+        state = construction_screen(*projects, orders=orders)
+        seen = qa._pending_dialog(state)
+        self.assertEqual([(p["blueprint"], p["level"], p["origin"]) for p in seen["projects"]], [
+            ("spanish_house", 1, [120, 70, 7]), ("spanish_church", 1, [140, 70, 7]),
+            ("gate", 1, [100, 70, 7]), ("road", 1, [115, 68, 4])])
+        self.assertEqual([(o["index"], o["blueprint"], o["reason"]) for o in seen["orders"]], [
+            (1, "spanish_plaza", "waiting for forest evidence"), (2, "spanish_fortress", "busy")])
+        self.assertFalse(qa._head_waits(seen))
+        clipped = {"ui_nodes": state["ui_nodes"][:4]}
+        cut = qa._pending_dialog(clipped, clipped_ok=True)
+        self.assertEqual((cut["clipped"], cut["pending_count"], cut["head"]), (True, 2, "spanish_plaza L1"))
+        sites = {"ui_nodes": [{"id": "dialog/body/0", "label":
+                 "Active site: spanish_house L1 · 120 70 7\nActive site: spanish_church L1 · 140 70 7"}]}
+        self.assertTrue(qa._map_has_sites(sites, seen["projects"][:2]))
+        listed = qa._listed_buildings(["#7 spanish_plaza level 1 [110, 68, 0]-[124, 75, 14]"])
+        self.assertEqual((listed[0]["kind"], listed[0]["level"]), ("spanish_plaza", 1))
+        with self.assertRaisesRegex(RuntimeError, "'Spanish house'"):
+            qa._project_progress(construction_screen("Spanish house L1 · Building\n1/9\n1 2 3"))
+
     def test_road_restart_subject_records_the_street_plan_before_restart(self) -> None:
         status = construction_screen("Road L1 · Building\n5/42\n7 200 10")
         layout = ("Roads: 40/120 columns reachable on foot from the bell; 0/3 reachable stretches paved."

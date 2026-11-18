@@ -913,7 +913,7 @@ def _pending_dialog(state: dict[str, Any], *, clipped_ok: bool = False) -> dict[
     body = _dialog_body(state)
     orders = []
     for match in re.finditer(r"(?m)^Pending #(\d+): (.+?) L(\d+) · (.+)$", body):
-        blueprint = PROJECT_LABELS.get(match[2])
+        blueprint = _label_blueprint(match[2])
         if blueprint is None:
             raise RuntimeError(f"unrecognised pending blueprint {match[2]!r}")
         orders.append({"index": int(match[1]), "blueprint": blueprint,
@@ -1172,7 +1172,7 @@ def _map_has_sites(state: dict[str, Any], projects: list[dict[str, Any]]) -> boo
     body = _dialog_body(state)
     return len(projects) >= 2 and all(
         any(f"Active site: {label} L{p['level']} · {' '.join(map(str, p['origin']))}" in body
-            for label, blueprint in PROJECT_LABELS.items() if blueprint == p["blueprint"])
+            for label in _blueprint_labels(p["blueprint"]))
         for p in projects)
 
 
@@ -1951,7 +1951,9 @@ def _listed_buildings(lines: list[str]) -> list[dict[str, Any]]:
     return records
 
 
-# Project status labels (settlements/ui.rs blueprint_label), English and Russian.
+# Project status labels (settlements/ui.rs blueprint_label), English and Russian. A
+# blueprint without a display name there (the culture blueprints spanish_plaza,
+# spanish_house, spanish_church, spanish_fortress, spanish_wall) shows its raw id.
 PROJECT_LABELS = {
     "House": "house", "Дом": "house",
     "Storage": "storage", "Склад": "storage",
@@ -1963,11 +1965,34 @@ PROJECT_LABELS = {
     "Barracks": "barracks", "Казарма": "barracks",
     "Wall": "wall", "Стена": "wall",
     "Watchtower": "watch_tower", "Сторожевая башня": "watch_tower",
+    "Gate": "gate", "Ворота": "gate",
+    "Armorer's workshop": "armorer", "Мастерская бронника": "armorer",
+    "Butcher's workshop": "butcher", "Мастерская мясника": "butcher",
+    "Cartographer's workshop": "cartographer", "Мастерская картографа": "cartographer",
+    "Cleric's workshop": "cleric", "Мастерская священника": "cleric",
+    "Fisherman's workshop": "fisherman", "Мастерская рыбака": "fisherman",
+    "Fletcher's workshop": "fletcher", "Мастерская лучника": "fletcher",
+    "Leatherworker's workshop": "leatherworker", "Мастерская кожевника": "leatherworker",
+    "Librarian's workshop": "librarian", "Мастерская библиотекаря": "librarian",
+    "Toolsmith's workshop": "toolsmith", "Мастерская инструментальщика": "toolsmith",
+    "Weaponsmith's workshop": "weaponsmith", "Мастерская оружейника": "weaponsmith",
     "Road": "road", "Дорога": "road",
     "Street lamp": "lamp", "Фонарь": "lamp",
     "Meadow clearing": "meadow", "Расчистка луга": "meadow",
     "Building": "unlabelled", "Здание": "unlabelled",
 }
+RAW_BLUEPRINT_ID = re.compile(r"[a-z][a-z0-9_]*")
+
+
+def _label_blueprint(label: str) -> str | None:
+    """The blueprint a dialog label names: a display name, else a raw id; None when neither."""
+    return PROJECT_LABELS.get(label) or (label if RAW_BLUEPRINT_ID.fullmatch(label) else None)
+
+
+def _blueprint_labels(blueprint: str) -> list[str]:
+    return [label for label, named in PROJECT_LABELS.items() if named == blueprint] or [blueprint]
+
+
 # Street work: structure-ledger projects with no authored blueprint or
 # certificate. A road paves one stretch; a lamp is two fences and a torch;
 # a meadow clears seed-bearing grass for the first Farm.
@@ -1982,7 +2007,7 @@ def _project_progress(observed: dict[str, Any], *, clipped_ok: bool = False) -> 
         r"(?m)^(.+?) L(\d+) · ([^\n]+)\n(\d+)/(\d+)\n"
         r"(-?\d+) (-?\d+) (-?\d+)\nBuilder: ([^\n]+)(?:\n|$)", body,
     ):
-        blueprint = PROJECT_LABELS.get(match[1])
+        blueprint = _label_blueprint(match[1])
         if blueprint is None:
             raise RuntimeError(f"unrecognised active project label {match[1]!r}")
         project = {
