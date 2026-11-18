@@ -747,6 +747,7 @@ pub(crate) fn source_images(state: &TickState, id: SettlementId) -> Vec<inventor
     images
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn debit(
     state: &mut TickState,
     id: SettlementId,

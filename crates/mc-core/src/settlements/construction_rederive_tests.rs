@@ -614,15 +614,21 @@ fn a_refused_cell_publishes_nothing_when_storage_is_full() {
     let mut s = one_log_cell();
     set(&mut s, 5, "minecraft:oak_planks");
     let sticks = ItemStack::new(item(&s.state, "minecraft:stick"), 64);
-    for slot in &mut s.state.block_entities.get_mut(&(1, Y, 1)).unwrap().slots {
-        *slot = sticks.clone();
-    }
+    s.state
+        .block_entities
+        .get_mut(&(1, Y, 1))
+        .unwrap()
+        .slots
+        .fill(sticks);
     expect_refusal(&mut s, Failure::InsufficientItems, "full storage");
     assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:oak_planks")));
     // Room again: the very same cell then proceeds with exactly one credit.
-    for slot in &mut s.state.block_entities.get_mut(&(1, Y, 1)).unwrap().slots {
-        *slot = ItemStack::EMPTY;
-    }
+    s.state
+        .block_entities
+        .get_mut(&(1, Y, 1))
+        .unwrap()
+        .slots
+        .fill(ItemStack::EMPTY);
     step(&mut s).unwrap();
     assert_eq!(stock(&s.state, "minecraft:oak_planks"), 1);
     assert_eq!(total_stock(&s.state), 1);

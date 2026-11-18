@@ -336,9 +336,7 @@ pub(super) struct Divergence {
 /// fence so it names the cell. Read-only, and only called once a refusal has
 /// already happened: an admitted pass pays nothing for it.
 pub(super) fn refusal(state: &TickState, project: &Project, species: &str) -> Option<Divergence> {
-    if project.building.is_none() {
-        return None;
-    }
+    project.building?;
     let evidence = executor::previous_committed(
         state,
         project.settlement,
