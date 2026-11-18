@@ -28,6 +28,7 @@ fn input(movement: MovementClass, position: Vec3) -> MotionInput {
         rotation: [0.0; 3],
         look_target: None,
         battle_facing: false,
+        legacy_facing: false,
         head_follows_body: false,
         climbs_walls: false,
         aquatic_control: AquaticControl::Other,
@@ -522,7 +523,7 @@ fn move_facing_keeps_the_head_on_the_body_for_a_special_controller() {
 fn move_facing_follows_the_swim_detour_around_a_wall() {
     // Water only in the layer y 1..2; solid floor, ceiling and an x wall at 1.
     let world = Habitat(|x, y, _| {
-        if y < 1 || y >= 2 || x >= 1 {
+        if !(1..2).contains(&y) || x >= 1 {
             BlockMaterial::Solid
         } else {
             BlockMaterial::Water
@@ -670,6 +671,7 @@ fn battle(rotation: [f32; 3], previous: [f64; 2], drive: [f64; 2]) -> MotionInpu
     state.drive = [drive[0], 0.0, drive[1]];
     state.rotation = rotation;
     state.battle_facing = true;
+    state.legacy_facing = true;
     state
 }
 
@@ -687,6 +689,7 @@ fn battle_step(input: MotionInput, wall: bool) -> MotionResult {
 /// The same input with the battle rule off: the shared MoveControl facing.
 fn old_step(mut input: MotionInput, wall: bool) -> MotionResult {
     input.battle_facing = false;
+    input.legacy_facing = false;
     battle_step(input, wall)
 }
 
@@ -894,6 +897,32 @@ fn battle_facing_holds_against_knockback_without_changing_motion() {
         -180.0,
         "the previous tree faced the knockback"
     );
+}
+
+/// A standing battle row is not hold-eligible, but it is still a battle row and
+/// keeps the legacy look at the resolved velocity: an impulse turns it. Tying
+/// the legacy facing to the hold's selector would freeze its yaw instead.
+#[test]
+fn standing_battle_row_keeps_the_legacy_facing_on_an_impulse() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    state.battle_facing = false;
+    state.legacy_facing = true;
+    state.impulse = [8.0, 0.0];
+    let moved = step(state, &flat, |_, _| true);
+    let legacy = look([0.0; 3], moved.body.position, moved.body.velocity, None);
+    assert_eq!(
+        moved.rotation[0], legacy[0],
+        "the legacy look, not the hold"
+    );
+    assert_eq!(moved.rotation[1], legacy[1], "pitch as well");
+    assert!(moved.rotation[0] < -10.0, "the impulse turns the body");
 }
 
 /// The battle policy stays frozen: a sliding step faces the resolved velocity

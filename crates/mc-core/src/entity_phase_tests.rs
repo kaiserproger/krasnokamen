@@ -1172,6 +1172,26 @@ fn battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error() {
     );
 }
 
+/// A standing battle row never had the hold: the old selector was
+/// `battle && !standing`, so a NoAI battle mob kept the legacy facing and an
+/// impulse turned it. Narrowing the legacy facing to the hold's selector would
+/// have frozen its yaw at zero (review of this slice).
+#[test]
+fn standing_battle_row_keeps_the_legacy_facing_on_an_impulse() {
+    let (mut state, slot) = resting_mob("minecraft:husk");
+    state.entities.set_faction(slot, 1);
+    state.entities.set_rot(slot, 0.0, 0.0);
+    state.entities.row_mut(slot).controls.no_ai = true;
+    state.entities.set_horizontal_impulse(slot, [8.0, 0.0]);
+    let (moved, _) = full_step_without_early_rest(&state, slot);
+    assert!(moved.pos[0] > 0.0, "the impulse moves the body");
+    assert!(
+        moved.rotation[0] < -10.0,
+        "the legacy look turns it toward the impulse, not holds it at 0: {}",
+        moved.rotation[0]
+    );
+}
+
 /// A mounted battle rider is not a standing row (`taming::suppress_ai` is
 /// fenced by `!battle`), so the facing rule covers it. Without a target its own
 /// step does not move it sideways; it keeps yaw, pitch and head, where the old

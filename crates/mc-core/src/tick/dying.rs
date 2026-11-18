@@ -91,6 +91,7 @@ fn fall(state: &mut TickState, slot: EntitySlot) {
             rotation,
             look_target: None,
             battle_facing: false,
+            legacy_facing: false,
             head_follows_body: false,
             climbs_walls: false,
             aquatic_control,

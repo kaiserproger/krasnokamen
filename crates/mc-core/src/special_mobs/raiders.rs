@@ -293,6 +293,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 rotation: state.entities.rot(slot),
                 look_target: destination,
                 battle_facing: false,
+                legacy_facing: false,
                 head_follows_body: false,
                 climbs_walls: false,
                 aquatic_control: crate::species::AquaticControl::Other,
