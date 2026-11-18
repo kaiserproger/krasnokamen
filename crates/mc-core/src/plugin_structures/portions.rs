@@ -215,7 +215,8 @@ pub(super) fn village_drops(
             || block == cell.state
             || block == state.registry.states.air
             || !inside(state, id, cell.at)
-            || crate::settlements::construction::excavatable(state, block))
+            || crate::settlements::construction::excavatable(state, block)
+            || crate::settlements::construction::relayout::village_soil(state, block))
     {
         return Ok(None);
     }
