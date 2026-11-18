@@ -482,6 +482,17 @@ must be resident and legible. Durable tickets restore after restart; ephemeral
 pearl tickets do not. Activation clocks and debt have native persisted custody;
 no downtime catch-up is inferred. See [residency](../architecture/residency.md).
 
+## Scale target and the hot set (owner decision, 2026-11-18)
+
+By default the core is sized for about one million of whatever is hot, in any
+scenario: plugins can make creatures or data hot that vanilla never does. The hot
+set is chosen by access, measured or declared, never by a list of vanilla types.
+Plugin components and entities get the same hot/cold split, pages, ordering,
+residency and collective representation as built-in ones; a plugin keeps its
+state across offload through materialization. A layout or fast path keyed on
+vanilla types or on one workload is rejected in review. The architecture
+committee works out the full design after the freeze.
+
 ## Rejected alternatives
 
 - Mutable spatial regions as the unit of parallel ownership: a crowd collapses
