@@ -107,12 +107,9 @@ async fn extra_pre_play_socket_is_refused_while_a_player_plays() {
     // The third is refused: the listener closes it instead of spawning a task.
     let mut extra = TcpStream::connect(address).await.unwrap();
     let mut byte = [0_u8; 1];
-    let refused = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        extra.read(&mut byte),
-    )
-    .await
-    .expect("over-cap connection is closed, not left open");
+    let refused = tokio::time::timeout(std::time::Duration::from_secs(30), extra.read(&mut byte))
+        .await
+        .expect("over-cap connection is closed, not left open");
     match refused {
         Ok(0) => {}
         Err(error)
@@ -125,7 +122,9 @@ async fn extra_pre_play_socket_is_refused_while_a_player_plays() {
     assert_eq!(limiter.live(), 2, "the refused socket holds no slot");
 
     // The established player still receives routed reliable frames.
-    server.feedback(play, "still playing").expect("player is routed");
+    server
+        .feedback(play, "still playing")
+        .expect("player is routed");
     assert!(
         reliable_rx.try_recv().is_ok(),
         "the play session keeps receiving while pre-play is refused"

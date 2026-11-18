@@ -897,6 +897,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "port",
                 "connection_throttle_ms",
                 "max_connections_per_ip",
+                "max_pre_play_connections",
             ],
         ),
         (

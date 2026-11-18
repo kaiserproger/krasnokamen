@@ -76,8 +76,12 @@ async fn client_dying_during_join_burst_leaves_core() {
             .pre_play
             .try_acquire()
             .expect("pre-play slot");
-        super::handle_connection(TcpStream::from_std(stream).unwrap(), connection_server, slot)
-            .await
+        super::handle_connection(
+            TcpStream::from_std(stream).unwrap(),
+            connection_server,
+            slot,
+        )
+        .await
     });
 
     let mut client = Client::connect(addr).await.unwrap();
@@ -314,10 +318,10 @@ async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip(
     let mut replacement = Client::connect(address).await.unwrap();
     let (socket, _) = listener.accept().await.unwrap();
     tasks.push(tokio::spawn(handle_connection(
-            socket,
-            Arc::clone(&server),
-            server.pre_play.try_acquire().expect("pre-play slot"),
-        )));
+        socket,
+        Arc::clone(&server),
+        server.pre_play.try_acquire().expect("pre-play slot"),
+    )));
     replacement
         .drive_login(address, "Replacement")
         .await
