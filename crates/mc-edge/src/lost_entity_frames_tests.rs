@@ -191,7 +191,7 @@ impl Pump {
                 server.hub.published_knockback_count(id)
             })
             .unwrap();
-        let (connections, _) = server.connections.routing_snapshot();
+        let (connections, _) = server.connections.routing_view();
         Self {
             viewers: HashMap::from([(
                 id,

@@ -72,6 +72,126 @@ fn registry_insert_remove_roster() {
 }
 
 #[test]
+fn routing_snapshot_copies_handles_only_on_change() {
+    let registry = ConnectionRegistry::new();
+    let mut generation = 0u64;
+    let (handles, roster) = registry.routing_snapshot(&mut generation);
+    assert!(handles.is_none(), "no connection, nothing to copy");
+    assert!(roster.is_none());
+
+    let id = registry.joining_id();
+    let (reliable_tx, _reliable_rx) = mpsc::channel(2);
+    let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
+    registry
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .unwrap();
+    let (handles, _) = registry.routing_snapshot(&mut generation);
+    let handles = handles.expect("a join copies the routing view once");
+    assert_eq!(handles.len(), 1, "routing follows the join");
+    assert_eq!(handles[0].0, id);
+
+    let (handles, _) = registry.routing_snapshot(&mut generation);
+    assert!(handles.is_none(), "an unchanged tick clones no handle");
+
+    registry.set_name(id, "Alex".to_owned());
+    let (handles, roster) = registry.routing_snapshot(&mut generation);
+    assert!(handles.is_none(), "a roster change is not a routing change");
+    assert_eq!(roster, Some(vec!["Alex".to_owned()]));
+
+    registry.remove(id);
+    let (handles, _) = registry.routing_snapshot(&mut generation);
+    assert!(
+        handles.expect("a leave copies the routing view").is_empty(),
+        "routing follows the leave"
+    );
+    assert!(registry.routing_snapshot(&mut generation).0.is_none());
+}
+
+/// Review (Sol, round 2): closing a connection that never had handles — a
+/// refused login, a Status ping, a second close — must not move the routing
+/// generation, or every such ping would make the pump copy every handle.
+#[test]
+fn closing_without_handles_does_not_move_the_routing_view() {
+    let registry = ConnectionRegistry::new();
+    let mut generation = 0u64;
+    let id = registry.joining_id();
+    let (reliable_tx, _reliable_rx) = mpsc::channel(2);
+    let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
+    registry
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .unwrap();
+    let (handles, _) = registry.routing_snapshot(&mut generation);
+    assert_eq!(handles.expect("the join copies once").len(), 1);
+
+    // A joining connection that never registered handles.
+    let pending = registry.joining_id();
+    registry.close(pending, "refused-login");
+    assert!(
+        registry.routing_snapshot(&mut generation).0.is_none(),
+        "a close without handles copies nothing"
+    );
+
+    // The real removal is one refresh.
+    registry.close(id, "kicked");
+    let handles = registry
+        .routing_snapshot(&mut generation)
+        .0
+        .expect("the real removal refreshes once");
+    assert!(handles.is_empty());
+
+    // A second close of the same connection changes nothing.
+    registry.close(id, "already-closed");
+    assert!(
+        registry.routing_snapshot(&mut generation).0.is_none(),
+        "a repeated close copies nothing"
+    );
+}
+
+/// Informative microbench (debug build, shared host): per-tick routing cost at
+/// K = 1000 connections — the previous per-tick clone of every handle versus
+/// one generation compare. No threshold; it prints both numbers. Ignored by
+/// default: it is a measurement, not a gate (`cargo test -- --ignored`).
+#[test]
+#[ignore = "informative microbench, not a gate"]
+fn routing_snapshot_tick_cost_at_1k() {
+    const K: usize = 1000;
+    const TICKS: u32 = 100;
+    let registry = ConnectionRegistry::new();
+    let mut queues = Vec::with_capacity(K);
+    for _ in 0..K {
+        let id = registry.joining_id();
+        let (reliable_tx, reliable_rx) = mpsc::channel(2);
+        let (world_tx, world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
+        registry
+            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+            .unwrap();
+        queues.push((reliable_rx, world_rx));
+    }
+    let mut generation = 0u64;
+    let (handles, _) = registry.routing_snapshot(&mut generation);
+    assert_eq!(handles.expect("first tick copies").len(), K);
+
+    // Before: one clone of every handle per tick (the old `routing_snapshot`).
+    let start = std::time::Instant::now();
+    for _ in 0..TICKS {
+        std::hint::black_box(registry.snapshot());
+    }
+    let before = start.elapsed() / TICKS;
+
+    // After: an unchanged tick takes the mutex and compares one counter.
+    let start = std::time::Instant::now();
+    for _ in 0..TICKS {
+        let (handles, _) = registry.routing_snapshot(&mut generation);
+        assert!(handles.is_none(), "no session change, no copy");
+    }
+    let after = start.elapsed() / TICKS;
+    println!(
+        "routing view K={K} per tick (debug, shared host, informative): before {before:?}, after {after:?}"
+    );
+    drop(queues);
+}
+
+#[test]
 fn dashboard_gate_requires_allow_remote() {
     let mut cfg = EdgeConfig::default();
     cfg.dashboard.bind_address = "0.0.0.0".to_owned();

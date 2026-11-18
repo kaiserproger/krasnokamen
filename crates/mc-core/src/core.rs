@@ -389,6 +389,7 @@ mod recovery;
 pub(crate) use recovery::*;
 
 mod moderation_selector;
+pub(crate) mod session_mirror;
 mod tick_loop;
 /// A currently joined player selected for an edge moderation command.
 pub type ModerationPlayer = (ConnectionId, uuid::Uuid, String);
@@ -464,7 +465,7 @@ struct CoreInner {
     build_gate: crate::build_precommit::Gateway,
     /// Fail-closed edge projection: only tick-observed unlocked sessions pass.
     require_plugin_login: bool,
-    unlocked_sessions: Arc<parking_lot::RwLock<BTreeSet<ConnectionId>>>,
+    unlocked_sessions: Arc<session_mirror::SessionMirror>,
     /// Overworld far-terrain LOD tiles, read beside the chunk workers.
     lod: crate::lod::LodSource,
     /// Bounded immutable real-chunk terrain sources per dimension.
@@ -1053,7 +1054,7 @@ impl Core {
 
         // Only known unlocked sessions pass the edge fence; a connection not
         // processed by the tick yet must never inherit administrative access.
-        let unlocked_sessions = Arc::new(parking_lot::RwLock::new(BTreeSet::new()));
+        let unlocked_sessions = Arc::new(session_mirror::SessionMirror::new());
         let halt_reason = Arc::new(std::sync::OnceLock::new());
         let input_log = if config.input_log {
             // Plugin commands and async plugin results enter `run_tick` from
@@ -1430,8 +1431,7 @@ impl Core {
     /// when authentication is required; configuration-off is unchanged.
     #[must_use]
     pub fn session_locked(&self, connection: ConnectionId) -> bool {
-        self.inner.require_plugin_login
-            && !self.inner.unlocked_sessions.read().contains(&connection)
+        self.inner.require_plugin_login && !self.inner.unlocked_sessions.contains(connection)
     }
 
     /// Add a remote ticket. Over-budget requests are refused explicitly.
@@ -1793,3 +1793,7 @@ mod village_generation_tests;
 #[cfg(test)]
 #[path = "core/startup_freeze_tests.rs"]
 mod startup_freeze_tests;
+
+#[cfg(test)]
+#[path = "core/session_mirror_tests.rs"]
+mod session_mirror_tests;

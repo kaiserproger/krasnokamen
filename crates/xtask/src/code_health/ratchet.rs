@@ -74,7 +74,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // head-controller capability and its initializer: 737.
         ("tick/entity_phase.rs", 737),
         ("settlements/construction.rs", 1_076),
-        ("tick.rs", 834),
+        // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
+        // is projected only when its inputs move, so `Connections` carries one
+        // membership generation and advances it in `insert`,
+        // `remove_by_connection` and `transfer_to` (834 -> 841). The lock set's
+        // own type was extracted to `tick/session_locks.rs` instead.
+        ("tick.rs", 841),
         // MotionYaw 2026-11-18: `set_facing`, the full [yaw, pitch, head]
         // setter that `set_rot` now delegates to: 925.
         ("entities.rs", 925),

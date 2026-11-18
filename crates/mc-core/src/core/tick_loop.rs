@@ -30,7 +30,7 @@ pub(super) struct TickChannels {
     /// Byte bound on queued `Append` payload (see `journal_budget`).
     pub(super) journal_budget: Arc<JournalBudget>,
     /// Edge-visible projection of tick-observed unlocked sessions.
-    pub(super) unlocked_sessions: Arc<parking_lot::RwLock<BTreeSet<ConnectionId>>>,
+    pub(super) unlocked_sessions: Arc<session_mirror::SessionMirror>,
     /// Set once by [`halt_authority`] before the tick broadcast closes, so the
     /// edge reads the halt's own reason on `Closed` without draining the outbox.
     pub(super) halt_reason: Arc<std::sync::OnceLock<String>>,
@@ -70,6 +70,9 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
     let mut paused = false;
     let mut singleplayer_pause = SingleplayerPause::default();
     let mut knockback_ticks = Arc::clone(&channels.knockback_publication.read());
+    // Session state the published unlocked-session mirror was built from; the
+    // projection runs only when this pair moves.
+    let mut published_sessions = (0u64, 0u64);
     'ticks: loop {
         let wall_start = std::time::Instant::now();
         let wall_start_unix_ns = std::time::SystemTime::now()
@@ -370,24 +373,16 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             );
             break;
         }
+        // Project the mirror only when a session joined, left, moved or
+        // changed its plugin-login lock: an unchanged tick compares two
+        // counters, and the projection itself is built outside the lock.
         if state.require_plugin_login {
-            let mut mirror = channels.unlocked_sessions.write();
-            let worlds = || {
-                std::iter::once(&state).chain(state.other_dimensions.values().map(|world| &**world))
-            };
-            mirror.retain(|connection| {
-                worlds().any(|world| {
-                    world.connections.entity_of(*connection).is_some()
-                        && !world.session_locked(*connection)
-                })
-            });
-            for world in worlds() {
-                mirror.extend(
-                    world
-                        .connections
-                        .all_connections()
-                        .filter(|connection| !world.session_locked(*connection)),
-                );
+            let stamp = session_mirror::stamp(&state);
+            if stamp != published_sessions {
+                published_sessions = stamp;
+                channels
+                    .unlocked_sessions
+                    .publish(session_mirror::unlocked_sessions(&state));
             }
         }
 

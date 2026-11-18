@@ -954,7 +954,9 @@ fn full_step_with_period(
         passive: passive_follow::Context {
             players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
             states: &state.players,
-            locked: state.require_plugin_login.then_some(&state.locked_sessions),
+            locked: state
+                .require_plugin_login
+                .then_some(&*state.locked_sessions),
         },
         dolphin_toys: &[],
         villagers: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
