@@ -30,7 +30,8 @@ pub struct SettlementRecord {
     pub revision: u64,
     /// Last submission sequence handed to an owner request; the queue is
     /// ordered by it so a restored request keeps its place (D8 review P2-3).
-    #[serde(default)]
+    /// No default: a row written before this field refuses to decode
+    /// (DESIGN.md:25), because a silent 0 would re-order the restored queue.
     pub order_seq: u64,
     #[serde(default)]
     pub household_sequence: u64,
@@ -66,6 +67,12 @@ pub struct SettlementRecord {
     pub orders: Vec<super::construction::OwnerOrder>,
     #[serde(default)]
     pub construction_cursor: u32,
+    /// Material debts of released builders, per item: the exact load each body
+    /// still owes storage. The slot is freed at once; the debt survives a
+    /// restart and is drained by the construction pass, independent of which
+    /// project is active (R4-1). No `serde(default)`: a row without the key
+    /// refuses (DESIGN.md:25).
+    pub carry_pending: std::collections::BTreeMap<uuid::Uuid, Vec<(u32, u32)>>,
     #[serde(default)]
     pub founding: Option<super::construction::FoundingExpedition>,
 }
@@ -526,6 +533,7 @@ impl Registry {
             furnace_workstation: None,
             orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         };
         validate_record(&record)?;
@@ -578,6 +586,7 @@ impl Registry {
             furnace_workstation: None,
             orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         };
         validate_record(&record)?;

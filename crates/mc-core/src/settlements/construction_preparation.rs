@@ -1,6 +1,9 @@
 //! Canonical preparation materialization and unpaid interference recovery.
 use super::*;
 
+#[path = "construction_liquid.rs"]
+pub(crate) mod liquid;
+
 /// A prepared plan: the executor's bounds and its ordered work cells.
 pub(super) type Plan = (ScriptWorldBounds, Vec<executor::PlannedCell>);
 
@@ -40,14 +43,28 @@ fn cell_plan(
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
     let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
+    let record = state
+        .settlements
+        .get(project.settlement)
+        .ok_or(Preparation)?;
+    // Village paths and farmland a new site covers: the detour stands before
+    // any old path cell is retired, so the walk stays connected at every tick.
+    // An upgrade's lot is its own certified ground, never village work.
+    let village = if project.building.is_none() {
+        super::relayout::plan(state, record, lot).map_err(|_| Preparation)?
+    } else {
+        None
+    };
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {
         let dirt = state.registry.states.dirt;
+        let mut fill = Vec::new();
         for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
                 let ground =
-                    surface_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
+                    liquid::ground_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
+                        .or_else(|| village.as_ref().and_then(|plan| plan.height(x, z)))
                         .ok_or(Preparation)?;
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
@@ -60,7 +77,7 @@ fn cell_plan(
                         continue;
                     }
                     bottom = bottom.min(y);
-                    cells.push(executor::PlannedCell {
+                    fill.push(executor::PlannedCell {
                         at: [x, y, z],
                         state: dirt,
                         resource: Some("minecraft:dirt".into()),
@@ -69,6 +86,10 @@ fn cell_plan(
                 }
             }
         }
+        // A fluid source goes first, top-down within its column, so the supply
+        // stops before any cut that the lava beside it would block.
+        liquid::order(state, &mut fill);
+        cells.append(&mut fill);
     }
     let mut cuts = Vec::new();
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
@@ -209,6 +230,27 @@ fn cell_plan(
                 // air the plan created and the drop is credited exactly once.
                 cuts.append(&mut cells);
                 cells = cuts;
+            }
+        }
+    }
+    if let Some(village) = village {
+        let mut taken: std::collections::HashSet<[i32; 3]> =
+            cells.iter().map(|cell| cell.at).collect();
+        // The detour leads the build stage: executor order is the manifest's,
+        // so it stands before a single house cell can close the old line.
+        let mut detour = Vec::with_capacity(village.detour.len());
+        for cell in village.detour.into_iter().chain(village.cleared) {
+            if taken.insert(cell.at) {
+                detour.push(cell);
+            }
+        }
+        detour.append(&mut cells);
+        cells = detour;
+        // Old path and farmland cells go last: nothing walks the old line
+        // until the detour that replaces it stands.
+        for cell in village.retired {
+            if taken.insert(cell.at) {
+                cells.push(cell);
             }
         }
     }
@@ -459,20 +501,20 @@ fn placement_actions(
     actions
 }
 
-pub(crate) fn active_lot(
+/// One project's own lot: parallel sites must not read the first project's
+/// bounds (D8 review R2-5).
+pub(crate) fn project_lot(
     state: &TickState,
     record: &SettlementRecord,
+    handle: &str,
 ) -> Option<ScriptWorldBounds> {
-    projects(record)
-        .next()
+    access::project_for_structure(record, handle)
         .and_then(|project| crate::settlements::forestry::lot_bounds(state, project))
 }
 
-/// The level ground discovery centres on: the active project's own floor, so a
-/// builder's footing and the fill plan agree, else the bell's elevation.
-pub(crate) fn active_floor(record: &SettlementRecord) -> i32 {
-    projects(record)
-        .next()
+/// One project's own floor level (D8 review R2-5).
+pub(crate) fn project_floor(record: &SettlementRecord, handle: &str) -> i32 {
+    access::project_for_structure(record, handle)
         .map_or(record.anchor[1], |project| project.origin[1])
 }
 
@@ -490,9 +532,7 @@ pub(crate) fn stale_tree_certification(
     let Some(record) = state.settlements.get(id) else {
         return false;
     };
-    let keeps_its_place = projects(record)
-        .next()
-        .filter(|project| project.structure == handle)
+    let keeps_its_place = access::project_for_structure(record, handle)
         .is_none_or(|project| project.ordered)
         && orders(record).next().is_none();
     keeps_its_place

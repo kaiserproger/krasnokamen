@@ -337,7 +337,7 @@ fn level_inside(record: &SettlementRecord, x: i32, z: i32) -> bool {
     inside(record, [x, record.anchor[1], z])
 }
 
-fn sample(
+pub(super) fn sample(
     state: &TickState,
     record: &SettlementRecord,
     x: i32,
@@ -464,6 +464,11 @@ fn vacant(state: &TickState, block: u32) -> bool {
         .is_some_and(|definition| {
             matches!(definition.block.id.path(), "air" | "cave_air" | "void_air")
         })
+}
+
+/// The state street paving turns soil into: the one `dirt_path` block.
+pub(crate) fn paved_state(state: &TickState) -> Option<u32> {
+    default_state(state, "minecraft:dirt_path")
 }
 
 fn default_state(state: &TickState, name: &str) -> Option<u32> {
@@ -752,6 +757,12 @@ impl<'a> Network<'a> {
         Some(route)
     }
 
+    /// The reached street column behind `building`'s door, exactly the column
+    /// [`Self::access`] indexes: the road graph a route must keep connected.
+    pub(crate) fn access_column(&self, building: &Building) -> Option<[i32; 3]> {
+        self.access(building).map(|index| self.cells[index])
+    }
+
     /// A verge may carry a detour, but a door still fronts an actual street.
     fn street_index(&self, x: i32, z: i32) -> Option<usize> {
         matches!(cell(self.record.anchor, x, z), Cell::Road | Cell::Plaza)
@@ -935,7 +946,7 @@ impl<'a> Network<'a> {
     pub(crate) fn road_work(&mut self, tile: &Tile) -> Option<Work> {
         let state = self.state;
         let air = state.registry.states.air;
-        let path = default_state(state, "minecraft:dirt_path")?;
+        let path = paved_state(state)?;
         let mut cells = Vec::new();
         let (mut low, mut high) = (i32::MAX, i32::MIN);
         for x in tile.min[0]..=tile.max[0] {
