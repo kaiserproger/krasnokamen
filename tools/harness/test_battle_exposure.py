@@ -323,8 +323,9 @@ class TakeTest(unittest.TestCase):
 class CoverageClassTest(unittest.TestCase):
     """An episode with no wire step is classified from the recording, never guessed."""
 
-    def evidence(self, spawn=2400, removed=(), death=(), positions=(2500, 3000)):
-        return {'spawn': spawn, 'removed': list(removed), 'death': list(death), 'positions': list(positions)}
+    def evidence(self, spawn=2400, removed=(), death=(), positions=(2500, 3000), teleports=()):
+        return {'spawn': spawn, 'removed': list(removed), 'death': list(death),
+                'positions': list(positions), 'teleports': list(teleports)}
 
     def test_a_tracked_body_that_did_not_move_is_tracked_across_the_window(self):
         kind, end, note = window_coverage({'motion': [5143, 5149]}, self.evidence())
@@ -370,11 +371,36 @@ class CoverageClassTest(unittest.TestCase):
             self.assertFalse(take['usable_for_d1'])
             self.assertTrue(any('lost' in gap for gap in take['coverage_gaps']))
 
+    def test_a_teleport_inside_the_window_makes_it_unresolved(self):
+        # spawn at 5140, a teleport at 5146 inside 5143-5149: the jump is not in the position
+        # stream, so the window's motion cannot be called observed zero
+        kind, _, note = window_coverage({'motion': [5143, 5149]},
+                                        self.evidence(spawn=5140, positions=(), teleports=[5146]))
+        self.assertEqual(kind, 'unresolved')
+        self.assertIn('teleport_entity at tick 5146', note)
+
+    def test_a_teleport_outside_the_window_is_ignored(self):
+        kind, _, _ = window_coverage({'motion': [5143, 5149]},
+                                     self.evidence(spawn=5140, positions=(), teleports=[5160]))
+        self.assertEqual(kind, 'tracked')
+
     def test_a_body_removed_early_and_readded_is_present(self):
         # ids 82 and 2108 of exposure-1: removed early, re-sent later, present at the window
         kind, end, _ = window_coverage({'motion': [5857, 7272]},
                                        self.evidence(spawn=2400, removed=[4359], positions=(5000, 6000)))
         self.assertEqual((kind, end), ('tracked', 7272))
+
+    def test_a_teleport_in_a_stepped_window_blocks_the_take(self):
+        positions = {'battle_start_tick': 5000, 'ids': {'1076': [
+            [5140, 0, 0, 0], [5144, round(4 * 4096), 0, 0], [5200, round(4 * 4096), 0, 0]]}}
+        evidence = {1076: {'spawn': 5100, 'removed': [], 'death': [], 'positions': [5140, 5144],
+                           'teleports': [5146]}}
+        with tempfile.TemporaryDirectory() as root:
+            take = analyse_take('take', take_directory(root, '\n'.join([episode_line(), summary_line()])),
+                                positions_file(root, positions), None, None, evidence)
+            row = take['wire']['episode_rows'][0]
+            self.assertEqual(row['coverage_class'], 'unresolved')
+            self.assertFalse(take['usable_for_d1'])
 
     def test_a_removal_after_the_window_end_keeps_the_window_covered(self):
         positions = {'battle_start_tick': 5000, 'ids': {'1076': [
@@ -418,6 +444,7 @@ class RecordingReaderTest(unittest.TestCase):
             'minecraft:remove_entities': {'protocol_id': 2},
             'minecraft:entity_event': {'protocol_id': 3},
             'minecraft:move_entity_pos': {'protocol_id': 4},
+            'minecraft:teleport_entity': {'protocol_id': 6},
             'minecraft:custom_payload': {'protocol_id': 5},
         }}}))
         solrec = Path(root, 'take.solrec')
@@ -449,8 +476,19 @@ class RecordingReaderTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             solrec, packets = self.recording(root, frames)
             table = recording_evidence(solrec, packets)
-            self.assertEqual(table[77], {'spawn': 900, 'removed': [900], 'death': [], 'positions': [900]})
+            self.assertEqual(table[77], {'spawn': 900, 'removed': [900], 'death': [], 'positions': [900],
+                                         'teleports': []})
             self.assertEqual(table[88]['death'], [900])
+
+    def test_a_teleport_is_read_by_id(self):
+        from tools.harness.battle_exposure import recording_evidence
+        frames = [
+            self.varint(5) + self.varint(len(b'krasnokamen:tick')) + b'krasnokamen:tick' + struct.pack('>QQ', 5146, 0),
+            self.varint(6) + self.varint(77) + b'0' * 40,
+        ]
+        with tempfile.TemporaryDirectory() as root:
+            solrec, packets = self.recording(root, frames)
+            self.assertEqual(recording_evidence(solrec, packets)[77]['teleports'], [5146])
 
     def test_a_truncated_recording_stops_cleanly(self):
         from tools.harness.battle_exposure import recording_evidence

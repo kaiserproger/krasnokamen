@@ -160,6 +160,7 @@ DEFAULT_PACKETS = Path('/run/media/kaiserroman/games/solaris-work/solaris/data/v
 REMOVE_ENTITIES = 'minecraft:remove_entities'
 ADD_ENTITY = 'minecraft:add_entity'
 ENTITY_EVENT = 'minecraft:entity_event'
+TELEPORT_ENTITY = 'minecraft:teleport_entity'
 POSITION_PACKETS = ('minecraft:move_entity_pos', 'minecraft:move_entity_pos_rot')
 
 
@@ -178,11 +179,13 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
     """Per entity id, the recording's own spawn / removal / death / position evidence.
 
     Reads the take's `take.solrec` frames (header JSON line, then `u32, u32 len` + payload) and
-    decodes only the four clientbound packets that carry the evidence: `add_entity` (spawned for
-    this observer), `remove_entities` (despawn or out of view), `entity_event` status 3 (death) and
-    the two position packets. Nothing is inferred from the shape of a longer gap: a body with no
-    removals, a spawn before a window and a position packet after it was tracked, so a window with
-    no movement packet inside it is observed zero motion.
+    decodes only the clientbound packets that carry the evidence: `add_entity` (spawned for this
+    observer), `remove_entities` (despawn or out of view), `entity_event` status 3 (death), the two
+    position packets and `teleport_entity` (a jump the wire never spells out as a move). Nothing is
+    inferred from the shape of a longer gap: a body with no removals, a spawn before a window and a
+    position packet after it was tracked, so a window with no movement packet inside it is observed
+    zero motion. A teleport inside a window is the opposite case: its displacement is not in the
+    position stream, so the window cannot be judged from steps alone.
     """
     template = json.loads(Path(packets_path).read_text())
     ids = template['play']['clientbound']
@@ -191,6 +194,8 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
         ids[REMOVE_ENTITIES]['protocol_id']: 'remove',
         ids[ENTITY_EVENT]['protocol_id']: 'event',
     }
+    if TELEPORT_ENTITY in ids:
+        wanted[ids[TELEPORT_ENTITY]['protocol_id']] = 'teleport'
     for name in POSITION_PACKETS:
         if name in ids:
             wanted[ids[name]['protocol_id']] = 'position'
@@ -199,7 +204,8 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
     table = {}
 
     def row(ident):
-        return table.setdefault(ident, {'spawn': None, 'removed': [], 'death': [], 'positions': []})
+        return table.setdefault(ident, {'spawn': None, 'removed': [], 'death': [], 'positions': [],
+                                        'teleports': []})
 
     with Path(solrec).open('rb') as handle:
         handle.readline()  # the recording header
@@ -226,6 +232,10 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
             if kind == 'position':
                 entity, _ = _varint(data, position)
                 row(entity)['positions'].append(tick)
+                continue
+            if kind == 'teleport':
+                entity, _ = _varint(data, position)
+                row(entity)['teleports'].append(tick)
                 continue
             if kind == 'add':
                 entity, _ = _varint(data, position)
@@ -262,7 +272,8 @@ def window_coverage(episode, evidence):
       `lost`           a removal or death at or before the window's end, or the body's recorded
                        presence stops before it: the window is not covered from `coverage_end + 1`.
       `unobserved`     no spawn and no position packet at all: the observer never had the body.
-      `unresolved`     no usable recording evidence: not guessed either way.
+      `unresolved`     no usable recording evidence, or a teleport inside the window: the jump is
+                       not in the position stream, so the window's motion cannot be judged.
     """
     first, last = episode['motion']
     if evidence is None:
@@ -270,6 +281,11 @@ def window_coverage(episode, evidence):
     removed = [tick for tick in evidence['removed'] if tick is not None and tick <= last]
     death = [tick for tick in evidence['death'] if tick is not None and tick <= last]
     positions = evidence['positions']
+    teleports = [tick for tick in evidence.get('teleports', ()) if tick is not None and first <= tick <= last]
+    if teleports:
+        return 'unresolved', None, (
+            f'teleport_entity at tick {min(teleports)}: the jump is not in the position stream, '
+            f'the window {first}-{last} cannot be judged from steps')
     ends = [tick for tick in removed + death if tick is not None]
     if ends:
         # Only the last end before the window matters, and only if the observer never acquired
@@ -455,13 +471,13 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             steps = episode_wire_steps(episode, wire.get(episode['id'], ()))
             # Coverage is judged over the whole window, steps or not: a removal inside a window
             # that happens to hold a step still leaves its tail unobserved.
-            kind, coverage_end, note = window_coverage(
-                episode, evidence.get(episode['id']) if evidence else None)
+            body = evidence.get(episode['id']) if evidence else None
+            kind, coverage_end, note = window_coverage(episode, body)
             if kind == 'tracked':
                 classification = 'covered' if steps else 'observed_zero'
-            elif kind == 'unresolved' and steps:
-                # No recording evidence, but the window itself carries motion: the steps are the
-                # observation. Its tail stays unwitnessed, which is counted so a reviewer sees it.
+            elif kind == 'unresolved' and body is None and steps:
+                # No recording evidence at all, but the window itself carries motion: the steps are
+                # the observation. Its tail stays unwitnessed, which is counted for the reviewer.
                 classification = 'covered'
                 take['_tail_unwitnessed'] = take.get('_tail_unwitnessed', 0) + 1
             else:
