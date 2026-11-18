@@ -1,11 +1,28 @@
 //! Canonical preparation materialization and unpaid interference recovery.
 use super::*;
+
+/// A prepared plan: the executor's bounds and its ordered work cells.
+pub(super) type Plan = (ScriptWorldBounds, Vec<executor::PlannedCell>);
+
 pub(super) fn planned_cells(
     state: &TickState,
     project: &Project,
     species: &str,
     clearance: &mut crate::settlements::forestry::Clearance,
-) -> Result<(ScriptWorldBounds, Vec<executor::PlannedCell>), site_refusals::Reason> {
+) -> Result<Plan, site_refusals::Reason> {
+    cell_plan(state, project, species, clearance, true)
+}
+
+/// The same plan, with the upgrade placement fence optionally applied. The
+/// refusal diagnosis re-plans without it so a refusal can name its cell; every
+/// other caller takes the fenced plan.
+fn cell_plan(
+    state: &TickState,
+    project: &Project,
+    species: &str,
+    clearance: &mut crate::settlements::forestry::Clearance,
+    fence: bool,
+) -> Result<Plan, site_refusals::Reason> {
     use site_refusals::Reason::Preparation;
     let blueprint = blueprints::get(&state.registry, &project.blueprint).ok_or(Preparation)?;
     let level = blueprint.level(project.level).ok_or(Preparation)?;
@@ -130,23 +147,26 @@ pub(super) fn planned_cells(
     }
     if project.building.is_some() {
         let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
-        let mut cleared = executor::upgrade_trees_clear(
+        // One evidence map per attempt: the tree half and the placement fence
+        // read the same last-committed-state image.
+        let evidence = executor::previous_committed(
             state,
             project.settlement,
             &project.blueprint,
             project.origin,
-            &cells,
-            Some(lot),
-            clearance,
         )
-        .map_err(|failure| match failure {
-            mc_script::ScriptOperationFailure::Unloaded => site_refusals::Reason::Unloaded,
-            mc_script::ScriptOperationFailure::Forbidden
-            | mc_script::ScriptOperationFailure::Blocked => {
-                site_refusals::Reason::ProtectedObstruction
-            }
-            _ => Preparation,
-        })?;
+        .map_err(|_| Preparation)?;
+        let mut cleared =
+            executor::upgrade_trees_clear(state, &evidence, &cells, Some(lot), clearance).map_err(
+                |failure| match failure {
+                    mc_script::ScriptOperationFailure::Unloaded => site_refusals::Reason::Unloaded,
+                    mc_script::ScriptOperationFailure::Forbidden
+                    | mc_script::ScriptOperationFailure::Blocked => {
+                        site_refusals::Reason::ProtectedObstruction
+                    }
+                    _ => Preparation,
+                },
+            )?;
         if !cleared.is_empty() {
             // The same whole-tree evidence a new site uses: a registered root
             // whose trunk is cut here is felled as a whole tree.
@@ -160,25 +180,36 @@ pub(super) fn planned_cells(
             cells = cleared;
         }
         // D7 §2.4: an upgrade may only write where the previous build wrote or
-        // where the world is empty. The evidence is the last committed state of
-        // every position the building's executed chain wrote, read at admission
-        // time; nothing is debited, receipted or placed before this refuses.
-        let evidence = executor::previous_committed(
-            state,
-            project.settlement,
-            &project.blueprint,
-            project.origin,
-        )
-        .map_err(|_| Preparation)?;
-        if let Some((at, live)) = previous_build_divergence(state, &cells, &evidence, project.origin[1])
-        {
-            tracing::warn!(settlement = project.settlement.0, blueprint = %project.blueprint,
-                level = project.level, cell = ?at, ?live,
-                "settlement_upgrade_previous_build_diverged");
-            return Err(match live {
-                Some(_) => site_refusals::Reason::PreviousBuildDiverged,
-                None => site_refusals::Reason::Unloaded,
-            });
+        // where the world is empty. Village territory is the village's own
+        // property (owner D27): a foreign block standing there is cleared first
+        // and its drop is credited to storage by the debit, so only a cell the
+        // executor cannot clear refuses. Nothing is debited, receipted or placed
+        // before this refuses.
+        if fence {
+            let mut cuts = Vec::new();
+            for action in placement_actions(
+                state,
+                project.settlement,
+                &cells,
+                &evidence,
+                project.origin[1],
+            ) {
+                match action {
+                    Action::Refuse(divergence) => return Err(divergence.reason),
+                    Action::Clear(at) => cuts.push(executor::PlannedCell {
+                        at,
+                        state: state.registry.states.air,
+                        resource: None,
+                        quantity: 0,
+                    }),
+                }
+            }
+            if !cuts.is_empty() {
+                // The village's own blocks go first, so every placement lands on
+                // air the plan created and the drop is credited exactly once.
+                cuts.append(&mut cells);
+                cells = cuts;
+            }
         }
     }
     // Include the whole placement extent (roof crowns/yards) in executor
@@ -203,23 +234,156 @@ pub(super) fn planned_cells(
     Ok((bounds, cells))
 }
 
-/// The first planned placement cell an upgrade may not write: its live block is
-/// neither air — the plan itself empties that position earlier, or the world is
-/// already empty there — nor the previous build's own last committed block at
-/// that position. Identity is compared by raw block id, as `reopen_emptied`
-/// does: an opened door, a connected fence or a lit furnace is the same block,
-/// not a divergence. `None` as the live state means the world is unloaded.
+/// A refused placement cell: the admission reason and the block the owner has
+/// to clear, so the log, the owner status and the player message name the same
+/// position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Divergence {
+    pub(super) reason: site_refusals::Reason,
+    pub(super) at: [i32; 3],
+    /// `None` when the world itself is unloaded there.
+    pub(super) live: Option<u32>,
+}
+
+/// The concrete admission refusal of an upgrade, planned again without the
+/// fence so it names the cell. Read-only, and only called once a refusal has
+/// already happened: an admitted pass pays nothing for it.
+pub(super) fn refusal(state: &TickState, project: &Project, species: &str) -> Option<Divergence> {
+    if project.building.is_none() {
+        return None;
+    }
+    let evidence = executor::previous_committed(
+        state,
+        project.settlement,
+        &project.blueprint,
+        project.origin,
+    )
+    .ok()?;
+    let (_, cells) = cell_plan(state, project, species, &mut Default::default(), false).ok()?;
+    placement_actions(
+        state,
+        project.settlement,
+        &cells,
+        &evidence,
+        project.origin[1],
+    )
+    .into_iter()
+    .find_map(|action| match action {
+        Action::Refuse(divergence) => Some(divergence),
+        Action::Clear(_) => None,
+    })
+}
+
+/// The admission refusal text of a project. An upgrade divergence names the cell
+/// the owner has to clear, in the player message as in the owner status; every
+/// other reason keeps its bare name.
+pub(super) fn refusal_text(
+    state: &TickState,
+    project: &Project,
+    species: &str,
+    reason: site_refusals::Reason,
+) -> String {
+    match reason {
+        site_refusals::Reason::PreviousBuildDiverged => match refusal(state, project, species) {
+            Some(divergence) => format!(
+                "Construction admission refused: PreviousBuildDiverged at {},{},{}.",
+                divergence.at[0], divergence.at[1], divergence.at[2]
+            ),
+            None => "Construction admission refused: PreviousBuildDiverged.".into(),
+        },
+        reason => format!("Construction admission refused: {reason:?}."),
+    }
+}
+
+/// The queued upgrade's concrete admission refusal, naming the cell the owner
+/// has to clear. A read-only probe: it stores nothing, so it disappears by
+/// itself once the obstacle is gone and no lifecycle state is involved.
+pub(super) fn upgrade_refusal(
+    state: &TickState,
+    id: SettlementId,
+    building: BuildingId,
+) -> Option<String> {
+    let record = state.settlements.get(id)?;
+    let target = record.buildings.get(&building)?;
+    let (blueprint, origin, rotation) = upgrade_blueprint(state, id, target)?;
+    let level = target.level + 1;
+    let images = executor::source_images(state, id);
+    let (species, _) = funded_variant(state, id, &blueprint.level(level)?.materials, &images)?;
+    let project = Project {
+        settlement: id,
+        blueprint: blueprint.id.clone(),
+        level,
+        origin,
+        rotation,
+        building: Some(building),
+        structure: String::new(),
+        ordered: true,
+        builder: None,
+        order_seq: None,
+    };
+    let divergence = refusal(state, &project, species)?;
+    let [x, y, z] = divergence.at;
+    Some(match divergence.reason {
+        site_refusals::Reason::Unloaded => format!("unloaded_worksite at {x},{y},{z}"),
+        _ => format!("previous_build_diverged at {x},{y},{z}"),
+    })
+}
+
+/// Report a queued request's admission refusal once per distinct reason: the
+/// request keeps its FIFO slot and is retried on every planning pass, so a
+/// repeating reason must not page the owner or the log each time. Runtime only.
+pub(super) fn note_order_refusal(
+    state: &mut TickState,
+    id: SettlementId,
+    seq: u64,
+    reason: String,
+) {
+    let repeated = state
+        .settlements
+        .order_refusal
+        .get(&(id, seq))
+        .is_some_and(|previous| *previous == reason);
+    if repeated {
+        return;
+    }
+    state
+        .settlements
+        .order_refusal
+        .insert((id, seq), reason.clone());
+    tracing::warn!(settlement = id.0, seq, %reason, "settlement_construction_order_refused");
+    notify_owner(state, id, reason);
+}
+
+/// What an upgrade must do with one planned placement cell: keep it, refuse the
+/// upgrade, or clear what stands there first and credit its drop.
+pub(super) enum Action {
+    Refuse(Divergence),
+    Clear([i32; 3]),
+}
+
+/// Classify every planned placement cell of an upgrade against the previous
+/// build's own last committed state. A cell is fine when it holds air — already,
+/// or because the plan empties it earlier (Opus F10) — or the previous build's
+/// own block, compared by raw block id as `reopen_emptied` does: an opened door,
+/// a connected fence or a lit furnace is the same block, not a divergence.
 ///
 /// The foundation row, `floor`, is the site's own ground: there the floor layer
 /// replaces the surface block by construction, and a new site's admission grants
-/// exactly that with [`floor_replaceable`] plus the player-touch veto, so an
+/// exactly that — floor-replaceable, no block entity, no player edit — so an
 /// upgrade inherits the grant instead of calling the ground it stands on foreign.
-fn previous_build_divergence(
+///
+/// Everything else is village property inside the village's territory (owner D27,
+/// 2026-11-18): the plan clears it and the debit credits its drop to storage, no
+/// matter who built it. Outside the territory, and for a cell holding a block
+/// entity — clearing a container would lose its contents, which no credit covers
+/// — the upgrade refuses instead.
+fn placement_actions(
     state: &TickState,
+    settlement: SettlementId,
     cells: &[executor::PlannedCell],
     evidence: &std::collections::BTreeMap<[i32; 3], u32>,
     floor: i32,
-) -> Option<([i32; 3], Option<u32>)> {
+) -> Vec<Action> {
     let identity = |block: u32| {
         state
             .registry
@@ -227,15 +391,29 @@ fn previous_build_divergence(
             .by_id(mc_world::BlockStateId(block))
             .map(|definition| definition.block.raw_id)
     };
+    let territory = state
+        .settlements
+        .get(settlement)
+        .map(|record| (record.anchor, i64::from(record.radius).pow(2)));
+    let in_territory = |at: [i32; 3]| {
+        territory.is_some_and(|(anchor, radius_sq)| {
+            at.iter()
+                .zip(anchor)
+                .map(|(a, b)| (i64::from(*a) - i64::from(b)).pow(2))
+                .sum::<i64>()
+                <= radius_sq
+        })
+    };
     let air = state.registry.states.air;
     let mut emptied = std::collections::BTreeSet::new();
+    let mut actions = Vec::new();
     for cell in cells {
         if cell.state == air {
             emptied.insert(cell.at);
             continue;
         }
         // An earlier air cell at this position is applied first, so the cell is
-        // placed on air the plan created (Opus F10).
+        // placed on air the plan created.
         if emptied.contains(&cell.at) {
             continue;
         }
@@ -243,7 +421,12 @@ fn previous_build_divergence(
             .world
             .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
         else {
-            return Some((cell.at, None));
+            actions.push(Action::Refuse(Divergence {
+                reason: site_refusals::Reason::Unloaded,
+                at: cell.at,
+                live: None,
+            }));
+            continue;
         };
         if live == air {
             continue;
@@ -252,15 +435,28 @@ fn previous_build_divergence(
         if own.is_some() && own == identity(live) {
             continue;
         }
+        let container = state
+            .block_entities
+            .contains_key(&(cell.at[0], cell.at[1], cell.at[2]));
+        // The foundation grant, with the vetoes the site search applies there.
         if cell.at[1] == floor
             && floor_replaceable(state, live)
+            && !container
             && !state.block_log.player_touched(cell.at)
         {
             continue;
         }
-        return Some((cell.at, Some(live)));
+        if !container && in_territory(cell.at) {
+            actions.push(Action::Clear(cell.at));
+            continue;
+        }
+        actions.push(Action::Refuse(Divergence {
+            reason: site_refusals::Reason::PreviousBuildDiverged,
+            at: cell.at,
+            live: Some(live),
+        }));
     }
-    None
+    actions
 }
 
 pub(crate) fn active_lot(
@@ -321,6 +517,69 @@ pub(crate) fn changed_project(
     project_for_structure(state.settlements.get(id)?, handle)
         .filter(|project| !layout::infra(&project.blueprint))
         .cloned()
+}
+
+/// Funded upgrade candidates an autonomous pass may plan before it settles for
+/// the first one the placement fence accepts: one refused building must not
+/// starve every other building's upgrade, and one pass stays bounded.
+const UPGRADE_CANDIDATES: usize = 4;
+
+/// The next funded upgrade an autonomous pass may admit. A building whose
+/// placement fence refuses it is skipped, not retried ahead of the others on
+/// every pass; an unrelated plan failure keeps the candidate, so its own reason
+/// still surfaces.
+pub(super) fn upgrade_project(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[crate::plugin_inventories::native::Image],
+) -> Option<(Project, String, u8)> {
+    record
+        .buildings
+        .values()
+        .filter_map(|building| {
+            let (blueprint, origin, rotation) = upgrade_blueprint(state, record.id, building)?;
+            let level = building.level + 1;
+            let (species, color) =
+                funded_variant(state, record.id, &blueprint.level(level)?.materials, images)?;
+            let species = species.to_owned();
+            Some((
+                Project {
+                    settlement: record.id,
+                    blueprint: blueprint.id.clone(),
+                    level,
+                    origin,
+                    rotation,
+                    building: Some(building.id),
+                    structure: String::new(),
+                    ordered: false,
+                    builder: None,
+                    order_seq: None,
+                },
+                species,
+                color,
+            ))
+        })
+        .take(UPGRADE_CANDIDATES)
+        .find(|(project, species, _)| fence_admits(state, project, species))
+}
+
+/// Whether the placement fence admits this project's plan: the autonomous
+/// planner's cheap skip, so one diverged building cannot starve the others.
+pub(super) fn fence_admits(state: &TickState, project: &Project, species: &str) -> bool {
+    !matches!(
+        planned_cells(state, project, species, &mut Default::default()),
+        Err(site_refusals::Reason::PreviousBuildDiverged)
+    )
+}
+
+/// The refusal a queued owner request is waiting on, if any: the owner status
+/// asks this, so a request that cannot start says why, with the cell.
+pub(super) fn queued_refusal(
+    state: &TickState,
+    id: SettlementId,
+    order: &OwnerOrder,
+) -> Option<String> {
+    upgrade_refusal(state, id, order.building?)
 }
 
 #[cfg(test)]

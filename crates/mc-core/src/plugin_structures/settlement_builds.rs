@@ -999,6 +999,18 @@ pub(crate) fn built_at(
     })
 }
 
+/// Creation revision of a settlement structure handle, `settlement-{id}-{rev}`.
+/// `snapshot.revision` moves on every change (a repair, a pause, a reopen) and a
+/// founding transfer stamps one revision on every record it moves, so only the
+/// handle orders two levels of one site. Records without the suffix fall back to
+/// their last revision.
+fn created_at(handle: &str, record: &Structure) -> u64 {
+    handle
+        .rsplit_once('-')
+        .and_then(|(_, revision)| revision.parse().ok())
+        .unwrap_or(record.snapshot.revision)
+}
+
 /// Every committed revision of `(settlement, blueprint, same site)`, oldest
 /// first: a blueprint level stores only its diff against the level below, so
 /// the executed evidence for an upgrade is the whole chain, not the newest
@@ -1011,10 +1023,10 @@ fn committed_chain<'a>(
     blueprint: &str,
     origin: [i32; 3],
 ) -> Vec<&'a Structure> {
-    let mut chain: Vec<&Structure> = ledger
+    let mut chain: Vec<(u64, u64, &Structure)> = ledger
         .structures
-        .values()
-        .filter(|record| {
+        .iter()
+        .filter(|(_, record)| {
             record.settlement == Some(id)
                 && record
                     .snapshot
@@ -1024,9 +1036,10 @@ fn committed_chain<'a>(
                 && same_site(state, record, origin)
                 && record.snapshot.state == ScriptStructureState::Committed
         })
+        .map(|(handle, record)| (created_at(handle, record), record.snapshot.revision, record))
         .collect();
-    chain.sort_by_key(|record| record.snapshot.revision);
-    chain
+    chain.sort_by_key(|(created, revision, _)| (*created, *revision));
+    chain.into_iter().map(|(_, _, record)| record).collect()
 }
 
 /// The previous build's own evidence, addressed by position: the last
@@ -1049,21 +1062,17 @@ pub(crate) fn previous_committed(
 
 /// Upgrade tree cells follow the same fence as a new site: a player-touched or
 /// persistent cell, unknown generator evidence, a protected root halo or a live
-/// player with capture disabled refuses; a previous committed building's exact
-/// authored state is a beam, not forest; every other tree or sapling cell becomes
-/// clear-stage work, so the executor cuts it with conserved drops.
+/// player with capture disabled refuses; the previous build's own authored
+/// state is a beam, not forest; every other tree or sapling cell becomes
+/// clear-stage work, so the executor cuts it with conserved drops. The caller
+/// passes the evidence once per attempt, shared with the placement fence.
 pub(crate) fn upgrade_trees_clear(
     state: &TickState,
-    id: SettlementId,
-    blueprint: &str,
-    origin: [i32; 3],
+    previous: &BTreeMap<[i32; 3], u32>,
     cells: &[PlannedCell],
     lot: Option<mc_script::ScriptWorldBounds>,
     clearance: &mut crate::settlements::forestry::Clearance,
 ) -> Result<Vec<PlannedCell>, Failure> {
-    // The whole executed chain, so an earlier level's beam is still the
-    // building's own cell when the newest level did not touch it.
-    let previous = previous_committed(state, id, blueprint, origin)?;
     let mut cleared = Vec::new();
     for cell in cells {
         let block = state

@@ -635,7 +635,11 @@ fn certified_house() -> (
     complete(&mut state, id, builder);
     let record = state.settlements.get(id).unwrap();
     assert!(record.projects.is_empty(), "level one certifies");
-    let building = *record.buildings.keys().next().expect("a certified building");
+    let building = *record
+        .buildings
+        .keys()
+        .next()
+        .expect("a certified building");
     let project = Project {
         settlement: id,
         blueprint: "house".into(),
@@ -652,16 +656,40 @@ fn certified_house() -> (
 }
 
 fn foreign_block(state: &TickState, different: u32) -> u32 {
-    ["minecraft:cobblestone", "minecraft:stone", "minecraft:bricks"]
-        .into_iter()
-        .map(|name| block(state, name, &[]))
-        .find(|id| raw(state, *id) != raw(state, different))
-        .expect("a foreign solid block")
+    [
+        "minecraft:cobblestone",
+        "minecraft:stone",
+        "minecraft:bricks",
+    ]
+    .into_iter()
+    .map(|name| block(state, name, &[]))
+    .find(|id| raw(state, *id) != raw(state, different))
+    .expect("a foreign solid block")
+}
+
+/// The admission action of every planned placement cell: what the fence, the
+/// owner status and the player message all read.
+fn actions(
+    state: &TickState,
+    id: SettlementId,
+    project: &Project,
+    cells: &[executor::PlannedCell],
+) -> Vec<Action> {
+    let evidence = executor::previous_committed(state, id, &project.blueprint, project.origin)
+        .expect("the committed chain is the evidence");
+    placement_actions(state, id, cells, &evidence, project.origin[1])
+}
+
+fn refusal_at(state: &TickState, project: &Project) -> Option<site_refusals::Reason> {
+    refusal(state, project, "oak").map(|divergence| divergence.reason)
 }
 
 #[test]
-fn upgrade_refuses_a_divergent_previous_build_cell() {
+fn upgrade_refuses_a_divergent_cell_outside_the_territory() {
     let (mut state, id, _, project) = certified_house();
+    // Outside the village's territory a foreign block stays someone else's, so
+    // the upgrade refuses there (owner D27 keeps the protection outside).
+    state.settlements.get_mut(id).unwrap().radius = 1;
     let (at, authored_state, _) = replaced_cell(&state, &project);
     let live = state.world.block_at(at[0], at[1], at[2]).unwrap();
     assert_eq!(
@@ -669,9 +697,6 @@ fn upgrade_refuses_a_divergent_previous_build_cell() {
         raw(&state, authored_state),
         "level one's own block still stands at the replaced cell"
     );
-    let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
-        .expect("the committed record is the evidence");
-    assert!(evidence.contains_key(&at));
     let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     assert!(
         cells
@@ -679,25 +704,37 @@ fn upgrade_refuses_a_divergent_previous_build_cell() {
             .any(|cell| cell.at == at && cell.state != state.registry.states.air),
         "level two places a block here"
     );
-    assert_eq!(
-        previous_build_divergence(&state, &cells, &evidence, project.origin[1]),
-        None,
+    assert!(
+        !actions(&state, id, &project, &cells)
+            .iter()
+            .any(|action| matches!(action, Action::Refuse(_))),
         "the previous build's own cell is never a divergence"
     );
 
     let foreign = foreign_block(&state, authored_state);
     state.world.set_block(at[0], at[1], at[2], foreign);
+    let divergence = actions(&state, id, &project, &cells)
+        .into_iter()
+        .find_map(|action| match action {
+            Action::Refuse(divergence) => Some(divergence),
+            Action::Clear(_) => None,
+        })
+        .expect("a foreign block outside the territory refuses the upgrade");
     assert_eq!(
-        previous_build_divergence(&state, &cells, &evidence, project.origin[1]),
-        Some((at, Some(foreign))),
+        (divergence.at, divergence.live),
+        (at, Some(foreign)),
         "the refusal names the divergent cell"
+    );
+    assert_eq!(
+        divergence.reason,
+        site_refusals::Reason::PreviousBuildDiverged
     );
     assert!(
         matches!(
             planned_cells(&state, &project, "oak", &mut Default::default()),
             Err(site_refusals::Reason::PreviousBuildDiverged)
         ),
-        "a foreign block on a planned placement cell refuses the upgrade"
+        "a foreign block outside the territory refuses the upgrade"
     );
 
     // Admission, not the executor: no project, no block write, no receipt and
@@ -708,9 +745,13 @@ fn upgrade_refuses_a_divergent_previous_build_cell() {
         .plugins
         .get_domain("@native-structures", "ledger")
         .cloned();
+    let [x, y, z] = at;
     assert_eq!(
         start_upgrade(&mut state, id, project.building.unwrap()),
-        Err("Construction admission refused: PreviousBuildDiverged.".into())
+        Err(format!(
+            "Construction admission refused: PreviousBuildDiverged at {x},{y},{z}."
+        )),
+        "the player's message names the cell too"
     );
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(foreign));
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
@@ -729,6 +770,50 @@ fn upgrade_refuses_a_divergent_previous_build_cell() {
 }
 
 #[test]
+fn upgrade_clears_a_foreign_block_inside_the_territory() {
+    let (mut state, id, builder, project) = certified_house();
+    let (at, authored_state, _) = replaced_cell(&state, &project);
+    let foreign = foreign_block(&state, authored_state);
+    // Owner D27: everything standing on the village's territory is the village's
+    // property, so a player-built block there is cleared, not refused, and its
+    // drop is the village's.
+    state.world.set_block(at[0], at[1], at[2], foreign);
+    state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default())
+        .expect("a block inside the village's territory never refuses an upgrade");
+    let cut = cells
+        .iter()
+        .position(|cell| cell.at == at && cell.state == state.registry.states.air)
+        .expect("the plan clears the foreign block first");
+    let placed = cells
+        .iter()
+        .position(|cell| cell.at == at && cell.state != state.registry.states.air)
+        .expect("and then places its own block");
+    assert!(
+        cut < placed,
+        "the clear cell precedes the placement, so the debit credits it first"
+    );
+    // Executing the plan clears the foreign block and certifies the upgrade.
+    fund(&mut state, "house", 2);
+    start(&mut state, id, "house", 2, Some(project.building.unwrap()));
+    complete(&mut state, id, builder);
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the upgrade certifies through the cleared cell"
+    );
+    let planned = cells
+        .iter()
+        .find(|cell| cell.at == at && cell.state != state.registry.states.air)
+        .expect("the placement cell")
+        .state;
+    assert_eq!(
+        state.world.block_at(at[0], at[1], at[2]),
+        Some(planned),
+        "the plan's own block stands where the village's property was cleared"
+    );
+}
+
+#[test]
 fn a_state_only_change_is_not_a_previous_build_divergence() {
     let (mut state, id, _, project) = certified_house();
     let (at, authored_state, sibling) = replaced_cell(&state, &project);
@@ -738,26 +823,30 @@ fn a_state_only_change_is_not_a_previous_build_divergence() {
         raw(&state, authored_state),
         "the sibling changes only the state, never the block"
     );
-    let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
-        .expect("the committed record is the evidence");
     let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).expect(
         "a stair reshaped, a door opened, a fence connected or a furnace lit is still the same block",
     );
     assert!(cells.iter().any(|cell| cell.at == at));
-    assert_eq!(
-        previous_build_divergence(&state, &cells, &evidence, project.origin[1]),
-        None
+    assert!(
+        !actions(&state, id, &project, &cells)
+            .iter()
+            .any(|action| matches!(action, Action::Refuse(_))),
+        "the building's own block is placed as planned"
     );
+    // Even outside the territory, a state-only change is the building's own.
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    assert_eq!(refusal_at(&state, &project), None);
 
     let foreign = foreign_block(&state, authored_state);
     state.world.set_block(at[0], at[1], at[2], foreign);
-    assert!(
-        matches!(
-            planned_cells(&state, &project, "oak", &mut Default::default()),
-            Err(site_refusals::Reason::PreviousBuildDiverged)
-        ),
-        "a different raw block in the same cell still refuses"
+    assert_eq!(
+        refusal_at(&state, &project),
+        Some(site_refusals::Reason::PreviousBuildDiverged),
+        "a different raw block in the same cell is a divergence outside the territory"
     );
+    // Inside the territory it is village property: cleared, not refused (D27).
+    state.settlements.get_mut(id).unwrap().radius = 48;
+    assert_eq!(refusal_at(&state, &project), None);
 }
 
 #[test]
@@ -765,13 +854,7 @@ fn an_earlier_levels_untouched_cell_is_upgrade_evidence() {
     let (mut state, id, builder, project) = certified_house();
     // Level two certifies on top of level one.
     fund(&mut state, "house", 2);
-    start(
-        &mut state,
-        id,
-        "house",
-        2,
-        Some(project.building.unwrap()),
-    );
+    start(&mut state, id, "house", 2, Some(project.building.unwrap()));
     complete(&mut state, id, builder);
     assert!(
         state.settlements.get(id).unwrap().projects.is_empty(),
@@ -789,7 +872,9 @@ fn an_earlier_levels_untouched_cell_is_upgrade_evidence() {
     let at = authored(&state, &third, 3)
         .into_iter()
         .find(|(at, id)| {
-            first.get(at).is_some_and(|old| old != id && !clearable(&state, *old))
+            first
+                .get(at)
+                .is_some_and(|old| old != id && !clearable(&state, *old))
                 && !second.contains_key(at)
                 && !second_cleared.contains(at)
         })
@@ -821,15 +906,19 @@ fn committed_records_are_upgrade_evidence_after_a_journal_replay() {
     use crate::journal::JournalEntry;
     let (mut state, id, _, project) = certified_house();
     let (at, _, _) = replaced_cell(&state, &project);
-    assert!(executor::built_at(&state, id, &project.blueprint, project.origin));
+    assert!(executor::built_at(
+        &state,
+        id,
+        &project.blueprint,
+        project.origin
+    ));
     let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
         .expect("evidence before the cycle");
     assert!(evidence.contains_key(&at));
 
     let mut entries = Vec::new();
     crate::plugin::journal(&mut state, &mut entries);
-    let JournalEntry::Plugins { value } = entries.pop().expect("the ledger's post-image")
-    else {
+    let JournalEntry::Plugins { value } = entries.pop().expect("the ledger's post-image") else {
         panic!("the plugin domain journal entry")
     };
     let (mut replayed, again, _) = super::super::tests::fixture();
@@ -854,5 +943,198 @@ fn committed_records_are_upgrade_evidence_after_a_journal_replay() {
             .expect("a cancelled ledger still reads")
             .is_empty(),
         "only committed records are upgrade evidence"
+    );
+}
+
+#[test]
+fn a_later_levels_last_write_wins_in_the_fold() {
+    let (mut state, id, builder, project) = certified_house();
+    let (replaced, first_state, _) = replaced_cell(&state, &project);
+    fund(&mut state, "house", 2);
+    start(&mut state, id, "house", 2, Some(project.building.unwrap()));
+    complete(&mut state, id, builder);
+    let live = state
+        .world
+        .block_at(replaced[0], replaced[1], replaced[2])
+        .unwrap();
+    assert_ne!(
+        raw(&state, live),
+        raw(&state, first_state),
+        "level two replaced level one's block"
+    );
+    let evidence = executor::previous_committed(&state, id, &project.blueprint, project.origin)
+        .expect("the committed chain is the evidence");
+    assert_eq!(
+        raw(&state, evidence[&replaced]),
+        raw(&state, live),
+        "the fold keeps level two's write at a cell both levels wrote, not level one's"
+    );
+    // Only one record writes any position inside a record: `prepare` partitions
+    // the plan into the clear and build stages, and a repair stage re-places a
+    // build cell with its own state, so a level's own stages never conflict.
+}
+
+#[test]
+fn an_unloaded_placement_cell_refuses_as_unloaded() {
+    let (state, id, _, project) = certified_house();
+    let far = [30_000, project.origin[1] + 3, 30_000];
+    let cells = [executor::PlannedCell {
+        at: far,
+        state: state.registry.states.stone,
+        resource: None,
+        quantity: 0,
+    }];
+    let divergence = actions(&state, id, &project, &cells)
+        .into_iter()
+        .find_map(|action| match action {
+            Action::Refuse(divergence) => Some(divergence),
+            Action::Clear(_) => None,
+        })
+        .expect("a cell in an unloaded chunk is a refusal");
+    assert_eq!(divergence.reason, site_refusals::Reason::Unloaded);
+    assert_eq!((divergence.at, divergence.live), (far, None));
+}
+
+#[test]
+fn the_foundation_grant_keeps_the_site_searches_vetoes_outside_the_territory() {
+    let (mut state, id, _, project) = certified_house();
+    // Outside the village's territory the grant is the only way a level's wider
+    // floor may replace its own ground, and the site search's vetoes still hold.
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    let floor = project.origin[1];
+    // One of the level's new width columns, on the previous build's own fill: the
+    // level's wider floor replaces the dirt level one filled there, and grass has
+    // grown over it since.
+    let at = [project.origin[0] + 9, floor, project.origin[2] + 3];
+    let dirt = state.registry.states.dirt;
+    let grass = block(&state, "minecraft:grass_block", &[("snowy", "false")]);
+    let planks = block(&state, "minecraft:oak_planks", &[]);
+    let mut evidence = std::collections::BTreeMap::new();
+    evidence.insert(at, dirt);
+    let cells = [executor::PlannedCell {
+        at,
+        state: planks,
+        resource: None,
+        quantity: 0,
+    }];
+    let divergence = |state: &TickState| {
+        placement_actions(state, id, &cells, &evidence, floor)
+            .into_iter()
+            .find_map(|action| match action {
+                Action::Refuse(divergence) => Some(divergence.reason),
+                Action::Clear(_) => None,
+            })
+    };
+    state.world.set_block(at[0], at[1], at[2], grass);
+    assert_eq!(
+        divergence(&state),
+        None,
+        "grass over the previous build's own foundation fill is the site's ground"
+    );
+
+    // A container is never overwritten: the executor refuses a stocked one only
+    // after the project is paid for, so admission has to refuse here.
+    let chest = block(&state, "minecraft:chest", &[]);
+    let stack = |state: &TickState, name: &str, count: i32| {
+        let item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap();
+        mc_data::ItemStack::new(item, count)
+    };
+    for filled in [false, true] {
+        state.world.set_block(at[0], at[1], at[2], chest);
+        let mut slots = vec![mc_data::ItemStack::EMPTY; 27];
+        if filled {
+            slots[0] = stack(&state, "minecraft:cobblestone", 3);
+        }
+        state.block_entities.insert(
+            (at[0], at[1], at[2]),
+            crate::tick::BlockEntityState {
+                slots,
+                furnace: None,
+            },
+        );
+        assert_eq!(
+            divergence(&state),
+            Some(site_refusals::Reason::PreviousBuildDiverged),
+            "a foreign container on the foundation row refuses (filled: {filled})"
+        );
+    }
+    // Inside the territory it still refuses: clearing a container would lose its
+    // contents, which no drop credit covers.
+    state.settlements.get_mut(id).unwrap().radius = 48;
+    assert_eq!(
+        divergence(&state),
+        Some(site_refusals::Reason::PreviousBuildDiverged),
+        "a container refuses inside the territory too"
+    );
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    state.block_entities.remove(&(at[0], at[1], at[2]));
+
+    // A ground the site search itself refuses is not granted either.
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    state.world.set_block(at[0], at[1], at[2], path);
+    assert_eq!(
+        divergence(&state),
+        Some(site_refusals::Reason::PreviousBuildDiverged),
+        "a floor the site search refuses is not granted"
+    );
+
+    // A retained player edit stays protected while its history is held.
+    state.world.set_block(at[0], at[1], at[2], grass);
+    state.block_log = crate::settlements::forestry::tests::player_history(&state, at, 0);
+    assert!(
+        state.block_log.player_touched(at),
+        "the fixture's player edit is live"
+    );
+    assert_eq!(
+        divergence(&state),
+        Some(site_refusals::Reason::PreviousBuildDiverged),
+        "a player edit on the foundation row refuses while its history is held"
+    );
+
+    // The public admission still refuses as well, with the same cell.
+    assert!(matches!(
+        planned_cells(&state, &project, "oak", &mut Default::default()),
+        Err(site_refusals::Reason::PreviousBuildDiverged)
+    ));
+}
+
+#[test]
+fn a_queued_upgrade_reports_the_cell_and_recovers_when_it_is_cleared() {
+    let (mut state, id, _, project) = certified_house();
+    // Outside the territory the divergent cell refuses, so the queue status has a
+    // refusal to name (inside it would simply be cleared, D27).
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    let (at, authored_state, _) = replaced_cell(&state, &project);
+    let foreign = foreign_block(&state, authored_state);
+    state.world.set_block(at[0], at[1], at[2], foreign);
+    fund(&mut state, "house", 2);
+    let building = project.building.unwrap();
+    access::push_order(
+        state.settlements.get_mut(id).unwrap(),
+        OwnerOrder {
+            seq: 1,
+            blueprint: "house".into(),
+            level: 2,
+            building: Some(building),
+        },
+    );
+    let [x, y, z] = at;
+    assert_eq!(
+        pending_reason_at(&state, id, 0),
+        Some(format!("previous_build_diverged at {x},{y},{z}")),
+        "the owner status names the cell instead of claiming ready"
+    );
+    // Clearing the obstacle makes the same queue slot ready again: the refusal is
+    // a read-only probe, not a stored lifecycle.
+    state.world.set_block(at[0], at[1], at[2], authored_state);
+    assert_eq!(pending_reason_at(&state, id, 0), Some("ready".into()));
+    // And no refusal was recorded for a queued request that never failed.
+    assert!(
+        state.settlements.order_refusal.is_empty(),
+        "no notification is stored until the queue actually retries and fails"
     );
 }

@@ -52,6 +52,48 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
 }
 
 #[test]
+fn an_upgrade_clear_cell_credits_a_foreign_blocks_drop_exactly_once() {
+    use crate::settlements::allocator::tests::block;
+    // Owner D27: inside the village's territory a player-built block is cleared
+    // like any other, and its own vanilla drop is the village's — the debit must
+    // credit a plain solid block, not only foliage.
+    let (mut state, id, builder) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    let mut project = state.settlements.get(id).unwrap().projects[0].clone();
+    project.building = Some(crate::settlements::buildings::BuildingId(1));
+    let handle = project.structure.clone();
+    let uuid = state.entities.row(builder).uuid;
+    project.builder = Some((uuid, None));
+    state.settlements.get_mut(id).unwrap().projects = vec![project];
+    let builder = uuid.to_string();
+    let at = [8, 204, 8];
+    let stone = block(&state, "minecraft:stone", &[]);
+    state.world.set_block(at[0], at[1], at[2], stone);
+    let before = counts(&state);
+    let mut expected = before.clone();
+    for drop in crate::settlements::forestry::roll(&state, at, stone).unwrap() {
+        assert!(!drop.is_empty());
+        *expected.entry(drop.item_id).or_default() += drop.count;
+    }
+    assert_ne!(expected, before, "a solid block drops something");
+    let cells = [super::super::Cell {
+        at,
+        state: state.registry.states.air,
+        resource: None,
+        quantity: 0,
+    }];
+    assert_eq!(
+        debit(&mut state, id, &handle, &builder, &BTreeMap::new(), &cells),
+        Ok(())
+    );
+    assert_eq!(
+        counts(&state),
+        expected,
+        "a foreign solid block's drop is credited exactly once"
+    );
+}
+
+#[test]
 fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
     crate::settlements::construction::tests::fund(&mut state, "storage", 1);

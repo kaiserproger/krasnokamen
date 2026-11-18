@@ -1041,11 +1041,13 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
         resource: None,
         quantity: 0,
     };
+    // No committed build on this site yet: the tree fence has no authored beam
+    // to defer to, exactly as before the evidence map became a parameter.
+    let evidence =
+        executor::previous_committed(&state, id, "house", root).expect("committed chain");
     let cleared = executor::upgrade_trees_clear(
         &state,
-        id,
-        "house",
-        root,
+        &evidence,
         std::slice::from_ref(&cell),
         Some(lot),
         &mut forestry::Clearance::default(),
@@ -1061,9 +1063,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     assert!(matches!(
         executor::upgrade_trees_clear(
             &state,
-            id,
-            "house",
-            root,
+            &evidence,
             std::slice::from_ref(&cell),
             Some(lot),
             &mut forestry::Clearance::default(),
@@ -1078,9 +1078,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     assert!(matches!(
         executor::upgrade_trees_clear(
             &state,
-            id,
-            "house",
-            root,
+            &evidence,
             std::slice::from_ref(&cell),
             Some(lot),
             &mut forestry::Clearance::default(),
@@ -1097,9 +1095,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     assert!(matches!(
         executor::upgrade_trees_clear(
             &state,
-            id,
-            "house",
-            root,
+            &evidence,
             std::slice::from_ref(&cell),
             Some(lot),
             &mut forestry::Clearance::default(),
