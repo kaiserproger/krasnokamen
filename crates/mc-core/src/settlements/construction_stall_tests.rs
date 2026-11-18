@@ -473,8 +473,8 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
     );
 }
 
-/// A pause in the build stage, even before its first paid cell, is a resume on
-/// the same structure handle: only a clear-stage stale tree certification cancels.
+/// A build-stage material refusal keeps the same handle without a stale pause;
+/// only a preparation-stage stale tree certification can cancel unpaid work.
 #[test]
 fn a_build_stage_refusal_before_payment_keeps_the_same_handle_without_a_pause() {
     let (mut state, id, builder) = fixture();
@@ -523,7 +523,7 @@ fn a_build_stage_refusal_before_payment_keeps_the_same_handle_without_a_pause() 
     let uuid = state.entities.row(builder).uuid;
     assert_eq!(
         executor::advance(&mut state, id, &structure, uuid),
-        Err(mc_script::ScriptOperationFailure::Blocked)
+        Err(mc_script::ScriptOperationFailure::InsufficientItems)
     );
     assert_eq!(
         executor::status(&state, id, &structure)

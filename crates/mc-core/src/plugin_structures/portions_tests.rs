@@ -7,12 +7,32 @@ use mc_data::ItemStack;
 #[test]
 fn implicit_preparation_tools_use_the_lowest_suitable_ordinary_tier() {
     let (state, _, _, _) = plan();
-    for (name, tool_name) in [
-        ("minecraft:cobblestone", "minecraft:wooden_pickaxe"),
-        ("minecraft:iron_ore", "minecraft:stone_pickaxe"),
-        ("minecraft:diamond_ore", "minecraft:iron_pickaxe"),
-        ("minecraft:obsidian", "minecraft:diamond_pickaxe"),
-        ("minecraft:snow", "minecraft:wooden_shovel"),
+    for (name, tool_name, drop_name) in [
+        (
+            "minecraft:cobblestone",
+            "minecraft:wooden_pickaxe",
+            "minecraft:cobblestone",
+        ),
+        (
+            "minecraft:iron_ore",
+            "minecraft:stone_pickaxe",
+            "minecraft:raw_iron",
+        ),
+        (
+            "minecraft:diamond_ore",
+            "minecraft:iron_pickaxe",
+            "minecraft:diamond",
+        ),
+        (
+            "minecraft:obsidian",
+            "minecraft:diamond_pickaxe",
+            "minecraft:obsidian",
+        ),
+        (
+            "minecraft:snow",
+            "minecraft:wooden_shovel",
+            "minecraft:snowball",
+        ),
     ] {
         let block = block(&state, name, &[]);
         let definition = state
@@ -26,6 +46,18 @@ fn implicit_preparation_tools_use_the_lowest_suitable_ordinary_tier() {
             tool_name
         );
         assert!(tool.enchantments.is_empty());
+        let drops = conserved_drops(&state, [8, 201, 4], block).unwrap();
+        assert!(!drops.is_empty(), "{name} must yield normal mining loot");
+        assert!(drops.iter().all(|stack| {
+            stack.count > 0
+                && state
+                    .registry
+                    .items
+                    .name_of(stack.item_id)
+                    .unwrap()
+                    .as_str()
+                    == drop_name
+        }));
     }
 }
 

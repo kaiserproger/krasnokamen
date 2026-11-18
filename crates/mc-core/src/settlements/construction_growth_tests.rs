@@ -284,6 +284,14 @@ fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
 fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
     for level in 1..=2 {
         let (mut state, id, builder) = fixture();
+        // Autonomous upgrades bypass fund(level > 1), but still need real
+        // canonical destruction loot for the standing house's replaced cells.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
         open_plan(&mut state);
         fund(&mut state, "spanish_house", 1);
         start(&mut state, id, "spanish_house", 1, None);
