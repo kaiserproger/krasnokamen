@@ -1298,6 +1298,54 @@ fn a_placement_over_one_half_of_a_double_chest_credits_into_another_storage() {
     );
 }
 
+#[test]
+fn repeated_repair_replaces_its_certificate() {
+    repair_certificate_after_replacing_the_old_tail(false);
+}
+
+#[test]
+fn repeated_recovery_truncates_the_old_certificate() {
+    repair_certificate_after_replacing_the_old_tail(true);
+}
+
+fn repair_certificate_after_replacing_the_old_tail(recover: bool) {
+    let mut s = scene(
+        None,
+        &[],
+        &[],
+        &[
+            (Fill, 5, "minecraft:dirt", Some("minecraft:dirt")),
+            (Build, 6, "minecraft:oak_log", Some("minecraft:oak_log")),
+        ],
+    );
+    assert!(!step(&mut s).unwrap());
+    assert!(step(&mut s).unwrap());
+    set(&mut s, 5, "minecraft:air");
+    set(&mut s, 6, "minecraft:air");
+    let repair = |s: &mut Scene| {
+        if recover {
+            executor::recover(&mut s.state, s.id, &s.handle)
+        } else {
+            executor::reopen_emptied(&mut s.state, s.id, &s.handle)
+        }
+    };
+    assert_eq!(repair(&mut s), Ok(true));
+    crate::plugin_structures::validate(&s.state).unwrap();
+    assert!(!step(&mut s).unwrap());
+    assert!(step(&mut s).unwrap());
+    set(&mut s, 5, "minecraft:air");
+    // Both real completion paths replace a committed two-cell repair with a
+    // one-cell repair, rather than retaining its old certificate shape.
+    assert_eq!(repair(&mut s), Ok(true));
+    crate::plugin_structures::validate(&s.state).unwrap();
+    assert!(step(&mut s).unwrap());
+    assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:dirt")));
+    assert_eq!(at(&s, 6), Some(named(&s.state, "minecraft:oak_log")));
+    assert_eq!(carried(&s, "minecraft:dirt"), 13);
+    assert_eq!(carried(&s, "minecraft:oak_log"), 14);
+    crate::plugin_structures::validate(&s.state).unwrap();
+}
+
 fn lapse(s: &mut Scene) {
     s.state.block_log = crate::block_log::BlockLog::restore(
         crate::config::BlockLogSettings {
