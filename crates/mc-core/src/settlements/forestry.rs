@@ -788,9 +788,7 @@ pub(crate) fn stalls_clearing(
         .world
         .physics_block_at(at[0], at[1], at[2])
         .is_some_and(|block| tree_or_sapling(state, block))
-        && !Clearance::verify()
-            .within(record)
-            .clearable(state, at, lot)
+        && !Clearance::verify().within(record).clearable(state, at, lot)
 }
 
 pub(crate) fn lot_bounds(
