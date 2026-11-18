@@ -414,8 +414,12 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let expected = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
     let tail = journal_entries_for_tick(&mut state, &output).unwrap();
+    // The controls image rides `EntityState` (the touched-set record) or a full
+    // image; an appearance-only change may now be a compact delta that carries no
+    // state, so the record kind is not the contract.
     assert!(tail.iter().any(|entry| matches!(entry,
-        JournalEntry::Entity { id: entity, state: image, .. }
+        JournalEntry::EntityState { id: entity, state: image, .. }
+        | JournalEntry::Entity { id: entity, state: image, .. }
             if *entity == id.0 && image.controls.no_gravity && image.controls.invulnerable)));
     writer.append(output.tick, output.tick, &tail).unwrap();
     writer.flush().unwrap();
