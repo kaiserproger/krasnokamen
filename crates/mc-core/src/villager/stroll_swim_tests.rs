@@ -500,3 +500,226 @@ fn meeting_arrival_stops_committed_motion_but_not_a_different_delivery() {
         "a different destination must still be approached"
     );
 }
+
+/// VILLAGER-SWIM-BOBS-ABOVE-BED-WAYPOINT: the allocator gives a cell of
+/// one-block water the bed top under it as its standing point
+/// (`allocator::standing`), while Swim holds the body 0.59-0.73 above that
+/// point (Spain trace, Farmer 45, ticks 111148-111150). The waypoint must be
+/// committed on the arrival proof, not when the bob dips under the band.
+fn one_deep_channel(state: &mut TickState) {
+    let water = block(state, "minecraft:water", &[]);
+    for x in 4..=12 {
+        state.world.set_block(x, 201, 8, water);
+    }
+    state.world.fold_overlay();
+}
+
+#[test]
+fn a_swimmer_over_a_bed_waypoint_advances_before_the_bob_dips() {
+    let mut state = test_state();
+    one_deep_channel(&mut state);
+    // The trace height: feet 0.70 above the bed top of the waypoint cell, dead
+    // over its centre, as the bob holds them at ticks 111148-111150.
+    let slot = villager(&mut state, [7.5, 201.70, 8.5]);
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, false);
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    v.activity = Activity::Idle;
+    let waypoint = BlockPos { x: 7, y: 201, z: 8 };
+    let onward = BlockPos { x: 8, y: 201, z: 8 };
+    v.navigation_path = vec![onward, waypoint];
+    move_committed(&mut state, slot, &mut v, Activity::Idle);
+    assert_eq!(
+        v.navigation_path,
+        vec![onward],
+        "a swimmer 0.70 above its water-bed waypoint must commit it"
+    );
+}
+
+#[test]
+fn a_swimming_resident_does_not_hover_over_its_waypoint() {
+    let mut state = test_state();
+    one_deep_channel(&mut state);
+    // Dead over the first waypoint at the trace height, so the first tick meets
+    // the 0.6-1.0 band by construction and every later one is measured.
+    let slot = villager(&mut state, [6.5, 201.70, 8.5]);
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, false);
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    v.activity = Activity::Idle;
+    // The next waypoint is the path's last element: cells 6, 7, 8, 9 east.
+    v.navigation_path = (6..=9)
+        .rev()
+        .map(|x| BlockPos { x, y: 201, z: 8 })
+        .collect();
+    let (mut bobs, mut hold, mut worst, mut advanced) = (0, 0, 0, 0);
+    for _ in 0..80 {
+        let pos = state.entities.pos(slot);
+        let next = v.navigation_path.last().copied();
+        let before = v.navigation_path.len();
+        move_committed(&mut state, slot, &mut v, Activity::Idle);
+        state.tick += 1;
+        let Some(next) = next else { break };
+        // A full-block bed puts the standing point on the waypoint cell's own y.
+        let gap = pos[1] - f64::from(next.y);
+        let banded = (0.6..1.0).contains(&gap);
+        let near = (pos[0] - (f64::from(next.x) + 0.5)).powi(2)
+            + (pos[2] - (f64::from(next.z) + 0.5)).powi(2)
+            < crate::villager::brain::WAYPOINT_REACH.powi(2);
+        if near && banded {
+            bobs += 1;
+            if v.navigation_path.len() == before {
+                hold += 1;
+                worst = worst.max(hold);
+                continue;
+            }
+        }
+        hold = 0;
+        if v.navigation_path.len() < before {
+            advanced += 1;
+        }
+    }
+    assert!(
+        bobs >= 1,
+        "setup: the swimmer must meet the 0.6-1.0 band over its waypoint ({bobs} ticks)"
+    );
+    assert_eq!(
+        worst, 0,
+        "the swimmer hovered {worst} ticks over its water-bed waypoint instead of advancing"
+    );
+    assert_eq!(advanced, 4, "every channel waypoint is committed");
+}
+
+#[test]
+fn a_dry_body_above_its_waypoint_keeps_the_tight_vertical_band() {
+    // The only guard against widening the band for every body: the D6 ledge
+    // test starts exactly 1.0 above its waypoint and would stay green under a
+    // global `< 1.0`. Only a body overlapping fluid gets the one-cell band.
+    let mut state = test_state();
+    let slot = villager(&mut state, [7.5, 201.70, 8.5]);
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, false);
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    v.activity = Activity::Idle;
+    v.navigation_path = vec![
+        BlockPos { x: 8, y: 201, z: 8 },
+        BlockPos { x: 7, y: 201, z: 8 },
+    ];
+    move_committed(&mut state, slot, &mut v, Activity::Idle);
+    assert_eq!(
+        v.navigation_path.len(),
+        2,
+        "a dry body 0.70 above its waypoint must keep it committed"
+    );
+}
+
+#[test]
+fn an_unsupported_waypoint_keeps_the_tight_band_for_a_wet_body() {
+    // `standing == None` falls back to `centre(cell)` (`allocator.rs:424-430`),
+    // whose y is the cell's own y (motion.rs:493): an unsupported node is a
+    // route that changed under the body, so the wide wet band must not apply.
+    let mut state = test_state();
+    let water = block(&state, "minecraft:water", &[]);
+    for x in 4..=12 {
+        // Water where the body floats, nothing under it: no standing point and
+        // no floating stand, so the route falls back to the cell centre.
+        state.world.set_block(x, 200, 8, state.registry.states.air);
+        state.world.set_block(x, 201, 8, water);
+    }
+    state.world.fold_overlay();
+    let waypoint = BlockPos { x: 7, y: 201, z: 8 };
+    let onward = BlockPos { x: 8, y: 201, z: 8 };
+    // A floater 0.3 under the water surface is 0.70 above the cell bottom.
+    let slot = villager(&mut state, [7.5, 201.70, 8.5]);
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, false);
+    assert!(
+        crate::settlements::allocator::standing(&state.world, &state.registry, waypoint, 0.3, 1.95)
+            .is_none(),
+        "setup: the waypoint has no support"
+    );
+    let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+    v.activity = Activity::Idle;
+    v.navigation_path = vec![onward, waypoint];
+    move_committed(&mut state, slot, &mut v, Activity::Idle);
+    assert_eq!(
+        v.navigation_path,
+        vec![onward, waypoint],
+        "a wet body 0.70 above the fallback centre must not take the unsupported waypoint"
+    );
+}
+
+#[test]
+fn a_skipped_swim_decision_advances_a_bed_waypoint_before_the_bob_dips() {
+    // Between brain decisions the resident moves through `move_skipped`; both
+    // arrival sites must apply the same proof.
+    let mut state = test_state();
+    one_deep_channel(&mut state);
+    let start = [7.5, 201.70, 8.5];
+    let slot = villager(&mut state, start);
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, false);
+    let waypoint = BlockPos { x: 7, y: 201, z: 8 };
+    let onward = BlockPos { x: 8, y: 201, z: 8 };
+    let mut v = VillagerState {
+        activity: Activity::Idle,
+        navigation_path: vec![onward, waypoint],
+        navigation_target: Some(onward),
+        ..VillagerState::default()
+    };
+    capture_route(&state, &mut v, start, true);
+    state.entities.row_mut(slot).villager = Some(Box::new(v));
+    move_skipped(&mut state, slot, false, false, Activity::Idle);
+    let v = state.entities.row(slot).villager.as_ref().unwrap();
+    assert_eq!(
+        v.navigation_path,
+        vec![onward],
+        "a skipped decision must commit the water-bed waypoint too"
+    );
+}
+
+/// The reviewer's bank hazard: `body_overlaps_fluid` samples block rows, so a
+/// resident standing on dirt-path banks level with the water counts as wet. It
+/// must still wade the ford and climb out on the far bank (green on both trees).
+#[test]
+fn a_resident_wading_a_ford_with_dirt_path_banks_climbs_out_onto_the_far_bank() {
+    let mut state = test_state();
+    let water = block(&state, "minecraft:water", &[]);
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    for z in 0..16 {
+        for x in 6..=7 {
+            state
+                .world
+                .set_block(x, 199, z, state.registry.states.stone);
+            state.world.set_block(x, 200, z, water);
+        }
+        for x in [5, 8] {
+            state.world.set_block(x, 200, z, path);
+        }
+    }
+    state.world.fold_overlay();
+    let slot = villager(&mut state, [4.5, 201.0, 8.5]);
+    let target = BlockPos {
+        x: 10,
+        y: 201,
+        z: 8,
+    };
+    let mut v = VillagerState::default();
+    let mut cache = PoiCache::default();
+    let mut wet = false;
+    for _ in 0..400 {
+        move_to(&mut state, &mut cache, slot, &mut v, Some(target), false);
+        state.tick += 1;
+        let pos = state.entities.pos(slot);
+        wet |= pos[1] < 200.9;
+        if pos[0] > 8.3 && pos[1] >= 200.9375 && state.entities.ground(slot) {
+            break;
+        }
+    }
+    let pos = state.entities.pos(slot);
+    assert!(wet, "setup: the route wades the channel");
+    assert!(
+        pos[0] > 8.3 && pos[1] >= 200.9375 && state.entities.ground(slot),
+        "resident must climb out onto the dirt-path bank, stopped at {pos:?}"
+    );
+}
