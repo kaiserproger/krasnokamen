@@ -1104,8 +1104,8 @@ fn chest(state: &TickState) -> Vec<mc_data::ItemStack> {
 fn outpost_sites_are_ordinary_projects_one_per_site() {
     let (mut state, parent, expedition) = prepared(0);
     fund_sites(&mut state, &expedition.sites()[..2]);
-    // Cap-agnostic: one admission per pass until the project set is full, so
-    // with the cap raised both funded sites run in parallel.
+    // One admission per pass; the joint proof funds exactly the two sites
+    // the stock covers together, so both run side by side.
     for _ in 0..6 {
         plan(&mut state, parent);
     }
@@ -1113,10 +1113,7 @@ fn outpost_sites_are_ordinary_projects_one_per_site() {
     let owned: Vec<_> = projects(record)
         .filter(|project| owns_project(record, project))
         .collect();
-    // Joint funding of several sites is the executor's proof (S2); here only
-    // that the funded sites run side by side as far as the cap allows.
-    assert!(owned.len() >= MAX_PROJECTS.min(2));
-    assert!(owned.len() <= MAX_PROJECTS);
+    assert_eq!(owned.len(), 2);
     assert_eq!(owned.len(), projects(record).count());
     let origins: std::collections::BTreeSet<_> = owned.iter().map(|p| p.origin).collect();
     let handles: std::collections::BTreeSet<_> = owned.iter().map(|p| &p.structure).collect();
@@ -1137,6 +1134,7 @@ fn a_site_under_construction_is_never_admitted_twice() {
         .map(|project| project.structure.clone())
         .collect::<Vec<_>>();
     assert_eq!(first.len(), 1);
+    // The other sites are fundable alone but not jointly with the first.
     let stock = chest(&state);
     for _ in 0..4 {
         plan(&mut state, parent);
@@ -1153,8 +1151,7 @@ fn a_site_under_construction_is_never_admitted_twice() {
         1,
         "the site keeps its single project"
     );
-    let origins: std::collections::BTreeSet<_> = projects(record).map(|p| p.origin).collect();
-    assert_eq!(origins.len(), projects(record).count());
+    assert_eq!(projects(record).count(), 1, "the joint proof refuses more");
     assert_eq!(chest(&state), stock, "no new reservation or movement");
 }
 
