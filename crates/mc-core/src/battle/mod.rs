@@ -26,6 +26,7 @@ pub(crate) mod ids;
 pub(crate) mod live_players;
 pub(crate) mod morale;
 pub(crate) mod persistence;
+mod probe;
 pub(crate) mod retaliation;
 pub mod staging;
 pub(crate) mod steering;
@@ -90,6 +91,9 @@ pub(crate) struct BattleState {
     /// `info` lines for the campaign bound, runtime-only and never persisted.
     #[serde(skip)]
     pub exposure: exposure::Exposure,
+    /// Facing counters of the phase log (probe.rs), runtime-only.
+    #[serde(skip)]
+    pub probe: probe::Probe,
     #[serde(skip)]
     pub(crate) journaled: Option<persistence::Journaled>,
     #[cfg(test)]
@@ -389,6 +393,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     let mut mark = start;
     let mut battle = std::mem::take(&mut state.hostile.battle);
     battle.work = Work::default();
+    battle.probe.counts = probe::Counts::default();
     let mut output = std::mem::take(&mut battle.output);
     if !battle.running {
         battle
@@ -455,6 +460,13 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     #[cfg(test)]
     if battle.trace.is_some() {
         battle.trace = Some(trace_tests::frame_digest(&battle, &output));
+    }
+    if start.is_some() {
+        let mut probe = std::mem::take(&mut battle.probe);
+        probe.observe(&frame, &battle);
+        battle.probe = probe;
+        // Not timed: the next phase starts after the counters.
+        phase_us(&mut mark);
     }
     battle.elapsed_ticks += 1;
     state.hostile.events.append(&mut output.events);

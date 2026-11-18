@@ -2024,7 +2024,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         );
         let battle = state.hostile.battle.timings;
         eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={} stepped_battle_rows={} battle_rows={}",
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={} stepped_battle_rows={} battle_rows={} {}",
             battle.total_us,
             battle.counters_us,
             battle.formation_us,
@@ -2038,6 +2038,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             battle.emit_us,
             rows.iter().filter(|row| row.battle).count(),
             state.entities.battle_slots().count(),
+            state.hostile.battle.probe.counts,
         );
     }
     rows.clear();
