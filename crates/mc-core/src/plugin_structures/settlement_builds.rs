@@ -662,28 +662,44 @@ pub(super) fn debit(
     // clears natural forest or a registered tree must credit the same drops.
     let preparing = true;
     // A solid cell may not be placed through another project's builder: that
-    // body is not this site's to trap (D8 review SOL-4).
+    // body is not this site's to trap (D8 review SOL-4). The body is a box, not
+    // a column: at 0.6 wide it straddles a cell edge and at 1.95 tall it owns
+    // the cell above, so every non-air cell is tested against the whole box
+    // (D8 review R3-3).
+    let elsewhere: Vec<uuid::Uuid> = state
+        .settlements
+        .get(id)
+        .map(|record| {
+            crate::settlements::construction::projects(record)
+                .filter(|other| other.structure != handle)
+                .filter_map(|other| other.builder.map(|(bound, _)| bound))
+                .collect()
+        })
+        .unwrap_or_default();
     for cell in cells
         .iter()
         .filter(|cell| cell.state != state.registry.states.air)
     {
         for resident in crate::settlements::construction::residents(state, id) {
-            let pos = state.entities.pos(resident);
-            if [0, 1, 2]
-                .into_iter()
-                .any(|axis| pos[axis].floor() as i32 != cell.at[axis])
-            {
+            if !elsewhere.contains(&state.entities.row(resident).uuid) {
                 continue;
             }
             let body = state.entities.body(resident);
-            let uuid_here = state.entities.row(resident).uuid;
-            let bound_elsewhere = state.settlements.get(id).is_some_and(|record| {
-                crate::settlements::construction::projects(record).any(|other| {
-                    other.structure != handle
-                        && other.builder.is_some_and(|(bound, _)| bound == uuid_here)
-                })
+            if body.height <= 0.0 || body.half_width <= 0.0 {
+                continue;
+            }
+            let pos = state.entities.pos(resident);
+            let lo = [pos[0] - body.half_width, pos[1], pos[2] - body.half_width];
+            let hi = [
+                pos[0] + body.half_width,
+                pos[1] + body.height,
+                pos[2] + body.half_width,
+            ];
+            let intersects = (0..3).all(|axis| {
+                let min = f64::from(cell.at[axis]);
+                lo[axis] < min + 1.0 && hi[axis] > min
             });
-            if bound_elsewhere && body.height > 0.0 {
+            if intersects {
                 return Err(Failure::Blocked);
             }
         }

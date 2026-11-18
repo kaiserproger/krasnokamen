@@ -92,6 +92,55 @@ fn preparation_target(
     preparation_stand(state, slot, project, next, base)
 }
 
+/// Whether a body standing with its feet at `pos` and these dimensions overlaps
+/// another active project's authored box. A villager is a box, not a column:
+/// 0.6 wide it straddles a cell edge, and 1.95 tall it owns the cell above, so
+/// a feet-column test lets a neighbour lot's walls cross it (D8 review SOL-4,
+/// R3-4/R3-5). The own-site test already uses the body this way.
+fn in_other_body(
+    state: &TickState,
+    project: &construction::Project,
+    pos: [f64; 3],
+    half_width: f64,
+    height: f64,
+) -> bool {
+    if half_width <= 0.0 || height <= 0.0 {
+        return false;
+    }
+    let lo = [pos[0] - half_width, pos[1], pos[2] - half_width];
+    let hi = [pos[0] + half_width, pos[1] + height, pos[2] + half_width];
+    construction::projects_of(&state.settlements, project.settlement)
+        .filter(|other| other.structure != project.structure)
+        .filter_map(|other| construction::footprint(state, other))
+        .any(|bounds| {
+            (0..3).all(|axis| {
+                lo[axis] < f64::from(bounds.max[axis]) + 1.0
+                    && hi[axis] > f64::from(bounds.min[axis])
+            })
+        })
+}
+
+/// The same test for a stand on the centre of cell `at`.
+fn standing_in_other_body(
+    state: &TickState,
+    project: &construction::Project,
+    slot: EntitySlot,
+    at: BlockPos,
+) -> bool {
+    let body = state.entities.body(slot);
+    in_other_body(
+        state,
+        project,
+        [
+            f64::from(at.x) + 0.5,
+            f64::from(at.y),
+            f64::from(at.z) + 0.5,
+        ],
+        body.half_width,
+        body.height,
+    )
+}
+
 /// A dry footing near the cell `next` that the builder's body can stand on
 /// and from which, once arrived, it is within felling reach of `base`, the
 /// cell's own footing.
@@ -121,6 +170,11 @@ pub(super) fn preparation_stand(
             ) else {
                 continue;
             };
+            // A neighbour lot's future body is not a stand: that project would
+            // place a wall through this builder (D8 review SOL-4/R3-4).
+            if standing_in_other_body(state, project, slot, at) {
+                continue;
+            }
             // Seed 24 then parked a builder for 51,000 ticks beside a pen,
             // walking toward the top of a fence post: `footing` counts the
             // 1.5-high fence as ground, but no body can stand on it. The stand
@@ -179,10 +233,14 @@ fn site_target(
         return Some(stand);
     }
     if project.blueprint == construction::furnace::NAME {
-        return construction::furnace::stand(state, project, next).map(block_pos);
+        return construction::furnace::stand(state, project, next)
+            .map(block_pos)
+            .filter(|at| !standing_in_other_body(state, project, slot, *at));
     }
     if layout::infra(&project.blueprint) {
-        return layout::stand(state, project, next).map(block_pos);
+        return layout::stand(state, project, next)
+            .map(block_pos)
+            .filter(|at| !standing_in_other_body(state, project, slot, *at));
     }
     let blueprint = blueprints::get(&state.registry, &project.blueprint)?;
     let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
@@ -222,13 +280,9 @@ fn site_target(
             continue;
         };
         // A neighbour lot's future body is not a stand: another project would
-        // place a wall through this builder (D8 review SOL-4).
-        let column = [
-            stand[0].floor() as i32,
-            stand[1].floor() as i32,
-            stand[2].floor() as i32,
-        ];
-        if construction::in_other_footprint(state, project.settlement, &project.structure, column) {
+        // place a wall through this builder. The body, not the feet column, is
+        // what must stay clear (D8 review SOL-4/R3-5).
+        if in_other_body(state, project, stand, body.half_width, body.height) {
             continue;
         }
         let placement_distance = (stand[0] - f64::from(next[0]) - 0.5).powi(2)
@@ -316,7 +370,17 @@ fn in_reach(
     if let Some(base) = preparation_footing(state, project, next) {
         // As with lumberjacks, felling is rooted at the trunk's footing; its
         // crown need not be reachable as an independently placed roof block.
-        if super::mining::near(state, slot, base, PREPARATION_REACH) {
+        // Standing inside a neighbour lot's future body is never in reach: that
+        // project would place a wall through this builder (SOL-4/R3-4).
+        let body = state.entities.body(slot);
+        if !in_other_body(
+            state,
+            project,
+            state.entities.pos(slot),
+            body.half_width,
+            body.height,
+        ) && super::mining::near(state, slot, base, PREPARATION_REACH)
+        {
             return true;
         }
         // Only a cell with no stand in felling reach falls back to the
@@ -326,7 +390,8 @@ fn in_reach(
         }
     }
     let pos = state.entities.pos(slot);
-    let width = state.entities.body(slot).half_width;
+    let body = state.entities.body(slot);
+    let (width, height) = (body.half_width, body.height);
     if layout::infra(&project.blueprint) || project.blueprint == construction::furnace::NAME {
         // Roads and meadows are walked on while worked; a lamp or furnace
         // column must stay clear of the builder's whole body.
@@ -335,7 +400,9 @@ fn in_reach(
                 let min = f64::from(next[axis]);
                 pos[axis] + width <= min || pos[axis] - width >= min + 1.0
             });
-        return clear && super::mining::near(state, slot, block_pos(next), REACH);
+        return clear
+            && !in_other_body(state, project, pos, width, height)
+            && super::mining::near(state, slot, block_pos(next), REACH);
     }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
         return false;
@@ -351,14 +418,10 @@ fn in_reach(
     if !outside {
         return false;
     }
-    let column = [
-        pos[0].floor() as i32,
-        pos[1].floor() as i32,
-        pos[2].floor() as i32,
-    ];
     // Standing inside a neighbour lot's future cells would put a wall through
-    // this builder (D8 review SOL-4).
-    !construction::in_other_footprint(state, project.settlement, &project.structure, column)
+    // this builder: the body's own box decides, not the feet column
+    // (D8 review SOL-4/R3-5).
+    !in_other_body(state, project, pos, width, height)
         && super::mining::near(state, slot, block_pos(next), REACH)
 }
 
@@ -550,3 +613,10 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
 #[cfg(test)]
 #[path = "building_site_reach_tests.rs"]
 mod site_reach_tests;
+
+/// Cross-project body and stand safety (D8 review SOL-4/R3-3..R3-5). The file
+/// lives beside the settlement tests but is registered here: it asserts on this
+/// module's private predicates with the body predicates it exercises.
+#[cfg(test)]
+#[path = "../settlements/construction_body_safety_tests.rs"]
+mod body_safety_tests;
