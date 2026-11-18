@@ -666,6 +666,28 @@ pub(super) fn debit(
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
     if preparing {
+        // A free pavement cell re-lays the village work it stands on, never
+        // lays a block from nothing: if the player dug that work out, the
+        // project pauses instead of paving air.
+        let pavement = crate::settlements::construction::relayout::dirt_path(state);
+        for cell in cells.iter().filter(|cell| {
+            cell.resource.is_none() && cell.quantity == 0 && Some(cell.state) == pavement
+        }) {
+            let block = state
+                .world
+                .block_at(cell.at[0], cell.at[1], cell.at[2])
+                .ok_or(Failure::Unloaded)?;
+            let worked = state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(block))
+                .is_some_and(|definition| {
+                    matches!(definition.block.id.path(), "dirt_path" | "farmland")
+                });
+            if !worked {
+                return Err(Failure::Blocked);
+            }
+        }
         for cell in cells
             .iter()
             .filter(|cell| cell.state == state.registry.states.air)

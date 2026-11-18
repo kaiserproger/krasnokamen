@@ -609,7 +609,7 @@ fn within(nodes: &Nodes, seeds: &[(i32, i32)]) -> HashSet<(i32, i32)> {
     seen
 }
 
-fn dirt_path(state: &TickState) -> Option<u32> {
+pub(crate) fn dirt_path(state: &TickState) -> Option<u32> {
     layout::paved_state(state)
 }
 

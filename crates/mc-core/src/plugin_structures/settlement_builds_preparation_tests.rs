@@ -88,3 +88,45 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
         assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     }
 }
+
+#[test]
+fn a_player_dug_pavement_cell_pauses_instead_of_paving_air() {
+    let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    crate::settlements::construction::tests::fund(&mut state, "storage", 1);
+    crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
+    let builder = state.entities.row(builder).uuid.to_string();
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    let cells = [super::super::Cell {
+        at: root,
+        state: path,
+        resource: None,
+        quantity: 0,
+    }];
+    state.world.set_block(root[0], root[1], root[2], path);
+    state.world.fold_overlay();
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert_eq!(
+        debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+        Ok(()),
+        "village work under the cell is re-laid free"
+    );
+    assert_eq!(
+        state.block_entities[&(1, 201, 1)].slots.clone(),
+        stock,
+        "paving natural work charges nothing"
+    );
+    // The player digs the work out before the project resumes: the same free
+    // cell would be a block from nothing, so the project pauses instead.
+    state
+        .world
+        .set_block(root[0], root[1], root[2], state.registry.states.air);
+    assert_eq!(
+        debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+        Err(Failure::Blocked)
+    );
+    assert_eq!(
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(state.registry.states.air),
+        "air is never paved over"
+    );
+}
