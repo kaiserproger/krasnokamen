@@ -733,6 +733,34 @@ fn village_property_inside_the_territory_ignores_history_and_provenance() {
     }
 }
 
+/// Owner D27.4: the stall watch names a protected tree only when the clear
+/// stage really may not cut it; inside the territory a player's log is the
+/// village's and stalls nothing.
+#[test]
+fn a_player_log_stalls_clearing_outside_the_territory_only() {
+    let (mut state, id, _, project, root, _) = forest();
+    let player_log = [root[0] + 1, root[1] + 3, root[2]];
+    let log = block(&state, "minecraft:birch_log", &[]);
+    state
+        .world
+        .set_block(player_log[0], player_log[1], player_log[2], log);
+    state.block_log = player_history(&state, player_log, 0);
+    let lot = lot_bounds(&state, &project);
+    let record = state.settlements.get(id).unwrap();
+    assert!(record.contains(player_log));
+    assert!(
+        !stalls_clearing(&state, record, player_log, lot),
+        "inside the territory the player's log is the village's"
+    );
+    let record = state.settlements.get_mut(id).unwrap();
+    record.anchor = [root[0] + 1_000, root[1], root[2]];
+    record.radius = 8;
+    assert!(
+        stalls_clearing(&state, state.settlements.get(id).unwrap(), player_log, lot),
+        "outside the territory the player's log stalls the clear stage"
+    );
+}
+
 #[test]
 fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
     let (mut state, id, builder, _, root, _) = forest();

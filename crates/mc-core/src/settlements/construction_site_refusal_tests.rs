@@ -337,6 +337,38 @@ fn persistent_and_retained_player_foliage_report_protected_obstruction_outside_t
     }
 }
 
+/// Owner D27.4: inside the territory a refused tree cell is never named after
+/// player history or the persistent-leaf mark; a cell of the settlement's own
+/// planted crown still names the planting. Outside, the history names it.
+#[test]
+fn a_refused_tree_cell_is_named_without_player_history_inside_the_territory() {
+    let (mut state, id, _, _, root, _) = super::super::super::forestry::tests::forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let at = [root[0] + 1, root[1] + 4, root[2]];
+    let leaf = crate::settlements::allocator::tests::block(
+        &state,
+        "minecraft:birch_leaves",
+        &[("persistent", "true")],
+    );
+    state.world.set_block(at[0], at[1], at[2], leaf);
+    state.block_log = super::super::super::forestry::tests::player_history(&state, at, 0);
+    assert_eq!(
+        tree_refusal(&state, at, false),
+        Reason::ProtectedObstruction,
+        "outside the territory the player's edit names the refusal"
+    );
+    assert_eq!(
+        tree_refusal(&state, at, true),
+        Reason::AmbiguousFoliage,
+        "inside the territory the planted crown names it"
+    );
+}
+
 #[test]
 fn natural_zone_terrain_keeps_its_shape_without_a_building_setback() {
     use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
