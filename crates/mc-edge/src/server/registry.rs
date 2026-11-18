@@ -385,6 +385,21 @@ impl ConnectionRegistry {
         (handles, names)
     }
 
+    /// Every handle copy plus the pending roster, for tests that build a fresh
+    /// routing view for one tick. Production keeps the view across ticks and
+    /// uses [`routing_snapshot`](Self::routing_snapshot).
+    #[cfg(test)]
+    pub(crate) fn routing_view(
+        &self,
+    ) -> (
+        HashMap<ConnectionId, ConnectionHandles>,
+        Option<Vec<String>>,
+    ) {
+        let mut generation = 0;
+        let (handles, roster) = self.routing_snapshot(&mut generation);
+        (handles.unwrap_or_default().into_iter().collect(), roster)
+    }
+
     /// Set a player name for the dashboard roster.
     pub fn set_name(&self, id: ConnectionId, name: String) {
         let mut inner = self.inner.lock();

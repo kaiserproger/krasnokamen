@@ -1645,7 +1645,8 @@ async fn serve_with_pump(
                 }
                 let hub = Arc::clone(&server.hub);
                 tokio::task::spawn_blocking(move || hub.shutdown()).await?;
-                let (mut connections, _) = server.connections.routing_snapshot();
+                let mut connections: HashMap<ConnectionId, ConnectionHandles> =
+                    server.connections.snapshot().into_iter().collect();
                 let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
                 route_outbox(&server, &mut HashMap::new(), &mut connections, None, &mut latest_roster);
                 if let Some(console) = &console {
