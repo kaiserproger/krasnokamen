@@ -756,7 +756,10 @@ fn joint_requirement(state: &TickState, id: SettlementId) -> Option<Vec<(u32, u3
     joint_active_bill(state, id)
 }
 
-/// The authored footprint box of one project, for neighbour safety.
+/// The authored footprint box of one project. Only the neighbour tests read the
+/// authored box now: production stands and placements use the body AABB
+/// (`villager::building::in_other_body`), so this stays test-only (D8 merge).
+#[cfg(test)]
 pub(crate) fn footprint(
     state: &TickState,
     project: &Project,
@@ -772,8 +775,9 @@ pub(crate) fn footprint(
     mc_script::ScriptWorldBounds::new(min, max).ok()
 }
 
-/// Whether `at` falls inside another active project's footprint: no builder
-/// stands or places there (D8 review SOL-4).
+/// Whether `at` falls inside another active project's authored footprint.
+/// Test-only after the merge: the production rule is the body AABB.
+#[cfg(test)]
 pub(crate) fn in_other_footprint(
     state: &TickState,
     id: SettlementId,

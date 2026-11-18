@@ -1,0 +1,468 @@
+//! D8 pre-freeze cross-project safety: a parallel site may not place a block
+//! through another project's builder, and no builder stands inside another
+//! active project's future body (review SOL-4, R3-3/R3-4/R3-5).
+//!
+//! Every executor case goes through the real `advance` -> `debit` path with two
+//! prepared, adjacent sites of two projects of one settlement; only the world
+//! fixture is shared, no terrain is generated for the lots.
+use super::*;
+use crate::settlements::allocator::tests::villager;
+use crate::settlements::construction::tests::{bind_project, fixture};
+use crate::settlements::{SettlementId, construction};
+use mc_data::ItemStack;
+use mc_script::ScriptWorldBounds;
+
+/// The persisted structure-ledger domain (`plugin_structures::OWNER`), which is
+/// part of the save image; a refusal must leave it byte-identical.
+const LEDGER_OWNER: &str = "@native-structures";
+
+fn item(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+        .unwrap()
+}
+
+/// The fixture's second Builder, bound to the settlement like its own.
+fn second_builder(state: &mut TickState, id: SettlementId, feet: [f64; 3]) -> EntitySlot {
+    let slot = villager(state, feet);
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(state, id, entity).unwrap();
+    let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    v.data.profession = VillagerProfession::Builder;
+    v.activity = Activity::Work;
+    slot
+}
+
+/// Admit `project` into the settlement's active set. The record is the only
+/// authority the safety predicates read; a ledger structure is prepared
+/// separately where the path under test resolves one.
+fn push_project(
+    state: &mut TickState,
+    id: SettlementId,
+    handle: &str,
+    blueprint: &str,
+    origin: [i32; 3],
+) {
+    let record = state.settlements.get_mut(id).unwrap();
+    record.projects.push(construction::Project {
+        settlement: id,
+        blueprint: blueprint.into(),
+        level: 1,
+        origin,
+        rotation: 0,
+        building: None,
+        structure: handle.into(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    });
+    record.revision = record.revision.saturating_add(1);
+}
+
+fn site_project(state: &TickState, id: SettlementId, handle: &str) -> construction::Project {
+    construction::project_for_structure(state.settlements.get(id).unwrap(), handle)
+        .unwrap_or_else(|| panic!("project {handle}"))
+        .clone()
+}
+
+/// The state a refusal must leave untouched: the persisted structure ledger, the
+/// settlement's storage, the acting builder's carry and the cell the step would
+/// have written.
+struct Untouched {
+    ledger: Vec<(String, serde_json::Value)>,
+    storage: Vec<ItemStack>,
+    carry: [Option<ItemStack>; 8],
+    block: u32,
+    at: [i32; 3],
+}
+
+fn ledger(state: &TickState) -> Vec<(String, serde_json::Value)> {
+    state
+        .plugins
+        .domain_entries(LEDGER_OWNER)
+        .map(|(key, value)| (key.to_owned(), value.clone()))
+        .collect()
+}
+
+fn snapshot(state: &TickState, slot: EntitySlot, at: [i32; 3]) -> Untouched {
+    Untouched {
+        ledger: ledger(state),
+        storage: state.block_entities[&(1, 201, 1)].slots.clone(),
+        carry: state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .expect("builder")
+            .inventory
+            .clone(),
+        block: state
+            .world
+            .block_at(at[0], at[1], at[2])
+            .expect("fixture cell"),
+        at,
+    }
+}
+
+fn assert_untouched(state: &TickState, slot: EntitySlot, before: &Untouched) {
+    let after = snapshot(state, slot, before.at);
+    assert!(!after.ledger.is_empty(), "the ledger exists to stay put");
+    assert_eq!(after.ledger, before.ledger, "the ledger moved");
+    assert_eq!(after.storage, before.storage, "storage moved");
+    assert_eq!(after.carry, before.carry, "the builder's carry moved");
+    assert_eq!(after.block, before.block, "the cell was written");
+}
+
+struct TwoSites {
+    state: TickState,
+    id: SettlementId,
+    builder: EntitySlot,
+    handle: String,
+}
+
+/// Two adjacent prepared sites of one settlement, projected at
+/// `[6,201,6]..[10,204,10]` and `[11,201,6]..[15,204,10]`. The first site's
+/// next build cell is `cell`; the neighbour's Builder stands wherever `feet`
+/// puts it, so a builder that wandered into our lot is the case under test.
+fn two_sites(feet: [f64; 3], cell: [i32; 3]) -> TwoSites {
+    let (mut state, id, builder) = fixture();
+    let stone = state.registry.states.stone;
+    let air = state.registry.states.air;
+    let mine = ScriptWorldBounds::new([6, 201, 6], [10, 204, 10]).unwrap();
+    let handle = executor::prepare(
+        &mut state,
+        id,
+        "house".into(),
+        mine,
+        mine,
+        vec![executor::PlannedCell {
+            at: cell,
+            state: stone,
+            resource: Some("minecraft:stone".into()),
+            quantity: 1,
+        }],
+    )
+    .unwrap();
+    let theirs = ScriptWorldBounds::new([11, 201, 6], [15, 204, 10]).unwrap();
+    let neighbour = executor::prepare(
+        &mut state,
+        id,
+        "house".into(),
+        theirs,
+        theirs,
+        vec![executor::PlannedCell {
+            at: [12, 201, 7],
+            state: air,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    push_project(&mut state, id, &handle, "house", [6, 201, 6]);
+    push_project(&mut state, id, &neighbour, "house", [11, 201, 6]);
+    bind_project(&mut state, id, &handle, builder);
+    let second = second_builder(&mut state, id, feet);
+    bind_project(&mut state, id, &neighbour, second);
+    // The acting builder carries the block the refused step would place.
+    let stone_item = item(&state, "stone");
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(ItemStack::new(stone_item, 1));
+    TwoSites {
+        state,
+        id,
+        builder,
+        handle,
+    }
+}
+
+fn advance(sites: &mut TwoSites) -> Result<bool, mc_script::ScriptOperationFailure> {
+    let uuid = sites.state.entities.row(sites.builder).uuid;
+    executor::advance(&mut sites.state, sites.id, &sites.handle, uuid)
+}
+
+/// R3-3: the body owns the cell above its feet. A solid block there is placed
+/// through the neighbour builder's head.
+#[test]
+fn a_head_height_block_over_a_neighbour_builder_is_refused() {
+    // Feet at [8,201,8]: the placement cell is the head cell of that column.
+    let mut sites = two_sites([8.5, 201.0, 8.5], [8, 202, 8]);
+    let before = snapshot(&sites.state, sites.builder, [8, 202, 8]);
+    let refused = advance(&mut sites);
+    assert_eq!(
+        refused.map_err(|failure| failure.as_str()),
+        Err("blocked"),
+        "a head-height cell over another project's builder must be refused"
+    );
+    assert_untouched(&sites.state, sites.builder, &before);
+}
+
+/// R3-3: the body is 0.6 wide, so it straddles the cell edge; a block in the
+/// next column is still placed through its chest.
+#[test]
+fn a_side_block_reaching_a_neighbour_builder_is_refused() {
+    // Feet at x = 8.95: the body spans 8.65..9.25, into the cell at x = 9.
+    let mut sites = two_sites([8.95, 201.0, 8.5], [9, 201, 8]);
+    let before = snapshot(&sites.state, sites.builder, [9, 201, 8]);
+    let refused = advance(&mut sites);
+    assert_eq!(
+        refused.map_err(|failure| failure.as_str()),
+        Err("blocked"),
+        "a cell the body straddles must be refused"
+    );
+    assert_untouched(&sites.state, sites.builder, &before);
+}
+
+/// The guard is not a blanket refusal: the same neighbour builder, one cell
+/// away, leaves a free cell buildable and pays for it from the carry.
+#[test]
+fn a_cell_clear_of_the_neighbour_body_still_places() {
+    let mut sites = two_sites([8.95, 201.0, 8.5], [9, 201, 7]);
+    let placed = advance(&mut sites).expect("a cell outside the neighbour body is buildable");
+    assert!(placed, "the single-stage site completes on its one cell");
+    let state = &sites.state;
+    assert_eq!(
+        state.world.block_at(9, 201, 7).expect("fixture cell"),
+        state.registry.states.stone,
+        "the free cell was placed"
+    );
+    let carried = state
+        .entities
+        .row(sites.builder)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory
+        .iter()
+        .flatten()
+        .filter(|stack| stack.item_id == item(state, "stone"))
+        .map(|stack| stack.count)
+        .sum::<i32>();
+    assert_eq!(carried, 0, "the placement paid from the carry");
+}
+
+/// A clearing site whose own stand is available: the neighbour's lot covers the
+/// nearest stand cell, so the chosen stand must be the next one outside it.
+fn clearing_site() -> (TickState, SettlementId, EntitySlot, String) {
+    let (mut state, id, slot) = fixture();
+    let air = state.registry.states.air;
+    let site = ScriptWorldBounds::new([5, 201, 5], [9, 204, 9]).unwrap();
+    let handle = executor::prepare(
+        &mut state,
+        id,
+        "house".into(),
+        site,
+        site,
+        vec![executor::PlannedCell {
+            at: [5, 201, 5],
+            state: air,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    push_project(&mut state, id, &handle, "house", [5, 201, 5]);
+    // The neighbour's authored box x 0..6, z 5..11 is adjacent to this lot and
+    // owns the stand cell at [4,201,5] nearest to the builder.
+    push_project(&mut state, id, "neighbour-lot", "house", [-2, 201, 5]);
+    state.entities.set_pos(slot, [4.5, 201.0, 5.5]);
+    (state, id, slot, handle)
+}
+
+/// R3-4: `preparation_stand` never returns a stand inside another active
+/// project's future body, while a stand outside it stays available.
+#[test]
+fn a_stand_is_never_chosen_inside_a_neighbour_lot_while_clearing() {
+    let (state, id, slot, handle) = clearing_site();
+    let project = site_project(&state, id, &handle);
+    assert!(
+        construction::in_other_footprint(&state, id, &handle, [4, 201, 5]),
+        "fixture: the neighbour lot owns the nearest stand cell"
+    );
+    let base = BlockPos { x: 5, y: 201, z: 5 };
+    let stand = preparation_stand(&state, slot, &project, [5, 201, 5], base)
+        .expect("a stand outside the neighbour lot is still available");
+    assert!(
+        !standing_in_other_body(&state, &project, slot, stand),
+        "stand {stand:?} is inside the neighbour's future body"
+    );
+    assert_ne!(
+        stand,
+        BlockPos { x: 4, y: 201, z: 5 },
+        "the stand inside the neighbour lot is not chosen"
+    );
+}
+
+/// R3-4: the clear branch of `in_reach` refuses a builder whose body stands in
+/// a neighbour's future body, however close the trunk it would fell.
+#[test]
+fn in_reach_refuses_a_builder_inside_a_neighbour_body_while_clearing() {
+    let (state, id, slot, handle) = clearing_site();
+    let project = site_project(&state, id, &handle);
+    let base = BlockPos { x: 5, y: 201, z: 5 };
+    assert!(
+        crate::villager::mining::near(&state, slot, base, PREPARATION_REACH),
+        "fixture: the builder is within felling reach"
+    );
+    let body = state.entities.body(slot);
+    assert!(
+        in_other_body(
+            &state,
+            &project,
+            state.entities.pos(slot),
+            body.half_width,
+            body.height
+        ),
+        "fixture: the builder's body stands in the neighbour's lot"
+    );
+    assert!(
+        !in_reach(&state, slot, &project, [5, 201, 5]),
+        "a body inside the neighbour's lot is not in reach"
+    );
+}
+
+/// A road project beside a house lot at `neighbour_origin`, with the builder on
+/// the boundary between them.
+fn road_site(neighbour_origin: [i32; 3]) -> (TickState, SettlementId, EntitySlot) {
+    let (mut state, id, slot) = fixture();
+    push_project(&mut state, id, "road-site", "road", [7, 201, 7]);
+    push_project(&mut state, id, "neighbour-lot", "house", neighbour_origin);
+    state.entities.set_pos(slot, [4.5, 201.0, 5.5]);
+    (state, id, slot)
+}
+
+/// R3-4: the infrastructure branch refuses a road stand inside a neighbour's lot.
+#[test]
+fn in_reach_refuses_a_builder_inside_a_neighbour_body_on_infrastructure() {
+    let next = BlockPos { x: 7, y: 201, z: 7 };
+    let (state, id, slot) = road_site([-2, 201, 5]);
+    let project = site_project(&state, id, "road-site");
+    assert!(layout::infra(&project.blueprint), "fixture: a road project");
+    assert!(
+        crate::villager::mining::near(&state, slot, next, REACH),
+        "fixture: the road cell is within placement reach"
+    );
+    assert!(
+        !in_reach(&state, slot, &project, [7, 201, 7]),
+        "a body inside the neighbour's lot is not in reach of a road cell"
+    );
+    // Control: the same builder and cell with the neighbour lot moved away.
+    let (state, id, slot) = road_site([-2, 201, 12]);
+    let project = site_project(&state, id, "road-site");
+    assert!(
+        in_reach(&state, slot, &project, [7, 201, 7]),
+        "without a neighbour body the road cell is in reach"
+    );
+}
+
+/// R3-5: `site_target` tests the stand's body, not its feet column, so a
+/// neighbour lot one level up still owns the stand the builder's head reaches.
+#[test]
+fn site_target_never_picks_a_stand_whose_body_reaches_a_neighbour_lot() {
+    let (state, id, slot) = road_site([4, 202, 4]);
+    let project = site_project(&state, id, "road-site");
+    let body = state.entities.body(slot);
+    assert_eq!(
+        layout::stand(&state, &project, [7, 201, 7]),
+        Some([7, 201, 7]),
+        "fixture: the road stand is the cell's own column"
+    );
+    assert!(
+        !construction::in_other_footprint(&state, id, "road-site", [7, 201, 7]),
+        "fixture: the feet column alone is outside the neighbour's box"
+    );
+    assert!(
+        in_other_body(
+            &state,
+            &project,
+            [7.5, 201.0, 7.5],
+            body.half_width,
+            body.height
+        ),
+        "fixture: the 1.95-high body reaches the box one level up"
+    );
+    assert_eq!(
+        site_target(&state, &project, [7, 201, 7], slot, None),
+        None,
+        "a stand inside the neighbour's body is not a target"
+    );
+    // Control: the same stand with the neighbour lot moved away.
+    let (state, id, slot) = road_site([4, 202, 20]);
+    let project = site_project(&state, id, "road-site");
+    assert_eq!(
+        site_target(&state, &project, [7, 201, 7], slot, None),
+        Some(BlockPos { x: 7, y: 201, z: 7 }),
+        "without a neighbour body the road stand stays usable"
+    );
+}
+
+/// R3-5: the blueprint branch of `in_reach` keeps the whole body out of a
+/// neighbour's box, including the head above a feet column that is outside it.
+#[test]
+fn in_reach_uses_the_body_not_the_feet_column_at_a_blueprint_site() {
+    let site = |neighbour: [i32; 3]| {
+        let (mut state, id, slot) = fixture();
+        push_project(&mut state, id, "house-site", "house", [5, 201, 5]);
+        push_project(&mut state, id, "neighbour-lot", "house", neighbour);
+        state.entities.set_pos(slot, [4.5, 201.0, 5.5]);
+        (state, id, slot)
+    };
+    let (state, id, slot) = site([0, 202, 0]);
+    let project = site_project(&state, id, "house-site");
+    let body = state.entities.body(slot);
+    assert!(
+        !construction::in_other_footprint(&state, id, "house-site", [4, 201, 5]),
+        "the feet column is outside the neighbour's box"
+    );
+    assert!(
+        in_other_body(
+            &state,
+            &project,
+            state.entities.pos(slot),
+            body.half_width,
+            body.height
+        ),
+        "the body reaches the neighbour's box one level up"
+    );
+    assert!(
+        !in_reach(&state, slot, &project, [8, 201, 8]),
+        "a body reaching a neighbour's box is not in reach"
+    );
+    // Control: the same builder and cell with the neighbour lot moved away.
+    let (state, id, slot) = site([0, 201, 12]);
+    let project = site_project(&state, id, "house-site");
+    assert!(
+        in_reach(&state, slot, &project, [8, 201, 8]),
+        "outside every neighbour body the site is in reach"
+    );
+}
+
+/// The geometry these regressions assume: a 0.6 x 1.95 body straddles a cell
+/// edge and owns the cell above, so a changed villager size cannot silently
+/// weaken them.
+#[test]
+fn the_measured_body_is_a_straddling_box() {
+    let (state, _, slot) = fixture();
+    let body = state.entities.body(slot);
+    // Vanilla villager AABB 0.6 x 1.95, stored from f32 dimensions.
+    assert!(
+        (body.half_width - 0.3).abs() < 1e-6,
+        "villager half width: {}",
+        body.half_width
+    );
+    assert!(
+        (body.height - 1.95).abs() < 1e-6,
+        "villager height: {}",
+        body.height
+    );
+    assert!(
+        body.half_width > 0.0 && body.height > 1.0 + body.half_width,
+        "the body spans the cell above its feet"
+    );
+}
