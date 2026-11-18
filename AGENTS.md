@@ -155,11 +155,13 @@ python3 -m tools.harness list
   or sibling repo's copy. There are no memory slots: a compile command waits for
   one of three host-wide build tokens (a nested compile reuses its parent's),
   every other command starts at once. One agent holds at most one token: it
-  starts its next compile command only after the previous one finished (owner,
-  2026-11-18: one agent with two parallel runs held two thirds of the build
-  capacity). The priority slice named by Main keeps the normal lane; every other
-  agent compiles with `env KRASNOKAMEN_BUILD_LANE=background` (any token, but
-  a freed token goes to a waiting normal-lane compile first). The heavy-watchdog pauses plain cargo
+  starts its next compile command only after the previous one finished (laptop
+  proposal 2026-11-18, pending the owner's confirmation: one agent with two
+  parallel runs held two thirds of the build capacity). The priority slice named
+  by Main and battle-video work (takes, render, live-take pins; owner 2026-11-12:
+  the battle video gets resources first) keep the normal lane; every other agent
+  compiles with `env KRASNOKAMEN_BUILD_LANE=background` (any token, but a freed
+  token goes to a waiting normal-lane compile first). The heavy-watchdog pauses plain cargo
   builds under real memory pressure and resumes them, never tests, servers or
   harness runs. The runner points
   `RUSTC_WRAPPER` at `tools/dev/sccache.sh` (shared sccache; empty when its daemon is

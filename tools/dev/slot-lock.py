@@ -23,7 +23,7 @@ and mem-run.sh (three build tokens) both run through it.
   wins (stale records of dead waiters are dropped by the next waiter), and, when the
   environment names a pipe fd in VAR_READY_FD (tests), writes b"w" to it once it is
   queued; a caller that won at once gets the fd closed instead.
-- Priority (owner 2026-11-18: the priority slice gets the next freed build token):
+- Priority (laptop proposal 2026-11-18, pending the owner's confirmation: the priority slice gets the next freed build token):
   every waiter with --hold-gate FILE holds a shared flock on FILE while it waits, so
   any number of priority waiters keep it held together. A --yield-gate caller tests
   FILE only once it holds a slot (taken at once or after waiting); if a priority

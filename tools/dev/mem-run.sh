@@ -123,11 +123,13 @@ fi
 # holders never wait on their own nested builds. The token is taken before the -x
 # lock: a queued compile never delays a -x window, and a -x window never waits for a
 # token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
-# KRASNOKAMEN_BUILD_LANE=background: such compiles may take any token, but (owner
-# 2026-11-18) they give a freed token to a waiting normal-lane compile first: a
-# normal-lane waiter holds tokens/priority.gate, a background waiter yields to it. No
-# token is reserved for priority work (owner 2026-11-18: an idle token 3 left a third
-# of the build capacity unused while background compiles waited).
+# KRASNOKAMEN_BUILD_LANE=background: such compiles may take any token, but they give a
+# freed token to a waiting normal-lane compile first: a normal-lane waiter holds
+# tokens/priority.gate, a background waiter yields to it. Battle-video work (takes,
+# render, live-take pins) keeps the normal lane, so it gets the next freed token first:
+# that keeps the owner's 2026-11-12 goal ("the battle video gets resources first"). The
+# token-3 reserve for that goal was removed on a laptop proposal (2026-11-18, pending the
+# owner's confirmation; the owner may restore it for take windows).
 build_tokens=3
 token_slots=$(seq -s, "$build_tokens")
 token_gate=(--hold-gate "$dir/tokens/priority.gate")
