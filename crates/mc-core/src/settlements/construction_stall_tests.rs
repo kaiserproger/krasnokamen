@@ -97,8 +97,14 @@ fn a_material_stall_reports_the_item_source_route_and_actual_builder_release() {
             .profession,
         Profession::None
     );
+    // The unpaid bed never started: the failed rotation gives back its slot
+    // and keeps the newer pending order, without touching stock.
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.projects[0].structure, project.structure);
+    assert!(record.projects.is_empty(), "{text}");
+    assert!(
+        text.contains("recovery=\"preparation_cancelled\""),
+        "{text}"
+    );
     assert_eq!(record.orders[0].blueprint, "spanish_house");
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert!(
@@ -157,7 +163,20 @@ fn a_real_fetch_refusal_is_retained_for_the_stall_report_without_debiting_stock(
 fn a_repeated_stall_names_the_first_recovery_and_cell_once_without_discarding_work() {
     let (mut state, id, _) = bed_project();
     let project = state.settlements.get(id).unwrap().projects[0].clone();
+    // Paid work keeps its slot through every failed recovery. A bed cell is
+    // normally paid when placed; record the payment in the canonical ledger.
+    let mut ledger = state
+        .plugins
+        .get_domain("@native-structures", "ledger")
+        .unwrap()
+        .clone();
+    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+        serde_json::json!([{"resource": "minecraft:white_bed", "quantity": 1}]);
+    state
+        .plugins
+        .set_domain("@native-structures", "ledger", ledger);
     let before = executor::status(&state, id, &project.structure).unwrap();
+    assert!(!before.consumed.is_empty());
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let text = log_stall(&mut state, id);
     assert_eq!(
@@ -471,4 +490,172 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
         structure
     );
     assert!(snapshot.consumed.is_empty());
+}
+
+/// The planner's builder pass, as `tick` runs it, for two stall windows of a
+/// builder that never reaches the next cell; the shift lasts the whole run.
+fn stall_with_rotation(state: &mut TickState, id: SettlementId) -> Warnings {
+    state.day_time = 2_000;
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
+        for _ in 0..=300 {
+            crate::villager::building::tick(state, id);
+            state.tick += 20;
+            state.day_time += 20;
+            assign_builder(state, id);
+        }
+    });
+    warnings
+}
+
+fn free_project(
+    state: &mut TickState,
+    id: SettlementId,
+    blueprint: &str,
+    cells: Vec<executor::PlannedCell>,
+) -> String {
+    let bounds = ScriptWorldBounds::new([2, 201, 2], [14, 201, 14]).unwrap();
+    let structure = executor::prepare(state, id, blueprint.into(), bounds, bounds, cells).unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: blueprint.into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: structure.clone(),
+        ordered: false,
+        builder: None,
+    }];
+    structure
+}
+
+/// SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4, shape A: trial-4's road stood at
+/// `Running work=34 consumed=0` for 78,000 ticks while every builder the
+/// rotation chose stayed trapped away from cell 35, holding the only slot.
+#[test]
+fn an_unpaid_road_that_stops_running_gives_back_the_slot_after_a_failed_rotation() {
+    let (mut state, id, _) = fixture();
+    let path = super::super::allocator::tests::block(&state, "minecraft:dirt_path", &[]);
+    let (near, far) = ([3, 201, 4], [14, 201, 14]);
+    let structure = free_project(
+        &mut state,
+        id,
+        layout::ROAD,
+        [near, far]
+            .map(|at| executor::PlannedCell {
+                at,
+                state: path,
+                resource: None,
+                quantity: 0,
+            })
+            .into(),
+    );
+    crate::villager::building::tick(&mut state, id);
+    let running = executor::status(&state, id, &structure).unwrap();
+    assert_eq!(
+        (running.state, running.completed_work_units),
+        (ScriptStructureState::Running, 1)
+    );
+    assert!(running.consumed.is_empty(), "road paving is free work");
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let warnings = stall_with_rotation(&mut state, id);
+    let text = warnings.0.lock().unwrap().join("\n");
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "a rotation that still cannot reach the cell must free the slot: {text}"
+    );
+    assert_eq!(
+        executor::status(&state, id, &structure).unwrap().state,
+        ScriptStructureState::Cancelled
+    );
+    assert!(
+        text.contains("first_recovery=\"builder_released\""),
+        "{text}"
+    );
+    assert!(
+        text.contains("recovery=\"preparation_cancelled\""),
+        "{text}"
+    );
+    assert_eq!(state.world.block_at(near[0], near[1], near[2]), Some(path));
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+}
+
+/// Shape B: growth-03ef2e297a72-laptop-2's perimeter stretch stood `Prepared
+/// work=0` while its builders carried the cobblestone but never reached the
+/// cell; the owner's queued order waited `busy` behind it.
+#[test]
+fn an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order() {
+    let (mut state, id, builder) = fixture();
+    let cobblestone = super::super::allocator::tests::block(&state, "minecraft:cobblestone", &[]);
+    let far = [14, 201, 14];
+    let structure = free_project(
+        &mut state,
+        id,
+        layout::PERIMETER,
+        vec![executor::PlannedCell {
+            at: far,
+            state: cobblestone,
+            resource: Some("minecraft:cobblestone".into()),
+            quantity: 1,
+        }],
+    );
+    let item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:cobblestone").unwrap())
+        .unwrap();
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(ItemStack::new(item, 1));
+    let order = OwnerOrder {
+        blueprint: "spanish_house".into(),
+        level: 1,
+        building: None,
+    };
+    state.settlements.get_mut(id).unwrap().orders = vec![order.clone()];
+    let warnings = stall_with_rotation(&mut state, id);
+    let text = warnings.0.lock().unwrap().join("\n");
+    let record = state.settlements.get(id).unwrap();
+    assert!(
+        record.projects.is_empty(),
+        "a project that never starts must not hold the slot: {text}"
+    );
+    assert_eq!(record.orders.first(), Some(&order));
+    let snapshot = executor::status(&state, id, &structure).unwrap();
+    assert_eq!(snapshot.state, ScriptStructureState::Cancelled);
+    assert_eq!(snapshot.completed_work_units, 0);
+    assert!(text.contains("cause=\"worksite_unreached\""), "{text}");
+    assert!(
+        text.contains("recovery=\"preparation_cancelled\""),
+        "{text}"
+    );
+    // The carried load returns to storage; nothing is debited or lost.
+    let stored: u32 = state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count as u32)
+        .sum();
+    assert_eq!(stored, 1);
+    assert!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .all(ItemStack::is_empty)
+    );
+    assert_eq!(
+        state.world.block_at(far[0], far[1], far[2]),
+        Some(state.registry.states.air)
+    );
 }

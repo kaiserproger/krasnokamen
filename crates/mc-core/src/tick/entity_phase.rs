@@ -530,6 +530,17 @@ pub(super) fn early_entity_rest(
         || body
             .hurt_at
             .is_some_and(|at| view.tick.saturating_sub(at) < 100)
+        // The skipped step is what turns a battle row toward its look target,
+        // so a targeted row that is not yet facing it must not rest
+        // (BATTLE-REST-SKIPS-TARGET-FACING). After the cheap vetoes, because it
+        // evaluates the step's rotation at the zero velocity established above.
+        || battle
+            && crate::battle::rest_turns_toward_target(
+                &view.hostile.battle.columns,
+                slot,
+                view.rotations[slot.0 as usize],
+                view.positions[slot.0 as usize],
+            )
     {
         return false;
     }

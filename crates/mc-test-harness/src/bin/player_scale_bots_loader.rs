@@ -212,6 +212,10 @@ pub(super) async fn configure(client: &mut Client, cache: &Path) -> Result<()> {
             }
         } else if frame.id == FinishConfiguration::ID {
             client.write_packet(&AcknowledgeFinishConfiguration).await?;
+            // The server paces world delivery on the client's chunk-batch
+            // acknowledgement, which the wire client only sends in the Play
+            // phase; this transport configures itself, so it enters Play here.
+            client.enter_play();
             return Ok(());
         } else {
             bail!("unexpected configuration frame id=0x{:02x}", frame.id);
@@ -279,6 +283,75 @@ mod tests {
             assert_eq!(frame.id, id);
         }
         assert!(!cache.path().join("receipt.json").exists());
+        Ok(())
+    }
+
+    /// The server paces world delivery on `ServerboundChunkBatchReceived`, which the
+    /// wire client only emits in the Play phase. A Loader-transport client that never
+    /// enters Play receives one chunk batch and then nothing (the ops/stress fixtures
+    /// stalled at 1 batch, so no profile could be prepared). Reverting
+    /// `Client::enter_play` in `configure` makes this test time out.
+    #[tokio::test]
+    async fn loader_configuration_enters_play_and_acknowledges_chunk_batches() -> Result<()> {
+        use mc_protocol::frame::{Compression, encode_frame, try_decode_frame};
+        use mc_protocol::packets::play::{
+            ClientboundChunkBatchFinished, ServerboundChunkBatchReceived,
+        };
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let mut client = Client::connect(listener.local_addr()?).await?;
+        let (mut peer, _) = listener.accept().await?;
+        let mut body = Vec::new();
+        ClientboundKnownPacks { packs: Vec::new() }.encode(&mut body)?;
+        peer.write_all(&encode_frame(
+            ClientboundKnownPacks::ID,
+            &body,
+            Compression::Disabled,
+        )?)
+        .await?;
+        peer.write_all(&encode_frame(
+            FinishConfiguration::ID,
+            &[],
+            Compression::Disabled,
+        )?)
+        .await?;
+        let cache = tempfile::tempdir()?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            configure(&mut client, cache.path()),
+        )
+        .await??;
+        // One chunk batch: the wire client must acknowledge it at receipt.
+        body.clear();
+        ClientboundChunkBatchFinished { batch_size: 8 }.encode(&mut body)?;
+        peer.write_all(&encode_frame(
+            ClientboundChunkBatchFinished::ID,
+            &body,
+            Compression::Disabled,
+        )?)
+        .await?;
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_secs(5), client.read_frame()).await??;
+        // Configuration acks may still be in flight ahead of the batch ack.
+        let mut received = bytes::BytesMut::new();
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        let id = loop {
+            if let Some(frame) = try_decode_frame(&mut received, Compression::Disabled)? {
+                if frame.id == ServerboundChunkBatchReceived::ID {
+                    break frame.id;
+                }
+                continue;
+            }
+            ensure!(
+                tokio::time::timeout_at(deadline, peer.read_buf(&mut received))
+                    .await
+                    .map_err(|_| anyhow::anyhow!("chunk batch acknowledgement missing"))??
+                    != 0,
+                "chunk batch acknowledgement missing"
+            );
+        };
+        assert_eq!(id, ServerboundChunkBatchReceived::ID);
         Ok(())
     }
 

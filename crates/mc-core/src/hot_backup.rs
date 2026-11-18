@@ -115,6 +115,10 @@ pub(crate) fn copy_world(
             )));
         }
         let relative = format!("journal/{name}");
+        // Books R5 G3: a digest only proves the copy matches the source. Decode
+        // and CRC-check every batch so the backup cannot be silently
+        // unrestorable because the source tail was damaged.
+        crate::journal::verify_batch_file(&world_dir.join(&relative))?;
         let digest = copy_hashed(&world_dir.join(&relative), &out.join(&relative))?;
         files.insert(relative, digest);
         covered = *hi;

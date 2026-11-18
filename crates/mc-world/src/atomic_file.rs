@@ -81,6 +81,21 @@ mod tests {
         assert!(!second.exists());
     }
 
+    /// R4-P2: every durability directory (journal, world root, input log) is
+    /// created through this helper, so it must build a deep missing chain and
+    /// stay idempotent on an existing one.
+    #[test]
+    fn creates_a_deep_directory_chain_durably_and_idempotently() {
+        let root = tempfile::tempdir().unwrap();
+        let nested = root.path().join("world/journal");
+        create_dir_all_durable(&nested).unwrap();
+        assert!(nested.is_dir());
+        // Second call on the same chain must succeed (reopen path).
+        create_dir_all_durable(&nested).unwrap();
+        std::fs::write(nested.join("batch.bin"), b"x").unwrap();
+        assert_eq!(std::fs::read(nested.join("batch.bin")).unwrap(), b"x");
+    }
+
     #[test]
     fn replacement_failure_cleans_temporary_file() {
         let root = tempfile::tempdir().unwrap();

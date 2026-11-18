@@ -43,18 +43,18 @@ fn complete_sweeps_report_reason_changes_not_cursor_batches() {
     );
     assert!(!reported(&mut watch, Reason::ProtectedObstruction, 128));
     assert!(!reported(&mut watch, Reason::BuildingBuffer, 128));
-    assert!(!reported(&mut watch, Reason::HeightVariance, 128));
-    assert!(reported(&mut watch, Reason::HeightVariance, 128));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 128));
+    assert!(reported(&mut watch, Reason::SurfaceUnavailable, 128));
     assert!(!reported(&mut watch, Reason::ProtectedObstruction, 128));
     assert!(
         reported(&mut watch, Reason::BuildingBuffer, 128),
         "a previous reason returning is another change"
     );
-    assert!(!reported(&mut watch, Reason::HeightVariance, 128));
-    assert!(!reported(&mut watch, Reason::HeightVariance, 192));
-    assert!(!reported(&mut watch, Reason::HeightVariance, 192));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 128));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 192));
+    assert!(!reported(&mut watch, Reason::SurfaceUnavailable, 192));
     assert!(
-        reported(&mut watch, Reason::HeightVariance, 192),
+        reported(&mut watch, Reason::SurfaceUnavailable, 192),
         "a changed network starts a complete new sweep"
     );
 }
@@ -126,7 +126,12 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
             "a new order is a new episode: {text}"
         );
         state.settlements.get_mut(id).unwrap().planted_trees.clear();
-        plan(&mut state, id);
+        for _ in 0..256 {
+            plan(&mut state, id);
+            if !state.settlements.get(id).unwrap().projects.is_empty() {
+                break;
+            }
+        }
         let record = state.settlements.get(id).unwrap();
         assert_eq!(record.projects[0].blueprint, "storage");
         assert!(record.orders.is_empty());
@@ -203,11 +208,12 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
             [1, 12, 1],
             None,
             &mut Default::default(),
+            None,
         ),
         Err(Reason::PlantingProvenance)
     );
     super::super::super::forestry::native_tree_tests::grow(&mut state, root, 5);
-    assert_eq!(
+    assert!(
         check(
             &state,
             state.settlements.get(id).unwrap(),
@@ -215,8 +221,10 @@ fn off_lot_registered_sapling_reserves_its_crown_until_it_actually_grows() {
             [1, 12, 1],
             None,
             &mut Default::default(),
-        ),
-        Ok(())
+            None,
+        )
+        .is_ok(),
+        "an actually grown registered tree is clearable by its owner lot"
     );
 }
 
@@ -233,6 +241,7 @@ fn native_overlapping_crowns_report_ambiguous_foliage_not_a_clearable_site() {
                 [1, 12, 1],
                 None,
                 &mut Default::default(),
+                None,
             ),
             Err(Reason::AmbiguousFoliage),
             "touching trunks: {connected}"
@@ -271,9 +280,91 @@ fn persistent_and_retained_player_foliage_report_protected_obstruction() {
                 [1, 12, 1],
                 None,
                 &mut Default::default(),
+                None,
             ),
             Err(Reason::ProtectedObstruction),
             "retained edit: {retained}"
         );
     }
+}
+
+#[test]
+fn natural_zone_terrain_keeps_its_shape_without_a_building_setback() {
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    let size = [3, 4, 3];
+    let zone = |state: &mut TickState, kind, bounds: ScriptWorldBounds| {
+        let zone_id = BuildingId((id.0 << 32) | 700);
+        state.settlements.get_mut(id).unwrap().buildings.insert(
+            zone_id,
+            Building {
+                id: zone_id,
+                settlement: id,
+                kind,
+                level: 1,
+                bounds,
+                work_points: vec![[bounds.min[0], bounds.min[1] + 1, bounds.min[2]]],
+                revision: 1,
+                natural_zone: true,
+            },
+        );
+    };
+    let check_at = |state: &TickState, origin: [i32; 3], size: [u8; 3]| {
+        check(
+            state,
+            state.settlements.get(id).unwrap(),
+            origin,
+            size,
+            None,
+            &mut Default::default(),
+            None,
+        )
+        .map(|_| ())
+    };
+    let origin = [10, 201, 10];
+    assert_eq!(
+        check_at(&state, origin, size),
+        Ok(()),
+        "bare terrain admits the lot"
+    );
+    // A certified terrain zone one column away keeps only its own columns: its
+    // one-block building setback is not a terrain rule.
+    zone(
+        &mut state,
+        BuildingKind::LumberCamp,
+        ScriptWorldBounds::new([6, 200, 8], [9, 206, 14]).unwrap(),
+    );
+    assert_eq!(
+        check_at(&state, origin, size),
+        Ok(()),
+        "a natural zone does not reserve the neighbouring lot"
+    );
+    // A zone the house would stand in is still an overlap.
+    state.settlements.get_mut(id).unwrap().buildings.clear();
+    zone(
+        &mut state,
+        BuildingKind::Mine,
+        ScriptWorldBounds::new([11, 200, 11], [12, 206, 12]).unwrap(),
+    );
+    assert_eq!(
+        check_at(&state, origin, size),
+        Err(Reason::BuildingBuffer),
+        "a zone the house would stand in still refuses"
+    );
+    // A zone below the floor that the fill would cross still refuses: the
+    // preparation volume reaches down to the discovered ground, not only the
+    // authored footprint (review 1.1). The lot is raised, so two fill rows exist
+    // below its floor, and the zone's top sits between the ground and the floor.
+    state.settlements.get_mut(id).unwrap().buildings.clear();
+    zone(
+        &mut state,
+        BuildingKind::Mine,
+        ScriptWorldBounds::new([11, 195, 11], [12, 201, 12]).unwrap(),
+    );
+    assert_eq!(
+        check_at(&state, [10, 203, 10], size),
+        Err(Reason::BuildingBuffer),
+        "the fill below the floor may not cross a mine's zone"
+    );
 }

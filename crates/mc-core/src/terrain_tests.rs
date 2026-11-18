@@ -609,3 +609,63 @@ fn empty_source(
     });
     probe_source(registry, dimension, generator)
 }
+
+// B5 (CS341 REPORT-B.md): the section-stamp table is bounded and pinned to
+// section revisions, and a miss used to walk all 1024 entries twice
+// (`values().max()` then `min_by_key`) under the one per-dimension mutex every
+// LOD worker shares. The rewrite keeps the observable contract exactly —
+// same stamp per revision, strictly increasing allocation order, capacity, and
+// oldest-first eviction — and replaces both scans with a hash probe, an
+// ordered-index pop and a monotone counter. These two checks pin that contract;
+// the cost shape is a structural property of `StampTable` (no call reads more
+// than the probed entry and the one it evicts), not something a counter inside
+// the production type could prove.
+
+#[test]
+fn stamp_table_keeps_a_revision_and_never_repeats_a_stamp() {
+    let mut table = super::StampTable::default();
+    let first = table.stamp(7, 1_000);
+    assert_eq!(
+        table.stamp(7, 5_000),
+        first,
+        "same revision keeps its stamp"
+    );
+    let second = table.stamp(8, 1_000);
+    assert!(
+        second > first,
+        "a new revision outranks every stamp issued before it even inside \
+         one wall-clock millisecond: {second} after {first}"
+    );
+    let backwards = table.stamp(9, 10);
+    assert!(
+        backwards > second,
+        "a backwards wall clock must not reorder revisions: {backwards} after {second}"
+    );
+}
+
+#[test]
+fn stamp_table_stays_bounded_and_evicts_the_oldest_stamp() {
+    let mut table = super::StampTable::default();
+    let cap = super::StampTable::CAP;
+    let mut stamps = Vec::with_capacity(cap + 8);
+    for revision in 0..cap as u64 {
+        stamps.push(table.stamp(revision, 1_000));
+    }
+    // One more revision than capacity: the oldest-stamped entry leaves and the
+    // table never grows past it.
+    let last = table.stamp(cap as u64, 1_000);
+    assert_eq!(table.by_revision.len(), cap, "bounded at capacity");
+    assert_eq!(table.by_stamp.len(), cap, "eviction side stays in step");
+    assert!(
+        stamps.windows(2).all(|pair| pair[0] < pair[1]),
+        "allocation order is monotone"
+    );
+    assert!(last > stamps[cap - 1], "new stamp outranks the old maximum");
+    assert_eq!(
+        table.stamp(0, 1_000),
+        last + 1,
+        "the evicted oldest revision is re-stamped above the newest stamp, \
+         never stale"
+    );
+    assert_eq!(table.by_revision.len(), cap, "re-stamp keeps the bound");
+}

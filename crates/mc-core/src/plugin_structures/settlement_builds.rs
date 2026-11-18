@@ -39,19 +39,27 @@ pub(crate) fn prepare(
     }
     let ledger = ledger(state)?;
     if ledger.structures.values().any(|record| {
+        let same_settlement = record.settlement == Some(settlement);
+        // An in-flight structure of this settlement holds its own site, not the
+        // wide clear-stage window: a neighbour lot may be prepared beside it
+        // (D8 parallel construction). Foreign and committed structures keep the
+        // full reservation.
+        let held = if same_settlement && record.snapshot.state != ScriptStructureState::Committed {
+            site_reservation(record).ok()
+        } else {
+            reserved_bounds(record).ok()
+        };
+        let wanted = if same_settlement {
+            site
+        } else if record.snapshot.state == ScriptStructureState::Committed {
+            site
+        } else {
+            bounds
+        };
         record.snapshot.dimension == state.dimension.name()
             && record.snapshot.state != ScriptStructureState::Cancelled
             && !spent_free_work(record)
-            && reserved_bounds(record).is_ok_and(|existing| {
-                overlaps(
-                    existing,
-                    if record.snapshot.state == ScriptStructureState::Committed {
-                        site
-                    } else {
-                        bounds
-                    },
-                )
-            })
+            && held.is_some_and(|existing| overlaps(existing, wanted))
             // Only a *committed* structure on the same lot may be rebuilt or
             // upgraded in place; an in-flight structure on that lot blocks a
             // second admission (D8).
@@ -675,6 +683,50 @@ pub(super) fn debit(
                     lot,
                     &mut clearance,
                 )?);
+            } else if crate::settlements::construction::excavatable(state, block) {
+                // Bounded terrain cut: recheck the cell the survey certified
+                // immediately before the debit, credit its own mining drop in
+                // this same transaction, and never write fluid or lava in.
+                if state.block_log.player_touched(cell.at) {
+                    return Err(Failure::Blocked);
+                }
+                let path = state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(block))
+                    .map(|definition| definition.block.id.path())
+                    .ok_or(Failure::Blocked)?;
+                let item = crate::villager::mining::item_id(
+                    state,
+                    crate::villager::mining::drop_name(path),
+                )
+                .ok_or(Failure::Blocked)?;
+                let count = crate::villager::mining::drop_count(path);
+                for (dx, dy, dz) in [
+                    (1, 0, 0),
+                    (-1, 0, 0),
+                    (0, 1, 0),
+                    (0, -1, 0),
+                    (0, 0, 1),
+                    (0, 0, -1),
+                ] {
+                    let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
+                    let neighbour = state
+                        .world
+                        .block_at(at[0], at[1], at[2])
+                        .ok_or(Failure::Unloaded)?;
+                    // Lava or water next to the cell would flow into the cut.
+                    if state.registry.states.lava_levels.contains(&neighbour)
+                        || state
+                            .registry
+                            .blocks
+                            .by_id(mc_world::BlockStateId(neighbour))
+                            .is_some_and(|definition| definition.has_fluid())
+                    {
+                        return Err(Failure::Blocked);
+                    }
+                }
+                drops.push(mc_data::ItemStack::new(item, count));
             } else {
                 // A log-tag variant excluded from tree ownership must never
                 // pass through the flora path with an empty drop list.
@@ -875,6 +927,11 @@ pub(crate) fn missing_stock(
 /// Foundation cells extend the bottom of the ledger box, never its top.
 /// Recover the exact authored floor from that top and the future footprint;
 /// do not treat arbitrary vertically overlapping buildings as the same site.
+/// The site a structure reserves, without its wide clear-stage window.
+fn site_reservation(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
+    bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
+}
+
 fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
     let Some(blueprint) = record
         .snapshot

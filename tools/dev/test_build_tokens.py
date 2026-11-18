@@ -29,6 +29,39 @@ for line in sys.stdin:
                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
         print(f"nested {out.returncode} {out.stdout.strip()}", flush=True)
 '''
+# Loaded by every Python process of one runner through PYTHONPATH (the runner itself is
+# unchanged): reports slot-lock.py's gate calls on a pipe and pauses after its first test
+# that found the gate free, until the test writes to the go pipe.
+GATE_HOOK = '''import fcntl, os
+_fds = os.environ.get("TOKEN_TEST_GATE_HOOK")
+if _fds:
+    _sig, _go = (int(fd) for fd in _fds.split(","))
+    _flock, _close, _free, _paused = fcntl.flock, os.close, set(), []
+
+    def _gate(fd):
+        try:
+            return os.readlink(f"/proc/self/fd/{fd}").endswith("priority.gate")
+        except OSError:
+            return False
+
+    def flock(fd, op):
+        if op == fcntl.LOCK_EX and _gate(fd):
+            os.write(_sig, b"y")  # yielding: about to sleep until no priority waiter is left
+        _flock(fd, op)
+        if op == fcntl.LOCK_EX | fcntl.LOCK_NB and _gate(fd):
+            _free.add(fd)  # the test found no priority waiter
+
+    def close(fd):
+        tested = fd in _free
+        _free.discard(fd)
+        _close(fd)
+        if tested and not _paused:
+            _paused.append(fd)
+            os.write(_sig, b"p")
+            os.read(_go, 1)
+
+    fcntl.flock, os.close = flock, close
+'''
 
 
 class Command:
@@ -264,43 +297,120 @@ class BuildTokenTests(unittest.TestCase):
         for cmd in running:
             self.finish(cmd)
 
-    def test_background_lane_leaves_token_three_for_priority_compiles(self):
+    def test_a_waiting_priority_compile_gets_the_next_freed_token_before_background(self):
+        running, _ = self.hold_three()
         background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
         saved, self.env = self.env, background
         try:
-            cmds = [self.start('cargo', 'build', '-p', f'bg{n}') for n in range(3)]
+            waiter = self.start('cargo', 'build', '-p', 'bg')
         finally:
             self.env = saved
-        self.settle(cmds)
-        running = [cmd for cmd in cmds if cmd.state == 'run']
-        queued = [cmd for cmd in cmds if cmd.state == 'queued']
-        self.assertEqual(sorted(cmd.token for cmd in running), ['1', '2'])
-        self.assertEqual(len(queued), 1)
-        # A priority compile (no lane) still gets token 3 while background work waits.
-        priority = self.start('cargo', 'build', '-p', 'video')
+        self.settle([waiter])
+        self.assertEqual(waiter.state, 'queued')
+        # Queued after the background compile, the priority compile still wins the
+        # next token the background lane could take.
+        priority = self.start('cargo', 'build', '-p', 'd8')
         self.settle([priority])
-        self.assertEqual((priority.state, priority.token), ('run', '3'))
-        self.finish(priority)
-        # Token 3 comes back free and the background waiter does not take it.
-        def expired(*_):
-            raise AssertionError('token 3 stayed held after the priority compile exited')
-        previous = signal.signal(signal.SIGALRM, expired)
-        signal.alarm(BOUND)
-        fd = os.open(self.state_dir / 'tokens' / 'token-3.lock', os.O_RDONLY)
+        self.assertEqual(priority.state, 'queued')
+        freed = next(cmd for cmd in running if cmd.token in ('1', '2'))
+        self.finish(freed)
+        self.wait_run(priority)
+        self.assertEqual(priority.token, freed.token)
+        readable, _, _ = select.select([waiter.proc.stdout], [], [], 0)
+        self.assertFalse(readable, 'the background compile started while a priority compile waited')
+        # With no priority compile waiting, the background compile takes the next one.
+        running.remove(freed)
+        other = next(cmd for cmd in running if cmd.token in ('1', '2'))
+        self.finish(other)
+        self.wait_run(waiter)
+        self.assertEqual(waiter.token, other.token)
+        for cmd in [*running, priority, waiter]:
+            if cmd is not other:
+                self.finish(cmd)
+        self.wait_tokens_free()
+
+    def test_two_waiting_priority_compiles_both_win_before_background(self):
+        running, _ = self.hold_three()
+        background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
+        saved, self.env = self.env, background
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            signal.alarm(0)
-            readable, _, _ = select.select([queued[0].proc.stdout], [], [], 0)
-            self.assertFalse(readable, 'a background compile started on token 3')
+            waiter = self.start('cargo', 'build', '-p', 'bg')
         finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, previous)
-            os.close(fd)
-        self.finish(running[0])
-        self.wait_run(queued[0])
-        self.assertEqual(queued[0].token, running[0].token)
-        for cmd in (running[1], queued[0]):
+            self.env = saved
+        self.settle([waiter])
+        first = self.start('cargo', 'build', '-p', 's2')
+        self.settle([first])
+        second = self.start('cargo', 'build', '-p', 's4')
+        self.settle([second])
+        self.assertEqual((waiter.state, first.state, second.state), ('queued', 'queued', 'queued'))
+        # Token 3 goes to one priority compile; the next token the background lane
+        # could take still goes to the other one.
+        by_token = {cmd.token: cmd for cmd in running}
+        self.finish(by_token['3'])
+        readable, _, _ = select.select([first.proc.stdout, second.proc.stdout], [], [], BOUND)
+        self.assertTrue(readable, 'no priority compile took token 3')
+        winner = first if first.proc.stdout in readable else second
+        other = second if winner is first else first
+        self.wait_run(winner)
+        self.finish(by_token['1'])
+        self.wait_run(other)
+        self.assertEqual(other.token, '1')
+        readable, _, _ = select.select([waiter.proc.stdout], [], [], 0)
+        self.assertFalse(readable, 'the background compile started while a priority compile waited')
+        self.finish(by_token['2'])
+        self.wait_run(waiter)
+        self.assertEqual(waiter.token, '2')
+        for cmd in (winner, other, waiter):
             self.finish(cmd)
+        self.wait_tokens_free()
+
+    def test_a_background_compile_that_found_the_gate_free_yields_to_a_priority_compile_queued_after(self):
+        """Advisor: the at-once take tested the gate before taking a token, so a priority compile
+        could queue in between and lose the next freed token to the background compile."""
+        running, _ = self.hold_three()
+        hook_dir = self.root / 'hook'
+        hook_dir.mkdir()
+        (hook_dir / 'sitecustomize.py').write_text(GATE_HOOK)
+        sig_r, sig_w = os.pipe()
+        go_r, go_w = os.pipe()
+        for fd in (sig_r, go_w):
+            self.addCleanup(os.close, fd)
+        saved = self.env
+        self.env = saved | {'KRASNOKAMEN_BUILD_LANE': 'background', 'PYTHONPATH': str(hook_dir),
+                            'TOKEN_TEST_GATE_HOOK': f'{sig_w},{go_r}'}
+        try:
+            background = self.start('cargo', 'build', '-p', 'bg', pass_fds=(sig_w, go_r))
+        finally:
+            self.env = saved
+        os.close(sig_w)
+        os.close(go_r)
+        # The background runner either queued (all tokens busy) or found the gate free and
+        # paused before it takes a token; either way no priority compile is waiting yet.
+        readable, _, _ = select.select([background.ready, sig_r], [], [], BOUND)
+        self.assertTrue(readable, 'the background runner neither queued nor tested the gate')
+        if sig_r in readable:
+            self.assertEqual(os.read(sig_r, 1), b'p')
+        # Now a priority compile registers (a shared hold, as a waiting normal-lane runner
+        # takes it) and a token the background lane can take frees.
+        gate = os.open(self.state_dir / 'tokens' / 'priority.gate', os.O_WRONLY | os.O_CREAT, 0o666)
+        fcntl.flock(gate, fcntl.LOCK_SH)
+        freed = next(cmd for cmd in running if cmd.token == '1')
+        self.finish(freed)
+        os.write(go_w, b'g')
+        # The background compile either starts (stdout) or yields (the hook's `y`), never both.
+        readable, _, _ = select.select([background.proc.stdout, sig_r], [], [], BOUND)
+        self.assertTrue(readable, 'the background runner neither started nor yielded')
+        self.assertNotIn(background.proc.stdout, readable,
+                         'the background compile took a token while a priority compile waited')
+        self.assertEqual(os.read(sig_r, 1), b'y')
+        # The priority waiter wins and lets go: the background compile takes the token.
+        os.close(gate)
+        self.wait_run(background)
+        self.assertEqual(background.token, '1')
+        for cmd in running:
+            if cmd is not freed:
+                self.finish(cmd)
+        self.finish(background)
         self.wait_tokens_free()
 
 

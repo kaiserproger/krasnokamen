@@ -24,6 +24,18 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LINGERING-FRIENDLY-P
 regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_healing_cloud_heals_other_player_with_pvp_off"]
 failing_first = "reported"
 
+
+[[bug]]
+id = "PHYSICS-CLIP-Y-PARITY"
+title = "`clip_y` has no contact-tolerance parity with `clip_x`/`clip_z`: the vertical axis is covered only by the `sweep_axis_interval` clamp, so a body resting up to 1e-7 inside the floor or a ceiling is not snapped out the way the horizontal faces are."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Files this gap as promised by the R6 amendment 2 (CrowdPush): the physics fix widens the vanilla `VoxelShape.collideX`/`collideZ` face tolerance (`clip >= -1.0E-7`, `clip <= 1.0E-7`) for the horizontal axes and adds the `sweep_axis_interval` contact clamp, which covers `resolve_until_first_impact` and the horizontal sweep. `clip_y` in crates/mc-physics/src/lib.rs is unchanged and still skips a face it is within the tolerance of, so the vertical paths that use it (`resolve_axes`) keep the pre-R6 behaviour. Not reproduced as a failure; no test covers a body resting 1 ULP inside a floor or ceiling. Needs an audit of `VoxelShape.collideY` in the local 26.1.2 oracle and a regression on the vertical faces before any 26.1.2 parity claim."
+regression = []
+failing_first = "not recorded"
+
 [[bug]]
 id = "POTION-TARGET-GEOMETRY"
 title = "Splash and lingering potions miss bodies whose hitboxes overlap their areas while feet lie outside."
@@ -4616,6 +4628,43 @@ regression = [
 fix_commit = "2b8219d1"
 
 [[bug]]
+id = "SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4"
+title = "A settlement road project stays Running with no progress for 78,000 ticks and holds the only construction slot, leaving the owner upgrade queued"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "UpgradeProof D18 harness on the retained trial-4 world (receipts/UpgradeProof/HANDOFF.md, logs/after-final.log), trees d7fd00e64 and 94968fcc6a alike: road level 1 at state=Running stage=0 work=34 consumed=0 pause=None from tick 304153 to 382153, so a funded owner upgrade order remains Queued{busy} for the observation. Same symptom family as CIV-SEED24-ROAD-CLEAR-STALL, but that row's fix 2b8219d1 (fence-post stand) is an ancestor of 94968fcc6a, so it does not cover this stall. Cause (SlotStall, receipts/SlotStall/README.md, native retained-world probe on copies at ab2d945c9): the construction stall watch only rotated Builders and reached retry_preparation only for a protected tree in a clear stage, so a rotation that kept picking residents who could not reach the worksite held the only slot forever. Shape A, trial-4: road Running work=34/42 consumed=0 for 24,000 ticks, settlement_construction_stalled cause=worksite_unreached recovery=builder_released at tick 308521, then recovery_failed at 311521 and nothing more; 7 of 8 residents float in the one-cell water basin beside the bell (SETTLEMENT-RESIDENTS-TRAPPED-IN-PLAZA-BASIN), so every rotation picks a trapped Builder. Shape B, growth-03ef2e297a72-laptop-2: perimeter Prepared work=0/24 the same way; its Builders carry the cobblestone but get no worksite target (SETTLEMENT-WALL-STRETCH-WITHOUT-STAND). The other Prepared scan hits never stall when ticked: fast-ab/pin, fast-ab/frames12 and LedgerSplit base-tail start at the morning shift, PreparedLaunchFix real-gait has a frozen clock (day_time 18000). Fix: at the repeated-stall window unpaid work (nothing consumed) is cancelled through retry_preparation (owner order requeued when no newer order is pending); on the fixed tree both copies log recovery=preparation_cancelled and the slot frees, so a queued owner order is admitted at the next planning pass. Paid work keeps rotating Builders."
+regression = [
+  "cargo:mc-core:settlements::construction::stall_tests::an_unpaid_road_that_stops_running_gives_back_the_slot_after_a_failed_rotation",
+  "cargo:mc-core:settlements::construction::stall_tests::an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order",
+]
+failing_first = "reported"
+fix_commit = "85e10283e4b29cfa9854a79d39fc5eeef4993161"
+
+[[bug]]
+id = "SETTLEMENT-RESIDENTS-TRAPPED-IN-PLAZA-BASIN"
+title = "Seven of trial-4's eight residents stay in the one-cell water basin beside the bell for 24,000 ticks under a tree crown, so no Builder ever reaches a worksite"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "SlotStall native probe on a copy of SpainCulture trial-4 at ab2d945c9 (receipts/SlotStall/README.md, logs/before-trial4.log, logs/dump-trial4.log): residents at (116.3-116.7, 69.6, 7.5) float in water (116,69,7), rimmed by acacia_wood at y=69, with acacia_leaves at (116,72,7) and its neighbours and an acacia trunk at (116,70..73,9); they hold navigation targets and 40-130-node paths but do not move from tick 304106 to 328106. mc-physics step_entity lets a body jump out of fluid only when a 0.6 rise is free of collision; from y=69.6 the 1.95-high body would reach 72.15 and meets the crown at y=72. Not established: whether vanilla frees villagers here, and how the crown came to stand over the basin (lumber replant or natural growth)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "SETTLEMENT-WALL-STRETCH-WITHOUT-STAND"
+title = "A perimeter wall stretch planned on a lakeshore house roof has no Builder stand, so it never starts and is admitted again after each cancellation"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "SlotStall native probe on a copy of SpainCulture growth-03ef2e297a72-laptop-2 at ab2d945c9 (receipts/SlotStall/README.md, logs/after-growth03ef-l2.log PROBE_COLUMN lines): the next wall cell [91,69,-25] stands on acacia_stairs at y=68 of a house roof; layout::stand's inward columns (91,-24) and (91,-23) are open water up to y=62, below the surface band 63..79 of anchor y 71, so stand is None, villager::building::work gives the Builder no target (navigation=None) and the stretch stays Prepared work=0/24 while the Builders carry 24 cobblestone. With SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4's fix the stretch is cancelled after one failed rotation, and with no pending order the planner admits the same stretch 20 ticks later. A similar worksite_unreached stall hits fast-ab/pin's stretch at origin [102,72,35] on cell [107,77,35] (logs/before-fastab-pin.log)."
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
 id = "CIV-SEED24-FARM-SEEDS-NEED-A-FARM"
 title = "A settlement without a farm can never fund its first Farm: the Farm's wheat cells cost 12 wheat seeds whose only source is a farm, so stored bread runs out and births stop"
 area = "gameplay"
@@ -5740,6 +5789,17 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "CI run 43340344269 (main 3caeae5c, regressions stage): mc-edge advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book panicked at crates/mc-edge/src/advancements_tests.rs:233 on std::fs::remove_dir_all(dir).unwrap() directly after drop(core): Os code 39 DirectoryNotEmpty (artifact test-failure-receipts-1, receipts/FleetControl/ci-flakes-20261113/a). Reproduced on main ad93ee71 (after the forest-worker join fix fb4c1a52, so that fix does not cover it) by looping the exact test binary: 0 of 100 serial, 1 of 100 with four copies in parallel (receipts/CiFlakes/repro.sh, repro.out, A-par4-56.log). Classification: a timing race in the core, not in the test and not caused by the input/entity commits: remove_dir_all empties the directory and the final rmdir fails, so some core thread or deferred writer still creates a file after Core::drop returned (Core::drop does not wait for every writer of the world directory). Which thread and file is not yet identified (next step: list the leftover entry on failure)."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CORE-DROP-RELEASES-LEASE-BEFORE-OWNERS-JOIN"
+title = "Dropping a running Core without Core::shutdown detaches the tick and journal owners and releases the world lease while they may still write"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Sol code review of CoreBounds (receipts/CoreBounds/REVIEW-CODE-sol.md, 2026-11-18): Core/CoreInner have no Drop that stops and joins the owners; on a plain drop(core) the JoinHandles detach and the lease File closes (crates/mc-core/src/core.rs:353-357 at wt/CoreBounds e41b22250), while the safe order exists only in Core::shutdown (:1450-1475). A second Core::open of the same world could then run beside a still-writing owner. CoreBounds' StartupOwners guard covers only the failed-start path. Possibly the cause of CORE-DROP-LEAVES-WORLD-DIR-WRITER; not yet reproduced."
 regression = []
 failing_first = "reported"
 
@@ -7192,11 +7252,13 @@ id = "WORLD-PRUNE-JUDGES-STORE-WITHOUT-TAIL-CHECKPOINT"
 title = "world prune does not check that its open/shutdown cycle published a checkpoint covering the crash journal tail"
 area = "gameplay"
 severity = "minor"
-status = "open"
-source = "Independent review receipts/ReviewPruneFix/REPORT.md (architect-fable, 2026-11-16), finding 1, inferred from code, not reproduced: prune_world (crates/mc-world-tools/src/world_maintenance.rs:115-131) opens and shuts the world down, then judges chunk rows without checking that a checkpoint covering the journal tail was published (core.rs:1442-1467, core_stop.rs:32-41, core/tick_loop.rs:478-480, core/journal.rs:110-133,188-193). If the final checkpoint is refused or the tick thread panics, prune judges a store without the tail and reports success; a chunk changed only in the WAL could then be pruned and regenerated (its WAL edits replay at the next start). Pre-existing before the WORLD-PRUNE-PANICS-ON-CRASH-IMAGE fix for tails without block writes. Suggested guard: after shutdown and the lease, refuse while journal/ holds a batch above the manifest tick. Announcement backlog."
+status = "fixed"
+source = "Independent review receipts/ReviewPruneFix/REPORT.md (architect-fable, 2026-11-16), finding 1, inferred from code, not reproduced: prune_world (crates/mc-world-tools/src/world_maintenance.rs:115-131) opens and shuts the world down, then judges chunk rows without checking that a checkpoint covering the journal tail was published (core.rs:1442-1467, core_stop.rs:32-41, core/tick_loop.rs:478-480, core/journal.rs:110-133,188-193). If the final checkpoint is refused or the tick thread panics, prune judges a store without the tail and reports success; a chunk changed only in the WAL could then be pruned and regenerated (its WAL edits replay at the next start). Pre-existing before the WORLD-PRUNE-PANICS-ON-CRASH-IMAGE fix for tails without block writes. Fixed by the PruneGuard slice (merge 00e38ed6d, branch head 12a0280ea): prune_stopped refuses through native_checkpoint::require_checkpointed_tail. The fix spans several commits, so fix_commit is patch mode: docs/bugs/fix-patches/WORLD-PRUNE-JUDGES-STORE-WITHOUT-TAIL-CHECKPOINT.patch adds only the guard call, and reversing it removes that call while keeping the scoped manifest read, the guard function and the tests. Only the mc-world-tools ref goes red under that control (receipt wt/PruneGuard .analysis/validation/20261117T194256-test-mefpdc1b: prune returned Ok, pruned 72 of 81); the two mc-core refs unit-test the guard function itself. Committee: Opus approve, Sol amend (negative control only, done) in /var/tmp/w/receipts/PruneGuard/REVIEW-CODE-*.md."
 repro = "source"
-regression = []
+regression = ["cargo:mc-world-tools:world_maintenance::tests::prune_refuses_a_published_tail_the_checkpoint_does_not_cover", "cargo:mc-core:core::native_checkpoint_crash_tests::shutdown_with_a_refused_final_checkpoint_leaves_the_tail_prune_refuses", "cargo:mc-core:native_checkpoint::tests::checkpointed_tail_guard_reads_published_batch_names"]
 failing_first = "not recorded"
+fix_commit = "patch:deedd050814b07404bfbfe53461b61f4afe1f9c210da80b9e5afda6e638da514"
+promotion = "docs/bugs/promotions/WORLD-PRUNE-JUDGES-STORE-WITHOUT-TAIL-CHECKPOINT.json"
 
 [[bug]]
 id = "SETTLEMENT-REMOVAL-STALE-ROW-BLOCKS-STARTUP"
@@ -7281,11 +7343,13 @@ id = "BATTLE-REST-SKIPS-TARGET-FACING"
 title = "A battle soldier standing still with a look target does not turn to face it while it rests"
 area = "gameplay"
 severity = "minor"
-status = "open"
-source = "Found while implementing the battle facing rule, 2026-11-17 (receipts/BattleYawHold/RESULTS.md). early_entity_rest (crates/mc-core/src/tick/entity_phase.rs:491) keeps a battle row out of the rest only for a non-zero battle drive. A row with zero drive, zero velocity, on the ground, not hurt in the last 100 ticks and with a battle look target (columns.look_by_slot) therefore rests, and the step is skipped. Its full step would turn it toward the target: a scratch test on a resting husk at yaw 30 with a target at +x gave rest = true while the full step returned yaw -60. Battle rows rest without a physics proof, so the rest is not bit-identical to the step in this case. Fix idea, one guard: also refuse the rest for `battle && look_by_slot[slot].is_some()`. Cost: every targeted battle row standing still would run the full step instead of resting; the share of rest hits lost is unmeasured. Deferred until after the 2026-11-19 freeze (Main)."
+status = "fixed"
+source = "Found while implementing the battle facing rule, 2026-11-17 (receipts/BattleYawHold/RESULTS.md). early_entity_rest (crates/mc-core/src/tick/entity_phase.rs:491) keeps a battle row out of the rest only for a non-zero battle drive. A row with zero drive, zero velocity, on the ground, not hurt in the last 100 ticks and with a battle look target (columns.look_by_slot) therefore rests, and the step is skipped. Its full step would turn it toward the target: a scratch test on a resting husk at yaw 30 with a target at +x gave rest = true while the full step returned yaw -60. Battle rows rest without a physics proof, so the rest is not bit-identical to the step in this case. Fix 75d04c02c4..77a3de360e (design receipts/BattleRest/DESIGN.md): the rest guard refuses the rest while battle::rest_turns_toward_target says the skipped step would still turn the row by at least half a wire quantum (0.703125 deg), and the row rests again once it faces its target. Three base-pin and three fix-pin takes of the A1 battle scene (receipts/BattleRest/BOUNDS-REST-TAKES.md): strict foot S1/S2/S3, strict horse C1, V1, M3 reversal, W1 and horse target-facing (R2) do not regress. The pre-registered foot with-target loose bound (R1) FAILS in mid (350/345/389 vs 292.4) and on two of three takes in late; M3 gap_engaged misses below its window. Committee code review: Opus approve and Sol approve (receipts/BattleRest/REVIEW-CODE-{opus,sol}.md); both name R1 the inherent cost of a resting soldier tracking a moving target, and no narrower guard removes it. Main 2026-11-18 accepted R1 as an explicit trade-off: the FAIL stays recorded as a FAIL; the owner may override. Recorded packet payload cost (receipts/BattleRest/BYTES-ATTRIBUTION.md; .solrec stores the uncompressed packet id and payload without transport framing, so this is NOT measured network bandwidth): rotate_head frames +63%, move_entity_rot frames 21,488 to 422,532, about +3.9 MB of rotation payload per take and about +5.9% total recorded play payload; the differences in other packet types are not isolated. Entity phase p50 3.1-3.4 ms against 3.0-3.1 ms on base (informative, shared host). Integration (Main): the clause moved after the hostile-target and hurt vetoes; the quantization docs now say floor packing gives a bounded angular error, not an invisible one; a boundary regression was added. The fix patch was regenerated from the production hunks against ab2d945c9 at docs/bugs/fix-patches/BATTLE-REST-SKIPS-TARGET-FACING.patch."
 repro = "source"
-regression = []
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::resting_battle_row_with_a_look_target_faces_it_and_then_rests", "cargo:mc-core:tick::entity_phase::entity_phase_tests::battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error"]
+failing_first = "reported"
+fix_commit = "patch:3908dbf5ba2e061d4158ce2d05c1b55226bc342b0b87cac4a0971edf6061a770"
+promotion = "docs/bugs/promotions/BATTLE-REST-SKIPS-TARGET-FACING.json"
 
 [[bug]]
 id = "BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT"
@@ -7293,8 +7357,118 @@ title = "A cavalry husk whose horse died skates across the battlefield at 45-107
 area = "gameplay"
 severity = "major"
 status = "open"
-source = "BattleJitterClient diagnosis 2026-11-17 (receipts/BattleYawHold/RIDER-FLING.md): wire recordings of six field-1k battle takes, two before and four after the yaw fix, a per-tick server probe and the source. Every wire position step above 2 blocks per 3-tick packet but one horse knockback belongs to a dismounted cavalry husk (3-51 per take, up to 10.9 blocks per packet, 2 entity_position_sync packets in one take); the vanilla client draws them as a 3-tick glide, so the body visibly skates. Cause: battle/cavalry.rs sweep_drives wrote the raw sweep heading, a displacement in blocks, as the drive of every untargeted steady member of a sweeping mounted regiment; only the mounted pass turns it into a horse speed, so a rider whose horse died kept it as his own drive in blocks per second and covered 1/20 of the distance to the plan point every tick (server probe: consecutive-tick step ratio 0.950, up to 5.34 blocks/tick). Fix: only members seated on their own native row take the plan heading; the others keep the steering foot drive (independent design review receipts/BattleYawHold/REVIEW-DESIGN-sweepseat-astra.md). Take acceptance: dismounted steps above 2 blocks per packet = 0 on at least three final-campaign takes with recorded dismounts, with a skip-reverted control that reproduces them (FinalCampaign RUNBOOK 6b)."
-repro = "source"
+source = "BattleJitterClient diagnosis 2026-11-17 (receipts/BattleYawHold/RIDER-FLING.md): wire recordings of six field-1k battle takes, two before and four after the yaw fix, a per-tick server probe and the source. Every wire position step above 2 blocks per 3-tick packet but one horse knockback belongs to a dismounted cavalry husk (3-51 per take, up to 10.9 blocks per packet, 2 entity_position_sync packets in one take); the vanilla client draws them as a 3-tick glide, so the body visibly skates. Cause: battle/cavalry.rs sweep_drives wrote the raw sweep heading, a displacement in blocks, as the drive of every untargeted steady member of a sweeping mounted regiment; only the mounted pass turns it into a horse speed, so a rider whose horse died kept it as his own drive in blocks per second and covered 1/20 of the distance to the plan point every tick (server probe: consecutive-tick step ratio 0.950, up to 5.34 blocks/tick). Fix: only members seated on their own native row take the plan heading; the others keep the steering foot drive (independent design review receipts/BattleYawHold/REVIEW-DESIGN-sweepseat-astra.md). Take acceptance (FinalCampaign RUNBOOK 6b, client wire-recorder receipt, never a probe-patched binary): dismounted steps above 2 blocks per packet = 0 on at least three takes of the unmodified final pin whose wire shows at least N_min really dismounted bodies moving untargeted, with N_min from the fling rate of such bodies on a skip-reverted control pin, which must reproduce the fling on one of them."
+repro = "client"
 regression = ["cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_chase", "cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_flank", "cargo:mc-core:battle::cavalry::tests::a_rider_whose_horse_dies_walks_from_the_next_battle_tick"]
 failing_first = "reported"
 fix_commit = "9176f32745de0bb4933212569efa643f0ec68874"
+
+[[bug]]
+id = "HARNESS-RESERVE-CPUS-STALE-RESERVATION"
+title = "A stale CPU reservation left by a killed `reserve-cpus` silently pins every later `mem-run` scope away from those CPUs, or drops the restriction entirely when the stale list covers a whole lane pool"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G4, read from code and not reproduced: tools/dev/reserve-cpus:20-30 creates /tmp/solaris-mem-slots/reserved-cpus with only the CPU list (`printf '%s\n' \"$cpus\" > \"$file\"`, noclobber) and releases it from `trap release EXIT`; a SIGKILL (agent cancel, OOM) or a wrapper kill leaves the file behind, and tools/dev/mem-run.sh:365-373 then excludes those CPUs from every new scope, including the perf lane's own pool (`pool=$perf_cpus`), so -p A/B numbers shrink with no line in the log saying why; when the stale list covers a whole pool, `allowed` is empty and mem-run.sh:371-372 skips `cpu_pin`, so the scope runs on the reserved CPUs and the reservation is ignored instead. tools/dev/README.md:17 states the file is removed when the command ends. Nothing records a pid or checks freshness; /tmp is tmpfs, so only a reboot clears it. Repro: `tools/dev/reserve-cpus 6,7 -- sleep 60` and SIGKILL the script's pid, then run `tools/dev/mem-run.sh -m 1G sh -c 'grep Cpus_allowed_list /proc/self/status'` and see the reserved CPUs excluded with no reservation owner alive."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY"
+title = "`mem-run` forwards a stop signal to its direct child only, so a descendant that ignores it keeps the wrapper, the scope and the build token held until the wrapper is SIGKILLed"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G5, read from code and not reproduced: tools/dev/mem-run.sh:410-411 background the command (`\"$@\" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!`) and install `trap \"kill -TERM $c\" TERM INT HUP`; the only whole-scope cleanup is tools/dev/mem-run-guard.py:63-84, which fires when the wrapper or its caller dies. A targeted `kill -TERM <mem-run pid>` (an agent cancelling one job by pid) with a command whose children ignore TERM leaves the wrapper blocked in `wait` forever, so the guardian sees a live wrapper, the scope is never killed and the build token it holds is not released until someone SIGKILLs the wrapper. Ctrl-C at a terminal hides this because the kernel signals the whole foreground process group. Repro: `tools/dev/mem-run.sh -m 1G sh -c 'trap \"\" TERM; sleep 600' &`, `kill -TERM` the mem-run pid, then check the scope stays populated and the token is still held in tools/dev/fleet-status."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "CONTENT-IMPORT-JVM-NO-TIMEOUT"
+title = "`content import` waits on the bundle's datagen, javac and the Java extractors with no timeout and no kill on drop, so a stalled JVM blocks the command forever"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G7, read from code and not reproduced: crates/mc-edge/src/content_import.rs:868-875 (bundle datagen via `-DbundlerMainClass`), :923-934 (javac of the in-tree extractors) and :948-954 (extractor run) call `Command::new(java|javac) ... .output()` with no timeout and no kill-on-drop. A JVM that waits on a lock, on stdin or on a full disk blocks `krasnokamen content import --version <version> --download` indefinitely with no progress line and no error, and Ctrl-C leaves the JVM running until it finishes on its own (it stops only because the terminal signals the whole process group). Repro: run content import against a bundle whose datagen stalls, or SIGSTOP the java child while :868-875 is running, and observe the command never returns and prints no diagnostic."
+repro = "command"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "KNOCKBACK-EPOCH-MAP-COPY"
+title = "The knockback epoch observer turned the tick output's snapshot uniqueness into a tick-owner panic (`Arc::get_mut(&mut output.snapshot).expect(..)`); publishing now rebuilds a shared snapshot instead, while the O(K) epoch-map copy per impulse tick (K = tracked connections) is measured and accepted rather than removed."
+area = "gameplay"
+severity = "minor"
+status = "fixed"
+source = "crates/mc-core/src/core.rs:115-148 (observe_explosion_knockback): the pre-fix code assigned the epoch map through `Arc::get_mut(&mut output.snapshot).expect(\"tick output is not shared before publication\")`, so any second holder of the tick's snapshot panicked the tick owner; the shared map is WorldSnapshot.player_knockback_ticks (crates/mc-core/src/boundary.rs:671) and the broadcast retains up to broadcast_cap=32 outputs (crates/mc-core/src/config.rs:137) while the tick seeds its handle at crates/mc-core/src/core/tick_loop.rs:66. Fix: assign in place when the snapshot is unique (every tick the loop publishes), and otherwise rebuild this tick's snapshot by cloning it (`WorldSnapshot`'s `Clone` is documented fallback-only) and leave a snapshot a reader holds untouched; the epoch assignment also stays outside the 'epochs changed' condition, because a fresh run_tick snapshot starts empty, so an unchanged tick republishes the same `Arc` (same pointer, same non-empty content). Kept deliberately: the `Arc::make_mut` copy on impulse ticks, an O(K) node walk where K = tracked connections (players), measured at K=100 (12.5 us/clone) and K=1000 (61.6 us/clone) in this change's debug test build (debug, shared host, informative; printed by cargo:mc-core:dimensions::tests::knockback_epoch_clone_cost_is_informative_not_a_gate); the audit's suggested alternative (a private map cloned only on the change path) copies on exactly the same ticks, so it is not a fix. Negative control: reverting the non-test hunks restores the `.expect` and the registered shared-snapshot check panics at core.rs:125 'tick output is not shared before publication'. Found by read-only audit CS341/REPORT-B.md B6; no production failure observed."
+repro = "source"
+regression = [
+  "cargo:mc-core:dimensions::tests::shared_tick_snapshot_never_panics_the_knockback_observer",
+  "cargo:mc-core:dimensions::tests::unchanged_knockback_ticks_republish_the_same_map_without_a_copy",
+]
+failing_first = "not recorded"
+fix_commit = "215e1d9212729dc2415a45e71c4c45b31c989e1e"
+promotion = "docs/bugs/promotions/KNOCKBACK-EPOCH-MAP-COPY.json"
+
+[[bug]]
+id = "ENTITYVIEWS-ASCENDING-ID-DEBUG-ONLY"
+title = "EntityViews::publish documents a strictly ascending unique-id input contract but enforced it only with debug_assert!, so a release build silently accepted a batch with a duplicated id (one slot captured before the batch's mutations and freed twice, the identity index and page cells then diverging) or a merely out-of-order one (changed slot assignment between versions that share a slot); the check now runs in every build."
+area = "gameplay"
+severity = "minor"
+status = "fixed"
+source = "crates/mc-core/src/entity_views.rs:64-83 (the doc contract, now including release-build enforcement) and :122-137 (the check: one comparison per row on the serial slot walk, always on, before that row mutates anything); the serial lifecycle it guards is :118-171 (next_append, free-list pop/push, slot insertion) and the page grouping is `entries.sort_by_key` by slot after a 'Stable' comment. Fix: replace the `debug_assert!(resolved.windows(2)…)` whole-batch scan with `previous < row.id` per row, panicking with a named contract message in every build. Two breaches motivated it, not equally severe: a duplicate id captures its slot before this batch's mutations, so removing it twice frees the same slot twice and the identity index, page cells and chunk index disagree; a unique but descending batch stays self-consistent but changes slot assignment between versions that share a slot (a determinism breach). Consequence, stated exactly: the panic is not caught (the tick thread has no catch_unwind) and does not run halt_authority, so no reliable `Disconnect` is sent; the broadcast sender drops, the pump ends and `serve` returns an error — a fail-stop of serving, the intended outcome for an internal contract breach after a partial mutation. Negative controls: reverting the non-test hunks restores the bare `debug_assert!`, whose payload is the stringified expression, so the registered message assertion fails in a debug build; with `-C debug-assertions=off` the reverted tree accepts the batch and the same checks fail at `expect_err`, while the fixed tree panics with the contract message (receipts 20261117T160526, 20261117T162308, 20261117T161253). Found by read-only audit CS341/REPORT-B.md B8; no caller violation known and no failure observed."
+repro = "source"
+regression = [
+  "cargo:mc-core:entity_views::tests::publish_rejects_descending_ids_with_a_named_contract_panic",
+  "cargo:mc-core:entity_views::tests::publish_rejects_a_duplicate_id_that_would_free_one_slot_twice",
+  "cargo:mc-core:entity_views::tests::ascending_batch_still_publishes_and_keeps_its_slots",
+]
+failing_first = "not recorded"
+fix_commit = "1f949f1516cb1cae2451f90fbc0011fb30741e37"
+promotion = "docs/bugs/promotions/ENTITYVIEWS-ASCENDING-ID-DEBUG-ONLY.json"
+
+[[bug]]
+id = "JOURNAL-TMP-NEVER-PRUNED"
+title = "Unpublished journal batches (`batch-<lo>-<hi>.bin.tmp`) are never removed: every failed or interrupted append leaves a file nothing prunes, so the world grows silently until an append hits ENOSPC and the core fail-stops."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Auditor C, D19 CS341 audit, /var/tmp/w/receipts/CS341/REPORT-C.md finding G-5 (books rule ch. 12.2.4 p. 270 'free up resources in every possible code path', ch. 18.7 p. 374 'clean up files'). Evidence: crates/mc-core/src/journal.rs:576-579 builds `self.dir.join(format!(\"{name}.tmp\"))` and :579-607 writes, sync_all's and renames it; a write/sync error (ENOSPC/EIO) or a stop between create and rename leaves the tmp file; prune_batches_through (journal.rs:982-997) deletes only names that start 'batch-' and end '.bin', and JournalWriter::open (journal.rs:437-448) only calls create_dir_all, so no path ever removes or reports a stale '*.tmp' (journal.rs:7,648 only documents that they are ignored). Not reproduced as a failure; read from source. Repro/test idea: a cargo test in mc-core (a `journal_tests::` fn; note crates/mc-core/src/journal_tests.rs:1364 already pins the current 'tmp is ignored' behaviour, which is what this row changes) that arms the existing WAL_WRITE_FAILURE hook (journal.rs:420-424,590-597, one-shot partial write + injected ENOSPC) for one append, reopens the world (JournalWriter::open) and asserts the journal directory holds no '*.tmp'; plus a second case that leaves a hand-written 'batch-00000000000000000099-00000000000000000099.bin.tmp' and asserts open removes it. Suggested fix: sweep 'journal/*.tmp' in JournalWriter::open and log one line with count and bytes."
+regression = ["cargo:mc-core:journal_tests::open_removes_unpublished_batch_leftovers"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "ENTITY-CROWD-PUSH-INTO-WALL"
+title = "Mobs in crowded pens are observed suffocating with their bodies partly or wholly inside stone walls; the cause is a clip/overlap tolerance band in the movement kernel."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Perf1M prep11-125000 on main de660fabd fixture (seal-then-clear pens, no Invulnerable), 2026-11-17 ~23:00: at 98/128 pens, 95,798 cohort summons, 204 suffocation events on 98 distinct cohort mobs (the earlier 190/93 was a snapshot of the same run), every one inside a pen wall, repeating every 10 ticks at the same position. Examples: zombie pos=11.54,65.00,511.95 (0.4-wide body spans z 511.75-512.15, 0.25 into the stone wall at z=511); skeleton pos=7966.70,65.00,511.30 (body z 511.10-511.50, wholly inside the wall block). Pens span z=512..575, wall at z=511; no fixture sweep reaches the wall. Receipt: targets/Perf1M/legs/prep11-125000/prepare/server.log; read-only world probes confirm (11,64,511)=stone with (11,64,512) and (11,64,510) air. Cause: the entity step's horizontal resolver is the time-of-impact sweep, whose first_sweep_hit drops any obstacle whose entry time is in the past (crates/mc-physics/src/lib.rs TIME_EPSILON 1e-12), while every clip and support predicate treats a side within COLLISION_EPSILON (1e-7 blocks) of a face as not overlapping; a body between ~1e-14 and 1e-7 blocks inside a block is therefore invisible on both sides and the step advances into the wall every tick. The band is supplied by the clip's own rounding while these mobs carry hand-written f64 literals: crates/mc-core/src/blueprint.rs builds minecraft:zombie with half width 0.3 (blueprint.rs:903 at de660fabd; 512.3 + (512.0 - (512.3 - 0.3)) - 0.3 = -5.68e-14), not the f32-widened contract width that R6 checked. Once inside, try_start_jump's raised-box sweep ignores the same obstacle, so a jumping kind lands on the wall's lowest block (y=65) and stays; only jumping kinds show y=65 (spiders have jump_speed 0). Fix: vanilla VoxelShape.collideX symmetric tolerance in clip_x/clip_z plus a contact pre-clip inside the tolerance in resolve_horizontal_sweep, and body sizes sourced from the vanilla f32 contract."
+regression = ["cargo:mc-physics:tests::wall_face_snap_never_lets_a_body_cross_the_face", "cargo:mc-physics:tests::a_contact_never_grows_deeper_than_the_tolerance_behind_a_face", "cargo:mc-core:tick::crowd_pen_tests::crowded_pen_bodies_never_enter_the_wall", "cargo:mc-core:blueprint_tests::body_sizes_come_from_the_vanilla_entity_contract", "cargo:mc-core:blueprint_tests::a_summoned_villager_keeps_the_contract_body_through_the_appearance_refresh", "cargo:mc-core:sleep::tests::a_woken_player_carries_the_player_contract_body", "cargo:mc-core:tick_tests::elytra_tests::an_unsolvable_reported_move_is_refused_instead_of_teleporting_the_player"]
+failing_first = "reported"
+
+[[bug]]
+id = "JOURNAL-PRUNE-ERRORS-SILENT"
+title = "WAL pruning swallows every failure (`read_dir` error, per-entry error, `remove_file` result), so a read-only or EIO journal directory grows the WAL without bound and without one log line until an append fails with ENOSPC and halt."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Auditor C, D19 CS341 audit, /var/tmp/w/receipts/CS341/REPORT-C.md finding G-6 (book rules ch. 12.2.4 p. 270, ch. 12.6 p. 286 'handle failures', ch. 18.7 p. 374). Evidence: crates/mc-core/src/journal.rs:982-997 - `let Ok(entries) = std::fs::read_dir(journal_dir) else { return }`, `let Ok(entry) = entry else { continue }`, `let _ = std::fs::remove_file(...)`; the only caller is the checkpoint completion path crates/mc-core/src/core/journal.rs:1008-1009, which logs nothing about pruning, so a filesystem refusal (remount-ro after a disk error, an overlay/NFS volume turning read-only, a changed directory mode) makes every checkpoint commit while nothing is deleted. Correctness is unaffected (batches at or below the committed checkpoint are ignored by replay), so the observable symptom is pure growth until ENOSPC. Not reproduced as a failure; read from source. Repro/test idea: a cargo test in mc-core that runs a real checkpoint through journal_loop on a temp world, makes the journal directory non-writable (chmod 0555 / a read-only overlay in a drill), then asserts the checkpoint still commits and that a warning is emitted naming the directory, the failing entry count and the errno; the same test must keep the existing green prune test unchanged. Suggested fix: count failures and emit one rate-limited warn per checkpoint with errno and unpruned count/bytes."
+regression = ["cargo:mc-core:journal_tests::prune_reports_and_counts_a_refused_removal"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "BATTLE-RESTING-ROWS-TRACKING-TARGETS-INFLATE-ROTATION-PACKETS"
+title = "Standing battle soldiers that track a moving target turn often and send many more rotation packets"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Accepted cost of the BATTLE-REST-SKIPS-TARGET-FACING fix (Main, 2026-11-18; owner may override). On the A1 battle scene at 1000/side, three base-pin and three fix-pin recordings (receipts/BattleRest/BOUNDS-REST-TAKES.md, BYTES-ATTRIBUTION.md): the pre-registered foot with-target loose turn bound R1 fails in mid (350/345/389 vs 292.4) and in two of three late windows, because a resting soldier now turns each time its target's bearing moves by at least half a wire quantum. Recorded packet payload (.solrec: uncompressed packet id and payload, not network bandwidth): rotate_head frames +63%, move_entity_rot frames 21,488 to 422,532, about +3.9 MB of rotation payload per take, about +5.9% total recorded play payload. Fix direction (after the 2026-11-19 freeze): a battle look-rate cadence or angular hysteresis for standing rows so turns follow the target at a bounded rate, re-measured against R1 and the payload attribution on the same scene. Backlog, not a freeze blocker."
+regression = []
+failing_first = "reported"

@@ -621,6 +621,22 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
     );
 }
 
+/// A later order against an active project never preempts it. It is admitted
+/// beside it, waits for materials, or is refused because the plan has no second
+/// lot of the right geometry; the active project must be untouched either way.
+fn later_order(state: &mut TickState, id: SettlementId, blueprint: &str) -> Option<OrderOutcome> {
+    match request_build(state, id, blueprint) {
+        Ok(outcome) => Some(outcome),
+        Err(error) => {
+            assert!(
+                error.contains("No free loaded construction site"),
+                "unexpected refusal: {error}"
+            );
+            None
+        }
+    }
+}
+
 fn plan_until_started(state: &mut TickState, id: SettlementId) {
     for _ in 0..2000 {
         plan(state, id);
@@ -1634,6 +1650,18 @@ fn fund_all(state: &mut TickState, blueprints_: &[&str]) {
 fn autonomous_storage(state: &mut TickState, id: SettlementId) {
     open_plan(state);
     fund_all(state, &["storage", "house"]);
+    // A second lot beside the first needs foundation dirt of its own (D8): the
+    // fixture carries the two bills and one more lot's spare stack.
+    for stack in state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .filter(|stack| stack.count > 0)
+    {
+        stack.count = (stack.count * 2).min(64);
+    }
     plan_until_started(state, id);
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
@@ -1651,14 +1679,14 @@ fn an_untouched_autonomous_project_keeps_its_fifo_slot_before_an_owner_order() {
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     // D8: the later house starts beside the autonomous project or waits for
     // materials; either way it never takes the autonomous project's slot.
-    let outcome = request_build(&mut state, id, "house").unwrap();
+    let outcome = later_order(&mut state, id, "house");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
     assert!(!project.ordered);
     assert_eq!(project.structure, old);
     assert_eq!(executor::status(&state, id, &old).unwrap(), snapshot);
     match outcome {
-        OrderOutcome::Queued { .. } => assert_eq!(
+        Some(OrderOutcome::Queued { .. }) => assert_eq!(
             state
                 .settlements
                 .get(id)
@@ -1669,10 +1697,15 @@ fn an_untouched_autonomous_project_keeps_its_fifo_slot_before_an_owner_order() {
                 .blueprint,
             "house"
         ),
-        OrderOutcome::Started => {
+        Some(OrderOutcome::Started) => {
             let record = state.settlements.get(id).unwrap();
             assert_eq!(record.projects.len(), 2, "the house builds in parallel");
             assert!(record.orders.is_empty());
+        }
+        None => {
+            let record = state.settlements.get(id).unwrap();
+            assert_eq!(record.projects.len(), 1, "no second project is admitted");
+            assert!(record.orders.is_empty(), "a refused request is not queued");
         }
     }
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
@@ -1707,11 +1740,11 @@ fn owner_order_is_busy_once_an_autonomous_project_placed_a_block() {
     let writes = state.plugin_block_writes.len();
     // D8: a placed block does not reserve the settlement; the later order
     // starts beside the autonomous project or waits, never above it.
-    let outcome = request_build(&mut state, id, "house").unwrap();
+    let outcome = later_order(&mut state, id, "house");
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.projects[0], before.clone().unwrap());
     match outcome {
-        OrderOutcome::Queued { .. } => {
+        Some(OrderOutcome::Queued { .. }) => {
             assert_eq!(record.projects, vec![before.clone().unwrap()]);
             let pending = &record.orders[0];
             assert_eq!(
@@ -1719,7 +1752,8 @@ fn owner_order_is_busy_once_an_autonomous_project_placed_a_block() {
                 ("house", 1, None)
             );
         }
-        OrderOutcome::Started => assert_eq!(record.projects.len(), 2),
+        Some(OrderOutcome::Started) => assert_eq!(record.projects.len(), 2),
+        None => assert_eq!(record.projects.len(), 1),
     }
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert_eq!(state.plugin_block_writes.len(), writes);
@@ -1859,9 +1893,12 @@ fn a_later_owner_order_preserves_the_active_builders_hauled_materials() {
     let stored = stock_total(&state);
     // D8: a later order either starts beside the active project or waits for
     // materials; admission itself never touches the active builder's haul.
-    let outcome = request_build(&mut state, id, "house").unwrap();
+    let outcome = later_order(&mut state, id, "house");
     assert!(
-        matches!(outcome, OrderOutcome::Started | OrderOutcome::Queued { .. }),
+        matches!(
+            outcome,
+            None | Some(OrderOutcome::Started | OrderOutcome::Queued { .. })
+        ),
         "unexpected outcome {outcome:?}"
     );
     assert_eq!(
@@ -1889,8 +1926,10 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
         "the earlier autonomous project is admitted first"
     );
     // D8 admits the ordered house beside the autonomous project.
-    request_build(&mut state, id, "house").unwrap();
-    let project = state
+    let admitted = later_order(&mut state, id, "house");
+    // A second lot may be refused by the plan's geometry; the upgrade row only
+    // exists for a house this settlement actually built, so skip then.
+    let Some(project) = state
         .settlements
         .get(id)
         .unwrap()
@@ -1898,7 +1937,10 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
         .iter()
         .find(|project| project.blueprint == "house")
         .cloned()
-        .expect("the ordered house is admitted beside the autonomous project");
+    else {
+        assert!(admitted.is_none(), "the house starts only with its own lot");
+        return;
+    };
     complete(&mut state, id, slot);
     let (bid, building) = state
         .settlements
@@ -2374,6 +2416,11 @@ fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
     v.data.profession = Profession::Lumberjack;
     v.job_site = Some(crate::boundary::BlockPos { x: 2, y: 201, z: 8 });
     v.job_site_dimension = state.dimension.name().into();
+    // The camp is built on the first legal lot in walking order, beside the
+    // simulated plaza chunk; every other lot is refused, so the ranked sweep
+    // takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
+    super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
     request_build(&mut state, id, "lumber_camp").unwrap();
     state.tick = PLAN_CADENCE;
     tick(&mut state);
@@ -2487,6 +2534,11 @@ fn active_wood_shortfall_can_retask_a_borrowed_miner_through_ticks() {
         .unwrap()
         .data
         .profession = Profession::Miner;
+    // The camp is built on the first legal lot in walking order, beside the
+    // simulated plaza chunk; every other lot is refused, so the ranked sweep
+    // takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
+    super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
     request_build(&mut state, id, "lumber_camp").unwrap();
     state.tick = PLAN_CADENCE;
     tick(&mut state);

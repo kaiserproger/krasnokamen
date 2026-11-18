@@ -656,18 +656,20 @@ impl LocateState {
         self.in_flight.get(&connection).copied().unwrap_or(0)
     }
 
-    fn worker(&mut self) -> &SyncSender<LocateJob> {
+    /// The worker's job queue, spawning the owner on first use. A thread that
+    /// cannot start is a command failure, never a tick-thread panic: the
+    /// channels are dropped with this call, so the next `/locate` retries.
+    fn worker(&mut self) -> Result<&SyncSender<LocateJob>, std::io::Error> {
         if self.jobs.is_none() {
             let (job_tx, job_rx) = std::sync::mpsc::sync_channel::<LocateJob>(MAX_QUEUED_JOBS);
             let (done_tx, done_rx) = std::sync::mpsc::channel::<LocateDone>();
             std::thread::Builder::new()
                 .name("locate".into())
-                .spawn(move || locate_worker(job_rx, done_tx))
-                .expect("locate worker thread spawns");
+                .spawn(move || locate_worker(job_rx, done_tx))?;
             self.jobs = Some(job_tx);
             self.done = Some(done_rx);
         }
-        self.jobs.as_ref().expect("locate worker just spawned")
+        Ok(self.jobs.as_ref().expect("locate worker just spawned"))
     }
 }
 
@@ -1154,7 +1156,24 @@ fn submit(
         min_y: geometry.min_y(),
         max_y: geometry.max_y() - 1,
     };
-    match state.locate.worker().try_send(job) {
+    let worker = match state.locate.worker() {
+        Ok(worker) => worker,
+        Err(error) => {
+            // A thread that cannot start is a command failure, not a tick panic.
+            tracing::error!(%error, "locate worker thread could not start");
+            if quiet {
+                return false;
+            }
+            state.push_player(
+                connection,
+                PlayerChange::Chat {
+                    message: "Locate is unavailable right now".into(),
+                },
+            );
+            return false;
+        }
+    };
+    match worker.try_send(job) {
         Ok(()) => {
             *state.locate.in_flight.entry(connection).or_default() += 1;
             true

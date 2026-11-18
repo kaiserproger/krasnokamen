@@ -125,6 +125,32 @@ server CPU affinity and its memory cap do not include the graphical client.
 `explore-3` means three exploring players, not the twenty-player workload under
 a different name.
 
+The 8 GiB shape also needs the one queue between the simulation and the network
+layer bounded, because the tick never waits for a slow edge:
+`[data] outbox_queue_bytes` (256 MiB by default) caps the queued reliable
+backlog and warns once per crossing at 8 MiB (re-armed only after the queue falls
+below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
+batch larger than the whole cap is admitted alone into an empty queue, and a
+halt's terminal disconnect batch is admitted past it so the reason can still be
+delivered. A batch that no longer fits under the cap, or a backlog that consumes
+no batch for 10 s, stops the server fail-closed (no publish, no checkpoint), and
+the process exits after the journal's final flush even when the edge pump is the
+wedged part: the edge watches the core's own closing signal, waits up to 5 s for
+connections to close (the pump's chance to route the terminal batch), then kicks
+every remaining connection with the core's halt reason itself. The reason is best
+effort: a connection whose queue is full, or whose kick times out behind a
+registry lock the wedged pump holds, gets no reason; every connection still
+closes when the process exits. Those waits run on the edge runtime; when no
+runtime worker is free to finish them (a single-CPU host with the pump stuck), an
+OS watchdog thread ends the process with status 1 once 60 s pass after the halt,
+after the journal's final flush. The next start replays the retained WAL
+([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
+warning's byte count before raising the cap. The queued and peak byte counters
+exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in
+the tick's own logs, not on the dashboard; the dashboard's `reliable_drops` counts
+a different thing — frames dropped by one connection's edge-side reliable queue,
+which is where an individual slow client shows up.
+
 ### Singleplayer with software Vulkan
 
 On 2026-11-07, fresh seed 42, installed 26.3 content, 1280×720 Low preset,
@@ -196,6 +222,10 @@ enable_command_block = false     # command-block execution gate
 # whitelist = true               # initial enforcement, see access control
 [data]
 # backup_dir = "/srv/krasnokamen/backups"   # console `backup` destination
+# journal_fsync_every_batches = 10  # 1..=1200 published batches between
+#                                    # directory fsyncs; power loss can drop
+#                                    # up to this many (see "What a crash can lose")
+# outbox_queue_bytes = 268435456  # tick→edge reliable backlog cap (256 MiB)
 [block_log]                      # history behind /co
 enabled = true
 retention_days = 30              # 0 keeps records until max_records
@@ -222,6 +252,17 @@ beside the selected config. The old `[admin]`, `[simulation]`, `[autoscale]`,
 `[chunk_pipeline]`, worldgen-mode and per-package grant/roster/reload settings
 are not supported; the key list in `crates/mc-edge/src/config.rs` is the
 authority when in doubt.
+
+The config file can hold secrets: `proxy.secret` (Velocity forwarding),
+`msmp.bearer_token`, `dashboard.metrics_bearer_token` and `rcon.password`. The
+edge's debug formatting prints them redacted, and on Unix startup warns when the
+file carries any of them and has a group or other permission bit set. Keep it
+readable by the service user alone:
+
+```sh
+chown krasnokamen: server.toml
+chmod 600 server.toml
+```
 
 Behavior worth knowing:
 
@@ -290,6 +331,12 @@ port independently: authentication does not change listener exposure. Offline
 identities can be impersonated, operator names included; restrict offline
 servers to trusted players or a correctly authenticated network boundary
 (`auth.online_mode = true`, or a Velocity proxy).
+
+Startup logs a warning when that exposure has no identity check at all: offline
+mode, a non-loopback bind, `proxy.mode = "none"` and no plugin login gate
+(`auth.require_plugin_login`, or an auth-capable plugin package, which turns the
+gate on by itself). It is a warning, not a refusal — LAN offline play is
+supported — and it names the bind address it found.
 
 Connection admission:
 
@@ -941,6 +988,17 @@ configuration, back up before changing binaries or world identity, and never
 bypass identity validation by hand-editing saved metadata. Anvil is a
 compatibility format, not a live fallback or dual-write store.
 
+What a crash can lose beyond the last checkpoint comes from two windows. First,
+a tick is shown to clients once its journal batch is queued, before the batch is
+published (written, fsynced and renamed into place): up to 128 batches (6.4 s of
+ticks, at most 256 MiB of estimated payload) can wait behind the one the journal
+thread is handling. Any crash, SIGKILL included, can lose every batch not yet
+published: the queued ones, and the current one if its rename has not happened,
+so an empty queue does not close this window. Second, the journal directory is
+fsynced only every `journal_fsync_every_batches` published batches (10 by
+default), so a host power loss can also drop up to that many published batches.
+A clean stop flushes both.
+
 When upgrading from a build with the old scalar rider format, stop it cleanly
 before deploying: an old unclean WAL tail containing `rider` is refused at
 startup. A checkpoint containing the old `krasnokamen:Rider` key is also
@@ -1077,7 +1135,27 @@ prunes and compacts nothing, but that first open and close still happens, like
 a server start and clean stop: it replays a crash journal tail, writes a
 checkpoint and removes the journal batches the checkpoint covers, even on a
 cleanly stopped world. Copy a crash image you want to keep as evidence before
-running prune on it. The Nether and the End are not pruned.
+running prune on it. If that stop did not finish its final checkpoint — the log
+reports a refused checkpoint or a core process panic — prune refuses with
+`the last shutdown did not checkpoint the published journal tail` and names the
+tick range, because a chunk changed only in that tail would be judged untouched
+and regenerated. Nothing is pruned and the journal is kept, so it replays on the
+next start. Another start and stop alone does not fix a persistent cause: clear
+the checkpoint error logged above, start the server and stop it until the stop
+logs `checkpoint committed`, then rerun prune. The Nether and the End are not
+pruned.
+
+Pruning itself never stops the server. A batch it cannot remove (read-only or
+EIO journal directory, changed permissions) is warned once per checkpoint with
+the directory, the count and the retained bytes, and shows as
+`krasnokamen_journal_prune_failures_total` and
+`krasnokamen_journal_prune_retained_bytes` on `/metrics` (and under `journal` in
+`/stats`). Covered batches stay replay-inert, so the world stays correct while
+the journal grows; the next failed append is what halts the server.
+
+`journal_fsync_every_batches` sets only the power-loss window described in
+"What a crash can lose" above; 1 closes it at one directory fsync per tick. The
+process-crash window (the batch being written plus the queued ones) stays.
 
 ### Native backup and restore
 
@@ -1091,7 +1169,11 @@ krasnokamen --config restored-server.toml
 ```
 
 A backup holds the native database, WAL/journal and other world files with a
-versioned SHA-256 manifest (lease files excluded). Restore verifies the full
+versioned SHA-256 manifest (lease files excluded). Never mix a `journal/`
+directory with a store it was not written by: batches carry no store identity,
+so a foreign tail replays into the wrong world without a refusal. `backup` and
+`restore` always move both together; restoring only `native/state.redb` over an
+existing `journal/` is operator error, not a supported path. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
@@ -1125,6 +1207,10 @@ the manifest is durable, so a failed backup leaves nothing behind. Restore with
 a copy of the backup directory: opening replays the WAL to tick `N`, exactly as
 crash recovery does. It covers world state only.
 
+Never open a world with an older binary than the one that last wrote it: newer
+manifests and WAL records are forward-only, and an older reader either defaults
+the newer state away or refuses the tail.
+
 ## Observability
 
 ### Dashboard and metrics
@@ -1145,11 +1231,23 @@ metrics_bearer_token = "replace-with-a-secret"   # optional, /metrics only
 
 The scrape includes TPS, tick p50/p95/p99, the latest per-phase timings, online
 players, loaded chunks, entity count, resident memory, network bytes, reliable
-drops and skipped pump ticks. A token protects only `/metrics`: keep the loopback
-bind or put the JSON endpoints behind an authenticated reverse proxy. A
-non-loopback address needs `allow_remote = true`; otherwise the dashboard does
+drops, input drops, skipped pump ticks and the journal prune counters. A token
+protects only `/metrics`: keep the loopback bind or put the JSON endpoints
+behind an authenticated reverse proxy. A non-loopback address needs
+`allow_remote = true`; otherwise the dashboard does
 not start and a warning is logged. Operators at level 2 can run `/tps` and
 `/mspt` in game; both report the same rolling window and are observation only.
+
+Input drops (`network.input_drops` in `/stats`,
+`krasnokamen_network_input_drops_total` in `/metrics`) count player inputs the
+bounded core input queue refused because it was full: the input is gone, the
+server corrects the client, and players see rubber-banding. The count is read
+from the core when a payload is built, so it is current without waiting for a
+pump sample, and the core also logs one rate-limited warning (at most every ten
+seconds) with the running total. A non-zero, growing count at a given population
+means the queue no longer holds one tick of arrivals there; its depth is not an
+operator knob (the core's fixed 4096 slots plus one slot per configured
+`max_players`).
 
 `/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
 `/load-metrics`) returns one JSON object per retained core tick: the

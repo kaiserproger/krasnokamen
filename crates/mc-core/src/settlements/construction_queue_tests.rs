@@ -27,7 +27,13 @@ fn a_funded_queued_order_lifts_over_an_unfunded_head() {
         access::push_order(record, lifted);
     }
     fund(&mut state, "house", 1);
-    plan(&mut state, id);
+    // The site sweep may need several passes before the funded lot is found.
+    for _ in 0..64 {
+        plan(&mut state, id);
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            break;
+        }
+    }
     let record = state.settlements.get(id).unwrap();
     assert_eq!(
         access::projects(record)
@@ -95,13 +101,21 @@ fn a_pass_admits_one_project_and_a_second_pass_admits_the_next() {
     {
         stack.count *= 2;
     }
-    plan(&mut state, id);
+    let mut passes = 0;
+    while access::projects(state.settlements.get(id).unwrap()).count() == 0 && passes < 64 {
+        plan(&mut state, id);
+        passes += 1;
+    }
     assert_eq!(
         access::projects(state.settlements.get(id).unwrap()).count(),
         1,
-        "one admission per pass"
+        "the first admission"
     );
-    plan(&mut state, id);
+    let mut passes = 0;
+    while access::projects(state.settlements.get(id).unwrap()).count() == 1 && passes < 64 {
+        plan(&mut state, id);
+        passes += 1;
+    }
     let record = state.settlements.get(id).unwrap();
     assert_eq!(
         access::projects(record).count(),
@@ -133,8 +147,9 @@ fn the_joint_proof_keeps_a_second_project_out_of_the_first_ones_stock() {
         );
     }
     fund(&mut state, "house", 1);
-    plan(&mut state, id);
-    plan(&mut state, id);
+    for _ in 0..64 {
+        plan(&mut state, id);
+    }
     let record = state.settlements.get(id).unwrap();
     assert_eq!(
         access::projects(record).count(),

@@ -53,8 +53,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Drowned joins the `hunts_villagers` capability table next to zombie,
     // zombie_villager and husk (vanilla Drowned targets AbstractVillager),
     // 2026-11-13: 2632.
+    // R6 G1 (CrowdPush, 2026-11-18): the player and falling-block body sizes are
+    // contract lookups, and their type names live once as
+    // `blueprint::PLAYER_TYPE_NAME` / `FALLING_BLOCK_TYPE_NAME`, which the
+    // existing loot and falling-block sites reuse: no headroom taken.
     // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
-    // reuse and the already-resolved dirt state remove one net literal, 2026-11-17.
+    // reuse and the already-resolved dirt state remove one net literal, 2026-11-17: 2631.
     vanilla_id_literals: 2_631,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
@@ -73,9 +77,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // `settlements/construction_access.rs`; 1028 after the split, measured
         // on the D8 branch, 2026-11-17. The store flip and the queue rules
         // (S1b) took it to 1058. S2 (joint per-project bills, binding liveness,
-        // per-project stall watch, addressed queue API) adds 69: 1127. The next
-        // extraction candidate is the stall watch, which is now per project.
-        ("settlements/construction.rs", 1_127),
+        // per-project stall watch, addressed queue API) adds 69: 1127. The
+        // wave-1 site refactor (SpainLevel's whole-plan sweep, SpainD7Rest's
+        // candidate ranking) merged in adds 23: 1150. The next extraction
+        // candidate is the stall watch, which is now per project.
+        ("settlements/construction.rs", 1_150),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

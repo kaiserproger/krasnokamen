@@ -50,10 +50,14 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
   and takes whichever frees first: no polling, no CPU while waiting, and the
   runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With
-  `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile waits
-  only for tokens 1-2, so token 3 stays free for priority work (owner,
-  2026-11-12: the battle video gets resources first); Main exports it for
-  every agent outside the priority task. The lock
+  `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile may
+  take any token, but a freed token goes to a waiting normal-lane compile first
+  (owner, 2026-11-18; no token is reserved, since an idle reserved token left a
+  third of the build capacity unused): every normal-lane
+  waiter holds a shared lock on `tokens/priority.gate`, and a background waiter
+  that wins a token while the gate is held gives it back and queues again once
+  every waiting priority compile has won. Main exports the background lane for every agent outside the priority
+  task. The lock
   stays at fd 9 of the runner and its scope guardian, never the command, so
   the token returns once the scope is empty: on any exit, kill or OOM. The
   `mem-run: scope` line shows `token=<n>`, `token=<n>(reused)` or

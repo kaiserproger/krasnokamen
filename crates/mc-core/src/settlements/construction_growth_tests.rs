@@ -1,4 +1,4 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, start};
+use super::tests::{attempt, complete, fixture, fund, open_plan, plan_until_project, start};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use std::sync::{Arc, Mutex};
@@ -73,10 +73,21 @@ fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
-    // One house's worth of stock: the later church is refused by the joint
-    // proof, so the earlier house keeps its slot (D8).
+    // One house's worth of stock, doubled so a second lot's foundation can be
+    // paid: the later church is still refused by the joint proof, so the
+    // earlier house keeps its slot (D8).
     stock_buildings(&mut state, &[("spanish_house", 1)]);
-    plan(&mut state, id);
+    for stack in state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .filter(|stack| stack.count > 0)
+    {
+        stack.count = (stack.count * 2).min(64);
+    }
+    plan_until_project(&mut state, id);
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "spanish_house");
     assert!(!project.ordered);
@@ -174,10 +185,19 @@ fn house_without_site() -> (TickState, SettlementId) {
     let record = state.settlements.get(id).unwrap();
     let images = executor::source_images(&state, id);
     let house = priority_house(&state, record, &images).expect("a funded housing need");
+    let mut sweeps = site_refusals::Sweeps::default();
     assert!(
-        site_project(&state, record, std::iter::once(house), 0, u32::MAX, &images)
-            .0
-            .is_none(),
+        site_project(
+            &state,
+            record,
+            std::iter::once(house),
+            &mut sweeps,
+            0,
+            u32::MAX,
+            &images
+        )
+        .site
+        .is_none(),
         "no loaded House site fits"
     );
     assert!(
@@ -185,13 +205,14 @@ fn house_without_site() -> (TickState, SettlementId) {
             &state,
             record,
             std::iter::once(blueprints::get(&state.registry, "farm").unwrap()),
+            &mut sweeps,
             0,
-            SITE_ATTEMPTS,
+            u32::MAX,
             &images,
         )
-        .0
+        .site
         .is_some(),
-        "the funded Farm has a legal site in this planning pass"
+        "a complete sweep finds the funded Farm a legal site"
     );
     (state, id)
 }
@@ -199,7 +220,7 @@ fn house_without_site() -> (TickState, SettlementId) {
 #[test]
 fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
     let (mut state, id) = house_without_site();
-    plan(&mut state, id);
+    plan_until_project(&mut state, id);
     assert_eq!(
         state.settlements.get(id).unwrap().projects[0].blueprint,
         "farm"
@@ -223,7 +244,12 @@ fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
         level: 1,
         building: None,
     }];
-    assert!(plan_order(&mut state, id));
+    for _ in 0..256 {
+        assert!(plan_order(&mut state, id));
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            break;
+        }
+    }
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.projects[0].blueprint, "farm");
     assert!(record.orders.is_empty());
@@ -301,10 +327,19 @@ fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
         let images = executor::source_images(&state, id);
         let farm = blueprints::get(&state.registry, "farm").unwrap();
         assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        let mut sweeps = site_refusals::Sweeps::default();
         assert!(
-            site_project(&state, record, std::iter::once(farm), 0, u32::MAX, &images)
-                .0
-                .is_none(),
+            site_project(
+                &state,
+                record,
+                std::iter::once(farm),
+                &mut sweeps,
+                0,
+                u32::MAX,
+                &images
+            )
+            .site
+            .is_none(),
             "the funded missing kind has no legal lot"
         );
         let stock = state.block_entities[&(1, 201, 1)].slots.clone();
@@ -766,19 +801,10 @@ fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
 fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     let (mut state, id, builder) = fixture();
     open_plan(&mut state);
-    let record = state.settlements.get(id).unwrap();
-    let blueprint = blueprints::get(&state.registry, "spanish_fortress").unwrap();
-    let mut network = super::super::layout::Network::walk(&state, record);
-    let lot = network
-        .frontage()
-        .into_iter()
-        .find_map(|(at, normal)| {
-            let lot = network.lot(blueprint, at, normal)?;
-            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-            site_free(&state, record, lot.origin, size).then_some(lot)
-        })
-        .unwrap();
-    let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+    // The tree grows on the first legal lot in walking order; once the world
+    // is regrown, every other lot is refused, so the ranked sweep takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "spanish_fortress");
+    let (lot, size) = (site.lot, site.size);
     let expected = Project {
         settlement: id,
         blueprint: "spanish_fortress".into(),
@@ -822,6 +848,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .unwrap()
         .planted_trees
         .insert(root);
+    super::site_tests::pin_lot(&mut state, id, "spanish_fortress", &site);
     let bounds = super::super::forestry::lot_bounds(&state, &expected).unwrap();
     assert!(!super::super::forestry::clearable(&state, root));
     assert!(!super::super::forestry::Clearance::default().clearable(&state, root, None));
@@ -1248,4 +1275,100 @@ fn disabled_history_with_live_player_refuses_upgrade_of_an_identical_authored_be
         ],
     );
     assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
+}
+
+/// Committee ruling: an unfinished sweep holds the project slot only while it
+/// already holds a legal candidate. An empty one must not starve the upgrade,
+/// meadow, fortification or street planning.
+#[test]
+fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
+    let (mut state, id, builder) = fixture();
+    // A plan wider than one pass's share of candidates.
+    super::terrain_tests::wide_plan(&mut state);
+    super::terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // Keep the standing house's maximum footprint and dry Builder approaches;
+    // every other lot column is solid through the terrain window. Roads,
+    // verges and the plaza stay walkable, so the sweep still walks every
+    // frontage and refuses each lot.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    for x in -48..64 {
+        for z in -48..64 {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && !((0..17).contains(&x) && (0..14).contains(&z))
+            {
+                for y in 201..=216 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
+    );
+    // Premise: one planning pass cannot finish the funded Farm's sweep, that
+    // pass finds nothing legal, and the whole sweep has no legal lot either.
+    {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let farm = blueprints::get(&state.registry, "farm").unwrap();
+        assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        let pass = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            record.construction_cursor,
+            SITE_ATTEMPTS,
+            &images,
+        );
+        assert!(
+            pass.site.is_none() && pass.running,
+            "one pass leaves the sweep unfinished"
+        );
+        assert!(
+            !pass.waiting,
+            "that unfinished sweep holds no legal candidate"
+        );
+        let whole = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            0,
+            u32::MAX,
+            &images,
+        );
+        assert!(
+            whole.site.is_none(),
+            "the funded Farm has no legal lot at all"
+        );
+    }
+    assert!(upgrade_available(&state, id, house));
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    plan(&mut state, id);
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .first()
+        .expect("the empty unfinished sweep left the slot to the funded upgrade");
+    assert_eq!(project.blueprint, "spanish_house");
+    assert_eq!(project.building, Some(house));
+    assert_eq!(project.level, 2);
+    assert!(!project.ordered, "the autonomous planner admitted it");
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }

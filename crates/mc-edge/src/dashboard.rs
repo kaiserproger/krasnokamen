@@ -89,6 +89,10 @@ pub struct DashboardPlayers {
     pub names: Vec<String>,
 }
 
+/// Read-only cumulative counter source, polled when a dashboard payload is
+/// built. The count itself stays in its owner (the core's submit path).
+pub type InputDropSource = Arc<dyn Fn() -> u64 + Send + Sync>;
+
 /// Counters committed together after one pump publish.
 #[derive(Default)]
 pub(crate) struct PumpTick {
@@ -140,6 +144,10 @@ pub struct DashboardNetwork {
     pub bytes_written: u64,
     /// Reliable-queue overflows that disconnected a client.
     pub reliable_drops: u64,
+    /// Player inputs refused by the bounded core input queue since open
+    /// ([`mc_core::Core::dropped_inputs`], read on request). A refused input is
+    /// gone: the server corrects the client, so the symptom is rubber-banding.
+    pub input_drops: u64,
 }
 
 /// Actual production component execution counters, not submissions or bot writes.
@@ -167,6 +175,15 @@ pub struct CorePerfVisibilityProof {
     pub tracked_entity_viewer_pairs: usize,
     pub unique_tracked_entities: Option<usize>,
     pub pair_limit: usize,
+}
+
+/// Journal pruning health (process counters, read on demand).
+#[derive(Debug, Clone, Copy, Serialize, Default)]
+pub struct DashboardJournal {
+    /// Failed covered-batch removals since start.
+    pub prune_failures_total: u64,
+    /// Bytes the latest prune attempt could not remove.
+    pub prune_retained_bytes: u64,
 }
 
 /// The complete `/stats` payload.
@@ -202,6 +219,8 @@ pub struct StatsSnapshot {
     pub coreperf_visibility_proof: Option<CorePerfVisibilityProof>,
     /// Network counters.
     pub network: DashboardNetwork,
+    /// Journal prune health: a failing prune means the WAL grows silently.
+    pub journal: DashboardJournal,
     /// Absent when no production component deployment is configured.
     pub plugin: Option<PluginStats>,
     /// Autoscale is not implemented on the edge; always `false`.
@@ -374,6 +393,9 @@ pub struct DashboardState {
     load_changed: Notify,
     queue_source: OnceLock<Arc<ConnectionRegistry>>,
     plugin_source: OnceLock<Arc<mc_core::Core>>,
+    /// Cumulative input-drop counter, read at request time like the queue
+    /// gauges (the count lives in the core's submit path, not in the pump).
+    input_source: OnceLock<InputDropSource>,
     /// Idle=0, queued=1, consumed=2; disabled=u8::MAX.
     coreperf_visibility_requested: AtomicU8,
     coreperf_visibility_changed: Notify,
@@ -433,6 +455,7 @@ impl DashboardState {
             load_changed: Notify::new(),
             queue_source: OnceLock::new(),
             plugin_source: OnceLock::new(),
+            input_source: OnceLock::new(),
             metrics_bearer_token: OnceLock::new(),
             coreperf_visibility_requested: AtomicU8::new(
                 if std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some() {
@@ -462,6 +485,12 @@ impl DashboardState {
     /// Read real component counters on demand, without a tick-path producer.
     pub fn set_plugin_source(&self, core: Arc<mc_core::Core>) {
         let _ = self.plugin_source.set(core);
+    }
+
+    /// Wire the core's cumulative input-drop counter. Read on each dashboard
+    /// payload, so a full input queue is visible without a pump change.
+    pub fn set_input_source(&self, source: InputDropSource) {
+        let _ = self.input_source.set(source);
     }
 
     fn metrics_authorized(&self, supplied: Option<&str>) -> bool {
@@ -771,6 +800,9 @@ impl DashboardState {
     /// Render the current `/stats` snapshot.
     pub fn snapshot(&self) -> StatsSnapshot {
         let uptime_secs = self.started.elapsed().as_secs();
+        // Request-time counter, read before the state lock: the source is one
+        // atomic load in its owner and must never run under this mutex.
+        let input_drops = self.input_source.get().map_or(0, |source| source());
         let inner = self.inner.lock();
         let tick = summarize(&inner.tick_us, inner.simulation_tick);
         let publish = summarize(&inner.publish_us, inner.simulation_tick);
@@ -789,7 +821,17 @@ impl DashboardState {
             entities: inner.entities.clone(),
             coreperf_visibility: inner.coreperf_visibility.clone(),
             coreperf_visibility_proof: inner.coreperf_visibility_proof.clone(),
-            network: inner.network.clone(),
+            network: DashboardNetwork {
+                input_drops,
+                ..inner.network.clone()
+            },
+            journal: {
+                let stats = mc_core::journal::journal_prune_stats();
+                DashboardJournal {
+                    prune_failures_total: stats.failures_total,
+                    prune_retained_bytes: stats.retained_bytes,
+                }
+            },
             plugin: self.plugin_snapshot(),
             autoscale: false,
             warnings: inner.warnings.clone(),
@@ -1214,8 +1256,25 @@ fn prometheus(state: &DashboardState) -> String {
     );
     prometheus_gauge(
         &mut out,
+        "krasnokamen_network_input_drops_total",
+        snapshot.network.input_drops,
+    );
+    prometheus_gauge(
+        &mut out,
         "krasnokamen_pump_skipped_ticks_total",
         snapshot.pump_skipped_ticks,
+    );
+    out.push_str("# TYPE krasnokamen_journal_prune_failures_total counter\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_prune_failures_total",
+        snapshot.journal.prune_failures_total,
+    );
+    out.push_str("# TYPE krasnokamen_journal_prune_retained_bytes gauge\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_prune_retained_bytes",
+        snapshot.journal.prune_retained_bytes,
     );
     if let Some(bytes) = crate::host_telemetry::resident_memory_bytes() {
         prometheus_gauge(&mut out, "krasnokamen_process_resident_memory_bytes", bytes);
@@ -2002,6 +2061,38 @@ mod tests {
         }
     }
 
+    #[test]
+    fn journal_prune_failures_reach_the_operator_surfaces() {
+        let state = test_state();
+        let dir = tempfile::tempdir().unwrap();
+        let journal = dir.path().join("journal");
+        std::fs::create_dir_all(&journal).unwrap();
+        // Parses as a covered batch but cannot be removed: a directory.
+        std::fs::create_dir(journal.join("batch-00000000000000000001-00000000000000000001.bin"))
+            .unwrap();
+        mc_core::journal::prune_batches_through(&journal, 5);
+        let stats = mc_core::journal::journal_prune_stats();
+        assert!(stats.failures_total > 0, "the refusal is counted");
+        let metrics = prometheus(&state);
+        for name in [
+            "krasnokamen_journal_prune_failures_total",
+            "krasnokamen_journal_prune_retained_bytes",
+        ] {
+            assert!(metrics.contains(name), "missing {name}: {metrics}");
+        }
+        assert!(
+            metrics.contains(&format!(
+                "krasnokamen_journal_prune_failures_total {}\n",
+                stats.failures_total
+            )),
+            "the scrape reports the current count: {metrics}"
+        );
+        assert_eq!(
+            state.snapshot().journal.prune_failures_total,
+            stats.failures_total
+        );
+    }
+
     #[tokio::test]
     async fn metrics_route_honors_optional_bearer_token() {
         let state = test_state();
@@ -2117,6 +2208,33 @@ mod tests {
                 .unwrap()
                 .source_tick,
             77
+        );
+    }
+
+    #[test]
+    fn input_drops_are_polled_on_request_and_exported() {
+        let state = test_state();
+        let drops = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let exported = Arc::clone(&drops);
+        state.set_input_source(Arc::new(move || {
+            exported.load(std::sync::atomic::Ordering::Relaxed)
+        }));
+        assert_eq!(
+            state.snapshot().network.input_drops,
+            0,
+            "a fresh source reads zero"
+        );
+        drops.store(7, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            state.snapshot().network.input_drops,
+            7,
+            "the count is read at request time, so a full input queue is \
+             visible without waiting for a pump sample"
+        );
+        let text = prometheus(&state);
+        assert!(
+            text.contains("krasnokamen_network_input_drops_total 7\n"),
+            "Prometheus exports the cumulative drop counter: {text}"
         );
     }
 }

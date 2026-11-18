@@ -16,8 +16,11 @@ pub(super) struct TickChannels {
     pub(super) spawn_rx: Receiver<SpawnRequest>,
     pub(super) ticket_rx: Receiver<RemoteTicket>,
     pub(super) moderation_selector_rx: Receiver<moderation_selector::Request>,
-    /// Reliable FIFO handoff; only the tick owns the sender.
-    pub(super) outbox: std::sync::mpsc::Sender<TimedOutboxBatch>,
+    /// Reliable FIFO handoff; only the tick owns the sender. Bounded in bytes
+    /// with a non-blocking fail-closed push (see `core/outbox.rs`).
+    pub(super) outbox: OutboxSender,
+    /// Tick-side time bound on a non-draining outbox (see `core/outbox.rs`).
+    pub(super) outbox_stall: StallWatch,
     pub(super) tick_broadcast: broadcast::Sender<TickOutput>,
     pub(super) knockback_publication: KnockbackPublication,
     pub(super) timing_broadcast: broadcast::Sender<(u64, TickTimes)>,
@@ -28,6 +31,9 @@ pub(super) struct TickChannels {
     pub(super) journal_budget: Arc<JournalBudget>,
     /// Edge-visible projection of tick-observed unlocked sessions.
     pub(super) unlocked_sessions: Arc<parking_lot::RwLock<BTreeSet<ConnectionId>>>,
+    /// Set once by [`halt_authority`] before the tick broadcast closes, so the
+    /// edge reads the halt's own reason on `Closed` without draining the outbox.
+    pub(super) halt_reason: Arc<std::sync::OnceLock<String>>,
     pub(super) shutdown_rx: std::sync::mpsc::Receiver<()>,
     pub(super) checkpoint_rx: std::sync::mpsc::Receiver<std::sync::mpsc::Sender<bool>>,
     pub(super) backup_rx: std::sync::mpsc::Receiver<BackupJob>,
@@ -90,7 +96,15 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             inputs.push(input);
         }
         let singleplayer_runs =
-            singleplayer_pause.filter_inputs(&state, &mut inputs, &channels.outbox);
+            match singleplayer_pause.filter_inputs(&state, &mut inputs, &channels.outbox) {
+                Ok(runs) => runs,
+                Err(refusal) => {
+                    // A refused reliable pause answer is a halt, never a silent
+                    // drop: the same fail-closed path as the tick's own push.
+                    halt_authority(&mut state, &channels, &refusal.reason());
+                    break;
+                }
+            };
         let mut activity = !inputs.is_empty();
         while let Ok(request) = channels.moderation_selector_rx.try_recv() {
             moderation_selector::answer(&state, request);
@@ -170,6 +184,24 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             true
         });
         if pause_world {
+            // A paused world still owns a charged outbox: check the stall here,
+            // before any new checkpoint admission, or a wedged pump could hold
+            // the queue forever while simulation is stopped.
+            if let Some(stalled) = channels
+                .outbox_stall
+                .stalled_at(channels.outbox.budget(), std::time::Instant::now())
+            {
+                halt_authority(
+                    &mut state,
+                    &channels,
+                    &format!(
+                        "edge pump not draining for {} s, {} bytes queued while the world is paused (fail closed)",
+                        stalled.as_secs(),
+                        channels.outbox.queued_bytes()
+                    ),
+                );
+                break;
+            }
             if !checkpoint_in_flight && let Ok(reply) = channels.checkpoint_rx.try_recv() {
                 checkpoint_in_flight = start_checkpoint_with_reply(
                     &mut state,
@@ -311,11 +343,32 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
         let owner_post_start = std::time::Instant::now();
         // Hand off before waking edge subscribers. The receiver coalesces
         // batches in FIFO order and never extends a sealed Disconnect queue.
-        if !drains.is_empty() {
-            channels
-                .outbox
-                .send((output.tick, drains))
-                .expect("reliable outbox receiver dropped");
+        // The push charges the batch against the byte cap and never blocks: a
+        // batch that does not fit stops the core fail-closed instead of being
+        // dropped (see `core/outbox.rs`).
+        if !drains.is_empty()
+            && let Err(refusal) = channels.outbox.push(output.tick, drains)
+        {
+            halt_authority(&mut state, &channels, &refusal.reason());
+            break;
+        }
+        // A pump that is alive but not keeping up is invisible to task
+        // supervision; a non-empty outbox whose drain epoch has not moved for
+        // the whole limit halts the same way.
+        if let Some(stalled) = channels
+            .outbox_stall
+            .stalled_at(channels.outbox.budget(), std::time::Instant::now())
+        {
+            halt_authority(
+                &mut state,
+                &channels,
+                &format!(
+                    "edge pump not draining for {} s, {} bytes queued (fail closed)",
+                    stalled.as_secs(),
+                    channels.outbox.queued_bytes()
+                ),
+            );
+            break;
         }
         if state.require_plugin_login {
             let mut mirror = channels.unlocked_sessions.write();
@@ -675,6 +728,7 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
         cause = reason,
         "core tick owner halted (fail closed)"
     );
+    let _ = channels.halt_reason.set(reason.to_owned());
     let live: Vec<(ConnectionId, crate::boundary::PlayerChange)> = std::iter::once(&*state)
         .chain(state.other_dimensions.values().map(|world| &**world))
         .flat_map(|world| world.connections.all_connections())
@@ -709,8 +763,21 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
                 .flat_map(|world| std::mem::take(&mut world.outbox)),
         )
         .collect();
-    channels
-        .outbox
-        .send((state.tick, drains))
-        .expect("reliable outbox receiver dropped");
+    // One admission past the cap: the reason must reach every live connection
+    // even when the cap is exactly what failed.
+    if let Err(refusal) = channels.outbox.push_terminal(state.tick, drains) {
+        tracing::error!(
+            tick = state.tick,
+            cause = %refusal.reason(),
+            "terminal disconnect could not be queued"
+        );
+    }
+    // Flush what the journal already accepted (file and directory fsync, no
+    // checkpoint); the halt itself is still the fail-stop, not a commit.
+    if channels.work_tx.send(JournalWork::Shutdown).is_err() {
+        tracing::error!(
+            tick = state.tick,
+            "halt could not ask the journal for its final flush"
+        );
+    }
 }

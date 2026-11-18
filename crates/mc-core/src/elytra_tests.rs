@@ -145,7 +145,10 @@ fn elytra_start_checks_airborne_equipment_fluid_riding_and_levitation() {
         );
         assert_eq!(appearance.pose == 1, condition == "valid", "{condition}");
         if condition == "valid" {
-            assert_eq!(state.entities.body(slot).height, 0.6);
+            assert_eq!(
+                state.entities.body(slot).height,
+                crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+            );
             start(&mut state);
             assert_eq!(
                 state.players[&player].fall_flying_ticks, 2,
@@ -280,7 +283,10 @@ fn elytra_fast_glide_is_not_corrected_and_shallow_descent_resets_fall_damage() {
     assert!(!state.players[&player].fall_flying);
     assert_eq!(state.entities.row(slot).appearance.shared_flags & 0x80, 0);
     assert_ne!(state.entities.row(slot).appearance.pose, 1);
-    assert_eq!(state.entities.body(slot).height, 1.8);
+    assert_eq!(
+        state.entities.body(slot).height,
+        crate::blueprint::PLAYER_BODY.height
+    );
     assert_eq!(state.players[&player].vitals.health, 20.0);
     assert!(
         !drains
@@ -412,6 +418,55 @@ fn elytra_rejoin_restores_flight_pose_and_worn_equipment() {
         state.entities.row(slot).appearance.shared_flags & 0x80,
         0x80
     );
-    assert_eq!(state.entities.body(slot).height, 0.6);
+    assert_eq!(
+        state.entities.body(slot).height,
+        crate::blueprint::PLAYER_FALL_FLYING_HEIGHT
+    );
     assert_eq!(state.players[&restored].inventory.slots[38].damage, Some(1));
+}
+
+/// R6 G3: a reported displacement the collision solver refuses must never be
+/// accepted. 17 blocks is past the solver's 16-block per-step budget and inside
+/// the 300-squared gliding allowance, so it reaches the refusal branch; taking
+/// the claimed position would put the player through the wall.
+#[test]
+fn an_unsolvable_reported_move_is_refused_instead_of_teleporting_the_player() {
+    let (mut state, player, pos) = fixture();
+    start(&mut state);
+    let slot = state.entities.slot_of(player).unwrap();
+    let wall_x = pos[0].floor() as i32 + 3;
+    for dy in -1..4 {
+        for dz in -1..=1 {
+            state.world.set_block(
+                wall_x,
+                pos[1].floor() as i32 + dy,
+                pos[2].floor() as i32 + dz,
+                state.registry.states.stone,
+            );
+        }
+    }
+    state.world.fold_overlay();
+    let claimed = [pos[0] + 17.0, pos[1], pos[2]];
+    let (_, changes, _) = run_tick(
+        &mut state,
+        &[PlayerInput::Move {
+            connection: ConnectionId(1),
+            position: claimed,
+            yaw: 0.0,
+            pitch: 0.0,
+            on_ground: false,
+        }],
+    );
+    assert_eq!(
+        state.entities.pos(slot),
+        pos,
+        "an unsolvable move must not move the player"
+    );
+    assert!(
+        changes
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| matches!(change, PlayerChange::PositionCorrected { .. })),
+        "the client must be corrected back to the position the server holds"
+    );
 }

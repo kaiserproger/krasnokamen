@@ -769,7 +769,6 @@ fn start_build(
         return Err(error);
     }
     let images = executor::source_images(state, id);
-    let record = state.settlements.get(id).expect("claimed settlement");
     // A direct owner request searches once for immediate admission. Retried
     // pending work shares the autonomous planner's bounded, resumable scan.
     let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
@@ -779,14 +778,26 @@ fn start_build(
         .lock()
         .expect("forest cache poisoned")
         .misses();
-    let (site, cursor, report) = site_project(
-        state,
-        record,
-        std::iter::once(blueprint),
-        start,
-        attempts,
-        &images,
-    );
+    let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+    let pass = {
+        let record = state.settlements.get(id).expect("claimed settlement");
+        site_project(
+            state,
+            record,
+            std::iter::once(blueprint),
+            &mut sweeps,
+            start,
+            attempts,
+            &images,
+        )
+    };
+    state.settlements.site_sweep.insert(id, sweeps);
+    let SitePass {
+        site,
+        cursor,
+        report,
+        ..
+    } = pass;
     let Some(mut site) = site else {
         if planning_cursor.is_none()
             && state
@@ -1131,7 +1142,7 @@ pub(crate) fn clearable(state: &TickState, block: u32) -> bool {
 
 /// Only natural terrain can be excavated; buildings, paths and fluids are not
 /// site preparation materials.
-fn excavatable(state: &TickState, block: u32) -> bool {
+pub(crate) fn excavatable(state: &TickState, block: u32) -> bool {
     state
         .registry
         .blocks
@@ -1158,8 +1169,6 @@ fn excavatable(state: &TickState, block: u32) -> bool {
                 )
         })
 }
-
-const SITE_VARIANCE: i32 = 3;
 
 /// Floor replacement permits solid ground or clearable fill space, but never
 /// fluids, paths, paid crops or authored non-ground blocks under an overhang.
@@ -1206,7 +1215,7 @@ fn site_free_claim(
     expedition: Option<&FoundingExpedition>,
     clearance: &mut super::forestry::Clearance,
 ) -> bool {
-    site_refusals::check(state, record, origin, size, expedition, clearance).is_ok()
+    site_refusals::check(state, record, origin, size, expedition, clearance, None).is_ok()
 }
 
 /// Rewrite the already-funded authored cells, not the stored project later.
@@ -1296,6 +1305,8 @@ fn begin(state: &mut TickState, project: Project, species: &str, color: u8) -> b
     else {
         return false;
     };
+    let images = executor::source_images(state, project.settlement);
+    filler::apply_filler(state, &project, &mut cells, &images);
     if apply_bed_color(state, &mut cells, color).is_none() {
         return false;
     }
@@ -1494,89 +1505,120 @@ struct FundedSite {
     cells: Vec<executor::PlannedCell>,
 }
 
+/// One bounded pass of the funded site search.
+struct SitePass {
+    site: Option<FundedSite>,
+    cursor: u32,
+    report: site_refusals::Report,
+    /// At least one kind's whole sweep still has candidates to examine.
+    running: bool,
+    /// Some unfinished sweep already holds a legal candidate, so its cheapest
+    /// lot is worth holding the slot for. An empty sweep never blocks other work.
+    waiting: bool,
+}
+
 /// Search the funded kinds in priority order over one shared street walk.
-/// Divide the admission's total attempt budget among them: an unplaceable
-/// early kind must not hide a later legal lot. Each kind resumes at the same
-/// frontage cursor. Owner requests pass one kind and retain their full scan.
+/// A kind may admit only after its whole cursor sweep has been examined, and
+/// then only its cheapest legal lot; an unfinished sweep admits nothing. Each
+/// kind advances its own resumable sweep every pass, so a completed empty kind
+/// cannot starve a later one, and the first kind in priority order still wins
+/// when several are ready. Admission is decided on the authored bill only, so
+/// foundation material is a project shortfall, not a site refusal. Only the
+/// winner is materialized.
 fn site_project<'a>(
     state: &TickState,
     record: &SettlementRecord,
-    blueprints: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
+    kinds: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
+    sweeps: &mut site_refusals::Sweeps,
     start: u32,
     attempts: u32,
     images: &[super::inventory::Image],
-) -> (Option<FundedSite>, u32, site_refusals::Report) {
-    let share = attempts / blueprints.len().max(1) as u32;
+) -> SitePass {
     let mut network = layout::Network::for_construction(state, record);
-    let fronts = network.frontage();
-    let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
+    let count = u32::try_from(network.frontage().len()).unwrap_or(u32::MAX);
     let mut report = site_refusals::Report {
         frontages: count,
         ..Default::default()
     };
     if count == 0 {
         report.reject(site_refusals::Reason::NoFrontage, record.anchor);
-        return (None, 0, report);
+        return SitePass {
+            site: None,
+            cursor: 0,
+            report,
+            running: false,
+            waiting: false,
+        };
     }
-    let mut index = start % count;
+    let mut cursor = start % count;
+    let share = (attempts / kinds.len().max(1) as u32).max(1);
+    let mut running = false;
     let mut clearance = super::forestry::Clearance::default();
-    for blueprint in blueprints {
-        index = start % count;
-        for _ in 0..share.min(count) {
-            let (front, normal) = fronts[index as usize];
-            index = (index + 1) % count;
-            report.examined += 1;
-            let Some(lot) = network.lot(blueprint, front, normal) else {
-                report.reject(site_refusals::Reason::LotGeometry, front);
-                continue;
-            };
-            let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-            if let Err(reason) = site_refusals::check(
-                state,
-                record,
-                lot.origin,
-                size,
-                record.founding.as_ref(),
-                &mut clearance,
-            ) {
-                report.reject(reason, lot.origin);
-                continue;
+    for blueprint in kinds {
+        let Some(level) = blueprint.level(1) else {
+            continue;
+        };
+        let floors = std::array::from_fn(|turns| {
+            site_refusals::floor_columns(blueprint, u8::try_from(turns).expect("quarter turns"))
+        });
+        let Some((species, color)) = funded_variant(state, record.id, &level.materials, images)
+        else {
+            report.reject(site_refusals::Reason::MaterialBill, record.anchor);
+            continue;
+        };
+        let mut budget = share;
+        match site_refusals::advance(
+            state,
+            record,
+            &mut network,
+            blueprint,
+            &floors,
+            &mut clearance,
+            sweeps,
+            cursor,
+            &mut budget,
+            &mut report,
+        ) {
+            site_refusals::Advance::Incomplete(next) => {
+                cursor = next;
+                running = true;
             }
-            let project = Project {
-                settlement: record.id,
-                blueprint: blueprint.id.clone(),
-                level: 1,
-                origin: lot.origin,
-                rotation: lot.rotation,
-                building: None,
-                structure: String::new(),
-                ordered: false,
-                builder: None,
-            };
-            let Ok((bounds, mut cells)) = planned_cells(state, &project, "oak", &mut clearance)
-            else {
-                report.reject(site_refusals::Reason::Preparation, lot.origin);
-                continue;
-            };
-            if let Some(bill) = cell_bill(state, &cells)
-                && let Some((species, color)) = funded_variant(state, record.id, &bill, images)
-                && apply_species(state, &mut cells, species).is_some()
-                && apply_bed_color(state, &mut cells, color).is_some()
-            {
-                return (
-                    Some(FundedSite {
-                        project,
-                        bounds,
-                        cells,
-                    }),
-                    0,
-                    report,
+            site_refusals::Advance::Empty => {
+                cursor = 0;
+            }
+            site_refusals::Advance::Cheapest(origin, rotation) => {
+                let site = site_refusals::materialize(
+                    state,
+                    record,
+                    site_refusals::Winner {
+                        blueprint,
+                        origin,
+                        rotation,
+                        species,
+                        color,
+                    },
+                    &floors[usize::from(rotation) % 4],
+                    &mut clearance,
+                    images,
+                    &mut report,
                 );
+                return SitePass {
+                    site,
+                    cursor: 0,
+                    report,
+                    running: false,
+                    waiting: false,
+                };
             }
-            report.reject(site_refusals::Reason::MaterialBill, lot.origin);
         }
     }
-    (None, index, report)
+    SitePass {
+        site: None,
+        cursor,
+        report,
+        running,
+        waiting: sweeps.waiting(),
+    }
 }
 
 /// Street work for the buildings already standing: the first unpaved road
@@ -1667,65 +1709,100 @@ fn plan(state: &mut TickState, id: SettlementId) {
     let gathering = gatherer_demand(state, record, &images)
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
     // Housing gets its own bounded scan. If it has no site, ordinary funded
-    // candidates still get their shared scan in this same planning pass.
-    let (house, cursor, _) = priority_house(state, record, &images).map_or_else(
-        || {
-            (
-                None,
-                record.construction_cursor,
-                site_refusals::Report::default(),
-            )
-        },
-        |house| {
-            site_project(
-                state,
-                record,
-                std::iter::once(house),
-                record.construction_cursor,
-                SITE_ATTEMPTS,
-                &images,
-            )
-        },
-    );
+    // candidates still get their shared scan in this same planning pass. Both
+    // read and extend the same runtime-only sweep scratch.
+    let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+    let record = state.settlements.get(id).expect("planned settlement");
+    let (house, house_cursor, funded_site, search_running, search_waiting) = {
+        let sweeps = &mut sweeps;
+        let house = priority_house(state, record, &images).map_or_else(
+            || SitePass {
+                site: None,
+                cursor: record.construction_cursor,
+                report: site_refusals::Report::default(),
+                running: false,
+                waiting: false,
+            },
+            |house| {
+                site_project(
+                    state,
+                    record,
+                    std::iter::once(house),
+                    sweeps,
+                    record.construction_cursor,
+                    SITE_ATTEMPTS,
+                    &images,
+                )
+            },
+        );
+        let mut running = house.running;
+        let mut waiting = house.waiting;
+        let mut funded_site = None;
+        if house.site.is_none() {
+            let mut funded = [None; AUTONOMOUS_KINDS];
+            let mut funded_count = 0;
+            let catalog = catalog(state, record);
+            for kind in candidate_kinds(state, record, &images) {
+                let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind)
+                else {
+                    continue;
+                };
+                if blueprint.level(1).is_some_and(|level| {
+                    funded_variant(state, id, &level.materials, &images).is_some()
+                }) {
+                    funded[funded_count] = Some(blueprint);
+                    funded_count += 1;
+                }
+            }
+            if funded_count != 0 {
+                let pass = site_project(
+                    state,
+                    record,
+                    funded
+                        .into_iter()
+                        .take(funded_count)
+                        .map(|blueprint| blueprint.expect("funded prefix")),
+                    sweeps,
+                    house.cursor,
+                    SITE_ATTEMPTS,
+                    &images,
+                );
+                running |= pass.running;
+                waiting |= pass.waiting;
+                funded_site = Some(pass);
+            }
+        }
+        (house.site, house.cursor, funded_site, running, waiting)
+    };
+    state.settlements.site_sweep.insert(id, sweeps);
     if let Some(site) = house {
         begin_cells(state, site.project, site.bounds, site.cells);
         return;
     }
-    let mut funded = [None; AUTONOMOUS_KINDS];
-    let mut funded_count = 0;
-    let catalog = catalog(state, record);
-    for kind in candidate_kinds(state, record, &images) {
-        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
-            continue;
-        };
-        if blueprint
-            .level(1)
-            .is_some_and(|level| funded_variant(state, id, &level.materials, &images).is_some())
-        {
-            funded[funded_count] = Some(blueprint);
-            funded_count += 1;
-        }
-    }
-    if funded_count != 0 {
-        let (site, cursor, _) = site_project(
-            state,
-            record,
-            funded
-                .into_iter()
-                .take(funded_count)
-                .map(|blueprint| blueprint.expect("funded prefix")),
-            cursor,
-            SITE_ATTEMPTS,
-            &images,
-        );
+    let funded_kinds = funded_site.is_some();
+    if let Some(pass) = funded_site {
         let record = state.settlements.get_mut(id).expect("planned settlement");
-        record.construction_cursor = cursor;
+        record.construction_cursor = pass.cursor;
         record.revision = record.revision.saturating_add(1);
-        if let Some(site) = site {
+        if let Some(site) = pass.site {
             begin_cells(state, site.project, site.bounds, site.cells);
             return;
         }
     }
+    // A kind's sweep is still running and already holds a legal candidate: its
+    // cheapest lot is decided only after the last one, so the slot waits. An
+    // unfinished sweep with nothing legal yet must not hold it.
+    if search_running && search_waiting {
+        if !funded_kinds {
+            let record = state.settlements.get_mut(id).expect("planned settlement");
+            if record.construction_cursor != house_cursor {
+                record.construction_cursor = house_cursor;
+                record.revision = record.revision.saturating_add(1);
+            }
+        }
+        return;
+    }
+    let cursor = house_cursor;
     // A funded new building may have no legal lot. Existing houses must still
     // be able to gain beds through their reserved upgrade footprint.
     let record = state.settlements.get(id).expect("planned settlement");
@@ -1734,7 +1811,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     {
         return;
     }
-    if funded_count == 0 {
+    if !funded_kinds {
         let record = state.settlements.get_mut(id).expect("planned settlement");
         if record.construction_cursor != cursor {
             record.construction_cursor = cursor;
@@ -2229,8 +2306,11 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         .and_then(|((item, _), pos)| executor::pickup_point(state, id, item, pos));
     let navigation = villager.and_then(|v| v.navigation_target);
     let navigation_failed = villager.map(|v| v.navigation_search_failed);
-    let preparation =
-        (protected && snapshot.consumed.is_empty()).then(|| retry_preparation(state, id, &project));
+    // A failed first recovery (another window without a cell) gives back the
+    // slot of unpaid work, as a protected tree does: rotating builders that
+    // cannot reach the worksite would otherwise hold the only slot forever.
+    let preparation = ((protected || !report) && snapshot.consumed.is_empty())
+        .then(|| retry_preparation(state, id, &project));
     let recovery = if preparation.as_ref().is_some_and(|result| result.is_ok()) {
         "preparation_cancelled"
     } else if snapshot.pause_reason.is_some() {
@@ -2336,12 +2416,12 @@ pub(crate) fn retry_preparation(
             id,
             if requeued {
                 format!(
-                    "Protected tree blocked {} preparation; queued a new site.",
+                    "Cancelled unpaid {} work that made no progress; queued a new site.",
                     project.blueprint
                 )
             } else {
                 format!(
-                    "Cancelled unpaid {} preparation at a protected tree; any newer pending order is retained.",
+                    "Cancelled unpaid {} work that made no progress; any newer pending order is retained.",
                     project.blueprint
                 )
             },
@@ -3361,6 +3441,10 @@ mod queue_tests;
 mod site_tests;
 
 #[cfg(test)]
+#[path = "construction_terrain_tests.rs"]
+mod terrain_tests;
+
+#[cfg(test)]
 #[path = "construction_stall_tests.rs"]
 mod stall_tests;
 
@@ -3371,6 +3455,9 @@ mod fortification_tests;
 #[cfg(test)]
 #[path = "construction_growth_tests.rs"]
 mod growth_tests;
+
+#[path = "construction_filler.rs"]
+pub(super) mod filler;
 
 #[path = "construction_preparation.rs"]
 pub(crate) mod preparation;

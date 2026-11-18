@@ -756,7 +756,12 @@ class LedgerRegistrationTests(unittest.TestCase):
         tree = self.root / name
         (tree / "tools").mkdir(parents=True)
         shutil.copytree(HERE.parent / "harness", tree / "tools/harness")
+        # ledger.py imports tools.dev.wtlib (via regressions) for the pins root.
+        (tree / "tools/dev").mkdir()
+        shutil.copy2(HERE / "wtlib.py", tree / "tools/dev/wtlib.py")
         (tree / "README").write_text(content)
+        # Importing ledger.py writes __pycache__; untracked, it would make every fixture tree dirty.
+        (tree / ".gitignore").write_text("__pycache__/\n")
         subprocess.run(["git", "init", "-q", str(tree)], check=True, env=self.env)
         subprocess.run(["git", "-C", str(tree), "add", "."], check=True, env=self.env)
         subprocess.run(["git", "-C", str(tree), "commit", "-qm", content], check=True, env=self.env)
@@ -789,6 +794,18 @@ class LedgerRegistrationTests(unittest.TestCase):
         refused = self.probe(control, sha)
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("different tree", refused.stderr)
+
+    def test_an_untracked_file_marks_the_tree_dirty_and_changes_its_fingerprint(self):
+        candidate = self.tree("candidate", "candidate")
+        clean = pin.ledger_fingerprint(candidate)
+        self.assertFalse(clean["dirty"])
+        (candidate / "scratch.txt").write_text("one")
+        first = pin.ledger_fingerprint(candidate)
+        self.assertTrue(first["dirty"])
+        self.assertEqual(first["head"], clean["head"])
+        self.assertNotEqual(first["sha256"], clean["sha256"])
+        (candidate / "scratch.txt").write_text("two")
+        self.assertNotEqual(pin.ledger_fingerprint(candidate)["sha256"], first["sha256"])
 
     def test_a_test_executable_is_never_registered_as_the_server_evidence(self):
         # ledger-builds is the server binary registry: core-tests must never be certified there

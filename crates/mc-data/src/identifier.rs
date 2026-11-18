@@ -48,6 +48,12 @@ struct LegacyIdentifier {
 pub struct IdentifierError(pub String);
 
 impl Identifier {
+    /// Bytes this identifier's own string keeps alive, for callers accounting
+    /// queued payloads. The inline header is not included.
+    pub fn heap_bytes(&self) -> usize {
+        self.full.capacity()
+    }
+
     /// Parse a `namespace:path` (or bare `path`, which defaults to the
     /// `minecraft` namespace, as the vanilla protocol does).
     pub fn parse(input: impl Into<String>) -> Result<Self, IdentifierError> {

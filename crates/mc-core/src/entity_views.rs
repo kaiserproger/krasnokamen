@@ -72,6 +72,15 @@ impl EntityViews {
     /// are cloned from the previous page. Pages of earlier versions are never
     /// mutated, and nothing is visible to `self` readers until the batch is
     /// complete. The version/revision advances only if an image actually changed.
+    ///
+    /// The ascending, duplicate-free order is enforced in **every** build, not
+    /// only with debug assertions: one comparison per row, on the same serial
+    /// walk that assigns the slots, before that row mutates anything. A
+    /// duplicate ID captures its slot before this batch's mutations and would
+    /// free the same slot twice (two cells and the identity index then
+    /// disagree); an out-of-order batch silently changes slot assignment
+    /// between versions that share a slot. A violation is a contract breach in
+    /// the caller, so it panics with this message.
     pub(crate) fn publish<'c, C, S>(
         &mut self,
         candidates: &'c [C],
@@ -103,7 +112,6 @@ impl EntityViews {
         } else {
             resolved.extend(candidates.iter().map(&lookup));
         }
-        debug_assert!(resolved.windows(2).all(|pair| pair[0].id < pair[1].id));
         assert!(u32::try_from(resolved.len()).is_ok());
 
         // Serial, ID-ordered lifecycle: slot reuse and appends are deterministic.
@@ -111,8 +119,22 @@ impl EntityViews {
             (self.pages.len() - 1) * ROWS_PER_PAGE + last.len()
         });
         let mut entries = Vec::with_capacity(resolved.len());
+        let mut previous_id: Option<EntityId> = None;
         for (index, row) in resolved.iter().enumerate() {
             let index = index as u32;
+            // One comparison per row on the walk that is already serial, and
+            // before this row mutates anything. Always on: see `publish`.
+            if let Some(previous) = previous_id {
+                assert!(
+                    previous < row.id,
+                    "EntityViews::publish: entity view ids must be strictly ascending and unique; \
+                     got {} after {}. Slots are assigned in this order, so a duplicate frees one \
+                     slot twice and an out-of-order batch reorders slot assignment",
+                    row.id.0,
+                    previous.0
+                );
+            }
+            previous_id = Some(row.id);
             match (row.slot, row.src.is_some()) {
                 (Some(slot), true) => entries.push(Entry {
                     slot,

@@ -4,7 +4,8 @@
 //! Layout under `<world_dir>/`:
 //! - `journal/batch-<first_tick>-<last_tick>.bin`: framed batches. One batch
 //!   holds whole ticks: `[magic u32][version u32][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
-//!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored.
+//!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored
+//!   when reading and removed by the next [`JournalWriter::open`].
 //! - `native/state.redb`: one atomic checkpoint of chunks, entities, players,
 //!   globals and the committed tick across all dimensions.
 //!
@@ -17,6 +18,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -433,10 +435,67 @@ fn wal_stage(stage: &str) {
     }
 }
 
+/// Why a checkpoint's WAL gate refused.
+///
+/// The two kinds have different consequences: a checkpoint asking past the
+/// writer's known append coverage refuses this one checkpoint and keeps serving
+/// (the appended batches stay durable and pruning removes nothing), while a
+/// filesystem failure means the journal can no longer promise durability and
+/// the caller must stop the world instead of retrying the fsync (CS341/Books
+/// review F1). A hole or damage that tail verification finds on disk is `Io`.
+#[derive(Debug)]
+pub enum GateError {
+    /// The WAL does not cover `(prev_tick, through]`; nothing was written.
+    Hole(CoreError),
+    /// `flush`'s directory fsync or the tail verification failed.
+    Io(CoreError),
+}
+
+impl GateError {
+    /// The underlying error, for callers that treat both kinds alike.
+    pub fn into_core(self) -> CoreError {
+        match self {
+            Self::Hole(error) | Self::Io(error) => error,
+        }
+    }
+}
+
+impl From<GateError> for CoreError {
+    fn from(error: GateError) -> Self {
+        error.into_core()
+    }
+}
+
 impl JournalWriter {
     pub fn open(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
         let dir = world_dir.join("journal");
-        std::fs::create_dir_all(&dir).map_err(|err| CoreError::Storage(err.to_string()))?;
+        // R4-P2: the shared helper persists every directory entry it creates,
+        // including a journal directory left unflushed by an interrupted first
+        // start, so no batch rename can claim durability inside a directory a
+        // later recovery cannot find.
+        mc_world::atomic_file::create_dir_all_durable(&dir)
+            .map_err(|err| CoreError::Storage(err.to_string()))?;
+        // Safe here and only here: the caller holds the exclusive world lease
+        // and no append exists yet, so every `*.bin.tmp` is a leftover of a
+        // failed or interrupted append. Pruning must not sweep them, because a
+        // live append writes its tmp between create and rename.
+        let sweep = sweep_unpublished_batches(&dir);
+        if sweep.removed_files > 0 {
+            tracing::warn!(
+                dir = %dir.display(),
+                files = sweep.removed_files,
+                bytes = sweep.removed_bytes,
+                "removed unpublished journal batches left by a failed or interrupted append"
+            );
+        }
+        if sweep.failed > 0 {
+            tracing::warn!(
+                dir = %dir.display(),
+                failed = sweep.failed,
+                error = sweep.first_error.as_deref().unwrap_or("unknown"),
+                "unpublished journal batches could not be removed; they stay on disk"
+            );
+        }
         Ok(Self {
             dir,
             pending_fsync: 0,
@@ -465,20 +524,21 @@ impl JournalWriter {
     /// are contiguous (an append failure ends the journal), so coverage is
     /// tracked in process; batches from before open are verified on disk
     /// once. Batch files are fsynced at append, so only the directory
-    /// needs a final fsync.
-    pub fn gate(&mut self, prev_tick: u64, through: u64) -> Result<(), CoreError> {
+    /// needs a final fsync. A coverage [hole](GateError::Hole) refuses this
+    /// checkpoint only; an [I/O failure](GateError::Io) must stop the world.
+    pub fn gate(&mut self, prev_tick: u64, through: u64) -> Result<(), GateError> {
         // Recovery may already cover the whole save without a new tick/append.
         if through == prev_tick
             || self
                 .pre_open_verified
                 .is_some_and(|(from, hi)| from <= prev_tick && hi >= through)
         {
-            return self.flush();
+            return self.flush().map_err(GateError::Io);
         }
         let hole = |from: u64| {
-            Err(CoreError::Storage(format!(
+            Err(GateError::Hole(CoreError::Storage(format!(
                 "journal hole: ticks {from}..={through} have no batch"
-            )))
+            ))))
         };
         let first_appended = match self.appended {
             Some((lo, hi)) if hi >= through => lo,
@@ -490,10 +550,11 @@ impl JournalWriter {
                 .pre_open_verified
                 .is_some_and(|(from, through)| from <= prev_tick && through >= first_appended - 1)
         {
-            verify_batches_through(&self.dir, prev_tick, first_appended - 1)?;
+            verify_batches_through(&self.dir, prev_tick, first_appended - 1)
+                .map_err(GateError::Io)?;
             self.pre_open_verified = Some((prev_tick, first_appended - 1));
         }
-        self.flush()
+        self.flush().map_err(GateError::Io)
     }
 
     /// Append one batch covering ticks `tick_lo..=tick_hi`.
@@ -558,20 +619,7 @@ impl JournalWriter {
             );
             payload.push('\n');
         }
-        let bytes = payload.into_bytes();
-        let crc = crc32fast::hash(&bytes);
-        let mut frame = Vec::with_capacity(HEADER_LEN + bytes.len());
-        frame.extend_from_slice(&BATCH_MAGIC.to_le_bytes());
-        frame.extend_from_slice(&BATCH_VERSION.to_le_bytes());
-        frame.extend_from_slice(&tick_lo.to_le_bytes());
-        frame.extend_from_slice(&tick_hi.to_le_bytes());
-        frame.extend_from_slice(
-            &u32::try_from(bytes.len())
-                .map_err(|_| CoreError::Storage("batch too large".to_owned()))?
-                .to_le_bytes(),
-        );
-        frame.extend_from_slice(&crc.to_le_bytes());
-        frame.extend_from_slice(&bytes);
+        let frame = frame_batch(tick_lo, tick_hi, payload.as_bytes())?;
         let name = format!("batch-{tick_lo:020}-{tick_hi:020}.bin");
         let tmp = self.dir.join(format!("{name}.tmp"));
         let final_path = self.dir.join(&name);
@@ -619,6 +667,22 @@ impl JournalWriter {
 
     /// Fsync the journal directory so all appended batches are durable.
     pub fn flush(&mut self) -> Result<(), CoreError> {
+        // Test hook (loop-level tests only): for the armed world dir, let the
+        // first `skip` flushes through and then fail every flush — per-dir so
+        // parallel tests never poison each other's journals (same pattern as
+        // `FAIL_JOURNAL_APPEND`).
+        #[cfg(test)]
+        if let Ok(mut armed) = crate::core::FAIL_JOURNAL_FLUSH.lock()
+            && let Some((dir, skip)) = armed.as_mut()
+            && *dir == self.dir.parent().unwrap_or(&self.dir).to_path_buf()
+        {
+            if *skip == 0 {
+                return Err(CoreError::Storage(
+                    "injected journal flush failure".to_owned(),
+                ));
+            }
+            *skip -= 1;
+        }
         fsync_dir(&self.dir).map_err(|err| CoreError::Storage(err.to_string()))?;
         self.pending_fsync = 0;
         Ok(())
@@ -978,23 +1042,217 @@ pub struct CheckpointManifest {
     pub gamerules: BTreeMap<String, String>,
 }
 
-/// Prune batches fully at or below `manifest_tick`.
-pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) {
-    let Ok(entries) = std::fs::read_dir(journal_dir) else {
-        return;
-    };
-    for entry in entries {
-        let Ok(entry) = entry else { continue };
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !(name.starts_with("batch-") && name.ends_with(".bin")) {
-            continue;
-        }
-        if let Some((_, hi)) = parse_batch_name(&name)
-            && hi <= manifest_tick
-        {
-            let _ = std::fs::remove_file(journal_dir.join(&name));
+/// Frame one batch payload:
+/// `[magic][version][tick_lo][tick_hi][len][crc32][payload]`.
+///
+/// [`JournalWriter::append`] is the only production writer; fixtures (the hot
+/// backup tests) use this instead of hand-rolling bytes that would not decode.
+pub(crate) fn frame_batch(
+    tick_lo: u64,
+    tick_hi: u64,
+    payload: &[u8],
+) -> Result<Vec<u8>, CoreError> {
+    let mut frame = Vec::with_capacity(HEADER_LEN + payload.len());
+    frame.extend_from_slice(&BATCH_MAGIC.to_le_bytes());
+    frame.extend_from_slice(&BATCH_VERSION.to_le_bytes());
+    frame.extend_from_slice(&tick_lo.to_le_bytes());
+    frame.extend_from_slice(&tick_hi.to_le_bytes());
+    frame.extend_from_slice(
+        &u32::try_from(payload.len())
+            .map_err(|_| CoreError::Storage("batch too large".to_owned()))?
+            .to_le_bytes(),
+    );
+    frame.extend_from_slice(&crc32fast::hash(payload).to_le_bytes());
+    frame.extend_from_slice(payload);
+    Ok(frame)
+}
+
+/// Unpublished batch file name (`batch-<lo>-<hi>.bin.tmp`).
+fn is_unpublished_batch(name: &str) -> bool {
+    name.strip_suffix(".tmp")
+        .is_some_and(|name| parse_batch_name(name).is_some())
+}
+
+/// What one [`sweep_unpublished_batches`] attempt did, including the failures it
+/// must not hide: an unremovable leftover is an operator warning, not a reason to
+/// refuse startup, and it must never be attempted again from the prune path.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct SweepOutcome {
+    pub removed_files: u64,
+    pub removed_bytes: u64,
+    /// Failures: one per directory read/iteration error and per removal that failed.
+    pub failed: u64,
+    /// First failure, already carrying the path and the reason.
+    pub first_error: Option<String>,
+}
+
+impl SweepOutcome {
+    fn fail(&mut self, path: &Path, error: impl std::fmt::Display) {
+        self.failed += 1;
+        if self.first_error.is_none() {
+            self.first_error = Some(format!("{}: {error}", path.display()));
         }
     }
+}
+
+/// Remove `batch-*.bin.tmp` leftovers of failed or interrupted appends and report
+/// what happened. Nothing else in the directory is touched: published batches are
+/// immutable and unpublished readers ignore `.tmp`.
+pub(crate) fn sweep_unpublished_batches(dir: &Path) -> SweepOutcome {
+    let mut outcome = SweepOutcome::default();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            outcome.fail(dir, error);
+            return outcome;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                outcome.fail(dir, error);
+                continue;
+            }
+        };
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !is_unpublished_batch(name) {
+            continue;
+        }
+        let path = dir.join(name);
+        let len = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+        match std::fs::remove_file(&path) {
+            Ok(()) => {
+                outcome.removed_files += 1;
+                outcome.removed_bytes += len;
+            }
+            Err(error) => outcome.fail(&path, error),
+        }
+    }
+    outcome
+}
+
+/// Outcome of one [`prune_batches_through`] attempt.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PruneReport {
+    /// Published batches removed by this attempt.
+    pub removed: u64,
+    /// Failures in this attempt: an unreadable directory counts once, and so
+    /// does every batch that could not be removed.
+    pub failed: u64,
+    /// Bytes of covered batches that stayed on disk because removal failed.
+    pub retained_bytes: u64,
+    /// First failure of this attempt, for the log line.
+    pub error: Option<String>,
+}
+
+/// Process-wide prune counters. One process serves one world, as with the
+/// component-host counters the dashboard already reads on demand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct JournalPruneStats {
+    /// Failed removals (plus one per unreadable journal directory) since start.
+    pub failures_total: u64,
+    /// Bytes the latest attempt could not remove; zero when it succeeded.
+    pub retained_bytes: u64,
+}
+
+static PRUNE_FAILURES: AtomicU64 = AtomicU64::new(0);
+static PRUNE_RETAINED_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// Read the process-wide prune counters; cheap, no allocation.
+#[must_use]
+pub fn journal_prune_stats() -> JournalPruneStats {
+    JournalPruneStats {
+        failures_total: PRUNE_FAILURES.load(Ordering::Relaxed),
+        retained_bytes: PRUNE_RETAINED_BYTES.load(Ordering::Relaxed),
+    }
+}
+
+/// Record one failed attempt: counted for the dashboard and warned once, so a
+/// read-only or EIO journal directory cannot grow the WAL silently.
+fn record_prune_failure(journal_dir: &Path, report: &PruneReport) {
+    PRUNE_FAILURES.fetch_add(report.failed, Ordering::Relaxed);
+    PRUNE_RETAINED_BYTES.store(report.retained_bytes, Ordering::Relaxed);
+    tracing::warn!(
+        dir = %journal_dir.display(),
+        failed = report.failed,
+        retained_bytes = report.retained_bytes,
+        error = report.error.as_deref().unwrap_or("unknown"),
+        "journal prune failed; covered batches stay on disk and the WAL grows"
+    );
+}
+
+/// Prune batches fully at or below `manifest_tick`.
+///
+/// A failure here is warned and counted, never fatal: batches at or below the
+/// committed checkpoint are ignored on replay, so only the WAL grows. A
+/// directory that cannot be written at all still fails closed on the next
+/// append (`journal append failed; world halting`), which is the fatal path.
+pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) -> PruneReport {
+    let mut report = PruneReport::default();
+    let entries = match std::fs::read_dir(journal_dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            report.failed += 1;
+            report.error = Some(error.to_string());
+            record_prune_failure(journal_dir, &report);
+            return report;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                report.failed += 1;
+                report.error.get_or_insert_with(|| error.to_string());
+                continue;
+            }
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((_, hi)) = parse_batch_name(&name) else {
+            continue;
+        };
+        if hi > manifest_tick {
+            continue;
+        }
+        match std::fs::remove_file(entry.path()) {
+            Ok(()) => report.removed += 1,
+            Err(error) => {
+                report.failed += 1;
+                report.retained_bytes += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+                report
+                    .error
+                    .get_or_insert_with(|| format!("{}: {error}", entry.path().display()));
+            }
+        }
+    }
+    if report.failed == 0 {
+        PRUNE_RETAINED_BYTES.store(0, Ordering::Relaxed);
+    } else {
+        record_prune_failure(journal_dir, &report);
+    }
+    report
+}
+
+/// Decode one published batch file and return its tick range and entry count.
+///
+/// Recovery already refuses a damaged batch; the hot backup calls this on every
+/// batch it copies so a backup is not merely byte-identical to a **damaged**
+/// source (Books R5 G3). Memory is one batch, and the WAL tail since the last
+/// checkpoint bounds how many calls a backup makes.
+pub fn verify_batch_file(path: &Path) -> Result<(u64, u64, usize), CoreError> {
+    let name = path
+        .file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or_default();
+    let (lo, hi) = parse_batch_name(name).ok_or_else(|| {
+        CoreError::Storage(format!("journal {}: not a batch file name", path.display()))
+    })?;
+    let bytes = std::fs::read(path)
+        .map_err(|error| CoreError::Storage(format!("journal {}: {error}", path.display())))?;
+    let entries = decode_batch(&bytes, lo, hi).map_err(|error| error.at_path(path))?;
+    Ok((lo, hi, entries.len()))
 }
 
 /// Compact player post-image shared by the journal and checkpoints.

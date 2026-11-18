@@ -139,7 +139,16 @@ zero drive/no look, preserving the ordinary world's sparse fast path.
 
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
-and unaffected by impulse/hurt/effects or changed geometry. Moving rows still use
+and unaffected by impulse/hurt/effects or changed geometry, and only while its
+facing already matches what the skipped step would produce: a look target the
+step would still turn to by at least half a wire rotation quantum (0.703125
+degrees) keeps the row on the ordinary step until it faces it
+(`early_entity_rest` and `battle::rest_turns_toward_target`,
+`crates/mc-core/src/tick/entity_phase.rs`, `crates/mc-core/src/battle/mod.rs`),
+so a resting soldier's stored facing stays within half a quantum of the step's.
+That is a bounded angular error, not an invisible one: the edge packs angles
+with `floor`, so a sub-quantum turn can still change the packed byte and the
+drawn facing can be up to almost 1.5 quanta from the target bearing. Moving rows still use
 ordinary block collision, ordered movement writeback and native intent merge.
 No position writer or second physics path is introduced.
 

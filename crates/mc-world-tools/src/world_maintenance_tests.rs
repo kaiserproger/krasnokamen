@@ -71,6 +71,73 @@ fn prune_forgets_far_pregenerated_chunks_and_they_regenerate_on_demand() {
     std::fs::remove_dir_all(dir).ok();
 }
 
+fn published_checkpoint_tick(config: &CoreConfig) -> u64 {
+    let store = mc_world::native::NativeReadOnlyStore::open_with_cache(
+        &config.world_dir.join("native/state.redb"),
+        mc_core::native_checkpoint::native_identity(config),
+        16 * 1024 * 1024,
+    )
+    .expect("read-only store");
+    let reader = store.checkpoint_reader().expect("reader");
+    mc_core::native_checkpoint::published_manifest(config, &reader)
+        .expect("manifest")
+        .tick
+}
+
+/// Publish a journal batch above the checkpoint, as a stop whose final
+/// checkpoint failed leaves one.
+fn append_block_tail(config: &CoreConfig) {
+    let durable = published_checkpoint_tick(config);
+    let mut journal = mc_core::journal::JournalWriter::open(&config.world_dir, 1).expect("journal");
+    journal
+        .append(
+            durable + 1,
+            durable + 1,
+            &[mc_core::journal::JournalEntry::Block {
+                pos: [0, 64, 0],
+                state: 1,
+            }],
+        )
+        .expect("publish the tail");
+}
+
+/// A store whose published WAL tail the checkpoint does not cover is not
+/// judged: prune refuses with the named error, dry run included, and classifies
+/// or deletes nothing. The open/shutdown cycle `prune_world` runs folds the same
+/// tail in and then proceeds.
+#[test]
+fn prune_refuses_a_published_tail_the_checkpoint_does_not_cover() {
+    let dir = world_dir("mc-core-prune-uncheckpointed-tail");
+    let config = config(&dir, 11);
+    let request = PregenerateRequest {
+        radius: 64,
+        center: Some([0, 0]),
+    };
+    let first = pregenerate(&config, &request, &mut no_progress).expect("pregenerate");
+    assert_eq!(first.chunks, 81);
+    append_block_tail(&config);
+
+    for dry_run in [false, true] {
+        let error = prune_stopped(&config, &prune_request(16, dry_run), [0, 0])
+            .expect_err("a store without its published tail is not judged");
+        assert!(
+            error
+                .to_string()
+                .contains(mc_core::native_checkpoint::UNCHECKPOINTED_TAIL),
+            "{error}"
+        );
+    }
+
+    // Nothing was classified or deleted: every chunk is still stored.
+    let rerun = pregenerate(&config, &request, &mut no_progress).expect("rerun");
+    assert_eq!(rerun.already_stored, first.chunks);
+    assert_eq!(rerun.generated, 0);
+
+    let report = prune_world(&config, &prune_request(16, false)).expect("recovered store");
+    assert_eq!(report.chunks.pruned, 72);
+    std::fs::remove_dir_all(dir).ok();
+}
+
 #[test]
 fn compact_world_keeps_every_chunk_and_never_grows_the_file() {
     let dir = world_dir("mc-core-compact");

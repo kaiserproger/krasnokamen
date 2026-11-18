@@ -10,6 +10,7 @@ import asyncio
 import copy
 import json
 import math
+import re
 import os
 from pathlib import Path
 import platform
@@ -36,6 +37,22 @@ SCALE_PROFILES = {
     for label, count in (("100k", 100_000), ("500k", 500_000), ("1m", 1_000_000))
     for mix in ("all-active", "mostly-resting", "sparse-active")
 }
+
+SCALE_RESIDENTS_MAX = 2_000_000
+
+
+def scale_residents(profile: str, smoke_residents: int | None, override: int | None) -> int:
+    """Resident cohort of a scale profile: smoke cap, explicit override, else the ladder point."""
+    if smoke_residents is not None and override is not None:
+        raise ValueError("--smoke-residents and --scale-residents are exclusive")
+    if override is not None and not 10 <= override <= SCALE_RESIDENTS_MAX:
+        raise ValueError(f"--scale-residents must be within 10..{SCALE_RESIDENTS_MAX}")
+    if smoke_residents is not None:
+        return smoke_residents
+    if override is not None:
+        return override
+    return SCALE_PROFILES[profile][0]
+
 
 PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
 
@@ -322,15 +339,24 @@ def scale_fixture(residents: int, mix: str, *, excluded_kinds: tuple[str, ...] =
                 group = len(regions)
                 x, z = group % 32 * 256, group // 32 * 256
                 roof = 67 if kind == "spider" else 71
+                # Seal before digging. Clearing first opened a pit in desert
+                # terrain, surface sand collapsed into it and set as a floor layer
+                # at y=64, and an animal summoned there suffocated inside the sand
+                # (receipts/Perf1M/ENTITY-LOSS.md). Walls and roof go up first, then
+                # the interior is cleared, so nothing outside can fall in.
                 commands = [
                     f"fill {x-1} 62 {z-1} {x+64} 62 {z+64} minecraft:dirt",
                     f"fill {x-1} 63 {z-1} {x+64} 63 {z+64} minecraft:grass_block",
-                    f"fill {x} 64 {z} {x+63} 70 {z+63} minecraft:air",
                     f"fill {x-1} 64 {z-1} {x+64} {roof-1} {z-1} minecraft:stone",
                     f"fill {x-1} 64 {z+64} {x+64} {roof-1} {z+64} minecraft:stone",
                     f"fill {x-1} 64 {z} {x-1} {roof-1} {z+63} minecraft:stone",
                     f"fill {x+64} 64 {z} {x+64} {roof-1} {z+63} minecraft:stone",
                     f"fill {x-1} {roof} {z-1} {x+64} {roof} {z+64} minecraft:stone",
+                    # Clear only after sealing: with the walls and roof up, nothing
+                    # outside can fall onto the floor, so one sweep is enough (two made
+                    # the preparation ~4x slower). Stop at roof-1: the spider pens roof
+                    # at y=67 and a sweep to 70 would delete their ceiling.
+                    f"fill {x} 64 {z} {x+63} {roof-1} {z+63} minecraft:air",
                 ]
                 if active:
                     # Keep the normal moving observer on its roof ticket; no
@@ -870,6 +896,67 @@ def validate_churn_cohort(recipe: dict[str, Any], before: dict[str, Any], snapsh
     return after, {"before": len(old_churn), "after": len(churn), "replaced_min": count}
 
 
+SUMMON_CELL = re.compile(r"summon minecraft:[a-z_]+ (-?[0-9.]+) (-?[0-9.]+) (-?[0-9.]+)")
+
+
+def cohort_cells(recipe: dict[str, Any]) -> list[tuple[int, int, int]]:
+    """Feet and head cells of every cohort summon, in recipe order, deduplicated.
+
+    The pen builder seals the enclosure before it clears it, but a preparation can
+    still strand an animal inside a block when terrain collapses elsewhere, and an
+    animal inside a block suffocates and dies while the cohort fence insists it is
+    alive (receipts/Perf1M/ENTITY-LOSS.md). These cells are the ones that must read
+    as air in the finished world.
+    """
+    cells: list[tuple[int, int, int]] = []
+    seen: set[tuple[int, int, int]] = set()
+    for index, region in enumerate(recipe["regions"]):
+        for command in region.get("commands", ()):
+            match = SUMMON_CELL.match(command)
+            if match is None:
+                continue
+            x, y, z = (math.floor(float(value)) for value in match.groups())
+            for cell in ((x, y, z), (x, y + 1, z)):
+                if cell not in seen:
+                    seen.add(cell)
+                    cells.append(cell)
+    return cells
+
+
+def verify_pen_clearance(args: argparse.Namespace, world: Path, config: Path,
+                         receipt_dir: Path, recipe: dict[str, Any],
+                         batch: int = 20000) -> dict[str, Any]:
+    """Fail when any cohort summon cell is not air, read from the stopped world."""
+    cells = cohort_cells(recipe)
+    if not cells:
+        return {"cells": 0, "blocked": []}
+    receipt_dir.mkdir(parents=True, exist_ok=True)
+    blocked: list[dict[str, Any]] = []
+    for start in range(0, len(cells), batch):
+        chunk = cells[start:start + batch]
+        receipt = receipt_dir / f"pen-clearance-{start // batch}.json"
+        command = [str(args.server_bin), "--config", str(config), "world", "probe",
+                   "--source", str(world), "--receipt", str(receipt)]
+        command += [item for cell in chunk for item in ("--block", f"{cell[0]},{cell[1]},{cell[2]}")]
+        done = subprocess.run(command, capture_output=True, text=True)
+        if done.returncode:
+            raise load.ClassifiedFailure(
+                "SETUP_FAILED",
+                f"pen clearance probe failed ({done.returncode}): {done.stderr.strip()[-400:]}")
+        data = json.loads(receipt.read_text())
+        if data.get("status") != "PASS":
+            raise load.ClassifiedFailure("SETUP_FAILED", f"pen clearance probe refused: {data.get('error')}")
+        for row in data["blocks"]:
+            if row["block"] != "minecraft:air":
+                blocked.append({"x": row["x"], "y": row["y"], "z": row["z"], "block": row["block"]})
+    if blocked:
+        raise load.ClassifiedFailure(
+            "SETUP_FAILED",
+            f"{len(blocked)} cohort summon cells are not air, e.g. {blocked[:5]}: an animal summoned there "
+            "would suffocate (seal-then-clear must leave the interior clear)")
+    return {"cells": len(cells), "blocked": []}
+
+
 def fixture_block_spec(recipe: dict[str, Any]) -> dict[str, Any]:
     rows = recipe.get("expected_blocks", [])
     positions = [tuple(row["position"]) for row in rows]
@@ -1281,6 +1368,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             if args.mobs or recipe.get("observer_anchors"):
                 anchors = (recipe["observer_anchors"] if recipe.get("observer_anchors") else
                            recipe["stress"]["anchors"] if recipe.get("stress", {}).get("kind") == "xp-orbs" else
+                           getattr(args, "observed_anchors", None) or
                            [region["anchor"] for index, region in enumerate(recipe["regions"])
                             if "coverage" not in recipe or recipe["coverage"][index]["active"]])
                 load.scale.dump(directory / "anchors.json", [anchors[n % len(anchors)] for n in range(args.clients)])
@@ -1546,8 +1634,15 @@ async def run(args: argparse.Namespace) -> int:
             recipe["regions"][-1]["commands"].extend(
                 f"gamerule minecraft:{name} {str(value).lower()}" for name, value in spawn_rules.items())
         if "coverage" in recipe:
+            stride = max(1, int(getattr(args, "observer_stride", 1) or 1))
+            active_regions = [index for index, row in enumerate(recipe["coverage"]) if row["active"]]
+            stride = min(stride, max(1, len(active_regions)))
+            observed = active_regions[::stride]
+            args.observed_anchors = ([recipe["regions"][index]["anchor"] for index in observed]
+                                     if stride > 1 else None)
             args.clients = (recipe["stress"]["players"] if args.xp_orbs is not None
-                            else sum(row["active"] for row in recipe["coverage"]))
+                            else len(observed))
+            result["conditions"]["observer_stride"] = stride
             result["conditions"]["clients"] = args.clients
             result["noncanonical"] = True
             result["variant"] = recipe["variant"]
@@ -1570,6 +1665,8 @@ async def run(args: argparse.Namespace) -> int:
         finally:
             args.server_toml_extra = ""
         validate_prepared(recipe, prepared)
+        result["pen_clearance"] = verify_pen_clearance(
+            args, world, args.out / "prepare" / "server.toml", args.out / "prepare", recipe)
         if args.profile == "items-heavy":
             result["items_before"] = items_census(recipe, prepared["snapshot"])
         if recipe.get("spawn_rules"):
@@ -1664,6 +1761,14 @@ def main() -> int:
                         help="2s warmup + 5s measurement at full population; lifecycle only, never publication evidence")
     parser.add_argument("--smoke-residents", type=int,
                         help="smaller noncanonical resident cohort for --smoke only")
+    parser.add_argument("--scale-view-distance", type=int,
+                        help="scale profiles only: observer view distance (2..32, default 6); "
+                             "measurement control for the cost of visible entities — the resident "
+                             "cohort and the one-observer-per-pen coverage do not change")
+    parser.add_argument("--scale-residents", type=int,
+                        help="scale profiles only: override the ladder point (10..%d residents); "
+                             "the observer count, pen coverage and recipe name follow the override"
+                             % SCALE_RESIDENTS_MAX)
     stress = parser.add_mutually_exclusive_group()
     stress.add_argument("--projectiles", type=int,
                         help="noncanonical exact projectile cohort: 0, 100 or 1000 (smoke may use smaller counts)")
@@ -1679,6 +1784,9 @@ def main() -> int:
                         help="saved filled-map frames: 0, 10000 or 100000 (smoke may use smaller counts)")
     parser.add_argument("--xp-players", type=int, choices=(0, 1, 100, 1000))
     parser.add_argument("--xp-locality", choices=("compact", "spread"))
+    parser.add_argument("--observer-stride", type=int, default=1,
+                        help="scale profiles only: keep one observer anchor per N active regions "
+                             "(cohort and pen coverage unchanged); for measuring the per-client slope")
     parser.add_argument("--spawn-mobs", choices=("on", "off"))
     parser.add_argument("--spawn-monsters", choices=("on", "off"))
     stress.add_argument("--churn-percent", type=int, choices=(0, 1, 10))
@@ -1697,8 +1805,19 @@ def main() -> int:
             parser.error("scale telemetry requires a local server")
         if args.smoke_residents is not None and not args.smoke:
             parser.error("--smoke-residents requires --smoke")
-        args.clients, args.mobs, args.villagers, args.view_distance = (
-            0, args.smoke_residents if args.smoke_residents is not None else SCALE_PROFILES[args.profile][0], 0, 6)
+        try:
+            residents = scale_residents(args.profile, args.smoke_residents, args.scale_residents)
+        except ValueError as error:
+            parser.error(str(error))
+        # Measurement-only control: how much each observer sees, with the resident set and
+        # the one-observer-per-pen coverage untouched. Residents are admitted by observer
+        # proximity, so reducing the observer *count* would leave pens dormant and break the
+        # admission invariant; view distance is the knob that changes visible entities
+        # without changing who is observed.
+        view_distance = args.scale_view_distance if args.scale_view_distance is not None else 6
+        if not 2 <= view_distance <= 32:
+            parser.error("--scale-view-distance must be within 2..32")
+        args.clients, args.mobs, args.villagers, args.view_distance = 0, residents, 0, view_distance
         if args.mobs < 10:
             parser.error("scale population must be at least 10")
         if args.projectiles is not None and (
@@ -1741,6 +1860,10 @@ def main() -> int:
             parser.error("spawn-rule controls require a scale profile")
         if args.smoke_residents is not None:
             parser.error("--smoke-residents requires a scale profile")
+        if args.scale_residents is not None:
+            parser.error("--scale-residents requires a scale profile")
+        if args.scale_view_distance is not None:
+            parser.error("--scale-view-distance requires a scale profile")
         if any(value is not None for value in (args.projectiles, args.xp_orbs, args.containers,
                                                 args.productive_npcs, args.damage_victims, args.map_frames,
                                                 args.churn_percent, args.daylight_zombies, args.wool_sheep,
