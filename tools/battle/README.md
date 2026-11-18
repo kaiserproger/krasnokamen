@@ -247,8 +247,10 @@ packets at most 6 ticks apart) whose interval intersects an exposure window. It 
 whose summary disagrees with its lines, which resumed or was capped, is `INCOMPLETE`. `usable_for_d1`
 additionally needs every counted window joinable — no uncovered wire tail, no episode without a wire
 step, no `unsettled` close, no exposure id the wire never carried — and both are aggregated over the
-run instead of reading as zero exposure. With `--recording` the take's own `take.solrec` judges each
-window over its whole length, steps or not: a window is `lost` when the observer removed the body or
+run instead of reading as zero exposure. `--recording` is required for a take whose verdict counts toward D1: a step inside a window
+witnesses its own interval only, so a window with no recording (or whose id the recording never saw)
+is `unresolved` and the take is UNUSABLE, named in `coverage_gaps`. With `--recording` the take's own
+`take.solrec` judges each window over its whole length, steps or not: a window is `lost` when the observer removed the body or
 it died inside the window (the tail past `coverage_end` is unobserved), `unresolved` when a
 `teleport_entity` for that id falls inside it (the jump is not in the position stream), `observed_zero`
 when a tracked body sent no movement packet, and `covered` otherwise. Only windows that are not
