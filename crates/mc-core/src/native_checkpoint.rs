@@ -526,6 +526,12 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
     let store =
         NativeReadOnlyStore::open_with_cache(&path, native_identity(config), 16 * 1024 * 1024)
             .map_err(|e| open_refusal(config, &path, e))?;
+    // Books R4-P1: every offline reader (export, censuses, tools) refuses a store
+    // that disagrees with its checkpoint marker before reading checkpoint or WAL;
+    // nothing is rewritten here.
+    store
+        .verify_marker(&config.world_dir)
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
     let reader = store
         .checkpoint_reader()
         .map_err(|e| CoreError::Storage(e.to_string()))?;

@@ -56,6 +56,8 @@ const APPLIED: TableDefinition<&[u8], u64> = TableDefinition::new("applied_lsn")
 const GENERATED: TableDefinition<&[u8], ()> = TableDefinition::new("generated_baselines");
 /// Independent of the unchanged vanilla-like WORLDGEN_REVISION.
 pub const NATIVE_PROTOTYPE_SCHEMA: u32 = 3;
+/// Store path relative to the world directory every native world uses.
+pub const NATIVE_DATABASE: &str = "native/state.redb";
 const DB_CACHE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Error)]
@@ -76,6 +78,10 @@ pub enum NativeError {
     /// another Krasnokamen storage format); callers turn this into operator guidance.
     #[error("native global: unknown or missing required domain")]
     GlobalDomains,
+    /// The checkpoint marker disagrees with the store (Books R4-P1). Operator
+    /// text: names the path, both ids or both ticks.
+    #[error("{0}")]
+    Marker(String),
     #[error("unsupported native schema {0}; explicit offline conversion required")]
     UnsupportedSchema(u32),
 }
@@ -275,6 +281,30 @@ impl NativeReadOnlyStore {
         validate_header(&db(database.begin_read())?, identity)?;
         Ok(Self { database })
     }
+
+    /// The store's immutable id and committed checkpoint tick.
+    pub fn marker_fields(&self) -> Result<([u8; 16], Option<u64>), NativeError> {
+        let tx = db(self.database.begin_read())?;
+        let header = db(tx.open_table(HEADER))?;
+        let store_uuid = db(header.get("store_uuid"))?
+            .ok_or(NativeError::Invalid("native store id missing"))?
+            .value()
+            .try_into()
+            .map_err(|_| NativeError::Invalid("invalid native store id"))?;
+        Ok((store_uuid, checkpoint::tick_from(&tx)?))
+    }
+
+    /// Refuse a store that disagrees with the world's checkpoint marker before
+    /// a read-only tool reports it as truth (Books R4-P1). Same refusal rules as
+    /// [`NativeStore::check_marker`], but it never writes: a store ahead of the
+    /// marker (the commit-to-marker crash window) is accepted and the source
+    /// world stays byte-identical.
+    pub fn verify_marker(&self, world_dir: &Path) -> Result<(), NativeError> {
+        let (store_uuid, tick) = self.marker_fields()?;
+        crate::store_marker::verify(world_dir, store_uuid, tick)
+            .map_err(|error| NativeError::Marker(error.to_string()))
+    }
+
     pub fn block_origin(
         &self,
         dimension: u32,
@@ -482,6 +512,38 @@ impl NativeStore {
     #[must_use]
     pub fn store_uuid(&self) -> [u8; 16] {
         self.store_uuid
+    }
+
+    /// The checkpoint-marker refusal for callers that open a store outside
+    /// `Core::open` (Books R4-P1). A missing or corrupt marker next to a store
+    /// with a checkpoint, a foreign store id, and a store behind the marker are
+    /// refused; a store ahead of the marker is the commit-to-marker crash window
+    /// and is **accepted without rewriting the marker**: only server start
+    /// publishes a newer marker.
+    pub fn verify_marker(&self, world_dir: &Path) -> Result<(), NativeError> {
+        let tick = self.checkpoint_tick()?;
+        crate::store_marker::verify(world_dir, self.store_uuid, tick)
+            .map_err(|error| NativeError::Marker(error.to_string()))
+    }
+
+    /// Open a world's store for writing outside `Core::open` (world tools,
+    /// maintenance, offline censuses) and run [`verify_marker`] before the
+    /// caller's first write or reported read. One entry so no tool path can
+    /// skip the pair check; none of them rewrites the marker.
+    pub fn open_checked(world_dir: &Path, identity: [u8; 32]) -> Result<Self, NativeError> {
+        let store = Self::open(&world_dir.join(NATIVE_DATABASE), identity)?;
+        store.verify_marker(world_dir)?;
+        Ok(store)
+    }
+
+    /// Marker check for a store whose identity cannot be compared yet (the
+    /// worldgen-revision upgrade rewrites it). Repairs the store first if redb
+    /// requires it, exactly as the first serve would, then refuses a store that
+    /// disagrees with its marker, without touching the marker file.
+    pub fn check_marker_file(world_dir: &Path, path: &Path) -> Result<(), NativeError> {
+        let (store_uuid, tick) = Self::read_marker_fields(path)?;
+        crate::store_marker::verify(world_dir, store_uuid, tick)
+            .map_err(|error| NativeError::Marker(error.to_string()))
     }
 
     /// Read durable database bytes through its lease-holding handle.

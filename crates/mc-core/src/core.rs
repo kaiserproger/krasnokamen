@@ -912,6 +912,27 @@ impl Core {
         let store_tick = store
             .checkpoint_tick()
             .map_err(|e| CoreError::Storage(e.to_string()))?;
+        // A first start interrupted between its tick-0 commit and the first
+        // marker write never served a player. The first-start file is the
+        // bootstrap proof: exactly that state (first-start present, no marker,
+        // checkpoint 0) publishes the pair once from the store it just created.
+        // Every other missing or corrupt marker is refused by the check below.
+        if resumed
+            && store_tick == Some(0)
+            && mc_world::store_marker::read(&config.world_dir)
+                .map_err(|e| CoreError::Storage(e.to_string()))?
+                .is_none()
+        {
+            mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).map_err(
+                |error| {
+                    CoreError::Storage(format!(
+                        "world {}: interrupted first start could not publish its checkpoint \
+                         marker: {error}",
+                        config.world_dir.display()
+                    ))
+                },
+            )?;
+        }
         mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
             |error| {
                 CoreError::Storage(format!(

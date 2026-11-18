@@ -189,8 +189,29 @@ pub fn write(
 /// Refuses a missing or corrupt marker for a store that has a checkpoint, a
 /// different store id, and a store behind the marker. A store ahead of the
 /// marker is the crash window between the commit and the marker write: it is
-/// accepted and the marker is rewritten.
+/// accepted and the marker is rewritten. Read-only callers use [`verify`]
+/// instead, which never writes.
 pub fn check(
+    world_dir: &Path,
+    store_uuid: [u8; 16],
+    store_tick: Option<u64>,
+) -> Result<(), MarkerError> {
+    verify(world_dir, store_uuid, store_tick)?;
+    let Some(marker) = read(world_dir)? else {
+        // No checkpoint and no marker: a store created before its first one.
+        return Ok(());
+    };
+    let store_tick = store_tick.unwrap_or(0);
+    if store_tick > marker.checkpoint_tick {
+        write(world_dir, store_uuid, store_tick)?;
+    }
+    Ok(())
+}
+
+/// The same refusal rules as [`check`], without writing: a store ahead of the
+/// marker is accepted and the marker is left byte-identical. Read-only tools
+/// (`world census`, `world probe`, backups) must use this one.
+pub fn verify(
     world_dir: &Path,
     store_uuid: [u8; 16],
     store_tick: Option<u64>,
@@ -219,9 +240,6 @@ pub fn check(
             store_tick,
             marker_tick: marker.checkpoint_tick,
         });
-    }
-    if store_tick > marker.checkpoint_tick {
-        write(world_dir, store_uuid, store_tick)?;
     }
     Ok(())
 }

@@ -255,7 +255,10 @@ file, `sync_all`, rename over the marker and the world-directory fsync
 prune of the WAL batches that checkpoint covers. A marker write error is a
 durability failure: no ACK, no prune, and the writer stops the world (fail
 closed); the marker keeps the previous checkpoint, so the retained WAL still
-replays on the next start.
+replays on the next start. On Windows there is no directory fsync
+(`sync_parent_dir` is a no-op there): the marker's rename survives a process
+crash, and a power loss can still lose the directory entry, exactly as for the
+native store file and the journal directory entry.
 
 Before any replay, startup refuses a store that has a checkpoint while the marker
 is missing or fails its checksum, whose `store_uuid` differs from the native
@@ -273,6 +276,13 @@ restored pair — store id and checkpoint tick read back from the copied store
 against the copied marker — and on a mismatch removes what it copied and reports
 no world. WAL batches still carry no store identity of their own; the marker
 binds a store to its own checkpoints, not a foreign journal directory to it.
+
+Every offline tool that opens a store without `Core::open` goes through the same
+entry (`NativeStore::open_checked`, or `check_marker_file` where the worldgen
+revision is legitimately rewritten) before its first write or reported read:
+`world prune` and `world compact`, offline pregeneration, the worldgen-revision
+upgrade, `world census`/`world probe` and the crash and custody censuses. A tool
+must not report or rewrite a store that lost a committed checkpoint.
 
 Disk-full checkpoint drills wrap the real lease-holding native file backend.
 The injected writer and `NativeStore` retain the same `Arc<File>`, as the

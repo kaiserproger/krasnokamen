@@ -463,3 +463,85 @@ fn census_receipt_inside_source_is_refused_without_writing() {
     assert!(census_native(&fixture.config, &fixture.world, &path).is_err());
     assert!(!path.exists());
 }
+
+/// Books R4-P1 / advisor R2: a census promises a byte-identical source, so a
+/// store ahead of its marker (the commit-to-marker crash window) is accepted
+/// without rewriting the marker, and a disagreeing pair is refused.
+#[test]
+fn census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pair() {
+    let fixture = populated();
+    let marker = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .expect("fixture marker");
+    mc_world::store_marker::write(
+        &fixture.world,
+        marker.store_uuid,
+        marker.checkpoint_tick.saturating_sub(1),
+    )
+    .unwrap();
+    let ahead = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .unwrap();
+    let before = hashes(&fixture.world).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let receipt = census_native(
+        &fixture.config,
+        &fixture.world,
+        &out.path().join("ahead.json"),
+    )
+    .unwrap();
+    assert_eq!(receipt.status, "PASS");
+    assert_eq!(receipt.source_unchanged, Some(true));
+    assert_eq!(
+        hashes(&fixture.world).unwrap(),
+        before,
+        "a read-only census must not rewrite the source, marker included"
+    );
+    assert_eq!(
+        mc_world::store_marker::read(&fixture.world).unwrap(),
+        Some(ahead),
+        "the marker stays as it was"
+    );
+
+    // Missing, foreign and behind markers are refused before any count.
+    for (marker_write, expected) in [
+        (None, "is missing but this store has checkpoint"),
+        (Some([0x33; 16]), "belong to different worlds"),
+    ] {
+        let fixture = world(vec![], false);
+        let ours = mc_world::store_marker::read(&fixture.world)
+            .unwrap()
+            .unwrap();
+        match marker_write {
+            None => std::fs::remove_file(mc_world::store_marker::path(&fixture.world)).unwrap(),
+            Some(uuid) => {
+                mc_world::store_marker::write(&fixture.world, uuid, ours.checkpoint_tick).unwrap()
+            }
+        }
+        let out = tempfile::tempdir().unwrap();
+        let error = census_native(
+            &fixture.config,
+            &fixture.world,
+            &out.path().join("bad.json"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains(expected), "{expected:?} in {error}");
+    }
+
+    let fixture = world(vec![], false);
+    let ours = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .unwrap();
+    mc_world::store_marker::write(&fixture.world, ours.store_uuid, ours.checkpoint_tick + 1)
+        .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let error = census_native(
+        &fixture.config,
+        &fixture.world,
+        &out.path().join("behind.json"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("behind checkpoint marker"), "{error}");
+}

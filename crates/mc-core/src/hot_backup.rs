@@ -81,6 +81,7 @@ pub(crate) fn copy_world(
     database: &mut impl Read,
     checkpoint_tick: u64,
     through: u64,
+    store_uuid: [u8; 16],
 ) -> Result<HotBackup, CoreError> {
     let through = through.max(checkpoint_tick);
     let mut files = BTreeMap::new();
@@ -99,6 +100,15 @@ pub(crate) fn copy_world(
         .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
     let marker = mc_world::store_marker::StoreMarker::decode(&marker_bytes)
         .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
+    if marker.store_uuid != store_uuid {
+        return Err(CoreError::Storage(format!(
+            "hot backup: checkpoint marker {} records store id {} but the store is {}; the copy \
+             would pair two different worlds",
+            marker_path.display(),
+            uuid::Uuid::from_bytes(marker.store_uuid),
+            uuid::Uuid::from_bytes(store_uuid),
+        )));
+    }
     if marker.checkpoint_tick > checkpoint_tick {
         return Err(CoreError::Storage(format!(
             "hot backup: checkpoint marker records {}, ahead of the committed checkpoint {}; \

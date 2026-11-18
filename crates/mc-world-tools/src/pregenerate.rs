@@ -127,8 +127,8 @@ pub fn pregenerate(
     let center = request.center.unwrap_or([spawn[0], spawn[2]]);
     let (chunk_min, chunk_max, chunks) = rectangle(center, request.radius)?;
     let store = Arc::new(
-        NativeStore::open(
-            &config.world_dir.join("native/state.redb"),
+        NativeStore::open_checked(
+            &config.world_dir,
             mc_core::native_checkpoint::native_identity(config),
         )
         .map_err(|error| {

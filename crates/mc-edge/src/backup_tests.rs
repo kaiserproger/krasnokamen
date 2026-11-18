@@ -3,7 +3,10 @@ use mc_world::native::{NativeReadOnlyStore, NativeStore};
 
 fn seed_world(root: &Path) {
     std::fs::create_dir_all(root.join("native")).unwrap();
-    drop(NativeStore::create(&root.join(NATIVE_DATABASE), [7; 32]).unwrap());
+    let store = NativeStore::create(&root.join(NATIVE_DATABASE), [7; 32]).unwrap();
+    // Every world this build creates has a checkpoint marker; restore requires it.
+    mc_world::store_marker::write(root, store.store_uuid(), 0).unwrap();
+    drop(store);
     let mut journal = mc_core::journal::JournalWriter::open(root, 1).unwrap();
     journal.append(1, 1, &[]).unwrap();
     journal.flush().unwrap();
@@ -155,7 +158,12 @@ fn native_redb_writer_blocks_backup_without_a_directory_lease() {
     let store = NativeStore::open(&world.join(NATIVE_DATABASE), [7; 32]).unwrap();
     let out = root.path().join("backup");
     let error = run_backup(&world, &out).unwrap_err();
-    assert!(error.to_string().contains("leased"), "{error:#}");
+    // The pair check opens the store through its own handle, so another writer's
+    // database lock is the refusal that names the source.
+    assert!(
+        error.to_string().contains("backup source store"),
+        "{error:#}"
+    );
     assert!(!out.exists());
     drop(store);
     run_backup(&world, &out).unwrap();

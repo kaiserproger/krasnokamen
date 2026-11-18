@@ -1119,6 +1119,7 @@ pub(super) fn run_native_work(
                 &mut store.snapshot_reader(),
                 prev_manifest.tick,
                 through,
+                store.store_uuid(),
             );
             match &result {
                 Ok(backup) => tracing::info!(

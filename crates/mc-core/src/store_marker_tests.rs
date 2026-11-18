@@ -33,43 +33,28 @@ fn wait_for_tick(rx: &mut tokio::sync::broadcast::Receiver<TickOutput>, at_least
     }
 }
 
-/// Wait until the marker on disk witnesses `at_least`, i.e. that checkpoint's
-/// marker write finished.
-fn wait_for_marker(config: &CoreConfig, at_least: u64) -> StoreMarker {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-    loop {
-        if let Some(marker) = store_marker::read(&config.world_dir).unwrap()
-            && marker.checkpoint_tick >= at_least
-        {
-            return marker;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "checkpoint marker never reached tick {at_least}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-}
-
-fn last_batch_tick(config: &CoreConfig) -> u64 {
-    let mut last = 0;
+fn batch_ticks(config: &CoreConfig) -> Vec<u64> {
+    let mut ticks = Vec::new();
     for entry in std::fs::read_dir(config.world_dir.join("journal")).unwrap() {
         let name = entry.unwrap().file_name();
-        if let Some((_, hi)) = crate::journal::parse_batch_name(&name.to_string_lossy()) {
-            last = last.max(hi);
+        if let Some((lo, hi)) = crate::journal::parse_batch_name(&name.to_string_lossy()) {
+            ticks.push((lo, hi));
         }
     }
-    last
+    ticks.sort_unstable();
+    ticks.into_iter().map(|(_, hi)| hi).collect()
 }
 
-/// One observed stage and the marker tick that was durable at that moment.
+/// One observed checkpoint stage and the marker tick durable at that moment.
 type StageEvent = (&'static str, Option<u64>);
 
-/// Records every native checkpoint stage together with the marker tick visible
-/// at that moment, so the write order can be checked rather than inferred.
+/// One observed stage, the marker tick durable at that moment, and the two
+/// rendezvous the tests wait on instead of sleeping.
 struct Observe {
     path: PathBuf,
     events: Arc<parking_lot::Mutex<Vec<StageEvent>>>,
+    pruned: std::sync::mpsc::Receiver<u64>,
+    failed: std::sync::mpsc::Receiver<()>,
 }
 
 impl Observe {
@@ -77,6 +62,8 @@ impl Observe {
         let events = Arc::new(parking_lot::Mutex::new(Vec::new()));
         let observed = Arc::clone(&events);
         let watched = path.to_path_buf();
+        let (pruned_tx, pruned) = std::sync::mpsc::channel();
+        let (failed_tx, failed) = std::sync::mpsc::channel();
         CHECKPOINT_STAGE_OBSERVERS.lock().push((
             path.to_path_buf(),
             Box::new(move |stage| {
@@ -85,12 +72,44 @@ impl Observe {
                     .flatten()
                     .map(|marker| marker.checkpoint_tick);
                 observed.lock().push((stage, tick));
+                match stage {
+                    "pruned" => {
+                        let _ = pruned_tx.send(tick.unwrap_or(0));
+                    }
+                    "ack_none_sent" => {
+                        let _ = failed_tx.send(());
+                    }
+                    _ => {}
+                }
             }),
         ));
         Self {
             path: path.to_path_buf(),
             events,
+            pruned,
+            failed,
         }
+    }
+
+    /// Block until a checkpoint at or above `at_least` finished pruning, i.e. its
+    /// marker write and ACK already happened.
+    fn wait_pruned(&mut self, at_least: u64) -> u64 {
+        loop {
+            let tick = self
+                .pruned
+                .recv_timeout(std::time::Duration::from_secs(120))
+                .expect("no checkpoint reached its prune");
+            if tick >= at_least {
+                return tick;
+            }
+        }
+    }
+
+    /// Block until a checkpoint answered with a negative ACK.
+    fn wait_negative_ack(&mut self) {
+        self.failed
+            .recv_timeout(std::time::Duration::from_secs(120))
+            .expect("no checkpoint answered with a negative ACK");
     }
 
     fn events(&self) -> Vec<(&'static str, Option<u64>)> {
@@ -114,13 +133,19 @@ fn a_checkpoint_writes_the_marker_after_the_commit_and_before_the_ack_and_prune(
     let mut rx = core.subscribe();
     assert_eq!(marker(&config).checkpoint_tick, 0, "the initial checkpoint");
 
-    let observe = Observe::new(&config.world_dir);
+    let mut observe = Observe::new(&config.world_dir);
     wait_for_tick(&mut rx, 2);
-    let committed = wait_for_marker(&config, 2);
+    observe.wait_pruned(2);
     core.shutdown();
     drop(core);
 
     let events = observe.events();
+    let failures: Vec<_> = events
+        .iter()
+        .map(|(stage, _)| *stage)
+        .filter(|stage| *stage == "ack_none_sent")
+        .collect();
+    assert!(failures.is_empty(), "no checkpoint failed here");
     let first_commit = events
         .iter()
         .position(|(stage, _)| *stage == "native_committed")
@@ -130,26 +155,23 @@ fn a_checkpoint_writes_the_marker_after_the_commit_and_before_the_ack_and_prune(
         .position(|(stage, _)| *stage == "before_ack")
         .expect("an acknowledgement stage");
     assert!(first_commit < first_ack);
-    assert_eq!(
-        events[first_commit].1,
-        Some(0),
-        "the marker must not move before the native commit"
-    );
+    let at_commit = events[first_commit]
+        .1
+        .expect("a marker exists before a commit");
+    let at_ack = events[first_ack]
+        .1
+        .expect("the marker is durable at the acknowledgement");
     assert!(
-        events[first_ack].1.is_some_and(|tick| tick >= 1),
-        "the marker must be durable before the checkpoint is acknowledged: {:?}",
-        events[first_ack]
+        at_ack > at_commit,
+        "the marker must move after the native commit and before the ACK: {at_commit} -> {at_ack}"
     );
-    // Prune follows the marker: nothing at or below the marker tick survives.
-    for entry in std::fs::read_dir(config.world_dir.join("journal")).unwrap() {
-        let name = entry.unwrap().file_name();
-        if let Some((_, hi)) = crate::journal::parse_batch_name(&name.to_string_lossy()) {
-            assert!(
-                hi > committed.checkpoint_tick,
-                "batch {name:?} covered by marker tick {} was not pruned",
-                committed.checkpoint_tick
-            );
-        }
+    // Prune follows the marker: nothing at or below the final marker tick survives.
+    let final_marker = marker(&config).checkpoint_tick;
+    for hi in batch_ticks(&config) {
+        assert!(
+            hi > final_marker,
+            "a batch covered by marker tick {final_marker} was not pruned"
+        );
     }
 }
 
@@ -162,10 +184,13 @@ fn world_with_saved_earlier_store(root: &std::path::Path) -> (CoreConfig, PathBu
     assert_eq!(marker(&config).checkpoint_tick, 0);
     let earlier = root.join("state-tick0.redb");
     std::fs::copy(config.world_dir.join("native/state.redb"), &earlier).unwrap();
+    let mut observe = Observe::new(&config.world_dir);
     wait_for_tick(&mut rx, 2);
-    let marker = wait_for_marker(&config, 2);
+    observe.wait_pruned(1);
+    // Shutdown checkpoints again, so the final marker is read after it.
     core.shutdown();
     drop(core);
+    let marker = marker(&config);
     (config, earlier, marker)
 }
 
@@ -173,9 +198,9 @@ fn world_with_saved_earlier_store(root: &std::path::Path) -> (CoreConfig, PathBu
 fn a_store_rolled_back_behind_the_marker_is_refused_before_replay() {
     let root = tempfile::tempdir().unwrap();
     let (config, earlier, marker) = world_with_saved_earlier_store(root.path());
-    assert!(marker.checkpoint_tick >= 2);
-    // redb repair swapped to the older commit: the store is behind the marker
-    // whose WAL was already pruned.
+    assert!(marker.checkpoint_tick >= 1);
+    // A real older store file stands in for redb's own slot switch: the pair
+    // now records a checkpoint the store no longer has.
     std::fs::copy(&earlier, config.world_dir.join("native/state.redb")).unwrap();
 
     let error = Core::open(config.clone())
@@ -256,46 +281,106 @@ fn a_store_ahead_of_the_marker_is_the_crash_window_and_rewrites_the_marker() {
     drop(core);
 }
 
+/// SM2-1: a first start interrupted between its tick-0 commit and the first
+/// marker write must not brick the new world. The first-start file is the
+/// bootstrap proof; without it the same state is refused.
+#[test]
+fn an_interrupted_first_start_publishes_the_marker_once_and_then_refuses() {
+    let root = tempfile::tempdir().unwrap();
+    let config = config(root.path(), u64::MAX);
+    FAIL_CHECKPOINT_MARKER
+        .lock()
+        .unwrap()
+        .push(config.world_dir.clone());
+    let error = Core::open(config.clone())
+        .expect_err("the initial marker write is injected to fail")
+        .to_string();
+    assert!(error.contains("checkpoint marker"), "{error}");
+    assert!(
+        config.world_dir.join(FIRST_START_MARKER).exists(),
+        "the interrupted first start keeps its proof"
+    );
+    assert!(store_marker::read(&config.world_dir).unwrap().is_none());
+    FAIL_CHECKPOINT_MARKER
+        .lock()
+        .unwrap()
+        .retain(|dir| dir != &config.world_dir);
+
+    // Retry: the store has checkpoint 0 and the first-start file proves it.
+    let core = Core::open(config.clone()).expect("interrupted first start retries");
+    assert_eq!(
+        marker(&config).checkpoint_tick,
+        0,
+        "the tick-0 pair is published"
+    );
+    core.shutdown();
+    drop(core);
+    assert!(!config.world_dir.join(FIRST_START_MARKER).exists());
+
+    // The same state without the proof is a rolled-back world: refused.
+    let marker = marker(&config);
+    std::fs::remove_file(store_marker::path(&config.world_dir)).unwrap();
+    let error = Core::open(config.clone())
+        .expect_err("a served world without its marker is refused")
+        .to_string();
+    assert!(
+        error.contains("is missing but this store has checkpoint"),
+        "{error}"
+    );
+    // Restore the pair so the temporary world is left valid.
+    store_marker::write(&config.world_dir, marker.store_uuid, marker.checkpoint_tick).unwrap();
+}
+
+/// SM2-3: the marker write fails at real file I/O (its temporary path is a
+/// directory). The checkpoint is committed but not acknowledged, its WAL range
+/// stays intact, and the writer stops.
 #[test]
 fn a_marker_write_failure_prunes_nothing_and_halts_the_world() {
     let root = tempfile::tempdir().unwrap();
     let config = config(root.path(), 1);
     let core = Core::open(config.clone()).unwrap();
-    let mut rx = core.subscribe();
+    let mut observe = Observe::new(&config.world_dir);
     assert_eq!(marker(&config).checkpoint_tick, 0);
-    FAIL_CHECKPOINT_MARKER
-        .lock()
-        .unwrap()
-        .push(config.world_dir.clone());
+    std::fs::create_dir(config.world_dir.join("checkpoint.marker.tmp"))
+        .expect("block the marker's temporary path with a directory");
 
-    // The writer stops; the tick thread halts and closes the broadcast.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-    loop {
-        match rx.try_recv() {
-            Ok(_)
-            | Err(tokio::sync::broadcast::error::TryRecvError::Empty)
-            | Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => {}
-            Err(tokio::sync::broadcast::error::TryRecvError::Closed) => break,
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "the world kept serving after a checkpoint marker write failure"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
+    observe.wait_negative_ack();
+    let at_failure = marker(&config).checkpoint_tick;
+    let batches_at_failure = batch_ticks(&config);
     core.shutdown();
+    drop(core);
 
     assert_eq!(
         marker(&config).checkpoint_tick,
-        0,
+        at_failure,
         "a failed marker write must not publish the checkpoint"
     );
-    assert!(
-        last_batch_tick(&config) >= 1,
+    assert_eq!(
+        batch_ticks(&config),
+        batches_at_failure,
         "the failed checkpoint's WAL must not be pruned"
     );
-    FAIL_CHECKPOINT_MARKER
-        .lock()
-        .unwrap()
-        .retain(|dir| dir != &config.world_dir);
+    assert!(
+        batches_at_failure.contains(&(at_failure + 1)),
+        "the failed checkpoint's own WAL batch must stay: {batches_at_failure:?}"
+    );
+    let events = observe.events();
+    let failed = events
+        .iter()
+        .position(|(stage, _)| *stage == "ack_none_sent")
+        .expect("the checkpoint answered with a negative ACK");
+    let committed = events[..failed]
+        .iter()
+        .rposition(|(stage, _)| *stage == "native_committed")
+        .expect("the checkpoint did commit before its marker failed");
+    assert_eq!(
+        events[committed].1,
+        Some(at_failure),
+        "the commit happened and the marker stayed at the last good checkpoint"
+    );
+    assert!(
+        events[failed..].iter().all(|(stage, _)| *stage != "pruned"),
+        "a checkpoint whose marker failed must not prune: {:?}",
+        &events[failed..]
+    );
 }

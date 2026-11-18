@@ -11,7 +11,7 @@ fn copy_world(
 ) -> Result<crate::hot_backup::HotBackup, crate::config::CoreError> {
     let mut database = std::fs::File::open(world.join("native/state.redb")).unwrap();
     database.try_lock().unwrap();
-    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through)
+    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through, [9; 16])
 }
 
 fn batch(dir: &std::path::Path, lo: u64, hi: u64) {
@@ -81,9 +81,15 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
     let world = fake_world();
     let out = tempfile::tempdir().unwrap();
     let bytes = b"lease-holder snapshot";
-    let backup =
-        crate::hot_backup::copy_world(world.path(), out.path(), &mut bytes.as_slice(), 10, 10)
-            .unwrap();
+    let backup = crate::hot_backup::copy_world(
+        world.path(),
+        out.path(),
+        &mut bytes.as_slice(),
+        10,
+        10,
+        [9; 16],
+    )
+    .unwrap();
     assert_eq!(
         std::fs::read(out.path().join("native/state.redb")).unwrap(),
         bytes
@@ -102,13 +108,40 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
 fn copy_refuses_a_marker_ahead_of_the_committed_checkpoint() {
     let world = fake_world();
     let out = tempfile::tempdir().unwrap();
-    let error =
-        crate::hot_backup::copy_world(world.path(), out.path(), &mut b"database".as_slice(), 9, 9)
-            .unwrap_err();
+    let error = crate::hot_backup::copy_world(
+        world.path(),
+        out.path(),
+        &mut b"database".as_slice(),
+        9,
+        9,
+        [9; 16],
+    )
+    .unwrap_err();
     assert!(
         error
             .to_string()
             .contains("ahead of the committed checkpoint"),
+        "{error}"
+    );
+}
+
+#[test]
+fn copy_refuses_a_marker_from_another_store() {
+    let world = fake_world();
+    let out = tempfile::tempdir().unwrap();
+    let error = crate::hot_backup::copy_world(
+        world.path(),
+        out.path(),
+        &mut b"database".as_slice(),
+        10,
+        10,
+        [8; 16],
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("would pair two different worlds"),
         "{error}"
     );
 }

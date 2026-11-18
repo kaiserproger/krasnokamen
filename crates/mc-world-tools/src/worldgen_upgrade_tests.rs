@@ -229,3 +229,102 @@ fn older_storage_format_is_refused_with_export_import_guidance_and_not_written()
     std::fs::remove_dir_all(dir).unwrap();
     std::fs::remove_dir_all(current_dir).unwrap();
 }
+
+/// Main ruling R2: the worldgen-upgrade pre-check is a pure pair verification.
+/// A store newer than its marker (a stale marker) passes it, and an upgrade that
+/// then refuses (a different seed) leaves the marker and the committed records
+/// exactly as they were.
+#[test]
+fn a_stale_marker_with_a_refused_upgrade_leaves_the_world_unchanged() {
+    let dir = std::env::temp_dir().join(format!("mc-core-worldgen-stale-{}", uuid::Uuid::new_v4()));
+    let mut config = config(&dir, 42);
+    config.checkpoint_every_ticks = 1;
+    let core = Core::open(config.clone()).expect("fresh world");
+    let mut rx = core.subscribe();
+    loop {
+        if rx.blocking_recv().is_ok_and(|output| output.tick >= 1) {
+            break;
+        }
+    }
+    core.shutdown();
+    drop(core);
+
+    let marker = mc_world::store_marker::read(&dir)
+        .unwrap()
+        .expect("a Core world has a marker");
+    assert!(marker.checkpoint_tick >= 1, "{marker:?}");
+    mc_world::store_marker::write(&dir, marker.store_uuid, marker.checkpoint_tick - 1).unwrap();
+    let stale = mc_world::store_marker::read(&dir).unwrap().unwrap();
+    let fingerprint = checkpoint_fingerprint(&config);
+    let marker_bytes = std::fs::read(mc_world::store_marker::path(&dir)).unwrap();
+
+    let mut wrong_seed = config.clone();
+    wrong_seed.seed = 43;
+    let error = upgrade_worldgen_revision(&wrong_seed)
+        .expect_err("a different seed refuses")
+        .to_string();
+    assert!(error.contains("identity differs"), "{error}");
+
+    assert_eq!(
+        mc_world::store_marker::read(&dir).unwrap(),
+        Some(stale),
+        "a refused upgrade must not rewrite the stale marker"
+    );
+    assert_eq!(
+        std::fs::read(mc_world::store_marker::path(&dir)).unwrap(),
+        marker_bytes,
+        "the marker file stays byte-identical"
+    );
+    assert_eq!(
+        checkpoint_fingerprint(&config),
+        fingerprint,
+        "and no committed record changes"
+    );
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// Committed checkpoint records of the world at `config`, so a refusal can be
+/// checked without depending on redb's own header rewrite on any writable open.
+fn checkpoint_fingerprint(config: &CoreConfig) -> Vec<(String, u64, usize)> {
+    let store = NativeReadOnlyStore::open_with_cache(
+        &config.world_dir.join("native/state.redb"),
+        mc_core::native_checkpoint::native_identity(config),
+        CACHE,
+    )
+    .expect("read-only store");
+    let image = store
+        .checkpoint_reader()
+        .expect("reader")
+        .read_checkpoint_metadata()
+        .expect("metadata");
+    image
+        .globals
+        .into_iter()
+        .map(|(key, record)| (key, record.captured_tick, record.payload.len()))
+        .collect()
+}
+
+/// Main correction: the revision upgrade creates no checkpoint and the marker
+/// holds only (store id, checkpoint tick), both unchanged by the rewrite. A
+/// successful upgrade therefore leaves the marker byte-identical, and the world
+/// opens at the current revision afterwards.
+#[test]
+fn a_successful_upgrade_leaves_the_marker_identical_and_the_world_opens() {
+    let old = mc_worldgen::WORLDGEN_REVISION - 1;
+    let (dir, config) = world_at(old);
+    let marker_path = mc_world::store_marker::path(&dir);
+    let before = std::fs::read(&marker_path).expect("marker");
+    let report = upgrade_worldgen_revision(&config).expect("a matching pair upgrades");
+    assert_eq!(report.from_revision, old);
+    assert_eq!(report.to_revision, mc_worldgen::WORLDGEN_REVISION);
+    assert!(report.rewritten);
+    assert_eq!(
+        std::fs::read(&marker_path).unwrap(),
+        before,
+        "the upgrade publishes no marker"
+    );
+    Core::open(config)
+        .expect("the upgraded world opens")
+        .shutdown();
+    std::fs::remove_dir_all(dir).ok();
+}

@@ -176,7 +176,7 @@ fn decode(bytes: &[u8]) -> Result<NativeDomainRecord, NativeError> {
 }
 
 /// Captured tick of the committed checkpoint row, if one exists.
-fn checkpoint_tick_from(tx: &redb::ReadTransaction) -> Result<Option<u64>, NativeError> {
+pub(super) fn tick_from(tx: &redb::ReadTransaction) -> Result<Option<u64>, NativeError> {
     let global = db(tx.open_table(GLOBAL))?;
     db(global.get("checkpoint"))?
         .map(|record| decode_envelope(record.value()).map(|(_, captured_tick, _)| captured_tick))
@@ -191,7 +191,7 @@ fn marker_fields_from(tx: &redb::ReadTransaction) -> Result<([u8; 16], Option<u6
         .value()
         .try_into()
         .map_err(|_| failure("world/store_uuid", "invalid length"))?;
-    Ok((store_uuid, checkpoint_tick_from(tx)?))
+    Ok((store_uuid, tick_from(tx)?))
 }
 pub(super) fn initialize(tx: &redb::WriteTransaction) -> Result<(), NativeError> {
     db(tx.open_table(GLOBAL))?;
@@ -861,7 +861,7 @@ impl NativeStore {
     /// Tick of the committed checkpoint row, if any, without decoding the
     /// manifest. This is the tick the checkpoint marker witnesses.
     pub fn checkpoint_tick(&self) -> Result<Option<u64>, NativeError> {
-        checkpoint_tick_from(&db(self.database.begin_read())?)
+        tick_from(&db(self.database.begin_read())?)
     }
 
     /// Offline operator path: the store id and committed checkpoint tick of a
