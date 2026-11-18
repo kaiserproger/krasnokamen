@@ -846,3 +846,101 @@ fn an_indexed_cancel_takes_the_named_request() {
         Err("No pending construction order #6.".to_string())
     );
 }
+
+/// R4-1b: while a debt is open the debtor is not hired for a new project and
+/// its carry is not consumed; when the store frees, exactly the owed amount is
+/// delivered once and the debt closes.
+#[test]
+fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, 7));
+    // Full store: the return cannot be delivered, so the debt stays open.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::new(log, 64);
+    }
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    super::rebind_lost_builders(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, 7)]),
+        "the exact owed carry is recorded per item"
+    );
+    // A new project is admitted while the debt is open.
+    push_neighbour(&mut state, id, "second-house", [24, 200, 24]);
+    super::drain_carry_duties_for_test(&mut state, id);
+    super::assign_builder(&mut state, id);
+    assert!(
+        project_for_structure(state.settlements.get(id).unwrap(), "second-house")
+            .is_some_and(|project| project.builder.is_none()),
+        "a debtor is not hired for another project"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory[0]
+            .as_ref()
+            .map(|stack| stack.count),
+        Some(7),
+        "the owed carry is not consumed while the store is full"
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, 7)]),
+        "the debt survives a full store"
+    );
+    // The store frees: the exact amount is delivered once and the debt closes.
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = None;
+    super::drain_carry_duties_for_test(&mut state, id);
+    let delivered: i32 = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(delivered, 7, "the exact owed carry reaches storage once");
+    assert!(
+        state.settlements.get(id).unwrap().carry_pending.is_empty(),
+        "the debt closes on delivery"
+    );
+    super::drain_carry_duties_for_test(&mut state, id);
+    let after_second = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum::<i32>();
+    assert_eq!(after_second, 7, "a drained debt is never delivered twice");
+}
