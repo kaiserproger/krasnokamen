@@ -450,6 +450,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     // Ordered execution columns avoid per-fighter hash lookups.
     for bi in 0..battle.columns.ids.len() {
         if !battle.columns.active[bi] || battle.columns.carried[bi] {
+            // A fighter this pass cannot visit keeps the deadline the old
+            // per-tick re-stamp had left on the tick before: stamping stopped
+            // here, so `frame.tick + ROUTING_HESITATION` is exactly the value a
+            // later pass must read, even after the hold expires off-chunk.
+            if let Action::Guard {
+                until: ROUTING_HOLD,
+            } = combat.fighters[bi].action
+            {
+                combat.fighters[bi].action = Action::Guard {
+                    until: frame.tick.saturating_add(ROUTING_HESITATION),
+                };
+            }
             continue;
         }
         let slot = battle.columns.slots[bi].expect("active column");
