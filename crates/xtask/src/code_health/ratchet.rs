@@ -59,7 +59,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // existing loot and falling-block sites reuse: no headroom taken.
     // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
     // reuse and the already-resolved dirt state remove one net literal, 2026-11-17: 2631.
-    vanilla_id_literals: 2_631,
+    // canonical extraction-tool data table (31 tools), PrepPortions 2026-11-18;
+    // moves to mc-data with typed CoreRegistry resolution after the 19:00 cut
+    // (PLAN post-cut queue).
+    vanilla_id_literals: 2_660,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,

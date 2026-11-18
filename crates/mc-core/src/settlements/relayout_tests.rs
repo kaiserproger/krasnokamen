@@ -359,6 +359,14 @@ fn a_player_placed_path_is_relaid() {
 #[test]
 fn farmland_removal_conserves_the_harvest() {
     let (mut state, id, builder) = fixture();
+    // D27 also credits crops overwritten directly by a non-air authored cell;
+    // exercise their canonical loot authority, not an empty registry fixture.
+    state.registry = std::sync::Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
     let (_, _, lot, size) = plateau(&mut state, id);
     let bounds = bounds_of(lot, size);
     let farmland = block(&state, "minecraft:farmland", &[("moisture", "7")]);
