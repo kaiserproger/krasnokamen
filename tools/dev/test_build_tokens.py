@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import re
 import select
 import shutil
 import signal
@@ -20,6 +21,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BOUND = 60  # seconds; only a failure ever waits this long
+# The token count is the runner's own `build_tokens=N` (owner D27 trial, 2026-11-18: 4).
+TOKENS = [str(n) for n in range(1, int(re.search(r'^build_tokens=(\d+)$', (HERE / 'mem-run.sh').read_text(),
+                                                 re.M).group(1)) + 1)]
 STUB = '''#!/usr/bin/env python3
 import os, subprocess, sys
 print(f"run {os.environ.get('KRASNOKAMEN_BUILD_TOKEN', '-')} {os.getpid()}", flush=True)
@@ -179,7 +183,7 @@ class BuildTokenTests(unittest.TestCase):
 
     def held_tokens(self) -> list[str]:
         held = []
-        for token in '123':
+        for token in TOKENS:
             fd = os.open(self.state_dir / 'tokens' / f'token-{token}.lock', os.O_RDONLY)
             try:
                 fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
@@ -197,7 +201,7 @@ class BuildTokenTests(unittest.TestCase):
         previous = signal.signal(signal.SIGALRM, expired)
         signal.alarm(BOUND)
         try:
-            for token in '123':
+            for token in TOKENS:
                 fd = os.open(self.state_dir / 'tokens' / f'token-{token}.lock', os.O_RDONLY)
                 try:
                     fcntl.flock(fd, fcntl.LOCK_EX)
@@ -207,27 +211,27 @@ class BuildTokenTests(unittest.TestCase):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, previous)
 
-    def hold_three(self, extra: int = 0) -> tuple[list[Command], list[Command]]:
-        cmds = [self.start('cargo', 'test', '-p', f'crate{n}') for n in range(3 + extra)]
+    def hold_all(self, extra: int = 0) -> tuple[list[Command], list[Command]]:
+        cmds = [self.start('cargo', 'test', '-p', f'crate{n}') for n in range(len(TOKENS) + extra)]
         self.settle(cmds)
         running = [cmd for cmd in cmds if cmd.state == 'run']
         queued = [cmd for cmd in cmds if cmd.state == 'queued']
-        self.assertEqual(len(running), 3, f'exactly three compile commands run, got {len(running)}')
-        self.assertEqual(sorted(cmd.token for cmd in running), ['1', '2', '3'])
-        self.assertEqual(self.held_tokens(), ['1', '2', '3'])
+        self.assertEqual(len(running), len(TOKENS), f'exactly {len(TOKENS)} compile commands run, got {len(running)}')
+        self.assertEqual(sorted(cmd.token for cmd in running), TOKENS)
+        self.assertEqual(self.held_tokens(), TOKENS)
         return running, queued
 
     def test_fourth_compile_waits_for_a_freed_token_and_a_kill_frees_one(self):
-        running, queued = self.hold_three(extra=1)
+        running, queued = self.hold_all(extra=1)
         self.assertEqual(len(queued), 1)
         fourth = queued[0]
         self.assertIsNone(fourth.proc.poll())
         status = subprocess.run([str(HERE / 'fleet-status'), '--mem-dir', str(self.state_dir)], env=self.env,
                                 capture_output=True, text=True, timeout=BOUND, check=True).stdout
-        self.assertIn('BUILD TOKENS (3/3 in use, 1 waiting)', status)
-        self.assertEqual(status.count('cargo test -p crate'), 4, status)
+        self.assertIn(f'BUILD TOKENS ({len(TOKENS)}/{len(TOKENS)} in use, 1 waiting)', status)
+        self.assertEqual(status.count('cargo test -p crate'), len(TOKENS) + 1, status)
         self.assertIn(f'waiting pid {fourth.proc.pid}', status)
-        self.assertEqual(status.count(f'in {self.tree}'), 4, status)
+        self.assertEqual(status.count(f'in {self.tree}'), len(TOKENS) + 1, status)
         # A normal exit hands its token to the waiter.
         first = running.pop(0)
         self.finish(first)
@@ -278,7 +282,7 @@ class BuildTokenTests(unittest.TestCase):
         self.wait_tokens_free()  # while the window still holds exclusive.lock
 
     def test_nested_compile_and_gate_run_while_all_tokens_are_held(self):
-        running, _ = self.hold_three()
+        running, _ = self.hold_all()
         # A gate on a pinned binary takes no token.
         gate = subprocess.run([str(self.runner), '-m', '1G', 'sh', '-c', 'echo "gate ${KRASNOKAMEN_BUILD_TOKEN:-none}"'],
                               cwd=self.tree, env=self.env, capture_output=True, text=True, timeout=BOUND)
@@ -293,12 +297,12 @@ class BuildTokenTests(unittest.TestCase):
         nested = outer.proc.stdout.readline().split()
         self.assertEqual(nested[:3], ['nested', '0', 'run'], nested)
         self.assertEqual(nested[3], outer.token)
-        self.assertEqual(self.held_tokens(), ['1', '2', '3'])
+        self.assertEqual(self.held_tokens(), TOKENS)
         for cmd in running:
             self.finish(cmd)
 
     def test_a_waiting_priority_compile_gets_the_next_freed_token_before_background(self):
-        running, _ = self.hold_three()
+        running, _ = self.hold_all()
         background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
         saved, self.env = self.env, background
         try:
@@ -330,7 +334,7 @@ class BuildTokenTests(unittest.TestCase):
         self.wait_tokens_free()
 
     def test_two_waiting_priority_compiles_both_win_before_background(self):
-        running, _ = self.hold_three()
+        running, _ = self.hold_all()
         background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
         saved, self.env = self.env, background
         try:
@@ -360,14 +364,15 @@ class BuildTokenTests(unittest.TestCase):
         self.finish(by_token['2'])
         self.wait_run(waiter)
         self.assertEqual(waiter.token, '2')
-        for cmd in (winner, other, waiter):
+        rest = [cmd for token, cmd in by_token.items() if token not in ('1', '2', '3')]
+        for cmd in (winner, other, waiter, *rest):
             self.finish(cmd)
         self.wait_tokens_free()
 
     def test_a_background_compile_that_found_the_gate_free_yields_to_a_priority_compile_queued_after(self):
         """Advisor: the at-once take tested the gate before taking a token, so a priority compile
         could queue in between and lose the next freed token to the background compile."""
-        running, _ = self.hold_three()
+        running, _ = self.hold_all()
         hook_dir = self.root / 'hook'
         hook_dir.mkdir()
         (hook_dir / 'sitecustomize.py').write_text(GATE_HOOK)
