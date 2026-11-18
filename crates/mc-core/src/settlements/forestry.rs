@@ -114,26 +114,11 @@ impl Clearance {
                 }
             }
         }
-        if !certified {
-            return false;
-        }
-        // Every tree whose own log stands within RANGE of a certified cell is
-        // felled whole; the walk stays one hop wide, so no grove chain grows.
-        for other in contributors {
-            if self.needed.contains(&other) {
-                continue;
-            }
-            let within = self.grove.component(state, other).is_some_and(|logs| {
                 logs.iter().any(|log| {
                     (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
                         <= tree_proof::RANGE
                 })
-            });
-            if within {
-                self.needed.insert(other);
-            }
-        }
-        true
+        certified
     }
 
     pub(crate) fn append_whole_trees(

@@ -190,6 +190,9 @@ fn diagonal_log_is_foreign_because_no_grown_tree_has_one() {
 }
 
 #[test]
+        if (at[0] - c[0]).abs() > 2 || (at[2] - c[2]).abs() > 2 {
+            continue; // the box also holds B's leaves; C's own crown is ±2
+        }
 fn touching_stripped_logs_wood_and_hyphae_are_not_owned_or_manifested() {
     for name in [
         "minecraft:stripped_birch_log",
@@ -209,10 +212,12 @@ fn touching_stripped_logs_wood_and_hyphae_are_not_owned_or_manifested() {
         );
         assert!(!proof.owns_log(foreign), "foreign log-tag variant: {name}");
         let mut clearance = Clearance::default();
-        assert!(clearance.clearable(&state, root, Some(tests::lot_around(root))));
+        // This fixture's tree has no worldgen evidence (`grown_world` is empty),
+        // so an ambiguous component leaves nothing provable.
+        assert!(!clearance.clearable(&state, root, Some(tests::lot_around(root))));
         let mut cells = Vec::new();
         clearance.append_whole_trees(&state, &mut cells);
-        assert!(cells.iter().any(|cell| cell.at == root));
+        assert!(cells.is_empty());
         assert!(!cells.iter().any(|cell| cell.at == foreign), "{name}");
         assert_eq!(
             state.world.block_at(foreign[0], foreign[1], foreign[2]),

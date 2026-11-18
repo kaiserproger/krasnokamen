@@ -154,6 +154,14 @@ fn vanilla_acacia_diagonal_trunk_steps_are_owned_and_conserved() {
             "minecraft:acacia_log"
         );
     }
+    let mut cells = Vec::new();
+    clearance.append_whole_trees(&state, &mut cells);
+        assert!(
+            !cells.iter().any(|cell| cell.at == at),
+            "the off-column step is never manifested: {at:?}"
+        );
+    }
+    for at in [branch, tip] {
 }
 
 #[test]
