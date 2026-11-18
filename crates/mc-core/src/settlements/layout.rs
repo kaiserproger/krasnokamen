@@ -410,53 +410,156 @@ pub(super) fn sample(
 
 /// A new crown may change the preferred route or lot, but must not remove
 /// existing building access or the last feasible lot of a housing blueprint.
-pub(super) fn planting_blocks_access(
+/// The proof takes one slice of the tick's site `budget` (owner D42): its
+/// walks and at most the slice's lot checks. Per house blueprint the crown
+/// spares the blueprint's housing when
+/// - the last free lot found (the village's hint) is still free on the
+///   crowned walk: one check; or
+/// - no lot the crown takes from the plain walk is free now
+///   (`construction::takes_free_lot`), all checked in this proof.
+///
+/// Otherwise the crowned walk must keep another free lot: this crown's own
+/// scan looks for one with a fair share of the slice and its next proof
+/// continues it (`construction::crowned_house_lot`); a walk without one
+/// refuses. Every verdict that plants is proved in the proof that plants.
+/// Without a slice, or while a scan runs, the verdict is "not yet".
+pub(super) fn planting_verdict(
     state: &TickState,
     record: &SettlementRecord,
     crown: ScriptWorldBounds,
-) -> bool {
-    let misses = state
-        .settlements
-        .forest
-        .lock()
-        .expect("forest cache poisoned")
-        .misses();
-    let mut before = None;
-    let mut after = Network::build(state, record, true, Some(crown));
+    budget: &mut construction::site_turn::SiteBudget,
+) -> construction::Replant {
+    let lots = budget.take();
+    if lots == 0 {
+        return construction::Replant::NotYet;
+    }
+    crown_verdict(state, record, crown, lots, budget)
+}
+
+fn crown_verdict(
+    state: &TickState,
+    record: &SettlementRecord,
+    crown: ScriptWorldBounds,
+    lots: u32,
+    budget: &mut construction::site_turn::SiteBudget,
+) -> construction::Replant {
+    use construction::{HouseLot, Replant};
+    let misses = forest_misses(state);
+    let crowned = Network::build(state, record, true, Some(crown));
+    let mut proof = CrownProof {
+        crown,
+        plain: None,
+        fronts: crowned.frontage(),
+        crowned,
+        checks: construction::LotChecks::new(lots),
+    };
     if record.buildings.values().any(|building| {
         !building.natural_zone
-            && after.access(building).is_none()
-            && before
+            && proof.crowned.access(building).is_none()
+            && proof
+                .plain
                 .get_or_insert_with(|| Network::for_construction(state, record))
                 .access(building)
                 .is_some()
     }) {
-        return true;
+        return Replant::Refused;
     }
-    for blueprint in blueprints::all(&state.registry)
+    let scans: Vec<&'static Blueprint> = blueprints::all(&state.registry)
         .iter()
         .filter(|blueprint| blueprint.kind == BuildingKind::House)
-    {
-        if !construction::has_house_lot(state, record, &mut after, blueprint)
-            && (construction::has_house_lot(
-                state,
-                record,
-                before.get_or_insert_with(|| Network::for_construction(state, record)),
-                blueprint,
-            ) || state
-                .settlements
-                .forest
-                .lock()
-                .expect("forest cache poisoned")
-                .misses()
-                != misses)
-        {
-            return true;
+        .filter(|&blueprint| !spares_housing(state, record, &mut proof, blueprint, budget, misses))
+        .collect();
+    let mut verdict = Replant::Plant;
+    let mut waiting = u32::try_from(scans.len()).unwrap_or(u32::MAX);
+    for blueprint in scans {
+        // Each scan takes a fair share of what the slice has left, so one
+        // long scan cannot starve the next blueprint's scan.
+        let share = proof.checks.lots / waiting;
+        let rest = proof.checks.lots - share;
+        proof.checks.lots = share;
+        waiting -= 1;
+        let (hint, progress) = budget.house(record.id, &blueprint.id, crown.min, state.tick);
+        let found = construction::crowned_house_lot(
+            state,
+            &mut proof.crowned,
+            &proof.fronts,
+            blueprint,
+            progress,
+            &mut proof.checks,
+        );
+        proof.checks.lots += rest;
+        match found {
+            Some(HouseLot::Free(front)) => *hint = Some(front),
+            Some(HouseLot::None) => return Replant::Refused,
+            None => verdict = Replant::NotYet,
         }
     }
     // A proved remaining lot and its loaded access are enough. Unrelated
     // cache misses elsewhere must not discard this grove's renewal.
-    false
+    verdict
+}
+
+fn forest_misses(state: &TickState) -> u64 {
+    state
+        .settlements
+        .forest
+        .lock()
+        .expect("forest cache poisoned")
+        .misses()
+}
+
+/// A crown proof: the crown, the crowned walk and its frontages, the plain
+/// walk (built only when needed) and the proof's lot checks.
+struct CrownProof<'a> {
+    crown: ScriptWorldBounds,
+    plain: Option<Network<'a>>,
+    crowned: Network<'a>,
+    fronts: Vec<construction::Front>,
+    checks: construction::LotChecks,
+}
+
+/// Whether the crown spares `blueprint`'s housing without a scan: the hint
+/// lot is still free on the crowned walk, or the crown takes no lot of the
+/// blueprint that is free now (proved with forest evidence at hand). A crown
+/// whose scan for another free lot runs already took a free lot.
+fn spares_housing<'a>(
+    state: &'a TickState,
+    record: &'a SettlementRecord,
+    proof: &mut CrownProof<'a>,
+    blueprint: &'static Blueprint,
+    budget: &mut construction::site_turn::SiteBudget,
+    misses: u64,
+) -> bool {
+    let (hint, progress) = budget.house(record.id, &blueprint.id, proof.crown.min, state.tick);
+    if let Some(front) = *hint {
+        match construction::keeps_free_lot(
+            state,
+            &mut proof.crowned,
+            &proof.fronts,
+            blueprint,
+            front,
+            &mut proof.checks,
+        ) {
+            Some(true) => return true,
+            Some(false) => *hint = None,
+            None => return false,
+        }
+    }
+    if !progress.idle() {
+        return false;
+    }
+    let plain = proof
+        .plain
+        .get_or_insert_with(|| Network::for_construction(state, record));
+    construction::takes_free_lot(
+        state,
+        plain,
+        &proof.fronts,
+        proof.crown,
+        blueprint,
+        &mut proof.checks,
+    ) == Some(false)
+        && forest_misses(state) == misses
 }
 
 fn vacant(state: &TickState, block: u32) -> bool {
@@ -565,6 +668,71 @@ fn facing(blueprint: &Blueprint, normal: [i32; 2]) -> Option<u8> {
     u8::try_from((outward + 4 - front(blueprint)?) % 4).ok()
 }
 
+/// The geometry of the blueprint's lot facing a frontage across the verge,
+/// before any terrain is read.
+struct LotPlan {
+    rotation: u8,
+    /// Minimum x and z of the footprint.
+    origin: [i32; 2],
+    /// The rotated footprint.
+    size: [i32; 3],
+    verge: [i32; 2],
+    door: [i32; 2],
+}
+
+fn lot_plan(blueprint: &Blueprint, front: [i32; 3], normal: [i32; 2]) -> Option<LotPlan> {
+    let verge = [front[0] + normal[0], front[2] + normal[1]];
+    let door = [front[0] + 2 * normal[0], front[2] + 2 * normal[1]];
+    let rotation = facing(blueprint, normal)?;
+    let turn = Rotation::from_quarter_turns(rotation);
+    let entrance = blueprint.level(1)?.rotated(turn).entrance.map(i32::from);
+    let size = blueprint.footprint(turn).map(i32::from);
+    let [sx, _, sz] = size;
+    let origin = match normal {
+        [0, -1] => [door[0] - entrance[0], door[1] - (sz - 1)],
+        [0, _] => [door[0] - entrance[0], door[1]],
+        [-1, _] => [door[0] - (sx - 1), door[1] - entrance[2]],
+        _ => [door[0], door[1] - entrance[2]],
+    };
+    Some(LotPlan {
+        rotation,
+        origin,
+        size,
+        verge,
+        door,
+    })
+}
+
+/// Whether `crown` covers a column the blueprint's lot facing `front` reads
+/// (its footprint, door or verge): only such a lot can differ between a walk
+/// and the same walk with the crown planted ([`Network::lot`]).
+pub(crate) fn crown_touches_lot(
+    blueprint: &Blueprint,
+    front: [i32; 3],
+    normal: [i32; 2],
+    crown: ScriptWorldBounds,
+) -> bool {
+    let Some(LotPlan {
+        origin: [ox, oz],
+        size: [sx, _, sz],
+        verge,
+        door,
+        ..
+    }) = lot_plan(blueprint, front, normal)
+    else {
+        return false;
+    };
+    let covers = |[x, z]: [i32; 2]| {
+        (crown.min[0]..=crown.max[0]).contains(&x) && (crown.min[2]..=crown.max[2]).contains(&z)
+    };
+    covers(verge)
+        || covers(door)
+        || (crown.min[0] < ox + sx
+            && ox <= crown.max[0]
+            && crown.min[2] < oz + sz
+            && oz <= crown.max[2])
+}
+
 /// Street columns reachable on foot from the bell, including verge detours.
 pub(crate) struct Network<'a> {
     state: &'a TickState,
@@ -589,6 +757,11 @@ impl<'a> Network<'a> {
     /// removal work before this corridor is actually walkable.
     pub(crate) fn for_construction(state: &'a TickState, record: &'a SettlementRecord) -> Self {
         Self::build(state, record, true, None)
+    }
+
+    /// The settlement this walk belongs to.
+    pub(crate) fn record(&self) -> &'a SettlementRecord {
+        self.record
     }
 
     fn build(
@@ -708,18 +881,13 @@ impl<'a> Network<'a> {
         normal: [i32; 2],
     ) -> Option<Lot> {
         let anchor = self.record.anchor;
-        let verge = [front[0] + normal[0], front[2] + normal[1]];
-        let door = [front[0] + 2 * normal[0], front[2] + 2 * normal[1]];
-        let rotation = facing(blueprint, normal)?;
-        let turn = Rotation::from_quarter_turns(rotation);
-        let entrance = blueprint.level(1)?.rotated(turn).entrance.map(i32::from);
-        let [sx, sy, sz] = blueprint.footprint(turn).map(i32::from);
-        let [ox, oz] = match normal {
-            [0, -1] => [door[0] - entrance[0], door[1] - (sz - 1)],
-            [0, _] => [door[0] - entrance[0], door[1]],
-            [-1, _] => [door[0] - (sx - 1), door[1] - entrance[2]],
-            _ => [door[0], door[1] - entrance[2]],
-        };
+        let LotPlan {
+            rotation,
+            origin: [ox, oz],
+            size: [sx, sy, sz],
+            verge,
+            door,
+        } = lot_plan(blueprint, front, normal)?;
         if !(ox..ox + sx).all(|x| (oz..oz + sz).all(|z| cell(anchor, x, z) == Cell::Lot)) {
             return None;
         }

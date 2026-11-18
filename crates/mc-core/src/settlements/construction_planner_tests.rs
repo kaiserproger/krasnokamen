@@ -1,4 +1,6 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, request_started, start};
+use super::tests::{
+    attempt, complete, fixture, fund, open_plan, request_started, start, upgrade_started,
+};
 use super::*;
 use mc_script::ScriptWorldBounds;
 
@@ -1065,10 +1067,7 @@ fn queued_upgrade_targets_next_level_after_active_upgrade_finishes() {
         .next()
         .unwrap();
     fund(&mut state, "house", 2);
-    assert_eq!(
-        request_upgrade(&mut state, id, building).unwrap(),
-        OrderOutcome::Started
-    );
+    upgrade_started(&mut state, id, building);
     let active = state.settlements.get(id).unwrap().projects.first().cloned();
     assert_eq!(active.as_ref().unwrap().level, 2);
     assert!(
@@ -1993,7 +1992,7 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
     // The row is orderable and the upgraded house offers L3 the same way.
     for level in [2, 3] {
         fund(&mut state, "house", level);
-        request_upgrade(&mut state, id, bid).unwrap();
+        upgrade_started(&mut state, id, bid);
         complete(&mut state, id, slot);
         let upgraded = &state.settlements.get(id).unwrap().buildings[&bid];
         assert_eq!(upgraded.level, level);

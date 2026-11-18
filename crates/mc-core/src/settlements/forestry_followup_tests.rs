@@ -475,12 +475,18 @@ fn replant_house_scan_never_proves_a_nonoverlapping_registered_root() {
     let record = state.settlements.get(id).unwrap();
     let blueprint = crate::settlements::blueprints::get(&state.registry, "house").unwrap();
     let mut network = crate::settlements::layout::Network::for_construction(&state, record);
+    let fronts = network.frontage();
     let before = tree_proof::BUILDS.with(std::cell::Cell::get);
-    assert!(crate::settlements::construction::has_house_lot(
-        &state,
-        record,
-        &mut network,
-        blueprint
+    assert!(matches!(
+        crate::settlements::construction::crowned_house_lot(
+            &state,
+            &mut network,
+            &fronts,
+            blueprint,
+            &mut crate::settlements::construction::CrownScan::default(),
+            &mut crate::settlements::construction::LotChecks::new(64)
+        ),
+        Some(crate::settlements::construction::HouseLot::Free(_))
     ));
     assert_eq!(tree_proof::BUILDS.with(std::cell::Cell::get), before);
 }

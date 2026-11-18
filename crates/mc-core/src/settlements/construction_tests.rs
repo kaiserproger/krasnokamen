@@ -216,13 +216,14 @@ pub(crate) fn open_plan(state: &mut TickState) {
     state.world.fold_overlay();
 }
 
-/// Planning passes until no owner order still waits for its site: the order's
-/// command only queues it and the passes search its site, one bounded slice
-/// each (owner D42). A started order needs no pass.
+/// Planning passes until no owner order still waits for its site or its
+/// admission: the order's command only queues it and the passes search its
+/// site, one bounded slice each, or admit the upgrade (owner D42).
 pub(crate) fn finish_sweep(state: &mut TickState, id: SettlementId) {
     let waiting = |state: &TickState| {
         (0..access::orders(state.settlements.get(id).unwrap()).count()).any(|index| {
-            pending_reason_at(state, id, index).as_deref() == Some(site_refusals::WAITING_FOR_SITE)
+            pending_reason_at(state, id, index)
+                .is_some_and(|reason| reason == site_refusals::WAITING_FOR_SITE || reason == READY)
         })
     };
     for _ in 0..64 {
@@ -238,12 +239,26 @@ pub(crate) fn finish_sweep(state: &mut TickState, id: SettlementId) {
 /// search its site.
 pub(crate) fn request_started(state: &mut TickState, id: SettlementId, blueprint: &str) {
     match request_build(state, id, blueprint).unwrap() {
-        OrderOutcome::Started => {}
         OrderOutcome::Queued { reason } if reason == site_refusals::WAITING_FOR_SITE => {
             finish_sweep(state, id);
         }
         other => panic!("{blueprint} was not admitted: {other:?}"),
     }
+}
+
+/// An owner upgrade run to its start: the command queues it, a planning pass
+/// admits it.
+pub(crate) fn upgrade_started(state: &mut TickState, id: SettlementId, building: BuildingId) {
+    match request_upgrade(state, id, building).unwrap() {
+        OrderOutcome::Queued { reason } if reason == READY => finish_sweep(state, id),
+        other => panic!("upgrade of {building:?} was not admitted: {other:?}"),
+    }
+}
+
+/// The site lots a tick leaves the replanting proofs when its site work
+/// examined none: a whole tick's budget; the villages' lot scans carry over.
+pub(crate) fn fresh_site_budget(state: &mut TickState) {
+    state.settlements.site_budget.refill();
 }
 
 /// World position of the first oak log the project's rotated level places.

@@ -135,6 +135,9 @@ pub struct Registry {
     pub(super) site_orders: BTreeMap<SettlementId, u64>,
     /// The settlement the last order turn served.
     pub(super) site_turn: Option<SettlementId>,
+    /// The site lots this tick's site work left for the replanting proofs;
+    /// runtime only, never persisted (`construction::site_turn`).
+    pub(super) site_budget: super::construction::site_turn::SiteBudget,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,

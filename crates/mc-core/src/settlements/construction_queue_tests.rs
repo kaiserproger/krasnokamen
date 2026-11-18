@@ -397,6 +397,304 @@ fn simultaneous_orders_share_one_bounded_site_budget_and_all_start() {
     }
 }
 
+/// Owner D42, upgrades too: a funded upgrade's command checks and queues it
+/// and admits nothing, so no project exists before its order turn; the turn,
+/// with a slice of the shared budget, starts it without any debit.
+#[test]
+fn a_funded_upgrade_is_queued_and_starts_on_its_order_turn() {
+    let (mut state, id, slot) = super::tests::fixture();
+    super::tests::start(&mut state, id, "house", 1, None);
+    fund(&mut state, "house", 1);
+    super::tests::complete(&mut state, id, slot);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    state.tickets.insert(
+        "upgrade".into(),
+        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
+    );
+    state.refresh_active_chunks(0);
+    fund(&mut state, "house", 2);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert_eq!(
+        request_upgrade(&mut state, id, building).unwrap(),
+        OrderOutcome::Queued {
+            reason: READY.into()
+        }
+    );
+    let record = state.settlements.get(id).unwrap();
+    assert!(record.projects.is_empty(), "the command admits nothing");
+    assert_eq!(
+        access::orders(record)
+            .map(|order| (order.level, order.building))
+            .collect::<Vec<_>>(),
+        [(2, Some(building))]
+    );
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    // Only the order turn runs this tick, not the four-tick planner pass.
+    state.tick = state.tick / 4 * 4 + 1;
+    crate::settlements::construction::tick(&mut state);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        access::projects(record)
+            .map(|project| (project.level, project.building, project.ordered))
+            .collect::<Vec<_>>(),
+        [(2, Some(building), true)]
+    );
+    assert_eq!(access::orders(record).count(), 0);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+}
+
+/// A crown deep inside the lot block north-east of the fixture's bell: on
+/// the fixture's loaded ground it takes no lot, road, verge or access.
+const BLOCK_ROOT: [i32; 3] = [24, 201, 24];
+
+/// The fixture town in its open plan with more street frontages than one
+/// tick's site budget.
+fn town_with_long_walk() -> (TickState, SettlementId) {
+    let (mut state, id, _slot) = fixture();
+    open_plan(&mut state);
+    let frontages = layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
+        .frontage()
+        .len();
+    assert!(
+        frontages > (site_turn::SITE_SLICES * SITE_ATTEMPTS) as usize,
+        "{frontages} frontages"
+    );
+    (state, id)
+}
+
+/// Whether house blueprint `blueprint` has a free lot anywhere on the
+/// settlement's walk: one whole scan.
+fn free_lot_anywhere(
+    state: &TickState,
+    id: SettlementId,
+    blueprint: &blueprints::Blueprint,
+) -> bool {
+    let mut network = layout::Network::for_construction(state, state.settlements.get(id).unwrap());
+    let fronts = network.frontage();
+    matches!(
+        crowned_house_lot(
+            state,
+            &mut network,
+            &fronts,
+            blueprint,
+            &mut CrownScan::default(),
+            &mut LotChecks::new(u32::MAX)
+        ),
+        Some(HouseLot::Free(_))
+    )
+}
+
+fn houses(state: &TickState) -> impl Iterator<Item = &'static blueprints::Blueprint> {
+    blueprints::all(&state.registry)
+        .iter()
+        .filter(|blueprint| blueprint.kind == BuildingKind::House)
+}
+
+/// A crown over the south lot row of that block, clear of its door row: it
+/// takes the row's lots but no road, verge or building access.
+const EDGE_ROOT: [i32; 3] = [24, 201, 16];
+
+/// Owner D42: a replanting proof is site search under the tick's shared
+/// budget. In the open plan every lot is free: the first proof takes a slice,
+/// finds that its crown takes a free lot and scans its crowned walk to
+/// another, which becomes the village's hint; the next proof re-checks only
+/// the hint (house blueprints of one footprint share the check); a tick's
+/// third proof finds no slice left and waits ("not yet").
+#[test]
+fn replanting_proofs_with_a_free_lot_plant_within_the_tick_budget() {
+    let (mut state, _) = town_with_long_walk();
+    super::tests::fresh_site_budget(&mut state);
+    lots_examined();
+    assert_eq!(
+        replant_verdict(&mut state, EDGE_ROOT),
+        Replant::Plant,
+        "a free house lot remains, so the crown is planted"
+    );
+    let first = lots_examined();
+    assert!((1..=SITE_ATTEMPTS).contains(&first), "{first} lots");
+    assert_eq!(replant_verdict(&mut state, EDGE_ROOT), Replant::Plant);
+    let second = lots_examined();
+    assert!(
+        (1..=2).contains(&second),
+        "one crowned check of the hint lot per house blueprint: {second}"
+    );
+    assert_eq!(
+        replant_verdict(&mut state, EDGE_ROOT),
+        Replant::NotYet,
+        "the tick's two slices are spent"
+    );
+    assert_eq!(lots_examined(), 0);
+    super::tests::fresh_site_budget(&mut state);
+    assert_eq!(
+        replant_verdict(&mut state, EDGE_ROOT),
+        Replant::Plant,
+        "the next tick plants"
+    );
+}
+
+/// Owner D42: with no free house lot anywhere (every lot block holds a
+/// building) nothing can be lost. A proof checks only the lots its crown
+/// takes, all in this proof and within one slice, and plants; it never scans
+/// the walk. A crown that takes no lot needs no check at all.
+#[test]
+fn replanting_without_a_free_lot_checks_only_the_lots_its_crown_takes() {
+    let (mut state, id) = town_with_long_walk();
+    build_over_lot_blocks(&mut state, id, None);
+    for blueprint in houses(&state) {
+        assert!(
+            !free_lot_anywhere(&state, id, blueprint),
+            "{}",
+            blueprint.id
+        );
+    }
+    super::tests::fresh_site_budget(&mut state);
+    lots_examined();
+    assert_eq!(replant_verdict(&mut state, EDGE_ROOT), Replant::Plant);
+    let lots = lots_examined();
+    assert!((1..=SITE_ATTEMPTS).contains(&lots), "{lots} lots");
+    assert_eq!(replant_verdict(&mut state, BLOCK_ROOT), Replant::Plant);
+    assert_eq!(lots_examined(), 0, "the deeper crown takes no lot");
+}
+
+/// Every lot row deeper than the door row of the fixture's 4 x 4 lot blocks
+/// (but `spare`) is built over, so every lot of every house blueprint there
+/// meets a building; roads, verges and door rows stay free and the walk keeps
+/// every frontage.
+fn build_over_lot_blocks(state: &mut TickState, id: SettlementId, spare: Option<[i32; 2]>) {
+    let record = state.settlements.get_mut(id).unwrap();
+    let anchor = record.anchor;
+    for (index, [i, j]) in (-2..2)
+        .flat_map(|i| (-2..2).map(move |j| [i, j]))
+        .enumerate()
+        .filter(|(_, block)| Some(*block) != spare)
+    {
+        let min = [
+            anchor[0] + i * layout::PERIOD + 5,
+            anchor[2] + j * layout::PERIOD + 5,
+        ];
+        let max = [min[0] + layout::PERIOD - 10, min[1] + layout::PERIOD - 10];
+        let building = BuildingId((id.0 << 32) | (index as u64 + 1));
+        record.buildings.insert(
+            building,
+            buildings::Building {
+                id: building,
+                settlement: id,
+                kind: BuildingKind::House,
+                level: 1,
+                bounds: ScriptWorldBounds::new([min[0], 200, min[1]], [max[0], 204, max[1]])
+                    .unwrap(),
+                work_points: Vec::new(),
+                revision: 1,
+                natural_zone: false,
+            },
+        );
+    }
+}
+
+/// One proof of `crown` for settlement `id` with the tick's shared budget.
+fn crown_proof(state: &mut TickState, id: SettlementId, crown: ScriptWorldBounds) -> Replant {
+    let mut budget = std::mem::take(&mut state.settlements.site_budget);
+    let verdict = layout::planting_verdict(
+        state,
+        state.settlements.get(id).unwrap(),
+        crown,
+        &mut budget,
+    );
+    state.settlements.site_budget = budget;
+    verdict
+}
+
+/// Owner D42 and the stale-proof review: a proof never plants on an earlier
+/// answer. With every lot built over a proof plants (nothing to lose); then
+/// the north-east block is cleared down to its south row, and a crown over
+/// that row would take the village's only free lots. Its lumberjack, far
+/// from every player, asks once per brain run (32 ticks apart, with the
+/// server's site work between): the first proof finds the taken free lots,
+/// the crowned walk's scan for another needs more than that proof's lots and
+/// continues over the next runs, each proof within its slice; no proof
+/// plants, and the walk scanned whole refuses. Negative controls: a stale
+/// "no free lot" plants at once; a scan that restarts every proof, or is
+/// pruned between brain runs, never refuses.
+#[test]
+fn a_crown_over_the_last_free_lots_is_refused_within_the_tick_budget() {
+    let (mut state, id) = town_with_long_walk();
+    build_over_lot_blocks(&mut state, id, None);
+    super::tests::fresh_site_budget(&mut state);
+    assert_eq!(
+        replant_verdict(&mut state, BLOCK_ROOT),
+        Replant::Plant,
+        "no free lot, nothing to lose"
+    );
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    // The block's first lot column, and the last column a lot of its south
+    // row reaches (a lot is at most `LOT_DEPTH` deep): the block's building
+    // now starts beyond that and the one-block building buffer.
+    let first = [anchor[0] + 3, anchor[2] + 3];
+    let row = {
+        let record = state.settlements.get_mut(id).unwrap();
+        let building = record
+            .buildings
+            .values_mut()
+            .find(|building| {
+                let bounds = building.bounds;
+                [0, 2]
+                    .into_iter()
+                    .all(|axis| (bounds.min[axis]..=bounds.max[axis]).contains(&BLOCK_ROOT[axis]))
+            })
+            .unwrap();
+        let [x, y, z] = building.bounds.min;
+        let deeper = first[1] + layout::LOT_DEPTH + 1;
+        assert!(deeper > z && deeper <= building.bounds.max[2]);
+        building.bounds = ScriptWorldBounds::new([x, y, deeper], building.bounds.max).unwrap();
+        deeper - 2
+    };
+    assert!(
+        houses(&state).any(|blueprint| free_lot_anywhere(&state, id, blueprint)),
+        "the south row is free again"
+    );
+    let crown = ScriptWorldBounds::new(
+        [first[0], 201, first[1]],
+        [anchor[0] + layout::PERIOD - 3, 265, row],
+    )
+    .unwrap();
+    state.tick = 1;
+    let mut verdicts = Vec::new();
+    for run in 0..64 {
+        // Never a planner tick: the proof has the tick's whole budget.
+        state.tick += 32;
+        crate::settlements::construction::tick(&mut state);
+        lots_examined();
+        let verdict = crown_proof(&mut state, id, crown);
+        let lots = lots_examined();
+        assert!(
+            lots <= SITE_ATTEMPTS,
+            "run {run}: the proof examined {lots} lots"
+        );
+        assert_ne!(verdict, Replant::Plant, "run {run}");
+        verdicts.push(verdict);
+        if verdict == Replant::Refused {
+            break;
+        }
+    }
+    assert_eq!(
+        verdicts.first(),
+        Some(&Replant::NotYet),
+        "the crowned walk takes more than one proof"
+    );
+    assert_eq!(
+        verdicts.last(),
+        Some(&Replant::Refused),
+        "the crowned walk was scanned whole: {verdicts:?}"
+    );
+}
+
 /// The sweep is runtime scratch: a restart mid-sweep keeps only the saved
 /// order, whose next planning pass re-derives the sweep from its first slice
 /// and still starts it.

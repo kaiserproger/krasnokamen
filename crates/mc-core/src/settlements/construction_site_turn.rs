@@ -2,35 +2,46 @@
 //! shares (owner D42).
 //!
 //! Bottleneck: a site search runs on the tick thread. Every candidate lot it
-//! examines (`site_refusals::advance`) reads the lot's terrain column by
-//! column, and every slice of a sweep also pays one street walk and one survey
-//! of the village walk. Before D42 an owner command ran its own slice inside
-//! its command tick, so N players ordering in one tick cost N slices in that
-//! tick, and a planner pass ran one slice for every funded order it held.
+//! examines (`site_refusals::advance`, a replanting proof's lot checks) runs
+//! the full site check on the lot's terrain, and every slice of a sweep also
+//! pays one street walk and one survey of the village walk. Before D42 an
+//! owner command ran its own slice (or, for an upgrade, its whole admission)
+//! inside its command tick, so N players ordering in one tick cost N slices
+//! in that tick; a planner pass ran one slice for every funded order it held;
+//! and each lumberjack's replanting proof scanned every frontage of the
+//! village, up to twice per house blueprint.
 //!
-//! Boundary: one tick runs at most [`SITE_SLICES`] slices server-wide, every
-//! settlement and player together, and a slice examines at most
-//! `SITE_ATTEMPTS` lots. The tick's planner pass claims its slices first (its
-//! priority house and its funded kinds, as before D42); the order turn takes
-//! what is left. A command examines no lot: it checks the slot, the blueprint
-//! and the funding, withdraws nothing, queues the order and answers.
+//! Boundary: one tick examines at most [`SITE_SLICES`] x `SITE_ATTEMPTS` lots
+//! server-wide, every settlement, player and lumberjack together. The tick's
+//! planner pass claims its slices first (its priority house and its funded
+//! kinds, as before D42); the order turn takes a slice of what is left, and an
+//! upgrade's admission, which searches no site, takes a slice too; the
+//! villager brain's replanting proofs, later in the tick, take a slice each
+//! of the rest. A proof checks the village's last free lot, then the lots its
+//! crown would take; only a crown that takes a free lot scans its crowned
+//! walk for another, and that scan is continued by its next proof. A proof
+//! without a slice, or while that scan runs, does not plant yet and the
+//! lumberjack asks again at its next brain run. A command examines no lot
+//! and admits nothing: it checks the slot, the blueprint and the funding,
+//! withdraws nothing, queues the order and answers.
 //!
 //! Fence: the order turn serves one settlement per tick, the next after the
 //! one served last in id order; inside it one funded new building searches,
-//! the next after the one searched last. So no settlement starves another, and
-//! a sweep that never finds a site cannot starve a later request. A settlement
-//! stays in the turn while a sweep of its is running and leaves it when it has
-//! nothing to search (no funded new building, no free slot, a refused sweep
-//! with no other building to search, its chunk not simulated); its planner
-//! pass enters it again. The turn is runtime state: after a restart the queued
-//! orders wait for their planner pass. Outside the budget: placements that
-//! check a fixed handful of candidates (street work, fortification, meadow,
-//! upgrades, a founding outpost) and the replanting house-lot proof.
+//! the next after the one searched last, and at most one order starts. So no
+//! settlement starves another, and a sweep that never finds a site cannot
+//! starve a later request. A settlement stays in the turn while a sweep or an
+//! upgrade of its waits for the budget and leaves it when it has nothing to
+//! admit (no funded order, no free slot, a refused order with no other to try,
+//! its chunk not simulated); its planner pass enters it again. The turn is
+//! runtime state: after a restart the queued orders wait for their planner
+//! pass. Outside the budget: placements that check a fixed handful of
+//! candidates (street work, fortification, meadow, a founding outpost).
 //!
 //! Effect: N simultaneous orders share one tick's slices instead of adding a
 //! slice each to their command tick; the last of them starts after about
 //! N x (slices its sweep needs) order turns. A single order on an idle server
 //! gets one slice every tick and starts as soon as its sweep is complete.
+use std::collections::BTreeMap;
 use std::ops::Bound;
 
 use super::{
@@ -45,43 +56,100 @@ use crate::tick::TickState;
 /// lots than that pass did, however many players order at once.
 pub(super) const SITE_SLICES: u32 = 2;
 
-/// The site slices the current tick has left, handed out whole.
+/// Ticks a waiting crown's scan of its crowned walk outlives its last proof:
+/// longer than the longest villager brain period (32 ticks,
+/// `villager::brain::brain_period`), so a working lumberjack far from every
+/// player, who asks again at its next brain run, keeps its scan; an older
+/// scan belongs to a planting nobody waits for any more.
+const CROWN_PATIENCE: u64 = 64;
+
+/// The candidate lots the current tick may still examine: [`SITE_SLICES`]
+/// slices of `SITE_ATTEMPTS` lots. Each tick's site work starts it afresh and
+/// leaves the rest to the villager brain's replanting proofs later in the
+/// same tick (`state.settlements.site_budget`). Runtime only.
 #[derive(Debug)]
 pub(crate) struct SiteBudget {
-    slices: u32,
+    lots: u32,
+    /// Per settlement and house blueprint, the last free lot a replanting
+    /// proof found; the next proof checks it first (`planting_verdict`).
+    hints: BTreeMap<(SettlementId, &'static str), Option<super::Front>>,
+    /// Per settlement, house blueprint and waiting crown (its minimum
+    /// corner), that crown's scan of its crowned walk (`crowned_house_lot`).
+    crowns: BTreeMap<(SettlementId, &'static str, [i32; 3]), super::CrownScan>,
 }
 
 impl Default for SiteBudget {
     fn default() -> Self {
         Self {
-            slices: SITE_SLICES,
+            lots: SITE_SLICES * super::SITE_ATTEMPTS,
+            hints: BTreeMap::new(),
+            crowns: BTreeMap::new(),
         }
     }
 }
 
 impl SiteBudget {
-    /// Lots the next slice may examine: a whole slice, or none once the tick's
-    /// slices are spent.
-    pub(super) fn take(&mut self) -> u32 {
-        if self.slices == 0 {
-            return 0;
-        }
-        self.slices -= 1;
-        super::SITE_ATTEMPTS
+    /// Lots the next slice may examine: a whole slice of what is left, none
+    /// once the tick's lots are spent.
+    pub(crate) fn take(&mut self) -> u32 {
+        let lots = self.lots.min(super::SITE_ATTEMPTS);
+        self.lots -= lots;
+        lots
+    }
+
+    /// A new tick's lots; hints and waiting crowns' scans carry over.
+    pub(super) fn refill(&mut self) {
+        self.lots = SITE_SLICES * super::SITE_ATTEMPTS;
+    }
+
+    /// Settlement `id`'s free-lot hint for house blueprint `blueprint`, and
+    /// the scan of the crowned walk of the crown whose minimum corner is
+    /// `crown`, used at `tick`.
+    pub(crate) fn house(
+        &mut self,
+        id: SettlementId,
+        blueprint: &'static str,
+        crown: [i32; 3],
+        tick: u64,
+    ) -> (&mut Option<super::Front>, &mut super::CrownScan) {
+        let progress = self.crowns.entry((id, blueprint, crown)).or_default();
+        progress.touched = tick;
+        (self.hints.entry((id, blueprint)).or_default(), progress)
     }
 }
 
 /// The tick's site work: the planner pass first, then one order turn with the
-/// slices it left.
+/// lots it left; the rest is the replanting proofs' (`replant_verdict`).
 pub(crate) fn tick(state: &mut TickState) {
-    let mut budget = SiteBudget::default();
+    let mut budget = std::mem::take(&mut state.settlements.site_budget);
+    budget.refill();
+    budget
+        .hints
+        .retain(|(id, _), _| state.settlements.get(*id).is_some());
+    budget
+        .crowns
+        .retain(|_, progress| state.tick.saturating_sub(progress.touched) <= CROWN_PATIENCE);
     super::planner_tick(state, &mut budget);
     turn(state, &mut budget);
+    state.settlements.site_budget = budget;
+}
+
+/// A lumberjack's verdict on planting a sapling at `root` now: each village
+/// proof that the crown leaves building access and a house lot takes a slice
+/// of the tick's remaining site budget (its walks and at most the slice's lot
+/// checks, `layout::planting_verdict`). A proof without a slice, or while its
+/// crown's scan for another free lot runs, is "not yet": it never plants onto
+/// the last house lot unproven.
+pub(crate) fn replant_verdict(state: &mut TickState, root: [i32; 3]) -> super::Replant {
+    let mut budget = std::mem::take(&mut state.settlements.site_budget);
+    let verdict = super::replant_check(state, root, &mut budget);
+    state.settlements.site_budget = budget;
+    verdict
 }
 
 /// Serve the next settlement whose funded new building is searching.
 fn turn(state: &mut TickState, budget: &mut SiteBudget) {
-    if budget.slices == 0 {
+    if budget.lots == 0 {
         return;
     }
     let queue = &state.settlements.site_orders;
@@ -191,17 +259,27 @@ pub(super) fn plan_order(state: &mut TickState, id: SettlementId, budget: &mut S
     }
     for index in candidates {
         let searched = search.filter(|(build, _)| *build == index);
-        let Some(record) = state.settlements.get_mut(id) else {
-            return true;
-        };
-        let new_building = access::orders(record)
-            .nth(index)
+        let new_building = state
+            .settlements
+            .get(id)
+            .and_then(|record| access::orders(record).nth(index))
             .is_some_and(|order| order.building.is_none());
-        let attempts = if searched.is_some() { budget.take() } else { 0 };
-        if new_building && attempts == 0 {
+        if new_building && searched.is_none() {
             continue;
         }
-        let Some(order) = access::take_order(record, index) else {
+        // The searched building's site slice; an upgrade searches no site, but
+        // its admission work takes a slice too.
+        let attempts = budget.take();
+        if attempts == 0 {
+            // The tick's slices are spent: a later turn tries it.
+            enter(state, id);
+            continue;
+        }
+        let Some(order) = state
+            .settlements
+            .get_mut(id)
+            .and_then(|record| access::take_order(record, index))
+        else {
             continue;
         };
         let seq = order.seq;

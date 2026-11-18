@@ -100,8 +100,9 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // D8S3's extracted upgrade guard adds six residual statements/items: 1326.
         // Measured 1279 on the PreFinal main+Prep merge, 2026-11-18; 1272
         // after the PrepTerritory/PrepRollover/PrepPortions finals. D42 moves
-        // owner-order admission turns into construction_site_turn.rs: 1228.
-        ("settlements/construction.rs", 1_228),
+        // owner-order admission turns into construction_site_turn.rs: 1228;
+        // its replanting proof into construction_replant.rs: 1209.
+        ("settlements/construction.rs", 1_209),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,

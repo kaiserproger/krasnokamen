@@ -3640,6 +3640,14 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
         alice,
         &format!("settlement build upgrade {}", building.0),
     );
+    // Owner D42: the command queues the funded upgrade at once and its order
+    // turn admits it, without a block write or a debit.
+    assert_eq!(
+        build_last_chat(&state, ConnectionId(1)),
+        "Queued house L2: ready"
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     let project = &record.projects[0];
     assert_eq!(project.building, Some(building));

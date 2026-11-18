@@ -432,10 +432,10 @@ pub(super) fn settlement(
 /// executor's enclosing settlement (closest anchor within its radius, like
 /// building/army commands). Both variants need an authenticated actor and
 /// `can_manage`, which also refuses ownerless settlements; operators of an
-/// owned settlement pass per existing semantics. A funded, free upgrade starts
-/// immediately; a new building and every other order append to the bounded
-/// owner queue, whose site search runs under the server's one per-tick site
-/// budget (`construction::site_turn`). Cancellation targets one pending order;
+/// owned settlement pass per existing semantics. Every order, a new building
+/// or an upgrade, appends to the bounded owner queue and is admitted on a
+/// later order turn under the server's one per-tick site budget
+/// (`construction::site_turn`). Cancellation targets one pending order;
 /// active work and real stock stay unchanged.
 pub(super) fn build_command(
     state: &mut TickState,
@@ -504,8 +504,8 @@ fn build_cancel_command(
 /// Native `/settlement build upgrade <buildingId>` execution. The building id
 /// is global (`settlement << 32 | sequence`, like `/settlement building
 /// upgrade`), but authorization runs against the executor's enclosing
-/// settlement: the target must belong to it. Starts a funded free upgrade or
-/// queues it without stock debit or placement.
+/// settlement: the target must belong to it. Queues the upgrade without stock
+/// debit or placement; its order turn admits it.
 /// Kept separate from the geometric `/settlement building upgrade` path.
 pub(super) fn build_upgrade_command(
     state: &mut TickState,

@@ -35,7 +35,15 @@ pub(super) mod site_refusals;
 #[path = "construction_site_turn.rs"]
 pub(super) mod site_turn;
 use site_turn::plan_order;
-pub(crate) use site_turn::tick;
+pub(crate) use site_turn::{replant_verdict, tick};
+
+#[path = "construction_replant.rs"]
+mod replant;
+use replant::replant_check;
+pub(crate) use replant::{CrownScan, Replant};
+pub(super) use replant::{
+    Front, HouseLot, LotChecks, crowned_house_lot, keeps_free_lot, takes_free_lot,
+};
 
 #[path = "construction_upgrade.rs"]
 mod upgrade;
@@ -192,7 +200,7 @@ fn start_order(
     order: &OwnerOrder,
     attempts: u32,
 ) -> Result<String, String> {
-    if upgrade::next_level(state, id, order).is_some_and(|next| next != order.level) {
+    if upgrade::waits(state, id, order) {
         return Err("Busy.".into());
     }
     match order.building {
@@ -215,11 +223,10 @@ fn submit_order(
             "Construction queue is full: MAX_ORDERS={MAX_ORDERS}."
         ));
     }
-    // The request takes its submission sequence whether it starts at once or
-    // waits: a project that starts immediately and later retries must still
-    // restore the place it was submitted at (D8 review R2-4). The sequence is
-    // committed only when the request is kept, so a refused submission leaves
-    // the record untouched.
+    // The request takes its submission sequence when it is queued: a project
+    // started from it that later retries must still restore the place it was
+    // submitted at (D8 review R2-4). The sequence is committed only when the
+    // request is kept, so a refused submission leaves the record untouched.
     let seq = state
         .settlements
         .get(id)
@@ -248,62 +255,41 @@ fn submit_order(
             .position(|queued| queued.seq == seq)
             .unwrap_or(0);
         let reason = pending_reason_at(state, id, index).unwrap_or_else(|| "queued".into());
-        if reason == site_refusals::WAITING_FOR_SITE {
+        if reason == site_refusals::WAITING_FOR_SITE || reason == READY {
             site_turn::enter(state, id);
         }
         return Ok(OrderOutcome::Queued { reason });
     }
-    let started = match order.building {
-        Some(_) => start_order(state, id, &order, 0),
-        // A new building's site is searched in a later tick's order turn under
-        // the server's one site budget (`site_turn`), never in this command's
-        // tick: only its admission checks run here.
-        None => {
-            buildable(state, id, &order.blueprint).and(Err(site_refusals::WAITING_FOR_SITE.into()))
+    // Every order starts on a later order turn under the server's one site
+    // budget (`site_turn`, owner D42), never in this command's tick: only its
+    // admission checks run here, and nothing is withdrawn or reserved.
+    let admitted = if upgrade::waits(state, id, &order) {
+        Err("Busy.".to_owned())
+    } else {
+        match order.building {
+            Some(building) => upgrade::upgradable(state, id, building).map(|()| READY),
+            None => {
+                buildable(state, id, &order.blueprint).map(|()| site_refusals::WAITING_FOR_SITE)
+            }
         }
     };
-    match started {
-        Ok(handle) => {
-            // The started project carries its sequence, so its own retry keeps
-            // the submission place instead of taking the newest one.
-            if let Some(record) = state.settlements.get_mut(id) {
-                record.order_seq = seq;
-                if let Some(project) = record
-                    .projects
-                    .iter_mut()
-                    .find(|project| project.structure == handle)
-                {
-                    project.order_seq = Some(seq);
-                }
-                record.revision = record.revision.saturating_add(1);
-            }
-            Ok(OrderOutcome::Started)
-        }
-        Err(reason)
-            if reason == "Busy."
-                || reason.starts_with("not enough:")
-                || reason == site_refusals::WAITING_FOR_SITE =>
-        {
-            let record = state
-                .settlements
-                .get_mut(id)
-                .ok_or("Settlement not found.")?;
-            record.order_seq = seq;
-            access::insert_order_by_seq(record, order);
-            record.revision = record.revision.saturating_add(1);
-            if reason == site_refusals::WAITING_FOR_SITE {
-                site_turn::enter(state, id);
-            }
-            Ok(OrderOutcome::Queued {
-                reason: if reason == "Busy." {
-                    "busy".into()
-                } else {
-                    reason
-                },
-            })
-        }
-        Err(error) => Err(error),
+    let (reason, turn) = match admitted {
+        Ok(reason) => (reason.to_owned(), true),
+        Err(reason) if reason == "Busy." => ("busy".to_owned(), false),
+        Err(reason) if reason.starts_with("not enough:") => (reason, false),
+        Err(error) => return Err(error),
+    };
+    let record = state
+        .settlements
+        .get_mut(id)
+        .ok_or("Settlement not found.")?;
+    record.order_seq = seq;
+    access::insert_order_by_seq(record, order);
+    record.revision = record.revision.saturating_add(1);
+    if turn {
+        site_turn::enter(state, id);
     }
+    Ok(OrderOutcome::Queued { reason })
 }
 
 pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<(), String> {
@@ -367,11 +353,15 @@ pub(crate) fn pending_reason_at(
         if order.building.is_none() {
             site_refusals::WAITING_FOR_SITE
         } else {
-            "ready"
+            READY
         }
         .into(),
     )
 }
+
+/// The waiting reason of a funded upgrade with a free slot: its order turn
+/// admits it (`site_turn`).
+pub(crate) const READY: &str = "ready";
 
 /// A confirmed level remains unchanged even while its predecessor is missing.
 fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Option<u8> {
@@ -947,22 +937,12 @@ fn start_upgrade(
     id: SettlementId,
     building: BuildingId,
 ) -> Result<String, String> {
-    claim_slot(state, id)?;
+    upgrade::upgradable(state, id, building)?;
     let record = state.settlements.get(id).expect("claimed settlement");
-    let building = record
-        .buildings
-        .get(&building)
-        .ok_or("Building not found.")?;
-    let (blueprint, origin, rotation) = upgrade_blueprint(state, id, building)
-        .ok_or("No blueprint upgrade available for this building.")?;
+    let building = &record.buildings[&building];
+    let (blueprint, origin, rotation) =
+        upgrade_blueprint(state, id, building).expect("upgradable building");
     let level = building.level + 1;
-    if let Some(error) = funding_error(
-        state,
-        id,
-        &blueprint.level(level).expect("upgrade level").materials,
-    ) {
-        return Err(error);
-    }
     let images = executor::source_images(state, id);
     let (species, color) = funded_variant(
         state,
@@ -1118,74 +1098,6 @@ fn priority_house(
     funded_variant(state, record.id, &level.materials, images)
         .is_some()
         .then_some(blueprint)
-}
-
-/// Reuse the executor's reservation, including the admitted clearing corridor.
-/// Finished structures stay protected; spent road and meadow work does not.
-pub(crate) fn replant_conflicts(state: &TickState, root: [i32; 3]) -> bool {
-    let crown = super::forestry::PLANTED_CROWN_RADIUS as i32;
-    let bounds = ScriptWorldBounds::new(
-        [
-            root[0].saturating_sub(crown),
-            root[1],
-            root[2].saturating_sub(crown),
-        ],
-        [
-            root[0].saturating_add(crown),
-            root[1]
-                .saturating_add(64)
-                .min(state.world.geometry().max_y() - 1),
-            root[2].saturating_add(crown),
-        ],
-    );
-    bounds.map_or(true, |bounds| {
-        executor::area_held(state, bounds)
-            || state
-                .settlements
-                .records()
-                .filter(|record| {
-                    // Street headroom and lots stay inside the territory's
-                    // horizontal extent. Outpost claims may lie outside it.
-                    let horizontal = ScriptWorldBounds::new(
-                        [bounds.min[0], record.anchor[1], bounds.min[2]],
-                        [bounds.max[0], record.anchor[1], bounds.max[2]],
-                    )
-                    .expect("valid crown projection");
-                    founding::sphere_overlaps(record.anchor, record.radius, horizontal)
-                        || record.founding.as_ref().is_some_and(|expedition| {
-                            let claim = expedition.bounds();
-                            [0, 2].into_iter().all(|axis| {
-                                bounds.min[axis] <= claim.max[axis]
-                                    && claim.min[axis] <= bounds.max[axis]
-                            })
-                        })
-                })
-                .any(|record| layout::planting_blocks_access(state, record, bounds))
-    })
-}
-
-/// Geometrically feasible housing, independent of today's material balance.
-/// The network may forecast a proposed planting without mutating the world.
-pub(super) fn has_house_lot(
-    state: &TickState,
-    record: &SettlementRecord,
-    network: &mut layout::Network<'_>,
-    blueprint: &blueprints::Blueprint,
-) -> bool {
-    let mut survey = site_refusals::Survey::default();
-    network.frontage().into_iter().any(|(front, normal)| {
-        let Some(lot) = network.lot(blueprint, front, normal) else {
-            return false;
-        };
-        site_free_claim(
-            state,
-            record,
-            lot.origin,
-            blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
-            record.founding.as_ref(),
-            &mut survey,
-        )
-    })
 }
 
 fn candidate_kinds<'a>(

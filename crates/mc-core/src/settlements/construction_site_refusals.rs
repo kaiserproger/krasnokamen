@@ -240,7 +240,7 @@ fn sweep_stale(id: &str, sweep: &Sweep, blueprint: &str, frontages: u32, topolog
 }
 
 /// Identity of the ordered frontage list a sweep walked.
-fn topology(fronts: &[([i32; 3], [i32; 2])]) -> u64 {
+pub(super) fn topology(fronts: &[([i32; 3], [i32; 2])]) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     for (at, normal) in fronts {
         for byte in at
@@ -362,6 +362,12 @@ thread_local! {
     pub(super) static EXAMINED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
+/// Count one examined candidate lot on this thread (tests' cost observer).
+pub(super) fn examined() {
+    #[cfg(test)]
+    EXAMINED.with(|count| count.set(count.get() + 1));
+}
+
 /// Examine up to `budget` further candidates of this blueprint's sweep. An
 /// incomplete sweep admits nothing; a completed one returns its cheapest lot
 /// and forgets its scratch. Equal costs go to the lot nearest the anchor.
@@ -399,8 +405,7 @@ pub(super) fn advance(
         sweep.next += 1;
         *budget -= 1;
         report.examined += 1;
-        #[cfg(test)]
-        EXAMINED.with(|count| count.set(count.get() + 1));
+        examined();
         let (front, normal) = fronts[index as usize];
         let Some(lot) = network.lot(blueprint, front, normal) else {
             // The lot's own door or verge column holds fluid: the builder
