@@ -344,53 +344,95 @@ fn changed_later_and_mid_portion_cells_rederive_with_exact_credit_without_livelo
     validate(&state).unwrap();
 }
 
+/// Outside the territory a player's history refuses the write whether the cell
+/// changed type (grass on admitted air) or kept it (a fern removed and placed
+/// again by a player after admission, review P1-1); without history the changed
+/// cell is re-derived with its credit and the unchanged one is built over.
 #[test]
 fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
-    for protected in [false, true] {
-        let (mut state, id, builder, handle) = plan();
-        for _ in 0..5 {
-            builds::advance(&mut state, id, &handle, builder).unwrap();
-        }
-        state.settlements.get_mut(id).unwrap().radius = 1;
-        let grass = block(&state, "minecraft:grass_block", &[]);
-        state.world.set_block(9, 201, 4, grass);
-        if protected {
-            state.block_log =
-                crate::settlements::forestry::tests::player_history(&state, [9, 201, 4], 0);
-            assert!(state.block_log.player_touched([9, 201, 4]));
-        }
-        let before = certificate(&state, &handle);
-        let carry = state
-            .entities
-            .row(state.entities.slot_of_uuid(builder).unwrap())
-            .villager
-            .as_ref()
-            .unwrap()
-            .inventory
-            .clone();
-        if protected {
-            assert_eq!(
-                builds::advance(&mut state, id, &handle, builder),
-                Err(Failure::Blocked)
+    for same_id in [false, true] {
+        for protected in [false, true] {
+            let (mut state, id, builder, handle) = if same_id {
+                plan_with_build([None, Some("minecraft:fern")])
+            } else {
+                plan()
+            };
+            for _ in 0..5 {
+                builds::advance(&mut state, id, &handle, builder).unwrap();
+            }
+            state.settlements.get_mut(id).unwrap().radius = 1;
+            let player = block(
+                &state,
+                if same_id {
+                    "minecraft:fern"
+                } else {
+                    "minecraft:grass_block"
+                },
+                &[],
             );
-            assert_eq!(certificate(&state, &handle), before);
-            assert_eq!(stock(&state, "minecraft:dirt"), 0);
-            assert_eq!(state.world.block_at(9, 201, 4), Some(grass));
-            assert_eq!(
-                state
-                    .entities
-                    .row(state.entities.slot_of_uuid(builder).unwrap())
-                    .villager
-                    .as_ref()
-                    .unwrap()
-                    .inventory,
-                carry
-            );
-        } else {
-            assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
-            assert_eq!(stock(&state, "minecraft:dirt"), 1);
+            state.world.set_block(9, 201, 4, player);
+            if protected {
+                state.block_log =
+                    crate::settlements::forestry::tests::player_history(&state, [9, 201, 4], 0);
+                assert!(state.block_log.player_touched([9, 201, 4]));
+            }
+            let before = certificate(&state, &handle);
+            let carry = state
+                .entities
+                .row(state.entities.slot_of_uuid(builder).unwrap())
+                .villager
+                .as_ref()
+                .unwrap()
+                .inventory
+                .clone();
+            if protected {
+                assert_eq!(
+                    builds::advance(&mut state, id, &handle, builder),
+                    Err(Failure::Blocked),
+                    "same id: {same_id}"
+                );
+                assert_eq!(certificate(&state, &handle), before);
+                assert_eq!(stock(&state, "minecraft:dirt"), 0);
+                assert_eq!(state.world.block_at(9, 201, 4), Some(player));
+                assert_eq!(
+                    state
+                        .entities
+                        .row(state.entities.slot_of_uuid(builder).unwrap())
+                        .villager
+                        .as_ref()
+                        .unwrap()
+                        .inventory,
+                    carry
+                );
+            } else {
+                assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
+                assert_eq!(stock(&state, "minecraft:dirt"), i32::from(!same_id));
+                assert_ne!(state.world.block_at(9, 201, 4), Some(player));
+            }
         }
     }
+}
+
+/// A water source a player places beside an admitted log after admission
+/// refuses the dry Trees cut (review P1-2): the log stays, nothing is
+/// credited and no water reaches the site.
+#[test]
+fn a_water_source_placed_beside_an_admitted_log_refuses_the_cut() {
+    let (mut state, id, builder, handle) = plan();
+    builds::advance(&mut state, id, &handle, builder).unwrap();
+    let log = state.world.block_at(5, 201, 4).unwrap();
+    let source = state.registry.states.water_levels[0];
+    state.world.set_block(5, 201, 5, source);
+    let before = certificate(&state, &handle);
+    let logs = stock(&state, "minecraft:oak_log");
+    assert_eq!(
+        builds::advance(&mut state, id, &handle, builder),
+        Err(Failure::Blocked)
+    );
+    assert_eq!(state.world.block_at(5, 201, 4), Some(log));
+    assert_eq!(state.world.block_at(5, 201, 5), Some(source));
+    assert_eq!(certificate(&state, &handle), before);
+    assert_eq!(stock(&state, "minecraft:oak_log"), logs);
 }
 
 #[test]

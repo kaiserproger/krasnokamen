@@ -470,6 +470,42 @@ pub(crate) fn lava_beside(state: &TickState, at: [i32; 3]) -> bool {
     })
 }
 
+/// An actual cut into air opens no path for a fluid: the target and its six
+/// neighbours hold no water, lava or waterlogged block at the write, whatever
+/// the cut (tree, plant cover, changed cell or terrain, credited or not). A
+/// source placed after admission refuses the cut instead of flowing into the
+/// site. The liquid stage still fills every admitted source before any cut, so
+/// an admitted pool only waits here until its remaining flow has drained.
+pub(crate) fn dry_cut(
+    state: &TickState,
+    at: [i32; 3],
+) -> Result<(), mc_script::ScriptOperationFailure> {
+    use mc_script::ScriptOperationFailure as Failure;
+    for step in [
+        [0, 0, 0],
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 1, 0],
+        [0, -1, 0],
+        [0, 0, 1],
+        [0, 0, -1],
+    ] {
+        let block = state
+            .world
+            .block_at(at[0] + step[0], at[1] + step[1], at[2] + step[2])
+            .ok_or(Failure::Unloaded)?;
+        if state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .is_none_or(|definition| definition.has_fluid())
+        {
+            return Err(Failure::Blocked);
+        }
+    }
+    Ok(())
+}
+
 /// A stand cell a builder can occupy without touching lava: support, feet and
 /// head plus their four horizontal neighbours are all lava-free.
 pub(crate) fn stand_safe(state: &TickState, at: [i32; 3]) -> bool {

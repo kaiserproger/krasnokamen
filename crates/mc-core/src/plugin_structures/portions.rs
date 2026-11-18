@@ -106,6 +106,26 @@ pub(super) fn inside(
         .is_some_and(|town| town.contains(at))
 }
 
+/// Outside the working settlement's territory a player's block stays the
+/// player's (owner D27.4) before every actual write, whatever its type: a
+/// retained player record refuses any non-air cell, and a cell whose type
+/// changed since admission is also refused by the disabled-history live-player
+/// veto. Inside the territory nothing is attributed.
+pub(super) fn outside_attributed(
+    state: &TickState,
+    id: crate::settlements::SettlementId,
+    at: [i32; 3],
+    block: u32,
+    changed: bool,
+) -> bool {
+    !inside(state, id, at)
+        && if changed {
+            crate::settlements::forestry::vetoed(state, at)
+        } else {
+            block != state.registry.states.air && state.block_log.player_touched(at)
+        }
+}
+
 /// Only unprocessed cells of the requested advance are checked, including after
 /// the first cell of a portion. Earlier writes are not admission-before cells.
 pub(super) fn stale_reason(
@@ -144,17 +164,12 @@ pub(super) fn stale_reason(
         return Ok(Some("footprint_changed".to_owned()));
     }
     for (n, cell) in cells.iter().enumerate() {
-        let actual = identity(
-            state,
-            state
-                .world
-                .block_at(cell.at[0], cell.at[1], cell.at[2])
-                .ok_or(Failure::Unloaded)?,
-        )?;
-        if evidence.expected.get(offset + n) != Some(&actual)
-            && !inside(state, id, cell.at)
-            && crate::settlements::forestry::vetoed(state, cell.at)
-        {
+        let block = state
+            .world
+            .block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        let changed = evidence.expected.get(offset + n) != Some(&identity(state, block)?);
+        if outside_attributed(state, id, cell.at, block, changed) {
             return Err(Failure::Blocked);
         }
     }
@@ -210,6 +225,9 @@ pub(super) fn village_drops(
         .block_at(cell.at[0], cell.at[1], cell.at[2])
         .ok_or(Failure::Unloaded)?;
     let unchanged = identity(state, block)? == expected;
+    if outside_attributed(state, id, cell.at, block, !unchanged) {
+        return Err(Failure::Blocked);
+    }
     if unchanged
         && (cell.state == state.registry.states.air
             || block == cell.state
@@ -219,9 +237,6 @@ pub(super) fn village_drops(
             || crate::settlements::construction::relayout::village_soil(state, block))
     {
         return Ok(None);
-    }
-    if !inside(state, id, cell.at) && crate::settlements::forestry::vetoed(state, cell.at) {
-        return Err(Failure::Blocked);
     }
     // Outside territory a changed clear cell that holds a tree block is no
     // conserved drift: the clear path's executor identity recheck (N6) decides
@@ -234,39 +249,6 @@ pub(super) fn village_drops(
     }
     if identity(state, block)? == identity(state, cell.state)? {
         return Ok(Some(Vec::new()));
-    }
-    let definition = state
-        .registry
-        .blocks
-        .by_id(mc_world::BlockStateId(block))
-        .ok_or(Failure::InvalidRequest)?;
-    if cell.state == state.registry.states.air && definition.has_fluid() {
-        return Err(Failure::Blocked);
-    }
-    if cell.state == state.registry.states.air
-        && crate::settlements::construction::excavatable(state, block)
-    {
-        for (dx, dy, dz) in [
-            (1, 0, 0),
-            (-1, 0, 0),
-            (0, 1, 0),
-            (0, -1, 0),
-            (0, 0, 1),
-            (0, 0, -1),
-        ] {
-            let neighbour = state
-                .world
-                .block_at(cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz)
-                .ok_or(Failure::Unloaded)?;
-            if state
-                .registry
-                .blocks
-                .by_id(mc_world::BlockStateId(neighbour))
-                .is_none_or(|definition| definition.has_fluid())
-            {
-                return Err(Failure::Blocked);
-            }
-        }
     }
     conserved_drops(state, cell.at, block).map(Some)
 }
