@@ -25,6 +25,7 @@ pub(super) fn load_dimension_state(
     };
     let manifest_tick = root_manifest.tick;
     crate::mounts::persistence::validate_replay(&replay)?;
+    crate::journal::validate_replay(&replay)?;
     crate::battle::persistence::validate_replay(&replay, &registry)?;
     let recovered_tick = replay.tick.max(manifest_tick);
 

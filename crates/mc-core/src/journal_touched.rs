@@ -21,6 +21,10 @@
 //! - Chunk clock admission is not a row mutation. Each affected chunk rebases
 //!   its entity anchors before its boundary image is drained; unrelated chunk
 //!   residency and activity cannot force a population-wide comparison.
+//! - Compact records ([`compact_entry`]) are deltas of the last full image of
+//!   the same WAL tail and exist only while its base does: a body's first
+//!   record after recovery or a checkpoint capture is always a full image, and
+//!   removals drop the base with the id.
 
 use std::sync::Arc;
 
@@ -54,17 +58,151 @@ impl MotionPose {
     }
 }
 
+/// Last full `Entity` image fields of one body: the base its compact
+/// `EntityAppearance`/`ProjectileFlight` records are a delta of. The appearance
+/// is an `Arc` clone of the row's own allocation, so a baseline costs no pixel
+/// copy; the projectile copy exists only for projectile bodies.
+#[derive(Debug)]
+struct FieldBaseline {
+    appearance: Arc<crate::boundary::EntityAppearance>,
+    uuid: uuid::Uuid,
+    type_id: u32,
+    /// The image carried a villager post-image (a converted or cured body
+    /// changes that presence, which only a full image can express).
+    villager: bool,
+    /// The image carried this pickup delay; `EntityAppearance` does not carry it.
+    pickup_delay: u32,
+    /// The image carried the retained projectile, in the persisted shape: the
+    /// runtime-only attachment is not serialized, so replay never has it.
+    projectile: Option<Box<crate::projectiles::ProjectileState>>,
+}
+
+/// Whether a body can take a compact record instead of the whole image at all:
+/// a live non-player body whose pose is either not journaled (ordinary mobs) or
+/// journaled by `EntityMotion` (battle bodies). Items, falling bodies, TNT,
+/// vehicles, dragons and endermen have their pose in the image only, and a corpse
+/// image is a removal on replay.
+fn compactable(state: &TickState, slot: EntitySlot) -> bool {
+    let body = *state.entities.body(slot);
+    let row = state.entities.row(slot);
+    body.alive
+        && !matches!(body.kind, EntityKind::Player { .. })
+        && row.item.is_none()
+        && row.falling.is_none()
+        && row.tnt.is_none()
+        && row.entity_life.vehicle.is_none()
+        && !crate::end_fight::is_dragon(state, slot)
+        && !crate::enderman::is_enderman(&body)
+}
+
+/// The image's own type id projection.
+fn body_type_id(body: &crate::entities::Body) -> Option<u32> {
+    match body.kind {
+        EntityKind::Mob { type_id }
+        | EntityKind::Item { type_id }
+        | EntityKind::ExperienceOrb { type_id } => Some(type_id),
+        EntityKind::Player { .. } => None,
+    }
+}
+
+/// Whether `live` matches `base` in every projectile field a compact record can
+/// leave out. `age` always rides the record; `landing` also skips the landing
+/// transition. Destructured without `..` on both sides, so a new
+/// `ProjectileState` field stops compiling here instead of silently diverging.
+fn projectile_rest_matches(
+    base: &crate::projectiles::ProjectileState,
+    live: &crate::projectiles::ProjectileState,
+    landing: bool,
+) -> bool {
+    use crate::projectiles::ProjectileState;
+    let ProjectileState {
+        owner,
+        kind,
+        age: _,
+        stuck,
+        grounded_at_age,
+        ground_lifetime,
+        pickup,
+        stack,
+        damage,
+        punch,
+        flame,
+        piercing,
+        hit,
+        data,
+        critical,
+        mob_damage,
+        returning,
+        shot_at_angle,
+        fired_from_weapon,
+        crossbow_kills,
+        // Runtime-only and never serialized: the stored base keeps it cleared.
+        attached_to: _,
+        acceleration_power,
+    } = base;
+    let ProjectileState {
+        owner: live_owner,
+        kind: live_kind,
+        age: _,
+        stuck: live_stuck,
+        grounded_at_age: live_grounded_at_age,
+        ground_lifetime: live_ground_lifetime,
+        pickup: live_pickup,
+        stack: live_stack,
+        damage: live_damage,
+        punch: live_punch,
+        flame: live_flame,
+        piercing: live_piercing,
+        hit: live_hit,
+        data: live_data,
+        critical: live_critical,
+        mob_damage: live_mob_damage,
+        returning: live_returning,
+        shot_at_angle: live_shot_at_angle,
+        fired_from_weapon: live_fired_from_weapon,
+        crossbow_kills: live_crossbow_kills,
+        attached_to: _,
+        acceleration_power: live_acceleration_power,
+    } = live;
+    owner == live_owner
+        && kind == live_kind
+        && ground_lifetime == live_ground_lifetime
+        && pickup == live_pickup
+        && stack == live_stack
+        && damage == live_damage
+        && punch == live_punch
+        && flame == live_flame
+        && piercing == live_piercing
+        && hit == live_hit
+        && data == live_data
+        && critical == live_critical
+        && mob_damage == live_mob_damage
+        && returning == live_returning
+        && shot_at_angle == live_shot_at_angle
+        && fired_from_weapon == live_fired_from_weapon
+        && crossbow_kills == live_crossbow_kills
+        && acceleration_power == live_acceleration_power
+        && (!landing || (stuck == live_stuck && grounded_at_age == live_grounded_at_age))
+}
+
 /// Journal-side entity caches that live next to the baseline images.
 #[derive(Debug, Default)]
 pub(crate) struct JournalScan {
     /// Motion-capable bodies and their last emitted pose. Retained state uses
     /// the ordinary projected-image comparison below, even for a touched body.
     motion: std::collections::HashMap<EntityId, Option<MotionPose>>,
+    /// Bodies whose last emitted record was a full `Entity` image in this WAL
+    /// tail, with the fields a compact record diffs against.
+    fields: std::collections::HashMap<EntityId, FieldBaseline>,
     /// Dead ids whose stopped live clocks differ from the replay projection
     /// and must be compared again next batch even if untouched.
     clock_recheck: Vec<EntityId>,
     /// The first batch seeds all baselines; later boundaries use chunk indexes.
     initialized: bool,
+    /// Test-only: keep the full-image path so one test can journal the same
+    /// scenario both ways and compare the replayed state.
+    #[cfg(test)]
+    force_full: bool,
     /// Stage wall times of the latest batch build (phase-log attribution).
     pub(crate) times: BuildTimes,
 }
@@ -107,24 +245,20 @@ pub(crate) fn entity_images(
         state.journaled_villagers.remove(&id);
         state.journaled_entity_state.remove(&id);
         state.journal_scan.motion.remove(&id);
+        state.journal_scan.fields.remove(&id);
     }
     if state.journaled_entity_state.is_empty() {
         state.journaled_entity_state.reserve(state.entities.len());
     }
 
-    // Entity post-images: only entities that changed this tick. Spawns and
-    // appearance changes (e.g. a partly picked-up item stack) carry the full
-    // record; hurt-only updates carry health. Replay stays idempotent
-    // (absolute post-images); unchanged entities are covered by the
-    // checkpoint and earlier batches. Full snapshots every tick do not
-    // scale (50k entities ~= tens of MB per batch and stall the tick thread).
-    let mut full: Vec<EntityId> = output
-        .changes
-        .entities_spawned
-        .iter()
-        .chain(output.changes.entities_appearance_changed.iter())
-        .copied()
-        .collect();
+    // Entity post-images: only entities that changed this tick. A spawn or a
+    // chunk crossing carries the whole image; an appearance-only mark on a body
+    // whose image is already in this tail carries a compact delta (below);
+    // hurt-only updates carry health. Replay stays idempotent (absolute
+    // post-images); unchanged entities are covered by the checkpoint and
+    // earlier batches. Full snapshots every tick do not scale (50k entities ~=
+    // tens of MB per batch and stall the tick thread).
+    let mut full: Vec<EntityId> = output.changes.entities_spawned.clone();
     if !std::mem::replace(&mut state.journal_scan.initialized, true) {
         touched.clear();
         touched.extend(state.entities.slots().filter_map(|slot| {
@@ -132,7 +266,18 @@ pub(crate) fn entity_images(
             (!matches!(body.kind, EntityKind::Player { .. })).then_some(body.id)
         }));
     }
+    // A full image used to carry the live state image and villager image of
+    // every appearance-marked body. Keep those exact comparisons for those ids so
+    // the compact record may rely on them (committee F3).
+    let mut marked: Vec<EntityId> = output.changes.entities_appearance_changed.clone();
+    marked.sort_unstable();
+    marked.dedup();
     let owner_count = touched.len();
+    let mut needs_sort = false;
+    if !marked.is_empty() {
+        touched.extend(marked.iter().copied());
+        needs_sort = true;
+    }
     for chunk in state.world.simulation_clock_changes() {
         touched.extend(
             state
@@ -153,7 +298,8 @@ pub(crate) fn entity_images(
                 .copied(),
         );
     }
-    if touched.len() != owner_count {
+    needs_sort |= touched.len() != owner_count;
+    if needs_sort {
         #[cfg(test)]
         let sort_start = crate::horde_bench::merge_cost_tests::start();
         touched.sort_unstable();
@@ -247,6 +393,28 @@ pub(crate) fn entity_images(
     let sort_start = crate::horde_bench::merge_cost_tests::start();
     full.sort_unstable();
     full.dedup();
+    // Appearance-only marks on a body whose full image is already in this WAL
+    // tail carry the parts that changed instead of the whole entity image
+    // (`FieldBaseline`). Everything else keeps the full image: spawns, deaths,
+    // crossings, items, villager images, first appearance in the tail.
+    let mut appearance: Vec<EntityId> = output.changes.entities_appearance_changed.clone();
+    appearance.sort_unstable();
+    appearance.dedup();
+    let mut compact: Vec<EntityId> = Vec::new();
+    for id in &appearance {
+        if full.binary_search(id).is_ok() {
+            continue;
+        }
+        match compact_entry(state, *id, output.tick) {
+            Some(entry) => {
+                entries.push(entry);
+                compact.push(*id);
+            }
+            None => full.push(*id),
+        }
+    }
+    full.sort_unstable();
+    full.dedup();
     #[cfg(test)]
     crate::horde_bench::merge_cost_tests::record(sort_start, |probe, ns| {
         probe.journal_sort_ns += ns;
@@ -261,7 +429,9 @@ pub(crate) fn entity_images(
             | EntityEvent::Death { entity } => Some(entity),
             _ => None,
         })
-        .filter(|entity| full.binary_search(entity).is_err())
+        .filter(|entity| {
+            full.binary_search(entity).is_err() && compact.binary_search(entity).is_err()
+        })
         .collect();
     #[cfg(test)]
     let sort_start = crate::horde_bench::merge_cost_tests::start();
@@ -331,6 +501,27 @@ pub(crate) fn entity_images(
             projectile: row.projectile.clone(),
             tick: output.tick,
         });
+        if compactable(state, slot) {
+            state.journal_scan.fields.insert(
+                body.id,
+                FieldBaseline {
+                    appearance: Arc::clone(&row.appearance),
+                    uuid: row.uuid,
+                    type_id,
+                    villager: row.villager.is_some(),
+                    pickup_delay: body.pickup_delay,
+                    projectile: row.projectile.clone().map(|mut state| {
+                        // Runtime-only, never serialized: replay cannot hold it.
+                        state.attached_to = None;
+                        state
+                    }),
+                },
+            );
+        } else {
+            // Bodies the compact path cannot serve carry no base (documents the
+            // invariant instead of relying on the guards alone).
+            state.journal_scan.fields.remove(&body.id);
+        }
         if let Some(previous) = state.journal_scan.motion.get_mut(id) {
             let [yaw, pitch, _] = state.entities.rot(slot);
             let pose = MotionPose {
@@ -403,6 +594,137 @@ pub(crate) fn entity_images(
     state.journal_scan.times.touched = images_start - start;
     state.journal_scan.times.images = compare_start - images_start;
     state.journal_scan.times.compare = compare_start.elapsed();
+}
+
+/// Clear the compact-record bases. A checkpoint stores neither the WAL's
+/// transient appearance (living flags, metadata extras) nor a replayed
+/// projectile state, so every tail after a capture must start with a full
+/// image per body, exactly like the battle history's full-image rule.
+pub(crate) fn clear_field_baselines(state: &mut TickState) {
+    state.journal_scan.fields.clear();
+}
+
+/// Test-only: journal this state with full `Entity` images only, so one test
+/// can fold both tails and compare the replayed state.
+#[cfg(test)]
+pub(crate) fn force_full_images(state: &mut TickState) {
+    state.journal_scan.force_full = true;
+}
+
+/// One compact post-image for an appearance-only mark, or `None` when the body
+/// needs the full `Entity` image instead (spawn, death, crossing, an item or a
+/// pose only the image journals, a changed identity, custody or pickup delay, or
+/// no image in this tail).
+fn compact_entry(state: &mut TickState, id: EntityId, tick: u64) -> Option<JournalEntry> {
+    #[cfg(test)]
+    if state.journal_scan.force_full {
+        return None;
+    }
+    let slot = state.entities.slot_of_any(id)?;
+    if !compactable(state, slot) {
+        return None;
+    }
+    let body = *state.entities.body(slot);
+    let type_id = body_type_id(&body)?;
+    let row = state.entities.row(slot);
+    let chunk = chunk_position(state, slot);
+    // The delta is computed against the borrowed base; nothing is copied until a
+    // payload actually changed, and the borrow ends before the base is replaced.
+    let mut landing = None;
+    let appearance = {
+        let baseline = state.journal_scan.fields.get(&id)?;
+        if state
+            .journaled_entity_state
+            .get(&id)
+            .is_some_and(|(_, old_chunk, _)| *old_chunk != chunk)
+        {
+            // A crossing image is the only record that advances a replayed pose
+            // across chunk-clock authority.
+            return None;
+        }
+        if baseline.uuid != row.uuid
+            || baseline.type_id != type_id
+            || baseline.villager != row.villager.is_some()
+            || baseline.pickup_delay != body.pickup_delay
+            || baseline.projectile.is_some() != row.projectile.is_some()
+        {
+            // A changed identity, villager custody, pickup delay or projectile
+            // presence is a whole-image change.
+            return None;
+        }
+        let appearance =
+            crate::journal::EntityAppearanceDelta::diff(&baseline.appearance, &row.appearance);
+        if let Some(projectile) = &row.projectile {
+            // The pose, the age and (on its tick) the landing ride every flight
+            // record; anything else keeps the whole retained state.
+            let base = baseline.projectile.as_deref()?;
+            let landing_changed = !projectile_rest_matches(base, projectile, true);
+            let rest_changed = landing_changed && !projectile_rest_matches(base, projectile, false);
+            landing = Some(if rest_changed {
+                (
+                    None,
+                    crate::journal::DeltaValue::Unchanged,
+                    Some(projectile.clone()),
+                )
+            } else if landing_changed {
+                let grounded_at_age = match projectile.grounded_at_age {
+                    Some(age) => crate::journal::DeltaValue::Set(age),
+                    None => crate::journal::DeltaValue::Clear,
+                };
+                (Some(projectile.stuck), grounded_at_age, None)
+            } else {
+                (None, crate::journal::DeltaValue::Unchanged, None)
+            });
+        }
+        appearance
+    };
+    let entry = match landing {
+        Some((stuck, grounded_at_age, retained)) => JournalEntry::ProjectileFlight {
+            id: entity_id_int(body.id),
+            tick,
+            age: row.age,
+            health: row.health,
+            alive: body.alive,
+            active_effects: row.active_effects.clone(),
+            appearance,
+            pos: state.entities.pos(slot),
+            vel: state.entities.vel(slot),
+            yaw: state.entities.rot(slot)[0],
+            pitch: state.entities.rot(slot)[1],
+            projectile_age: row
+                .projectile
+                .as_deref()
+                .map_or(0, |projectile| projectile.age),
+            stuck,
+            grounded_at_age,
+            state: retained,
+        },
+        None => JournalEntry::EntityAppearance {
+            id: entity_id_int(body.id),
+            tick,
+            age: row.age,
+            health: row.health,
+            alive: body.alive,
+            active_effects: row.active_effects.clone(),
+            appearance,
+        },
+    };
+    state.journal_scan.fields.insert(
+        id,
+        FieldBaseline {
+            appearance: Arc::clone(&row.appearance),
+            uuid: row.uuid,
+            type_id,
+            villager: row.villager.is_some(),
+            pickup_delay: body.pickup_delay,
+            projectile: row.projectile.clone().map(|mut state| {
+                // Runtime-only, never serialized: replay cannot hold it.
+                state.attached_to = None;
+                state
+            }),
+        },
+    );
+    Some(entry)
 }
 
 fn clock_sensitive(
@@ -512,6 +834,20 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
             body.id,
             crate::journal::EntityStateImage::from_row(body, row),
         );
+        if let Some(baseline) = state.journal_scan.fields.get(&body.id) {
+            assert!(
+                baseline.appearance == row.appearance,
+                "entity {:?} has an appearance change that no record carries\n  baseline {:?}\n  live     {:?}",
+                body.id,
+                baseline.appearance,
+                row.appearance,
+            );
+            assert_eq!(
+                baseline.pickup_delay, body.pickup_delay,
+                "entity {:?} changed its pickup delay without a full image",
+                body.id
+            );
+        }
     }
 }
 

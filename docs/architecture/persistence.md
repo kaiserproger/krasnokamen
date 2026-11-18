@@ -31,6 +31,30 @@ meaningful entity changes are journaled; ordinary non-projectile mob motion and
 idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
 recovery.
+A body whose appearance changed (a battle shield is one metadata byte) journals
+`JournalEntry::EntityAppearance` instead of the whole image: the fields of the
+appearance image that differ, plus the health and effects scalars the image
+would have set. A projectile flight tick journals `JournalEntry::ProjectileFlight`:
+the authoritative pose and age, the landing transition, and the whole retained
+`ProjectileState` only when a payload, ledger or custody field changed
+(`journal_touched.rs` `compact_entry`). Both are deltas of the last full `Entity`
+image of the same WAL tail: the first record per body after a checkpoint capture
+or a recovery is always a full image, because a checkpoint stores neither the
+WAL's transient appearance (living flags, variant metadata) nor a replayed
+projectile state. Replay proves the base per id and dimension
+(`Replay::tail_images`, dropped by a removal) rather than trusting a record the
+checkpoint populated; a compact record without that proof refuses recovery
+(`journal::validate_replay`, `entity_fault`). A compact record lands the clock
+projection a full image would have baked in — the state image, the villager
+clocks and the lifetime age advance to its tick — applies its delta first (the
+projection reads the record's `baby`), and then moves the record's clock anchor.
+Full images remain for spawns, deaths, chunk crossings, dropped items, a changed
+entity identity, a changed pickup delay or villager custody, and a gained or lost
+projectile. Fields that only a full image refreshes stay checkpoint-durable
+between records by contract: `EntityStateImage::no_action_time`, the idle/despawn
+counter, and the position of a body whose motion is not journaled. "Identical"
+in this document means identical in every field replay projects, not that a
+compact record rewrites those checkpoint-only fields.
 Dropped-item pose changes use compact native `ItemMotion` images, including items
 whose lifetime or pickup clock is infinite. Resting items emit no pose image.
 

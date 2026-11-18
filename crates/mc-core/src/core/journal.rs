@@ -168,8 +168,13 @@ pub(super) fn start_checkpoint_with_reply(
     // Writes from here on stamp above `tick`, so whatever this capture misses
     // stays dirty after its acknowledgement (ADR 0020).
     state.entities.checkpoint_captured(tick);
+    // Compact entity records are deltas of a full image in the same tail; a
+    // checkpoint stores neither the WAL's transient appearance nor a replayed
+    // projectile, so the next record per body is a full image again.
+    crate::journal_touched::clear_field_baselines(state);
     for world in state.other_dimensions.values_mut() {
         world.entities.checkpoint_captured(tick);
+        crate::journal_touched::clear_field_baselines(world);
     }
     let (players, entities, block_entities) = changed_checkpoint_data_for(state, tick);
     let data_time = capture_start.elapsed();
