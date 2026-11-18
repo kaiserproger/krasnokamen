@@ -99,15 +99,34 @@ class ResidentCensusTests(unittest.TestCase):
         self.assertEqual(probe.call.call_count, 2)
 
 
+class ScriptedChat:
+    """A client probe whose server chat arrives one line per poll, newest first like the client buffer."""
+
+    def __init__(self, replies):
+        self.replies, self.chat, self.check = list(replies), [], Mock()
+
+    def call(self, tool, args):
+        assert tool == 'minecraft_send_chat', tool
+        if not args['command']:
+            self.chat.insert(0, f"<SpainCulture> {args['message']}")
+        return {}
+
+    def wait(self, predicate, label, timeout_seconds=None):
+        state = {'recent_chat': list(self.chat)}
+        while not predicate(state):
+            if not self.replies:
+                raise TimeoutError(f'timed out waiting for {label}')
+            self.chat.insert(0, self.replies.pop(0))
+            state = {'recent_chat': list(self.chat)}
+        return state
+
+
 class BuildingOrderTests(unittest.TestCase):
     def test_started_and_queued_are_native_admission_not_client_send_success(self):
         for reply in ['Started spanish_house construction.', 'Queued spanish_house: busy']:
             with self.subTest(reply=reply):
-                probe, run = Mock(), {}
-                with patch('tools.showcase.spain_trial.buildings_qa._send_fresh',
-                           return_value={'recent_chat': [reply]}) as send:
-                    order_build(probe, 'spanish_house', run)
-                send.assert_called_once_with(probe, 'settlement build spanish_house')
+                probe, run = ScriptedChat([reply]), {}
+                order_build(probe, 'spanish_house', run)
                 order = dict(run['building_orders'][0])
                 self.assertIsInstance(order.pop('reply_ms_with_marker'), int)
                 self.assertEqual(order, {
@@ -116,13 +135,19 @@ class BuildingOrderTests(unittest.TestCase):
                 })
                 probe.check.assert_called_once_with('spanish_house_order_admitted', True)
 
+    def test_an_unrelated_line_before_the_reply_does_not_decide_the_order(self):
+        notice = 'village_00000001: a resident arrived.'
+        probe, run = ScriptedChat([notice, 'Started spanish_house construction.']), {}
+        order_build(probe, 'spanish_house', run)
+        self.assertTrue(run['building_orders'][0]['admitted'])
+        self.assertEqual(run['building_orders'][0]['recent_chat'],
+                         ['Started spanish_house construction.', notice])
+
     def test_laptop_site_refusal_fails_immediately_and_retains_its_cause(self):
         reply = 'No free loaded construction site is available within the material budget.'
-        probe, run = Mock(), {}
-        with patch('tools.showcase.spain_trial.buildings_qa._send_fresh',
-                   return_value={'recent_chat': [reply]}):
-            with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted.*No free loaded'):
-                order_build(probe, 'spanish_house', run)
+        probe, run = ScriptedChat([reply, 'Started spanish_house construction.']), {}
+        with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted.*No free loaded'):
+            order_build(probe, 'spanish_house', run)
         self.assertFalse(run['building_orders'][0]['admitted'])
         self.assertEqual(run['building_orders'][0]['recent_chat'], [reply])
         probe.check.assert_not_called()
@@ -130,12 +155,9 @@ class BuildingOrderTests(unittest.TestCase):
     def test_absent_or_other_blueprint_acknowledgement_cannot_advance_order(self):
         for lines in [[], ['Started spanish_plaza construction.']]:
             with self.subTest(lines=lines):
-                probe, run = Mock(), {}
-                with patch('tools.showcase.spain_trial.buildings_qa._send_fresh',
-                           return_value={'recent_chat': lines}):
-                    with self.assertRaisesRegex(RuntimeError, 'spanish_house.*not admitted'):
-                        order_build(probe, 'spanish_house', run)
-                self.assertFalse(run['building_orders'][0]['admitted'])
+                probe, run = ScriptedChat(lines), {}
+                with self.assertRaises(TimeoutError):
+                    order_build(probe, 'spanish_house', run)
                 probe.check.assert_not_called()
 
 

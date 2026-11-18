@@ -171,15 +171,23 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
     return dict(zip(ACCEL_KEYS, map(float, found[-1]))) if found else None
 
 
+# Refusals `/settlement build` can answer with (command_execution/settlement.rs build_command,
+# settlements/construction.rs request_build, building_commands.rs); any other line is not its reply.
+BUILD_REFUSALS = ('Construction ', 'No free loaded construction site', 'No settlement contains your position',
+                  'Settlement command admission is unavailable', 'Only the owner or an operator orders construction',
+                  'Unknown blueprint', 'Settlement not found', 'Building not found', 'No blueprint upgrade')
+
+
 def order_build(probe: ProbeSteps, blueprint: str, run: dict) -> None:
     command = f'settlement build {blueprint}'
-    # The reply can take seconds under load (bounded site search on a 2-CPU box): wait for
-    # the command's own reply after a fresh chat marker, not a fixed 40-tick window.
+    admission = (f'Started {blueprint} construction.', f'Queued {blueprint}:')
+    # The reply can take seconds under load (bounded site search on a 2-CPU box): wait for the
+    # command's own outcome or a known refusal after a fresh chat marker, not a fixed tick window
+    # and not the first unrelated line.
     sent = time.monotonic()
-    lines = village._recent_chat(buildings_qa._send_fresh(probe, command), 20)
+    lines = village._recent_chat(buildings_qa._send_fresh(probe, command, admission + BUILD_REFUSALS), 20)
     reply_ms = round((time.monotonic() - sent) * 1000)
-    admitted = any(line.startswith((f'Started {blueprint} construction.',
-                                    f'Queued {blueprint}:')) for line in lines)
+    admitted = any(line.startswith(admission) for line in lines)
     run.setdefault('building_orders', []).append({
         'command': command, 'recent_chat': lines, 'admitted': admitted,
         'reply_ms_with_marker': reply_ms,
