@@ -1228,6 +1228,28 @@ fn handover_refuses_while_a_household_member_builds_another_project() {
 }
 
 #[test]
+fn handover_waits_for_a_member_to_return_owed_carry() {
+    let (mut state, parent, expedition) = prepared(4);
+    let uuid = member_uuid(&state, parent, &expedition.household);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .unwrap();
+    let record = state.settlements.get_mut(parent).unwrap();
+    record.carry_pending.insert(uuid, vec![(log, 3)]);
+    let before = civil_image(&state);
+    assert!(!finish(&mut state, parent, &expedition));
+    assert_eq!(civil_image(&state), before, "the refusal changes nothing");
+    assert!(state.settlements.find("colony_2").is_none());
+    // Allowed once the debt is closed.
+    let record = state.settlements.get_mut(parent).unwrap();
+    record.carry_pending.remove(&uuid);
+    assert!(finish(&mut state, parent, &expedition));
+    assert!(state.settlements.find("colony_2").is_some());
+}
+
+#[test]
 fn handover_waits_only_for_the_expeditions_own_projects() {
     let (mut state, parent, expedition) = prepared(4);
     let handle = unrelated_project(&mut state, parent);

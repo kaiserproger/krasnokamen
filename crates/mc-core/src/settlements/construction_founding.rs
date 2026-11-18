@@ -350,6 +350,15 @@ fn member_bound(state: &TickState, parent: SettlementId, household: &str) -> boo
         .any(|slot| bound_builder(&state.settlements, state.entities.row(slot).uuid))
 }
 
+/// True while a villager of the expedition household still owes storage its
+/// carried materials; the debt belongs to the parent and its body must not leave.
+fn member_owes_carry(state: &TickState, parent: SettlementId, household: &str) -> bool {
+    super::super::households::members(state, parent, household)
+        .into_iter()
+        .filter_map(|entity| state.entities.slot_of(entity))
+        .any(|slot| carry_debtor(state, parent, state.entities.row(slot).uuid))
+}
+
 /// Cancels every project the expedition owns, each through `cancel_project`.
 pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId) {
     let owned: Vec<String> = {
@@ -455,6 +464,7 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
     // away a villager who is bound as a builder on any project.
     if projects(source).any(|project| owns_project(source, project))
         || member_bound(state, parent, &expedition.household)
+        || member_owes_carry(state, parent, &expedition.household)
         || source.revision > u64::MAX - 2
         || source.households[&expedition.household].revision == u64::MAX
     {
