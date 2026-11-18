@@ -236,21 +236,29 @@ fn water_path<S: BlockSampler>(sampler: &S, body: EntityBody, velocity: Vec3) ->
     })
 }
 
-/// Deterministic local alternatives, not an unbounded path search or A*.
-fn swim_navigation<S: BlockSampler>(sampler: &S, body: EntityBody, wanted: Vec3) -> Vec3 {
-    for candidate in [
-        wanted,
-        Vec3::new(wanted.x, 0.0, wanted.z),
-        Vec3::new(0.0, wanted.y, 0.0),
-        Vec3::new(-wanted.z, wanted.y, wanted.x),
-        Vec3::new(wanted.z, wanted.y, -wanted.x),
-        Vec3::new(-wanted.x, -wanted.y, -wanted.z),
-    ] {
-        if candidate != Vec3::ZERO && water_path(sampler, body, candidate) {
-            return candidate;
-        }
+/// The linear candidate map [`swim_navigation`] chooses from. Every candidate is
+/// a fixed linear image of the requested velocity, so the same map applies to the
+/// drive when the body picks its facing: a swimmer turns the way it actually
+/// swims, not into the wall its request points at.
+fn swim_candidate(index: usize, wanted: Vec3) -> Vec3 {
+    match index {
+        1 => Vec3::new(wanted.x, 0.0, wanted.z),
+        2 => Vec3::new(0.0, wanted.y, 0.0),
+        3 => Vec3::new(-wanted.z, wanted.y, wanted.x),
+        4 => Vec3::new(wanted.z, wanted.y, -wanted.x),
+        5 => Vec3::new(-wanted.x, -wanted.y, -wanted.z),
+        _ => wanted,
     }
-    Vec3::ZERO
+}
+
+/// Deterministic local alternatives, not an unbounded path search or A*.
+/// Returns the index of the first candidate that stays in water; `None` when no
+/// candidate does (the body then stops).
+fn swim_navigation<S: BlockSampler>(sampler: &S, body: EntityBody, wanted: Vec3) -> Option<usize> {
+    (0..6).find(|&index| {
+        let candidate = swim_candidate(index, wanted);
+        candidate != Vec3::ZERO && water_path(sampler, body, candidate)
+    })
 }
 
 fn rotate(current: f32, wanted: f32, limit: f32) -> f32 {
@@ -354,7 +362,9 @@ pub(crate) fn step<S: BlockSampler>(
         return MotionResult {
             body,
             impulse: [0.0; 2],
-            rotation: input.rotation,
+            // The body cannot move, so its head settles onto its body: an
+            // unloaded column must not strand a lagging head out of the rest.
+            rotation: [input.rotation[0], input.rotation[1], input.rotation[0]],
             air_supply: input.air_supply,
             drowning: false,
             wall_climbing: false,
@@ -412,7 +422,7 @@ pub(crate) fn step<S: BlockSampler>(
     // The direction this tick's AI wants to travel: vanilla `MoveControl` turns
     // toward the wanted position, which a combat impulse never moves. It is the
     // drive alone, so no movement-class branch can leak an impulse into it.
-    let wanted = Vec3::new(input.drive[0], 0.0, input.drive[2]);
+    let mut wanted = Vec3::new(input.drive[0], 0.0, input.drive[2]);
     if input.movement == MovementClass::Flyer
         || water
         || (input.aquatic_control == AquaticControl::Dolphin
@@ -430,7 +440,18 @@ pub(crate) fn step<S: BlockSampler>(
         config.vertical_air_drag = 1.0;
         body.velocity.y = input.drive[1];
         if water && input.aquatic_control != AquaticControl::Dolphin {
-            body.velocity = swim_navigation(sampler, body, body.velocity);
+            let request = body.velocity;
+            let picked = swim_navigation(sampler, body, request);
+            body.velocity = picked.map_or(Vec3::ZERO, |index| swim_candidate(index, request));
+            if let Some(index) = picked {
+                // The AI's own navigation picked this detour: the body faces the
+                // way it swims, not the wall its raw drive points at.
+                let intent = swim_candidate(
+                    index,
+                    Vec3::new(input.drive[0], input.drive[1], input.drive[2]),
+                );
+                wanted = Vec3::new(intent.x, 0.0, intent.z);
+            }
         }
     } else if input.movement == MovementClass::Swimmer {
         config.jump_speed = 0.0;
