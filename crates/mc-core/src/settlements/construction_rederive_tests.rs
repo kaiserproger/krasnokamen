@@ -393,20 +393,27 @@ fn unchanged_under_placement(table: &[(&str, Option<&str>)]) -> Vec<String> {
     let mut failures = Vec::new();
     for (present, drop) in table {
         let (present, drop) = (*present, *drop);
+        // The tested block is the second cell of the portion, so its evidence
+        // is read at the right offset behind the cursor.
         let mut s = scene(
             None,
-            &[(5, present)],
+            &[(6, present)],
             &[],
             &[
                 (Build, 5, "minecraft:oak_log", Some("minecraft:oak_log")),
                 (Build, 6, "minecraft:oak_log", Some("minecraft:oak_log")),
+                (Build, 7, "minecraft:oak_log", Some("minecraft:oak_log")),
             ],
         );
         let log = named(&s.state, "minecraft:oak_log");
         let label = format!("{present} under a placement");
         let result = (|| -> Result<(), String> {
+            step(&mut s).map_err(|e| format!("{label}: first {e:?}"))?;
+            if total_stock(&s.state) != 0 {
+                return Err(format!("{label}: an air placement paid"));
+            }
             step(&mut s).map_err(|e| format!("{label}: {e:?}"))?;
-            if at(&s, 5) != Some(log) {
+            if at(&s, 6) != Some(log) {
                 return Err(format!("{label}: not replaced"));
             }
             let want = i32::from(drop.is_some());
@@ -417,9 +424,9 @@ fn unchanged_under_placement(table: &[(&str, Option<&str>)]) -> Vec<String> {
                     total_stock(&s.state)
                 ));
             }
-            step(&mut s).map_err(|e| format!("{label}: second {e:?}"))?;
+            step(&mut s).map_err(|e| format!("{label}: third {e:?}"))?;
             if total_stock(&s.state) != want {
-                return Err(format!("{label}: second cell paid"));
+                return Err(format!("{label}: third cell paid"));
             }
             let done = image(&s);
             if step(&mut s).is_ok() || image(&s) != done {
