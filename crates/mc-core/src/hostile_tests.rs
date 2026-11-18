@@ -1051,6 +1051,9 @@ fn fresh_hits_publish_damage_and_excess_hits_journal_mob_health_without_wire_eve
                 crate::journal::JournalEntry::Entity { id, health: h, .. } => {
                     *id == mob.0 && *h == health
                 }
+                crate::journal::JournalEntry::EntityAppearance { id, health: h, .. } => {
+                    *id == mob.0 && *h == health
+                }
                 _ => false,
             }));
         }

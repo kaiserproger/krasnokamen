@@ -19,13 +19,12 @@ impl TickState {
         }
         self.armor_stand_hits.remove(&id);
         if let EntityKind::Player { .. } = kind
-            && let Some(connection) = self.connections.by_entity.get(&id).copied()
+            && let Some(connection) = self.connections.entity_connection(id)
         {
-            self.connections.by_connection.remove(&connection);
-            self.connections.by_entity.remove(&id);
-            self.connections.view_distances.remove(&connection);
-            self.connections.locales.remove(&connection);
-            self.connections.chat_visibilities.remove(&connection);
+            // One path for every player departure: it also drops the name and
+            // uuid rows, and advances the membership generation the
+            // unlocked-session mirror is gated on.
+            self.connections.remove_by_connection(connection);
             self.outbox.remove(&connection);
         }
         self.players.remove(&id);

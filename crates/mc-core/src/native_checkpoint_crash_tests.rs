@@ -349,7 +349,7 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
                 pause_state: tokio::sync::watch::channel(None).0,
                 work_tx,
                 journal_budget: tick_budget,
-                unlocked_sessions: Arc::new(parking_lot::RwLock::new(Default::default())),
+                unlocked_sessions: Arc::new(crate::core::session_mirror::SessionMirror::new()),
                 halt_reason: Default::default(),
                 shutdown_rx,
                 checkpoint_rx,

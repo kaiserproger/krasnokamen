@@ -659,6 +659,7 @@ fn consolidated_motion_apply_matches_the_ordered_setter_sequence() {
         vel: [0.0; 3],
         yaw: 0.0,
         pitch: 0.0,
+        head_yaw: 0.0,
         ground: true,
         horizontal_impulse: [0.0; 2],
         air_supply: 300,
@@ -734,7 +735,7 @@ fn consolidated_motion_apply_matches_the_ordered_setter_sequence() {
                 ..base
             },
         },
-        // rotation only; third component mirrors yaw
+        // rotation only; pose writes keep the head on the body
         Case {
             type_id: cow,
             pickup_delay: 0,
@@ -742,6 +743,7 @@ fn consolidated_motion_apply_matches_the_ordered_setter_sequence() {
             result: MotionResult {
                 yaw: 90.0,
                 pitch: -10.0,
+                head_yaw: 90.0,
                 ..base
             },
         },
@@ -827,6 +829,39 @@ fn consolidated_motion_apply_matches_the_ordered_setter_sequence() {
     assert_eq!(new.rot[7], [90.0, -10.0, 90.0]);
 }
 
+/// The head is its own stored component and reaches the wire as such: vanilla
+/// `LookControl` lets it lag the body. Reverting the store hunk (`head = yaw`)
+/// fails this.
+#[test]
+fn apply_motion_result_keeps_the_head_separate_from_the_body() {
+    let mut store = EntityStore::default();
+    let id = EntityId(1);
+    let slot = store.spawn(
+        id,
+        Uuid::from_u128(1),
+        EntityKind::Mob { type_id: 1 },
+        wire_fields([1.5, 64.0, 1.5]),
+    );
+    store.apply_motion_result(
+        slot,
+        &MotionResult {
+            pos: [1.5, 64.0, 1.5],
+            vel: [0.0; 3],
+            yaw: 30.0,
+            pitch: 5.0,
+            head_yaw: 60.0,
+            ground: true,
+            horizontal_impulse: [0.0; 2],
+            air_supply: 300,
+            attack_cooldown: None,
+        },
+    );
+    assert_eq!(store.rot(slot), [30.0, 5.0, 60.0]);
+    let views = store.views();
+    let view = views.iter().find(|view| view.id == id).expect("published");
+    assert_eq!((view.yaw, view.pitch, view.head_yaw), (30.0, 5.0, 60.0));
+}
+
 #[test]
 fn resident_slots_are_sorted_unique_and_skip_removed_ids() {
     let registry = crate::registry::CoreRegistry::load(None).unwrap();
@@ -910,6 +945,7 @@ fn motion_writeback_and_resident_index_micro() {
                     vel: [phase * 0.1, -0.08, 0.0],
                     yaw: (slot.0 % 360) as f32 + phase as f32,
                     pitch: 1.0,
+                    head_yaw: (slot.0 % 360) as f32 + phase as f32,
                     ground: slot.0 % 3 == 0,
                     horizontal_impulse: [0.0; 2],
                     air_supply: 300,
@@ -1406,6 +1442,7 @@ fn quiet_timer_flag_matches_cold_predicate_after_all_motion_write_paths() {
         vel: store.vel(slot),
         yaw: store.rot(slot)[0],
         pitch: store.rot(slot)[1],
+        head_yaw: store.rot(slot)[2],
         ground: store.ground(slot),
         horizontal_impulse: [0.0; 2],
         air_supply: 300,

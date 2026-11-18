@@ -218,7 +218,7 @@ impl Wire {
                 server.hub.published_knockback_count(id)
             })
             .unwrap();
-        let (connections, _) = server.connections.routing_snapshot();
+        let (connections, _) = server.connections.routing_view();
         let viewers = HashMap::from([(
             id,
             crate::plan::ViewerState::new(id, EntityId(1), [2.5, 65.0, 3.5]),

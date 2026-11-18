@@ -933,6 +933,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     state.block_log = Default::default();
+    let revision = state.settlements.get(id).unwrap().revision;
 
     for _ in 0..4096 {
         if !executor::clearing(&state, id, &project.structure) {
@@ -958,14 +959,13 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             next,
             previous,
             Some(bounds),
-            &mut super::super::forestry::Clearance::prepared(),
+            &mut super::super::forestry::Clearance::verify(),
         )
         .unwrap()
         {
             *expected_stock.entry(stack.item_id).or_default() += stack.count;
         }
         state.tick -= 20;
-        let revision = state.settlements.get(id).unwrap().revision;
         attempt(&mut state, id, builder);
         assert_eq!(
             counts(&state),
@@ -973,15 +973,24 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             "managed-tree drops at {next:?}"
         );
         if next == root {
+            // The root keeps its registration until its whole trunk column is
+            // empty; the retire pass after the loop removes it.
             let record = state.settlements.get(id).unwrap();
             assert!(
-                !record.planted_trees.contains(&root),
-                "root retires in the clearing transaction"
+                record.planted_trees.contains(&root),
+                "a partially felled trunk keeps its registered root"
             );
-            assert!(record.revision > revision, "root retirement is journaled");
         }
     }
     assert!(!executor::clearing(&state, id, &project.structure));
+    // The root keeps its registration until its whole trunk column is empty;
+    // then the ordinary retire pass removes it.
+    state.tick = 20;
+    super::super::forestry::retire_missing(&mut state);
+    assert!(
+        state.settlements.get(id).unwrap().revision > revision,
+        "root retirement is journaled"
+    );
     assert!(
         !state
             .settlements

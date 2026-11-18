@@ -1,16 +1,62 @@
 //! Selection-only whole-tree evidence. Never scanned by the per-cell executor.
+//!
+//! N5: a leaf is foreign only when a log it could belong to belongs to *no*
+//! non-ambiguous registered component. Touching registered trees are therefore
+//! one grove: the leaves between their trunks are permitted, and a contributing
+//! tree whose own log stands within [`RANGE`] of a certified cell is felled
+//! whole instead of being left mutilated. Ownership and permission are still
+//! measured from *this* root's own logs only, so a union never widens one tree's
+//! crown claim to a neighbour's.
 use super::*;
 
-const RANGE: i32 = 6;
+pub(super) const RANGE: i32 = 6;
 const LOG: u8 = 1;
 const OWNED: u8 = 2;
 const UNKNOWN: u8 = 4;
+/// A log of some non-ambiguous registered component inside this box.
+const UNION: u8 = 8;
+
+/// One component walk per registered root per scan, shared by every proof and
+/// by the whole-tree contributor checks, so a grove costs one walk per tree.
+/// Only roots whose halo crosses a proof box are ever walked.
+#[derive(Default)]
+pub(super) struct Grove {
+    components: HashMap<[i32; 3], Option<Vec<[i32; 3]>>>,
+}
+
+impl Grove {
+    /// Walk once per registered root per scan; later calls are a lookup.
+    pub(super) fn ensure(&mut self, state: &TickState, root: [i32; 3]) {
+        self.components
+            .entry(root)
+            .or_insert_with(|| component(state, root));
+    }
+
+    /// `None` when the component is ambiguous (nothing may be owned) or when
+    /// the root is not a tree log at all.
+    pub(super) fn get(&self, root: [i32; 3]) -> Option<&[[i32; 3]]> {
+        self.components
+            .get(&root)
+            .expect("walked component")
+            .as_deref()
+            .filter(|logs| !logs.is_empty())
+    }
+
+    /// Component of a root that may not have been walked yet.
+    pub(super) fn component(&mut self, state: &TickState, root: [i32; 3]) -> Option<&[[i32; 3]]> {
+        self.ensure(state, root);
+        self.get(root)
+    }
+}
 
 pub(super) struct Proof {
     min: [i32; 3],
     size: [usize; 3],
     distance: Vec<u8>,
     logs: Vec<u8>,
+    /// Registered roots (this one included) with at least one component log
+    /// inside this box: the only trees a certified cell can touch.
+    pub(super) contributors: Vec<[i32; 3]>,
 }
 
 #[cfg(test)]
@@ -39,6 +85,14 @@ impl Proof {
         ]
     }
 
+    fn max(&self) -> [i32; 3] {
+        std::array::from_fn(|axis| self.min[axis] + self.size[axis] as i32 - 1)
+    }
+
+    /// Further than [`RANGE`] from every log that belongs to no registered
+    /// component, and within [`RANGE`] of one of this root's own logs. Every
+    /// permitted cell keeps a full [`RANGE`] of read environment inside the box,
+    /// because the box reaches `2 * RANGE` above the connected log top.
     pub(super) fn permits(&self, at: [i32; 3]) -> bool {
         self.index(at).is_some_and(|index| {
             self.distance[index] & 15 > RANGE as u8 && self.distance[index] >> 4 <= RANGE as u8
@@ -62,17 +116,13 @@ impl Proof {
 
     /// Once per cached root: own only non-stripped tree logs inside the halo.
     /// Cap at the connected log top + 2*RANGE: the first range reaches owned
-    /// leaves, the second detects every foreign log that could support them.
-    pub(super) fn new(state: &TickState, root: [i32; 3]) -> Self {
+    /// leaves, the second detects every log that could support them.
+    pub(super) fn new(state: &TickState, root: [i32; 3], grove: &mut Grove) -> Self {
         #[cfg(test)]
         BUILDS.with(|count| count.set(count.get() + 1));
-        let Some(component) = component(state, root).filter(|logs| !logs.is_empty()) else {
-            return Self {
-                min: root,
-                size: [0; 3],
-                distance: Vec::new(),
-                logs: Vec::new(),
-            };
+        grove.ensure(state, root);
+        let Some(component) = grove.get(root) else {
+            return Self::empty(root);
         };
         let top = component
             .iter()
@@ -99,6 +149,7 @@ impl Proof {
             size,
             distance: vec![0x77; len],
             logs: Vec::new(),
+            contributors: Vec::new(),
         };
         let mut cells = vec![0; len];
         for (index, cell) in cells.iter_mut().enumerate() {
@@ -116,15 +167,53 @@ impl Proof {
             }
         }
         for at in component {
-            cells[proof.index(at).expect("component inside proof")] |= OWNED;
+            cells[proof.index(*at).expect("component inside proof")] |= OWNED;
+        }
+        // A log of another non-ambiguous registered component stops being a
+        // foreign source, so leaves between the two trunks are permitted.
+        // Ambiguous neighbours stay foreign: nothing is assumed about them.
+        // Roots are visited in registry order from a memoized walk, so a direct
+        // pass over the records needs no intermediate collection.
+        let crown = PLANTED_CROWN_RADIUS as i32;
+        let [min_x, min_y, min_z] = proof.min;
+        let [max_x, max_y, max_z] = proof.max();
+        for other in state
+            .settlements
+            .records()
+            .flat_map(|record| record.planted_trees.iter().copied())
+        {
+            if other[0] + crown < min_x
+                || other[0] - crown > max_x
+                || other[2] + crown < min_z
+                || other[2] - crown > max_z
+                || other[1] > max_y
+                || other[1] + 64 < min_y
+            {
+                continue;
+            }
+            grove.ensure(state, other);
+            let mut marked = false;
+            if let Some(logs) = grove.get(other) {
+                for at in logs {
+                    if let Some(index) = proof.index(*at)
+                        && cells[index] & LOG != 0
+                    {
+                        cells[index] |= UNION;
+                        marked = true;
+                    }
+                }
+            }
+            if marked {
+                proof.contributors.push(other);
+            }
         }
         let mut queue = VecDeque::new();
-        // Two nibbles hold distances to foreign and owned logs respectively.
+        // Two nibbles hold distances to foreign and own logs respectively.
         // Multi-source fields are built once, not a 13³ scan for every leaf.
         for shift in [0, 4] {
             for (index, &cell) in cells.iter().enumerate() {
                 let source = if shift == 0 {
-                    cell & UNKNOWN != 0 || cell & (LOG | OWNED) == LOG
+                    cell & UNKNOWN != 0 || (cell & LOG != 0 && cell & UNION == 0)
                 } else {
                     cell & OWNED != 0
                 };
@@ -137,6 +226,16 @@ impl Proof {
         }
         proof.logs = cells;
         proof
+    }
+
+    fn empty(root: [i32; 3]) -> Self {
+        Self {
+            min: root,
+            size: [0; 3],
+            distance: Vec::new(),
+            logs: Vec::new(),
+            contributors: Vec::new(),
+        }
     }
 
     fn spread(&mut self, queue: &mut VecDeque<usize>, shift: u8) {
@@ -179,6 +278,11 @@ fn component(state: &TickState, root: [i32; 3]) -> Option<Vec<[i32; 3]>> {
     if !state.registry.tree_logs.get(block as usize).copied()? || !tree(state, block) {
         return Some(Vec::new());
     }
+    // A retained player edit on the root itself is attribution for the whole
+    // tree: the component is ambiguous before its first log is admitted.
+    if state.block_log.player_touched(root) {
+        return None;
+    }
     let mut seen = [false; WIDTH * WIDTH * HEIGHT];
     let mut logs = vec![root];
     seen[index(root)] = true;
@@ -193,7 +297,9 @@ fn component(state: &TickState, root: [i32; 3]) -> Option<Vec<[i32; 3]>> {
         {
             return None;
         }
-        // ForkingTrunkPlacer advances Y and one horizontal axis together.
+        // ForkingTrunkPlacer advances Y and one horizontal axis together. A
+        // second horizontal axis in the same step is not a shape any sapling of
+        // this tree grows (mc-world plant_rules), so it stays foreign.
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
                 for dz in -1i32..=1 {
@@ -205,15 +311,30 @@ fn component(state: &TickState, root: [i32; 3]) -> Option<Vec<[i32; 3]>> {
                     if !state.registry.tree_logs.get(block as usize).copied()? {
                         continue;
                     }
+                    // The executor proves a log by its registered root's own
+                    // column alone (worldgen evidence covers everything else),
+                    // so selection must not certify anything wider: a log in a
+                    // different column is a player structure attached to the
+                    // trunk (a treehouse, a support) and makes the whole
+                    // component ambiguous before any clearing starts.
+                    if next[0] != root[0] || next[2] != root[2] {
+                        return None;
+                    }
                     // A log beyond the ownership envelope is evidence of a
                     // larger/foreign component, never a silent truncation.
                     if !in_halo(root, next) {
                         return None;
                     }
-                    if tree(state, block) && !seen[index(next)] {
-                        seen[index(next)] = true;
-                        logs.push(next);
+                    if !tree(state, block) || seen[index(next)] {
+                        continue;
                     }
+                    // N5c: a retained player edit is never part of a tree, so
+                    // an attributable player log keeps the whole component.
+                    if state.block_log.player_touched(next) {
+                        return None;
+                    }
+                    seen[index(next)] = true;
+                    logs.push(next);
                 }
             }
         }

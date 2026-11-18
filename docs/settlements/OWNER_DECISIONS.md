@@ -196,3 +196,22 @@ Status: design decided; implementation starts after the 19 November freeze
   the construction module does not read or write the record's project or pending
   order directly (owner, 2026-11-17, with the code-health ratchet that counts
   such accesses).
+
+## Upgrade clears its own new cells — owner D18, 2026-11-17
+
+> Б до заморозки
+
+- An upgrade clears natural forest on its own new cells before the freeze,
+  merged together with D7 Slice A.
+- This is the 2026-11-08 [forest site preparation](#forest-site-preparation--2026-11-08)
+  decision applied to upgrades, with the same fence:
+  - the block matches this world's generator;
+  - no retained player placement record;
+  - persisted lumberjack roots protected, except the D10 needed-lot rule;
+  - a whole planted tree is felled by trunk connectivity (the existing proof);
+  - drops go to settlement storage with no loss or duplication.
+- The upgrade rule refuses only what that fence protects: player-touched cells,
+  persistent leaves, unknown or imported generator evidence, a protected root
+  halo, and the nearby-live-player veto when block history is disabled.
+- The order path stays FIFO; a refusal leaves the owner order pending.
+

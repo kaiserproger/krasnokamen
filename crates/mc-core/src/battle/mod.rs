@@ -11,6 +11,7 @@
 pub(crate) mod archery;
 pub(crate) mod cavalry;
 mod columns;
+pub(crate) mod exposure;
 pub(crate) use columns::Columns;
 pub(crate) mod combat;
 mod faction;
@@ -77,6 +78,10 @@ pub(crate) struct BattleState {
     pub live: live_players::LiveState,
     /// Soldiers answering an enemy who hurt them or a friend (retaliation.rs).
     pub retaliation: retaliation::Retaliation,
+    /// At-risk exposure of dismounted sweep riders (exposure.rs): bounded
+    /// `info` lines for the campaign bound, runtime-only and never persisted.
+    #[serde(skip)]
+    pub exposure: exposure::Exposure,
     #[serde(skip)]
     pub(crate) journaled: Option<persistence::Journaled>,
     #[cfg(test)]
@@ -346,6 +351,23 @@ pub(crate) struct Output {
     pub counters: UnitCounters,
 }
 
+/// A run boundary the battle step does not own — `battle reset`, server
+/// shutdown, the journal halt — closes the exposure tracker with the body
+/// positions of that moment and reports the run's summary, so an episode is
+/// never lost or left to be misread as zero exposure. `BattleState::exposure`
+/// is runtime-only, so a recovered battle starts a fresh tracker; the summary's
+/// `start=` names the tick each run began.
+pub(crate) fn halt_exposure(state: &mut TickState) {
+    let mut exposure = std::mem::take(&mut state.hostile.battle.exposure);
+    let sample = exposure::Sample {
+        entities: &state.entities,
+        formation: &state.hostile.battle.formation,
+        columns: &state.hostile.battle.columns,
+    };
+    exposure.halt(Some(&sample));
+    state.hostile.battle.exposure = exposure;
+}
+
 /// The only battle tick call. Ordered kernels read a frozen world/entity store
 /// and write only battle runtime + private output; native effects apply after
 /// the frozen borrow ends. Spawned arrows enter ordinary projectile simulation.
@@ -372,6 +394,12 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         ..Default::default()
     };
     if !battle.running {
+        let sample = exposure::Sample {
+            entities: &state.entities,
+            formation: &battle.formation,
+            columns: &battle.columns,
+        };
+        battle.exposure.halt(Some(&sample));
         battle.columns.drive_by_slot.clear();
         battle.columns.look_by_slot.clear();
         battle.output = output;
@@ -380,6 +408,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         state.hostile.battle = battle;
         return Vec::new();
     }
+    battle.exposure.begin(state.tick);
     let frame = Frame {
         entities: &state.entities,
         registry: &state.registry,
@@ -450,7 +479,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
 /// byte where 1 is `isUsingItem` and 2 selects the off hand. A raised battle
 /// shield is the off-hand use a blocking mob or player shows; native
 /// appearance custody journals and publishes it like any metadata change.
-const LIVING_FLAGS: u8 = 8;
+pub(crate) const LIVING_FLAGS: u8 = 8;
 const USING_OFF_HAND: i8 = 0b11;
 
 fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {

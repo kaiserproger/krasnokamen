@@ -99,6 +99,7 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
             vel: [0.0; 3],
             yaw: 0.0,
             pitch: 0.0,
+            head_yaw: 0.0,
             ground: true,
             horizontal_impulse: [0.0; 2],
             air_supply: 300,
@@ -953,7 +954,9 @@ fn full_step_with_period(
         passive: passive_follow::Context {
             players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
             states: &state.players,
-            locked: state.require_plugin_login.then_some(&state.locked_sessions),
+            locked: state
+                .require_plugin_login
+                .then_some(&*state.locked_sessions),
         },
         dolphin_toys: &[],
         villagers: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
@@ -1166,6 +1169,26 @@ fn battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error() {
     assert!(
         can_early_rest(&mut state, slot),
         "the yaw error wraps across +-180"
+    );
+}
+
+/// A standing battle row never had the hold: the old selector was
+/// `battle && !standing`, so a NoAI battle mob kept the legacy facing and an
+/// impulse turned it. Narrowing the legacy facing to the hold's selector would
+/// have frozen its yaw at zero (review of this slice).
+#[test]
+fn standing_battle_row_keeps_the_legacy_facing_on_an_impulse() {
+    let (mut state, slot) = resting_mob("minecraft:husk");
+    state.entities.set_faction(slot, 1);
+    state.entities.set_rot(slot, 0.0, 0.0);
+    state.entities.row_mut(slot).controls.no_ai = true;
+    state.entities.set_horizontal_impulse(slot, [8.0, 0.0]);
+    let (moved, _) = full_step_without_early_rest(&state, slot);
+    assert!(moved.pos[0] > 0.0, "the impulse moves the body");
+    assert!(
+        moved.rotation[0] < -10.0,
+        "the legacy look turns it toward the impulse, not holds it at 0: {}",
+        moved.rotation[0]
     );
 }
 
@@ -1510,6 +1533,9 @@ fn idle_cow_ignores_non_food_but_wakes_for_food_in_either_hand() {
         })
         .unwrap();
     state.entity_phase_revision = state.world.revision_now();
+    // Settle the head on the body: a lagging head is motion the rest refuses.
+    let rot = state.entities.rot(slot);
+    state.entities.set_rot(slot, rot[0], rot[1]);
     state.entities.prepare_motion_hints(&state.registry);
     let item = |name| {
         state
@@ -1548,6 +1574,41 @@ fn idle_cow_ignores_non_food_but_wakes_for_food_in_either_hand() {
         ));
         state.players.get_mut(&player).unwrap().inventory.slots[index] =
             mc_data::ItemStack::new(dirt, 1);
+    }
+}
+
+/// A head still settling toward the body is motion the footprint shortcut cannot
+/// see, so every activation period must refuse the rest until it settles. A body
+/// whose head is on its body (every battle row holds `head = yaw`) still rests.
+#[test]
+fn early_rest_refuses_a_settling_head_at_every_activation_period() {
+    let (mut state, slot) = resting_cow();
+    let cow = state.entities.body(slot).id;
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, true);
+    state.tick = (1..120)
+        .find(|&tick| {
+            crate::entity_motion::wander(state.entities.body(slot).movement, cow.0, tick, 1.0)
+                == [0.0; 3]
+        })
+        .unwrap();
+    state.entity_phase_revision = state.world.revision_now();
+    let rot = state.entities.rot(slot);
+    state.entities.set_rot(slot, rot[0], rot[1]);
+    state.entities.prepare_motion_hints(&state.registry);
+    for period in [1, 2, 4] {
+        let view = PrepView::of(&state);
+        assert!(
+            early_entity_rest(&view, slot, period, state.entity_phase_revision, true, true),
+            "settled body rests at period {period}"
+        );
+        state.entities.set_facing(slot, [40.0, 0.0, 60.0]);
+        let view = PrepView::of(&state);
+        assert!(
+            !early_entity_rest(&view, slot, period, state.entity_phase_revision, true, true),
+            "a settling head wakes the body at period {period}"
+        );
+        state.entities.set_rot(slot, 40.0, 0.0);
     }
 }
 

@@ -198,6 +198,62 @@ tools/battle/run-battle.sh --take --pin ... --client ... --client-data ... --cac
   --seed 42 --scenario field-10k --duration 180 --server-scope
 ```
 
+## Dismounted-rider exposure log
+
+A soldier of a regiment riding a sweep plan (`sweep_drives`, `cavalry.rs`) whose
+horse is gone is the case the D1 bound counts: before the seat check he took the
+plan heading — a displacement in blocks — as a drive in blocks per second and
+skated. The client wire cannot see the plan, `active`, `wounded` or `routing`, so
+it cannot count that exposure; the core logs it. With the default `info` filter
+every battle run writes one line per exposure episode, where an episode is a run
+of consecutive battle ticks in which one member passes every other
+`sweep_drives` guard (alive, not wounded, not routing, active, untargeted, no
+wounded action) and is not seated:
+
+```
+INFO mc_core::battle::exposure: Battle exposure: id=1076 tick=5142 ticks=7 motion=5143-5149 plan=chase \
+  from=[-12.345,64.000,88.100] to=[-14.100,64.000,87.200] travel=1.985 peak=0.412 excess=0 \
+  outcome=targeted
+INFO mc_core::battle::exposure: Battle exposure summary: start=5142 episodes=37 bodies=12 \
+  member_ticks=214 excess_episodes=0 suppressed=0 capped=false
+```
+
+The guards are evaluated in the battle step of tick `tick`, before that tick's entity motion, and the
+motion the step causes is published under the next marker; `motion=FIRST-LAST` therefore names the
+published ticks the exposed movement belongs to (`tick+1..tick+ticks`), and a wire packet joins the
+episode on that window with no offset to fit. `ticks` is the duration, `travel` the horizontal
+start-to-end distance, `peak` the largest single-tick horizontal step — the closing sample is taken
+when the episode ends, so the movement of the last exposed tick is always inside it. `outcome` is
+`reseated`, `dead`, `wounded`, `routing`, `inactive`, `targeted`, `plan_end`, `stopped` (a run
+boundary closed it: pause, `battle reset`, shutdown or the journal halt with a trustworthy final
+sample), `unsettled` (a boundary closed it without one — the episode is observation-incomplete, never
+silently clean) or `gone` (the identity left the formation). `excess=1` and the summary's
+`excess_episodes` are the core's own per-tick > 2 blocks signal, computed from the exact peak rather
+than the three decimals printed beside it: the server-side analogue of the D1 step, reported but not
+the verdict, because knockback moves a body too. A run that started always writes its summary, even
+with zero episodes, so a clean take is never indistinguishable from a filtered log; `/tick freeze`
+is not a boundary (the battle step is skipped, so an episode spanning a freeze keeps the frozen ticks
+in `ticks`/`motion` — the window only widens). One run logs at
+most 256 episode lines and 64 distinct bodies; `suppressed` and `capped` in the summary report what
+those caps dropped, and a take that reports either is not usable for a bound. Nothing is persisted:
+`BattleState::exposure` is `serde(skip)`, so a recovered battle starts a fresh run and its summary's
+`start=` names that run.
+
+`python3 -m tools.harness.battle_exposure --take yaw-1=RUN_DIR --positions
+yaw-1=POSITIONS.json --fling-json yaw-1=FLING.json` reads the lines out of a take's `server.log`, joins
+them with `wire_jitter.py --positions-out`, cross-checks them against `fling_analysis.py`'s real
+dismounts and D1 count, and reports the at-risk bodies and the D1 steps (> 2 blocks between two
+packets at most 6 ticks apart) whose interval intersects an exposure window. It fails closed: any take with no records exits 2, and a take whose log is missing its summary or
+whose summary disagrees with its lines, which resumed or was capped, is `INCOMPLETE`. `usable_for_d1`
+additionally needs every counted window joinable — no uncovered wire tail, no episode without a wire
+step, no `unsettled` close, no exposure id the wire never carried — and both are aggregated over the
+run instead of reading as zero exposure. With `--recording` the take's own `take.solrec` judges each
+window over its whole length, steps or not: a window is `lost` when the observer removed the body or
+it died inside the window (the tail past `coverage_end` is unobserved), `unresolved` when a
+`teleport_entity` for that id falls inside it (the jump is not in the position stream), `observed_zero`
+when a tracked body sent no movement packet, and `covered` otherwise. Only windows that are not
+fully observed block `usable_for_d1`.
+
 ## Checkpoint observation
 
 `checkpoint-report.py TELEMETRY.jsonl SERVER.log --output REPORT.json` joins the

@@ -53,7 +53,8 @@ async fn listen(
             while let Ok((stream, _)) = listener.accept().await {
                 let server = Arc::clone(&server);
                 tokio::spawn(async move {
-                    let _ = super::handle_connection(stream, server).await;
+                    let slot = server.pre_play.try_acquire().expect("pre-play slot");
+                    let _ = super::handle_connection(stream, server, slot).await;
                 });
             }
         }

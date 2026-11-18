@@ -31,6 +31,30 @@ meaningful entity changes are journaled; ordinary non-projectile mob motion and
 idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
 recovery.
+A body whose appearance changed (a battle shield is one metadata byte) journals
+`JournalEntry::EntityAppearance` instead of the whole image: the fields of the
+appearance image that differ, plus the health and effects scalars the image
+would have set. A projectile flight tick journals `JournalEntry::ProjectileFlight`:
+the authoritative pose and age, the landing transition, and the whole retained
+`ProjectileState` only when a payload, ledger or custody field changed
+(`journal_touched.rs` `compact_entry`). Both are deltas of the last full `Entity`
+image of the same WAL tail: the first record per body after a checkpoint capture
+or a recovery is always a full image, because a checkpoint stores neither the
+WAL's transient appearance (living flags, variant metadata) nor a replayed
+projectile state. Replay proves the base per id and dimension
+(`Replay::tail_images`, dropped by a removal) rather than trusting a record the
+checkpoint populated; a compact record without that proof refuses recovery
+(`journal::validate_replay`, `entity_fault`). A compact record lands the clock
+projection a full image would have baked in — the state image, the villager
+clocks and the lifetime age advance to its tick — applies its delta first (the
+projection reads the record's `baby`), and then moves the record's clock anchor.
+Full images remain for spawns, deaths, chunk crossings, dropped items, a changed
+entity identity, a changed pickup delay or villager custody, and a gained or lost
+projectile. Fields that only a full image refreshes stay checkpoint-durable
+between records by contract: `EntityStateImage::no_action_time`, the idle/despawn
+counter, and the position of a body whose motion is not journaled. "Identical"
+in this document means identical in every field replay projects, not that a
+compact record rewrites those checkpoint-only fields.
 Dropped-item pose changes use compact native `ItemMotion` images, including items
 whose lifetime or pickup clock is infinite. Resting items emit no pose image.
 
@@ -420,10 +444,16 @@ row or WAL tail was written by an older binary after its first battle tick
 refuses to open (fail closed). Before upgrading, run `battle reset` and then
 `save-all flush` with the old binary (or reset the world). The harness gates
 read the same chain (`battle_recovery.py` `fold_battle`, the same refusals).
+A fugitive's guard hold is stamped once per flight, like the fight clock, and
+resolved on the first pass that reads it, so a rout does not rewrite every
+fleeing fighter each tick; recovery stays exact because the stamp and
+`elapsed_ticks` share the image. An older binary opened mid-rout keeps such a
+fighter in Guard until he is hit; run `battle reset` before a downgrade.
 Regressions:
 `battle_wal_journals_changed_parts_not_the_whole_image_each_tick`,
-`battle_wal_patches_changed_parts_and_replays_the_live_image` and
-`battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements`.
+`battle_wal_patches_changed_parts_and_replays_the_live_image`,
+`battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements` and
+`battle_wal_does_not_rejournal_a_routing_fighter_every_tick`.
 
 Native entity custody remains sole authority for life, pose, equipment in hand
 and mounts. Live battle bodies additionally journal changed intra-chunk poses through

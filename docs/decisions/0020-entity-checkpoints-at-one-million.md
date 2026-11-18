@@ -166,6 +166,23 @@ after reopen then covers the tail it prunes.
 
 ## Reopen memory (the 1M peak)
 
+The compact entity records (`JournalEntry::EntityAppearance` /
+`ProjectileFlight`) keep their base in `JournalScan::fields`
+(`HashMap<EntityId, FieldBaseline>`). The entry is `EntityId` plus an
+`Arc<EntityAppearance>`, the uuid, the type id, two presence bytes and an
+`Option<Box<ProjectileState>>`: 48 B of payload with hashbrown's control byte,
+but the map's capacity is a power of two at 7/8 load, so 100k live bases mean
+131 072 slots (about 6.4 MiB) and 1M mean 2 097 152 (about 98 MiB). `clear`
+keeps the capacity, so that is a high-water mark for the largest tail, and the
+map holds only bodies that emitted a full image in the current tail (the hot
+set, not necessarily every live row). The `Arc` clone copies no appearance
+payload, but it keeps the refcount above one, so the row's next
+`Arc::make_mut` does copy the `EntityAppearance` (equipment, strings, metadata
+vectors); the published `EntityView` snapshots usually share that allocation
+already, so the net addition is one extra copy per appearance write on a
+baselined body. The retained `Box<ProjectileState>` is a real payload copy for
+every baselined projectile (a few hundred bytes each).
+
 `Replay.entities` (`BTreeMap<i32, ReplayEntity>`) holds the whole population
 before `restore` drains it. Every `ReplayEntity` stores these inline:
 

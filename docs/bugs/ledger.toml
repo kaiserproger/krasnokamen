@@ -7317,8 +7317,9 @@ severity = "minor"
 status = "open"
 source = "D6 design review 2026-11-17 (receipts/UnitJitter/REVIEW-DESIGN-fable.md F7): trace of Farmer 45, ticks 111149-111160, on the hash-verified Spain trial copy used by receipts/UnitJitter/CLASSIFY.md; the swimmer stays 0.59-0.73 above a bed waypoint and pops only at the 0.6 tolerance (crates/mc-core/src/villager/brain/motion.rs). Not changed by the horizontal step cap."
 repro = "source"
-regression = []
-failing_first = "not recorded"
+regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_swimmer_over_a_bed_waypoint_advances_before_the_bob_dips", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_skipped_swim_decision_advances_a_bed_waypoint_before_the_bob_dips", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_swimming_resident_does_not_hover_over_its_waypoint", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::an_unsupported_waypoint_keeps_the_tight_band_for_a_wet_body", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_dry_body_above_its_waypoint_keeps_the_tight_vertical_band"]
+failing_first = "reported"
+fix_commit = "b8a9fe89e"
 
 [[bug]]
 id = "BATTLE-FOOT-STEERING-REVERSALS"
@@ -7473,3 +7474,25 @@ status = "open"
 source = "Accepted cost of the BATTLE-REST-SKIPS-TARGET-FACING fix (Main, 2026-11-18; owner may override). On the A1 battle scene at 1000/side, three base-pin and three fix-pin recordings (receipts/BattleRest/BOUNDS-REST-TAKES.md, BYTES-ATTRIBUTION.md): the pre-registered foot with-target loose turn bound R1 fails in mid (350/345/389 vs 292.4) and in two of three late windows, because a resting soldier now turns each time its target's bearing moves by at least half a wire quantum. Recorded packet payload (.solrec: uncompressed packet id and payload, not network bandwidth): rotate_head frames +63%, move_entity_rot frames 21,488 to 422,532, about +3.9 MB of rotation payload per take, about +5.9% total recorded play payload. Fix direction (after the 2026-11-19 freeze): a battle look-rate cadence or angular hysteresis for standing rows so turns follow the target at a bounded rate, re-measured against R1 and the payload attribution on the same scene. Backlog, not a freeze blocker."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "MOB-YAW-FACES-POST-COLLISION-VELOCITY"
+title = "A mob with nothing to look at turns toward the velocity physics left it with instead of the direction it wants to travel, so a clipped, blocked or knocked-back step swings its body by up to 90 degrees a tick"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "BattleJitterClient/Main 2026-11-17 (receipts/BattleJitterClient/FIX-PROPOSAL.md:5-14: the freeze fix was battle-only; receipts/Stage3/D20-INVENTORY.md row 'Global MoveControl yaw parity'; receipts/MotionYaw/DESIGN.md). Before this change crates/mc-core/src/entity_motion.rs:448-460 called look() with the post-physics body.velocity, and look() at :248-282 turned the body yaw toward whatever direction it was handed at 90 deg/tick; the head was returned as the body yaw. Vanilla MoveControl turns the body toward the wanted position (local javap constants: MAX_TURN 90, MIN_SPEED 5.0E-4 blocks/tick, MIN_SPEED_SQR 2.5000003E-7, MOVE_TO with no turn under the dead zone), never toward the resolved velocity, and a knockback does not move the wanted position. Fix in receipts/MotionYaw: the body turns toward the tick's wanted drive with the vanilla dead zone, and the head follows the body at LookControl's 10 deg/tick inside the 75 deg cone of BodyRotationControl. Battle rows keep battle_holds_facing (BATTLE-HOLD rows above) unchanged."
+repro = "client"
+regression = ["cargo:mc-core:entity_motion_tests::move_facing_faces_the_wanted_direction_not_the_resolved_step", "cargo:mc-core:entity_motion_tests::move_facing_holds_below_the_vanilla_dead_zone", "cargo:mc-core:entity_motion_tests::move_facing_ignores_a_knockback", "cargo:mc-core:entity_motion_tests::move_facing_steady_walk_keeps_the_old_yaw_and_pitch", "cargo:mc-core:entity_motion_tests::move_facing_head_follows_the_body_at_the_vanilla_rate", "cargo:mc-core:entity_motion_tests::stationary_body_holds_its_facing_while_the_head_settles", "cargo:mc-core:entity_motion_tests::move_facing_follows_the_swim_detour_around_a_wall", "cargo:mc-core:entity_motion_tests::unloaded_column_settles_the_head_on_the_body", "cargo:mc-core:entity_motion_tests::standing_battle_row_keeps_the_legacy_facing_on_an_impulse", "cargo:mc-core:tick::entity_phase::entity_phase_tests::standing_battle_row_keeps_the_legacy_facing_on_an_impulse", "cargo:mc-core:entities::tests::apply_motion_result_keeps_the_head_separate_from_the_body"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "BATTLE-CAVALRY-HORSE-YAW-SWAY"
+title = "Cavalry horses swing their body yaw in alternating steps of 45 degrees or more at gallop speed while their path continues"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "BattleYawHold residual 2026-11-17 (receipts/BattleYawHold/RESULTS.md:44; BOUNDS.md:21-28 C1; receipts/Stage3/D20-INVENTORY.md row 'Cavalry yaw residual'). ATTRIBUTED 2026-11-18 with a drive probe (receipts/MotionYaw/motion_probe.patch, one RUNBOOK 6a take, 285,212,332 bytes of per-row records, horses selected by wire type 67, no look target, battle rows): 935,386 horse body-ticks, 35.5% turn at all, 61,816 turns >= 45 deg. Of those turns 61% happen while the horse's own drive direction is steady (<= 15 deg/tick movement of the drive) - the body follows a step the physics clipped or bent, i.e. presentation; 31% coincide with the drive itself turning >= 45 deg, i.e. steering; 8% mixed (receipts/MotionYaw/cavalry-attribution2.txt; foot for contrast 39% presentation, 28% steering, 33% mixed). BLOCKED for this freeze: facing the drive has been measured (candidate branch 662460c411 before the battle-row fallback, integration pin 45b5407f6e2c, three takes) and halves the C1 horse time share (.0064/.0058/.0053 -> .0029/.0042/.0028) but it raises recorded move_entity_rot payload from 120-135 KB to 2,554,276 bytes per take (+19x) and rotate_head frames by 62%, and the integration take fails the pre-registered M3 gap_engaged window (.019 vs .0557-.0572); the slice alone with battle rows frozen reproduces the base rows exactly (M3 gap .0574/.0554, move_entity_rot 132,594/136,110 bytes, head_frames 621,960/619,850), so the cost belongs to BattleRest's rest guard, not to the horse change, and the horse change waits for a campaign A/B that carries both. An earlier previous-velocity proxy (replay.py over hook2-yaw-probe.bin) was rejected by the design reviewer and is not evidence."
+repro = "client"
+regression = []
+failing_first = "not recorded"

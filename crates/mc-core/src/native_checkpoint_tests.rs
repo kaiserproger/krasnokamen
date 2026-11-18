@@ -938,14 +938,18 @@ fn custom_name_visible_survives_native_store_restart_without_opaque_shadow() {
     let mut changes = ChangeSet::default();
     crate::command_execution::execute(&mut state, ConnectionId(1), actor, &command, &mut changes);
     let id = changes.entities_spawned[0];
+    // A compact record is a delta of an image in the same tail: seed the replay
+    // with the whole tail, beginning with the summon tick's full image.
+    let mut tail: Vec<crate::journal::JournalEntry> = Vec::new();
     for visible in [true, false] {
         let slot = state.entities.slot_of(id).unwrap();
         Arc::make_mut(&mut state.entities.row_mut(slot).appearance).custom_name_visible = visible;
         state.appearance_changed.push(id);
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+        tail.extend(entries.iter().cloned());
         let replay =
-            crate::journal::replay_batches(Replay::default(), &[(1, output.tick, entries)]);
+            crate::journal::replay_batches(Replay::default(), &[(1, output.tick, tail.clone())]);
         assert_eq!(
             replay.entities[&id.0].appearance.custom_name_visible,
             visible

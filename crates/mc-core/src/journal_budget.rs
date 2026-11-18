@@ -359,6 +359,39 @@ fn effects_heap(effects: &crate::effects::ActiveEffects) -> usize {
             .sum::<usize>()
 }
 
+fn appearance_delta_heap(delta: &crate::journal::EntityAppearanceDelta) -> usize {
+    let item = match &delta.item {
+        crate::journal::DeltaValue::Set(stack) => item_heap(stack),
+        _ => 0,
+    };
+    item + delta.equipment.as_ref().map_or(0, |equipment| {
+        equipment.capacity() * std::mem::size_of::<Option<mc_data::ItemStack>>()
+            + equipment.iter().map(opt_item_heap).sum::<usize>()
+    }) + match &delta.custom_name {
+        crate::journal::DeltaValue::Set(name) => name.capacity(),
+        _ => 0,
+    } + delta.extra.as_ref().map_or(0, |extra| {
+        extra.capacity() * std::mem::size_of::<(u8, EntityDataValueImage)>()
+            + extra
+                .iter()
+                .map(|(_, value)| match value {
+                    EntityDataValueImage::String(text) => text.capacity(),
+                    EntityDataValueImage::Item(stack) => opt_item_heap(stack),
+                    _ => 0,
+                })
+                .sum::<usize>()
+    }) + delta.extra_changes.capacity() * std::mem::size_of::<(u8, Option<EntityDataValueImage>)>()
+        + delta
+            .extra_changes
+            .iter()
+            .map(|(_, value)| match value {
+                Some(EntityDataValueImage::String(text)) => text.capacity(),
+                Some(EntityDataValueImage::Item(stack)) => opt_item_heap(stack),
+                _ => 0,
+            })
+            .sum::<usize>()
+}
+
 fn appearance_heap(appearance: &EntityAppearanceImage) -> usize {
     opt_item_heap(&appearance.item)
         + appearance.equipment.capacity() * std::mem::size_of::<Option<mc_data::ItemStack>>()
@@ -627,6 +660,21 @@ fn entry_heap(entry: &JournalEntry) -> usize {
                 + projectile.as_deref().map_or(0, projectile_heap)
         }
         E::EntityState { state, .. } => state_heap(state),
+        E::EntityAppearance {
+            active_effects,
+            appearance,
+            ..
+        } => effects_heap(active_effects) + appearance_delta_heap(appearance),
+        E::ProjectileFlight {
+            active_effects,
+            appearance,
+            state,
+            ..
+        } => {
+            effects_heap(active_effects)
+                + appearance_delta_heap(appearance)
+                + state.as_deref().map_or(0, projectile_heap)
+        }
         E::Ticket { owner, .. } | E::TicketRemoved { owner, .. } => owner.capacity(),
         E::BlockLog { value } => std::mem::size_of::<crate::block_log::Delta>()
             + value.records.capacity() * std::mem::size_of::<crate::block_log::Record>()

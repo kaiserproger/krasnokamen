@@ -2,6 +2,7 @@
 //! buff. Once their own foot is in contact, unengaged riders swing wide round
 //! the nearest enemy foot block and turn into its rear.
 use super::combat::{Action, CombatRuntime};
+use super::exposure::{Plan, Sample};
 use super::formation::Regiment;
 use super::steering::NEIGHBOURS;
 use super::{BattleState, Frame};
@@ -274,17 +275,22 @@ fn sweep_drives(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Combat
             {
                 continue;
             }
+            let pos = battle.columns.positions[bi];
             let seated = m
                 .slot
                 .is_some_and(|slot| frame.entities.row(slot).entity_life.mount.vehicle.is_some());
             if !seated {
+                let kind = match plan {
+                    Sweep::Chase(_) => Plan::Chase,
+                    Sweep::Flank(_) => Plan::Flank,
+                };
+                battle.exposure.exposed(m.id, bi, pos, kind);
                 continue;
             }
             let slot = super::formation::slot_position(
                 &r.spec,
                 usize::from(m.rank) * usize::from(r.spec.files) + m.file,
             );
-            let pos = battle.columns.positions[bi];
             let leader = [
                 pos[0] - (slot[0] - r.spec.origin[0]),
                 pos[1],
@@ -294,6 +300,12 @@ fn sweep_drives(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Combat
             battle.columns.drive[bi] = [heading[0], 0.0, heading[1]];
         }
     }
+    let sample = Sample {
+        entities: frame.entities,
+        formation: &battle.formation,
+        columns: &battle.columns,
+    };
+    battle.exposure.close(&sample, &combat.fighters, &plans);
     combat.sweeps = plans;
 }
 

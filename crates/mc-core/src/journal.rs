@@ -347,6 +347,56 @@ pub enum JournalEntry {
     BattlePatch {
         value: serde_json::Value,
     },
+    /// Compact post-image of one live body whose appearance changed: the parts
+    /// of its last `Entity` image that differ, instead of the whole image.
+    /// Replay refuses one without an earlier `Entity` record for the id in the
+    /// same tail: the changed appearance parts, the age and the scalars the
+    /// image would have set, but no state or villager image. Replay lands the
+    /// clock projection the image would have baked in, then moves the anchor.
+    /// Appended to preserve variant order.
+    EntityAppearance {
+        id: i32,
+        tick: u64,
+        age: u32,
+        health: f32,
+        alive: bool,
+        #[serde(default)]
+        active_effects: crate::effects::ActiveEffects,
+        appearance: EntityAppearanceDelta,
+    },
+    /// Compact post-image of one projectile flight tick: the authoritative pose
+    /// and the projectile state delta, instead of the whole entity image.
+    /// `state` carries the whole state when any field but the age and the
+    /// landing transition changed. Appended to preserve variant order.
+    ProjectileFlight {
+        id: i32,
+        tick: u64,
+        age: u32,
+        health: f32,
+        alive: bool,
+        #[serde(default)]
+        active_effects: crate::effects::ActiveEffects,
+        appearance: EntityAppearanceDelta,
+        pos: [f64; 3],
+        vel: [f64; 3],
+        yaw: f32,
+        pitch: f32,
+        /// Absolute `ProjectileState::age` when `state` is absent.
+        projectile_age: u32,
+        /// Landing transition, only when it changed this tick.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stuck: Option<bool>,
+        /// Ground clock: unchanged, cleared when the arrow leaves the ground, or
+        /// set on landing.
+        #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+        grounded_at_age: DeltaValue<u32>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "deserialize_optional_projectile_image"
+        )]
+        state: Option<Box<crate::projectiles::ProjectileState>>,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(
@@ -613,6 +663,37 @@ impl JournalWriter {
                 {
                     return Err(CoreError::Storage("nonfinite projectile motion".into()));
                 }
+            }
+            match entry {
+                JournalEntry::EntityAppearance { health, .. } => {
+                    if !health.is_finite() {
+                        return Err(CoreError::Storage("nonfinite entity health".into()));
+                    }
+                }
+                JournalEntry::ProjectileFlight {
+                    health,
+                    pos,
+                    vel,
+                    yaw,
+                    pitch,
+                    state,
+                    ..
+                } => {
+                    if !health.is_finite()
+                        || pos.iter().chain(vel.iter()).any(|value| !value.is_finite())
+                        || !yaw.is_finite()
+                        || !pitch.is_finite()
+                    {
+                        return Err(CoreError::Storage(
+                            "nonfinite projectile flight post-image".into(),
+                        ));
+                    }
+                    if let Some(state) = state {
+                        crate::projectiles::persistence::validate_state(state)
+                            .map_err(|error| CoreError::Storage(error.to_owned()))?;
+                    }
+                }
+                _ => {}
             }
             payload.push_str(
                 &serde_json::to_string(entry).map_err(|err| CoreError::Storage(err.to_string()))?,
@@ -1472,6 +1553,223 @@ pub enum EntityDataValueImage {
     CowVariant(u32),
     PigVariant(u32),
     ZombieNautilusVariant(u32),
+}
+
+/// A field a compact appearance record leaves alone, clears or sets.
+///
+/// `Option<Option<T>>` cannot express this in JSON: `null` decodes to the outer
+/// `None`, so a cleared field would silently keep its old value. The derived
+/// enum encoding is unambiguous (`"Unchanged"`, `"Clear"`, `{"Set": value}`) and
+/// is covered by tests through a real batch encode/decode.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum DeltaValue<T> {
+    #[default]
+    Unchanged,
+    Clear,
+    Set(T),
+}
+
+impl<T> DeltaValue<T> {
+    fn is_unchanged(&self) -> bool {
+        matches!(self, Self::Unchanged)
+    }
+}
+
+/// The delta of one optional live field against the image the record follows.
+fn delta_of<T: Clone + PartialEq>(base: &Option<T>, live: &Option<T>) -> DeltaValue<T> {
+    if base == live {
+        DeltaValue::Unchanged
+    } else {
+        match live {
+            Some(value) => DeltaValue::Set(value.clone()),
+            None => DeltaValue::Clear,
+        }
+    }
+}
+
+/// Apply one optional delta onto a replayed field.
+pub(crate) fn apply_delta<T: Clone>(delta: &DeltaValue<T>, target: &mut Option<T>) {
+    match delta {
+        DeltaValue::Unchanged => {}
+        DeltaValue::Clear => *target = None,
+        DeltaValue::Set(value) => *target = Some(value.clone()),
+    }
+}
+
+/// Part-delta of [`EntityAppearanceImage`] against the last image of the same
+/// body emitted in the same WAL tail. An `Unchanged` field kept its image;
+/// `extra` carries only the metadata entries that changed, unless the surviving
+/// entry order changed (then the whole list rides in `extra`). Every field is an
+/// absolute value, so folding one record is idempotent. Unknown fields refuse
+/// decoding: a newer writer's field must not be dropped silently.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EntityAppearanceDelta {
+    #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+    pub item: DeltaValue<mc_data::ItemStack>,
+    #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+    pub experience_orb: DeltaValue<(i32, i32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawn_data: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equipment: Option<Vec<Option<mc_data::ItemStack>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baby: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pose: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_flags: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<f32>,
+    #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+    pub custom_name: DeltaValue<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name_visible: Option<bool>,
+    /// Whole metadata list; set only when the surviving entry order changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra: Option<Vec<(u8, EntityDataValueImage)>>,
+    /// Per-index updates in change order: `Some` sets, `None` removes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_changes: Vec<(u8, Option<EntityDataValueImage>)>,
+}
+
+impl EntityAppearanceDelta {
+    /// The parts of `live` that differ from the image `base`, borrowing both
+    /// native appearances: only changed payloads are cloned, and nothing is
+    /// materialised for an unchanged field or an unchanged metadata entry.
+    pub(crate) fn diff(
+        base: &crate::boundary::EntityAppearance,
+        live: &crate::boundary::EntityAppearance,
+    ) -> Self {
+        let mut delta = Self {
+            item: delta_of(&base.item, &live.item),
+            experience_orb: delta_of(&base.experience_orb, &live.experience_orb),
+            spawn_data: (base.spawn_data != live.spawn_data).then_some(live.spawn_data),
+            equipment: None,
+            baby: (base.baby != live.baby).then_some(live.baby),
+            pose: (base.pose != live.pose).then_some(live.pose),
+            shared_flags: (base.shared_flags != live.shared_flags).then_some(live.shared_flags),
+            health: (base.health != live.health).then_some(live.health),
+            custom_name: delta_of(&base.custom_name, &live.custom_name),
+            custom_name_visible: (base.custom_name_visible != live.custom_name_visible)
+                .then_some(live.custom_name_visible),
+            extra: None,
+            extra_changes: Vec::new(),
+        };
+        if base.equipment != live.equipment {
+            delta.equipment = Some(live.equipment.to_vec());
+        }
+        // Per-index updates are exact when the entries that survive keep their
+        // relative order: existing indices update in place, new ones append in
+        // the order they appear here. A reordered or duplicated list needs the
+        // whole image instead. No temporary index vectors.
+        let mut reordered = false;
+        let mut previous: Option<usize> = None;
+        for (index, _) in &live.extra {
+            let Some(position) = base.extra.iter().position(|(other, _)| other == index) else {
+                continue;
+            };
+            if previous.is_some_and(|previous| position <= previous) {
+                reordered = true;
+                break;
+            }
+            previous = Some(position);
+        }
+        let duplicated = |entries: &[(u8, crate::boundary::EntityDataValue)]| {
+            entries
+                .iter()
+                .enumerate()
+                .any(|(at, (index, _))| entries[..at].iter().any(|(other, _)| other == index))
+        };
+        if reordered || duplicated(&base.extra) || duplicated(&live.extra) {
+            let differs = base.extra.len() != live.extra.len()
+                || live
+                    .extra
+                    .iter()
+                    .any(|(index, value)| !base_has(base, *index, value));
+            if differs {
+                delta.extra = Some(
+                    live.extra
+                        .iter()
+                        .map(|(index, value)| (*index, EntityDataValueImage::from(value)))
+                        .collect(),
+                );
+            }
+            return delta;
+        }
+        for (index, value) in &live.extra {
+            if !base_has(base, *index, value) {
+                delta
+                    .extra_changes
+                    .push((*index, Some(EntityDataValueImage::from(value))));
+            }
+        }
+        for (index, _) in &base.extra {
+            if !live.extra.iter().any(|(other, _)| other == index) {
+                delta.extra_changes.push((*index, None));
+            }
+        }
+        delta
+    }
+
+    /// Apply onto the replayed image.
+    pub(crate) fn apply(&self, image: &mut EntityAppearanceImage) {
+        if !self.item.is_unchanged() {
+            apply_delta(&self.item, &mut image.item);
+        }
+        if !self.experience_orb.is_unchanged() {
+            apply_delta(&self.experience_orb, &mut image.experience_orb);
+        }
+        if let Some(spawn_data) = self.spawn_data {
+            image.spawn_data = spawn_data;
+        }
+        if let Some(equipment) = &self.equipment {
+            image.equipment = equipment.clone();
+        }
+        if let Some(baby) = self.baby {
+            image.baby = baby;
+        }
+        if let Some(pose) = self.pose {
+            image.pose = pose;
+        }
+        if let Some(shared_flags) = self.shared_flags {
+            image.shared_flags = shared_flags;
+        }
+        if let Some(health) = self.health {
+            image.health = health;
+        }
+        if !self.custom_name.is_unchanged() {
+            apply_delta(&self.custom_name, &mut image.custom_name);
+        }
+        if let Some(custom_name_visible) = self.custom_name_visible {
+            image.custom_name_visible = custom_name_visible;
+        }
+        if let Some(extra) = &self.extra {
+            image.extra = extra.clone();
+            return;
+        }
+        for (index, value) in &self.extra_changes {
+            match value {
+                Some(value) => match image.extra.iter_mut().find(|(other, _)| other == index) {
+                    Some(entry) => entry.1 = value.clone(),
+                    None => image.extra.push((*index, value.clone())),
+                },
+                None => image.extra.retain(|(other, _)| other != index),
+            }
+        }
+    }
+}
+
+/// Whether the baseline carries this metadata entry with this value. Both sides
+/// are native values, so no image is built for an unchanged entry.
+fn base_has(
+    base: &crate::boundary::EntityAppearance,
+    index: u8,
+    live: &crate::boundary::EntityDataValue,
+) -> bool {
+    base.extra
+        .iter()
+        .any(|(other, value)| *other == index && value == live)
 }
 
 impl From<&crate::boundary::EntityAppearance> for EntityAppearanceImage {

@@ -1420,6 +1420,7 @@ fn custody_paths_reach_the_next_checkpoint() {
                     vel: [0.5, 0.0, 0.0],
                     yaw: 45.0,
                     pitch: 5.0,
+                    head_yaw: 45.0,
                     ground: true,
                     horizontal_impulse: [0.0; 2],
                     air_supply: 300,

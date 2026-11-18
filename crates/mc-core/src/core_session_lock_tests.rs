@@ -80,3 +80,37 @@ fn session_lock_mirror_reports_locked_join_when_required() {
     core.shutdown();
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Regression: the mirror is projected only when a session joined, left, moved
+/// or changed its login lock. Before the change stamp, every tick rebuilt it in
+/// place under the write lock.
+#[test]
+fn idle_ticks_publish_no_session_mirror() {
+    let (core, dir) = open_core(true);
+    let idle_before = core.inner.unlocked_sessions.projections();
+    wait_ticks(&core, 6);
+    assert_eq!(
+        core.inner.unlocked_sessions.projections(),
+        idle_before,
+        "a tick with no session change must project nothing"
+    );
+    core.submit(join(ConnectionId(21)));
+    wait_ticks(&core, 3);
+    assert!(
+        core.inner.unlocked_sessions.projections() > idle_before,
+        "a join changes the projection once"
+    );
+    assert!(
+        core.session_locked(ConnectionId(21)),
+        "a required join projects locked"
+    );
+    let joined = core.inner.unlocked_sessions.projections();
+    wait_ticks(&core, 4);
+    assert_eq!(
+        core.inner.unlocked_sessions.projections(),
+        joined,
+        "the projection is not repeated while nothing changes"
+    );
+    core.shutdown();
+    let _ = std::fs::remove_dir_all(dir);
+}

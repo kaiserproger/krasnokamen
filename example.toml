@@ -30,6 +30,13 @@ port = 25565
 # closed before the handshake.
 connection_throttle_ms = 0
 max_connections_per_ip = 0
+# Server-wide cap on concurrent pre-play connections (handshake, status,
+# login before Play); 0 derives `max_players * 2 + 64`. The cap counts only peers
+# still connecting (a Play session drops its slot), and the per-address knobs
+# above cannot bound a flood from many addresses. A connection over the cap is
+# closed before its handshake. The cap bounds memory, not time: each pre-play
+# stage has its own deadline (see OPERATING.md under "Connection admission").
+max_pre_play_connections = 0
 
 [auth]
 # Enable Mojang session authentication for public play.

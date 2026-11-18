@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// A copy of every registered connection's handles.
+pub(super) type HandleCopy = Vec<(ConnectionId, ConnectionHandles)>;
+
 pub struct ConnectionRegistry {
     pub(super) next_id: AtomicU64,
     pub(super) inner: parking_lot::Mutex<RegistryInner>,
@@ -17,6 +20,10 @@ pub(super) struct RegistryInner {
     /// Wakes the connection owner with the reason the registry dropped it.
     pub(super) closers: HashMap<ConnectionId, tokio::sync::oneshot::Sender<&'static str>>,
     pub(super) handles: HashMap<ConnectionId, ConnectionHandles>,
+    /// Advances whenever `handles` gains or loses a connection. The pump keeps
+    /// its routing view across ticks and copies it again only when this moves,
+    /// so an unchanged tick takes no handle clone at all.
+    pub(super) routing_generation: u64,
     pub(super) names: HashMap<ConnectionId, String>,
     pub(super) view_distances: HashMap<ConnectionId, i32>,
     /// Recorder connections ([`crate::recorder`]), fixed at join.
@@ -128,6 +135,7 @@ impl ConnectionRegistry {
         );
         handles.knockback_baseline = published_knockback_count();
         inner.handles.insert(id, handles);
+        inner.routing_generation += 1;
         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
     }
 
@@ -300,7 +308,12 @@ impl ConnectionRegistry {
         let closer = {
             let mut inner = self.inner.lock();
             inner.joining.remove(&id);
-            inner.handles.remove(&id);
+            // Only a connection that actually held handles moves the routing
+            // view: a second close, a refused login or a Status ping must not
+            // make the pump copy every remaining handle again.
+            if inner.handles.remove(&id).is_some() {
+                inner.routing_generation += 1;
+            }
             if inner.names.remove(&id).is_some() {
                 inner.roster_dirty = true;
             }
@@ -344,27 +357,55 @@ impl ConnectionRegistry {
             .collect()
     }
 
-    // One handle copy per pump iteration; roster work only follows a change.
+    /// The pump's routing view for one tick. Handles are returned only when a
+    /// connection registered or left since `generation` last observed a copy,
+    /// and the copy and the recorded generation come from one critical
+    /// section: an unchanged tick takes the mutex, compares one counter and
+    /// clones no handle. Roster work follows [`set_name`](Self::set_name).
     pub(super) fn routing_snapshot(
         &self,
-    ) -> (
-        HashMap<ConnectionId, ConnectionHandles>,
-        Option<Vec<String>>,
-    ) {
+        generation: &mut u64,
+    ) -> (Option<HandleCopy>, Option<Vec<String>>) {
         let (handles, names) = {
             let mut inner = self.inner.lock();
-            let names = if std::mem::take(&mut inner.roster_dirty) {
-                Some(inner.names.values().cloned().collect::<Vec<_>>())
-            } else {
+            let handles = if inner.routing_generation == *generation {
                 None
+            } else {
+                *generation = inner.routing_generation;
+                Some(
+                    inner
+                        .handles
+                        .iter()
+                        .map(|(id, handles)| (*id, handles.clone()))
+                        .collect(),
+                )
             };
-            (inner.handles.clone(), names)
+            // Owned copy under the same guard; the sort runs after it drops,
+            // so a busy roster never extends the critical section.
+            let names = std::mem::take(&mut inner.roster_dirty)
+                .then(|| inner.names.values().cloned().collect::<Vec<_>>());
+            (handles, names)
         };
         let names = names.map(|mut names| {
             names.sort();
             names
         });
         (handles, names)
+    }
+
+    /// Every handle copy plus the pending roster, for tests that build a fresh
+    /// routing view for one tick. Production keeps the view across ticks and
+    /// uses [`routing_snapshot`](Self::routing_snapshot).
+    #[cfg(test)]
+    pub(crate) fn routing_view(
+        &self,
+    ) -> (
+        HashMap<ConnectionId, ConnectionHandles>,
+        Option<Vec<String>>,
+    ) {
+        let mut generation = 0;
+        let (handles, roster) = self.routing_snapshot(&mut generation);
+        (handles.unwrap_or_default().into_iter().collect(), roster)
     }
 
     /// Set a player name for the dashboard roster.

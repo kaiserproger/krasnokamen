@@ -643,7 +643,7 @@ pub(super) fn debit(
     let lot = project.and_then(|project| crate::settlements::forestry::lot_bounds(state, project));
     let mut drops = Vec::new();
     let mut loot = Vec::new();
-    let mut clearance = crate::settlements::forestry::Clearance::prepared();
+    let mut clearance = crate::settlements::forestry::Clearance::verify();
     if preparing {
         for cell in cells
             .iter()
@@ -720,9 +720,6 @@ pub(super) fn debit(
         }
     }
     if required.is_empty() && drops.is_empty() && loot.is_empty() {
-        if preparing {
-            retire_cleared_roots(state, cells);
-        }
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -779,10 +776,10 @@ pub(super) fn debit(
     }
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
+    // A registered root retires through `forestry::retire_missing` at an empty
+    // trunk column only: retiring it cell by cell would remove the identity
+    // evidence its own unfinished crown still needs.
     inventory::commit(state, changes)?;
-    if preparing {
-        retire_cleared_roots(state, cells);
-    }
     for (at, stack) in spilled {
         crate::tick::spawn_item_entity(
             state,
@@ -795,26 +792,6 @@ pub(super) fn debit(
         );
     }
     Ok(())
-}
-
-fn retire_cleared_roots(state: &mut TickState, cells: &[super::Cell]) {
-    let air = state.registry.states.air;
-    for cell in cells.iter().filter(|cell| cell.state == air) {
-        loop {
-            let owner = state
-                .settlements
-                .records()
-                .find(|record| record.planted_trees.contains(&cell.at))
-                .map(|record| record.id);
-            let Some(id) = owner else { break };
-            let record = state
-                .settlements
-                .get_mut(id)
-                .expect("registered planting owner");
-            record.planted_trees.remove(&cell.at);
-            record.revision = record.revision.saturating_add(1);
-        }
-    }
 }
 
 pub(crate) fn missing(

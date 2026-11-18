@@ -6,14 +6,17 @@
 //! once. Viewers keep their own baselines (credit deferral and late joins
 //! diverge); only identical `(id, baseline)` pairs share a frame.
 //!
-//! Sharded `std::Mutex<FxHashMap>` keeps rayon viewers off a single lock.
-//! Below-threshold (`None`) moves are cached too, skipping repeated
-//! threshold math. A cache MUST be dropped with its snapshot: the entity
-//! image is the implicit half of every key.
+//! Sharded `parking_lot::Mutex<FxHashMap>` keeps rayon viewers off a single
+//! lock. The lock does not poison: a panic inside a shard leaves the cached
+//! frames usable for the rest of that snapshot (the panic itself still ends the
+//! pump task, which the accept loop treats as a server-wide failure).
+//! Below-threshold (`None`) moves are cached too, skipping repeated threshold
+//! math. A cache MUST be dropped with its snapshot: the entity image is the
+//! implicit half of every key.
 
 use super::*;
+use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
-use std::sync::Mutex;
 
 /// Shard count (power of two; the mask keeps shard selection cheap).
 const SHARDS: usize = 64;
@@ -86,7 +89,7 @@ impl SharedMoves {
     ) -> Option<SharedMove> {
         let key = MoveKey::new(entity.id, baseline);
         let shard = &self.moves[(key.id as usize) & (SHARDS - 1)];
-        let mut guard = shard.lock().expect("shared move encoder mutex");
+        let mut guard = shard.lock();
         guard
             .entry(key)
             .or_insert_with(|| {
@@ -108,7 +111,7 @@ impl SharedMoves {
     /// The caller wraps `(id, data)` into its own `PlannedPacket`.
     pub(super) fn head(&self, entity: &EntityView) -> (i32, bytes::Bytes) {
         let shard = &self.heads[(entity.id.0 as usize) & (SHARDS - 1)];
-        let mut guard = shard.lock().expect("shared head encoder mutex");
+        let mut guard = shard.lock();
         guard
             .entry(entity.id.0)
             .or_insert_with(|| {
@@ -118,6 +121,16 @@ impl SharedMoves {
                 })
             })
             .clone()
+    }
+
+    /// Test support: panic while holding a move shard's lock, the way an
+    /// unexpected encode panic would. A poisonable lock would then refuse
+    /// every later viewer's frame; parking-lot keeps the shard usable.
+    #[cfg(test)]
+    pub(super) fn probe_panic_in_move_shard(&self, id: i32) {
+        let shard = &self.moves[(id as usize) & (SHARDS - 1)];
+        let _guard = shard.lock();
+        panic!("shared move encoder panics with its shard locked");
     }
 }
 
