@@ -190,12 +190,38 @@ fn diagonal_log_is_foreign_because_no_grown_tree_has_one() {
 }
 
 #[test]
+fn root_player_history_keeps_every_cell_of_its_tree() {
+    let (mut state, _, root) = planted();
+    let lot = tests::lot_around(root);
+    let leaf = tree_cells_in(&state, &[root])
+        .into_iter()
+        .find(|at| is_leaf(&state, *at))
+        .expect("the grown crown has leaves");
+    let mut clearance = Clearance::default();
+    assert!(clearance.clearable(&state, leaf, Some(lot)));
+    // Retention on the root itself is attribution for the whole tree: the
+    // component is ambiguous before its first log is admitted, so even a leaf
+    // far from the trunk stays.
+    state.block_log = tests::player_history(&state, root, 0);
+    assert!(state.block_log.player_touched(root));
+    let mut clearance = Clearance::default();
+    assert!(!clearance.clearable(&state, leaf, Some(lot)));
+    assert!(!clearance.clearable(&state, root, Some(lot)));
+    let mut cells = Vec::new();
+    clearance.append_whole_trees(&state, &mut cells);
+    assert!(cells.is_empty());
+}
+
+#[test]
 fn lateral_historyless_log_keeps_its_registered_tree() {
     let (mut state, _, root) = planted();
     let log = block(&state, "minecraft:birch_log", &[]);
     let at = [root[0] + 1, root[1] + 3, root[2]];
     state.world.set_block(at[0], at[1], at[2], log);
-    assert!(!state.block_log.player_touched(at), "no retained record for it");
+    assert!(
+        !state.block_log.player_touched(at),
+        "no retained record for it"
+    );
     let lot = tests::lot_around(root);
     let mut clearance = Clearance::default();
     assert!(
@@ -204,7 +230,10 @@ fn lateral_historyless_log_keeps_its_registered_tree() {
     );
     let mut cells = Vec::new();
     clearance.append_whole_trees(&state, &mut cells);
-    assert!(cells.is_empty(), "nothing is manifested, so no requeue loop");
+    assert!(
+        cells.is_empty(),
+        "nothing is manifested, so no requeue loop"
+    );
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
 }
 
@@ -265,12 +294,14 @@ fn a_b_c_grove_needs_two_trees_and_keeps_the_third_crown() {
         }
         let mut planned: Vec<_> = tree_cells_in(state, &[a])
             .into_iter()
-            .map(|at| crate::plugin_structures::settlement_builds::PlannedCell {
-                at,
-                state: state.registry.states.air,
-                resource: None,
-                quantity: 0,
-            })
+            .map(
+                |at| crate::plugin_structures::settlement_builds::PlannedCell {
+                    at,
+                    state: state.registry.states.air,
+                    resource: None,
+                    quantity: 0,
+                },
+            )
             .collect();
         clearance.append_whole_trees(state, &mut planned);
         planned.into_iter().map(|cell| cell.at).collect::<Vec<_>>()
@@ -285,7 +316,10 @@ fn a_b_c_grove_needs_two_trees_and_keeps_the_third_crown() {
         if (at[0] - c[0]).abs() > 2 || (at[2] - c[2]).abs() > 2 {
             continue; // the box also holds B's leaves; C's own crown is ±2
         }
-        assert!(!manifest.contains(&at), "the third tree is untouched: {at:?}");
+        assert!(
+            !manifest.contains(&at),
+            "the third tree is untouched: {at:?}"
+        );
     }
     assert!(manifest.contains(&a), "the lot tree is felled");
     assert!(
@@ -314,9 +348,7 @@ fn a_b_c_grove_needs_two_trees_and_keeps_the_third_crown() {
                 let best = cells
                     .iter()
                     .map(|log| {
-                        (log[0] - at[0]).abs()
-                            + (log[1] - at[1]).abs()
-                            + (log[2] - at[2]).abs()
+                        (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
                     })
                     .min()
                     .expect("component has logs");

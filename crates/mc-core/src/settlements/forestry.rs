@@ -235,8 +235,7 @@ impl Clearance {
 fn nearest_log(component: Option<&[[i32; 3]]>, at: [i32; 3]) -> Option<i32> {
     let mut best = i32::MAX;
     for &log in component? {
-        let distance =
-            (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs();
+        let distance = (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs();
         if distance <= tree_proof::RANGE {
             best = best.min(distance);
         }
@@ -247,8 +246,7 @@ fn nearest_log(component: Option<&[[i32; 3]]>, at: [i32; 3]) -> Option<i32> {
 /// Manhattan distance from a log to a certified or candidate cell: the union
 /// radius [`tree_proof::RANGE`], shared by the needed-set and crown checks.
 fn within_reach(log: [i32; 3], at: [i32; 3]) -> bool {
-    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs()
-        <= tree_proof::RANGE
+    (log[0] - at[0]).abs() + (log[1] - at[1]).abs() + (log[2] - at[2]).abs() <= tree_proof::RANGE
 }
 
 pub(crate) fn vetoed(state: &TickState, at: [i32; 3]) -> bool {

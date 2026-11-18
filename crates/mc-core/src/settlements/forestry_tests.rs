@@ -1024,7 +1024,10 @@ fn lateral_log_at_the_same_height_keeps_its_registered_tree() {
         state.block_log = player_history(&state, at, 1);
         state.block_log.evict(u64::MAX);
         assert!(!state.block_log.player_touched(at));
-        assert!(!clearable_on_lot(&state, at, lot), "expired history: {at:?}");
+        assert!(
+            !clearable_on_lot(&state, at, lot),
+            "expired history: {at:?}"
+        );
         assert!(drops(&state, at, log, lot).is_err());
         assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
     }
