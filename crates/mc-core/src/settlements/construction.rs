@@ -2789,9 +2789,10 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 /// each item the project's bill asked for. Only those exact amounts are owed,
 /// so a resident's own food or a later working load is never taken (R4-1).
 pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
-    let Some(bill) = project_bill(state, id, handle) else {
-        return;
-    };
+    // The full remaining bill, before any bound builder's carry is subtracted:
+    // `project_bill` drops a type once the builder already carries all of it,
+    // which is exactly the load that must be recorded (R4-1).
+    let bill = remaining_bill(state, id, handle);
     let Some(slot) = state.entities.slot_of_uuid(uuid) else {
         return;
     };
@@ -2801,7 +2802,11 @@ pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uui
     let mut owed: Vec<(u32, u32)> = Vec::new();
     for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
         let item = stack.item_id;
-        if !bill.iter().any(|(known, _)| *known == item) {
+        // Unreadable bill: fail closed on the whole load this builder was
+        // carrying, since it was bound to this project a moment ago.
+        if let Some(bill) = bill.as_ref()
+            && !bill.iter().any(|(known, _)| *known == item)
+        {
             continue;
         }
         let count = stack.count as u32;
@@ -3285,6 +3290,27 @@ fn active_project_bill(state: &TickState, id: SettlementId) -> Option<Vec<(u32, 
 
 /// One project's remaining bill, net of the carry of the builder bound to it.
 /// Another project's load never pays for these cells (D8).
+/// The project's remaining materials, not net of any builder carry: the set a
+/// released builder's load must be measured against (D8 review R4-1).
+pub(crate) fn remaining_bill(
+    state: &TickState,
+    id: SettlementId,
+    handle: &str,
+) -> Option<Vec<(u32, u32)>> {
+    let snapshot = executor::status(state, id, handle).ok()?;
+    snapshot
+        .remaining
+        .into_iter()
+        .map(|material| {
+            let name = mc_data::Identifier::parse(&material.resource).ok()?;
+            Some((
+                state.registry.items.id_of(&name)?,
+                u32::try_from(material.quantity).ok()?,
+            ))
+        })
+        .collect()
+}
+
 pub(crate) fn project_bill(
     state: &TickState,
     id: SettlementId,

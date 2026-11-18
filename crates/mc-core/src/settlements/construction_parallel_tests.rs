@@ -888,6 +888,15 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         "the exact owed carry is recorded per item"
     );
     // A new project is admitted while the debt is open.
+    // A cured body with an open debt is exactly the resident the planner must
+    // refuse to hire (R4-1b).
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = None;
     push_neighbour(&mut state, id, "second-house", [24, 200, 24]);
     super::drain_carry_duties_for_test(&mut state, id);
     super::assign_builder(&mut state, id);
@@ -943,4 +952,68 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         .map(|stack| stack.count)
         .sum::<i32>();
     assert_eq!(after_second, 7, "a drained debt is never delivered twice");
+}
+
+/// R4-1c: a builder carrying exactly the item the bill still asks for must
+/// still record that debt — the net-of-carry bill has no such type left.
+#[test]
+fn a_carry_equal_to_the_remainder_is_still_owed() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    start(&mut state, id, "house", 1, None);
+    let handle = handles(&state, id)[0].clone();
+    let uuid = state.entities.row(slot).uuid;
+    bind_project(&mut state, id, &handle, slot);
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .expect("oak log id");
+    let remaining = super::remaining_bill(&state, id, &handle).expect("bill");
+    let owed = remaining
+        .iter()
+        .find(|(item, _)| *item == log)
+        .map(|(_, count)| *count)
+        .expect("the house asks for logs");
+    assert!(owed > 0, "the fixture bill has logs to place");
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(log, owed as i32));
+    // The live builder's own carry is subtracted from project_bill, so the
+    // type disappears there; the debt must come from the un-netted bill.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = Some(20);
+    super::rebind_lost_builders(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().carry_pending.get(&uuid),
+        Some(&vec![(log, owed)]),
+        "the whole remainder the builder carried is owed"
+    );
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .conversion_time = None;
+    for stack in chest(&mut state) {
+        *stack = mc_data::ItemStack::EMPTY;
+    }
+    super::drain_carry_duties_for_test(&mut state, id);
+    let delivered: i32 = chest(&mut state)
+        .iter()
+        .filter(|stack| stack.item_id == log)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(delivered, owed as i32, "the owed amount is delivered once");
+    assert!(state.settlements.get(id).unwrap().carry_pending.is_empty());
 }
