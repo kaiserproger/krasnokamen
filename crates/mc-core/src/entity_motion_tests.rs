@@ -515,6 +515,50 @@ fn move_facing_keeps_the_head_on_the_body_for_a_special_controller() {
     assert_eq!(moved.rotation[2], -90.0, "no head lag for that controller");
 }
 
+/// A swimmer that detours around a wall turns the way it swims: the drive is
+/// mapped through the candidate the navigation picked (+90 deg here), not left
+/// pointing into the wall. Reverting that mapping fails this.
+#[test]
+fn move_facing_follows_the_swim_detour_around_a_wall() {
+    // Water only in the layer y 1..2; solid floor, ceiling and an x wall at 1.
+    let world = Habitat(|x, y, _| {
+        if y < 1 || y >= 2 || x >= 1 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Water
+        }
+    });
+    let mut state = input(MovementClass::Swimmer, Vec3::new(0.6, 1.0, 0.5));
+    state.aquatic_control = AquaticControl::Fish;
+    state.rotation = [-90.0, 0.0, -90.0]; // facing the wall it wants to swim at
+    state.drive = [4.0, 0.0, 0.0];
+    let detoured = step(state, &world, |_, _| true);
+    assert!(
+        detoured.body.velocity.z > 0.0,
+        "the navigation takes the +90 candidate"
+    );
+    assert!(
+        detoured.body.position.z > 0.5,
+        "and the body really swims sideways"
+    );
+    assert_eq!(
+        detoured.rotation[0], 0.0,
+        "the yaw follows the sideways run"
+    );
+}
+
+/// A body in an unloaded column cannot move, so its head settles onto its body
+/// instead of being stranded away from it (which would keep it out of the rest).
+#[test]
+fn unloaded_column_settles_the_head_on_the_body() {
+    let air = Habitat(|_, _, _| BlockMaterial::Air);
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 64.0, 0.5));
+    state.rotation = [30.0, 5.0, 70.0];
+    let unloaded = step(state, &air, |_, _| false);
+    assert_eq!(unloaded.rotation, [30.0, 5.0, 30.0]);
+    assert_eq!(unloaded.body.velocity, Vec3::ZERO);
+}
+
 /// The yaw dead zone never freezes the pitch: a fall with nothing to walk to
 /// still tips the head down.
 #[test]
