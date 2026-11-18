@@ -272,8 +272,7 @@ pub(super) fn village_drops(
         return Err(Failure::Blocked);
     }
     let natural = crate::settlements::construction::excavatable(state, block);
-    let ground = natural
-        || crate::settlements::construction::relayout::village_soil(state, block);
+    let ground = natural || crate::settlements::construction::relayout::village_soil(state, block);
     if unchanged && ground {
         return Ok(None);
     }

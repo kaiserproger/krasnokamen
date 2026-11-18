@@ -542,8 +542,9 @@ fn a_structure_record_without_a_matching_admission_refuses_startup() {
     let mut state = state();
     let id = stored_structure(&mut state);
     validate(&state).unwrap();
-    let mut stripped = state.plugins.get_domain(OWNER, KEY).unwrap().clone();
-    stripped["structures"][&id]
+    let key = ledger::structure_key(&id);
+    let mut stripped = state.plugins.get_domain(OWNER, &key).unwrap().clone();
+    stripped
         .as_object_mut()
         .unwrap()
         .remove("admission")
@@ -553,10 +554,9 @@ fn a_structure_record_without_a_matching_admission_refuses_startup() {
 
     let mut state = self::state();
     let id = stored_structure(&mut state);
-    let mut ledger = ledger(&state).unwrap();
-    ledger.structures.get_mut(&id).unwrap().admission =
-        provenance::Admission::Captured { since: 0 };
-    save(&mut state, &ledger);
+    let mut ledger = ledger_mut(&mut state).unwrap();
+    ledger.structure_mut(&id).unwrap().admission = provenance::Admission::Captured { since: 0 };
+    save(&mut state, ledger);
     assert!(
         validate(&state).is_err(),
         "a plugin record with a settlement admission"

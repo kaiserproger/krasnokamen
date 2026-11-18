@@ -1387,7 +1387,10 @@ fn lapsed_coverage_simulates_the_outside_cut_then_fill_chain() {
     );
     s.state.settlements.get_mut(s.id).unwrap().radius = 1;
     lapse(&mut s);
-    assert_eq!(executor::provenance_refusal(&s.state, s.id, &s.handle), None);
+    assert_eq!(
+        executor::provenance_refusal(&s.state, s.id, &s.handle),
+        None
+    );
     assert!(!step(&mut s).unwrap());
     assert!(step(&mut s).unwrap());
     assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:dirt")));

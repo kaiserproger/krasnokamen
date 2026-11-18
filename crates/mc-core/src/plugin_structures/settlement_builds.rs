@@ -968,9 +968,7 @@ pub(super) fn debit(
                     && state
                         .world
                         .block_at(at[0], at[1], at[2])
-                        .is_none_or(|now| {
-                            now != cell.state && !soil_work_noop(state, cell, now)
-                        })
+                        .is_none_or(|now| now != cell.state && !soil_work_noop(state, cell, now))
             })
         };
         images.retain(|image| {
