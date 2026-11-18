@@ -23,23 +23,60 @@ pub(super) fn planned_cells(
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
     let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
+    let record = state
+        .settlements
+        .get(project.settlement)
+        .ok_or(Preparation)?;
+    // Owner D27.4: the plan reads no player history inside its own territory.
+    clearance.within(record);
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {
         let dirt = state.registry.states.dirt;
+        let authored = |at: [i32; 3]| {
+            rotated
+                .blocks
+                .iter()
+                .any(|(offset, _)| rotated.world(project.origin, *offset) == at)
+        };
         for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
                 let ground =
                     surface_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
                         .ok_or(Preparation)?;
+                // A field inside the territory (owner D27.4): every field cell
+                // of the column from its ground (or the floor under an
+                // overhang) up is cut in the clear stage, top-down so a crop
+                // never loses its farmland first, and the clear stage credits
+                // its vanilla loot. Farmland at or below the floor is soil the
+                // plan still needs, so the same cell is re-placed as paid dirt
+                // unless the authored floor covers it; a crop in the fill range
+                // gets the paid fill below. The lot neither creates nor loses material.
+                let top = project.origin[1] + i32::from(size[1]);
+                for y in (ground.min(project.origin[1])..top).rev() {
+                    let block = state.world.physics_block_at(x, y, z).ok_or(Preparation)?;
+                    if !field(state, block) || !record.contains([x, y, z]) {
+                        continue;
+                    }
+                    cells.push(executor::PlannedCell {
+                        at: [x, y, z],
+                        state: state.registry.states.air,
+                        resource: None,
+                        quantity: 0,
+                    });
+                    if !crop(state, block) && y <= project.origin[1] && !authored([x, y, z]) {
+                        bottom = bottom.min(y);
+                        cells.push(executor::PlannedCell {
+                            at: [x, y, z],
+                            state: dirt,
+                            resource: Some("minecraft:dirt".into()),
+                            quantity: 1,
+                        });
+                    }
+                }
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
-                    if y == project.origin[1]
-                        && rotated
-                            .blocks
-                            .iter()
-                            .any(|(offset, _)| rotated.world(project.origin, *offset) == [x, y, z])
-                    {
+                    if y == project.origin[1] && authored([x, y, z]) {
                         continue;
                     }
                     bottom = bottom.min(y);

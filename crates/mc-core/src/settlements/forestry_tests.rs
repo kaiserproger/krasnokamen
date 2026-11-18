@@ -12,6 +12,11 @@ fn clearable_on_lot(
     Clearance::default().clearable(state, at, lot)
 }
 
+/// Off-lot permission outside every village territory: all protections apply.
+fn clearable(state: &TickState, at: [i32; 3]) -> bool {
+    super::clearable(state, at, false)
+}
+
 fn drops(
     state: &TickState,
     at: [i32; 3],
@@ -685,6 +690,56 @@ fn player_log_under_natural_canopy_is_protected_with_empty_or_expired_history() 
     assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(log));
 }
 
+/// Owner D27.4: inside the working settlement's territory a retained player
+/// placement, a player log without generator evidence and a persistent leaf
+/// are the village's property, on the lot and off it. The same cells outside
+/// the territory (or with no territory) keep every protection.
+#[test]
+fn village_property_inside_the_territory_ignores_history_and_provenance() {
+    let (mut state, id, _, project, root, _) = forest();
+    state.block_log = player_history(&state, root, 0);
+    let player_log = [root[0] + 1, root[1] + 3, root[2]];
+    let log = block(&state, "minecraft:birch_log", &[]);
+    state
+        .world
+        .set_block(player_log[0], player_log[1], player_log[2], log);
+    let leaf = [root[0], root[1] + 12, root[2]];
+    let placed = block(&state, "minecraft:birch_leaves", &[("persistent", "true")]);
+    state.world.set_block(leaf[0], leaf[1], leaf[2], placed);
+    let lot = lot_bounds(&state, &project);
+    let within = |state: &TickState| {
+        let mut clearance = Clearance::default();
+        clearance.within(state.settlements.get(id).unwrap());
+        clearance
+    };
+    for at in [root, player_log, leaf] {
+        assert!(state.settlements.get(id).unwrap().contains(at));
+        assert!(within(&state).clearable(&state, at, None), "inside: {at:?}");
+        assert!(
+            within(&state).clearable(&state, at, lot),
+            "inside, lot: {at:?}"
+        );
+        assert!(!clearable_on_lot(&state, at, None), "no territory: {at:?}");
+        assert!(
+            !clearable_on_lot(&state, at, lot),
+            "no territory, lot: {at:?}"
+        );
+    }
+    let record = state.settlements.get_mut(id).unwrap();
+    record.anchor = [root[0] + 1_000, root[1], root[2]];
+    record.radius = 8;
+    for at in [root, player_log, leaf] {
+        assert!(
+            !within(&state).clearable(&state, at, None),
+            "outside: {at:?}"
+        );
+        assert!(
+            !within(&state).clearable(&state, at, lot),
+            "outside, lot: {at:?}"
+        );
+    }
+}
+
 #[test]
 fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
     let (mut state, id, builder, _, root, _) = forest();
@@ -901,47 +956,35 @@ fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
     );
 }
 
+/// A player's crown above the access headroom stays out of the clearance work
+/// outside the territory; inside it the crown is the village's property and
+/// becomes clearance work (owner D27.4).
 #[test]
-fn protected_crown_above_access_headroom_stays_while_the_building_finishes() {
-    let (mut state, id, builder, _, _, access) = forest();
+fn protected_crown_above_access_headroom_stays_outside_the_territory() {
+    let (mut state, id, _, project, _, access) = forest();
     let at = [access[0], access[1] + 4, access[2]];
-    let leaves = state.world.block_at(at[0], at[1], at[2]).unwrap();
-    state.block_log = crate::block_log::BlockLog::restore(
-        crate::config::BlockLogSettings {
-            retention_secs: 0,
-            ..Default::default()
-        },
-        vec![crate::block_log::Delta {
-            records: vec![crate::block_log::Record {
-                seq: 0,
-                tick: Some(1),
-                time: 0,
-                actor: Arc::from("player"),
-                pos: at,
-                change: crate::block_log::Change::Block {
-                    before: state.registry.states.air,
-                    after: leaves,
-                    entity: None,
-                },
-                rolled_back: false,
-            }],
-            marks: Vec::new(),
-        }],
-    );
+    state.block_log = player_history(&state, at, 0);
     assert!(!clearable(&state, at));
-    fund(&mut state, "storage", 1);
-    construction::request_build(&mut state, id, "storage").unwrap();
+    let size = blueprints::get(&state.registry, "storage")
+        .unwrap()
+        .footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
+    let planned = |clearance: &mut Clearance| {
+        super::cells(&state, &project, size, clearance)
+            .expect("the lot and its access plan")
+            .cells
+            .iter()
+            .any(|cell| cell.at == at)
+    };
     assert!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .projects
-            .first()
-            .is_some()
+        !planned(&mut Clearance::default()),
+        "outside the territory the protected crown stays"
     );
-    complete(&mut state, id, builder);
-    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(leaves));
+    let mut inside = Clearance::default();
+    inside.within(state.settlements.get(id).unwrap());
+    assert!(
+        planned(&mut inside),
+        "inside the territory it is clearance work"
+    );
 }
 
 #[test]

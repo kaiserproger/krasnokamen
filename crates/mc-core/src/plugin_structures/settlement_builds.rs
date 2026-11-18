@@ -1069,11 +1069,14 @@ pub(crate) fn upgrade_trees_clear(
             continue;
         }
         // Attribution and the disabled-history/live-player veto precede even
-        // an exact match with a building's own previous authored beam.
-        if crate::settlements::forestry::vetoed(state, cell.at) {
+        // an exact match with a building's own previous authored beam, outside
+        // the territory only: inside it everything built is the village's
+        // property (owner D27.4).
+        let property = clearance.village_property(state, cell.at);
+        if !property && crate::settlements::forestry::vetoed(state, cell.at) {
             return Err(Failure::Forbidden);
         }
-        if crate::settlements::forestry::persistent(state, block) {
+        if !property && crate::settlements::forestry::persistent(state, block) {
             return Err(Failure::Blocked);
         }
         if previous.is_some_and(|record| {

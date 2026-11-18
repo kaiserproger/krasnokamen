@@ -605,7 +605,6 @@ fn native_site_clearance_refuses_fluid_states_and_paid_or_authored_blocks() {
         "seagrass",
         "tall_seagrass",
         "lava",
-        "wheat",
         "light",
         "structure_void",
     ] {
@@ -621,6 +620,15 @@ fn native_site_clearance_refuses_fluid_states_and_paid_or_authored_blocks() {
             "construction must not clear {name}"
         );
     }
+    // A crop inside the territory is a field the lot may cut (owner D27.4).
+    let wheat = block(&state, "minecraft:wheat", &[]);
+    state.world.set_block(6, 201, 6, wheat);
+    assert!(site_free(
+        &state,
+        state.settlements.get(id).unwrap(),
+        [5, 200, 5],
+        [3, 4, 3]
+    ));
 }
 
 #[test]

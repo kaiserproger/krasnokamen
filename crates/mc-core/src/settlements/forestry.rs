@@ -21,21 +21,47 @@ mod tree_proof;
 /// Selection owns one bounded proof per root. The executor instead rechecks
 /// intrinsic vetoes on cells already certified in its canonical work manifest;
 /// it must not repeat a volume scan, or depend on a root retired while felling.
+///
+/// `territory` is the working settlement. Owner D27.4 (2026-11-18):
+/// everything built on a village's territory is the village's property, so for
+/// a cell inside it (`SettlementRecord::contains`, per modified cell) no player
+/// attribution, block history, persistent-leaf mark or generator evidence is
+/// consulted. Without a territory, or for a cell outside it (a founding site,
+/// a corridor or crown cell beyond the sphere), every protection applies.
 pub(crate) struct Clearance {
     proofs: Option<HashMap<[i32; 3], (tree_proof::Proof, bool)>>,
+    territory: Option<super::SettlementId>,
 }
 
 impl Default for Clearance {
     fn default() -> Self {
         Self {
             proofs: Some(HashMap::default()),
+            territory: None,
         }
     }
 }
 
 impl Clearance {
     pub(crate) fn prepared() -> Self {
-        Self { proofs: None }
+        Self {
+            proofs: None,
+            territory: None,
+        }
+    }
+
+    /// Clear for `record`'s planner and builders: its own territory only. The
+    /// site check and the plan set it, so one pass never mixes settlements.
+    pub(crate) fn within(&mut self, record: &super::SettlementRecord) -> &mut Self {
+        self.territory = Some(record.id);
+        self
+    }
+
+    /// The cell is the working village's property (owner D27.4).
+    pub(crate) fn village_property(&self, state: &TickState, at: [i32; 3]) -> bool {
+        self.territory
+            .and_then(|id| state.settlements.get(id))
+            .is_some_and(|record| record.contains(at))
     }
 
     fn owned(&mut self, state: &TickState, at: [i32; 3], leaf: bool) -> bool {
@@ -84,9 +110,9 @@ impl Clearance {
                     .blocks
                     .by_id(BlockStateId(block))
                     .is_some_and(|b| b.block.id.path().ends_with("_leaves"));
+                let property = self.village_property(state, at);
                 if !(proof.owns_log(at) || (leaf && proof.permits(at)))
-                    || vetoed(state, at)
-                    || (leaf && persistent(state, block))
+                    || (!property && (vetoed(state, at) || (leaf && persistent(state, block))))
                     || !seen.insert(at)
                 {
                     continue;
@@ -500,10 +526,16 @@ pub(super) fn protected_tree(state: &TickState, at: [i32; 3]) -> bool {
     state.block_log.player_touched(at) || planted(state, at)
 }
 
-pub(crate) fn clearable(state: &TickState, at: [i32; 3]) -> bool {
+/// `village_property`: the cell is inside the working settlement's territory
+/// (owner D27.4). There only the settlement's own registered planting protects
+/// a tree or sapling; attribution, history and generator evidence are not read.
+pub(crate) fn clearable(state: &TickState, at: [i32; 3], village_property: bool) -> bool {
     let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
         return false;
     };
+    if village_property {
+        return tree_or_sapling(state, block) && !planted(state, at);
+    }
     if !tree(state, block) || protected_tree(state, at) || near_unlogged_player(state, at) {
         return false;
     }
@@ -608,7 +640,8 @@ impl Clearance {
         at: [i32; 3],
         lot: Option<mc_script::ScriptWorldBounds>,
     ) -> bool {
-        if vetoed(state, at) {
+        let property = self.village_property(state, at);
+        if !property && vetoed(state, at) {
             return false;
         }
         let on_lot = lot.is_some_and(|bounds| {
@@ -628,19 +661,25 @@ impl Clearance {
             let Some(registered) = registered_planting(state, at) else {
                 return false;
             };
+            // Inside the territory a persistent (player-placed) leaf, a
+            // player-planted sapling and a log without generator evidence are
+            // village property. `owned` still runs first: it marks the planted
+            // roots whose whole tree the work must fell.
             if name.ends_with("_leaves") {
                 let nonpersistent = definition
                     .properties
                     .iter()
                     .any(|(key, value)| key == "persistent" && value == "false");
-                return nonpersistent && (self.owned(state, at, true) || natural(state, at, block));
+                return (property || nonpersistent)
+                    && (self.owned(state, at, true) || property || natural(state, at, block));
             }
-            if registered && name.ends_with("_sapling") {
+            if (registered || property) && name.ends_with("_sapling") {
                 return true;
             }
-            return tree_name(name) && (self.owned(state, at, false) || natural(state, at, block));
+            return tree_name(name)
+                && (self.owned(state, at, false) || property || natural(state, at, block));
         }
-        clearable(state, at)
+        clearable(state, at, property)
     }
 }
 
@@ -659,14 +698,19 @@ pub(crate) fn drops(
 
 /// Vanilla loot of a surface plant cleared without a tool: short grass drops
 /// wheat seeds one time in eight. Before its first farm a settlement has no
-/// other seed source, and that farm's wheat cells cost seeds. Air and blocks
-/// outside the clearable plant veneer roll nothing.
+/// other seed source, and that farm's wheat cells cost seeds. A field cell
+/// (farmland: its dirt; a crop: its produce) rolls its loot too: the plan
+/// cuts fields only inside the territory (owner D27.4), and a field is never
+/// overwritten unpaid. Air and other blocks outside the veneer roll nothing.
 pub(crate) fn plant_drops(
     state: &TickState,
     at: [i32; 3],
     block: u32,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
-    if block == state.registry.states.air || !super::construction::clearable(state, block) {
+    if block == state.registry.states.air
+        || !(super::construction::clearable(state, block)
+            || super::construction::field(state, block))
+    {
         return Ok(Vec::new());
     }
     roll(state, at, block)
@@ -844,22 +888,14 @@ pub(crate) fn footing_of(
     let record = state.settlements.get(settlement)?;
     let lot = super::construction::preparation::project_lot(state, record, handle);
     let centre = super::construction::preparation::project_floor(record, handle);
-    footing_in(state, centre, at, lot)
-}
-
-fn footing_in(
-    state: &TickState,
-    centre: i32,
-    at: [i32; 3],
-    lot: Option<mc_script::ScriptWorldBounds>,
-) -> Option<crate::boundary::BlockPos> {
+    // The same territory-aware surface the plan was materialized with.
     let y = super::construction::surface_y_for_lot(
         state,
         centre,
         at[0],
         at[2],
         lot,
-        &mut Clearance::prepared(),
+        Clearance::prepared().within(record),
     )?;
     Some(crate::boundary::BlockPos {
         x: at[0],

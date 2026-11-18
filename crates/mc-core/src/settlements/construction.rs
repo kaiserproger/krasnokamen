@@ -1374,6 +1374,41 @@ pub(crate) fn excavatable(state: &TickState, block: u32) -> bool {
         })
 }
 
+/// A field: farmland and the crop standing on it. Inside the working
+/// settlement's territory a needed lot cuts it with its vanilla loot credited
+/// and re-places paid dirt where the plan needs ground (owner D27.4, fields
+/// included); outside the territory a field keeps refusing the lot.
+pub(crate) fn field(state: &TickState, block: u32) -> bool {
+    crop(state, block)
+        || state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .is_some_and(|definition| definition.block.id.path() == "farmland")
+}
+
+/// A crop that grows on farmland.
+fn crop(state: &TickState, block: u32) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .is_some_and(|definition| {
+            matches!(
+                definition.block.id.path(),
+                "wheat"
+                    | "carrots"
+                    | "potatoes"
+                    | "beetroots"
+                    | "melon_stem"
+                    | "pumpkin_stem"
+                    | "attached_melon_stem"
+                    | "attached_pumpkin_stem"
+                    | "torchflower_crop"
+            )
+        })
+}
+
 /// Floor replacement permits solid ground or clearable fill space, but never
 /// fluids, paths, paid crops or authored non-ground blocks under an overhang.
 fn floor_replaceable(state: &TickState, block: u32) -> bool {
@@ -1699,7 +1734,12 @@ pub(super) fn surface_y_for_lot(
                 .world
                 .physics_block_at(x, y + 1, z)
                 .is_some_and(|above| {
-                    clearable(state, above) || clearance.clearable(state, [x, y + 1, z], lot)
+                    clearable(state, above)
+                        || clearance.clearable(state, [x, y + 1, z], lot)
+                        // A crop on its field is space a needed lot clears.
+                        || (lot.is_some()
+                            && crop(state, above)
+                            && clearance.village_property(state, [x, y + 1, z]))
                 })
         })
 }
@@ -2529,7 +2569,11 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
                 .world
                 .physics_block_at(at[0], at[1], at[2])
                 .is_some_and(|block| super::forestry::tree_or_sapling(state, block))
-                && !super::forestry::Clearance::prepared().clearable(state, at, lot)
+                && state.settlements.get(id).is_some_and(|record| {
+                    !super::forestry::Clearance::prepared()
+                        .within(record)
+                        .clearable(state, at, lot)
+                })
         });
     let cause = if protected {
         "protected_tree_in_preparation"

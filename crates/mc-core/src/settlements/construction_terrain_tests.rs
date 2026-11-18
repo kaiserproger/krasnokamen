@@ -687,45 +687,249 @@ fn a_foundation_shortfall_waits_as_collecting_material_then_finishes() {
     );
 }
 
-/// Cut attribution is the player's only if the log says so: it refuses the
-/// site at survey and again immediately before the debit.
+/// Move the settlement's territory far away and survey the same lot as a
+/// founding site: a founding site is outside the parent's territory (owner
+/// D27.4). The state's own record moves, since the clearance reads it.
+fn outside_territory(
+    state: &mut TickState,
+    id: SettlementId,
+    cell: [i32; 3],
+) -> FoundingExpedition {
+    let record = state.settlements.get_mut(id).unwrap();
+    assert!(record.contains(cell));
+    record.anchor = [1_000, FLOOR, 1_000];
+    record.radius = 8;
+    assert!(!record.contains(cell));
+    FoundingExpedition {
+        destination: [0, FLOOR - 2, 0],
+        household: String::new(),
+    }
+}
+
+fn survey(
+    state: &TickState,
+    id: SettlementId,
+    expedition: Option<&FoundingExpedition>,
+) -> Option<site_refusals::Reason> {
+    site_refusals::check(
+        state,
+        state.settlements.get(id).unwrap(),
+        [5, FLOOR, 5],
+        [3, 5, 3],
+        expedition,
+        &mut Default::default(),
+        None,
+    )
+    .err()
+}
+
+/// Owner D27.4: inside the settlement's territory a player's terrain edit is
+/// the village's property and no longer refuses the lot; the same edit on a
+/// founding site outside the territory still does.
 #[test]
-fn player_terrain_is_refused_at_survey_and_again_before_the_debit() {
+fn player_terrain_is_village_property_inside_the_territory_only() {
     let (mut state, id, _) = fixture();
-    let record = state.settlements.get(id).unwrap().clone();
-    let origin = [5, FLOOR, 5];
+    let cell = [6, FLOOR + 2, 6];
     let stone = state.registry.states.stone;
-    state.world.set_block(6, FLOOR + 2, 6, stone);
+    state.world.set_block(cell[0], cell[1], cell[2], stone);
     state.world.fold_overlay();
-    let check = |state: &TickState| {
-        site_refusals::check(
-            state,
-            &record,
-            origin,
-            [3, 5, 3],
-            None,
-            &mut Default::default(),
-            None,
-        )
-        .err()
-    };
-    assert_eq!(check(&state), None);
-    state.block_log = super::super::forestry::tests::player_history(&state, [6, FLOOR + 2, 6], 0);
+    assert_eq!(survey(&state, id, None), None);
+    state.block_log = super::super::forestry::tests::player_history(&state, cell, 0);
+    assert!(state.block_log.player_touched(cell));
+    assert_eq!(survey(&state, id, None), None, "inside: village property");
+    let expedition = outside_territory(&mut state, id, cell);
     assert_eq!(
-        check(&state),
-        Some(site_refusals::Reason::ProtectedObstruction)
+        survey(&state, id, Some(&expedition)),
+        Some(site_refusals::Reason::ProtectedObstruction),
+        "outside: the player's edit stays protected"
     );
-    // The same cell edited after admission stops the debit.
+    state.block_log = Default::default();
+    assert_eq!(
+        survey(&state, id, Some(&expedition)),
+        None,
+        "the founding site itself is admissible"
+    );
+}
+
+/// Owner D27.4, fields included: a field on the lot is usable inside the
+/// territory and keeps refusing the lot outside it.
+#[test]
+fn a_player_field_is_usable_inside_the_territory_and_refused_outside() {
+    let (mut state, id, _) = fixture();
+    let soil = [6, FLOOR, 6];
+    let crop = [6, FLOOR + 1, 6];
+    let farmland = block(&state, "minecraft:farmland", &[("moisture", "7")]);
+    let wheat = block(&state, "minecraft:wheat", &[("age", "0")]);
+    state.world.set_block(soil[0], soil[1], soil[2], farmland);
+    state.world.fold_overlay();
+    state.block_log = super::super::forestry::tests::player_history(&state, soil, 0);
+    assert_eq!(survey(&state, id, None), None, "bare field inside");
+    state.world.set_block(crop[0], crop[1], crop[2], wheat);
+    state.world.fold_overlay();
+    assert_eq!(survey(&state, id, None), None, "sown field inside");
+    let expedition = outside_territory(&mut state, id, soil);
+    assert!(
+        survey(&state, id, Some(&expedition)).is_some(),
+        "sown field outside"
+    );
+    state
+        .world
+        .set_block(crop[0], crop[1], crop[2], state.registry.states.air);
+    state.world.fold_overlay();
+    assert_eq!(
+        survey(&state, id, Some(&expedition)),
+        Some(site_refusals::Reason::ProtectedFloor),
+        "bare field outside"
+    );
+}
+
+/// Owner D27.4: a player's sown field on a needed lot inside the territory is
+/// cut in the clear stage, top-down, with its vanilla loot credited exactly
+/// once (farmland: one dirt; age-0 wheat: one seed), and its ground is
+/// re-placed (paid dirt or the authored floor). Nothing is conjured or lost.
+#[test]
+fn a_player_field_inside_the_territory_is_cut_with_exact_credit() {
+    let (mut state, id, builder) = fixture();
+    // The lightweight test registry carries no field loot tables.
+    std::sync::Arc::make_mut(&mut state.registry).loot = crate::tick_tests::full_registry().loot;
+    let site = only_lot(&mut state, id);
+    let [x, z] = free_column(&state, &site, 2, 0);
+    let floor = site.lot.origin[1];
+    let (soil, crop) = ([x, floor, z], [x, floor + 1, z]);
+    let farmland = block(&state, "minecraft:farmland", &[("moisture", "7")]);
+    let wheat = block(&state, "minecraft:wheat", &[("age", "0")]);
+    state.world.set_block(soil[0], soil[1], soil[2], farmland);
+    state.world.set_block(crop[0], crop[1], crop[2], wheat);
+    state.world.fold_overlay();
+    state.block_log = super::super::forestry::tests::player_history(&state, soil, 0);
+    assert!(state.settlements.get(id).unwrap().contains(soil));
+    let project = project_at(id, &site);
+    let (_, cells) = manifest(&state, &project);
+    let air = state.registry.states.air;
+    let clears: Vec<[i32; 3]> = cells
+        .iter()
+        .filter(|cell| cell.state == air && (cell.at == soil || cell.at == crop))
+        .map(|cell| cell.at)
+        .collect();
+    assert_eq!(clears, vec![crop, soil], "both field cells, crop first");
+    assert_eq!(
+        cells
+            .iter()
+            .filter(|cell| cell.at == soil && cell.state != air)
+            .count(),
+        1,
+        "the field's ground is re-placed once"
+    );
+    let fills = cells
+        .iter()
+        .filter(|cell| cell.resource.as_deref() == Some("minecraft:dirt"))
+        .count() as i64;
+    let (dirt_item, seed_item) = (item(&state, "dirt"), item(&state, "wheat_seeds"));
+    // The vanilla loot the clear stage must credit: farmland one dirt, age-0
+    // wheat one seed.
+    let loot = |at: [i32; 3]| {
+        let block = state.world.block_at(at[0], at[1], at[2]).unwrap();
+        super::super::forestry::plant_drops(&state, at, block)
+            .unwrap()
+            .iter()
+            .map(|stack| (stack.item_id, stack.count))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(loot(crop), vec![(seed_item, 1)], "the crop's vanilla loot");
+    assert_eq!(
+        loot(soil),
+        vec![(dirt_item, 1)],
+        "the farmland's vanilla loot"
+    );
+    {
+        let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+        let free = slots
+            .iter()
+            .position(|stack| stack.is_empty())
+            .expect("the bill leaves a free slot");
+        slots[free] = mc_data::ItemStack::new(dirt_item, 8);
+    }
+    // Every container the settlement may credit, plus the builder's hands.
+    let held = |state: &TickState, item: u32| -> i64 {
+        state
+            .block_entities
+            .values()
+            .flat_map(|entity| &entity.slots)
+            .filter(|stack| !stack.is_empty() && stack.item_id == item)
+            .map(|stack| i64::from(stack.count))
+            .sum::<i64>()
+            + carried(state, builder, item)
+    };
+    let (dirt, seeds) = (held(&state, dirt_item), held(&state, seed_item));
+    request_build(&mut state, id, "storage").expect("the field lot is admitted");
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    assert_eq!(project.origin, site.lot.origin);
+    let mut trace = Vec::new();
+    for _ in 0..4096 {
+        if !executor::clearing(&state, id, &project.structure) {
+            break;
+        }
+        attempt(&mut state, id, builder);
+        let seen = (
+            name_of(&state, crop).to_owned(),
+            name_of(&state, soil).to_owned(),
+            held(&state, seed_item),
+            held(&state, dirt_item),
+        );
+        if trace.last() != Some(&seen) {
+            trace.push(seen);
+        }
+    }
+    assert_eq!(
+        (name_of(&state, crop), name_of(&state, soil)),
+        ("air", "air"),
+        "{trace:?}"
+    );
+    assert_eq!(
+        held(&state, seed_item),
+        seeds + 1,
+        "the crop's seed, once: {trace:?}"
+    );
+    assert_eq!(
+        held(&state, dirt_item),
+        dirt + 1,
+        "the farmland's dirt, once: {trace:?}"
+    );
+    complete(&mut state, id, builder);
+    assert_eq!(
+        held(&state, dirt_item),
+        dirt + 1 - fills,
+        "the refill is paid, never conjured"
+    );
+    assert_ne!(name_of(&state, soil), "farmland");
+    assert_ne!(name_of(&state, crop), "wheat");
+}
+
+/// Outside the territory a cut cell a player edited after admission stops the
+/// debit (owner D27.4 keeps the veto there); inside it the debit credits it.
+#[test]
+fn player_terrain_edited_after_admission_outside_the_territory_stops_the_debit() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
     request_build(&mut state, id, "storage").unwrap();
-    state.block_log = super::super::forestry::tests::player_history(&state, pillar.cells[0], 0);
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(next, pillar.cells[0], "the pillar is the only clear cell");
+    state.block_log = super::super::forestry::tests::player_history(&state, next, 0);
+    let record = state.settlements.get_mut(id).unwrap();
+    record.anchor = [next[0] + 1_000, next[1], next[2]];
+    record.radius = 8;
     let before = stock(&state, pillar.item);
-    for _ in 0..3 {
-        attempt(&mut state, id, builder);
-    }
-    assert_eq!(name_of(&state, pillar.cells[0]), "stone");
+    super::tests::bind_project(&mut state, id, &project.structure, builder);
+    let uuid = state.entities.row(builder).uuid;
+    assert_eq!(
+        executor::advance(&mut state, id, &project.structure, uuid),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+    assert_eq!(name_of(&state, next), "stone");
     assert_eq!(stock(&state, pillar.item), before);
 }
 

@@ -881,8 +881,6 @@ fn hillside_review_floor_under_overhang_preserves_fluids_and_protected_blocks() 
         "minecraft:water",
         "minecraft:lava",
         "minecraft:dirt_path",
-        "minecraft:farmland",
-        "minecraft:wheat",
         "minecraft:torch",
     ] {
         let block = crate::settlements::allocator::tests::block(&state, name, &[]);
@@ -890,6 +888,15 @@ fn hillside_review_floor_under_overhang_preserves_fluids_and_protected_blocks() 
         assert!(
             !site_free(&state, state.settlements.get(id).unwrap(), origin, size),
             "protected floor under overhang: {name}"
+        );
+    }
+    // A field inside the territory is the village's property (owner D27.4).
+    for name in ["minecraft:farmland", "minecraft:wheat"] {
+        let block = crate::settlements::allocator::tests::block(&state, name, &[]);
+        state.world.set_block(6, 200, 6, block);
+        assert!(
+            site_free(&state, state.settlements.get(id).unwrap(), origin, size),
+            "a field floor under the overhang inside the territory: {name}"
         );
     }
 }

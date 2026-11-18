@@ -406,11 +406,15 @@ pub(super) fn advance(
     }
 }
 
-fn tree_refusal(state: &TickState, at: [i32; 3]) -> Reason {
+/// `property`: the cell is inside the working settlement's territory (owner
+/// D27.4); there player history and the persistent-leaf mark name nothing.
+fn tree_refusal(state: &TickState, at: [i32; 3], property: bool) -> Reason {
     let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
         return Reason::Unloaded;
     };
-    if state.block_log.player_touched(at) || super::super::forestry::persistent(state, block) {
+    if !property
+        && (state.block_log.player_touched(at) || super::super::forestry::persistent(state, block))
+    {
         return Reason::ProtectedObstruction;
     }
     if super::super::forestry::planted_crown_overlaps(
@@ -484,6 +488,11 @@ pub(super) fn check(
     if founding::site_reserved(state, record.id, origin, size) {
         return Err(Reason::OutpostClaim);
     }
+    // Owner D27.4: inside this settlement's own territory, decided per modified
+    // cell with `record.contains`, its planner reads no player history or
+    // attribution and may use a field. A founding site lies outside the
+    // parent's territory and keeps every protection.
+    clearance.within(record);
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     let lot = ScriptWorldBounds::new(origin, max).expect("blueprint bounds");
     // Support discovery is centered on the candidate floor, and the whole
@@ -521,7 +530,7 @@ pub(super) fn check(
                             })
                         })
                         .map_or(Reason::SurfaceUnavailable, |y| {
-                            tree_refusal(state, [x, y, z])
+                            tree_refusal(state, [x, y, z], record.contains([x, y, z]))
                         })
                 })?;
             lowest = lowest.min(height);
@@ -529,8 +538,14 @@ pub(super) fn check(
                 .world
                 .physics_block_at(x, height, z)
                 .expect("loaded surface");
-            if !floor_replaceable(state, ground) {
+            if !floor_replaceable(state, ground)
+                && !(field(state, ground) && record.contains([x, height, z]))
+            {
                 return Err(Reason::ProtectedFloor);
+            }
+            if height <= floor && field(state, ground) {
+                // The field's own soil is cut and re-placed (or covered).
+                cost.cut += 1;
             }
             let authored_floor =
                 floors.is_some_and(|floors| floors.contains(&[x - origin[0], z - origin[2]]));
@@ -541,16 +556,20 @@ pub(super) fn check(
                 .world
                 .physics_block_at(x, floor, z)
                 .ok_or(Reason::Unloaded)?;
+            let floor_property = record.contains([x, floor, z]);
             if fluid(state, floor_block) {
                 return Err(Reason::LiquidInWork);
             }
             if state.block_entities.contains_key(&(x, floor, z)) {
                 return Err(Reason::ProtectedObstruction);
             }
-            if !floor_replaceable(state, floor_block) {
+            if !floor_replaceable(state, floor_block)
+                && !(floor_property && field(state, floor_block))
+            {
                 return Err(Reason::ProtectedFloor);
             }
             if floor_block != state.registry.states.air
+                && !floor_property
                 && state.block_log.player_touched([x, floor, z])
             {
                 return Err(Reason::ProtectedObstruction);
@@ -571,10 +590,14 @@ pub(super) fn check(
                 if fluid(state, block) {
                     return Err(Reason::LiquidInWork);
                 }
-                if !clearable(state, block) {
+                let property = record.contains([x, y, z]);
+                if !clearable(state, block) && !(property && field(state, block)) {
                     return Err(Reason::CutBeyondEnvelope);
                 }
-                if block != state.registry.states.air && state.block_log.player_touched([x, y, z]) {
+                if block != state.registry.states.air
+                    && !property
+                    && state.block_log.player_touched([x, y, z])
+                {
                     return Err(Reason::ProtectedObstruction);
                 }
                 cost.fill += 1;
@@ -593,16 +616,21 @@ pub(super) fn check(
                 if fluid(state, block) {
                     return Err(Reason::LiquidInWork);
                 }
+                let property = record.contains([x, y, z]);
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 let tree_clearable = tree && clearance.clearable(state, [x, y, z], Some(lot));
+                let field_clearable = property && field(state, block);
                 if state.block_entities.contains_key(&(x, y, z))
                     || (tree && !tree_clearable)
-                    || (!clearable(state, block) && !excavatable(state, block) && !tree_clearable)
+                    || (!clearable(state, block)
+                        && !excavatable(state, block)
+                        && !tree_clearable
+                        && !field_clearable)
                 {
-                    return Err(tree_refusal(state, [x, y, z]));
+                    return Err(tree_refusal(state, [x, y, z], property));
                 }
                 if block != state.registry.states.air && !tree {
-                    if state.block_log.player_touched([x, y, z]) {
+                    if !property && state.block_log.player_touched([x, y, z]) {
                         return Err(Reason::ProtectedObstruction);
                     }
                     cost.cut += 1;
@@ -618,7 +646,7 @@ pub(super) fn check(
                 let tree = super::super::forestry::tree_or_sapling(state, block);
                 if tree {
                     if !clearance.clearable(state, [x, y, z], Some(lot)) {
-                        return Err(tree_refusal(state, [x, y, z]));
+                        return Err(tree_refusal(state, [x, y, z], record.contains([x, y, z])));
                     }
                     continue;
                 }

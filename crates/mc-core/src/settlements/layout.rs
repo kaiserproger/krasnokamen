@@ -389,7 +389,12 @@ fn sample(
             .physics_block_at(x, above, z)
             .is_some_and(|block| {
                 construction::clearable(state, block)
-                    || (prepare_forest && super::forestry::clearable(state, [x, above, z]))
+                    || (prepare_forest
+                        && super::forestry::clearable(
+                            state,
+                            [x, above, z],
+                            record.contains([x, above, z]),
+                        ))
             })
     });
     if ground.has_fluid()

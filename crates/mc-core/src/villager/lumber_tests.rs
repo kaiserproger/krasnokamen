@@ -283,13 +283,16 @@ fn lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling() {
     // Model the planted oak after growth, with a matching deterministic
     // baseline: only the recovered sapling origin may prevent site clearing.
     crate::settlements::forestry::tests::grown_world(&mut state, vec![[10, 201, 10]], "oak");
+    // The settlement's own planting stays protected even inside its territory.
     assert!(!crate::settlements::forestry::clearable(
         &state,
-        [10, 201, 10]
+        [10, 201, 10],
+        true
     ));
     assert!(!crate::settlements::forestry::clearable(
         &state,
-        [11, 205, 10]
+        [11, 205, 10],
+        true
     ));
 }
 #[test]
