@@ -1,41 +1,8 @@
 //! Canonical preparation materialization and unpaid interference recovery.
 use super::*;
 
-/// A field: farmland and the crop standing on it. Inside the working
-/// settlement's territory a needed lot cuts it with its vanilla loot credited
-/// and re-places paid dirt where the plan needs soil (owner D27.4, fields
-/// included); outside the territory a field keeps refusing the lot.
-pub(crate) fn field(state: &TickState, block: u32) -> bool {
-    crop(state, block)
-        || state
-            .registry
-            .blocks
-            .by_id(mc_world::BlockStateId(block))
-            .is_some_and(|definition| matches!(definition.block.id.path(), "farmland"))
-}
-
-/// A crop that grows on farmland.
-pub(super) fn crop(state: &TickState, block: u32) -> bool {
-    state
-        .registry
-        .blocks
-        .by_id(mc_world::BlockStateId(block))
-        .is_some_and(|definition| {
-            matches!(
-                definition.block.id.path(),
-                "wheat"
-                    | "carrots"
-                    | "potatoes"
-                    | "beetroots"
-                    | "melon_stem"
-                    | "pumpkin_stem"
-                    | "attached_melon_stem"
-                    | "attached_pumpkin_stem"
-                    | "torchflower_crop"
-            )
-        })
-}
-
+#[path = "construction_liquid.rs"]
+pub(crate) mod liquid;
 pub(super) fn planned_cells(
     state: &TickState,
     project: &Project,
@@ -65,61 +32,49 @@ pub(super) fn planned_cells(
         .ok_or(Preparation)?;
     // Owner D27.4: the plan reads no player history inside its own territory.
     clearance.within(record);
+    // Village paths and farmland a new site covers: the detour stands before
+    // any old path cell is retired, so the walk stays connected at every tick.
+    // An upgrade's lot is its own certified ground, never village work.
+    let village = if project.building.is_none() {
+        super::relayout::plan(state, record, lot).map_err(|_| Preparation)?
+    } else {
+        None
+    };
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {
-        let paid_dirt = |at: [i32; 3]| executor::PlannedCell {
-            at,
-            state: state.registry.states.dirt,
-            resource: Some("minecraft:dirt".into()),
-            quantity: 1,
-        };
-        let authored = |at: [i32; 3]| {
-            rotated
-                .blocks
-                .iter()
-                .any(|(offset, _)| rotated.world(project.origin, *offset) == at)
-        };
+        let dirt = state.registry.states.dirt;
+        let mut fill = Vec::new();
         for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
             for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
                 let ground =
-                    surface_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
+                    liquid::ground_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
+                        .or_else(|| village.as_ref().and_then(|plan| plan.height(x, z)))
                         .ok_or(Preparation)?;
-                // A field inside the territory (owner D27.4): every field cell
-                // of the column from its ground (or the floor under an
-                // overhang) up is cut in the clear stage, top-down so a crop
-                // never loses its farmland first, and the clear stage credits
-                // its vanilla loot. Farmland at or below the floor is soil the
-                // plan still needs, so the same cell is re-placed as paid dirt
-                // unless the authored floor covers it; a crop in the fill range
-                // gets the paid fill below. The lot neither creates nor loses material.
-                let top = project.origin[1] + i32::from(size[1]);
-                for y in (ground.min(project.origin[1])..top).rev() {
-                    let block = state.world.physics_block_at(x, y, z).ok_or(Preparation)?;
-                    if !field(state, block) || !record.contains([x, y, z]) {
-                        continue;
-                    }
-                    cells.push(executor::PlannedCell {
-                        at: [x, y, z],
-                        state: state.registry.states.air,
-                        resource: None,
-                        quantity: 0,
-                    });
-                    if !crop(state, block) && y <= project.origin[1] && !authored([x, y, z]) {
-                        bottom = bottom.min(y);
-                        cells.push(paid_dirt([x, y, z]));
-                    }
-                }
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
-                    if y == project.origin[1] && authored([x, y, z]) {
+                    if y == project.origin[1]
+                        && rotated
+                            .blocks
+                            .iter()
+                            .any(|(offset, _)| rotated.world(project.origin, *offset) == [x, y, z])
+                    {
                         continue;
                     }
                     bottom = bottom.min(y);
-                    cells.push(paid_dirt([x, y, z]));
+                    fill.push(executor::PlannedCell {
+                        at: [x, y, z],
+                        state: dirt,
+                        resource: Some("minecraft:dirt".into()),
+                        quantity: 1,
+                    });
                 }
             }
         }
+        // A fluid source goes first, top-down within its column, so the supply
+        // stops before any cut that the lava beside it would block.
+        liquid::order(state, &mut fill);
+        cells.append(&mut fill);
     }
     let mut cuts = Vec::new();
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
@@ -226,6 +181,27 @@ pub(super) fn planned_cells(
             });
             cleared.append(&mut cells);
             cells = cleared;
+        }
+    }
+    if let Some(village) = village {
+        let mut taken: std::collections::HashSet<[i32; 3]> =
+            cells.iter().map(|cell| cell.at).collect();
+        // The detour leads the build stage: executor order is the manifest's,
+        // so it stands before a single house cell can close the old line.
+        let mut detour = Vec::with_capacity(village.detour.len());
+        for cell in village.detour.into_iter().chain(village.cleared) {
+            if taken.insert(cell.at) {
+                detour.push(cell);
+            }
+        }
+        detour.append(&mut cells);
+        cells = detour;
+        // Old path and farmland cells go last: nothing walks the old line
+        // until the detour that replaces it stands.
+        for cell in village.retired {
+            if taken.insert(cell.at) {
+                cells.push(cell);
+            }
         }
     }
     // Include the whole placement extent (roof crowns/yards) in executor

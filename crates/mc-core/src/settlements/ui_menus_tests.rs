@@ -1149,3 +1149,101 @@ fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
         }
     }
 }
+
+#[test]
+fn d8_construction_icons_list_all_sites_and_all_indexed_owner_orders() {
+    let (mut state, id) = crate::settlements::ui::tests::parallel_ui_fixture(8);
+    for index in 0..8 {
+        state.settlements.get_mut(id).unwrap().orders.push(
+            crate::settlements::construction::OwnerOrder {
+                seq: index as u64 + 1,
+                blueprint: if index % 2 == 0 { "house" } else { "farm" }.into(),
+                level: 1,
+                building: None,
+            },
+        );
+    }
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::En,
+    };
+    let screen = project_screen(&state, &ctx, 0);
+    let contents = metadata(&screen);
+    for (index, project) in state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .iter()
+        .enumerate()
+    {
+        assert!(!screen.icons[index].is_empty());
+        assert!(matches!(screen.targets[index], Target::MapAt(at) if at == project.origin));
+        assert!(
+            contents.contains(&super::super::corner_text(project.origin)),
+            "{contents}"
+        );
+        assert!(
+            contents.contains(&format!("Builder: {}", project.builder.unwrap().0)),
+            "{contents}"
+        );
+    }
+    for (index, order) in state.settlements.get(id).unwrap().orders.iter().enumerate() {
+        assert!(
+            matches!(&screen.targets[18 + index], Target::Pending { index: shown, order: shown_order }
+            if *shown == index && shown_order == order)
+        );
+        assert!(
+            contents.contains(&format!("Pending #{}:", index + 1)),
+            "{contents}"
+        );
+    }
+    assert!(contents.contains("Active projects: 8/8"), "{contents}");
+    assert!(contents.contains("Pending orders: 8/8"), "{contents}");
+    assert!(contents.contains("0/2"), "{contents}");
+    let visitor = project_screen(
+        &state,
+        &Ctx {
+            manage: false,
+            ..ctx
+        },
+        0,
+    );
+    assert!(
+        visitor
+            .targets
+            .iter()
+            .all(|target| !matches!(target, Target::Pending { .. }))
+    );
+}
+
+#[test]
+fn d8_pending_icon_keeps_the_rendered_intent_when_the_queue_shifts() {
+    let (mut state, id) = crate::settlements::ui::tests::parallel_ui_fixture(2);
+    for blueprint in ["house", "farm"] {
+        state.settlements.get_mut(id).unwrap().orders.push(
+            crate::settlements::construction::OwnerOrder {
+                seq: if blueprint == "house" { 1 } else { 2 },
+                blueprint: blueprint.into(),
+                level: 1,
+                building: None,
+            },
+        );
+    }
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::En,
+    };
+    project(&mut state, CONN, &ctx);
+    crate::settlements::construction::cancel_pending(&mut state, id).unwrap();
+    let changes = press(&mut state, 18, 0, ClickMode::Pickup);
+    let shown = crate::settlements::ui::tests::last_dialog(&changes);
+    assert!(shown.body.contains("changed"), "{}", shown.body);
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 1);
+    assert_eq!(
+        state.settlements.get(id).unwrap().orders[0].blueprint,
+        "farm"
+    );
+}

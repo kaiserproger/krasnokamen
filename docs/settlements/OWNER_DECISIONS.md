@@ -170,10 +170,21 @@ claims require the actual pinned-server run, not this design decision.
 > Если пересекает участок - восстановить в другом месте, чтобы была целостной
 > 3. а.
 
-- Filling water and lava on lots is **missing** until after the freeze: until
-  then a lot that needs liquid filling is not chosen, and the refusal says so.
+- Filling water and lava on lots is **implemented** (owner D21, 2026-11-17:
+  pulled before the freeze, so the "missing" status above is superseded): water
+  and lava below a needed lot's authored floor are filled with real blocks from a
+  safe stand and sources first. The builder-side drain wait, the pre-`clear`
+  liquid stage, the lava-neighbour veto and the safe-stand rule are part of the
+  executor work, and a lava flow is waited out before the cell is worked. The
+  rules, named refusals and the bounded cost are in
+  [construction](construction.md). A fluid door or verge column
+  still refuses the lot, now by name `LiquidAccess`; preparing it is backlog.
 - Village paths and farmland on a needed lot may be removed, but the road
   network must stay connected: a road crossing the lot is re-laid around it.
+  Implemented in
+  [`construction.md`](construction.md#builders-and-supplies): the detour stands
+  before the old path cells are retired, and a lot whose cut cannot be bridged
+  is refused with `NoPathDetour`.
 - A grown planted lumberjack tree on a needed lot is felled as a whole tree,
   found by trunk connectivity from its registered root. Accepted risk: a player
   log touching that trunk, whose history has expired, is felled too, with its
@@ -248,10 +259,12 @@ the parallel behaviour lands,
   (2026-11-08, D4, D10).
 - Inside the territory this supersedes the retained-placement, generator-match
   and persistent-leaf conditions of [forest site preparation](#forest-site-preparation--2026-11-08)
-  and [D18](#upgrade-clears-its-own-new-cells--owner-d18-2026-11-17), the
+  and [D18](#upgrade-clears-its-own-new-cells--owner-d18-2026-11-17) and the
   protection of player-placed blocks in [lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17),
-  and the farmland refusal on needed lots. It replaces the planned provenance
-  lifetime (PrepLifecycle §2.3): nothing tracks history coverage inside the
-  territory.
+  including player-attributed water or lava fill cells at admission and on a
+  liquid plan's resume. Fields and village paths on a needed lot are the D10
+  re-lay's own work, which reads no history inside the territory either. It
+  replaces the planned provenance lifetime (PrepLifecycle §2.3): nothing
+  tracks history coverage inside the territory.
 - Lumberjack wood harvest, residents clearing leaves at doors and farmers are
   not the planner and keep their own rules.

@@ -252,9 +252,11 @@ def _wait_owner_order(
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if started:
-            project = _project_progress(_project_status(probe))
+            projects = _project_progress(_project_status(probe))
+            detail["owner_order_projects"] = projects
+            project = next((p for p in projects if p["blueprint"] == blueprint and p["level"] == 1), None)
             detail["owner_order_project"] = project
-            if project and project["blueprint"] == blueprint and project["level"] == 1:
+            if project is not None:
                 return True
         probe.call("minecraft_wait_ticks", {"ticks": 100})
         if not started:
@@ -789,7 +791,7 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
                     raise RuntimeError(f"births unverified: {proof['reason']}")
                 return {"scenario": probe.report}
             if owner_order:
-                _owner_order_before_restart(probe, detail, artifact)
+                _owner_order_before_restart(probe, detail, artifact, server, server_log_path)
                 before = None
             else:
                 _scenario(probe, detail, ctx, artifact, address, display, timeout, read_container, capture_peer)
@@ -886,12 +888,33 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
             server_log.close()
 
 
-def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
-    body = "\n".join(str(n.get("label", "")) for n in state.get("ui_nodes", [])
+OWNER_ORDER_VERDICTS = (
+    "two_orders_pending", "funded_later_starts", "unfunded_head_fences_autonomy",
+    "two_projects_advance", "all_sites_on_map", "parallel_restart",
+    "queue_limit_named", "cancel_by_index",
+)
+
+
+def _dialog_body(state: dict[str, Any]) -> str:
+    return "\n".join(str(n.get("label", "")) for n in state.get("ui_nodes", [])
                      if str(n.get("id", "")).startswith("dialog/body/"))
-    missing = [line.strip() for line in body.splitlines()
-               if re.search(r"\S.+\s+\d+/\d+\s+—", line)]
-    return {"body": body, "missing": missing, "pending": "Pending: " in body}
+
+
+def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
+    body = _dialog_body(state)
+    orders = []
+    for match in re.finditer(r"(?m)^Pending #(\d+): (.+?) L(\d+) · (.+)$", body):
+        blueprint = PROJECT_LABELS.get(match[2])
+        if blueprint is None:
+            raise RuntimeError(f"unrecognised pending blueprint {match[2]!r}")
+        orders.append({"index": int(match[1]), "blueprint": blueprint,
+                       "level": int(match[3]), "reason": match[4]})
+    count = re.search(r"(?m)^Pending orders: (\d+)/(\d+)$", body)
+    if count is None or int(count[1]) != len(orders) or [
+        order["index"] for order in orders
+    ] != list(range(1, len(orders) + 1)):
+        raise RuntimeError("pending order list does not match its count/indices")
+    return {"body": body, "orders": orders, "projects": _project_progress(state)}
 
 
 def _owner_projects(probe: ProbeSteps, detail: dict[str, Any], key: str, artifact: Path) -> dict[str, Any]:
@@ -899,6 +922,35 @@ def _owner_projects(probe: ProbeSteps, detail: dict[str, Any], key: str, artifac
     observed = _pending_dialog(state)
     detail[key] = observed
     return observed
+
+
+def _owner_check(probe: ProbeSteps, detail: dict[str, Any], name: str, passed: bool) -> None:
+    if name not in OWNER_ORDER_VERDICTS:
+        raise ValueError(f"unknown D8 verdict {name}")
+    _verdict(detail, name, "PASS" if passed else "FAIL", name, "D8 client Construction observations")
+    probe.check(name, passed)
+
+
+def _project_key(project: dict[str, Any]) -> tuple[Any, ...]:
+    return project["blueprint"], project["level"], tuple(project["origin"])
+
+
+def _parallel_advanced(before: list[dict[str, Any]], after: list[dict[str, Any]]) -> bool:
+    earlier = {_project_key(p): p for p in before}
+    advancing = [p for p in after if _project_key(p) in earlier
+                 and p["total"] == earlier[_project_key(p)]["total"]
+                 and p["done"] > earlier[_project_key(p)]["done"]]
+    return (len({_project_key(p) for p in advancing}) >= 2
+            and len({p["builder"] for p in advancing if p["builder"] != "unbound"}) >= 2)
+
+
+def _same_construction(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    old = {_project_key(p): p for p in before["projects"]}
+    new = {_project_key(p): p for p in after["projects"]}
+    return (len(old) >= 2 and old.keys() == new.keys()
+            and all(new[key]["total"] == p["total"] and new[key]["done"] >= p["done"]
+                    and new[key]["builder"] == p["builder"] for key, p in old.items())
+            and before["orders"] == after["orders"])
 
 
 def _founding_storage(probe: ProbeSteps, anchor: tuple[int, int, int]) -> tuple[int, int, int]:
@@ -929,7 +981,10 @@ def _founding_storage(probe: ProbeSteps, anchor: tuple[int, int, int]) -> tuple[
     return min(candidates)[1]
 
 
-def _owner_order_before_restart(probe: ProbeSteps, detail: dict[str, Any], artifact: Path) -> None:
+def _owner_order_before_restart(
+    probe: ProbeSteps, detail: dict[str, Any], artifact: Path,
+    server: subprocess.Popen[Any], log_path: Path,
+) -> None:
     probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     _walk_to(probe, detail, tuple(float(v) for v in VILLAGE_CENTER), "approach")
     deadline = time.monotonic() + 180
@@ -961,28 +1016,107 @@ def _owner_order_before_restart(probe: ProbeSteps, detail: dict[str, Any], artif
     claim = _recent_chat(_send(probe, "settlement claim"), 20)
     detail["claim_chat"] = claim
     probe.check("owner_claimed", bool(claim) and claim[0].startswith("Claimed "))
-    active = _project_progress(_project_status(probe))
-    detail["d5_active_before_order"] = active
-    probe.check("d5_project_active", bool(active))
-    queued = _recent_chat(_send(probe, "settlement build house"), 20)
-    detail["queued_chat"] = queued
-    probe.check("house_queued_busy", bool(queued) and queued[0].startswith("Queued house: busy"))
-    pending = _owner_projects(probe, detail, "pending_before_restart", artifact)
-    probe.check("pending_before_restart", "Pending: House L1" in pending["body"] and "busy" in pending["body"])
-    baseline = _recent_chat(probe.observe(), 20)
-    if os.environ.get("D5_QUEUE_CONTROL") == "no-second-order":
-        refused = _recent_chat(probe.observe(), 20)
-    else:
-        refused = _recent_chat(_send(probe, "settlement build farm"), 20)
-    detail["d5_refusal_chat"] = refused
-    fresh = _new_chat_lines(baseline, refused)
-    probe.check("d5_second_order_refused", "Construction queue is full: house is already pending. Cancel it before another order." in fresh)
-    native_client.capture(probe.client, artifact, "d5-refusal")
-    pending = _owner_projects(probe, detail, "d5_pending_after_refusal", artifact)
-    probe.check("d5_house_still_pending", "Pending: House L1" in pending["body"])
-    active_after = _project_progress(_project_status(probe))
-    detail["d5_active_after_refusal"] = active_after
-    probe.check("d5_active_unchanged", bool(active_after) and active_after["blueprint"] == active["blueprint"] and active_after["level"] == active["level"])
+    probe.fixture("gamerule advance_time false")
+    probe.fixture("time set 18000")
+    probe.call("minecraft_wait_ticks", {"ticks": 40})
+    initial = _owner_projects(probe, detail, "initial_construction", artifact)
+    chest = detail["founding_chest"]
+    clear = [f"item replace block {chest[0]} {chest[1]} {chest[2]} container.{slot} with minecraft:air"
+             for slot in range(27)]
+    if server.stdin is None:
+        raise RuntimeError("server console unavailable for queue fixture")
+    probe.report["fixture_commands"].extend(clear)
+    server.stdin.write(("\n".join(clear) + "\n").encode())
+    server.stdin.flush()
+    probe.call("minecraft_wait_ticks", {"ticks": 40})
+    probe.check("queue_fixture_empty_stock", not _read_storage_container(
+        server, log_path, tuple(chest), min(15.0, probe.remaining())))
+    for blueprint in ("house", "farm"):
+        lines = _recent_chat(_send(probe, f"settlement build {blueprint}"), 20)
+        detail[f"queued_{blueprint}_chat"] = lines
+        probe.check(f"{blueprint}_accepted_pending", bool(lines) and lines[0].startswith(f"Queued {blueprint}: "))
+    pending = _owner_projects(probe, detail, "two_pending", artifact)
+    _owner_check(probe, detail, "two_orders_pending",
+                 [o["blueprint"] for o in pending["orders"]] == ["house", "farm"])
+    _fund_parallel_fixture(probe, detail, server, log_path, initial["projects"])
+    probe.fixture("time set 3000")
+    deadline = time.monotonic() + min(1200.0, probe.remaining(limit=None))
+    initial_keys = {_project_key(p) for p in initial["projects"]}
+    allowed = set(initial_keys)
+    remaining_orders = [(o["blueprint"], o["level"]) for o in pending["orders"][:-1]]
+    detail["autonomy_fence_samples"] = [pending]
+    if not _owner_fence_sample(pending, allowed):
+        _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+    farm_key = None
+    funded = None
+    while time.monotonic() < deadline:
+        current = _owner_projects(probe, detail, "funded_later_status", artifact)
+        detail["autonomy_fence_samples"].append(current)
+        farm_key = _owner_project_admission(current, initial_keys, remaining_orders, "farm")
+        if farm_key is not None:
+            allowed.add(farm_key)
+        if not _owner_fence_sample(current, allowed):
+            _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+        if farm_key is not None:
+            funded = current
+            break
+        probe.call("minecraft_wait_ticks", {"ticks": 100})
+    _owner_check(probe, detail, "funded_later_starts", funded is not None)
+    lines = _recent_chat(_send(probe, "settlement build storage"), 20)
+    detail["storage_order_chat"] = lines
+    probe.check("storage_order_accepted", bool(lines) and (
+        lines[0] == "Started storage construction." or lines[0].startswith("Queued storage: ")))
+    before_storage_keys = {_project_key(p) for p in funded["projects"]}
+    storage_key = None
+    baseline = advanced = None
+    deadline = time.monotonic() + min(1200.0, probe.remaining(limit=None))
+    while time.monotonic() < deadline:
+        current = _owner_projects(probe, detail, "parallel_status", artifact)
+        detail["autonomy_fence_samples"].append(current)
+        if storage_key is None:
+            storage_key = _owner_project_admission(
+                current, before_storage_keys, remaining_orders, "storage")
+            if storage_key is not None:
+                allowed.add(storage_key)
+        if not _owner_fence_sample(current, allowed):
+            _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+        pair = [p for p in current["projects"] if _project_key(p) in (farm_key, storage_key)]
+        if len(pair) == 2:
+            if baseline is None:
+                baseline = pair
+                detail["parallel_before"] = pair
+                detail["ordered_project_keys"] = [farm_key, storage_key]
+            elif _parallel_advanced(baseline, pair):
+                advanced = current
+                break
+        probe.call("minecraft_wait_ticks", {"ticks": 100})
+    _owner_check(probe, detail, "two_projects_advance", advanced is not None)
+    # Keep the two admitted identities fixed: another Farm is not another owner
+    # admission. Every sample must leave capacity for autonomous admission.
+    for _ in range(3):
+        probe.call("minecraft_wait_ticks", {"ticks": 200})
+        current = _owner_projects(probe, detail, "head_wait_status", artifact)
+        detail["autonomy_fence_samples"].append(current)
+        if not _owner_fence_sample(current, allowed):
+            _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+    _owner_check(probe, detail, "unfunded_head_fences_autonomy", True)
+    # Night stops builder work without changing the project set.
+    probe.fixture("time set 18000")
+    probe.call("minecraft_wait_ticks", {"ticks": 40})
+    lines = _recent_chat(_send(probe, "settlement build barracks"), 20)
+    probe.check("restart_second_order_pending", bool(lines) and lines[0].startswith("Queued barracks: "))
+    snapshot = _owner_projects(probe, detail, "parallel_before_restart", artifact)
+    probe.check("restart_has_two_sites_and_two_orders",
+                {p["blueprint"] for p in snapshot["projects"]} >= {"farm", "storage"}
+                and [o["blueprint"] for o in snapshot["orders"]] == ["house", "barracks"])
+    _send(probe, "settlement menu map")
+    map_state = probe.wait(lambda s: (s.get("screen") or {}).get("class") == DIALOG_CLASS
+                           and str((s.get("screen") or {}).get("title", "")).startswith("Map"),
+                           "parallel_map_open", timeout_seconds=30.0)
+    detail["parallel_map"] = map_state
+    native_client.capture(probe.client, artifact, "parallel-map")
+    _owner_check(probe, detail, "all_sites_on_map", _map_has_sites(map_state, snapshot["projects"]))
+    probe.call("minecraft_close_screen", {})
 
 
 def _new_chat_lines(previous: list[str], current: list[str]) -> list[str]:
@@ -993,38 +1127,75 @@ def _new_chat_lines(previous: list[str], current: list[str]) -> list[str]:
     return current[:-overlap] if overlap else []
 
 
-def _owner_order_after_restart(
-    probe: ProbeSteps, detail: dict[str, Any], artifact: Path,
-    server: subprocess.Popen[Any], log_path: Path,
+def _head_waits(state: dict[str, Any]) -> bool:
+    orders = state["orders"]
+    return bool(orders and orders[0]["blueprint"] == "house"
+                and (orders[0]["reason"].startswith("not enough:")
+                     or orders[0]["reason"] == "Construction bed material is unavailable."))
+
+
+def _owner_project_admission(
+    state: dict[str, Any], before_keys: set[tuple[Any, ...]],
+    remaining_orders: list[tuple[str, int]], blueprint: str,
+) -> tuple[Any, ...] | None:
+    """One accepted request is no longer pending and introduced exactly one site."""
+    if [(o["blueprint"], o["level"]) for o in state["orders"]] != remaining_orders:
+        return None
+    added = [p for p in state["projects"] if _project_key(p) not in before_keys]
+    if len(added) != 1 or added[0]["blueprint"] != blueprint or added[0]["level"] != 1:
+        return None
+    return _project_key(added[0])
+
+
+def _owner_fence_sample(state: dict[str, Any], allowed: set[tuple[Any, ...]]) -> bool:
+    return (_head_waits(state) and len(state["projects"]) < 8
+            and all(_project_key(p) in allowed for p in state["projects"]))
+
+
+def _map_has_sites(state: dict[str, Any], projects: list[dict[str, Any]]) -> bool:
+    body = _dialog_body(state)
+    return len(projects) >= 2 and all(
+        any(f"Active site: {label} L{p['level']} · {' '.join(map(str, p['origin']))}" in body
+            for label, blueprint in PROJECT_LABELS.items() if blueprint == p["blueprint"])
+        for p in projects)
+
+
+def _fund_parallel_fixture(
+    probe: ProbeSteps, detail: dict[str, Any], server: subprocess.Popen[Any],
+    log_path: Path, projects: list[dict[str, Any]],
 ) -> None:
-    pending = _owner_projects(probe, detail, "pending_after_restart", artifact)
-    expected_pending = "Pending: House L1"
-    probe.check("pending_survives_restart", expected_pending in pending["body"])
-    previous = _recent_chat(probe.observe(), 20)
+    from collections import Counter
+    from tools import blueprints
+
+    bill: Counter[str] = Counter()
+    for blueprint, level in [("farm", 1), ("storage", 1), *[
+        (p["blueprint"], p["level"]) for p in projects if p["blueprint"] not in STREET_PROJECTS
+    ]]:
+        _, levels = blueprints.load(blueprints.DIR / f"{blueprint}.json")
+        items: Counter[str] = Counter()
+        for _, (name, props) in list(blueprints.diffs(levels))[level - 1]:
+            item, count = blueprints.item_of(name, props)
+            if item:
+                items[item] += count
+        bill.update(blueprints.base_resources(items))
+    probe.check("fixture_incumbents_do_not_need_wool", not bill.get("white_wool"))
+    bill["dirt"] += 256
+    bill["oak_log"] += 128
+    bill["cobblestone"] += 128
+    bill["coal"] += 16
     chest = tuple(detail["founding_chest"])
-    # Exact authored L1 base bill plus bounded dirt for real site preparation.
-    import ast
-    result = subprocess.run(
-        ["python3", "tools/blueprints.py", "materials", "house"],
-        cwd=runtime.REPO_ROOT, text=True, capture_output=True, check=True,
-    )
-    line = next(line for line in result.stdout.splitlines() if "L1:" in line and "base" in line)
-    base = ast.literal_eval(line.split("base", 1)[1].split(";", 1)[0].strip())
-    base["dirt"] = base.get("dirt", 0) + 256
-    slots = _open_chest(probe, chest)
-    free = [slot for slot in range(27) if slot not in slots or
-            slots[slot].get("item_id") in (None, "minecraft:air")]
+    # Real stacks only; no project/admission mutation. Withhold wool for the head.
     commands = []
-    for item, amount in sorted(base.items()):
+    slot = 0
+    for item, amount in sorted(bill.items()):
         while amount > 0:
-            if not free:
-                raise RuntimeError("founding chest lacks space for bounded house fixture")
+            if slot >= 27:
+                raise RuntimeError("parallel material fixture exceeds founding chest capacity")
             count = min(64, amount)
-            slot = free.pop(0)
             commands.append(f"item replace block {chest[0]} {chest[1]} {chest[2]} "
                             f"container.{slot} with minecraft:{item} {count}")
+            slot += 1
             amount -= count
-    probe.call("minecraft_close_screen", {})
     if server.stdin is None:
         raise RuntimeError("server console unavailable for material fixture")
     detail["material_fixture_commands"] = commands
@@ -1032,33 +1203,40 @@ def _owner_order_after_restart(
     server.stdin.write(("\n".join(commands) + "\n").encode())
     server.stdin.flush()
     probe.call("minecraft_wait_ticks", {"ticks": 40})
-    detail["funded_storage"] = _read_storage_container(server, log_path, chest, min(15.0, probe.remaining()))
-    deadline = time.monotonic() + min(2400.0, probe.remaining(limit=None))
-    started = False
-    while time.monotonic() < deadline:
-        chat = _recent_chat(probe.observe(), 20)
-        fresh = _new_chat_lines(previous, chat)
-        if "Started house construction." in fresh:
-            detail["started_chat"] = fresh
-            started = True
-            break
-        previous = chat
-        probe.call("minecraft_wait_ticks", {"ticks": 40})
-    probe.check("fresh_house_started", started)
-    project = _project_progress(_project_status(probe))
-    detail["started_status"] = project
-    probe.check("house_status_after_started", bool(project) and project["blueprint"] == "house" and project["level"] == 1)
-    native_client.capture(probe.client, artifact, "owner-order-started")
-    queued = _recent_chat(_send(probe, "settlement build farm"), 20)
-    detail["second_queued_chat"] = queued
-    probe.check("second_order_queued_busy", bool(queued) and queued[0].startswith("Queued farm: busy"))
-    pending = _owner_projects(probe, detail, "second_pending", artifact)
-    probe.check("second_pending_busy", "Pending: Farm L1" in pending["body"] and "busy" in pending["body"])
-    cancelled = _recent_chat(_send(probe, "settlement build cancel"), 20)
+    stock = _read_storage_container(server, log_path, chest, min(15.0, probe.remaining()))
+    detail["funded_storage"] = stock
+    probe.check("parallel_fixture_stock_visible",
+                all(stock.get(f"minecraft:{item}", 0) >= amount for item, amount in bill.items())
+                and not stock.get("minecraft:white_wool", 0))
+
+
+def _owner_order_after_restart(
+    probe: ProbeSteps, detail: dict[str, Any], artifact: Path,
+    server: subprocess.Popen[Any], log_path: Path,
+) -> None:
+    current = _owner_projects(probe, detail, "parallel_after_restart", artifact)
+    _owner_check(probe, detail, "parallel_restart",
+                 _same_construction(detail["parallel_before_restart"], current))
+    for index in range(len(current["orders"]) + 1, 9):
+        lines = _recent_chat(_send(probe, "settlement build house"), 20)
+        probe.check(f"queue_accepts_order_{index}", bool(lines) and lines[0].startswith("Queued house: "))
+    full = _owner_projects(probe, detail, "full_queue", artifact)
+    refused = _recent_chat(_send(probe, "settlement build farm"), 20)
+    detail["queue_limit_chat"] = refused
+    unchanged = _owner_projects(probe, detail, "full_after_refusal", artifact)
+    _owner_check(probe, detail, "queue_limit_named",
+                 len(full["orders"]) == 8 and full["orders"] == unchanged["orders"]
+                 and bool(refused) and refused[0] == "Construction queue is full: MAX_ORDERS=8.")
+    cancelled = _recent_chat(_send(probe, "settlement build cancel 2"), 20)
     detail["cancel_chat"] = cancelled
-    probe.check("order_cancelled", bool(cancelled) and cancelled[0] == "Cancelled pending construction order.")
-    pending = _owner_projects(probe, detail, "after_cancel", artifact)
-    probe.check("pending_gone_after_cancel", not pending["pending"])
+    remaining = _owner_projects(probe, detail, "after_index_cancel", artifact)
+    expected = [dict(order, index=index) for index, order in enumerate(
+        full["orders"][:1] + full["orders"][2:], 1)]
+    _owner_check(probe, detail, "cancel_by_index",
+                 bool(cancelled) and cancelled[0] == "Cancelled pending construction order."
+                 and remaining["orders"] == expected)
+    probe.check("all_owner_order_behaviours",
+                all(detail["behaviour"].get(name) == "PASS" for name in OWNER_ORDER_VERDICTS))
 
 
 
@@ -1780,29 +1958,31 @@ PROJECT_LABELS = {
 STREET_PROJECTS = frozenset({"road", "lamp", "meadow"})
 
 
-def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:
-    body = "\n".join(
-        node.get("label", "") for node in observed.get("ui_nodes", [])
-        if node.get("id", "").startswith("dialog/body/")
-    )
-    match = re.search(
-        r"(?m)^(.+?) L(\d+) · .+\n(\d+)/(\d+)\n"
-        r"(-?\d+) (-?\d+) (-?\d+)(?:\n|$)", body,
-    )
-    if match is None:
-        return None
-    blueprint = PROJECT_LABELS.get(match[1])
-    if blueprint is None:
-        # An active project the harness cannot name is not "no project".
-        raise RuntimeError(f"unrecognised active project label {match[1]!r}")
-    result = {
-        "blueprint": blueprint, "level": int(match[2]),
-        "done": int(match[3]), "total": int(match[4]),
-        "origin": [int(match[n]) for n in (5, 6, 7)],
-    }
-    if blueprint == "unlabelled":
-        result["label"] = match[1]
-    return result
+def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every project on the live Construction dialog, in display order."""
+    body = _dialog_body(observed)
+    projects = []
+    for match in re.finditer(
+        r"(?m)^(.+?) L(\d+) · ([^\n]+)\n(\d+)/(\d+)\n"
+        r"(-?\d+) (-?\d+) (-?\d+)\nBuilder: ([^\n]+)(?:\n|$)", body,
+    ):
+        blueprint = PROJECT_LABELS.get(match[1])
+        if blueprint is None:
+            raise RuntimeError(f"unrecognised active project label {match[1]!r}")
+        project = {
+            "blueprint": blueprint, "level": int(match[2]), "phase": match[3],
+            "done": int(match[4]), "total": int(match[5]),
+            "origin": [int(match[n]) for n in (6, 7, 8)], "builder": match[9],
+        }
+        if blueprint == "unlabelled":
+            project["label"] = match[1]
+        projects.append(project)
+    count = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
+    if count is None or int(count[1]) != len(projects) or len({
+        _project_key(p) for p in projects
+    }) != len(projects):
+        raise RuntimeError("active project list does not match its count/identities")
+    return projects
 
 
 def _street_layout(probe: ProbeSteps) -> dict[str, Any] | None:
@@ -2057,7 +2237,7 @@ def _planner_status(
     status: dict[str, Any] = {}
     try:
         observed = _project_status(probe, capture)
-        status["project"] = _project_progress(observed)
+        status["projects"] = _project_progress(observed)
         status["project_ui"] = observed.get("ui_nodes", [])
     except Exception as exc:
         status["projects_error"] = str(exc)[:300]
@@ -2077,11 +2257,12 @@ def _wait_project_started(probe: ProbeSteps) -> dict[str, Any]:
     deadline = time.monotonic() + 1300.0
     while time.monotonic() < deadline:
         state = _project_status(probe)
-        project = _project_progress(state)
-        if project is not None and 0 < project["done"] < project["total"]:
-            if project["blueprint"] == "road":
-                project["layout_before"] = _street_layout(probe)
-            return project
+        projects = _project_progress(state)
+        for project in projects:
+            if 0 < project["done"] < project["total"]:
+                if project["blueprint"] == "road":
+                    project["layout_before"] = _street_layout(probe)
+                return project
         probe.call("minecraft_wait_ticks", {"ticks": 100})
     raise RuntimeError("no genuinely in-progress project before restart")
 
@@ -2102,7 +2283,8 @@ def _wait_project_resumed(
     deadline = time.monotonic() + 1300.0
     while time.monotonic() < deadline:
         state = _project_status(probe)
-        after = _project_progress(state)
+        projects = _project_progress(state)
+        after = next((p for p in projects if _project_key(p) == _project_key(before)), None)
         detail["restart_after"] = after
         if after is not None and all(after[key] == before[key] for key in ("blueprint", "level", "origin", "total")):
             probe.check("restart_never_rewinds_project", after["done"] >= before["done"])

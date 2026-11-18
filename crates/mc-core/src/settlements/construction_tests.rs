@@ -556,9 +556,11 @@ fn site_selection_rejects_overlap_steep_paths_and_unloaded() {
         [5, 200, 5],
         [3, 4, 3]
     ));
+    // Village paths are work, not a refusal: an isolated path cell on the lot
+    // is admitted and retired (owner D10, `relayout::plan`).
     let path = block(&state, "minecraft:dirt_path", &[]);
     state.world.set_block(6, 200, 6, path);
-    assert!(!site_free(
+    assert!(site_free(
         &state,
         state.settlements.get(id).unwrap(),
         [5, 200, 5],
@@ -599,6 +601,9 @@ fn site_selection_rejects_overlap_steep_paths_and_unloaded() {
 #[test]
 fn native_site_clearance_refuses_fluid_states_and_paid_or_authored_blocks() {
     let (mut state, id, _) = fixture();
+    // Owner D27 p.4: everything on a village's territory, fields included, is
+    // village property and may be cleared, so a crop is no longer refused here;
+    // the outside-territory protection rule belongs to PrepTerritory.
     for name in [
         "water",
         "bubble_column",
@@ -620,15 +625,6 @@ fn native_site_clearance_refuses_fluid_states_and_paid_or_authored_blocks() {
             "construction must not clear {name}"
         );
     }
-    // A crop inside the territory is a field the lot may cut (owner D27.4).
-    let wheat = block(&state, "minecraft:wheat", &[]);
-    state.world.set_block(6, 201, 6, wheat);
-    assert!(site_free(
-        &state,
-        state.settlements.get(id).unwrap(),
-        [5, 200, 5],
-        [3, 4, 3]
-    ));
 }
 
 #[test]

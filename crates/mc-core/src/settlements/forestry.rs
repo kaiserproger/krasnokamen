@@ -715,19 +715,14 @@ pub(crate) fn drops(
 
 /// Vanilla loot of a surface plant cleared without a tool: short grass drops
 /// wheat seeds one time in eight. Before its first farm a settlement has no
-/// other seed source, and that farm's wheat cells cost seeds. A field cell
-/// (farmland: its dirt; a crop: its produce) rolls its loot too: the plan
-/// cuts fields only inside the territory (owner D27.4), and a field is never
-/// overwritten unpaid. Air and other blocks outside the veneer roll nothing.
+/// other seed source, and that farm's wheat cells cost seeds. Air and blocks
+/// outside the clearable plant veneer roll nothing.
 pub(crate) fn plant_drops(
     state: &TickState,
     at: [i32; 3],
     block: u32,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
-    if block == state.registry.states.air
-        || !(super::construction::clearable(state, block)
-            || super::construction::preparation::field(state, block))
-    {
+    if block == state.registry.states.air || !super::construction::clearable(state, block) {
         return Ok(Vec::new());
     }
     roll(state, at, block)

@@ -49,6 +49,39 @@ cross-dimension transfer or global tick sealing. `/tick freeze` still executes
 inputs, player work and merge/commit while gating simulation stages. Scheduling
 must use the existing admission/gates, not infer inactivity from an empty lane.
 
+## Settlement commit-tail writes and fluid ticks (D10)
+
+Native settlement construction writes blocks in the commit/native tail
+(`settlements::tick`), after the block pipeline's `fluids::schedule` and after
+the early merge fold; their after-images are sealed into `changes.blocks` at the
+publish seal. The contract that follows, and that ownership must keep:
+
+1. **Same-tick scheduling.** The settlements owner schedules fluid ticks for the
+   writes it made in that tick (`fluids::schedule_around` per new
+   `plugin_block_writes` entry) before it returns. Without this a builder that
+   fills a liquid source leaves the flow it fed without a due tick, and a wait
+   for that flow would never end.
+2. **No relocation.** An executor write is never moved into the pre-settlement
+   `block_writes`: that phase has already run and its overlay is folded, so a
+   late append would publish the same position twice.
+3. **World-state waits.** A liquid fill waits on the world, never on a timer:
+   the executor gate refuses to write a flowing or falling lava cell, and the
+   next admission reads the drained state. A waiting gate schedules the orphan
+   flow's neighbourhood **once, when the wait starts** — the fluid queue
+   deduplicates only inside one tick, so a per-tick call would add a fresh tick
+   per neighbour on every deadline. The wait is bounded by the engine's drain
+   (lava 30-tick steps) and is named in the stall cause (`lava_draining`)
+   instead of being reported as a stalled builder.
+4. **Pause and resume.** A fluid drain that changes the structure's block
+   identity inside its bounds trips the ordinary `footprint_changed` pause; the
+   settlement owner re-snapshots and resumes through its existing `recover`
+   path. `recover` does **not** re-run admission: it only refreshes the image and
+   builds the repair stage. Re-proving the liquid supply, mix and bowl before a
+   resume (with the shell inside the interference fence, and without re-planning
+   or re-charging paid cells) belongs to the executor follow-up. There is no
+   fluid-tolerant image and no second recovery path.
+   fluid-tolerant image and no second recovery path.
+
 ## Declaration and resource model
 
 A system declaration has a stable identity, immutable read set, write set,
