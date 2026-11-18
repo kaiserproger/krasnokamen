@@ -89,7 +89,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // adds 41 (the persisted carry debt) and the liquid ledger key adds its
         // scan hooks: 1320. The next extraction candidate is the stall watch
         // plus carry recovery, which belong in a construction_recovery module.
-        ("settlements/construction.rs", 1_320),
+        // D8S3's extracted upgrade guard adds six residual statements/items: 1326.
+        ("settlements/construction.rs", 1_326),
         ("tick.rs", 834),
         ("entities.rs", 924),
     ],

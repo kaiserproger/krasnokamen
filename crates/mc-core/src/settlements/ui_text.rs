@@ -575,8 +575,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Выберите чертёж для заказа.",
         ),
         Key::PendingOrder => (
-            "Pending: {blueprint} L{level} — {reason}",
-            "В очереди: {blueprint} ур. {level} — {reason}",
+            "Pending #{index}: {blueprint} L{level} · {reason}",
+            "В очереди #{index}: {blueprint} ур. {level} · {reason}",
         ),
         Key::PendingBusy => ("busy", "идёт другая стройка"),
         Key::PendingMaterials => ("waiting for materials", "не хватает материалов"),

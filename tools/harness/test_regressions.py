@@ -62,10 +62,10 @@ class RegressionLedgerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, name):
                     regressions._profile_command('civilization-seed-qa', 'new_house')
 
-    def test_owner_order_ref_rejects_d5_diagnostic_overrides(self):
-        with patch.dict('os.environ', {'D5_QUEUE_CONTROL': 'no-second-order'}):
-            with self.assertRaisesRegex(ValueError, 'D5_QUEUE_CONTROL'):
-                regressions._profile_command('village-owner-order-qa', 'all')
+    def test_owner_order_d8_control_runs_the_unchanged_parallel_gate(self):
+        # The control changes MAX_PROJECTS on its own tree/pin, not this argv.
+        command = regressions._profile_command('village-owner-order-qa', 'two_projects_advance')
+        self.assertEqual(command, regressions._profile_command('village-owner-order-qa', 'all'))
 
     def test_building_verdict_is_keyed_by_blueprint(self):
         command = regressions._profile_command('buildings-qa', 'wall.L1_built')
