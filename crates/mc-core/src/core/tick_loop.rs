@@ -529,6 +529,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
         // reopened world sees this tick's domains, then Shutdown (FIFO after
         // it on the journal thread) and exit.
         if channels.shutdown_rx.try_recv().is_ok() {
+            crate::battle::halt_exposure(&mut state);
             start_checkpoint(&mut state, &channels.work_tx, &checkpoint_done_tx, out_tick);
             send_shutdown(&mut state, &channels.work_tx);
             tick_times.owner_post_us = owner_post_start.elapsed().as_micros() as u64;
@@ -729,6 +730,7 @@ pub(super) fn halt_authority(state: &mut TickState, channels: &TickChannels, rea
         "core tick owner halted (fail closed)"
     );
     let _ = channels.halt_reason.set(reason.to_owned());
+    crate::battle::halt_exposure(state);
     let live: Vec<(ConnectionId, crate::boundary::PlayerChange)> = std::iter::once(&*state)
         .chain(state.other_dimensions.values().map(|world| &**world))
         .flat_map(|world| world.connections.all_connections())
