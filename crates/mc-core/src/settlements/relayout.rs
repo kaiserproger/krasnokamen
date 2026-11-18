@@ -240,6 +240,12 @@ fn half(state: &TickState, block: u32) -> Option<&str> {
         .map(|(_, value)| value.as_str())
 }
 
+/// What a detour path cell costs: paving the column's own ground is free, a
+/// cell raised above it stands on material and costs one dirt.
+pub(super) fn path_cost(natural: i32, level: i32) -> u32 {
+    u32::from(level > natural)
+}
+
 fn name(state: &TickState, block: u32) -> Option<&str> {
     state
         .registry
@@ -257,6 +263,8 @@ fn ground_at(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<(i32, u
             let block = state.world.physics_block_at(x, y, z)?;
             let definition = state.registry.blocks.by_id(mc_world::BlockStateId(block))?;
             if definition.has_fluid()
+                // A plant is not the ground: the field under it is.
+                || crop(state, block)
                 || crate::settlements::forestry::tree(state, block)
                 || !state
                     .registry
@@ -450,11 +458,8 @@ fn bridge(
         if let Some(path) = dirt_path(state) {
             // Natural level paves the soil already there; a raised path cell
             // stands on a fill of its own and costs one dirt like any block.
-            let (resource, quantity) = if level == natural {
-                (None, 0)
-            } else {
-                (fill_resource.clone(), 1)
-            };
+            let quantity = path_cost(natural, level);
+            let resource = (quantity != 0).then(|| fill_resource.clone()).flatten();
             cells.push(PlannedCell {
                 at: [x, level, z],
                 state: path,

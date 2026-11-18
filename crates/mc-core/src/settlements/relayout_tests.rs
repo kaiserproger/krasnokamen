@@ -448,3 +448,245 @@ fn item_of(state: &TickState, name: &str) -> u32 {
         .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
         .unwrap()
 }
+
+#[test]
+fn a_detour_manifest_opens_after_a_restart() {
+    let (mut state, id, builder) = fixture();
+    let (front, normal, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    crossing_road(&mut state, front, normal, size, bounds);
+    assert!(super::super::begin(
+        &mut state,
+        super::super::Project {
+            settlement: id,
+            blueprint: "storage".into(),
+            level: 1,
+            origin: lot.origin,
+            rotation: lot.rotation,
+            building: None,
+            structure: String::new(),
+            ordered: true,
+            borrowed_builder: None,
+        },
+        "oak",
+        0
+    ));
+    // A few cells of the detour stand, then the startup check re-reads the
+    // serialized ledger exactly as opening a world does.
+    for _ in 0..4 {
+        attempt(&mut state, id, builder);
+    }
+    crate::plugin_structures::validate(&state).expect("the ledger accepts the detour");
+}
+
+#[test]
+fn a_raised_detour_cell_costs_one_dirt() {
+    // The rule itself: natural ground is pavement (free), a cell raised above
+    // it stands on material and costs one dirt.
+    assert_eq!(path_cost(200, 200), 0, "natural paving is free");
+    assert_eq!(path_cost(200, 201), 1, "one block up costs one dirt");
+    assert_eq!(path_cost(200, 202), 1, "two blocks up costs one dirt");
+    // And the plan never breaks it: every paved cell is paid exactly when it
+    // stands above its column's own ground, and the bill matches the count.
+    let (mut state, id, _) = fixture();
+    let (front, normal, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    crossing_road(&mut state, front, normal, size, bounds);
+    let plan = plan(&state, state.settlements.get(id).unwrap(), bounds)
+        .expect("the lot is admitted")
+        .expect("the lot covers village work");
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let paths: Vec<_> = plan
+        .detour
+        .iter()
+        .filter(|cell| cell.state == dirt_path(&state).unwrap())
+        .collect();
+    assert!(!paths.is_empty(), "the detour is paved");
+    let mut bill = 0;
+    for cell in &paths {
+        let natural = super::super::surface_y(&state, anchor[1], cell.at[0], cell.at[2])
+            .unwrap_or(cell.at[1]);
+        let cost = path_cost(natural, cell.at[1]);
+        assert_eq!(
+            (cell.resource.is_some(), cell.quantity),
+            (cost != 0, cost),
+            "paved cell {:?} costs what its height says",
+            cell.at
+        );
+        if cost != 0 {
+            let filled = plan.detour.iter().any(|fill| {
+                fill.state == state.registry.states.dirt
+                    && fill.at == [cell.at[0], cell.at[1] - 1, cell.at[2]]
+            });
+            assert!(
+                filled || cell.at[1] - natural <= 1,
+                "a cell two or more above its own fill is a block from nothing"
+            );
+        }
+        bill += cell.quantity;
+    }
+    let paid: u32 = plan
+        .detour
+        .iter()
+        .filter(|cell| cell.resource.is_some())
+        .map(|cell| cell.quantity)
+        .sum();
+    assert!(
+        paid >= bill,
+        "the detour pays at least every raised cell it lays"
+    );
+}
+
+#[test]
+fn a_dug_out_path_is_never_rewritten_as_soil() {
+    let (mut state, id, builder) = fixture();
+    let (front, normal, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    crossing_road(&mut state, front, normal, size, bounds);
+    let plan = plan(&state, state.settlements.get(id).unwrap(), bounds)
+        .expect("the lot is admitted")
+        .expect("the lot covers village work");
+    let retired = plan.retired[0].at;
+    assert!(super::super::begin(
+        &mut state,
+        super::super::Project {
+            settlement: id,
+            blueprint: "storage".into(),
+            level: 1,
+            origin: lot.origin,
+            rotation: lot.rotation,
+            building: None,
+            structure: String::new(),
+            ordered: true,
+            borrowed_builder: None,
+        },
+        "oak",
+        0
+    ));
+    // The player digs the path out before its retirement cell is reached: the
+    // footprint changes and the project pauses. Its manifest must not turn the
+    // hole into soil.
+    state.world.set_block(
+        retired[0],
+        retired[1],
+        retired[2],
+        state.registry.states.air,
+    );
+    state.world.fold_overlay();
+    for _ in 0..24 {
+        attempt(&mut state, id, builder);
+    }
+    assert_eq!(
+        state
+            .world
+            .block_at(retired[0], retired[1], retired[2])
+            .unwrap(),
+        state.registry.states.air,
+        "a dug-out path cell stays air, never dirt from nothing"
+    );
+}
+
+#[test]
+fn only_the_retired_cell_is_exempt_from_the_protected_floor() {
+    let (mut state, id, _) = fixture();
+    let (_, _, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    // The column's own surface is a village path, which the plan retires at
+    // 201; its lot floor at 200 is a field cell that belongs to nobody. Only
+    // the retired cell [x, 201, z] may pass, never the whole column.
+    let (x, z) = (bounds.min[0] + 1, bounds.min[2] + 1);
+    let path = path_state(&state);
+    let farmland = block(&state, "minecraft:farmland", &[("moisture", "7")]);
+    state.world.set_block(x, FLOOR, z, farmland);
+    state.world.set_block(x, FLOOR + 1, z, path);
+    for y in FLOOR + 2..=FLOOR + 4 {
+        state.world.set_block(x, y, z, state.registry.states.air);
+    }
+    state.world.fold_overlay();
+    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+        .expect("the path on the column is village work")
+        .expect("the lot covers village work");
+    assert!(
+        planned.retires([x, FLOOR + 1, z]),
+        "the path cell above the floor is the retired one"
+    );
+    assert_eq!(
+        admit(&state, id, lot, size).err(),
+        Some(Reason::ProtectedFloor),
+        "a protected block at another height of the same column stays refused"
+    );
+}
+
+#[test]
+fn a_two_block_flower_crop_is_reaped_once_and_leaves_its_seed() {
+    let (mut state, id, _) = fixture();
+    let (_, _, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    let farmland = block(&state, "minecraft:farmland", &[("moisture", "7")]);
+    let lower = block(
+        &state,
+        "minecraft:pitcher_crop",
+        &[("age", "4"), ("half", "lower")],
+    );
+    let upper = block(
+        &state,
+        "minecraft:pitcher_crop",
+        &[("age", "4"), ("half", "upper")],
+    );
+    let (x, z) = (bounds.min[0] + 2, bounds.min[2] + 2);
+    state.world.set_block(x, FLOOR, z, farmland);
+    state.world.set_block(x, FLOOR + 1, z, lower);
+    state.world.set_block(x, FLOOR + 2, z, upper);
+    for y in FLOOR + 3..=FLOOR + 4 {
+        state.world.set_block(x, y, z, state.registry.states.air);
+    }
+    state.world.fold_overlay();
+    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+        .expect("the field is village work")
+        .expect("the lot covers village work");
+    let reaped: Vec<_> = planned
+        .cleared
+        .iter()
+        .filter(|cell| cell.at[0] == x && cell.at[2] == z)
+        .map(|cell| cell.at)
+        .collect();
+    assert_eq!(
+        reaped,
+        vec![[x, FLOOR + 1, z]],
+        "a two-block plant is one crop: only its lower half is reaped"
+    );
+    let loot = crop_drops(&state, lower);
+    let pods = loot
+        .iter()
+        .filter(|stack| stack.item_id == item_of(&state, "pitcher_pod"))
+        .map(|stack| stack.count)
+        .sum::<i32>();
+    assert_eq!(pods, 1, "one pitcher pod, not two: {loot:?}");
+    assert!(
+        !loot
+            .iter()
+            .any(|stack| stack.item_id == item_of(&state, "pitcher_plant")),
+        "the crop block never drops the flower itself: {loot:?}"
+    );
+}
+
+#[test]
+fn a_mature_torchflower_crop_leaves_seeds_not_the_flower() {
+    let (state, _, _) = fixture();
+    let crop = block(&state, "minecraft:torchflower_crop", &[("age", "1")]);
+    let loot = crop_drops(&state, crop);
+    let seeds = item_of(&state, "torchflower_seeds");
+    assert_eq!(
+        loot.iter()
+            .map(|stack| (stack.item_id, stack.count))
+            .collect::<Vec<_>>(),
+        vec![(seeds, 1)],
+        "the crop block leaves its seed at any age: {loot:?}"
+    );
+    assert!(
+        !loot
+            .iter()
+            .any(|stack| stack.item_id == item_of(&state, "torchflower")),
+        "the flower is the separate block's drop, not the crop's"
+    );
+}
