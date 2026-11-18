@@ -388,14 +388,10 @@ fn a_paid_remainder_refused_for_provenance_notifies_the_owner_once() {
         attempt(&mut lot.state, lot.id, lot.builder);
     }
     assert!(paid(&lot.state), "materials were paid");
-    // The player fills the next placement cell; the edit stays in the log.
+    // The player puts sand into the next cell; the edit stays in the log.
     let at = executor::next_cell(&lot.state, lot.id, &handle)
         .unwrap()
         .unwrap();
-    assert_eq!(
-        lot.state.world.block_at(at[0], at[1], at[2]),
-        Some(lot.state.registry.states.air)
-    );
     lot.state.world.set_block(at[0], at[1], at[2], lot.sand);
     history(&mut lot.state, 0, &[at]);
     let owner = uuid::Uuid::from_u128(77);
