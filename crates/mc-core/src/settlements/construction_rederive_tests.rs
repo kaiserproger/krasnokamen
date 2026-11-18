@@ -916,11 +916,10 @@ fn a_non_empty_container_in_a_placement_cell_still_refuses() {
             "{label}"
         );
         assert_eq!(stock(&s.state, "minecraft:diamond"), 0, "{label}");
-        if after_admission {
-            // A changed empty container is credited as the chest it is.
-            assert_eq!(stock(&s.state, "minecraft:chest"), 1);
-            assert_eq!(total_stock(&s.state), 1);
-        }
+        // Changed and unchanged empty containers both yield their canonical
+        // block drop exactly once under the placement.
+        assert_eq!(stock(&s.state, "minecraft:chest"), 1);
+        assert_eq!(total_stock(&s.state), 1);
     }
 }
 
