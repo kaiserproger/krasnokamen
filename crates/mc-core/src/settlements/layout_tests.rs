@@ -203,6 +203,27 @@ fn lots_line_the_entrance_up_with_the_road_across_the_verge() {
     );
 }
 
+/// Owner 2026-11-17: inside the settlement a step between the road, its verge
+/// and the lot floor is no reason to refuse a lot; the builder levels it.
+#[test]
+fn a_step_between_road_verge_and_floor_does_not_refuse_a_lot_inside_the_territory() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    let stone = state.registry.states.stone;
+    for y in 201..=203 {
+        state.world.set_block(10, y, 16, stone);
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get(id).unwrap();
+    let mut network = Network::walk(&state, record);
+    assert!(network.frontage().contains(&([9, 200, 16], [1, 0])));
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let lot = network
+        .lot(blueprint, [9, 200, 16], [1, 0])
+        .expect("a three-block verge step is levelled by the builder");
+    assert_eq!((lot.origin, lot.rotation), ([11, 200, 13], 1));
+}
+
 /// A player-certified house (no blueprint placement on record) on the lots
 /// east of the avenue, two stretches south of the plaza.
 fn certified_house(state: &mut TickState, id: SettlementId) {

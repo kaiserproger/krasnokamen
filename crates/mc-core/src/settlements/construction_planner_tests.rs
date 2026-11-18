@@ -905,7 +905,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     for x in -16..32 {
         for z in -16..32 {
             if lots(x, z) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
@@ -937,7 +937,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     for x in -16..32 {
         for z in 16..32 {
             if lots(x, z) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.air);
                 }
             }
@@ -1299,7 +1299,7 @@ fn funded_owner_order_without_a_free_site_is_refused_by_its_search_without_debit
     for x in 0..16 {
         for z in 0..16 {
             if (x, z) != (1, 1) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }

@@ -1376,7 +1376,7 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
             if layout::cell(anchor, x, z) == layout::Cell::Lot
                 && !((0..17).contains(&x) && (0..14).contains(&z))
             {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }

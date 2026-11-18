@@ -1456,7 +1456,9 @@ pub(crate) fn upgrade_available(state: &TickState, id: SettlementId, building: B
 /// Lot candidates examined per planning pass, and by an owner order in the
 /// tick that admits it.
 const SITE_ATTEMPTS: u32 = 64;
-/// Ground may differ this much from the bell's elevation and still be a site.
+/// Ground within this band of the bell's elevation is found first; inside the
+/// territory the search then widens to its whole vertical span (owner,
+/// 2026-11-17, lots and terrain).
 pub(super) const SITE_BAND: i32 = 8;
 
 /// Highest standing surface in the band around the bell for one column: a solid
@@ -1481,34 +1483,45 @@ pub(super) fn surface_y_for_lot(
     lot: Option<ScriptWorldBounds>,
     clearance: &mut super::forestry::Clearance,
 ) -> Option<i32> {
-    (anchor_y - SITE_BAND..=anchor_y + SITE_BAND)
+    let territory = clearance.territory(state);
+    let mut standing = |y: i32| {
+        state.world.physics_block_at(x, y, z).is_some_and(|ground| {
+            !super::forestry::tree(state, ground)
+                && state
+                    .registry
+                    .collision_boxes
+                    .get(ground as usize)
+                    .is_some_and(|boxes| !boxes.is_empty())
+        }) && state
+            .world
+            .physics_block_at(x, y + 1, z)
+            .is_some_and(|above| {
+                // A lot column may be covered by water or lava: the support
+                // under it is the pond's own bottom and the fluid cells are
+                // fill targets. Roads, frontage reach and layout pass
+                // `lot: None` and keep refusing a fluid ground.
+                clearable(state, above)
+                    || clearance.clearable(state, [x, y + 1, z], lot)
+                    || (lot.is_some()
+                        && (preparation::liquid::has_fluid(state, above)
+                            || preparation::liquid::contained(state, above).is_some()))
+                    // A field crop does not hide its farmland: a needed lot
+                    // surveys the soil under the plants it reaps (D10).
+                    || crate::settlements::construction::relayout::crop(state, above)
+            })
+    };
+    let band = anchor_y - SITE_BAND..=anchor_y + SITE_BAND;
+    if let Some(y) = band.clone().rev().find(|&y| standing(y)) {
+        return Some(y);
+    }
+    // Owner 2026-11-17: inside the settlement the terrain's height is no reason
+    // to refuse a column: the builder levels, digs or fills it. The territory's
+    // own vertical span replaces the bell-elevation band there.
+    let record = territory?;
+    let reach = i32::try_from(record.radius).unwrap_or(i32::MAX / 2);
+    (record.anchor[1] - reach..=record.anchor[1] + reach)
         .rev()
-        .find(|&y| {
-            state.world.physics_block_at(x, y, z).is_some_and(|ground| {
-                !super::forestry::tree(state, ground)
-                    && state
-                        .registry
-                        .collision_boxes
-                        .get(ground as usize)
-                        .is_some_and(|boxes| !boxes.is_empty())
-            }) && state
-                .world
-                .physics_block_at(x, y + 1, z)
-                .is_some_and(|above| {
-                    // A lot column may be covered by water or lava: the support
-                    // under it is the pond's own bottom and the fluid cells are
-                    // fill targets. Roads, frontage reach and layout pass
-                    // `lot: None` and keep refusing a fluid ground.
-                    clearable(state, above)
-                        || clearance.clearable(state, [x, y + 1, z], lot)
-                        || (lot.is_some()
-                            && (preparation::liquid::has_fluid(state, above)
-                                || preparation::liquid::contained(state, above).is_some()))
-                        // A field crop does not hide its farmland: a needed lot
-                        // surveys the soil under the plants it reaps (D10).
-                        || crate::settlements::construction::relayout::crop(state, above)
-                })
-        })
+        .find(|&y| !band.contains(&y) && record.contains([x, y, z]) && standing(y))
 }
 
 struct FundedSite {

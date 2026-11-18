@@ -886,7 +886,7 @@ impl<'a> Network<'a> {
         if !(ox..ox + sx).all(|x| (oz..oz + sz).all(|z| cell(anchor, x, z) == Cell::Lot)) {
             return None;
         }
-        let Column::Ground { y: verge_y, .. } = self.column(verge[0], verge[1]) else {
+        let Column::Ground { .. } = self.column(verge[0], verge[1]) else {
             return None;
         };
         let Column::Ground { y: floor, .. } = self.column(door[0], door[1]) else {
@@ -899,7 +899,10 @@ impl<'a> Network<'a> {
         }) {
             return None;
         }
-        ((verge_y - front[1]).abs() <= 1 && (floor - verge_y).abs() <= 1).then_some(Lot {
+        // Owner 2026-11-17: inside the settlement the step between road, verge and
+        // floor is no limit; the builder levels the lot (every ground column here
+        // is inside the territory, see `sample`).
+        Some(Lot {
             origin: [ox, floor, oz],
             rotation,
         })

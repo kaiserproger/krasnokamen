@@ -112,6 +112,14 @@ impl Clearance {
         self
     }
 
+    /// The working settlement, when this clearance is bound to one.
+    pub(crate) fn territory<'a>(
+        &self,
+        state: &'a TickState,
+    ) -> Option<&'a super::SettlementRecord> {
+        self.territory.and_then(|id| state.settlements.get(id))
+    }
+
     /// The cell is the working village's property (owner D27.4).
     pub(crate) fn village_property(&self, state: &TickState, at: [i32; 3]) -> bool {
         self.territory

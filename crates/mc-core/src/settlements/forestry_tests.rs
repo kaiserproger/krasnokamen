@@ -499,7 +499,7 @@ fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
             let selected = (project.origin[0]..project.origin[0] + i32::from(size[0])).contains(&x)
                 && (project.origin[2]..project.origin[2] + i32::from(size[2])).contains(&z);
             if !selected && layout::cell(anchor, x, z) == layout::Cell::Lot && (x, z) != (1, 1) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }

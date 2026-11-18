@@ -62,9 +62,11 @@ pub(crate) fn storage_lots(state: &TickState, id: SettlementId) -> Vec<Site> {
         .collect()
 }
 
-/// Solid stone through the terrain-following band on every lot column except
-/// the fixture chest and the given sites: roads, verges and the plaza stay
-/// walkable, so a site exists only where a test leaves one.
+/// Solid stone above the territory's whole vertical span (the bell's elevation
+/// plus its radius, 48) on every lot column except the fixture chest and the
+/// given sites: roads, verges and the plaza stay walkable, so a site exists
+/// only where a test leaves one. Anything lower would be a hill the builder
+/// levels (owner 2026-11-17), no longer a wall.
 pub(crate) fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Site]) {
     let anchor = state.settlements.get(id).unwrap().anchor;
     for x in -16i32..32 {
@@ -73,7 +75,7 @@ pub(crate) fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Si
                 && (x, z) != (1, 1)
                 && !open.iter().any(|site| site.within(x, z))
             {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
@@ -300,7 +302,7 @@ fn owner_order_in_a_cluttered_village_finds_the_clearing_at_once() {
                 && !clearing(x, z)
                 && (x.rem_euclid(3) == 0 || z.rem_euclid(3) == 0)
             {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }

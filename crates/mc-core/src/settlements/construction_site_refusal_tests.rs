@@ -283,6 +283,48 @@ fn outside_territory(
     result
 }
 
+/// Owner 2026-11-17: terrain shape is no reason to refuse a lot inside the
+/// settlement; a founding site outside the territory keeps the fill-depth
+/// retaining-wall limit and the bell-elevation band.
+#[test]
+fn terrain_shape_limits_hold_outside_the_territory_only() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    let origin = [6, 200, 6];
+    let size = [1, 12, 1];
+    let air = state.registry.states.air;
+    let stone = state.registry.states.stone;
+    for (depth, outside) in [
+        (5, Reason::HeightVariance),
+        (12, Reason::SurfaceUnavailable),
+    ] {
+        for y in 186..=200 {
+            state.world.set_block(6, y, 6, air);
+        }
+        state.world.set_block(6, 200 - depth, 6, stone);
+        state.world.fold_overlay();
+        assert_eq!(
+            check(
+                &state,
+                state.settlements.get(id).unwrap(),
+                origin,
+                size,
+                None,
+                &mut Default::default(),
+                None,
+            )
+            .map(|cost| cost.fill),
+            Ok(depth as u32),
+            "inside, a {depth}-block fill column is levelled"
+        );
+        assert_eq!(
+            outside_territory(&mut state, id, origin, size),
+            Err(outside),
+            "outside, a {depth}-block fill column keeps its refusal"
+        );
+    }
+}
+
 /// Overlapping crowns are ambiguous only outside the territory: inside it the
 /// foreign (player) tree is the village's property too (owner D27.4).
 #[test]

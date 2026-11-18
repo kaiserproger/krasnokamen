@@ -406,11 +406,10 @@ fn cheapest_lot_beyond_the_first_cursor_batch_wins_the_completed_sweep() {
     );
 }
 
-/// The window is bounded on both sides: a fill column four blocks deep and the
-/// authored top are the limits; a deeper support or a roof block above them is
-/// refused.
+/// Inside the territory the fill below the floor has no depth limit; the cut
+/// stays bounded by the authored top, and a roof block above it is refused.
 #[test]
-fn the_terrain_window_is_bounded_below_the_floor_and_above_the_roof() {
+fn the_fill_below_the_floor_is_unbounded_and_the_cut_is_bounded_above_the_roof() {
     let (mut state, id, _) = fixture();
     let record = state.settlements.get(id).unwrap().clone();
     let origin = [5, FLOOR, 5];
@@ -440,21 +439,25 @@ fn the_terrain_window_is_bounded_below_the_floor_and_above_the_roof() {
         Ok(4),
         "four fill cells below the floor"
     );
-    // A fifth block is a retaining wall the committee refuses, not a payment.
-    state
-        .world
-        .set_block(6, FLOOR - 4, 6, state.registry.states.air);
-    state
-        .world
-        .set_block(6, FLOOR - 5, 6, state.registry.states.stone);
-    state.world.fold_overlay();
-    assert_eq!(
-        column(&state).err(),
-        Some(site_refusals::Reason::HeightVariance),
-        "a fill column deeper than four blocks is refused"
-    );
+    // Inside the territory no depth is a reason to refuse (owner 2026-11-17):
+    // the builder fills a fifth block and a support far below the eight-block
+    // band around the floor with real material.
+    for (depth, filled) in [(5, 5), (12, 12)] {
+        for y in FLOOR - 14..=FLOOR {
+            state.world.set_block(6, y, 6, state.registry.states.air);
+        }
+        state
+            .world
+            .set_block(6, FLOOR - depth, 6, state.registry.states.stone);
+        state.world.fold_overlay();
+        assert_eq!(
+            column(&state).map(|cost| cost.fill),
+            Ok(filled),
+            "a fill column {depth} blocks deep is levelled inside the territory"
+        );
+    }
     // Restore the flat lot, then bound the cut at the authored top.
-    for y in FLOOR - 9..=FLOOR {
+    for y in FLOOR - 14..=FLOOR {
         state.world.set_block(6, y, 6, state.registry.states.air);
     }
     state

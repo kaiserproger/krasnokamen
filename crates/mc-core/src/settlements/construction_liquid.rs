@@ -28,12 +28,10 @@ impl Liquids {
     }
 }
 
-/// One lot's bounded fluid work. **Invariant:** a lot footprint is at most
-/// 11×11 columns and the fill below the floor is at most `MAX_FILL_DEPTH` rows,
-/// so a real lot never exceeds 11·11·(4+1) = 605 fluid cells; the 1024 cap is a
-/// cheap independent guard, never reachable through `check`. It is kept so a
-/// future wider window cannot make liquid work unbounded, and the named refusal
-/// stays testable on the struct itself.
+/// One lot's bounded fluid work. A lot footprint is at most 11×11 columns, but
+/// inside the territory the fill below the floor has no depth limit (owner
+/// 2026-11-17), so this cap is the real bound on fluid work: a lot beyond it is
+/// refused as `LiquidBeyondBound`.
 pub(crate) const MAX_LIQUID_CELLS: usize = 1024;
 
 /// A block that *contains* fluid, including a waterlogged block: the shell and

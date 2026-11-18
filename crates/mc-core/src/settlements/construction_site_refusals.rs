@@ -513,8 +513,8 @@ fn tree_refusal(state: &TickState, at: [i32; 3], property: bool) -> Reason {
     }
 }
 
-/// Deepest foundation this slice pays for under one column. A deeper column
-/// would be a retaining wall the settlement may not level (committee ruling).
+/// Deepest foundation a site outside the settlement's territory pays for under
+/// one column; a deeper column would be a retaining wall (committee ruling).
 const MAX_FILL_DEPTH: i32 = 4;
 
 /// One-cell shell around the work volume: a fluid there would flow into a cut.
@@ -678,9 +678,10 @@ pub(super) fn check(
             {
                 return Err(Reason::ProtectedObstruction);
             }
-            // A single fill column deeper than this is a retaining wall, not a
-            // foundation: the lot is refused instead of levelled.
-            if floor - height > MAX_FILL_DEPTH {
+            // Outside the territory (a founding site) a single fill column deeper
+            // than this is a retaining wall, not a foundation. Inside it the terrain
+            // is no reason to refuse a lot (owner 2026-11-17): the builder fills it.
+            if floor - height > MAX_FILL_DEPTH && !record.contains([x, floor, z]) {
                 return Err(Reason::HeightVariance);
             }
             // Fill: real blocks between the support and the floor. A fluid cell
