@@ -115,7 +115,11 @@ fn in_other_body(
     )
 }
 
-/// The same test for a stand on the centre of cell `at`.
+/// The same test for a stand on the centre of cell `at`, wherever on it the
+/// builder arrives: the brain stops within WAYPOINT_REACH of the centre, so a
+/// stand beside another site would leave the arrived body inside it and never
+/// in reach (Spain seed 100: a builder 0.25 off its stand's centre stood
+/// 0.05 into a neighbour's site for a whole stall window, worksite_unreached).
 fn standing_in_other_body(
     state: &TickState,
     project: &construction::Project,
@@ -131,7 +135,7 @@ fn standing_in_other_body(
             f64::from(at.y),
             f64::from(at.z) + 0.5,
         ],
-        body.half_width,
+        body.half_width + super::brain::WAYPOINT_REACH,
         body.height,
     )
 }
@@ -295,8 +299,10 @@ fn site_target(
         };
         // A neighbour lot's future body is not a stand: another project would
         // place a wall through this builder. The body, not the feet column, is
-        // what must stay clear (D8 review SOL-4/R3-5).
-        if in_other_body(state, project, stand, body.half_width, body.height) {
+        // what must stay clear (D8 review SOL-4/R3-5), wherever on the stand
+        // the brain lets it arrive.
+        let arrival = body.half_width + super::brain::WAYPOINT_REACH;
+        if in_other_body(state, project, stand, arrival, body.height) {
             continue;
         }
         let placement_distance = (stand[0] - f64::from(next[0]) - 0.5).powi(2)

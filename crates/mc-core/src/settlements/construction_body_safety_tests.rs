@@ -340,6 +340,33 @@ fn a_stand_is_never_chosen_inside_a_neighbour_lot_while_clearing() {
     );
 }
 
+/// Spain seed 100 (pin 3068dfb1b857): a builder stood on its felling stand at
+/// [99.5, 68, 115.25] for a whole stall window. The brain takes arrival within
+/// WAYPOINT_REACH of the stand's centre, which left the body inside the
+/// neighbour's site, so a stand chosen by its centre was never in reach
+/// (worksite_unreached with the builder on its navigation target).
+#[test]
+fn a_stand_is_in_reach_wherever_the_builder_arrives_on_it() {
+    let (mut state, id, slot, handle, _neighbour) = clearing_site();
+    let project = site_project(&state, id, &handle);
+    let base = BlockPos { x: 5, y: 201, z: 5 };
+    let stand = preparation_stand(&state, slot, &project, [5, 201, 5], base)
+        .expect("a stand outside the neighbour lot is still available");
+    let reach = crate::villager::brain::WAYPOINT_REACH - 0.01;
+    for [dx, dz] in [[-reach, 0.0], [reach, 0.0], [0.0, -reach], [0.0, reach]] {
+        let arrived = [
+            f64::from(stand.x) + 0.5 + dx,
+            f64::from(stand.y),
+            f64::from(stand.z) + 0.5 + dz,
+        ];
+        state.entities.set_pos(slot, arrived);
+        assert!(
+            in_reach(&state, slot, &project, [5, 201, 5]),
+            "arrived at {arrived:?} on stand {stand:?}, the builder is not in reach"
+        );
+    }
+}
+
 /// R3-4: the clear branch of `in_reach` refuses a builder whose body stands in
 /// a neighbour's future body, however close the trunk it would fell.
 #[test]
