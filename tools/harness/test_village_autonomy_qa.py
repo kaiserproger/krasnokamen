@@ -928,17 +928,23 @@ class OwnerOrderScenarioTests(unittest.TestCase):
                 regressions._profile_verdict(receipt, "village-owner-order-qa", name)
             self.assertEqual(detail["behaviour"][name], "FAIL")
 
-    def test_before_restart_observes_two_sites_and_keeps_head_pending(self):
-        probe, detail = self.probe(), self.detail()
+    def _run_before_restart(self, detail, *, extra_farm_at=None, initial_count=0, cap_one=False, clock=None):
+        probe = self.probe()
         head = "House L1 · not enough: minecraft:white_wool x3"
         one = "Farm L1 · Building\n1/100\n1 70 2"
         two = "Storage L1 · Building\n2/100\n20 70 2"
-        pending = qa._pending_dialog(construction_screen(orders=(head, "Farm L1 · not enough: dirt")))
-        funded = qa._pending_dialog(construction_screen(one, orders=(head,)))
-        pair = qa._pending_dialog(construction_screen(one, two, orders=(head,)))
-        advanced = qa._pending_dialog(construction_screen(
-            one.replace("1/100", "3/100"), two.replace("2/100", "4/100"), orders=(head,)))
-        snapshot = qa._pending_dialog(construction_screen(one, two, orders=(head, "Barracks L1 · not enough: wool")))
+        incumbents = tuple(f"House L1 · Building\n1/100\n{index * 3} 70 -12"
+                           for index in range(initial_count))
+        def screen(*projects, orders=()):
+            observed = construction_screen(*incumbents, *projects, orders=orders)
+            if cap_one:
+                observed["ui_nodes"][0]["label"] = f"Active projects: {len(projects)}/1"
+            return qa._pending_dialog(observed)
+        pending = screen(orders=(head, "Farm L1 · not enough: dirt"))
+        funded = screen(one, orders=(head,))
+        pair = screen(one, two, orders=(head,))
+        advanced = screen(one.replace("1/100", "3/100"), two.replace("2/100", "4/100"), orders=(head,))
+        snapshot = screen(one, two, orders=(head, "Barracks L1 · not enough: wool"))
         mapping = {"screen": {"class": qa.DIALOG_CLASS, "title": "Map"},
                    "ui_nodes": [{"id": "dialog/body/0", "label":
                      "Active site: Farm L1 · 1 70 2\nActive site: Storage L1 · 20 70 2"}]}
@@ -949,19 +955,78 @@ class OwnerOrderScenarioTests(unittest.TestCase):
             return {"recent_chat": [replies.get(command, f"Queued {command.split()[-1]}: not enough: wool")]}
         def observe(_probe, _detail, key, _artifact):
             state = next(states)
+            if cap_one and key == "parallel_status" and state["projects"][0]["blueprint"] == "storage":
+                clock.return_value = 1201.0
+            if key == extra_farm_at:
+                from copy import deepcopy
+                state = deepcopy(state)
+                extra = qa._project_progress(construction_screen("Farm L1 · Building\n9/100\n40 70 2"))[0]
+                extra["builder"] = "autonomous-builder"
+                state["projects"].append(extra)
             _detail[key] = state
             return state
-        states = iter([qa._pending_dialog(construction_screen()), pending, funded, pair, advanced,
-                       advanced, advanced, advanced, snapshot])
+        states = iter(
+            [screen(), pending, funded, screen(one, orders=(head, "Storage L1 · busy")),
+             screen(two, orders=(head,))] if cap_one else
+            [screen(), pending, funded, pair, advanced, advanced, advanced, advanced, snapshot])
         with (patch.object(qa, "_walk_to"), patch.object(qa, "_founding_storage", return_value=(1, 70, 1)),
               patch.object(qa, "_read_storage_container", return_value={}),
               patch.object(qa, "_send", side_effect=send), patch.object(qa, "_owner_projects", side_effect=observe),
               patch.object(qa, "_fund_parallel_fixture"), patch.object(qa.native_client, "capture")):
             qa._owner_order_before_restart(probe, detail, Path("/receipt"), Mock(), Path("/log"))
+        return snapshot
+
+    def test_before_restart_observes_two_sites_and_keeps_head_pending(self):
+        detail = self.detail()
+        snapshot = self._run_before_restart(detail)
         for name in ("two_orders_pending", "funded_later_starts", "two_projects_advance",
                      "unfunded_head_fences_autonomy", "all_sites_on_map"):
             self.assertEqual(detail["behaviour"][name], "PASS")
         self.assertEqual(detail["parallel_before_restart"]["orders"], snapshot["orders"])
+        self.assertEqual(len(detail["ordered_project_keys"]), 2)
+
+    def test_extra_autonomous_farm_of_ordered_blueprint_fails_fence(self):
+        for stage in ("funded_later_status", "parallel_status", "head_wait_status"):
+            with self.subTest(stage=stage):
+                detail = self.detail()
+                with self.assertRaisesRegex(RuntimeError, "unfunded_head_fences_autonomy"):
+                    self._run_before_restart(detail, extra_farm_at=stage)
+                self.assertEqual(detail["behaviour"]["unfunded_head_fences_autonomy"], "FAIL")
+
+    def test_owner_fence_requires_a_free_project_slot_during_the_interval(self):
+        detail = self.detail()
+        with self.assertRaisesRegex(RuntimeError, "unfunded_head_fences_autonomy"):
+            self._run_before_restart(detail, initial_count=6)
+        self.assertEqual(detail["behaviour"]["unfunded_head_fences_autonomy"], "FAIL")
+
+    def test_cap_one_control_reaches_two_projects_advance_failure(self):
+        detail = self.detail()
+        with patch.object(qa.time, "monotonic", return_value=0.0) as clock:
+            with self.assertRaisesRegex(RuntimeError, "two_projects_advance"):
+                self._run_before_restart(detail, cap_one=True, clock=clock)
+        self.assertEqual(detail["behaviour"]["funded_later_starts"], "PASS")
+        self.assertEqual(detail["behaviour"]["two_projects_advance"], "FAIL")
+
+    def test_owner_admission_requires_queue_transition_and_a_unique_new_site(self):
+        current = qa._pending_dialog(construction_screen(
+            "Farm L1 · Building\n1/100\n1 70 2",
+            orders=("House L1 · not enough: wool", "Farm L1 · busy")))
+        remaining = [("house", 1)]
+        self.assertIsNone(qa._owner_project_admission(current, set(), remaining, "farm"))
+        current["orders"].pop()
+        farm = qa._project_key(current["projects"][0])
+        self.assertEqual(qa._owner_project_admission(current, set(), remaining, "farm"), farm)
+        self.assertIsNone(qa._owner_project_admission(current, {farm}, remaining, "farm"))
+        current["projects"].append(dict(current["projects"][0], origin=[20, 70, 2]))
+        self.assertIsNone(qa._owner_project_admission(current, set(), remaining, "farm"))
+
+    def test_construction_count_parsers_accept_the_controls_declared_limits(self):
+        observed = construction_screen("Farm L1 · Building\n1/100\n1 70 2", orders=("House L1 · busy",))
+        observed["ui_nodes"][0]["label"] = "Active projects: 1/1"
+        observed["ui_nodes"][1]["label"] = "Pending orders: 1/2"
+        parsed = qa._pending_dialog(observed)
+        self.assertEqual(len(parsed["projects"]), 1)
+        self.assertEqual(len(parsed["orders"]), 1)
 
     def test_after_restart_fills_queue_refuses_overflow_and_cancels_second_not_head(self):
         probe, detail = self.probe(), self.detail()

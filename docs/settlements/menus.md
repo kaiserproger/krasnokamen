@@ -117,6 +117,12 @@ the named queue limit and indexed cancellation. Its D8 negative control runs
 the **unchanged gate** against a separate tree with the parallel cap reverted
 to one and its own `pin-release` binary. No environment switch skips commands
 or manufactures a failing observation.
+The gate follows exactly one Farm and one Storage from their accepted requests
+to new active-site identities. Any additional site, including another Farm,
+fails the autonomous-admission fence; each checked sample must retain a free
+slot under the eight-project contract. Count parsing accepts the displayed
+capacity so the cap-one control reaches `two_projects_advance`, rather than
+failing to parse its status screen.
 
 ## Settings
 

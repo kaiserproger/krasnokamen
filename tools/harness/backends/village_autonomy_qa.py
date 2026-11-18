@@ -909,7 +909,7 @@ def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
             raise RuntimeError(f"unrecognised pending blueprint {match[2]!r}")
         orders.append({"index": int(match[1]), "blueprint": blueprint,
                        "level": int(match[3]), "reason": match[4]})
-    count = re.search(r"(?m)^Pending orders: (\d+)/8$", body)
+    count = re.search(r"(?m)^Pending orders: (\d+)/(\d+)$", body)
     if count is None or int(count[1]) != len(orders) or [
         order["index"] for order in orders
     ] != list(range(1, len(orders) + 1)):
@@ -1041,16 +1041,23 @@ def _owner_order_before_restart(
     _fund_parallel_fixture(probe, detail, server, log_path, initial["projects"])
     probe.fixture("time set 3000")
     deadline = time.monotonic() + min(1200.0, probe.remaining(limit=None))
-    funded = None
     initial_keys = {_project_key(p) for p in initial["projects"]}
-    fenced = True
-    detail["autonomy_fence_samples"] = []
+    allowed = set(initial_keys)
+    remaining_orders = [(o["blueprint"], o["level"]) for o in pending["orders"][:-1]]
+    detail["autonomy_fence_samples"] = [pending]
+    if not _owner_fence_sample(pending, allowed):
+        _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+    farm_key = None
+    funded = None
     while time.monotonic() < deadline:
         current = _owner_projects(probe, detail, "funded_later_status", artifact)
         detail["autonomy_fence_samples"].append(current)
-        fenced = fenced and _head_waits(current) and all(
-            _project_key(p) in initial_keys or p["blueprint"] == "farm" for p in current["projects"])
-        if _head_waits(current) and any(p["blueprint"] == "farm" for p in current["projects"]):
+        farm_key = _owner_project_admission(current, initial_keys, remaining_orders, "farm")
+        if farm_key is not None:
+            allowed.add(farm_key)
+        if not _owner_fence_sample(current, allowed):
+            _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+        if farm_key is not None:
             funded = current
             break
         probe.call("minecraft_wait_ticks", {"ticks": 100})
@@ -1059,34 +1066,40 @@ def _owner_order_before_restart(
     detail["storage_order_chat"] = lines
     probe.check("storage_order_accepted", bool(lines) and (
         lines[0] == "Started storage construction." or lines[0].startswith("Queued storage: ")))
+    before_storage_keys = {_project_key(p) for p in funded["projects"]}
+    storage_key = None
     baseline = advanced = None
     deadline = time.monotonic() + min(1200.0, probe.remaining(limit=None))
     while time.monotonic() < deadline:
         current = _owner_projects(probe, detail, "parallel_status", artifact)
         detail["autonomy_fence_samples"].append(current)
-        pair = [p for p in current["projects"] if p["blueprint"] in ("farm", "storage")]
-        if {p["blueprint"] for p in pair} == {"farm", "storage"}:
+        if storage_key is None:
+            storage_key = _owner_project_admission(
+                current, before_storage_keys, remaining_orders, "storage")
+            if storage_key is not None:
+                allowed.add(storage_key)
+        if not _owner_fence_sample(current, allowed):
+            _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+        pair = [p for p in current["projects"] if _project_key(p) in (farm_key, storage_key)]
+        if len(pair) == 2:
             if baseline is None:
                 baseline = pair
                 detail["parallel_before"] = pair
+                detail["ordered_project_keys"] = [farm_key, storage_key]
             elif _parallel_advanced(baseline, pair):
                 advanced = current
                 break
         probe.call("minecraft_wait_ticks", {"ticks": 100})
     _owner_check(probe, detail, "two_projects_advance", advanced is not None)
-    # Observe several planning passes with spare capacity and a waiting head.
-    allowed = initial_keys | {_project_key(p) for p in advanced["projects"]
-                              if p["blueprint"] in ("farm", "storage")}
-    fenced = fenced and all(
-        _head_waits(sample) and all(_project_key(p) in allowed for p in sample["projects"])
-        for sample in detail["autonomy_fence_samples"])
+    # Keep the two admitted identities fixed: another Farm is not another owner
+    # admission. Every sample must leave capacity for autonomous admission.
     for _ in range(3):
         probe.call("minecraft_wait_ticks", {"ticks": 200})
         current = _owner_projects(probe, detail, "head_wait_status", artifact)
         detail["autonomy_fence_samples"].append(current)
-        fenced = fenced and _head_waits(current) and all(
-            _project_key(p) in allowed for p in current["projects"])
-    _owner_check(probe, detail, "unfunded_head_fences_autonomy", fenced)
+        if not _owner_fence_sample(current, allowed):
+            _owner_check(probe, detail, "unfunded_head_fences_autonomy", False)
+    _owner_check(probe, detail, "unfunded_head_fences_autonomy", True)
     # Night stops builder work without changing the project set.
     probe.fixture("time set 18000")
     probe.call("minecraft_wait_ticks", {"ticks": 40})
@@ -1119,6 +1132,24 @@ def _head_waits(state: dict[str, Any]) -> bool:
     return bool(orders and orders[0]["blueprint"] == "house"
                 and (orders[0]["reason"].startswith("not enough:")
                      or orders[0]["reason"] == "Construction bed material is unavailable."))
+
+
+def _owner_project_admission(
+    state: dict[str, Any], before_keys: set[tuple[Any, ...]],
+    remaining_orders: list[tuple[str, int]], blueprint: str,
+) -> tuple[Any, ...] | None:
+    """One accepted request is no longer pending and introduced exactly one site."""
+    if [(o["blueprint"], o["level"]) for o in state["orders"]] != remaining_orders:
+        return None
+    added = [p for p in state["projects"] if _project_key(p) not in before_keys]
+    if len(added) != 1 or added[0]["blueprint"] != blueprint or added[0]["level"] != 1:
+        return None
+    return _project_key(added[0])
+
+
+def _owner_fence_sample(state: dict[str, Any], allowed: set[tuple[Any, ...]]) -> bool:
+    return (_head_waits(state) and len(state["projects"]) < 8
+            and all(_project_key(p) in allowed for p in state["projects"]))
 
 
 def _map_has_sites(state: dict[str, Any], projects: list[dict[str, Any]]) -> bool:
@@ -1946,7 +1977,7 @@ def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
         if blueprint == "unlabelled":
             project["label"] = match[1]
         projects.append(project)
-    count = re.search(r"(?m)^Active projects: (\d+)/8$", body)
+    count = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
     if count is None or int(count[1]) != len(projects) or len({
         _project_key(p) for p in projects
     }) != len(projects):

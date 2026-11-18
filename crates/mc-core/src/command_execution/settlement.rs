@@ -487,10 +487,7 @@ fn build_cancel_command(
     };
     let result = match index {
         None => crate::settlements::construction::cancel_pending(state, id),
-        Some(index) => match index.checked_sub(1) {
-            Some(index) => crate::settlements::construction::cancel_pending_at(state, id, index),
-            None => Err("No pending construction order #0.".to_owned()),
-        },
+        Some(index) => crate::settlements::construction::cancel_pending_at(state, id, index - 1),
     };
     error(
         state,
