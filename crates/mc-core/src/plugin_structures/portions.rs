@@ -209,34 +209,39 @@ pub(super) fn village_drops(
         .world
         .block_at(cell.at[0], cell.at[1], cell.at[2])
         .ok_or(Failure::Unloaded)?;
-    let unchanged = identity(state, block)? == expected;
+    let actual = identity(state, block)?;
+    let unchanged = actual == expected;
+    let owned = inside(state, id, cell.at);
     if unchanged
         && (cell.state == state.registry.states.air
             || block == cell.state
             || block == state.registry.states.air
-            || !inside(state, id, cell.at)
-            || crate::settlements::construction::excavatable(state, block)
-            || crate::settlements::construction::relayout::village_soil(state, block))
+            || !owned)
     {
         return Ok(None);
     }
-    if !inside(state, id, cell.at) && crate::settlements::forestry::vetoed(state, cell.at) {
+    if !owned && crate::settlements::forestry::vetoed(state, cell.at) {
         return Err(Failure::Blocked);
     }
-    if identity(state, block)? == identity(state, cell.state)? {
+    let natural = crate::settlements::construction::excavatable(state, block);
+    let ground = natural
+        || crate::settlements::construction::relayout::village_soil(state, block);
+    if unchanged && ground {
+        return Ok(None);
+    }
+    // A foundation reshapes terrain; it does not mine a second material.
+    if cell.state != state.registry.states.air && ground {
         return Ok(Some(Vec::new()));
     }
-    let definition = state
-        .registry
-        .blocks
-        .by_id(mc_world::BlockStateId(block))
-        .ok_or(Failure::InvalidRequest)?;
-    if cell.state == state.registry.states.air && definition.has_fluid() {
-        return Err(Failure::Blocked);
+    if actual == identity(state, cell.state)? {
+        return Ok(Some(Vec::new()));
     }
     if cell.state == state.registry.states.air
-        && crate::settlements::construction::excavatable(state, block)
+        && crate::settlements::construction::preparation::liquid::fluid_block(state, block)
     {
+        return Err(Failure::Blocked);
+    }
+    if cell.state == state.registry.states.air && natural {
         for (dx, dy, dz) in [
             (1, 0, 0),
             (-1, 0, 0),
@@ -328,7 +333,7 @@ pub(super) fn conserved_drops(
         .by_id(mc_world::BlockStateId(block))
         .ok_or(Failure::InvalidRequest)?;
     if matches!(definition.block.id.path(), "air" | "cave_air" | "void_air")
-        || definition.has_fluid()
+        || crate::settlements::construction::preparation::liquid::fluid_block(state, block)
     {
         return Ok(Vec::new());
     }

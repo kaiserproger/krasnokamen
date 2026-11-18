@@ -368,7 +368,7 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed).rev() {
-            if !seen.insert(cell.at) || free_soil_work(target, cell) {
+            if free_soil_work(target, cell) || !seen.insert(cell.at) {
                 continue;
             }
             let now = target
@@ -477,11 +477,7 @@ fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
 /// ground or destroy a foreign block. Debit and publication share this gate.
 pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bool {
     if cell.resource.is_some()
-        || state
-            .registry
-            .blocks
-            .by_id(mc_world::BlockStateId(current))
-            .is_some_and(|definition| definition.has_fluid())
+        || crate::settlements::construction::preparation::liquid::fluid_block(state, current)
     {
         return false;
     }
@@ -527,9 +523,9 @@ pub(crate) fn reopen_emptied(
         .rev()
         .flat_map(|cells| cells.iter().rev())
     {
-        if !seen.insert(cell.at)
+        if free_soil_work(target, cell)
+            || !seen.insert(cell.at)
             || cell.state == target.registry.states.air
-            || free_soil_work(target, cell)
         {
             continue;
         }
@@ -935,7 +931,36 @@ pub(super) fn debit(
     }
     let mut spilled = Vec::new();
     if !drops.is_empty() || !loot.is_empty() {
-        let images = source_images(state, id);
+        let mut images = source_images(state, id);
+        // A receiver must remain physical after this step, including both
+        // halves of a paired chest. Fetching sources are intentionally unchanged.
+        let modified = |at: [i32; 3]| {
+            cells.iter().any(|cell| {
+                cell.at == at
+                    && state
+                        .world
+                        .block_at(at[0], at[1], at[2])
+                        .is_none_or(|now| {
+                            now != cell.state && !soil_work_noop(state, cell, now)
+                        })
+            })
+        };
+        images.retain(|image| {
+            let inventory::Endpoint::Container { position, .. } = &image.endpoint else {
+                return false;
+            };
+            !modified(*position)
+                && !crate::chests::storage_partner(
+                    &state.registry.blocks,
+                    crate::boundary::BlockPos {
+                        x: position[0],
+                        y: position[1],
+                        z: position[2],
+                    },
+                    &|at| state.world.block_at(at.x, at.y, at.z),
+                )
+                .is_some_and(|(_, at)| modified([at.x, at.y, at.z]))
+        });
         let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
         for stack in drops {
             if !crate::settlements::construction_crafting::add_stack(state, &mut post, &stack) {

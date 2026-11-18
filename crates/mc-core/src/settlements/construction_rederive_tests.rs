@@ -1293,6 +1293,37 @@ fn a_placement_over_one_half_of_a_double_chest_credits_into_another_storage() {
     );
 }
 
+#[test]
+fn free_retirement_does_not_hide_the_paid_floor_from_either_repair_path() {
+    for recover in [false, true] {
+        let mut s = scene(
+            None,
+            &[(5, "minecraft:farmland")],
+            &[],
+            &[
+                (Build, 5, "minecraft:oak_log", Some("minecraft:oak_log")),
+                (Build, 5, "minecraft:dirt", None),
+            ],
+        );
+        assert!(!step(&mut s).unwrap());
+        assert!(step(&mut s).unwrap());
+        assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:oak_log")));
+        set(&mut s, 5, "minecraft:air");
+        let reopened = if recover {
+            executor::recover(&mut s.state, s.id, &s.handle)
+        } else {
+            executor::reopen_emptied(&mut s.state, s.id, &s.handle)
+        };
+        assert_eq!(reopened, Ok(true), "recover={recover}");
+        assert!(step(&mut s).unwrap());
+        assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:oak_log")));
+        assert_eq!(carried(&s, "minecraft:oak_log"), 14);
+        assert_eq!(stock(&s.state, "minecraft:dirt"), 0);
+        assert_eq!(status(&s).consumed[0].quantity, 2);
+        crate::plugin_structures::validate(&s.state).unwrap();
+    }
+}
+
 // --- shared native helpers ---------------------------------------------------
 
 fn journal(state: &mut TickState, writer: &mut JournalWriter) {
