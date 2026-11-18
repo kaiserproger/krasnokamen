@@ -2529,17 +2529,9 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         .stages
         .get(snapshot.current_stage_index as usize)
         .is_some_and(|stage| stage.stage == "clear")
-        && next.is_some_and(|at| {
-            state
-                .world
-                .physics_block_at(at[0], at[1], at[2])
-                .is_some_and(|block| super::forestry::tree_or_sapling(state, block))
-                && state.settlements.get(id).is_some_and(|record| {
-                    !super::forestry::Clearance::prepared()
-                        .within(record)
-                        .clearable(state, at, lot)
-                })
-        });
+        && next
+            .zip(state.settlements.get(id))
+            .is_some_and(|(at, record)| super::forestry::stalls_clearing(state, record, at, lot));
     let cause = if protected {
         "protected_tree_in_preparation"
     } else if let Some(reason) = snapshot.pause_reason.as_deref() {

@@ -597,6 +597,23 @@ pub(crate) fn tree_or_sapling(state: &TickState, block: u32) -> bool {
         })
 }
 
+/// A tree or sapling the working settlement's clear stage may not cut: the
+/// stall watch names it as the cause (owner D27.4 inside the territory).
+pub(crate) fn stalls_clearing(
+    state: &TickState,
+    record: &super::SettlementRecord,
+    at: [i32; 3],
+    lot: Option<mc_script::ScriptWorldBounds>,
+) -> bool {
+    state
+        .world
+        .physics_block_at(at[0], at[1], at[2])
+        .is_some_and(|block| tree_or_sapling(state, block))
+        && !Clearance::prepared()
+            .within(record)
+            .clearable(state, at, lot)
+}
+
 pub(crate) fn lot_bounds(
     state: &TickState,
     project: &super::construction::Project,
