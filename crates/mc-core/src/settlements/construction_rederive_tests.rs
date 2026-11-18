@@ -17,7 +17,12 @@ const Y: i32 = 201;
 const Z: i32 = 4;
 
 /// Planned cell: portion, x (y and z are fixed), target block name, material.
-type Spec = (executor::PortionKind, i32, &'static str, Option<&'static str>);
+type Spec = (
+    executor::PortionKind,
+    i32,
+    &'static str,
+    Option<&'static str>,
+);
 
 struct Scene {
     state: TickState,
@@ -100,7 +105,10 @@ fn scene(dir: Option<&Path>, pre: &[(i32, &str)], roots: &[i32], specs: &[Spec])
         builder: Some((uuid, None)),
         order_seq: None,
     }];
-    for (index, name) in ["minecraft:dirt", "minecraft:oak_log"].into_iter().enumerate() {
+    for (index, name) in ["minecraft:dirt", "minecraft:oak_log"]
+        .into_iter()
+        .enumerate()
+    {
         let id = item(&state, name);
         state
             .entities
@@ -190,7 +198,12 @@ fn image(scene: &Scene) -> serde_json::Value {
     let chests: std::collections::BTreeMap<String, serde_json::Value> = state
         .block_entities
         .iter()
-        .map(|(key, entity)| (format!("{key:?}"), serde_json::to_value(&entity.slots).unwrap()))
+        .map(|(key, entity)| {
+            (
+                format!("{key:?}"),
+                serde_json::to_value(&entity.slots).unwrap(),
+            )
+        })
         .collect();
     let blocks: Vec<Option<u32>> = (0..16).map(|x| state.world.block_at(x, Y, Z)).collect();
     serde_json::json!({
@@ -353,7 +366,11 @@ fn restart_credits_once(edits: [&str; 3], expect: &[(&str, i32)]) {
             let mut restored = restore(&s, dir);
             let mut reached = status(&restored).watermark;
             let published = label == "published";
-            assert_eq!(reached, index as u64 + u64::from(published), "{label} {index}");
+            assert_eq!(
+                reached,
+                index as u64 + u64::from(published),
+                "{label} {index}"
+            );
             while status(&restored).state != ScriptStructureState::Committed {
                 step(&mut restored).unwrap();
                 assert!(status(&restored).watermark > reached);
@@ -364,7 +381,11 @@ fn restart_credits_once(edits: [&str; 3], expect: &[(&str, i32)]) {
                 wanted,
                 "{label} {index}: no second credit, none lost"
             );
-            assert_eq!(carried(&restored, "minecraft:oak_log"), 13, "{label} {index}");
+            assert_eq!(
+                carried(&restored, "minecraft:oak_log"),
+                13,
+                "{label} {index}"
+            );
             crate::plugin_structures::validate(&restored.state).unwrap();
         }
     }
@@ -373,7 +394,11 @@ fn restart_credits_once(edits: [&str; 3], expect: &[(&str, i32)]) {
 #[test]
 fn an_edited_cell_is_credited_once_across_checkpoint_wal_replay_and_restart() {
     restart_credits_once(
-        ["minecraft:oak_planks", "minecraft:dirt", "minecraft:grass_block"],
+        [
+            "minecraft:oak_planks",
+            "minecraft:dirt",
+            "minecraft:grass_block",
+        ],
         &[("minecraft:oak_planks", 1), ("minecraft:dirt", 2)],
     );
 }
@@ -381,7 +406,11 @@ fn an_edited_cell_is_credited_once_across_checkpoint_wal_replay_and_restart() {
 #[test]
 fn an_edited_tool_requiring_cell_is_credited_once_across_checkpoint_wal_replay_and_restart() {
     restart_credits_once(
-        ["minecraft:stone", "minecraft:oak_planks", "minecraft:cobblestone"],
+        [
+            "minecraft:stone",
+            "minecraft:oak_planks",
+            "minecraft:cobblestone",
+        ],
         &[("minecraft:cobblestone", 2), ("minecraft:oak_planks", 1)],
     );
 }
@@ -452,10 +481,8 @@ fn placement_over_a_preexisting_non_terrain_block_credits_one_drop() {
 
 #[test]
 fn placement_over_preexisting_terrain_credits_nothing() {
-    let failures = unchanged_under_placement(&[
-        ("minecraft:dirt", None),
-        ("minecraft:grass_block", None),
-    ]);
+    let failures =
+        unchanged_under_placement(&[("minecraft:dirt", None), ("minecraft:grass_block", None)]);
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
@@ -481,7 +508,11 @@ fn already_air_cells_pay_zero_and_a_cleared_cell_is_never_recredited() {
     step(&mut s).unwrap();
     assert_eq!(total_stock(&s.state), 0, "an air cell pays zero");
     step(&mut s).unwrap();
-    assert_eq!(total_stock(&s.state), 0, "a cell emptied after admission pays zero");
+    assert_eq!(
+        total_stock(&s.state),
+        0,
+        "a cell emptied after admission pays zero"
+    );
     assert_eq!(at(&s, 6), Some(air));
     step(&mut s).unwrap();
     assert_eq!(stock(&s.state, "minecraft:cobblestone"), 1);
@@ -536,7 +567,13 @@ fn a_refused_cell_publishes_nothing_when_the_material_is_missing() {
     let mut s = one_log_cell();
     set(&mut s, 5, "minecraft:oak_planks");
     let slot = s.state.entities.slot_of_uuid(s.builder).unwrap();
-    s.state.entities.row_mut(slot).villager.as_mut().unwrap().inventory[1] = None;
+    s.state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[1] = None;
     expect_refusal(&mut s, Failure::InsufficientItems, "missing material");
     assert_eq!(total_stock(&s.state), 0);
 }
@@ -606,11 +643,18 @@ fn advance_in_order(s: &mut Scene, index: usize) {
         snapshot.stages[snapshot.current_stage_index as usize].stage, stage,
         "step {index}"
     );
-    assert_eq!(executor::next_cell(&s.state, s.id, &s.handle).unwrap(), Some([x, Y, Z]));
+    assert_eq!(
+        executor::next_cell(&s.state, s.id, &s.handle).unwrap(),
+        Some([x, Y, Z])
+    );
     let before: Vec<_> = (4..=12).map(|x| at(s, x)).collect();
     step(s).unwrap();
     for (other, was) in (4..=12).zip(before) {
-        assert_eq!(at(s, other) != was, other == x, "step {index} touched x={other}");
+        assert_eq!(
+            at(s, other) != was,
+            other == x,
+            "step {index} touched x={other}"
+        );
     }
 }
 
@@ -654,7 +698,11 @@ fn preparation_portions_hold_their_order_through_restarts_mid_portion_and_repair
     let config = CoreConfig::new(live.clone(), 42);
     let mut s = ordered_scene(Some(&live));
     assert_eq!(
-        status(&s).stages.iter().map(|stage| stage.stage.as_str()).collect::<Vec<_>>(),
+        status(&s)
+            .stages
+            .iter()
+            .map(|stage| stage.stage.as_str())
+            .collect::<Vec<_>>(),
         ["saplings", "trees", "cut", "fill", "build"]
     );
     s.state.tick_control.set_frozen(true);
@@ -676,15 +724,21 @@ fn preparation_portions_hold_their_order_through_restarts_mid_portion_and_repair
     }
     assert_eq!(status(&s).state, ScriptStructureState::Committed);
     let finished = outcome(&s);
-    assert!(s.state.settlements.get(s.id).unwrap().planted_trees.is_empty());
+    assert!(
+        s.state
+            .settlements
+            .get(s.id)
+            .unwrap()
+            .planted_trees
+            .is_empty()
+    );
     assert_eq!(stock(&s.state, "minecraft:cobblestone"), 2);
     for (index, copy) in &saved {
         let mut restored = restore(&s, copy);
         let snapshot = status(&restored);
         let (stage, _) = ORDER[index + 1];
         assert_eq!(
-            snapshot.stages[snapshot.current_stage_index as usize].stage,
-            stage,
+            snapshot.stages[snapshot.current_stage_index as usize].stage, stage,
             "the cursor survives a restart in the middle of a portion"
         );
         crate::plugin_structures::validate(&restored.state).unwrap();
@@ -700,23 +754,40 @@ fn preparation_portions_hold_their_order_through_restarts_mid_portion_and_repair
     set(&mut s, 12, "minecraft:air");
     assert!(executor::recover(&mut s.state, s.id, &s.handle).unwrap());
     journal(&mut s.state, &mut writer);
-    let names: Vec<_> = status(&s).stages.iter().map(|stage| stage.stage.clone()).collect();
-    assert_eq!(names, ["saplings", "trees", "cut", "fill", "build", "repair"]);
+    let names: Vec<_> = status(&s)
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .collect();
+    assert_eq!(
+        names,
+        ["saplings", "trees", "cut", "fill", "build", "repair"]
+    );
     step(&mut s).unwrap();
     journal(&mut s.state, &mut writer);
     drop(writer);
     let copy = work.path().join("repair");
     copy_world(&live, &copy);
     let mut restored = restore(&s, &copy);
-    let names: Vec<_> = status(&restored).stages.iter().map(|stage| stage.stage.clone()).collect();
-    assert_eq!(names, ["saplings", "trees", "cut", "fill", "build", "repair"]);
+    let names: Vec<_> = status(&restored)
+        .stages
+        .iter()
+        .map(|stage| stage.stage.clone())
+        .collect();
+    assert_eq!(
+        names,
+        ["saplings", "trees", "cut", "fill", "build", "repair"]
+    );
     assert_eq!(status(&restored).current_stage_index, 5);
     crate::plugin_structures::validate(&restored.state).unwrap();
     step(&mut restored).unwrap();
     assert_eq!(status(&restored).state, ScriptStructureState::Committed);
     let dirt = named(&restored.state, "minecraft:dirt");
     let log = named(&restored.state, "minecraft:oak_log");
-    assert_eq!((at(&restored, 10), at(&restored, 12)), (Some(dirt), Some(log)));
+    assert_eq!(
+        (at(&restored, 10), at(&restored, 12)),
+        (Some(dirt), Some(log))
+    );
 }
 
 #[test]
@@ -757,7 +828,11 @@ fn outside_territory_natural_drift_proceeds_but_player_history_blocks_without_a_
     let log = named(&s.state, "minecraft:oak_log");
     step(&mut s).unwrap();
     assert_eq!(at(&s, 5), Some(log));
-    assert_eq!(stock(&s.state, "minecraft:dirt"), 1, "natural drift is cleared and credited");
+    assert_eq!(
+        stock(&s.state, "minecraft:dirt"),
+        1,
+        "natural drift is cleared and credited"
+    );
     assert_eq!(total_stock(&s.state), 1);
 
     let mut s = scene(None, &[], &[], &build);
@@ -768,7 +843,11 @@ fn outside_territory_natural_drift_proceeds_but_player_history_blocks_without_a_
     assert!(s.state.block_log.player_touched([5, Y, Z]));
     let grass = named(&s.state, "minecraft:grass_block");
     for attempt in 0..3 {
-        expect_refusal(&mut s, Failure::Blocked, &format!("player history, retry {attempt}"));
+        expect_refusal(
+            &mut s,
+            Failure::Blocked,
+            &format!("player history, retry {attempt}"),
+        );
         assert_eq!(at(&s, 5), Some(grass));
     }
     // Nothing was stored, so lifting the veto resumes with no recovery step.
@@ -831,7 +910,11 @@ fn a_non_empty_container_in_a_placement_cell_still_refuses() {
         // Emptied, the cell is the village's and the placement proceeds.
         s.state.block_entities.get_mut(&(5, Y, Z)).unwrap().slots[0] = ItemStack::EMPTY;
         step(&mut s).unwrap();
-        assert_eq!(at(&s, 5), Some(named(&s.state, "minecraft:oak_log")), "{label}");
+        assert_eq!(
+            at(&s, 5),
+            Some(named(&s.state, "minecraft:oak_log")),
+            "{label}"
+        );
         assert_eq!(stock(&s.state, "minecraft:diamond"), 0, "{label}");
         if after_admission {
             // A changed empty container is credited as the chest it is.
