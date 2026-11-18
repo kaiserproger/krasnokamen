@@ -8,6 +8,7 @@ use super::Frame;
 use super::combat::Action;
 use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
+use crate::entity_motion::Facing;
 use mc_physics::mth;
 use rustc_hash::FxHashMap;
 use std::fmt;
@@ -131,9 +132,15 @@ impl Probe {
     }
 }
 
-/// The yaw a row's body starts from.
-fn body_yaw(_battle: &BattleState, _slot: EntitySlot, stored: [f32; 3]) -> f32 {
-    stored[0]
+/// The yaw a row's body starts from: the body published this tick (under L
+/// the stored yaw lags it; a row leaving the projection starts from it), else
+/// the stored yaw.
+fn body_yaw(battle: &BattleState, slot: EntitySlot, stored: [f32; 3]) -> f32 {
+    match battle.facing.of(slot) {
+        Some(Facing::Set { body, .. }) => body,
+        Some(Facing::From { yaw }) => yaw,
+        None => stored[0],
+    }
 }
 
 fn bearing(from: [f64; 3], to: [f64; 3]) -> Option<f32> {
