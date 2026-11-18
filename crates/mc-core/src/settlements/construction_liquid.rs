@@ -47,8 +47,8 @@ pub(crate) fn has_fluid(state: &TickState, block: u32) -> bool {
 }
 
 /// An actual fluid block (water/lava state, any level). A waterlogged block or
-/// a bubble column is `contained` but not a fill target: it is a solid the plan
-/// may not overwrite.
+/// bubble column is `contained`, not liquid-fill work; D27 demolition instead
+/// uses its ordinary block-drop authority.
 pub(crate) fn fluid_block(state: &TickState, block: u32) -> bool {
     crate::fluids::fluid_at(&state.registry.states, block).is_some()
 }
@@ -261,7 +261,7 @@ pub(crate) fn proof(
         if state
             .world
             .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
-            .is_some_and(|block| contained(state, block).is_some())
+            .is_some_and(|block| fluid_block(state, block))
         {
             fluid.push(cell.at);
         }

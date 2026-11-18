@@ -369,8 +369,8 @@ fn changed_later_and_mid_portion_cells_rederive_with_exact_credit_without_livelo
     assert_eq!(after.watermark, 6);
     assert_eq!(
         stock(&state, "minecraft:dirt"),
-        1,
-        "credit the live dirt, not the stale stone"
+        0,
+        "foundation terrain is uncredited even after a foreign change"
     );
     assert_eq!(
         stock(&state, "minecraft:cobblestone"),
@@ -398,7 +398,7 @@ fn changed_later_and_mid_portion_cells_rederive_with_exact_credit_without_livelo
         builds::advance(&mut state, id, &handle, builder),
         Err(Failure::Blocked)
     );
-    assert_eq!(stock(&state, "minecraft:dirt"), 1);
+    assert_eq!(stock(&state, "minecraft:dirt"), 0);
     validate(&state).unwrap();
 }
 
@@ -485,7 +485,9 @@ fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
                 );
             } else {
                 assert!(builds::advance(&mut state, id, &handle, builder).unwrap());
-                assert_eq!(stock(&state, "minecraft:dirt"), i32::from(!same_id));
+                // Foundation terrain under a placement is uncredited even after
+                // a foreign change (PrepPortions A-ruling).
+                assert_eq!(stock(&state, "minecraft:dirt"), 0);
                 assert_ne!(state.world.block_at(9, 201, 4), Some(player));
             }
         }

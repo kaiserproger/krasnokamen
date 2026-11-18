@@ -793,6 +793,7 @@ fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
                 rolled_back: false,
             }],
             marks: Vec::new(),
+            coverage: 0,
         }],
     );
 }

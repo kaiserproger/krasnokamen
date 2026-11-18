@@ -226,6 +226,19 @@ pub(crate) fn remove(state: &mut TickState, id: SettlementId) -> bool {
     true
 }
 
+/// The online connection of the settlement's owner, if any.
+pub(crate) fn owner_connection(
+    state: &TickState,
+    id: SettlementId,
+) -> Option<crate::boundary::ConnectionId> {
+    let owner = state.settlements.get(id)?.owner.as_deref()?;
+    let uuid = owner.parse::<uuid::Uuid>().ok()?;
+    state
+        .connections
+        .all_connections()
+        .find(|connection| state.connections.uuid_of(*connection) == Some(uuid))
+}
+
 /// Retain authenticated names for offline presentation without changing the
 /// UUID used for ownership checks. No string copies or dirty idle-tick images.
 pub(crate) fn refresh_owner_names(state: &mut TickState) {

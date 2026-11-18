@@ -481,18 +481,7 @@ fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Optio
 }
 
 fn notify_owner(state: &mut TickState, id: SettlementId, message: String) {
-    let record = state.settlements.get(id).expect("settlement");
-    let owner = record
-        .owner
-        .as_deref()
-        .and_then(|owner| owner.parse::<uuid::Uuid>().ok());
-    let connection = owner.and_then(|uuid| {
-        state
-            .connections
-            .all_connections()
-            .find(|connection| state.connections.uuid_of(*connection) == Some(uuid))
-    });
-    if let Some(connection) = connection {
+    if let Some(connection) = super::owner_connection(state, id) {
         state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
     }
 }
@@ -2365,6 +2354,8 @@ pub(crate) struct BuilderWatch {
     recovery: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
+    /// The progress of the episode whose owner notice was settled (Sol S-2).
+    told: Option<(String, u32, u64)>,
 }
 
 /// The first active project with no bound builder.
@@ -2481,6 +2472,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let Ok(snapshot) = executor::status(state, id, &project.structure) else {
         return false;
     };
+    self::preparation::tell_provenance_wait(state, id, project, &snapshot);
     let progress = (
         project.structure.clone(),
         snapshot.current_stage_index,
@@ -2500,6 +2492,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
             refusal: None,
             recovery: None,
             shunned: Vec::new(),
+            told: None,
         });
     let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
     watch.seen = tick;
@@ -3916,6 +3909,10 @@ mod fortification_tests;
 #[cfg(test)]
 #[path = "construction_growth_tests.rs"]
 mod growth_tests;
+
+#[cfg(test)]
+#[path = "construction_provenance_tests.rs"]
+mod provenance_tests;
 
 #[path = "construction_filler.rs"]
 pub(super) mod filler;

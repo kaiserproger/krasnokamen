@@ -18,6 +18,8 @@ mod features;
 mod ledger;
 #[path = "plugin_structures/portions.rs"]
 mod portions;
+#[path = "plugin_structures/provenance.rs"]
+mod provenance;
 #[path = "plugin_structures/settlement_builds.rs"]
 pub(crate) mod settlement_builds;
 #[path = "plugin_structures/worksites.rs"]
@@ -292,6 +294,9 @@ struct Structure {
     snapshot: ScriptStructureSnapshot,
     blueprint_hash: String,
     image: String,
+    /// Block-log evidence the manifest was surveyed under (PrepLifecycle
+    /// §2.3). Required: a record without it does not decode.
+    admission: provenance::Admission,
     cells: Vec<Vec<Cell>>,
     portions: Vec<portions::Portion>,
 }
@@ -1056,6 +1061,7 @@ fn execute_operation(
                     blueprint_hash: blueprint.content_hash().to_owned(),
                     image,
                     portions: Vec::new(),
+                    admission: provenance::Admission::Plugin,
                     cells,
                 },
             );
@@ -1177,6 +1183,19 @@ fn execute_operation(
                     return Err(Failure::Blocked);
                 }
             }
+            // PrepLifecycle §2.3: outside the village territory a destructive
+            // cell is worked only under covering history or a re-admitted plan.
+            let recertified = match record.settlement {
+                Some(settlement) => provenance::admit(
+                    state,
+                    settlement,
+                    record.admission,
+                    &record.cells,
+                    [index, record.snapshot.completed_work_units as usize],
+                    portion,
+                )?,
+                None => None,
+            };
             let revision = next(ledger.revision)?;
             let sequence = next(record.snapshot.watermark)?;
             let receipt = ScriptStructureReceipt::new(
@@ -1232,6 +1251,9 @@ fn execute_operation(
             if record.settlement.is_none() {
                 record.image =
                     fingerprint(target, bounds, false).expect("preflight native footprint");
+            }
+            if let Some(admission) = recertified {
+                record.admission = admission;
             }
             record.snapshot.state = ScriptStructureState::Running;
             record.snapshot.revision = revision;
@@ -1571,6 +1593,9 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
             // revision and adds one to its watermark; nothing lowers either.
             || record.snapshot.watermark > record.snapshot.revision
             || record.cells.len() != record.snapshot.stages.len()
+            || record.settlement.is_some() == (record.admission == provenance::Admission::Plugin)
+            || matches!(record.admission, provenance::Admission::Captured { since }
+                if since > MAX_SCRIPT_WORLD_TIME)
         {
             return Err(malformed());
         }

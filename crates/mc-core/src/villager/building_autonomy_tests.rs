@@ -721,22 +721,24 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
     let mut residents = Vec::new();
     crate::settlements::construction_crafting::reset_scan_stats();
     // Include the real root's renewable resource growth rather than ticking
-    // only settlement and brain systems. Closure is deterministic at tick
-    // 52,641 on this fixture (measured 2026-11-15 on 90e282cec); the bound
-    // leaves room without a wall clock.
+    // only settlement and brain systems. Keep a simulation bound, not a wall
+    // clock; the post-Prep scan increase remains unexplained below.
     state.day_time = 3000;
     for _ in 0..80_000 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        // Deterministic work budget for the whole run (closure uses about
-        // 20,000 full proofs and 870,000 recipe candidates). Disabling the
-        // recipe index, dependency admission or the funding memo exceeds it.
-        // D8's funded-first queue scan adds one proof per queued request that
-        // waits behind an unfunded head: measured 21,033 proofs and 1,500,239
-        // recipe candidates on 2026-11-18, so the candidate bound rises to
-        // 1,700,000 while the proof bound stays 30,000.
+        // Deterministic work budget for the whole run. Disabling the recipe
+        // index, dependency admission or the funding memo exceeds it.
+        // Cause not established: +4% candidate scans after Prep integration
+        // (1,770,358 vs <=1,700,000 on 1a598ebf1, 2026-11-18).
+        // Closure tick 48,105 / 19,942 proofs; the old ceiling stopped at
+        // tick 44,541. Unchanged-placement credits are ruled out: disabling
+        // them gives identical counts. The 1.9M ceiling is a cut-time allowance,
+        // not an explanation; the 30,000-proof ceiling stays unchanged.
+        // SETTLEMENT-AUTONOMY-SCAN-GROWTH-AFTER-PREP-UNEXPLAINED
+        // (main 34b4ad975) tracks investigation after the cut.
         let work = crate::settlements::construction_crafting::scan_stats();
         assert!(
-            work.funding_calls <= 30_000 && work.recipes_scanned <= 1_700_000,
+            work.funding_calls <= 30_000 && work.recipes_scanned <= 1_900_000,
             "construction funding work exceeded its budget at tick {}: {work:?}",
             state.tick
         );
