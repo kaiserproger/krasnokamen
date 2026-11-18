@@ -24,8 +24,8 @@ pub struct BlockDropRules<'a> {
     pub mining: &'a BlockMiningTable,
 }
 
-/// Stacks dropped when a survival player breaks `state` with `tool`
-/// (empty stack for a bare hand). `seed` drives the loot rolls.
+/// Stacks dropped by a block break with `tool` (empty for a bare hand).
+/// `this_entity` distinguishes an acting player/NPC from environmental removal.
 pub fn block_drops(
     drops: &BlockDropRules<'_>,
     items: &impl BlockDropItems,
@@ -33,6 +33,7 @@ pub fn block_drops(
     tool: &ItemStack,
     seed: u64,
     block_entity: Option<&mc_nbt::Tag>,
+    this_entity: bool,
 ) -> Result<Vec<ItemStack>, crate::CoreError> {
     let Some(block_state) = drops.blocks.by_id(BlockStateId(state)) else {
         return Ok(Vec::new());
@@ -46,7 +47,19 @@ pub fn block_drops(
     {
         return Ok(Vec::new());
     }
-    evaluate(drops, items, state, tool, seed, block_entity, None)
+    evaluate(
+        drops,
+        items,
+        state,
+        tool,
+        seed,
+        block_entity,
+        if this_entity {
+            DropSource::Entity
+        } else {
+            DropSource::Environment
+        },
+    )
 }
 
 pub(crate) fn explosion_drops(
@@ -64,8 +77,14 @@ pub(crate) fn explosion_drops(
         &ItemStack::EMPTY,
         seed,
         block_entity,
-        radius,
+        radius.map_or(DropSource::Environment, DropSource::Explosion),
     )
+}
+
+enum DropSource {
+    Entity,
+    Environment,
+    Explosion(f32),
 }
 
 fn evaluate(
@@ -75,7 +94,7 @@ fn evaluate(
     tool: &ItemStack,
     seed: u64,
     block_entity: Option<&mc_nbt::Tag>,
-    radius: Option<f32>,
+    source: DropSource,
 ) -> Result<Vec<ItemStack>, crate::CoreError> {
     let Some(block_state) = drops.blocks.by_id(BlockStateId(state)) else {
         return Ok(Vec::new());
@@ -93,12 +112,14 @@ fn evaluate(
     if let Some(entity) = block_entity {
         context = context.with_block_entity(entity);
     }
-    if let Some(radius) = radius {
-        context = context.with_explosion(
+    context = match source {
+        DropSource::Entity => context.with_this_entity(),
+        DropSource::Environment => context,
+        DropSource::Explosion(radius) => context.with_explosion(
             mc_data::loot::LootExplosion::try_new(radius)
                 .map_err(|error| crate::CoreError::Storage(error.to_string()))?,
-        );
-    }
+        ),
+    };
     let rolled = match drops.loot.evaluate_block(&context) {
         Ok(Some(rolled)) => rolled,
         Err(error @ mc_data::loot::BlockLootEvaluationError::InvalidBlockEntity { .. }) => {

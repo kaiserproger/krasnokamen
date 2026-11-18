@@ -21,6 +21,7 @@ fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: [10, 202, 10],
             state: block,
             resource: Some("minecraft:white_bed".into()),
@@ -28,7 +29,7 @@ fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
         }],
     )
     .unwrap();
-    state.settlements.get_mut(id).unwrap().project = Some(Project {
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,
         blueprint: "spanish_fortress".into(),
         level: 1,
@@ -37,8 +38,9 @@ fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
         building: None,
         structure,
         ordered: true,
-        borrowed_builder: None,
-    });
+        builder: Some((state.entities.row(builder).uuid, None)),
+        order_seq: None,
+    }];
     (state, id, builder)
 }
 
@@ -61,12 +63,13 @@ fn a_material_stall_reports_the_item_source_route_and_actual_builder_release() {
     let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
     v.navigation_target = Some(crate::boundary::BlockPos { x: 1, y: 201, z: 1 });
     v.navigation_search_failed = true;
-    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "spanish_house".into(),
         level: 1,
         building: None,
-    });
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    }];
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let text = log_stall(&mut state, id);
     assert_eq!(
@@ -100,15 +103,12 @@ fn a_material_stall_reports_the_item_source_route_and_actual_builder_release() {
     // The unpaid bed never started: the failed rotation gives back its slot
     // and keeps the newer pending order, without touching stock.
     let record = state.settlements.get(id).unwrap();
-    assert!(record.project.is_none(), "{text}");
+    assert!(record.projects.is_empty(), "{text}");
     assert!(
         text.contains("recovery=\"preparation_cancelled\""),
         "{text}"
     );
-    assert_eq!(
-        record.pending_order.as_ref().unwrap().blueprint,
-        "spanish_house"
-    );
+    assert_eq!(record.orders[0].blueprint, "spanish_house");
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert!(
         executor::status(&state, id, &project.structure)
@@ -137,8 +137,11 @@ fn a_real_fetch_refusal_is_retained_for_the_stall_report_without_debiting_stock(
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     release_stalled_builder(&mut state, id);
     crate::villager::building::tick(&mut state, id);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
     assert_eq!(
-        state.settlements.builder_watch[&id].refusal,
+        state.settlements.builder_watch[&(id, handle)].refusal,
         Some("executor_capacity")
     );
     let text = log_stall(&mut state, id);
@@ -162,19 +165,24 @@ fn a_real_fetch_refusal_is_retained_for_the_stall_report_without_debiting_stock(
 #[test]
 fn a_repeated_stall_names_the_first_recovery_and_cell_once_without_discarding_work() {
     let (mut state, id, _) = bed_project();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     // Paid work keeps its slot through every failed recovery. A bed cell is
     // normally paid when placed; record the payment in the canonical ledger.
     let mut ledger = state
         .plugins
-        .get_domain("@native-structures", "ledger")
+        .get_domain(
+            "@native-structures",
+            &format!("structure/{}", project.structure),
+        )
         .unwrap()
         .clone();
-    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+    ledger["snapshot"]["consumed"] =
         serde_json::json!([{"resource": "minecraft:white_bed", "quantity": 1}]);
-    state
-        .plugins
-        .set_domain("@native-structures", "ledger", ledger);
+    state.plugins.set_domain(
+        "@native-structures",
+        &format!("structure/{}", project.structure),
+        ledger,
+    );
     let before = executor::status(&state, id, &project.structure).unwrap();
     assert!(!before.consumed.is_empty());
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
@@ -201,9 +209,21 @@ fn a_repeated_stall_names_the_first_recovery_and_cell_once_without_discarding_wo
             "missing {evidence}: {repeated}"
         );
     }
+    // The release clears the binding; the paid project keeps its slot, site and
+    // level through every failed recovery.
+    let kept = state.settlements.get(id).unwrap().projects[0].clone();
+    assert_eq!(kept.builder, None, "the released builder holds no project");
     assert_eq!(
-        state.settlements.get(id).unwrap().project.as_ref().unwrap(),
-        &project
+        (
+            kept.structure.as_str(),
+            kept.blueprint.as_str(),
+            kept.origin
+        ),
+        (
+            project.structure.as_str(),
+            project.blueprint.as_str(),
+            project.origin
+        )
     );
     assert_eq!(
         executor::status(&state, id, &project.structure).unwrap(),
@@ -228,6 +248,7 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Trees,
             at: next,
             state: air,
             resource: None,
@@ -235,7 +256,7 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
         }],
     )
     .unwrap();
-    state.settlements.get_mut(id).unwrap().project = Some(Project {
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,
         blueprint: layout::MEADOW.into(),
         level: 1,
@@ -244,12 +265,13 @@ fn ordinary_grass_clearing_uses_work_reach_not_a_tree_felling_stand() {
         building: None,
         structure: structure.clone(),
         ordered: false,
-        borrowed_builder: None,
-    });
+        builder: None,
+        order_seq: None,
+    }];
     state.entities.set_pos(builder, [5.5, 201.0, 10.5]);
     crate::villager::building::tick(&mut state, id);
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "a grass cell in ordinary work reach must not wait for an unrelated felling stand"
     );
     assert_eq!(
@@ -282,12 +304,14 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
         bounds,
         vec![
             executor::PlannedCell {
+                portion: executor::PortionKind::Saplings,
                 at: next,
                 state: air,
                 resource: None,
                 quantity: 0,
             },
             executor::PlannedCell {
+                portion: executor::PortionKind::Build,
                 at: build,
                 state: log,
                 resource: Some("minecraft:oak_log".into()),
@@ -296,7 +320,7 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
         ],
     )
     .unwrap();
-    state.settlements.get_mut(id).unwrap().project = Some(Project {
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,
         blueprint: "house".into(),
         level: 1,
@@ -305,14 +329,23 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
         building: None,
         structure: structure.clone(),
         ordered: true,
-        borrowed_builder: None,
-    });
+        builder: None,
+        order_seq: None,
+    }];
     // Decay happens after the canonical clear cell was planned. The crown
     // is nineteen blocks above its footing, beyond any perimeter stand.
     state.world.set_block(next[0], next[1], next[2], air);
     state.world.fold_overlay();
     state.entities.set_pos(builder, [8.5, 201.0, 8.5]);
     assert!(executor::clearing(&state, id, &structure));
+    // The planner binds the builder; a direct work call needs the same authority.
+    if let Some(record) = state.settlements.get_mut(id) {
+        super::bind_builder(
+            record,
+            &structure,
+            Some((state.entities.row(builder).uuid, None)),
+        );
+    }
     let mut v = state.entities.row_mut(builder).villager.take().unwrap();
     let target = crate::villager::building::work(
         &mut state,
@@ -332,17 +365,10 @@ fn a_decayed_crown_clear_cell_keeps_its_footing_and_resumes_instead_of_cancellin
     let snapshot = executor::status(&state, id, &structure).unwrap();
     assert_eq!(snapshot.state, ScriptStructureState::Running);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        state.settlements.get(id).unwrap().projects[0].structure,
         structure
     );
-    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert!(state.settlements.get(id).unwrap().orders.is_empty());
     assert_eq!(
         state.world.block_at(build[0], build[1], build[2]),
         Some(air)
@@ -368,15 +394,25 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
         "house".into(),
         bounds,
         bounds,
-        vec![executor::PlannedCell {
-            at: next,
-            state: air,
-            resource: None,
-            quantity: 0,
-        }],
+        vec![
+            executor::PlannedCell {
+                portion: executor::PortionKind::Trees,
+                at: next,
+                state: air,
+                resource: None,
+                quantity: 0,
+            },
+            executor::PlannedCell {
+                portion: executor::PortionKind::Build,
+                at: [9, 220, 8],
+                state: log,
+                resource: Some("minecraft:oak_log".into()),
+                quantity: 1,
+            },
+        ],
     )
     .unwrap();
-    state.settlements.get_mut(id).unwrap().project = Some(Project {
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,
         blueprint: "house".into(),
         level: 1,
@@ -385,22 +421,22 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
         building: None,
         structure: structure.clone(),
         ordered: true,
-        borrowed_builder: None,
-    });
-    // The registered root outgrew its certified sapling: the clear manifest's
-    // tree certification is genuinely stale.
+        builder: Some((state.entities.row(builder).uuid, None)),
+        order_seq: None,
+    }];
+    // Natural decay after certification must not cancel the active order.
     state
         .settlements
         .get_mut(id)
         .unwrap()
         .planted_trees
         .insert(next);
-    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "storage".into(),
         level: 1,
         building: None,
-    });
-    // The planned cell decays after certification, so the executor pauses.
+    }];
     state.world.set_block(next[0], next[1], next[2], air);
     state.world.fold_overlay();
     let uuid = state.entities.row(builder).uuid;
@@ -410,7 +446,7 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
             .unwrap()
             .pause_reason
             .as_deref(),
-        Some("footprint_changed")
+        None
     );
     crate::villager::building::tick(&mut state, id);
     let snapshot = executor::status(&state, id, &structure).unwrap();
@@ -419,16 +455,9 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
         ScriptStructureState::Running,
         "a newer pending order must not take the active order's slot"
     );
-    assert_eq!(snapshot.current_stage_index, 0);
+    assert_eq!(snapshot.current_stage_index, 1);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        state.settlements.get(id).unwrap().projects[0].structure,
         structure
     );
     assert_eq!(
@@ -436,18 +465,18 @@ fn a_newer_pending_order_never_drops_the_active_clear_stage() {
             .settlements
             .get(id)
             .unwrap()
-            .pending_order
-            .as_ref()
+            .orders
+            .first()
             .unwrap()
             .blueprint,
         "storage"
     );
 }
 
-/// A pause in the build stage, even before its first paid cell, is a resume on
-/// the same structure handle: only a clear-stage stale tree certification cancels.
+/// A build-stage material refusal keeps the same handle without a stale pause;
+/// only a preparation-stage stale tree certification can cancel unpaid work.
 #[test]
-fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
+fn a_build_stage_refusal_before_payment_keeps_the_same_handle_without_a_pause() {
     let (mut state, id, builder) = fixture();
     let at = [8, 202, 8];
     let log = super::super::allocator::tests::block(&state, "minecraft:oak_log", &[]);
@@ -461,6 +490,7 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
         bounds,
         bounds,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at,
             state: log,
             resource: Some("minecraft:oak_log".into()),
@@ -468,7 +498,7 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
         }],
     )
     .unwrap();
-    state.settlements.get_mut(id).unwrap().project = Some(Project {
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,
         blueprint: "house".into(),
         level: 1,
@@ -477,10 +507,11 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
         building: None,
         structure: structure.clone(),
         ordered: true,
-        borrowed_builder: None,
-    });
-    // A registered root that is no longer a sapling sits in the build cells, so
-    // only the stage condition prevents a cancel here.
+        builder: Some((state.entities.row(builder).uuid, None)),
+        order_seq: None,
+    }];
+    // A grown registered root in build work must never trigger the
+    // preparation-only N3 cancellation path.
     state
         .settlements
         .get_mut(id)
@@ -490,27 +521,22 @@ fn a_build_stage_pause_before_the_first_paid_cell_resumes_on_the_same_handle() {
     let stone = super::super::allocator::tests::block(&state, "minecraft:stone", &[]);
     state.world.set_block(at[0], at[1], at[2], stone);
     let uuid = state.entities.row(builder).uuid;
-    executor::advance(&mut state, id, &structure, uuid).unwrap();
+    assert_eq!(
+        executor::advance(&mut state, id, &structure, uuid),
+        Err(mc_script::ScriptOperationFailure::InsufficientItems)
+    );
     assert_eq!(
         executor::status(&state, id, &structure)
             .unwrap()
-            .pause_reason
-            .as_deref(),
-        Some("footprint_changed")
+            .pause_reason,
+        None
     );
     crate::villager::building::tick(&mut state, id);
     let snapshot = executor::status(&state, id, &structure).unwrap();
-    assert_eq!(snapshot.state, ScriptStructureState::Running);
+    assert_eq!(snapshot.state, ScriptStructureState::Prepared);
     assert_eq!(snapshot.current_stage_index, 0);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        state.settlements.get(id).unwrap().projects[0].structure,
         structure
     );
     assert!(snapshot.consumed.is_empty());
@@ -539,8 +565,22 @@ fn free_project(
     cells: Vec<executor::PlannedCell>,
 ) -> String {
     let bounds = ScriptWorldBounds::new([2, 201, 2], [14, 201, 14]).unwrap();
+    // Free paving transforms the soil in place: give each free dirt_path cell
+    // real soil to turn into a path (the executor no-ops a paving cell without
+    // it, SR3-2).
+    if let Some(path) = crate::settlements::layout::paved_state(state) {
+        let soil = super::super::allocator::tests::block(state, "minecraft:grass_block", &[]);
+        for cell in &cells {
+            if cell.state == path {
+                state
+                    .world
+                    .set_block(cell.at[0], cell.at[1], cell.at[2], soil);
+            }
+        }
+        state.world.fold_overlay();
+    }
     let structure = executor::prepare(state, id, blueprint.into(), bounds, bounds, cells).unwrap();
-    state.settlements.get_mut(id).unwrap().project = Some(Project {
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
         settlement: id,
         blueprint: blueprint.into(),
         level: 1,
@@ -549,8 +589,9 @@ fn free_project(
         building: None,
         structure: structure.clone(),
         ordered: false,
-        borrowed_builder: None,
-    });
+        builder: None,
+        order_seq: None,
+    }];
     structure
 }
 
@@ -568,6 +609,7 @@ fn an_unpaid_road_that_stops_running_gives_back_the_slot_after_a_failed_rotation
         layout::ROAD,
         [near, far]
             .map(|at| executor::PlannedCell {
+                portion: executor::PortionKind::Build,
                 at,
                 state: path,
                 resource: None,
@@ -586,7 +628,7 @@ fn an_unpaid_road_that_stops_running_gives_back_the_slot_after_a_failed_rotation
     let warnings = stall_with_rotation(&mut state, id);
     let text = warnings.0.lock().unwrap().join("\n");
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "a rotation that still cannot reach the cell must free the slot: {text}"
     );
     assert_eq!(
@@ -618,6 +660,7 @@ fn an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order()
         id,
         layout::PERIMETER,
         vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
             at: far,
             state: cobblestone,
             resource: Some("minecraft:cobblestone".into()),
@@ -637,19 +680,20 @@ fn an_unpaid_project_that_never_starts_gives_back_the_slot_to_the_queued_order()
         .unwrap()
         .inventory[0] = Some(ItemStack::new(item, 1));
     let order = OwnerOrder {
+        seq: 0,
         blueprint: "spanish_house".into(),
         level: 1,
         building: None,
     };
-    state.settlements.get_mut(id).unwrap().pending_order = Some(order.clone());
+    state.settlements.get_mut(id).unwrap().orders = vec![order.clone()];
     let warnings = stall_with_rotation(&mut state, id);
     let text = warnings.0.lock().unwrap().join("\n");
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.project.is_none(),
+        record.projects.is_empty(),
         "a project that never starts must not hold the slot: {text}"
     );
-    assert_eq!(record.pending_order.as_ref(), Some(&order));
+    assert_eq!(record.orders.first(), Some(&order));
     let snapshot = executor::status(&state, id, &structure).unwrap();
     assert_eq!(snapshot.state, ScriptStructureState::Cancelled);
     assert_eq!(snapshot.completed_work_units, 0);

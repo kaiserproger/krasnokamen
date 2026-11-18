@@ -18,8 +18,12 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
     // The same canonical debit must credit clear-cell drops for an upgrade,
     // not only for a new site's preparation.
     project.building = Some(crate::settlements::buildings::BuildingId(1));
-    state.settlements.get_mut(id).unwrap().project = Some(project);
-    let builder = state.entities.row(builder).uuid.to_string();
+    let handle = project.structure.clone();
+    let uuid = state.entities.row(builder).uuid;
+    // The executor only pays for the project's bound builder (P2-5).
+    project.builder = Some((uuid, None));
+    state.settlements.get_mut(id).unwrap().projects = vec![project];
+    let builder = uuid.to_string();
     let before = counts(&state);
     let cells = [super::super::Cell {
         at: root,
@@ -28,12 +32,21 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
         quantity: 0,
     }];
     let block = state.world.block_at(root[0], root[1], root[2]).unwrap();
+    let before_ids = [portions::identity(&state, block).unwrap()];
     let mut expected = before.clone();
     for drop in crate::settlements::forestry::roll(&state, root, block).unwrap() {
         *expected.entry(drop.item_id).or_default() += drop.count;
     }
     assert_eq!(
-        debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &BTreeMap::new(),
+            &cells,
+            &before_ids
+        ),
         Ok(())
     );
     assert_eq!(counts(&state), expected, "upgrade clear drops once");
@@ -57,7 +70,17 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
     crate::settlements::construction::tests::fund(&mut state, "storage", 1);
     crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
-    let builder = state.entities.row(builder).uuid.to_string();
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    let uuid = state.entities.row(builder).uuid;
+    // The executor only pays for the project's bound builder (P2-5).
+    if let Some(record) = state.settlements.get_mut(id) {
+        record.projects[0].builder = Some((uuid, None));
+    }
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    state.settlements.get_mut(id).unwrap().anchor = [0, 201, 0];
+    let builder = uuid.to_string();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let cells = [super::super::Cell {
         at: root,
@@ -72,8 +95,17 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     ] {
         let value = block(&state, name, &[]);
         state.world.set_block(root[0], root[1], root[2], value);
+        let expected = [portions::identity(&state, value).unwrap()];
         assert_eq!(
-            debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+            debit(
+                &mut state,
+                id,
+                &handle,
+                &builder,
+                &BTreeMap::new(),
+                &cells,
+                &expected
+            ),
             Err(Failure::Blocked),
             "{name}"
         );
@@ -89,7 +121,8 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
 fn touching_grove_is_felled_whole_with_exact_drops() {
     use crate::settlements::forestry::tests::{forest, grown_world};
     let (mut state, id, builder, project, _, _) = forest();
-    let builder = state.entities.row(builder).uuid.to_string();
+    let uuid = state.entities.row(builder).uuid;
+    let builder = uuid.to_string();
     grown_world(&mut state, Vec::new(), "birch");
     let left = [0, 201, 0];
     let right = [5, 201, 0];
@@ -140,7 +173,7 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
             *expected.entry(drop.item_id).or_default() += drop.count;
         }
     }
-    state.settlements.get_mut(id).expect("settlement").project = Some(project);
+    let handle = bind_project(&mut state, id, project, uuid);
     // The canonical executor advances one cell per debit and writes after it.
     for cell in &planned {
         let cells = [super::super::Cell {
@@ -149,8 +182,17 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
             resource: cell.resource.clone(),
             quantity: cell.quantity,
         }];
+        let admitted = [admitted_identity(&state, id, cell.at)];
         assert_eq!(
-            debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+            debit(
+                &mut state,
+                id,
+                &handle,
+                &builder,
+                &BTreeMap::new(),
+                &cells,
+                &admitted
+            ),
             Ok(()),
             "one-cell grove debit at {:?}",
             cell.at
@@ -172,6 +214,39 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
             "the grove is gone at {at:?}"
         );
     }
+}
+
+/// Installs `project` as the settlement's only project, bound to `builder`
+/// (the executor pays only for the project's bound builder), and returns the
+/// handle its debits name. The territory shrinks to its anchor: N5/N6 pin the
+/// outside-territory executor, whose tree cells must prove their identity;
+/// inside territory D27 re-derives a changed cell from the live world instead.
+fn bind_project(
+    state: &mut TickState,
+    id: SettlementId,
+    mut project: crate::settlements::construction::Project,
+    builder: uuid::Uuid,
+) -> String {
+    let handle = project.structure.clone();
+    project.builder = Some((builder, None));
+    let record = state.settlements.get_mut(id).expect("settlement");
+    record.projects = vec![project];
+    record.radius = 0;
+    handle
+}
+
+/// The identity admission recorded for an outside-territory cell the world
+/// has not changed since.
+fn admitted_identity(state: &TickState, id: SettlementId, at: [i32; 3]) -> u32 {
+    assert!(
+        !portions::inside(state, id, at),
+        "{at:?} is outside territory"
+    );
+    portions::identity(
+        state,
+        state.world.block_at(at[0], at[1], at[2]).expect("loaded"),
+    )
+    .expect("identity")
 }
 
 /// Tree blocks inside and around the given roots, for the manual manifest.
@@ -206,7 +281,8 @@ fn tree_cells(state: &TickState, around: &[[i32; 3]]) -> Vec<[i32; 3]> {
 fn late_player_log_in_an_admitted_manifest_is_not_felled() {
     use crate::settlements::forestry::tests::forest;
     let (mut state, id, builder, project, root, _) = forest();
-    let builder = state.entities.row(builder).uuid.to_string();
+    let uuid = state.entities.row(builder).uuid;
+    let builder = uuid.to_string();
     let blueprint = crate::settlements::blueprints::get(&state.registry, &project.blueprint)
         .expect("blueprint");
     let size = blueprint
@@ -232,10 +308,12 @@ fn late_player_log_in_an_admitted_manifest_is_not_felled() {
             .by_id(mc_world::BlockStateId(leaves))
             .is_some_and(|block| block.block.id.path().ends_with("_leaves"))
     );
+    let handle = bind_project(&mut state, id, project, uuid);
+    // Admission certified the leaf in this cell.
+    let admitted = [admitted_identity(&state, id, at)];
     // The player breaks that leaf and puts a log in the admitted cell.
     let log = block(&state, "minecraft:oak_log", &[]);
     state.world.set_block(at[0], at[1], at[2], log);
-    state.settlements.get_mut(id).expect("settlement").project = Some(project);
     let cells = [super::super::Cell {
         at,
         state: state.registry.states.air,
@@ -243,7 +321,15 @@ fn late_player_log_in_an_admitted_manifest_is_not_felled() {
         quantity: 0,
     }];
     assert_eq!(
-        debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &BTreeMap::new(),
+            &cells,
+            &admitted
+        ),
         Err(Failure::Blocked),
         "a late player block is not felled"
     );
@@ -313,7 +399,8 @@ fn off_column_trunk_steps_are_refused_before_clearing() {
 fn planted_tree_is_felled_cell_by_cell_to_the_end() {
     use crate::settlements::forestry::tests::{forest, grown_world};
     let (mut state, id, builder, project, _, _) = forest();
-    let builder = state.entities.row(builder).uuid.to_string();
+    let uuid = state.entities.row(builder).uuid;
+    let builder = uuid.to_string();
     grown_world(&mut state, Vec::new(), "birch");
     let root = [0, 201, 0];
     let leaves = crate::settlements::forestry::native_tree_tests::grow(&mut state, root, 5);
@@ -341,7 +428,7 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
             "trunk cell {at:?} is certified"
         );
     }
-    state.settlements.get_mut(id).expect("settlement").project = Some(project);
+    let handle = bind_project(&mut state, id, project, uuid);
     // Manifest order is the executor's own order; the trunk is cleared before
     // the crown, which is exactly the identity hazard this test pins.
     let mut felled = 0;
@@ -352,8 +439,17 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
             resource: cell.resource.clone(),
             quantity: cell.quantity,
         }];
+        let admitted = [admitted_identity(&state, id, cell.at)];
         assert_eq!(
-            debit(&mut state, id, &builder, &BTreeMap::new(), &cells),
+            debit(
+                &mut state,
+                id,
+                &handle,
+                &builder,
+                &BTreeMap::new(),
+                &cells,
+                &admitted
+            ),
             Ok(()),
             "one-cell debit at {:?}",
             cell.at
@@ -384,5 +480,223 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
             .planted_trees
             .contains(&root),
         "the root retires after its column is empty"
+    );
+}
+
+#[test]
+fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
+    let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    let site = ScriptWorldBounds::new(
+        [root[0] - 2, root[1], root[2] - 2],
+        [root[0] + 3, root[1] + 5, root[2] + 3],
+    )
+    .expect("the lot bounds");
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    let dirt = state.registry.states.dirt;
+    let planned = PlannedCell {
+        portion: PortionKind::Build,
+        at: root,
+        state: path,
+        resource: None,
+        quantity: 0,
+    };
+    // A free pavement cell is the soil itself: a player dug it out (air, with
+    // air under it) before the builder reached it.
+    state
+        .world
+        .set_block(root[0], root[1], root[2], state.registry.states.air);
+    state
+        .world
+        .set_block(root[0], root[1] - 1, root[2], state.registry.states.air);
+    state.world.fold_overlay();
+    let handle = prepare(&mut state, id, "storage".into(), site, site, vec![planned])
+        .expect("the pavement project prepares");
+    let uuid = state.entities.row(builder).uuid;
+    bind(&mut state, id, &handle, uuid, site.min);
+    let empty: BTreeMap<String, u64> = BTreeMap::new();
+    let builder = uuid.to_string();
+    assert_eq!(
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        Ok(()),
+        "the debit is not where the dug cell is refused"
+    );
+    advance(&mut state, id, &handle, uuid).expect("the stage advances past the dug cell");
+    assert_eq!(
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(state.registry.states.air),
+        "no block is written into the dug column"
+    );
+    let _ = dirt;
+}
+
+#[test]
+fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
+    let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    let site = ScriptWorldBounds::new(
+        [root[0] - 2, root[1], root[2] - 2],
+        [root[0] + 3, root[1] + 5, root[2] + 3],
+    )
+    .expect("the lot bounds");
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    let planks = block(&state, "minecraft:oak_planks", &[]);
+    let planned = PlannedCell {
+        portion: PortionKind::Build,
+        at: root,
+        state: path,
+        resource: None,
+        quantity: 0,
+    };
+    state.world.set_block(root[0], root[1], root[2], planks);
+    state.world.fold_overlay();
+    let handle = prepare(&mut state, id, "storage".into(), site, site, vec![planned])
+        .expect("the pavement project prepares");
+    let uuid = state.entities.row(builder).uuid;
+    bind(&mut state, id, &handle, uuid, site.min);
+    let builder = uuid.to_string();
+    let empty: BTreeMap<String, u64> = BTreeMap::new();
+    assert_eq!(
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        Ok(())
+    );
+    advance(&mut state, id, &handle, uuid).expect("the stage advances past the foreign cell");
+    assert_eq!(
+        state.world.block_at(root[0], root[1], root[2]),
+        Some(planks),
+        "a foreign block is never overwritten by free paving"
+    );
+}
+
+#[test]
+fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
+    let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    state.registry = Arc::new(
+        crate::registry::CoreRegistry::load(Some(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+        ))
+        .unwrap(),
+    );
+    let site = ScriptWorldBounds::new(
+        [root[0] - 2, root[1], root[2] - 2],
+        [root[0] + 3, root[1] + 5, root[2] + 3],
+    )
+    .expect("the lot bounds");
+    let dirt = state.registry.states.dirt;
+    let planned = PlannedCell {
+        portion: PortionKind::Build,
+        at: root,
+        state: dirt,
+        resource: None,
+        quantity: 0,
+    };
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    state.world.set_block(root[0], root[1], root[2], path);
+    state.world.fold_overlay();
+    let handle = prepare(&mut state, id, "storage".into(), site, site, vec![planned])
+        .expect("the retirement project prepares");
+    let uuid = state.entities.row(builder).uuid;
+    bind(&mut state, id, &handle, uuid, site.min);
+    let builder = uuid.to_string();
+    let empty: BTreeMap<String, u64> = BTreeMap::new();
+    assert_eq!(
+        debit(&mut state, id, &handle, &builder, &empty, &[], &[]),
+        Ok(())
+    );
+    let dirt_item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    let stored_soil = |state: &TickState| -> i32 {
+        state
+            .block_entities
+            .values()
+            .flat_map(|entity| entity.slots.iter())
+            .filter(|stack| stack.item_id == dirt_item && !stack.is_empty())
+            .map(|stack| stack.count)
+            .sum()
+    };
+    let before = stored_soil(&state);
+    assert!(advance(&mut state, id, &handle, uuid).expect("the stage advances"));
+    assert_eq!(
+        stored_soil(&state),
+        before,
+        "free soil work keeps its ground, not a second dirt item"
+    );
+    // The house stood; the player digs the free retirement cell out afterwards.
+    state
+        .world
+        .set_block(root[0], root[1], root[2], state.registry.states.air);
+    state.world.fold_overlay();
+    assert!(
+        !reopen_emptied(&mut state, id, &handle).expect("the certification reads"),
+        "a dug free soil cell has nothing to restore and never reopens the house"
+    );
+}
+
+fn bind(state: &mut TickState, id: SettlementId, handle: &str, uuid: uuid::Uuid, origin: [i32; 3]) {
+    state.settlements.get_mut(id).unwrap().projects =
+        vec![crate::settlements::construction::Project {
+            settlement: id,
+            blueprint: "storage".into(),
+            level: 1,
+            origin,
+            rotation: 0,
+            building: None,
+            structure: handle.to_string(),
+            ordered: true,
+            builder: Some((uuid, None)),
+            order_seq: None,
+        }];
+}
+
+#[test]
+fn a_pending_detour_holds_its_corridor_against_a_neighbour_lot() {
+    let (mut state, id, _builder, _, root, _) = crate::settlements::forestry::tests::forest();
+    let site = ScriptWorldBounds::new(
+        [root[0] - 2, root[1], root[2] - 2],
+        [root[0] + 3, root[1] + 5, root[2] + 3],
+    )
+    .expect("the lot bounds");
+    let path = block(&state, "minecraft:dirt_path", &[]);
+    let detour_at = [root[0] + 8, root[1], root[2]];
+    let bounds = ScriptWorldBounds::new(
+        [site.min[0], site.min[1], site.min[2]],
+        [detour_at[0], site.max[1], site.max[2]],
+    )
+    .expect("the placement bounds cover the detour");
+    let cell = |at: [i32; 3]| PlannedCell {
+        portion: PortionKind::Build,
+        at,
+        state: path,
+        resource: None,
+        quantity: 0,
+    };
+    // A prepares with a detour cell outside its authored site.
+    prepare(
+        &mut state,
+        id,
+        "storage".into(),
+        bounds,
+        site,
+        vec![cell(root), cell(detour_at)],
+    )
+    .expect("A prepares");
+    // B's site would take that detour corridor: the pending detour holds it.
+    let neighbour = ScriptWorldBounds::new(
+        [detour_at[0] - 1, detour_at[1], detour_at[2] - 1],
+        [detour_at[0] + 1, detour_at[1] + 5, detour_at[2] + 1],
+    )
+    .expect("the neighbour bounds");
+    assert_eq!(
+        prepare(
+            &mut state,
+            id,
+            "storage".into(),
+            neighbour,
+            neighbour,
+            vec![cell(detour_at)]
+        ),
+        Err(Failure::Blocked),
+        "an unbuilt detour holds its whole corridor"
     );
 }

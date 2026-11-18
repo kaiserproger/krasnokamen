@@ -645,9 +645,10 @@ fn a_member_with_construction_work_is_refused_without_mutation() {
         building: None,
         structure: "order".into(),
         ordered: true,
-        borrowed_builder: Some((builder_uuid, Profession::Mason)),
+        builder: Some((builder_uuid, Some(Profession::Mason))),
+        order_seq: None,
     };
-    state.settlements.get_mut(source).unwrap().project = Some(order.clone());
+    state.settlements.get_mut(source).unwrap().projects = vec![order.clone()];
     let revision = state.settlements.get(source).unwrap().revision;
     let before = [builder, partner].map(|id| image(&state, uuid_of(&state, id)));
     let mut changes = ChangeSet::default();
@@ -661,13 +662,13 @@ fn a_member_with_construction_work_is_refused_without_mutation() {
     };
     assert_eq!(refused(&mut state, &mut changes), [Some(REFUSAL); 3]);
     // The profession alone (the order released) is still construction work.
-    state.settlements.get_mut(source).unwrap().project = None;
+    state.settlements.get_mut(source).unwrap().projects.clear();
     assert_eq!(refused(&mut state, &mut changes), [Some(REFUSAL); 3]);
-    state.settlements.get_mut(source).unwrap().project = Some(order.clone());
+    state.settlements.get_mut(source).unwrap().projects = vec![order.clone()];
     assert!(changes.entities_removed.is_empty() && changes.entities_spawned.is_empty());
     let record = state.settlements.get(source).unwrap();
     assert_eq!(record.revision, revision);
-    assert_eq!(record.project, Some(order));
+    assert_eq!(record.projects, vec![order]);
     assert!(record.households.contains_key(&family));
     assert!(state.settlements.transit.records.is_empty());
     for (id, before) in [builder, partner].into_iter().zip(before) {

@@ -1,4 +1,6 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, plan_until_project, start};
+use super::tests::{
+    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, start,
+};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use std::sync::{Arc, Mutex};
@@ -41,8 +43,7 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
             .is_some(),
         "the resident must actually claim its bed"
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
-    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_church", 1)]);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     (state, id)
 }
 
@@ -74,8 +75,22 @@ fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
+    // One house's worth of stock, doubled so a second lot's foundation can be
+    // paid: the later church is still refused by the joint proof, so the
+    // earlier house keeps its slot (D8).
+    stock_buildings(&mut state, &[("spanish_house", 1)]);
+    for stack in state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .filter(|stack| stack.count > 0)
+    {
+        stack.count = (stack.count * 2).min(64);
+    }
     plan_until_project(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "spanish_house");
     assert!(!project.ordered);
     // Keep the earlier autonomous house untouched across later order passes.
@@ -87,22 +102,19 @@ fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_ord
     );
     for _ in 0..40 {
         crate::tick::run_tick(&mut state, &[]);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
     let record = state.settlements.get(id).unwrap();
-    let structure = record.project.as_ref().unwrap().structure.clone();
+    let structure = record.projects[0].structure.clone();
     for _ in 0..80 {
         crate::tick::run_tick(&mut state, &[]);
     }
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project.as_ref().unwrap().structure, structure);
-    assert_eq!(record.project.as_ref().unwrap().blueprint, "spanish_house");
-    assert_eq!(
-        record.pending_order.as_ref().unwrap().blueprint,
-        "spanish_church"
-    );
+    assert_eq!(record.projects[0].structure, structure);
+    assert_eq!(record.projects[0].blueprint, "spanish_house");
+    assert_eq!(record.orders[0].blueprint, "spanish_church");
 }
 
 #[test]
@@ -122,36 +134,27 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
     state.day_time = 0;
     for _ in 0..256 {
         crate::tick::run_tick(&mut state, &[]);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
-    let record = state.settlements.get(id).unwrap();
-    let project = record
-        .project
-        .as_ref()
-        .expect("the queued funded order starts");
+    let record = &state.settlements.get(id).unwrap();
+    let project = &record.projects[0];
     assert_eq!(project.blueprint, "spanish_fortress");
     assert!(project.ordered);
-    assert!(record.pending_order.is_none());
+    assert!(record.orders.is_empty());
 }
 
 #[test]
 fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
     let (mut state, id) = housing_fixture(true);
+    stock_buildings(&mut state, &[("spanish_church", 1)]);
     assert_eq!(
         request_build(&mut state, id, "spanish_church").unwrap(),
         OrderOutcome::Started
     );
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "spanish_church"
     );
 }
@@ -207,14 +210,7 @@ fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
     let (mut state, id) = house_without_site();
     plan_until_project(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "farm"
     );
 }
@@ -231,20 +227,21 @@ fn a_house_without_a_site_does_not_hold_a_direct_farm_order() {
 #[test]
 fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
     let (mut state, id) = house_without_site();
-    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "farm".into(),
         level: 1,
         building: None,
-    });
+    }];
     for _ in 0..256 {
         assert!(plan_order(&mut state, id));
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project.as_ref().unwrap().blueprint, "farm");
-    assert!(record.pending_order.is_none());
+    assert_eq!(record.projects[0].blueprint, "farm");
+    assert!(record.orders.is_empty());
 }
 
 fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
@@ -273,6 +270,14 @@ fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
 fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
     for level in 1..=2 {
         let (mut state, id, builder) = fixture();
+        // Autonomous upgrades bypass fund(level > 1), but still need real
+        // canonical destruction loot for the standing house's replaced cells.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
         open_plan(&mut state);
         fund(&mut state, "spanish_house", 1);
         start(&mut state, id, "spanish_house", 1, None);
@@ -336,7 +341,7 @@ fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
         );
         let stock = state.block_entities[&(1, 201, 1)].slots.clone();
         plan(&mut state, id);
-        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+        let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, "spanish_house");
         assert_eq!(project.building, Some(house));
         assert_eq!(project.level, level + 1);
@@ -437,7 +442,7 @@ fn protected_preparation() -> (
     super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
     fund(&mut state, "storage", 1);
     start(&mut state, id, "storage", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert!(executor::clearing(&state, id, &project.structure));
     state
         .settlements
@@ -497,10 +502,10 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
     let warnings = stall_preparation(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.project.is_none(),
+        record.projects.is_empty(),
         "a permanently protected tree must not retain the project slot"
     );
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "storage");
+    assert_eq!(record.orders[0].blueprint, "storage");
     assert_eq!(
         executor::status(&state, id, &project.structure)
             .unwrap()
@@ -535,17 +540,16 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
         .unwrap();
     retain_player_edit(&mut state, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
-    // using the canonical persisted ledger image, without changing its stage.
-    let mut ledger = state
+    // using the canonical persisted structure record, without changing its stage.
+    let key = format!("structure/{}", project.structure);
+    let mut record = state
         .plugins
-        .get_domain("@native-structures", "ledger")
+        .get_domain("@native-structures", &key)
         .unwrap()
         .clone();
-    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+    record["snapshot"]["consumed"] =
         serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
-    state
-        .plugins
-        .set_domain("@native-structures", "ledger", ledger);
+    state.plugins.set_domain("@native-structures", &key, record);
     let before = executor::status(&state, id, &project.structure).unwrap();
     assert!(!before.consumed.is_empty());
     assert!(executor::clearing(&state, id, &project.structure));
@@ -553,11 +557,8 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let warnings = stall_preparation(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(
-        record.project.as_ref().unwrap().structure,
-        project.structure
-    );
-    assert!(record.pending_order.is_none());
+    assert_eq!(record.projects[0].structure, project.structure);
+    assert!(record.orders.is_empty());
     let after = executor::status(&state, id, &project.structure).unwrap();
     assert_ne!(after.state, ScriptStructureState::Cancelled);
     assert_eq!(after.consumed, before.consumed);
@@ -644,7 +645,7 @@ fn planted_sapling_before_admission(corridor: bool) {
         "grown managed tree remains protected"
     );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 #[test]
@@ -684,7 +685,8 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
                 building: None,
                 structure: String::new(),
                 ordered: true,
-                borrowed_builder: None,
+                builder: None,
+                order_seq: None,
             };
             let (bounds, _) =
                 planned_cells(&state, &project, "oak", &mut Default::default()).ok()?;
@@ -809,7 +811,8 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
+        order_seq: None,
     };
     let root = [
         lot.origin[0] + i32::from(size[0]) / 2,
@@ -878,7 +881,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let original = state.world.block_at(root[0], root[1], root[2]);
     request_build(&mut state, id, "spanish_fortress").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(
         (project.origin, project.rotation),
         (expected.origin, expected.rotation)
@@ -898,14 +901,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .age = -1;
     let warnings = stall_preparation(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        state.settlements.get(id).unwrap().projects[0].structure,
         project.structure
     );
     assert!(
@@ -924,14 +920,20 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
         .unwrap()
         .unwrap();
     let previous = state.world.block_at(next[0], next[1], next[2]);
+    // Outside village property, retained player history still protects a cell.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    state.settlements.get_mut(id).unwrap().anchor = [anchor[0] + 1000, anchor[1], anchor[2]];
     retain_player_edit(&mut state, next);
     let uuid = state.entities.row(builder).uuid;
+    // The executor only advances a project for its bound builder (P2-5).
+    bind_project(&mut state, id, &project.structure, builder);
     assert_eq!(
         executor::advance(&mut state, id, &project.structure, uuid),
         Err(mc_script::ScriptOperationFailure::Blocked)
     );
     assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    state.settlements.get_mut(id).unwrap().anchor = anchor;
     state.block_log = Default::default();
     let revision = state.settlements.get(id).unwrap().revision;
 
@@ -1000,7 +1002,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
             .contains(&root)
     );
     complete(&mut state, id, builder);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert!(
         state
             .settlements
@@ -1040,6 +1042,7 @@ fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
     let at = [8, 203, 8];
     let lot = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
     let cell = executor::PlannedCell {
+        portion: executor::PortionKind::Trees,
         at,
         state: state.registry.states.air,
         resource: None,
@@ -1127,7 +1130,7 @@ fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
         .next()
         .unwrap();
     start(&mut state, id, "house", 2, Some(building));
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     let at = planned
         .iter()
@@ -1174,7 +1177,7 @@ fn upgrade_beam() -> (
 ) {
     let (mut state, id, builder) = fixture();
     start(&mut state, id, "house", 1, None);
-    let original = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let original = state.settlements.get(id).unwrap().projects[0].clone();
     fund(&mut state, "house", 1);
     complete(&mut state, id, builder);
     let building = *state
@@ -1374,8 +1377,8 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .as_ref()
+        .projects
+        .first()
         .expect("the empty unfinished sweep left the slot to the funded upgrade");
     assert_eq!(project.blueprint, "spanish_house");
     assert_eq!(project.building, Some(house));

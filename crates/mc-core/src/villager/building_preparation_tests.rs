@@ -37,13 +37,28 @@ fn clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing() {
     state.world.set_block(next[0], next[1], next[2], grass);
     state.world.fold_overlay();
     state.entities.set_pos(builder, [6.5, 204.0, 5.5]);
-    let base = crate::settlements::forestry::footing(&state, id, next).expect("pit footing");
+    // The fixture registered no project, so this stand sees no lot and the
+    // settlement anchor's floor, as the settlement-wide lookup did.
+    let project = crate::settlements::construction::Project {
+        settlement: id,
+        blueprint: "lumber_camp".into(),
+        level: 1,
+        origin: [0, 201, 0],
+        rotation: 0,
+        building: None,
+        structure: "fixture-site".into(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    };
+    let base = crate::settlements::forestry::footing_of(&state, id, &project.structure, next)
+        .expect("pit footing");
     assert_eq!((base.x, base.y, base.z), (6, 201, 8));
     assert!(
         !near(&state, builder, base, PREPARATION_REACH),
         "the hill edge itself is out of felling reach, as at seed 24"
     );
-    let stand = preparation_stand(&state, builder, id, next, base).expect("a stand exists");
+    let stand = preparation_stand(&state, builder, &project, next, base).expect("a stand exists");
     state.entities.set_pos(
         builder,
         [
@@ -77,13 +92,28 @@ fn clearing_stand_is_never_the_top_of_a_fence_post() {
     state.world.set_block(next[0], next[1], next[2], grass);
     state.world.fold_overlay();
     state.entities.set_pos(builder, [8.3, 201.0, 6.5]);
-    let base = crate::settlements::forestry::footing(&state, id, next).expect("cell footing");
+    // The fixture registered no project, so this stand sees no lot and the
+    // settlement anchor's floor, as the settlement-wide lookup did.
+    let project = crate::settlements::construction::Project {
+        settlement: id,
+        blueprint: "lumber_camp".into(),
+        level: 1,
+        origin: [0, 201, 0],
+        rotation: 0,
+        building: None,
+        structure: "fixture-site".into(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    };
+    let base = crate::settlements::forestry::footing_of(&state, id, &project.structure, next)
+        .expect("cell footing");
     assert_eq!((base.x, base.y, base.z), (10, 201, 10));
     assert!(
         !near(&state, builder, base, PREPARATION_REACH),
         "the builder's parking cell is out of felling reach, as at seed 24"
     );
-    let stand = preparation_stand(&state, builder, id, next, base).expect("a stand exists");
+    let stand = preparation_stand(&state, builder, &project, next, base).expect("a stand exists");
     let body = state.entities.body(builder);
     let Some(feet) = crate::settlements::allocator::standing(
         &state.world,

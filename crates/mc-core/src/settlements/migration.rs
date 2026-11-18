@@ -392,12 +392,7 @@ fn eligible(
             // without a commercial employment contract. Release it before
             // automatic migration rather than silently dismantling production.
             || super::buildings::building_for_job(state, v).is_some()
-            || state.settlements.records().any(|town| {
-                town.project
-                    .as_ref()
-                    .and_then(|project| project.borrowed_builder)
-                    .is_some_and(|(builder, _)| builder == row.uuid)
-            })
+            || super::construction::bound_builder(&state.settlements, row.uuid)
             || record
                 .economy
                 .commerce

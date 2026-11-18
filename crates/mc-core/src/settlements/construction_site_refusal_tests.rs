@@ -76,11 +76,12 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
     let passes = fronts.len().div_ceil(SITE_ATTEMPTS as usize) * 3;
     let record = state.settlements.get_mut(id).unwrap();
     record.planted_trees = roots;
-    record.pending_order = Some(OwnerOrder {
+    record.orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "storage".into(),
         level: 1,
         building: None,
-    });
+    }];
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let log = Log::default();
     let writer = log.clone();
@@ -95,10 +96,10 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
         }
         let record = state.settlements.get(id).unwrap();
         assert!(
-            record.project.is_none(),
+            record.projects.is_empty(),
             "protected lots do not admit autonomous work"
         );
-        assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "storage");
+        assert_eq!(record.orders[0].blueprint, "storage");
         assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
         assert!(state.settlements.site_watch.contains_key(&id));
         let text = String::from_utf8(log.0.lock().clone()).unwrap();
@@ -111,11 +112,12 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
         assert!(text.contains("storage"), "{text}");
         cancel_pending(&mut state, id).unwrap();
         assert!(!state.settlements.site_watch.contains_key(&id));
-        state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+        state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+            seq: 0,
             blueprint: "storage".into(),
             level: 1,
             building: None,
-        });
+        }];
         for _ in 0..passes {
             plan(&mut state, id);
         }
@@ -128,13 +130,13 @@ fn pending_site_refusal_logs_once_and_keeps_fifo_and_real_stock() {
         state.settlements.get_mut(id).unwrap().planted_trees.clear();
         for _ in 0..256 {
             plan(&mut state, id);
-            if state.settlements.get(id).unwrap().project.is_some() {
+            if !state.settlements.get(id).unwrap().projects.is_empty() {
                 break;
             }
         }
         let record = state.settlements.get(id).unwrap();
-        assert_eq!(record.project.as_ref().unwrap().blueprint, "storage");
-        assert!(record.pending_order.is_none());
+        assert_eq!(record.projects[0].blueprint, "storage");
+        assert!(record.orders.is_empty());
         assert!(!state.settlements.site_watch.contains_key(&id));
         assert_eq!(
             state.block_entities[&(1, 201, 1)].slots,

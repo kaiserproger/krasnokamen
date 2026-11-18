@@ -14,6 +14,10 @@ All paths below are under `crates/mc-core/src/settlements/` unless noted:
   `crates/mc-core/src/villager/` owns resident brains and state.
 - `buildings.rs`, `construction.rs`, `autonomy.rs`, `blueprints.rs`: certified
   buildings, construction and generated-village adoption.
+- `construction_access.rs`: the construction module's narrow surface (owner
+  D9.3). Code outside `construction*.rs` reads the record's projects and
+  pending orders only through it; the `code-health` ratchet counts direct field
+  accesses and its ceiling is zero.
 - `households.rs`, `districts.rs`, `production.rs`, `economy.rs`, `commerce.rs`,
   `caravan.rs`, `army.rs`: native domain policy and execution.
 - `inventory.rs`: physical container custody; `commands.rs`, `ui.rs` and
@@ -293,11 +297,11 @@ The parent persists only an optional `founding` object containing a ground-level
 `destination` and the existing `household` key. It reserves a loaded, buildable
 site outside the parent's radius against other towns, expeditions and structure
 claims. Four ordinary paid projects build three Spanish houses and a Spanish
-plaza. Construction progress, receipts and stage remain in the existing structure
-ledger. An outpost is not yet a civil settlement, and its beds are not available
-to the parent allocator.
+plaza. Construction progress (stages, completed work and the advance watermark)
+remains in the existing structure ledger. An outpost is not yet a civil
+settlement, and its beds are not available to the parent allocator.
 
-After all four physical structures and payment receipts validate, one native
+After all four physical structures are committed and validate, one native
 tick prepares and publishes the parent, daughter, reissued daughter building
 IDs, transferred structure-ledger ownership, unchanged resident bodies and
 inventories, household membership, and cleared expedition. The daughter shares

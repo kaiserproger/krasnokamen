@@ -999,6 +999,25 @@ pre-upgrade world backup**, not just the executable. The founding schema and
 atomic handover contract are in
 [settlement architecture](architecture/settlements.md#native-daughter-founding).
 
+### Structure ledger format
+
+The structure ledger (settlement construction and plugin builds) is stored as
+one key per structure, survey and worksite, not as one image
+([layout](architecture/persistence.md#structure-ledger-keys)). There is no
+converter between the two formats; each binary refuses the other's ledger at
+startup before it publishes anything. Opening the native database may still
+update its file bookkeeping, so try a binary switch on a copy.
+
+- A world where no structure, survey or worksite was ever written (no
+  settlement construction, no plugin builds) upgrades in place.
+- Any other world cannot be upgraded: every saved world with settlement
+  construction or plugin builds refuses on the new binary, not only the test
+  deployment. Keep it on the old binary, or reset the world before switching.
+  Dropping only the ledger is not an option: committed
+  structures back settlement buildings, and an Anvil export drops native
+  settlements as well.
+- Back up before switching binaries, as always.
+
 ### Native worlds and Anvil interchange
 
 Serving persists a native database (`native/state.redb`) and the tick WAL, not

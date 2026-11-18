@@ -112,6 +112,7 @@ fn touching_registered_grove_is_certified_and_felled_whole() {
         .into_iter()
         .map(
             |at| crate::plugin_structures::settlement_builds::PlannedCell {
+                portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                 at,
                 state: state.registry.states.air,
                 resource: None,
@@ -296,6 +297,7 @@ fn a_b_c_grove_needs_two_trees_and_keeps_the_third_crown() {
             .into_iter()
             .map(
                 |at| crate::plugin_structures::settlement_builds::PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                     at,
                     state: state.registry.states.air,
                     resource: None,

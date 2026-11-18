@@ -62,18 +62,44 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // MotionYaw 2026-11-18: the head-controller capability names shulker,
     // phantom and happy_ghast once, whose vanilla BodyRotationControl overrides
     // keep the head on the body: +3, 2634.
-    vanilla_id_literals: 2_634,
+    // canonical extraction-tool data table (31 tools), PrepPortions 2026-11-18:
+    // +29, 2663 with MotionYaw; moves to mc-data with typed CoreRegistry
+    // resolution after the 19:00 cut (PLAN post-cut queue).
+    vanilla_id_literals: 2_663,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
     merge_block_write_pushes: 17,
-    // D9 baseline on b58021e61, 2026-11-17; no spare headroom.
-    construction_field_accesses: 31,
+    // D9 baseline on b58021e61, 2026-11-17, was 31 field accesses; D8 moved
+    // every read outside the construction module behind
+    // `settlements/construction_access.rs` and renamed the fields to
+    // `projects`/`orders` in the same change, so the matcher follows the names
+    // in use. 0 on the D8 branch; any new access outside
+    // `settlements/construction*.rs` fails.
+    construction_field_accesses: 0,
     hot_files: &[
         // MotionYaw 2026-11-18: the early-rest head guard, the ReadRow
         // head-controller capability and its initializer: 737.
         ("tick/entity_phase.rs", 737),
-        ("settlements/construction.rs", 1_076),
+        // D8 moved the record's construction fields behind
+        // `settlements/construction_access.rs`; 1028 after the split, measured
+        // on the D8 branch, 2026-11-17. The store flip and the queue rules
+        // (S1b) took it to 1058. S2 (joint per-project bills, binding liveness,
+        // per-project stall watch, addressed queue API) adds 69: 1127. The
+        // wave-1 site refactor (SpainLevel's whole-plan sweep, SpainD7Rest's
+        // candidate ranking) merged in adds 23: 1150. Review round 1
+        // (binding-only incumbent, a joint gate for walls and lamps, and a
+        // submission-sequenced retry) adds 51: 1201. The relayout slice
+        // (SpainRoads, D10 village re-lay) adds its module declaration and the
+        // re-lay vetoes inside the scan: 1214. D8 review round 2 adds 54 (the
+        // neighbour-footprint helpers, the per-project summary split, the
+        // submission-sequence stamp, the joint-proof funding cause), round 4
+        // adds 41 (the persisted carry debt) and the liquid ledger key adds its
+        // scan hooks: 1320. The next extraction candidate is the stall watch
+        // plus carry recovery, which belong in a construction_recovery module.
+        // D8S3's extracted upgrade guard adds six residual statements/items: 1326.
+        // Measured 1279 on the PreFinal main+Prep merge, 2026-11-18.
+        ("settlements/construction.rs", 1_279),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,
@@ -130,7 +156,7 @@ fn describe(counter: Counter) -> (&'static str, &'static str, &'static str) {
              any receiver named `merge_block_writes` whatever its type",
         ),
         Counter::ConstructionFieldAccess => (
-            "`.project`/`.pending_order` accesses outside construction",
+            "`.projects`/`.orders` accesses outside construction",
             "construction state escapes its owner; use the construction interface",
             "field names are a structural proxy for SettlementRecord, without \
              receiver type resolution; unrelated same-named fields count too",

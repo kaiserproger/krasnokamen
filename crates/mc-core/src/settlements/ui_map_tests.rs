@@ -324,7 +324,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
     crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!((project.origin, project.rotation), ([11, 200, 13], 1));
     let grid = grid(&ctx(id), &state, state.settlements.get(id).unwrap(), None);
     // Storage is 9 wide and 5 deep; turned once it covers x 11..15, z 13..21.
@@ -769,7 +769,7 @@ fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
         .find_map(|run| {
             let payload = field(field(run, "click_event")?, "payload")?;
             (string(field(payload, "bids")).is_empty()
-                && string(field(payload, "site")).is_empty()
+                && string(field(payload, "sites")).is_empty()
                 && string(field(payload, "streets")).is_empty())
             .then(|| payload.clone())
         })
@@ -780,6 +780,75 @@ fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
             .iter()
             .all(|action| action == "krasnokamen:settlement/map")
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
-    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    assert!(state.settlements.get(id).unwrap().orders.is_empty());
+}
+
+#[test]
+fn d8_every_site_survives_a_shared_map_cell_hover_legend_and_click_payload() {
+    let (mut state, id) = crate::settlements::ui::tests::parallel_ui_fixture(8);
+    let record = state.settlements.get(id).unwrap();
+    let grid = grid(&ctx(id), &state, record, None);
+    let cell = at(&grid, 12, 13);
+    assert_eq!(cell.color, SITE);
+    assert_eq!(cell.click.len(), 8);
+    for project in &record.projects {
+        assert!(cell.click.contains(&Click::Site(project.structure.clone())));
+        assert!(
+            cell.hover.contains(&corner_text(project.origin)),
+            "{}",
+            cell.hover
+        );
+        assert!(
+            grid.legend
+                .iter()
+                .any(|(_, text)| text.contains(&corner_text(project.origin)))
+        );
+    }
+    let wire = cells_component(&grid, id);
+    let payload = elements(field(&wire, "extra"))
+        .iter()
+        .find_map(|run| {
+            let payload = field(field(run, "click_event")?, "payload")?;
+            (string(field(payload, "sites")).lines().count() == 8).then(|| payload.clone())
+        })
+        .expect("all stable structure handles are sent, not only the first site");
+    let picked = pick_payload(&mut state, payload.clone());
+    assert!(
+        actions(&picked)
+            .iter()
+            .filter(|action| *action == "krasnokamen:settlement/project_status")
+            .count()
+            >= 4
+    );
+    state.settlements.get_mut(id).unwrap().projects.remove(0);
+    let stale = pick_payload(&mut state, payload);
+    let text = format!("{stale:?}");
+    assert!(text.contains("changed"), "{text}");
+    assert!(
+        actions(&stale)
+            .iter()
+            .any(|action| action == "krasnokamen:settlement/project_status")
+    );
+}
+
+#[test]
+fn d8_map_names_every_active_site_in_its_visible_summary() {
+    let (mut state, id) = crate::settlements::ui::tests::parallel_ui_fixture(2);
+    let map = command(&mut state, "settlement menu map");
+    let body = elements(field(&map, "body"))
+        .iter()
+        .map(|paragraph| plain(field(paragraph, "contents").unwrap()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(body.matches("Active site: Storage L1").count(), 2);
+    for project in &state.settlements.get(id).unwrap().projects {
+        assert!(
+            body.contains(&format!(
+                "Active site: Storage L1 · {}",
+                corner_text(project.origin)
+            )),
+            "{body}"
+        );
+    }
 }

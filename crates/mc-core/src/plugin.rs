@@ -165,7 +165,7 @@ impl PluginState {
         key: &str,
     ) -> Option<&mut serde_json::Value> {
         let value = self.domains.get_mut(owner)?.get_mut(key)?;
-        self.structure_cache.invalidate(owner, key);
+        self.structure_cache.invalidate(owner);
         self.dirty = true;
         mark_key(&mut self.dirty_domains, owner, key);
         Some(value)
@@ -205,7 +205,7 @@ impl PluginState {
     }
 
     pub(crate) fn set_domain(&mut self, owner: &str, key: &str, value: serde_json::Value) {
-        self.structure_cache.invalidate(owner, key);
+        self.structure_cache.invalidate(owner);
         self.domains
             .entry(owner.into())
             .or_default()
@@ -220,7 +220,7 @@ impl PluginState {
             .get_mut(owner)
             .is_some_and(|domain| domain.remove(key).is_some())
         {
-            self.structure_cache.invalidate(owner, key);
+            self.structure_cache.invalidate(owner);
             self.dirty = true;
             mark_key(&mut self.dirty_domains, owner, key);
         }
@@ -388,7 +388,7 @@ impl PluginState {
         for (owner, records) in &delta.domains {
             let domain = self.domains.entry(owner.clone()).or_default();
             for (key, image) in records {
-                self.structure_cache.invalidate(owner, key);
+                self.structure_cache.invalidate(owner);
                 match image {
                     DomainPostImage::Present(value) => {
                         domain.insert(key.clone(), value.clone());

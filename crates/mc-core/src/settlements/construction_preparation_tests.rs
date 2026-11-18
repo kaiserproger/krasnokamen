@@ -52,7 +52,7 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
     state.world.set_block(other[0], other[1], other[2], plant);
     fund(&mut state, "storage", 1);
     assert!(begin(&mut state, expected.clone(), "oak", 0));
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(project.origin, expected.origin);
     assert_eq!(
         executor::next_cell(&state, id, &project.structure).unwrap(),
@@ -68,13 +68,13 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
         .map(|at| (at, state.world.block_at(at[0], at[1], at[2]).unwrap()))
         .collect();
     for _ in 0..16 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
         attempt(&mut state, id, builder);
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "changed unpaid preparation must cancel, not resume its stale work cells"
     );
     let cancelled = executor::status(&state, id, &project.structure).unwrap();
@@ -86,8 +86,8 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
             .settlements
             .get(id)
             .unwrap()
-            .pending_order
-            .as_ref()
+            .orders
+            .first()
             .unwrap()
             .blueprint,
         "storage"
@@ -103,8 +103,18 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
         begin(&mut state, expected.clone(), "oak", 0),
         "the grown native tree can be recertified"
     );
-    let renewed = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let renewed = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(renewed.origin, expected.origin);
+    // Retiring the superseded manifest returned the builder to its career; the
+    // recertified lot is admitted with a working builder again.
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = Profession::Builder;
     let (_, cells) = planned_cells(&state, &renewed, "oak", &mut Default::default()).unwrap();
     for &(at, _) in &grown {
         assert!(
@@ -138,9 +148,9 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
             logs += 1;
         }
         attempt(&mut state, id, builder);
+        let actual = stock(&state);
         assert_eq!(
-            stock(&state),
-            expected_stock,
+            actual, expected_stock,
             "every recertified tree drop at {at:?}"
         );
     }
@@ -158,7 +168,7 @@ fn on_lot_sapling_is_first_and_regrowth_requeues_an_unpaid_manifest() {
             .contains(&root)
     );
     complete(&mut state, id, builder);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 #[test]
@@ -256,7 +266,8 @@ fn raised_lot(id: super::super::SettlementId) -> Project {
         building: None,
         structure: String::new(),
         ordered: false,
-        borrowed_builder: None,
+        builder: None,
+        order_seq: None,
     }
 }
 
@@ -523,7 +534,7 @@ fn outpost_begin_reserves_the_brick_chain_for_its_fill() {
         "the chain's stone is stocked before admission"
     );
     assert!(super::super::begin(&mut state, project, "oak", 0));
-    let bill = super::super::active_project_bill(&state, id).expect("active bill");
+    let bill = super::super::joint_active_bill(&state, id).expect("active bill");
     let stone_left = bill
         .iter()
         .find(|(item, _)| {

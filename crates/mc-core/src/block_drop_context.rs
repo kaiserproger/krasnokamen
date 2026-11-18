@@ -183,6 +183,7 @@ pub(crate) fn roll(
     block: u32,
     tool: &mc_data::ItemStack,
     seed: u64,
+    this_entity: bool,
 ) -> Result<Vec<mc_data::ItemStack>, crate::CoreError> {
     if let Some(drops) = carrier_drop(state, block) {
         return Ok(drops);
@@ -199,6 +200,7 @@ pub(crate) fn roll(
         tool,
         seed,
         entity.as_ref(),
+        this_entity,
     )
 }
 
@@ -227,7 +229,14 @@ pub(crate) fn player_drops(
         {
             // ShulkerBoxBlock.playerWillDestroy preserves nonempty creative
             // boxes by dropping one item with the collected BE components.
-            return roll(state, pos, block, &mc_data::ItemStack::EMPTY, state.tick);
+            return roll(
+                state,
+                pos,
+                block,
+                &mc_data::ItemStack::EMPTY,
+                state.tick,
+                true,
+            );
         }
         return Ok(Vec::new());
     }
@@ -249,6 +258,7 @@ pub(crate) fn player_drops(
             .tick
             .wrapping_mul(0x9E37_79B9_7F4A_7C15)
             .wrapping_add(actor.0 as u64),
+        true,
     )
 }
 

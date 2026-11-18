@@ -167,10 +167,21 @@ claims require the actual pinned-server run, not this design decision.
 > Если пересекает участок - восстановить в другом месте, чтобы была целостной
 > 3. а.
 
-- Filling water and lava on lots is **missing** until after the freeze: until
-  then a lot that needs liquid filling is not chosen, and the refusal says so.
+- Filling water and lava on lots is **implemented** (owner D21, 2026-11-17:
+  pulled before the freeze, so the "missing" status above is superseded): water
+  and lava below a needed lot's authored floor are filled with real blocks from a
+  safe stand and sources first. The builder-side drain wait, the pre-`clear`
+  liquid stage, the lava-neighbour veto and the safe-stand rule are part of the
+  executor work, and a lava flow is waited out before the cell is worked. The
+  rules, named refusals and the bounded cost are in
+  [construction](construction.md). A fluid door or verge column
+  still refuses the lot, now by name `LiquidAccess`; preparing it is backlog.
 - Village paths and farmland on a needed lot may be removed, but the road
   network must stay connected: a road crossing the lot is re-laid around it.
+  Implemented in
+  [`construction.md`](construction.md#builders-and-supplies): the detour stands
+  before the old path cells are retired, and a lot whose cut cannot be bridged
+  is refused with `NoPathDetour`.
 - A grown planted lumberjack tree on a needed lot is felled as a whole tree,
   found by trunk connectivity from its registered root. Accepted risk: a player
   log touching that trunk, whose history has expired, is felled too, with its
@@ -181,8 +192,13 @@ claims require the actual pinned-server run, not this design decision.
 > 1. по числу строителей  2. если есть заявка на которую есть ресурсы - поднимаем
 > её вверх. иначе оставляем порядок очереди как есть  3. да
 
-Status: design decided; implementation starts after the 19 November freeze
-(owner, 2026-11-17). Until it lands,
+Status: design decided; implementation is pulled before the freeze by D21
+(2026-11-17 ~22:30, superseding the first "after the freeze" answer). The
+narrow interface lands first: code outside the construction module reads the
+record's projects and pending orders only through
+`crates/mc-core/src/settlements/construction_access.rs`, and the code-health
+ratchet ceiling for direct field accesses is 0 (owner D9.3, 2026-11-17). Until
+the parallel behaviour lands,
 [construction queue order](#construction-queue-order--owner-2026-11-17) holds.
 
 - A settlement builds as many projects at once as it has available builders.

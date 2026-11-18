@@ -695,14 +695,17 @@ fn existing_enchantment_fortune_silk_and_efficiency_change_real_loot_and_progres
         let rules = state.registry.item_rules();
         let mut improved = false;
         for seed in 0..64 {
-            let base = crate::block_drops::block_drops(&drops, &rules, ore, &ordinary, seed, None)
-                .unwrap();
+            let base =
+                crate::block_drops::block_drops(&drops, &rules, ore, &ordinary, seed, None, true)
+                    .unwrap();
             let boosted =
-                crate::block_drops::block_drops(&drops, &rules, ore, &fortune, seed, None).unwrap();
+                crate::block_drops::block_drops(&drops, &rules, ore, &fortune, seed, None, true)
+                    .unwrap();
             assert_eq!(base.iter().map(|stack| stack.count).sum::<i32>(), 1);
             improved |= boosted.iter().map(|stack| stack.count).sum::<i32>() > 1;
             let silk_drops =
-                crate::block_drops::block_drops(&drops, &rules, ore, &silk, seed, None).unwrap();
+                crate::block_drops::block_drops(&drops, &rules, ore, &silk, seed, None, true)
+                    .unwrap();
             assert_eq!(silk_drops.len(), 1);
             assert_eq!(
                 state

@@ -181,7 +181,7 @@ pub(crate) fn meadow_work(state: &TickState, record: &SettlementRecord) -> Optio
                         && !vacant(state, block)
                         && construction::clearable(state, block)
                     {
-                        cells.push(free([x, above, z], air));
+                        cells.push(cleared([x, above, z], air));
                         low = low.min(above);
                         high = high.max(above);
                     }
@@ -337,7 +337,7 @@ fn level_inside(record: &SettlementRecord, x: i32, z: i32) -> bool {
     inside(record, [x, record.anchor[1], z])
 }
 
-fn sample(
+pub(super) fn sample(
     state: &TickState,
     record: &SettlementRecord,
     x: i32,
@@ -466,6 +466,11 @@ fn vacant(state: &TickState, block: u32) -> bool {
         })
 }
 
+/// The state street paving turns soil into: the one `dirt_path` block.
+pub(crate) fn paved_state(state: &TickState) -> Option<u32> {
+    default_state(state, "minecraft:dirt_path")
+}
+
 fn default_state(state: &TickState, name: &str) -> Option<u32> {
     let id = mc_data::Identifier::parse(name).ok()?;
     Some(state.registry.blocks.block(&id)?.default.0)
@@ -475,6 +480,7 @@ fn paid(state: &TickState, at: [i32; 3], block: u32) -> Option<PlannedCell> {
     let (item, quantity) =
         blueprints::material_for(&state.registry, mc_world::BlockStateId(block))?;
     Some(PlannedCell {
+        portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
         at,
         state: block,
         resource: Some(state.registry.items.name_of(item)?.to_string()),
@@ -484,11 +490,18 @@ fn paid(state: &TickState, at: [i32; 3], block: u32) -> Option<PlannedCell> {
 
 fn free(at: [i32; 3], block: u32) -> PlannedCell {
     PlannedCell {
+        portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
         at,
         state: block,
         resource: None,
         quantity: 0,
     }
+}
+
+fn cleared(at: [i32; 3], air: u32) -> PlannedCell {
+    let mut cell = free(at, air);
+    cell.portion = crate::plugin_structures::settlement_builds::PortionKind::Cut;
+    cell
 }
 
 /// A finished lamp post: a fence topped by a torch anywhere in the band.
@@ -752,6 +765,12 @@ impl<'a> Network<'a> {
         Some(route)
     }
 
+    /// The reached street column behind `building`'s door, exactly the column
+    /// [`Self::access`] indexes: the road graph a route must keep connected.
+    pub(crate) fn access_column(&self, building: &Building) -> Option<[i32; 3]> {
+        self.access(building).map(|index| self.cells[index])
+    }
+
     /// A verge may carry a detour, but a door still fronts an actual street.
     fn street_index(&self, x: i32, z: i32) -> Option<usize> {
         matches!(cell(self.record.anchor, x, z), Cell::Road | Cell::Plaza)
@@ -935,7 +954,7 @@ impl<'a> Network<'a> {
     pub(crate) fn road_work(&mut self, tile: &Tile) -> Option<Work> {
         let state = self.state;
         let air = state.registry.states.air;
-        let path = default_state(state, "minecraft:dirt_path")?;
+        let path = paved_state(state)?;
         let mut cells = Vec::new();
         let (mut low, mut high) = (i32::MAX, i32::MIN);
         for x in tile.min[0]..=tile.max[0] {
@@ -954,7 +973,7 @@ impl<'a> Network<'a> {
                         && !vacant(state, block)
                         && construction::clearable(state, block)
                     {
-                        cells.push(free([x, above, z], air));
+                        cells.push(cleared([x, above, z], air));
                     }
                 }
                 if soil {
@@ -1002,7 +1021,7 @@ impl<'a> Network<'a> {
         for above in y + 1..=y + 3 {
             let block = state.world.physics_block_at(x, above, z)?;
             if !vacant(state, block) {
-                cells.push(free([x, above, z], air));
+                cells.push(cleared([x, above, z], air));
             }
         }
         cells.push(paid(state, [x, y + 1, z], fence)?);
@@ -1248,7 +1267,7 @@ fn column_cells(
             if !construction::clearable(state, have) {
                 return nothing;
             }
-            cells.push(free([x, y, z], air));
+            cells.push(cleared([x, y, z], air));
         }
         cells.push(placed(state, [x, y, z], want));
     }
@@ -1345,7 +1364,7 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
             if !construction::clearable(state, have) {
                 return None;
             }
-            cells.push(free([x, ground + 1, z], air));
+            cells.push(cleared([x, ground + 1, z], air));
         }
         cells.push(placed(state, [x, ground + 1, z], cobble));
     }
@@ -1354,7 +1373,7 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
         if !construction::clearable(state, above) {
             return None;
         }
-        cells.push(free([cx, centre + 1, cz], air));
+        cells.push(cleared([cx, centre + 1, cz], air));
     }
     cells.push(free([cx, centre, cz], water));
     Some(work_of(cells))

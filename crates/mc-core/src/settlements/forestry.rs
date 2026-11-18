@@ -195,6 +195,7 @@ impl Clearance {
                     continue;
                 }
                 cells.push(crate::plugin_structures::settlement_builds::PlannedCell {
+                    portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                     at,
                     state: state.registry.states.air,
                     resource: None,
@@ -864,6 +865,15 @@ pub(crate) fn roll(
     at: [i32; 3],
     block: u32,
 ) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
+    roll_with_tool(state, at, block, &mc_data::ItemStack::EMPTY)
+}
+
+pub(crate) fn roll_with_tool(
+    state: &TickState,
+    at: [i32; 3],
+    block: u32,
+    tool: &mc_data::ItemStack,
+) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
     let seed = at
         .into_iter()
         .fold(state.world.seed() as u64 ^ state.tick, |seed, value| {
@@ -877,8 +887,9 @@ pub(crate) fn roll(
             z: at[2],
         },
         block,
-        &mc_data::ItemStack::EMPTY,
+        tool,
         seed,
+        true,
     )
     .map_err(|_| mc_script::ScriptOperationFailure::Blocked)
 }
@@ -985,6 +996,7 @@ pub(crate) fn cells(
                 continue;
             }
             cells.push(PlannedCell {
+                portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
                 at: [x, y, z],
                 state: state.registry.states.air,
                 resource: None,
@@ -1008,6 +1020,8 @@ pub(crate) fn cells(
                         .is_some_and(|block| block.block.id.path().ends_with("_sapling"))
                 })
         {
+            cells[index].portion =
+                crate::plugin_structures::settlement_builds::PortionKind::Saplings;
             // Stable: keep the corridor cells first and the manifest's own order.
             cells[first..=index].rotate_right(1);
             first += 1;
@@ -1016,15 +1030,26 @@ pub(crate) fn cells(
     Some(Preparation { cells, corridor })
 }
 
-pub(crate) fn footing(
+/// The footing of one project's site: a neighbour's lot never decides where
+/// this project's own cells sit (D8 review R2-5).
+pub(crate) fn footing_of(
     state: &TickState,
     settlement: super::SettlementId,
+    handle: &str,
     at: [i32; 3],
 ) -> Option<crate::boundary::BlockPos> {
     let record = state.settlements.get(settlement)?;
-    let lot = super::construction::preparation::active_lot(state, record);
-    // The active project's own floor is the level the fill plan builds toward.
-    let centre = super::construction::preparation::active_floor(record);
+    let lot = super::construction::preparation::project_lot(state, record, handle);
+    let centre = super::construction::preparation::project_floor(record, handle);
+    footing_in(state, centre, at, lot)
+}
+
+fn footing_in(
+    state: &TickState,
+    centre: i32,
+    at: [i32; 3],
+    lot: Option<mc_script::ScriptWorldBounds>,
+) -> Option<crate::boundary::BlockPos> {
     let y = super::construction::surface_y_for_lot(
         state,
         centre,

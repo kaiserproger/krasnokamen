@@ -278,6 +278,7 @@ pub struct BlockLootContext<'a> {
     tool: &'a LootContextItem,
     explosion: Option<LootExplosion>,
     block_entity: Option<&'a mc_nbt::Tag>,
+    this_entity: bool,
     random: LootRandomBinding,
 }
 
@@ -297,8 +298,21 @@ impl<'a> BlockLootContext<'a> {
             tool,
             explosion: None,
             block_entity: None,
+            this_entity: false,
             random,
         })
+    }
+
+    /// The block was broken by an acting entity, rather than by the environment.
+    #[must_use]
+    pub fn with_this_entity(mut self) -> Self {
+        self.this_entity = true;
+        self
+    }
+
+    #[must_use]
+    pub fn has_this_entity(&self) -> bool {
+        self.this_entity
     }
 
     #[must_use]

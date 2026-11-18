@@ -71,7 +71,14 @@ fn preparation_footing(
                 block == state.registry.states.air
                     || crate::settlements::forestry::tree(state, block)
             }))
-    .then(|| crate::settlements::forestry::footing(state, project.settlement, next))
+    .then(|| {
+        crate::settlements::forestry::footing_of(
+            state,
+            project.settlement,
+            &project.structure,
+            next,
+        )
+    })
     .flatten()
 }
 
@@ -82,7 +89,51 @@ fn preparation_target(
     next: [i32; 3],
 ) -> Option<BlockPos> {
     let base = preparation_footing(state, project, next)?;
-    preparation_stand(state, slot, project.settlement, next, base)
+    preparation_stand(state, slot, project, next, base)
+}
+
+/// Whether a body standing with its feet at `pos` and these dimensions overlaps
+/// another active project's authored site. A villager is a box, not a column:
+/// 0.6 wide it straddles a cell edge, and 1.95 tall it owns the cell above, so
+/// a feet-column test lets a neighbour lot's walls cross it (D8 review SOL-4,
+/// R3-4/R3-5). The site comes from the canonical reservation, so a road, lamp
+/// or standalone furnace protects its site too (D8 review S2-2).
+fn in_other_body(
+    state: &TickState,
+    project: &construction::Project,
+    pos: [f64; 3],
+    half_width: f64,
+    height: f64,
+) -> bool {
+    executor::body_in_other_site(
+        state,
+        project.settlement,
+        &project.structure,
+        pos,
+        half_width,
+        height,
+    )
+}
+
+/// The same test for a stand on the centre of cell `at`.
+fn standing_in_other_body(
+    state: &TickState,
+    project: &construction::Project,
+    slot: EntitySlot,
+    at: BlockPos,
+) -> bool {
+    let body = state.entities.body(slot);
+    in_other_body(
+        state,
+        project,
+        [
+            f64::from(at.x) + 0.5,
+            f64::from(at.y),
+            f64::from(at.z) + 0.5,
+        ],
+        body.half_width,
+        body.height,
+    )
 }
 
 /// A dry footing near the cell `next` that the builder's body can stand on
@@ -91,7 +142,7 @@ fn preparation_target(
 pub(super) fn preparation_stand(
     state: &TickState,
     slot: EntitySlot,
-    settlement: SettlementId,
+    project: &construction::Project,
     next: [i32; 3],
     base: BlockPos,
 ) -> Option<BlockPos> {
@@ -106,13 +157,19 @@ pub(super) fn preparation_stand(
             if dx * dx + dz * dz > 9 {
                 continue;
             }
-            let Some(at) = crate::settlements::forestry::footing(
+            let Some(at) = crate::settlements::forestry::footing_of(
                 state,
-                settlement,
+                project.settlement,
+                &project.structure,
                 [next[0] + dx, next[1], next[2] + dz],
             ) else {
                 continue;
             };
+            // A neighbour lot's future body is not a stand: that project would
+            // place a wall through this builder (D8 review SOL-4/R3-4).
+            if standing_in_other_body(state, project, slot, at) {
+                continue;
+            }
             // Seed 24 then parked a builder for 51,000 ticks beside a pen,
             // walking toward the top of a fence post: `footing` counts the
             // 1.5-high fence as ground, but no body can stand on it. The stand
@@ -147,7 +204,18 @@ pub(super) fn preparation_stand(
             let distance = (here[0] - f64::from(at.x) - 0.5).powi(2)
                 + (here[1] - f64::from(at.y)).powi(2)
                 + (here[2] - f64::from(at.z) - 0.5).powi(2);
-            if stands && dry && reaches && best.as_ref().is_none_or(|(known, _)| distance < *known)
+            // D10: a felling stand beside lava is unsafe even when the cell
+            // itself is dry; the body rows and their four neighbours must be
+            // lava-free.
+            let lava_safe = crate::settlements::construction::preparation::liquid::stand_safe(
+                state,
+                [at.x, at.y, at.z],
+            );
+            if stands
+                && dry
+                && lava_safe
+                && reaches
+                && best.as_ref().is_none_or(|(known, _)| distance < *known)
             {
                 best = Some((distance, at));
             }
@@ -171,10 +239,22 @@ fn site_target(
         return Some(stand);
     }
     if project.blueprint == construction::furnace::NAME {
-        return construction::furnace::stand(state, project, next).map(block_pos);
+        let body = state.entities.body(slot);
+        // The veto lives inside the side loop: refusing the first free side
+        // without trying the others left the furnace with no target while the
+        // opposite side was safe (D8 review S2-1).
+        return construction::furnace::stand(
+            state,
+            project,
+            next,
+            Some((body.half_width, body.height)),
+        )
+        .map(block_pos);
     }
     if layout::infra(&project.blueprint) {
-        return layout::stand(state, project, next).map(block_pos);
+        return layout::stand(state, project, next)
+            .map(block_pos)
+            .filter(|at| !standing_in_other_body(state, project, slot, *at));
     }
     let blueprint = blueprints::get(&state.registry, &project.blueprint)?;
     let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
@@ -196,9 +276,12 @@ fn site_target(
         .flat_map(|x| [[x, edge_min[1]], [x, edge_max[1]]])
         .chain((edge_min[1] + 1..edge_max[1]).flat_map(|z| [[edge_min[0], z], [edge_max[0], z]]));
     for [x, z] in perimeter {
-        let Some(at) =
-            crate::settlements::forestry::footing(state, project.settlement, [x, min[1], z])
-        else {
+        let Some(at) = crate::settlements::forestry::footing_of(
+            state,
+            project.settlement,
+            &project.structure,
+            [x, min[1], z],
+        ) else {
             continue;
         };
         let Some(stand) = crate::settlements::allocator::standing(
@@ -210,6 +293,12 @@ fn site_target(
         ) else {
             continue;
         };
+        // A neighbour lot's future body is not a stand: another project would
+        // place a wall through this builder. The body, not the feet column, is
+        // what must stay clear (D8 review SOL-4/R3-5).
+        if in_other_body(state, project, stand, body.half_width, body.height) {
+            continue;
+        }
         let placement_distance = (stand[0] - f64::from(next[0]) - 0.5).powi(2)
             + (stand[1] - f64::from(next[1])).powi(2)
             + (stand[2] - f64::from(next[2]) - 0.5).powi(2);
@@ -248,7 +337,11 @@ pub(crate) fn work(
         return None;
     }
     let id = v.settlement?;
-    let project = state.settlements.get(id)?.project.as_ref()?;
+    let uuid = state.entities.row(slot).uuid;
+    let project = state
+        .settlements
+        .get(id)
+        .and_then(|record| crate::settlements::construction::project_of_builder(record, uuid))?;
     let next = executor::next_cell(state, id, &project.structure).ok()??;
     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
         && !carried(v, item, count)
@@ -291,17 +384,28 @@ fn in_reach(
     if let Some(base) = preparation_footing(state, project, next) {
         // As with lumberjacks, felling is rooted at the trunk's footing; its
         // crown need not be reachable as an independently placed roof block.
-        if super::mining::near(state, slot, base, PREPARATION_REACH) {
+        // Standing inside a neighbour lot's future body is never in reach: that
+        // project would place a wall through this builder (SOL-4/R3-4).
+        let body = state.entities.body(slot);
+        if !in_other_body(
+            state,
+            project,
+            state.entities.pos(slot),
+            body.half_width,
+            body.height,
+        ) && super::mining::near(state, slot, base, PREPARATION_REACH)
+        {
             return true;
         }
         // Only a cell with no stand in felling reach falls back to the
         // perimeter rule below, matching `site_target`.
-        if preparation_stand(state, slot, project.settlement, next, base).is_some() {
+        if preparation_stand(state, slot, project, next, base).is_some() {
             return false;
         }
     }
     let pos = state.entities.pos(slot);
-    let width = state.entities.body(slot).half_width;
+    let body = state.entities.body(slot);
+    let (width, height) = (body.half_width, body.height);
     if layout::infra(&project.blueprint) || project.blueprint == construction::furnace::NAME {
         // Roads and meadows are walked on while worked; a lamp or furnace
         // column must stay clear of the builder's whole body.
@@ -310,7 +414,9 @@ fn in_reach(
                 let min = f64::from(next[axis]);
                 pos[axis] + width <= min || pos[axis] - width >= min + 1.0
             });
-        return clear && super::mining::near(state, slot, block_pos(next), REACH);
+        return clear
+            && !in_other_body(state, project, pos, width, height)
+            && super::mining::near(state, slot, block_pos(next), REACH);
     }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
         return false;
@@ -323,7 +429,14 @@ fn in_reach(
         let min = f64::from(project.origin[axis]);
         pos[axis] + width <= min || pos[axis] - width >= min + f64::from(size[axis])
     });
-    outside && super::mining::near(state, slot, block_pos(next), REACH)
+    if !outside {
+        return false;
+    }
+    // Standing inside a neighbour lot's future cells would put a wall through
+    // this builder: the body's own box decides, not the feet column
+    // (D8 review SOL-4/R3-5).
+    !in_other_body(state, project, pos, width, height)
+        && super::mining::near(state, slot, block_pos(next), REACH)
 }
 
 pub(crate) fn wait_reason(
@@ -352,21 +465,100 @@ pub(crate) fn wait_reason(
     {
         return "collecting_material";
     }
+    // D10: name the world-state wait instead of a generic stalled placement. The
+    // gate reads the plan entry's state, so a clear cell beside lava names the
+    // wait the debit would take, not a wait that block never takes.
+    let planned = executor::next_plan_state(state, project.settlement, &project.structure)
+        .ok()
+        .flatten()
+        .unwrap_or(state.registry.states.air);
+    if let Some(wait) =
+        crate::settlements::construction::preparation::liquid::write_wait(state, next, planned)
+    {
+        return wait;
+    }
     if !in_reach(state, slot, project, next) {
         return "worksite_unreached";
     }
     "placement_not_advancing"
 }
 
+/// A member this admission may advance a project with: alive, not reserved by
+/// another job, working, and of this settlement.
+fn builder_ready(state: &TickState, id: SettlementId, slot: EntitySlot) -> bool {
+    state.entities.body(slot).alive
+        && !crate::settlements::economy::worker_reserved(
+            state,
+            Some(id),
+            state.entities.row(slot).uuid,
+        )
+        && state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| v.settlement == Some(id) && working(state, v))
+}
+
 /// Called once per construction admission, before the brain detaches carry.
 /// One transfer OR budgeted canonical cell advances, never both in an attempt.
 pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
-    let Some(project) = state
-        .settlements
-        .get(id)
-        .and_then(|record| record.project.clone())
+    // One project per admission, round-robin over the active set: a tick still
+    // writes one structure-registry image (D8).
+    // The settlement is chosen every four ticks by `(tick/4) % S`, so the
+    // project turn counts whole settlement rounds: a project index that is not
+    // congruent mod gcd(S, P) would otherwise never be visited (D8 review
+    // P1-1). An unbound project takes its turn like any other and is bound by
+    // the admission below (founding handover, fresh project).
+    let count = crate::settlements::construction::projects_of(&state.settlements, id).count();
+    if count == 0 {
+        return;
+    }
+    let settlements = state.settlements.records().count().max(1) as u64;
+    let turn = (state.tick / 4 / settlements) as usize % count;
+    let Some(project) = crate::settlements::construction::projects_of(&state.settlements, id)
+        .nth(turn)
+        .cloned()
     else {
         return;
+    };
+    // A founding handover admits a project before the planner binds anyone; the
+    // first admission binds the resident it is about to advance, so arrival
+    // order never leaves a paid project with no authority to advance it.
+    let candidate = match project.builder {
+        Some((uuid, _)) => Some(uuid),
+        // A lazy bind never takes a resident who already holds a project: one
+        // binding per resident, or the record stops opening (P1-2).
+        None => construction::residents(state, id)
+            .find(|slot| {
+                builder_ready(state, id, *slot)
+                    && !construction::bound_builder(
+                        &state.settlements,
+                        state.entities.row(*slot).uuid,
+                    )
+            })
+            .map(|slot| state.entities.row(slot).uuid),
+    };
+    let bound = match (project.builder.map(|(uuid, _)| uuid), candidate) {
+        (Some(uuid), _) => Some(uuid),
+        (None, Some(uuid)) => {
+            let borrowed = state
+                .entities
+                .slot_of_uuid(uuid)
+                .and_then(|slot| state.entities.row(slot).villager.as_ref())
+                .map(|v| v.data.profession);
+            let borrowed = match borrowed {
+                Some(VillagerProfession::Miner | VillagerProfession::Lumberjack) => borrowed,
+                _ => None,
+            };
+            if let Some(record) = state.settlements.get_mut(id)
+                && construction::bind_builder(record, &project.structure, Some((uuid, borrowed)))
+            {
+                record.revision = record.revision.saturating_add(1);
+            }
+            Some(uuid)
+        }
+        (None, None) => None,
     };
     // A paused footprint is re-snapshotted and resumed on the next admission.
     if executor::recover(state, id, &project.structure) == Ok(true) {
@@ -379,25 +571,20 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         let next = match executor::next_cell(state, id, &project.structure) {
             Ok(Some(next)) => next,
             Ok(None) => {
-                construction::finish_project(state, id);
+                construction::finish_project(state, id, &project.structure);
                 return;
             }
             Err(_) => return,
         };
-        let Some(slot) = construction::residents(state, id).find(|slot| {
-            state.entities.body(*slot).alive
-                && !crate::settlements::economy::worker_reserved(
-                    state,
-                    Some(id),
-                    state.entities.row(*slot).uuid,
-                )
-                && state
-                    .entities
-                    .row(*slot)
-                    .villager
-                    .as_ref()
-                    .is_some_and(|v| v.settlement == Some(id) && working(state, v))
-        }) else {
+        // Only the builder bound to this project advances it; an unbound or
+        // stale binding is the planner's business, not this tick's.
+        // The admitted project's builder is resolved by uuid first: a readiness
+        // search would stop at whichever resident is first in the list and drop
+        // the project's own builder on the filter (SOL-1).
+        let Some(slot) = bound
+            .and_then(|uuid| state.entities.slot_of_uuid(uuid))
+            .filter(|slot| builder_ready(state, id, *slot))
+        else {
             return;
         };
         let Ok(item) = executor::next_material(state, id, &project.structure) else {
@@ -415,9 +602,14 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
                 && super::mining::near(state, slot, point, 2.5)
             {
                 let uuid = state.entities.row(slot).uuid;
-                if let Err(reason) = executor::fetch(state, uuid, [point.x, point.y, point.z], item)
-                {
-                    construction::note_build_refusal(state, id, reason);
+                if let Err(reason) = executor::fetch(
+                    state,
+                    uuid,
+                    &project.structure,
+                    [point.x, point.y, point.z],
+                    item,
+                ) {
+                    construction::note_build_refusal(state, id, &project.structure, reason);
                 }
             }
             return;
@@ -428,12 +620,12 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         let uuid = state.entities.row(slot).uuid;
         match executor::advance(state, id, &project.structure, uuid) {
             Ok(true) => {
-                construction::finish_project(state, id);
+                construction::finish_project(state, id, &project.structure);
                 return;
             }
             Ok(false) => {}
             Err(reason) => {
-                construction::note_build_refusal(state, id, reason);
+                construction::note_build_refusal(state, id, &project.structure, reason);
                 return;
             }
         }
@@ -443,3 +635,10 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
 #[cfg(test)]
 #[path = "building_site_reach_tests.rs"]
 mod site_reach_tests;
+
+/// Cross-project body and stand safety (D8 review SOL-4/R3-3..R3-5). The file
+/// lives beside the settlement tests but is registered here: it asserts on this
+/// module's private predicates with the body predicates it exercises.
+#[cfg(test)]
+#[path = "../settlements/construction_body_safety_tests.rs"]
+mod body_safety_tests;

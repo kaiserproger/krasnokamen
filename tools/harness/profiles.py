@@ -612,7 +612,7 @@ def run_civilization_seed_qa(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_village_owner_order_qa(ctx: ProfileContext) -> dict[str, Any]:
-    """Short owner-order persistence and admission scenario."""
+    """D8 parallel sites/queue/restart; negative control: own tree/pin with MAX_PROJECTS=1."""
     from .backends import village_autonomy_qa
 
     return village_autonomy_qa.run(ctx, owner_order=True)
@@ -1223,7 +1223,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "village-owner-order-qa": {
         "scope": "real-client",
-        "description": "Owner-order queue, restart, real storage funding and cancellation (native, windowed)",
+        "description": "D8: funded later order, unfunded head fence, two advancing sites, map, restart, MAX_ORDERS and indexed cancel; control uses its own one-project tree/pin (native, windowed)",
         "run": run_village_owner_order_qa,
     },
     "scene-shot": {

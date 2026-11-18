@@ -237,7 +237,8 @@ fn project_at(id: SettlementId, site: &Site) -> Project {
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
+        order_seq: None,
     }
 }
 
@@ -393,7 +394,7 @@ fn cheapest_lot_beyond_the_first_cursor_batch_wins_the_completed_sweep() {
     let mut admitted = None;
     for _ in 0..64 {
         plan(&mut state, id);
-        if let Some(project) = state.settlements.get(id).unwrap().project.clone() {
+        if let Some(project) = state.settlements.get(id).unwrap().projects.first().cloned() {
             admitted = Some(project);
             break;
         }
@@ -563,7 +564,14 @@ fn excavated_solids_are_credited_once_and_the_fill_is_debited() {
     }
     let dirt = dirt + 8;
     request_build(&mut state, id, "storage").expect("authored bill admits the lot");
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .first()
+        .cloned()
+        .unwrap();
     assert_eq!(project.origin, site.lot.origin);
     complete(&mut state, id, builder);
     assert_eq!(
@@ -639,7 +647,14 @@ fn a_foundation_shortfall_waits_as_collecting_material_then_finishes() {
     dig(&mut state, &site, 2);
     request_build(&mut state, id, "storage")
         .expect("admission is decided on the authored bill, not the foundation");
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .first()
+        .cloned()
+        .unwrap();
     let next = executor::next_cell(&state, id, &project.structure)
         .unwrap()
         .expect("a planned cell");
@@ -657,13 +672,13 @@ fn a_foundation_shortfall_waits_as_collecting_material_then_finishes() {
         crate::villager::building::wait_reason(&state, builder, &project, next),
         "collecting_material"
     );
-    assert!(state.settlements.get(id).unwrap().project.is_some());
+    assert!(!state.settlements.get(id).unwrap().projects.is_empty());
     // Deliver the missing foundation; the same order completes.
     let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
     let free = slots.iter().position(|stack| stack.is_empty()).unwrap();
     slots[free] = mc_data::ItemStack::new(dirt, 8);
     complete(&mut state, id, builder);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     let [x, z] = free_column(&state, &site, 3, 1);
     assert_eq!(
         name_of(&state, [x, FLOOR - 1, z]),
@@ -700,18 +715,30 @@ fn player_terrain_is_refused_at_survey_and_again_before_the_debit() {
         check(&state),
         Some(site_refusals::Reason::ProtectedObstruction)
     );
-    // The same cell edited after admission stops the debit.
+}
+
+#[test]
+fn player_terrain_edits_inside_the_territory_are_cut_and_credited_at_debit() {
+    // Inside village property, a history-only edit after admission is cleared
+    // and credits the certified stone once.
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
     request_build(&mut state, id, "storage").unwrap();
     state.block_log = super::super::forestry::tests::player_history(&state, pillar.cells[0], 0);
     let before = stock(&state, pillar.item);
-    for _ in 0..3 {
-        attempt(&mut state, id, builder);
-    }
-    assert_eq!(name_of(&state, pillar.cells[0]), "stone");
-    assert_eq!(stock(&state, pillar.item), before);
+    let uuid = state.entities.row(builder).uuid;
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    bind_builder(
+        state.settlements.get_mut(id).unwrap(),
+        &handle,
+        Some((uuid, None)),
+    );
+    executor::advance(&mut state, id, &handle, uuid).unwrap();
+    assert_eq!(name_of(&state, pillar.cells[0]), "air");
+    assert_eq!(stock(&state, pillar.item), before + 1);
 }
 
 /// Lava arriving beside a planned cut blocks the write in the same preflight.
@@ -744,7 +771,14 @@ fn terrain_is_cut_top_down_and_no_step_drops_more_than_one_block() {
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 3);
     request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .first()
+        .cloned()
+        .unwrap();
     let (_, cells) = manifest(&state, &project);
     let [x, z] = [pillar.cells[0][0], pillar.cells[0][2]];
     let ordered: Vec<i32> = cells
@@ -1137,7 +1171,7 @@ fn a_flat_tie_goes_to_the_lot_nearest_the_anchor() {
         "premise: the westmost tie {westmost:?} is not the nearest {origin:?}"
     );
     request_build(&mut state, id, "storage").expect("a legal storage lot");
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = state.settlements.get(id).unwrap().projects.first().unwrap();
     assert_eq!(
         (project.origin, project.rotation),
         (origin, rotation),
@@ -1217,8 +1251,8 @@ fn a_credited_cut_survives_a_journal_reopen() {
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .as_ref()
+        .projects
+        .first()
         .unwrap()
         .structure
         .clone();

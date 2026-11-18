@@ -63,7 +63,7 @@ fn check_contents(state: &TickState, item: &ItemStack) {
 #[test]
 fn live_container_slots_become_one_lossless_item_image() {
     let (state, _, pos, current) = setup();
-    let drops = roll(&state, pos, current, &ItemStack::EMPTY, 1).unwrap();
+    let drops = roll(&state, pos, current, &ItemStack::EMPTY, 1, true).unwrap();
     assert_eq!(drops.len(), 1);
     assert!(retains_contents(&drops));
     check_contents(&state, &drops[0]);

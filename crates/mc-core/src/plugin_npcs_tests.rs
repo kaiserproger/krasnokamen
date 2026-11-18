@@ -1364,6 +1364,7 @@ fn every_physical_npc_work_kind_freezes_loot_and_debits_only_after_keep() {
                 previous,
                 original[0].as_ref().unwrap(),
                 fixture.state.tick,
+                true,
             )
             .unwrap();
             for drop in drops {

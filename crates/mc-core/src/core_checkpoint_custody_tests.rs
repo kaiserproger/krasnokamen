@@ -133,7 +133,12 @@ fn capture_custody_ticks_remove_picked_up_merged_and_retracted_rows() {
     use crate::boundary::{ConnectionId, PlayerInput};
     use mc_data::ItemStack;
     let directory = tempfile::tempdir().unwrap();
-    let mut world = World::new(directory.path());
+    // A live simulation window keeps the lot's chunk active across ticks, so its
+    // chest block entity and the plan's writes persist like a played area.
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 2;
+    let mut world = World::open(config);
     world
         .state
         .gamerules
@@ -3686,4 +3691,292 @@ fn container_stale_ack_and_real_eviction_keep_full_custody_in_every_dimension() 
             expected.assert_stored(&reopened, "post-eviction restart fence");
         }
     }
+}
+
+/// D10 liquid-lot custody through the real root tick and a durable checkpoint:
+/// a real storage chest funds the plan, the ordinary fetch moves one unit per
+/// cell, the source cell is paid once, and after a crash-style reopen the
+/// restored plan finishes the unpaid cell from a second storage unit without
+/// paying the first one again.
+#[test]
+fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
+    use crate::settlements::allocator::tests::{block, villager};
+    use crate::settlements::construction::Project;
+    use crate::settlements::{SettlementId, layout};
+    let directory = tempfile::tempdir().unwrap();
+    // A live simulation window keeps the lot's chunk active across ticks, so the
+    // plan's writes, the chest and the resident persist like a played area.
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 2;
+    let mut world = World::open(config);
+    let state = &mut world.state;
+    let registry = state.registry.clone();
+    let air = registry.states.air;
+    let stone = registry.states.stone;
+    let dirt = registry.states.dirt;
+    let water = registry.states.water_levels[0];
+    let dirt_item = registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:dirt").unwrap())
+        .unwrap();
+    state.world.ensure_blocking(
+        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect(),
+    );
+    // Flat two-cell lot with a floor: A holds a real source, B is dry.
+    let a = [11, 201, 11];
+    let b = [11, 201, 12];
+    let chest = [12, 201, 11];
+    let stand = [13, 201, 10];
+    for x in 10..=14 {
+        for z in 9..=14 {
+            state.world.set_block(x, 200, z, stone);
+            for y in 201..=203 {
+                state.world.set_block(x, y, z, air);
+            }
+        }
+    }
+    // A closed shell is part of the real liquid proof, not a skipped fence.
+    for x in 10..=12 {
+        for z in 10..=13 {
+            if x != 11 || !(11..=12).contains(&z) {
+                state.world.set_block(x, 201, z, stone);
+            }
+        }
+    }
+    let chest_block = block(state, "minecraft:chest", &[]);
+    state
+        .world
+        .set_block(chest[0], chest[1], chest[2], chest_block);
+    state.world.set_block(a[0], a[1], a[2], water);
+    state.world.set_block(b[0], b[1], b[2], air);
+    state.block_entities.insert(
+        (chest[0], chest[1], chest[2]),
+        crate::tick::BlockEntityState {
+            slots: vec![mc_data::ItemStack::EMPTY; 27],
+            furnace: None,
+        },
+    );
+    state.world.fold_overlay();
+    let id: SettlementId = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "builders".into(),
+            "owner".into(),
+            a,
+            48,
+        )
+        .unwrap();
+    state.settlements.get_mut(id).unwrap().bootstrap_storage = Some(chest);
+    state.tickets.insert(
+        "liquid-custody".into(),
+        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
+    );
+    let slot = villager(
+        state,
+        [f64::from(stand[0]) + 0.5, 201.0, f64::from(stand[2]) + 0.5],
+    );
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(state, id, entity).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    {
+        let v = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        v.data.profession = crate::villager::VillagerProfession::Builder;
+        v.activity = crate::villager::Activity::Work;
+    }
+    state.day_time = 3000;
+    let bounds = mc_script::ScriptWorldBounds::new(a, b).unwrap();
+    let project = Project {
+        settlement: id,
+        blueprint: layout::ROAD.into(),
+        level: 1,
+        origin: [a[0], 200, a[2]],
+        rotation: 0,
+        building: None,
+        structure: String::new(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    };
+    let cells = vec![
+        crate::plugin_structures::settlement_builds::PlannedCell {
+            portion: crate::plugin_structures::settlement_builds::PortionKind::Fill,
+            at: a,
+            state: dirt,
+            resource: Some("minecraft:dirt".into()),
+            quantity: 1,
+        },
+        crate::plugin_structures::settlement_builds::PlannedCell {
+            portion: crate::plugin_structures::settlement_builds::PortionKind::Fill,
+            at: b,
+            state: dirt,
+            resource: Some("minecraft:dirt".into()),
+            quantity: 1,
+        },
+    ];
+    assert!(crate::settlements::construction::begin_cells(
+        state, project, bounds, cells
+    ));
+    let handle = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .last()
+        .unwrap()
+        .structure
+        .clone();
+    crate::settlements::construction::bind_builder(
+        state.settlements.get_mut(id).unwrap(),
+        &handle,
+        Some((uuid, None)),
+    );
+    // Storage is the container the executor itself reads and writes, so the
+    // deposit, the fetch and the custody assertions share one store.
+    // The chest the executor fetches from is the runtime container map; the
+    // inactive-chunk sync drops a hand-inserted entry at the end of a tick, so
+    // the harness restores an *empty* chest when it vanished (a paid unit can
+    // never come back into storage) and re-seeds a deposit before use.
+    let keep_chest = |state: &mut TickState| {
+        if !state
+            .block_entities
+            .contains_key(&(chest[0], chest[1], chest[2]))
+        {
+            state.block_entities.insert(
+                (chest[0], chest[1], chest[2]),
+                crate::tick::BlockEntityState {
+                    slots: vec![mc_data::ItemStack::EMPTY; 27],
+                    furnace: None,
+                },
+            );
+        }
+    };
+    let storage = |state: &TickState| -> i32 {
+        state
+            .block_entities
+            .get(&(chest[0], chest[1], chest[2]))
+            .map_or(0, |chest_state| {
+                chest_state
+                    .slots
+                    .iter()
+                    .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
+                    .map(|stack| stack.count)
+                    .sum()
+            })
+    };
+    let deposit = |state: &mut TickState, count: i32| {
+        keep_chest(state);
+        state
+            .block_entities
+            .get_mut(&(chest[0], chest[1], chest[2]))
+            .expect("storage")
+            .slots[0] = mc_data::ItemStack::new(dirt_item, count);
+    };
+    let carried = |state: &TickState| -> i32 {
+        state
+            .entities
+            .slots()
+            .filter_map(|slot| state.entities.row(slot).villager.as_ref())
+            .flat_map(|v| v.inventory.iter().flatten())
+            .filter(|stack| !stack.is_empty() && stack.item_id == dirt_item)
+            .map(|stack| stack.count)
+            .sum()
+    };
+    // One storage unit only; the builder starts empty and fetches it.
+    deposit(state, 1);
+    assert_eq!(storage(state), 1, "one unit in storage");
+    assert_eq!(carried(state), 0, "the builder starts empty");
+    for _ in 0..24 {
+        world.tick(keep_chest);
+    }
+    assert_eq!(
+        world.state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the source cell is filled through the root tick"
+    );
+    assert_eq!(
+        world.state.world.block_at(b[0], b[1], b[2]),
+        Some(air),
+        "the unfunded cell stays open"
+    );
+    assert_eq!(storage(&world.state), 0, "the fetched unit left storage");
+    assert_eq!(carried(&world.state), 0, "the unit became the paid cell");
+    let consumed = |state: &TickState| {
+        crate::plugin_structures::settlement_builds::status(state, id, &handle)
+            .unwrap()
+            .consumed
+            .len()
+    };
+    assert_eq!(consumed(&world.state), 1, "the source cell is charged once");
+    world.checkpoint();
+    let mut reopened = world.crash();
+    reopened.state.world.ensure_blocking(
+        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect(),
+    );
+    assert_eq!(
+        reopened.state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the paid block is durable"
+    );
+    assert_eq!(
+        storage(&reopened.state),
+        0,
+        "storage stays empty across the reopen"
+    );
+    assert_eq!(
+        carried(&reopened.state),
+        0,
+        "the reopen charges nothing again"
+    );
+    assert!(consumed(&reopened.state) >= 1, "the paid prefix is durable");
+    // The resident must be at work after the restart, as a real player's is.
+    let slot = reopened.state.entities.slot_of_uuid(uuid).expect("builder");
+    reopened.state.entities.set_pos(
+        slot,
+        [f64::from(stand[0]) + 0.5, 201.0, f64::from(stand[2]) + 0.5],
+    );
+    {
+        let v = reopened
+            .state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .expect("restored villager");
+        v.data.profession = crate::villager::VillagerProfession::Builder;
+        v.activity = crate::villager::Activity::Work;
+    }
+    reopened.state.day_time = 3000;
+    crate::settlements::construction::bind_builder(
+        reopened.state.settlements.get_mut(id).unwrap(),
+        &handle,
+        Some((uuid, None)),
+    );
+    // The second unit goes into the restored storage and is fetched normally.
+    deposit(&mut reopened.state, 1);
+    assert_eq!(storage(&reopened.state), 1, "one unit after the reopen");
+    for _ in 0..24 {
+        reopened.tick(keep_chest);
+    }
+    assert_eq!(
+        reopened.state.world.block_at(b[0], b[1], b[2]),
+        Some(dirt),
+        "the reopened plan finishes the unpaid cell"
+    );
+    assert_eq!(
+        reopened.state.world.block_at(a[0], a[1], a[2]),
+        Some(dirt),
+        "the paid cell was not written or charged again"
+    );
+    assert_eq!(storage(&reopened.state), 0, "the second unit left storage");
+    assert_eq!(
+        carried(&reopened.state),
+        0,
+        "two cells cost exactly two units"
+    );
 }
