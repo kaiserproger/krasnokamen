@@ -570,7 +570,10 @@ fn battle_wal_patch_refuses_without_a_full_image_or_with_bad_elements() {
 fn without_hold(element: &serde_json::Value) -> serde_json::Value {
     let mut stripped = element.clone();
     // `Action` is an externally tagged enum: `{"Guard":{"until":N}}`.
-    if let Some(action) = stripped.get_mut("action").and_then(|action| action.as_object_mut()) {
+    if let Some(action) = stripped
+        .get_mut("action")
+        .and_then(|action| action.as_object_mut())
+    {
         for variant in action.values_mut() {
             if let Some(until) = variant.get_mut("until") {
                 *until = serde_json::Value::from(0);
@@ -689,11 +692,7 @@ fn battle_wal_does_not_rejournal_a_routing_fighter_every_tick() {
             }
         }
         replay = crate::journal::apply_batch_images(replay, &[(state.tick, state.tick, entries)]);
-        assert!(
-            replay.battle_fault.is_none(),
-            "{:?}",
-            replay.battle_fault
-        );
+        assert!(replay.battle_fault.is_none(), "{:?}", replay.battle_fault);
         assert!(
             parsed(&image(&replay).unwrap()) == parsed(&encode(&state).unwrap()),
             "tick {}: the folded records reproduce the live image",

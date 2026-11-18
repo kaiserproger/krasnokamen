@@ -14,6 +14,15 @@ use crate::intent::{DamageSource, Footprint, IntentKind};
 // The 21..25-tick action cycle skips one 20-tick decision after each attack.
 // Count that recovery before deriving odds; do not shorten the action clocks.
 const ATTACK_DECISION_TICKS: u64 = 20;
+/// A fugitive's guard deadline while he flees: he cannot act at all (the attack
+/// pass skips him on `routing` before it reads the deadline), so the value is a
+/// marker stamped once per flight, never a clock. Re-stamping `frame.tick + 20`
+/// every tick journaled every fugitive's fighter record in every WAL patch of a
+/// mass rout (D20 `Guard churn`, 2026-11-17: 62 % of the battle WAL).
+const ROUTING_HOLD: u64 = u64::MAX;
+/// Ticks a man who leaves flight still stands guard: what the old per-tick
+/// `frame.tick + 20` stamp had left on the tick before the first readable pass.
+const ROUTING_HESITATION: u64 = ATTACK_DECISION_TICKS - 1;
 /// Human reaction: a man who first finds an enemy within his melee range
 /// stands guard 4..=8 ticks (seeded per man) before his first decision.
 const REACTION_TICKS_MIN: u64 = 4;
@@ -455,9 +464,19 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             continue;
         }
         if context(battle, bi).is_some_and(|c| c.routing) && !battle.formation.cornered_at(bi) {
-            fighter.action = Action::Guard {
-                until: frame.tick + 20,
-            };
+            // One stamp per flight: the deadline is unread while he flees (the
+            // attack pass skips him on `routing`), so only the value the first
+            // readable pass resolves matters.
+            if !matches!(
+                fighter.action,
+                Action::Guard {
+                    until: ROUTING_HOLD
+                }
+            ) {
+                fighter.action = Action::Guard {
+                    until: ROUTING_HOLD,
+                };
+            }
             fighter.block = None;
             continue;
         }
@@ -539,6 +558,16 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let fighter = &mut combat.fighters[bi];
         let Action::Guard { until } = fighter.action else {
             continue;
+        };
+        // First readable pass of a flight (back in order, or pinned at bay):
+        // take the deadline the old per-tick re-stamp had left on the previous
+        // tick, so an uninterrupted flight decides on exactly the same tick.
+        let until = if until == ROUTING_HOLD {
+            let deadline = frame.tick.saturating_add(ROUTING_HESITATION);
+            fighter.action = Action::Guard { until: deadline };
+            deadline
+        } else {
+            until
         };
         // Two main weapons: no windup while the drawn weapon comes up.
         if fighter.arms.swapping(frame.tick) {
