@@ -820,6 +820,11 @@ pub(super) fn debit(
             }
             return Err(Failure::Blocked);
         }
+        // Any actual cut into air, whichever branch credits it, never opens a
+        // path for water or lava into the site.
+        if cell.state == state.registry.states.air && block != cell.state {
+            crate::settlements::construction::preparation::liquid::dry_cut(state, cell.at)?;
+        }
         // Paving and field retirement reshape existing soil without mining it.
         if free_soil_work(state, cell) {
             continue;
@@ -839,8 +844,8 @@ pub(super) fn debit(
             });
         } else if crate::settlements::construction::excavatable(state, block) {
             // Bounded terrain cut: recheck the cell the survey certified
-            // immediately before the debit, credit its own mining drop in
-            // this same transaction, and never write fluid or lava in.
+            // immediately before the debit and credit its own mining drop in
+            // this same transaction (the fluid check ran above).
             if !portions::inside(state, id, cell.at) && state.block_log.player_touched(cell.at) {
                 return Err(Failure::Blocked);
             }
@@ -854,30 +859,6 @@ pub(super) fn debit(
                 crate::villager::mining::item_id(state, crate::villager::mining::drop_name(path))
                     .ok_or(Failure::Blocked)?;
             let count = crate::villager::mining::drop_count(path);
-            for (dx, dy, dz) in [
-                (1, 0, 0),
-                (-1, 0, 0),
-                (0, 1, 0),
-                (0, -1, 0),
-                (0, 0, 1),
-                (0, 0, -1),
-            ] {
-                let at = [cell.at[0] + dx, cell.at[1] + dy, cell.at[2] + dz];
-                let neighbour = state
-                    .world
-                    .block_at(at[0], at[1], at[2])
-                    .ok_or(Failure::Unloaded)?;
-                // Lava or water next to the cell would flow into the cut.
-                if state.registry.states.lava_levels.contains(&neighbour)
-                    || state
-                        .registry
-                        .blocks
-                        .by_id(mc_world::BlockStateId(neighbour))
-                        .is_some_and(|definition| definition.has_fluid())
-                {
-                    return Err(Failure::Blocked);
-                }
-            }
             drops.push(mc_data::ItemStack::new(item, count));
         } else if portions::inside(state, id, cell.at)
             && !crate::settlements::construction::clearable(state, block)
