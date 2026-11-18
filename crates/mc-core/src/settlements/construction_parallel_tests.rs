@@ -887,23 +887,29 @@ fn a_debtor_is_not_hired_until_its_carry_is_delivered() {
         Some(&vec![(log, 7)]),
         "the exact owed carry is recorded per item"
     );
-    // A new project is admitted while the debt is open.
-    // A cured body with an open debt is exactly the resident the planner must
-    // refuse to hire (R4-1b).
-    state
-        .entities
-        .row_mut(slot)
-        .villager
-        .as_mut()
-        .unwrap()
-        .conversion_time = None;
+    // A new project is admitted while the debt is open. The cured body is
+    // otherwise hirable (on shift, Builder), so only the debt can explain a
+    // refusal (R4-1b).
+    {
+        let v = state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .expect("villager row");
+        v.conversion_time = None;
+        v.data.profession = crate::villager::VillagerProfession::Builder;
+        v.activity = crate::villager::Activity::Work;
+    }
     push_neighbour(&mut state, id, "second-house", [24, 200, 24]);
     super::drain_carry_duties_for_test(&mut state, id);
     super::assign_builder(&mut state, id);
+    // Neither the freshly admitted project nor the released one may take a
+    // debtor: the planner is refused for every binding, not just the new site.
     assert!(
-        project_for_structure(state.settlements.get(id).unwrap(), "second-house")
-            .is_some_and(|project| project.builder.is_none()),
-        "a debtor is not hired for another project"
+        access::projects_of(&state.settlements, id)
+            .all(|project| project.builder.map(|(bound, _)| bound) != Some(uuid)),
+        "a debtor is not hired for any project"
     );
     assert_eq!(
         state
