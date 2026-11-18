@@ -3906,6 +3906,10 @@ mod queue_tests;
 mod parallel_tests;
 
 #[cfg(test)]
+#[path = "construction_parallel_tick_tests.rs"]
+mod parallel_tick_tests;
+
+#[cfg(test)]
 #[path = "construction_site_tests.rs"]
 mod site_tests;
 
