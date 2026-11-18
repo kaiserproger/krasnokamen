@@ -236,43 +236,89 @@ pub(crate) fn finish(
     Ok(())
 }
 
-/// Re-prove a paused plan's liquid facts before it resumes, without re-planning
-/// or re-charging a paid cell: only the cells that are still ahead are read.
-/// `remaining` is the plan tail in stage order; `footprint` is the authored
-/// size. A new supply, a mixed body, an open shell or a player-attributed fluid
-/// cell refuses the resume, and the plan stays paused for the owner to see.
+/// The liquid proof of a plan: the discovered bottom, every fluid column's
+/// support row and the cells that held fluid when the bowl was certified. Paid
+/// cells stay in `cells`: the proof is the volume the admission certified, not
+/// the unpaid tail, so a resume reads the same envelope it was admitted with.
+pub(crate) fn proof(
+    state: &TickState,
+    cells: &[executor::PlannedCell],
+    floor: i32,
+) -> Option<crate::plugin_structures::LiquidProof> {
+    let mut fluid = Vec::new();
+    for cell in cells {
+        if cell.state == state.registry.states.air {
+            continue;
+        }
+        if state
+            .world
+            .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
+            .is_some_and(|block| contained(state, block).is_some())
+        {
+            fluid.push(cell.at);
+        }
+    }
+    if fluid.is_empty() {
+        return None;
+    }
+    // A fill column runs densely from the discovered ground up to the authored
+    // floor, so its lowest fill row is the ground's neighbour.
+    let mut supports: std::collections::BTreeMap<[i32; 2], i32> = std::collections::BTreeMap::new();
+    for cell in cells {
+        if cell.state == state.registry.states.air || cell.at[1] > floor {
+            continue;
+        }
+        supports
+            .entry([cell.at[0], cell.at[2]])
+            .and_modify(|y| *y = (*y).min(cell.at[1]))
+            .or_insert(cell.at[1]);
+    }
+    let columns: Vec<([i32; 2], i32)> = supports
+        .into_iter()
+        .map(|(column, lowest_fill)| (column, lowest_fill - 1))
+        .collect();
+    let lowest = columns.iter().map(|(_, support)| *support).min()?;
+    Some(crate::plugin_structures::LiquidProof {
+        lowest,
+        columns,
+        cells: fluid,
+    })
+}
+
+/// Re-prove a paused plan's liquid facts before it resumes. `proof` is the
+/// envelope the admission certified, paid cells included; the cursor, the
+/// consumed list and every paid cell stay untouched, so a resume never
+/// re-plans and never re-charges a cell that is already paid. A new supply, a
+/// mixed body, an opened shell, a player-attributed block or a removed support
+/// refuses the resume, and the plan stays paused for the owner to see.
 pub(crate) fn revalidate(
     state: &TickState,
+    proof: &crate::plugin_structures::LiquidProof,
     origin: [i32; 3],
     footprint: [i32; 3],
-    lowest: i32,
-    remaining: &[[i32; 3]],
 ) -> Result<(), mc_script::ScriptOperationFailure> {
     use mc_script::ScriptOperationFailure as Failure;
     let mut liquids = Liquids::default();
-    let mut deepest: std::collections::BTreeMap<[i32; 2], i32> = std::collections::BTreeMap::new();
-    for at in remaining {
+    for at in &proof.cells {
         let Some(block) = state.world.physics_block_at(at[0], at[1], at[2]) else {
             continue;
         };
-        deepest
-            .entry([at[0], at[2]])
-            .and_modify(|y| *y = (*y).min(at[1]))
-            .or_insert(at[1]);
         if block == state.registry.states.air {
             continue;
         }
+        // Admission refuses a player-attributed cell, fluid included; a block a
+        // player put into the certified volume is the same refusal on resume.
+        if state.block_log.player_touched(*at) {
+            return Err(Failure::Blocked);
+        }
+        match contained(state, block) {
+            Some((Fluid::Lava, _)) => liquids.lava += 1,
+            Some((Fluid::Water, _)) if fluid_block(state, block) => liquids.water += 1,
+            Some(_) => liquids.preserved_water = true,
+            None => continue,
+        }
         if fluid_block(state, block) {
-            if state.block_log.player_touched(*at) {
-                return Err(Failure::Blocked);
-            }
-            match contained(state, block) {
-                Some((Fluid::Lava, _)) => liquids.lava += 1,
-                _ => liquids.water += 1,
-            }
             liquids.top = Some(liquids.top.map_or(at[1], |top| top.max(at[1])));
-        } else if contained(state, block).is_some() {
-            liquids.preserved_water = true;
         }
     }
     if liquids.total() > MAX_LIQUID_CELLS as u32 {
@@ -287,13 +333,21 @@ pub(crate) fn revalidate(
     if liquids.top.is_none() {
         return Ok(());
     }
-    // The deepest remaining cell of a column sits on that column's support.
-    let supports: Vec<([i32; 2], i32)> = deepest
-        .into_iter()
-        .map(|(column, y)| (column, y - 1))
-        .collect();
+    // Read the real supports: the ground the bowl was proved on must still hold
+    // the liquid up, or the remaining flow leaves the lot.
+    for ([x, z], support) in &proof.columns {
+        let Some(ground) = state.world.physics_block_at(*x, *support, *z) else {
+            return Err(Failure::Blocked);
+        };
+        if ground == state.registry.states.air
+            || fluid_block(state, ground)
+            || state.block_log.player_touched([*x, *support, *z])
+        {
+            return Err(Failure::Blocked);
+        }
+    }
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + footprint[axis] - 1);
-    finish(state, &liquids, origin, max, lowest, &supports).map_err(|_| Failure::Blocked)
+    finish(state, &liquids, origin, max, proof.lowest, &proof.columns).map_err(|_| Failure::Blocked)
 }
 
 /// A lot whose own door column holds fluid cannot be entered: the builder has

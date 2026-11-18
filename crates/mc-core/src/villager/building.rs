@@ -399,13 +399,15 @@ pub(crate) fn wait_reason(
     {
         return "collecting_material";
     }
-    // D10: name the world-state wait instead of a generic stalled placement.
-    let current = state
-        .world
-        .physics_block_at(next[0], next[1], next[2])
+    // D10: name the world-state wait instead of a generic stalled placement. The
+    // gate reads the plan entry's state, so a clear cell beside lava names the
+    // wait the debit would take, not a wait that block never takes.
+    let planned = executor::next_plan_state(state, project.settlement, &project.structure)
+        .ok()
+        .flatten()
         .unwrap_or(state.registry.states.air);
     if let Some(wait) =
-        crate::settlements::construction::preparation::liquid::write_wait(state, next, current)
+        crate::settlements::construction::preparation::liquid::write_wait(state, next, planned)
     {
         return wait;
     }

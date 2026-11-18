@@ -82,25 +82,24 @@ pub(crate) fn prepare(
     // so no cell is placed or paid twice and the bill is unchanged.
     let liquid_stage =
         crate::settlements::construction::preparation::liquid::stage_cells(state, &cells);
-    // D10: a liquid plan's closed-bowl ring is one cell outside the footprint.
-    // Keep it inside the interference fence, so a ring change pauses the plan
-    // instead of letting the remaining flow leave the lot.
-    let liquid_work = cells.iter().any(|cell| {
-        state
-            .world
-            .block_at(cell.at[0], cell.at[1], cell.at[2])
-            .is_some_and(|block| {
-                crate::settlements::construction::preparation::liquid::has_fluid(state, block)
-            })
-    });
-    let bounds = if liquid_work {
-        ScriptWorldBounds::new(
-            [bounds.min[0] - 1, bounds.min[1], bounds.min[2] - 1],
+    // D10: a liquid plan's proof is the volume the admission certified, so the
+    // interference fence keeps the closed-bowl ring (one cell outside the
+    // footprint) and the discovered bottom, supports included. A ring or
+    // support change then pauses the plan instead of letting the remaining flow
+    // leave the lot.
+    let liquid_proof =
+        crate::settlements::construction::preparation::liquid::proof(state, &cells, site.min[1]);
+    let bounds = match &liquid_proof {
+        Some(proof) => ScriptWorldBounds::new(
+            [
+                bounds.min[0] - 1,
+                bounds.min[1].min(proof.lowest),
+                bounds.min[2] - 1,
+            ],
             [bounds.max[0] + 1, bounds.max[1], bounds.max[2] + 1],
         )
-        .map_err(|_| Failure::InvalidRequest)?
-    } else {
-        bounds
+        .map_err(|_| Failure::InvalidRequest)?,
+        None => bounds,
     };
     // The image covers the whole fence, ring included: the first advance of a
     // liquid plan must not read the expansion as a foreign edit.
@@ -187,6 +186,7 @@ pub(crate) fn prepare(
         Structure {
             owner: owner(settlement),
             settlement: Some(settlement),
+            liquid: liquid_proof,
             settlement_preparation: (bounds != site).then_some(bounds),
             snapshot,
             blueprint_hash: inventories::hash(&batches),
@@ -411,24 +411,17 @@ pub(crate) fn recover(
     }
     let bounds = bounds_of_structure(record)?;
     let image = fingerprint(target, bounds, true)?;
-    // D10: re-prove the liquid facts on the paused plan before it resumes. The
-    // fence now includes the one-cell shell, so a ring change already paused it;
+    // D10: re-prove the certified liquid envelope before the plan resumes. The
+    // fence includes the shell and the supports, so a change already paused it;
     // this refuses a resume into a world the admission no longer covers (a new
-    // supply, a mixed body, a player-attributed fluid cell) without re-planning
-    // or re-charging a cell that is already paid.
-    if record.settlement.is_some() {
-        let remaining = remaining_cells(record);
-        let lowest = remaining
-            .iter()
-            .map(|at| at[1])
-            .min()
-            .unwrap_or(bounds.min[1]);
+    // supply, a mixed body, an opened shell, a player block, a removed support)
+    // without re-planning or re-charging a cell that is already paid.
+    if let Some(proof) = record.liquid.clone() {
         crate::settlements::construction::preparation::liquid::revalidate(
             target,
+            &proof,
             record.snapshot.origin,
             record.snapshot.reserved_footprint,
-            lowest,
-            &remaining,
         )?;
     }
     drop(ledger);
@@ -483,25 +476,6 @@ pub(crate) fn recover(
 
 /// Name of the final stage that re-places authored cells a foreign edit emptied.
 const REPAIR: &str = "repair";
-
-/// The plan tail in stage order: everything the executor has not written yet,
-/// skipping the completed prefix of the current stage.
-fn remaining_cells(record: &Structure) -> Vec<[i32; 3]> {
-    let current = record.snapshot.current_stage_index as usize;
-    let completed = record.snapshot.completed_work_units as usize;
-    let mut remaining = Vec::new();
-    for (index, cells) in record.cells.iter().enumerate() {
-        let skip = if index < current {
-            cells.len()
-        } else if index == current {
-            completed
-        } else {
-            0
-        };
-        remaining.extend(cells[skip..].iter().map(|cell| cell.at));
-    }
-    remaining
-}
 
 /// Completion check of a committed building structure: an authored
 /// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
@@ -607,6 +581,22 @@ pub(crate) fn next_cell(
         .get(record.snapshot.current_stage_index as usize)
         .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
         .map(|cell| cell.at))
+}
+
+/// The planned world state of the next cell, for naming a wait: the gate reads
+/// the plan, not the block that is about to be replaced.
+pub(crate) fn next_plan_state(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<Option<u32>, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, &owner(settlement), handle)?;
+    Ok(record
+        .cells
+        .get(record.snapshot.current_stage_index as usize)
+        .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
+        .map(|cell| cell.state))
 }
 
 /// Borrow the canonical stage rather than inferring clearing from a live tree:

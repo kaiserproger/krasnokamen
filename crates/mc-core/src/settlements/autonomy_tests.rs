@@ -1218,7 +1218,7 @@ fn removing_a_claimed_generated_village_retires_its_source_across_queue_rebuilds
     assert_eq!(state.settlements.records().count(), 0);
 }
 
-fn native_village(config: &crate::CoreConfig) -> (TickState, SettlementId) {
+pub(crate) fn native_village(config: &crate::CoreConfig) -> (TickState, SettlementId) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
     let generator = Arc::new(VillageGenerator {
         terrain: mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks)),
@@ -1249,7 +1249,7 @@ fn native_village(config: &crate::CoreConfig) -> (TickState, SettlementId) {
     (state, id)
 }
 
-fn native_checkpoint(state: &mut TickState, config: &crate::CoreConfig, tick: u64) {
+pub(crate) fn native_checkpoint(state: &mut TickState, config: &crate::CoreConfig, tick: u64) {
     use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
     use mc_world::native::NativeCheckpoint;
     state.world.fold_overlay();
@@ -1273,6 +1273,16 @@ fn native_checkpoint(state: &mut TickState, config: &crate::CoreConfig, tick: u6
     );
     let mut manifest: crate::journal::CheckpointManifest =
         serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
+    // The plugin ledger (settlement structures included) is a native domain of
+    // its own; a checkpoint without it would restore an empty plugin state and
+    // silently drop every active plan.
+    image.globals.insert(
+        "plugins".into(),
+        record(tick, serde_json::to_vec(&state.plugins).unwrap()),
+    );
+    manifest
+        .domain_versions
+        .extend(crate::native_checkpoint::domain_versions());
     manifest.tick = tick;
     manifest.world_spawn = Some([8, 201, 8]);
     manifest.generated_entity_claims = state.generated_entity_claims.clone();
