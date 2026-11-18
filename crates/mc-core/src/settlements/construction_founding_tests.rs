@@ -1081,7 +1081,8 @@ fn unrelated_project(state: &mut TickState, parent: SettlementId) -> String {
             building: None,
             structure: String::new(),
             ordered: false,
-            builder: None
+            builder: None,
+            order_seq: None,
         },
         "oak",
         0
@@ -1259,7 +1260,8 @@ fn handover_refuses_while_an_expedition_project_is_active() {
             building: None,
             structure: String::new(),
             ordered: false,
-            builder: None
+            builder: None,
+            order_seq: None,
         },
         "oak",
         0
@@ -1285,7 +1287,8 @@ fn cancelling_an_expedition_cancels_every_project_it_owns() {
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                builder: None
+                builder: None,
+                order_seq: None,
             },
             "oak",
             0
