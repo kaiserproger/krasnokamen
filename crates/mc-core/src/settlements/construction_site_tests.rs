@@ -181,7 +181,8 @@ pub(super) fn first_legal_lot(state: &TickState, id: SettlementId, blueprint_nam
 
 /// Leave `keep` the only legal lot of `blueprint_name`: one column of every
 /// other frontage lot, outside `keep`'s footprint and as far from it as that
-/// lot reaches, gets a dirt-path floor the survey refuses as `ProtectedFloor`.
+/// lot reaches, gets a torch the survey refuses as `ProtectedFloor` (a dirt path
+/// is village work now and would not refuse the lot, owner D10).
 /// The ground stays walkable and the test's own terrain is untouched; the
 /// ranked sweep must then agree that `keep` is the winner.
 pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &str, keep: &Site) {
@@ -212,7 +213,7 @@ pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &
         marks.push([mark.0, floor, mark.1]);
     }
     drop(network);
-    let path = crate::settlements::allocator::tests::block(state, "minecraft:dirt_path", &[]);
+    let path = crate::settlements::allocator::tests::block(state, "minecraft:torch", &[]);
     for [x, y, z] in marks {
         state.world.set_block(x, y, z, path);
     }

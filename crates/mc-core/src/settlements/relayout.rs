@@ -141,15 +141,6 @@ pub(super) fn plan(
     if worked.is_empty() && cleared.is_empty() {
         return Ok(None);
     }
-    // Farmland inside another building's certificate is not this lot's to
-    // remove; the one-block building buffer already refuses that lot, so this
-    // names the cause instead of silently retiring a field in use.
-    if worked
-        .iter()
-        .any(|&(x, _, z, _)| inside_certificate(record, x, z))
-    {
-        return Err(Reason::BuildingBuffer);
-    }
     let detour = if paths.is_empty() {
         Salient::default()
     } else {
@@ -285,13 +276,6 @@ fn ground_at(state: &TickState, anchor_y: i32, x: i32, z: i32) -> Option<(i32, u
             }
             Some((y, block))
         })
-}
-
-fn inside_certificate(record: &SettlementRecord, x: i32, z: i32) -> bool {
-    record.buildings.values().any(|building| {
-        (building.bounds.min[0]..=building.bounds.max[0]).contains(&x)
-            && (building.bounds.min[2]..=building.bounds.max[2]).contains(&z)
-    })
 }
 
 fn vacant(state: &TickState, block: u32) -> bool {

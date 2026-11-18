@@ -30,9 +30,14 @@ pub(super) fn planned_cells(
         .settlements
         .get(project.settlement)
         .ok_or(Preparation)?;
-    // Village paths and farmland this lot covers: the detour stands before any
-    // old path cell is retired, so the walk stays connected at every tick.
-    let village = super::relayout::plan(state, record, lot).map_err(|_| Preparation)?;
+    // Village paths and farmland a new site covers: the detour stands before
+    // any old path cell is retired, so the walk stays connected at every tick.
+    // An upgrade's lot is its own certified ground, never village work.
+    let village = if project.building.is_none() {
+        super::relayout::plan(state, record, lot).map_err(|_| Preparation)?
+    } else {
+        None
+    };
     let mut bottom = project.origin[1];
     let mut corridor = None;
     if project.building.is_none() {

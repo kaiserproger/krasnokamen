@@ -586,9 +586,11 @@ fn site_selection_rejects_overlap_steep_paths_and_unloaded() {
         [5, 200, 5],
         [3, 4, 3]
     ));
+    // Village paths are work, not a refusal: an isolated path cell on the lot
+    // is admitted and retired (owner D10, `relayout::plan`).
     let path = block(&state, "minecraft:dirt_path", &[]);
     state.world.set_block(6, 200, 6, path);
-    assert!(!site_free(
+    assert!(site_free(
         &state,
         state.settlements.get(id).unwrap(),
         [5, 200, 5],
