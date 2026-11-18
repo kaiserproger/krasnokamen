@@ -15,11 +15,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use mc_script::ScriptWorldBounds;
 
+use crate::plugin_structures::settlement_builds::PlannedCell;
+use crate::settlements::SettlementRecord;
 use crate::settlements::construction::site_refusals::Reason;
 use crate::settlements::construction::{self, SITE_BAND};
 use crate::settlements::layout::{self, Cell, Column, PLAZA};
-use crate::settlements::SettlementRecord;
-use crate::plugin_structures::settlement_builds::PlannedCell;
 use crate::tick::TickState;
 
 /// Highest detour level above the column's natural ground: one paid fill cell
@@ -160,7 +160,10 @@ pub(super) fn plan(
     let mut retired = Vec::new();
     for (x, ground, z, _) in worked {
         floor.insert((x, z));
-        if cleared.iter().any(|cell| cell.at[0] == x && cell.at[2] == z) {
+        if cleared
+            .iter()
+            .any(|cell| cell.at[0] == x && cell.at[2] == z)
+        {
             ground_by_column.insert((x, z), ground);
         }
         retired.push(PlannedCell {
@@ -339,8 +342,8 @@ fn reconnection(
     let mut laid: HashSet<[i32; 3]> = HashSet::default();
     while !cut.is_empty() {
         let start = cut[0];
-        let (bridged, cells) = bridge(state, record, lot, &passable, &reach, start)
-            .ok_or(Reason::NoPathDetour)?;
+        let (bridged, cells) =
+            bridge(state, record, lot, &passable, &reach, start).ok_or(Reason::NoPathDetour)?;
         plan.cells
             .extend(cells.into_iter().filter(|cell| laid.insert(cell.at)));
         passable.extend(bridged);
@@ -482,8 +485,7 @@ fn candidate_ground(
     lot: ScriptWorldBounds,
     (x, z): (i32, i32),
 ) -> Option<(i32, u32)> {
-    if lot.min[0] - 1 <= x && x <= lot.max[0] + 1 && lot.min[2] - 1 <= z && z <= lot.max[2] + 1
-    {
+    if lot.min[0] - 1 <= x && x <= lot.max[0] + 1 && lot.min[2] - 1 <= z && z <= lot.max[2] + 1 {
         return None;
     }
     let (dx, dz) = (
@@ -510,12 +512,7 @@ fn inside(bounds: ScriptWorldBounds, x: i32, z: i32) -> bool {
 
 /// Whether a detour path may stand at `(x, z)` on `level`: it paves natural
 /// soil, or sits on a paid fill of vacant cells, with two clear blocks above.
-fn path_ok(
-    state: &TickState,
-    ground: Option<(i32, u32)>,
-    (x, z): (i32, i32),
-    level: i32,
-) -> bool {
+fn path_ok(state: &TickState, ground: Option<(i32, u32)>, (x, z): (i32, i32), level: i32) -> bool {
     let Some((natural, block)) = ground else {
         return false;
     };

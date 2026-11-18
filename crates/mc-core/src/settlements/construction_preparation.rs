@@ -26,7 +26,10 @@ pub(super) fn planned_cells(
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
     let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
-    let record = state.settlements.get(project.settlement).ok_or(Preparation)?;
+    let record = state
+        .settlements
+        .get(project.settlement)
+        .ok_or(Preparation)?;
     // Village paths and farmland this lot covers: the detour stands before any
     // old path cell is retired, so the walk stays connected at every tick.
     let village = super::relayout::plan(state, record, lot).map_err(|_| Preparation)?;

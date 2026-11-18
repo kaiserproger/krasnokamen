@@ -52,7 +52,9 @@ fn plateau(state: &mut TickState, id: SettlementId) -> ([i32; 3], [i32; 2], layo
     let bounds = bounds_of(lot, size);
     for x in bounds.min[0] - 8..=bounds.max[0] + 8 {
         for z in bounds.min[2] - 8..=bounds.max[2] + 8 {
-            state.world.set_block(x, FLOOR, z, state.registry.states.stone);
+            state
+                .world
+                .set_block(x, FLOOR, z, state.registry.states.stone);
             for y in FLOOR + 1..=FLOOR + 4 {
                 state.world.set_block(x, y, z, state.registry.states.air);
             }
@@ -325,8 +327,7 @@ fn farmland_removal_conserves_the_harvest() {
         .map(|stack| (stack.item_id, stack.count))
         .collect();
     assert!(
-        loot
-            .iter()
+        loot.iter()
             .any(|&(item, count)| item == item_of(&state, "wheat") && count >= 1),
         "a mature field yields wheat: {loot:?}"
     );
@@ -363,10 +364,7 @@ fn farmland_removal_conserves_the_harvest() {
     complete(&mut state, id, builder);
     for at in &crops {
         assert_ne!(
-            name(
-                &state,
-                state.world.block_at(at[0], at[1], at[2]).unwrap()
-            ),
+            name(&state, state.world.block_at(at[0], at[1], at[2]).unwrap()),
             Some("wheat")
         );
     }

@@ -786,11 +786,7 @@ fn terrain_preparation_accepts_a_bounded_pillar_and_rejects_protected_cells() {
     // A dirt path is village work now, not a refusal: the lot re-lays it
     // around the footprint (owner D10, `relayout::plan`). Authored blocks and
     // fluids stay protected floors.
-    for name in [
-        "minecraft:oak_planks",
-        "minecraft:water",
-        "minecraft:lava",
-    ] {
+    for name in ["minecraft:oak_planks", "minecraft:water", "minecraft:lava"] {
         let block = crate::settlements::allocator::tests::block(&state, name, &[]);
         state.world.set_block(6, 203, 6, block);
         assert!(

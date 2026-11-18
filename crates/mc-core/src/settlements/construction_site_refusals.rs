@@ -694,10 +694,11 @@ pub(super) fn check(
     cost.lava = liquids.lava;
     // The re-laid village detour is executor work too: its own reservation
     // refuses the lot exactly like the prepared volume.
-    if executor::area_reserved(state, volume) || relayout
-        .as_ref()
-        .and_then(|plan| plan.area())
-        .is_some_and(|area| executor::area_reserved(state, area))
+    if executor::area_reserved(state, volume)
+        || relayout
+            .as_ref()
+            .and_then(|plan| plan.area())
+            .is_some_and(|area| executor::area_reserved(state, area))
     {
         return Err(Reason::ExecutorReservation);
     }
