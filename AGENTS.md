@@ -153,8 +153,8 @@ python3 -m tools.harness list
   absolute path: `<work>/solaris/tools/dev/mem-run.sh -m 6G <command>`
   (`-m 12G` for full `test`/`correctness`; at most 12G each), never a worktree's
   or sibling repo's copy. There are no memory slots: a compile command waits for
-  one of four host-wide build tokens (owner trial D27, 2026-11-18: back to three
-  if the 15-minute load stays above 20 or tests turn flaky; a nested compile reuses its parent's),
+  one of three host-wide build tokens (a four-token owner trial, D27, ended on
+  2026-11-18 when the 15-minute load stayed above 20; a nested compile reuses its parent's),
   every other command starts at once. One agent holds at most one token: it
   starts its next compile command only after the previous one finished (laptop
   proposal 2026-11-18, pending the owner's confirmation: one agent with two
@@ -237,7 +237,7 @@ python3 -m tools.harness list
 - Main has standing authorization to spawn within the
   [current operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode).
   Outside announcement stabilization, the general limit is 15 active agents
-  plus 2 reviewers (owner, 2026-11-14), with 4 concurrent builders (D27 trial).
+  plus 2 reviewers (owner, 2026-11-14), with 3 concurrent builders.
   Workers spawn only when their brief allows it.
   Larger fleets need explicit owner permission.
 - **Generalists, not an agent per task (owner, 2026-11-16).** Main runs a small

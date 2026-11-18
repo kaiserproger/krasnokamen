@@ -36,9 +36,8 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   quota not explicitly pinned by the owner. Default command cap is `-m 8G`;
   requests above 12 GiB without `-x` are lowered to 12 GiB. These are runner defaults,
   not a promise about every machine's effective parent budget.
-- **Build tokens** (owner, 2026-11-11; four since the owner's D27 trial,
-  2026-11-18): at most four compile commands run host-wide; the fleet's
-  concurrent-builder limit is enforced here, not by
+- **Build tokens** (owner, 2026-11-11): at most three compile commands run
+  host-wide; the fleet's concurrent-builder limit is enforced here, not by
   convention. Compile is decided once from argv, after leading
   `env`/`nice`/`ionice`/`timeout` words: `cargo` with any subcommand except
   `fmt`, `fetch`, `tree`, `metadata`, `clean`, `update` and similar, `gradle`
@@ -390,7 +389,7 @@ Cleanup while agents run:
 | 2026-10-28 | no slots or queue; watchdog freezer; shared jobserver; measured peaks | current |
 | 2026-11-04 | pooled target dirs with per-tree marker and touch on switch | current; fixes false greens |
 | 2026-11-11 | three build tokens for compile commands (`slot-lock.py`), reused by nested compiles | current; the 3-builder limit was convention only and the fleet still ran more |
-| 2026-11-18 | four build tokens (owner D27 trial); token-3 battle-video reserve stays removed | current; back to three if the 15-minute load stays above 20 or tests turn flaky |
+| 2026-11-18 | four build tokens (owner D27 trial); token-3 battle-video reserve stays removed | ended the same day: the 15-minute load stayed above 20 (21.3, 24.1, 23.9); back to three tokens, the reserve stays removed |
 
 Skills or prompts that mention slots, "3 x 5G", "-m 5G", exit 75 as a memory
 refusal, or CPU 2/3 windows are obsolete; AGENTS.md and this page win.

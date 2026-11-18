@@ -129,9 +129,9 @@ fi
 # render, live-take pins) keeps the normal lane, so it gets the next freed token first:
 # that keeps the owner's 2026-11-12 goal ("the battle video gets resources first"). The
 # token-3 reserve for that goal stays removed (owner D27 p.7, 2026-11-18); restore a
-# reserve only for live-take windows if a take is starved. Four tokens are a trial (owner
-# D27 p.6): back to 3 if the 15-minute load stays above 20 or tests turn flaky.
-build_tokens=4
+# reserve only for live-take windows if a take is starved. A four-token trial (owner D27
+# p.6) was ended at 12:1x on 2026-11-18: the 15-minute load stayed above 20 (21.3, 24.1, 23.9).
+build_tokens=3
 token_slots=$(seq -s, "$build_tokens")
 token_gate=(--hold-gate "$dir/tokens/priority.gate")
 if [ "${KRASNOKAMEN_BUILD_LANE:-}" = background ]; then
