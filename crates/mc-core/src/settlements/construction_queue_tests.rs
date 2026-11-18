@@ -303,3 +303,64 @@ fn a_restart_mid_sweep_rederives_the_search_and_starts_the_order() {
     assert_eq!(record.projects[0].blueprint, "house");
     assert_eq!(access::orders(record).count(), 0);
 }
+
+/// The house lots the order's first sweep slice examines, in sweep order.
+fn first_slice_lots(state: &TickState, id: SettlementId) -> Vec<layout::Lot> {
+    let blueprint = blueprints::get(&state.registry, "house").unwrap();
+    let mut network = layout::Network::for_construction(state, state.settlements.get(id).unwrap());
+    network
+        .frontage()
+        .into_iter()
+        .take(SITE_ATTEMPTS as usize)
+        .filter_map(|(front, normal)| network.lot(blueprint, front, normal))
+        .collect()
+}
+
+/// Pin 38c3f1cdf: a lot that covers a village path proves the walk around it,
+/// and every such candidate rescanned the whole territory's walk from the
+/// world (70% of the probe's 0.93 s order tick). The walk does not depend on
+/// the lot, so one site pass scans it once however many of its lots cut a
+/// path; a lone check of each lot still scans it for that lot.
+#[test]
+fn a_site_pass_scans_the_village_walk_once() {
+    let (mut state, id, _) = owner_in_open_plan();
+    let path = relayout::dirt_path(&state).expect("dirt path state");
+    for lot in first_slice_lots(&state, id) {
+        state
+            .world
+            .set_block(lot.origin[0] + 1, lot.origin[1], lot.origin[2] + 1, path);
+    }
+    state.world.fold_overlay();
+    relayout::WALKS.with(|walks| walks.set(0));
+    assert_eq!(
+        request_build(&mut state, id, "house").unwrap(),
+        OrderOutcome::Queued {
+            reason: site_refusals::WAITING_FOR_SITE.into()
+        }
+    );
+    assert_eq!(examined(&state, id), Some(SITE_ATTEMPTS));
+    assert_eq!(
+        relayout::WALKS.with(std::cell::Cell::get),
+        1,
+        "the order's site pass scans the village walk once"
+    );
+    relayout::WALKS.with(|walks| walks.set(0));
+    let blueprint = blueprints::get(&state.registry, "house").unwrap();
+    let record = state.settlements.get(id).unwrap();
+    for lot in first_slice_lots(&state, id) {
+        let _ = site_refusals::check(
+            &state,
+            record,
+            lot.origin,
+            blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
+            record.founding.as_ref(),
+            &mut Default::default(),
+            Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+        );
+    }
+    let alone = relayout::WALKS.with(std::cell::Cell::get);
+    assert!(
+        alone > 1,
+        "the slice holds several path-cutting lots, each proved alone: {alone}"
+    );
+}

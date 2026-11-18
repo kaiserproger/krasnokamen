@@ -1283,7 +1283,7 @@ pub(super) fn has_house_lot(
     network: &mut layout::Network<'_>,
     blueprint: &blueprints::Blueprint,
 ) -> bool {
-    let mut clearance = super::forestry::Clearance::default();
+    let mut survey = site_refusals::Survey::default();
     network.frontage().into_iter().any(|(front, normal)| {
         let Some(lot) = network.lot(blueprint, front, normal) else {
             return false;
@@ -1294,7 +1294,7 @@ pub(super) fn has_house_lot(
             lot.origin,
             blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
             record.founding.as_ref(),
-            &mut clearance,
+            &mut survey,
         )
     })
 }
@@ -1435,9 +1435,9 @@ fn site_free_claim(
     origin: [i32; 3],
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
-    clearance: &mut super::forestry::Clearance,
+    survey: &mut site_refusals::Survey,
 ) -> bool {
-    site_refusals::check(state, record, origin, size, expedition, clearance, None).is_ok()
+    site_refusals::check(state, record, origin, size, expedition, survey, None).is_ok()
 }
 
 /// Rewrite the already-funded authored cells, not the stored project later.
@@ -1760,7 +1760,7 @@ fn site_project<'a>(
     let mut cursor = start % count;
     let share = (attempts / kinds.len().max(1) as u32).max(1);
     let mut running = false;
-    let mut clearance = super::forestry::Clearance::default();
+    let mut survey = site_refusals::Survey::default();
     for blueprint in kinds {
         let Some(level) = blueprint.level(1) else {
             continue;
@@ -1780,7 +1780,7 @@ fn site_project<'a>(
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut survey,
             sweeps,
             cursor,
             &mut budget,
@@ -1805,7 +1805,7 @@ fn site_project<'a>(
                         color,
                     },
                     &floors[usize::from(rotation) % 4],
-                    &mut clearance,
+                    &mut survey,
                     images,
                     &mut report,
                 );

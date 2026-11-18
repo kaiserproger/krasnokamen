@@ -217,8 +217,15 @@ fn unused_street_does_not_discard_renewable_timber_or_the_last_house_lot() {
             .contains(&root)
     );
     state.entities.row_mut(slot).villager = Some(worker);
+    // The order examines one sweep slice; planner passes finish the sweep.
+    construction::tests::request_started(&mut state, id, "spanish_house");
+    let town = state.settlements.get(id).unwrap();
     assert_eq!(
-        construction::request_build(&mut state, id, "spanish_house").unwrap(),
-        construction::OrderOutcome::Started,
+        construction::projects(town)
+            .map(|project| project.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["spanish_house"],
+        "the replanted avenue leaves the last house lot buildable"
     );
+    assert_eq!(construction::orders(town).count(), 0);
 }

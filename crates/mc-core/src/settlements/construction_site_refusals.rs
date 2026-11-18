@@ -290,7 +290,7 @@ pub(super) fn materialize(
     record: &SettlementRecord,
     winner: Winner<'_>,
     floors: &BTreeSet<[i32; 2]>,
-    clearance: &mut super::super::forestry::Clearance,
+    survey: &mut Survey,
     images: &[super::super::inventory::Image],
     report: &mut Report,
 ) -> Option<super::FundedSite> {
@@ -303,7 +303,7 @@ pub(super) fn materialize(
         winner.origin,
         size,
         record.founding.as_ref(),
-        clearance,
+        survey,
         Some(floors),
     ) {
         report.reject(reason, winner.origin);
@@ -321,7 +321,9 @@ pub(super) fn materialize(
         builder: None,
         order_seq: None,
     };
-    let Ok((bounds, mut cells)) = planned_cells(state, &project, winner.species, clearance) else {
+    let Ok((bounds, mut cells)) =
+        planned_cells(state, &project, winner.species, &mut survey.clearance)
+    else {
         report.reject(Reason::Preparation, winner.origin);
         return None;
     };
@@ -364,7 +366,7 @@ pub(super) fn advance(
     network: &mut layout::Network<'_>,
     blueprint: &blueprints::Blueprint,
     floors: &[BTreeSet<[i32; 2]>; 4],
-    clearance: &mut super::super::forestry::Clearance,
+    survey: &mut Survey,
     sweeps: &mut Sweeps,
     start: u32,
     budget: &mut u32,
@@ -411,7 +413,7 @@ pub(super) fn advance(
             lot.origin,
             size,
             record.founding.as_ref(),
-            clearance,
+            survey,
             Some(&floors[usize::from(rotation) % 4]),
         ) {
             Err(reason) => report.reject(reason, lot.origin),
@@ -451,7 +453,7 @@ pub(super) fn advance(
         return Advance::Empty;
     };
     // The world may have moved since that candidate was ranked: re-check it
-    // now and restart this sweep when its cost changed. The pass's clearance
+    // now and restart this sweep when its cost changed. The pass's survey
     // already describes this world, so a registered root is proved once.
     let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
     match check(
@@ -460,7 +462,7 @@ pub(super) fn advance(
         origin,
         size,
         record.founding.as_ref(),
-        clearance,
+        survey,
         Some(&floors[usize::from(rotation) % 4]),
     ) {
         Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
@@ -529,6 +531,18 @@ fn shell_fluid(state: &TickState, volume: ScriptWorldBounds) -> bool {
     false
 }
 
+/// One site pass's scratch, shared by every candidate it checks: what the
+/// pass derived from the world and needs again for its next lot. A pass runs
+/// inside one tick for one settlement; the next pass starts a new survey,
+/// since the world and the territory move between passes.
+#[derive(Default)]
+pub(super) struct Survey {
+    /// Planted-tree proofs: a registered root is proved once per pass.
+    pub(super) clearance: super::super::forestry::Clearance,
+    /// The village walk every lot that cuts a path must keep connected.
+    walk: super::relayout::Walk,
+}
+
 /// `floors` are the footprint columns of this candidate's own authored floor.
 pub(super) fn check(
     state: &TickState,
@@ -536,7 +550,7 @@ pub(super) fn check(
     origin: [i32; 3],
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
-    clearance: &mut super::super::forestry::Clearance,
+    survey: &mut Survey,
     floors: Option<&BTreeSet<[i32; 2]>>,
 ) -> Result<Cost, Reason> {
     if founding::site_reserved(state, record.id, origin, size) {
@@ -546,6 +560,7 @@ pub(super) fn check(
     // cell with `record.contains`, its planner reads no player history or
     // attribution. A founding site lies outside the parent's territory and
     // keeps every protection.
+    let Survey { clearance, walk } = survey;
     clearance.within(record);
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     let lot = ScriptWorldBounds::new(origin, max).expect("blueprint bounds");
@@ -573,7 +588,7 @@ pub(super) fn check(
     }
     // Village paths and farmland the lot covers: a path that carries the road
     // network is re-laid around the lot, so those cells are not refusals.
-    let relayout = super::relayout::plan(state, record, lot)?;
+    let relayout = super::relayout::plan(state, record, lot, walk)?;
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
             if distance_sq([x, max[1], z], record.anchor) > i64::from(record.radius).pow(2)

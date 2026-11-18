@@ -8,20 +8,20 @@ use crate::settlements::forestry::tests::player_history;
 /// Ground level of the flat fixture plateau.
 const FLOOR: i32 = 200;
 
-/// One storage lot of the live street plan, as the planner walks it: the
-/// reached road column behind the door, the normal into the lot, the lot.
-fn storage_lot(state: &TickState, id: SettlementId) -> ([i32; 3], [i32; 2], layout::Lot, [u8; 3]) {
+/// A lot as the planner walks to it: the reached road column behind the door,
+/// the normal into the lot, the lot and its footprint.
+type StreetLot = ([i32; 3], [i32; 2], layout::Lot, [u8; 3]);
+
+/// The storage lots of the live street plan, in the planner's walking order.
+fn storage_lots(state: &TickState, id: SettlementId) -> Vec<StreetLot> {
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let mut network = layout::Network::walk(state, record);
+    let mut lots = Vec::new();
     for (front, normal) in network.frontage() {
         if let Some(lot) = network.lot(blueprint, front, normal) {
             let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
-            let bounds = ScriptWorldBounds::new(
-                lot.origin,
-                std::array::from_fn(|axis| lot.origin[axis] + i32::from(size[axis]) - 1),
-            )
-            .unwrap();
+            let bounds = bounds_of(lot, size);
             // The fixture's bootstrap chest is a container the site search
             // refuses, so the planner never takes this lot.
             if (bounds.min[0]..=bounds.max[0]).contains(&1)
@@ -29,10 +29,18 @@ fn storage_lot(state: &TickState, id: SettlementId) -> ([i32; 3], [i32; 2], layo
             {
                 continue;
             }
-            return (front, normal, lot, size);
+            lots.push((front, normal, lot, size));
         }
     }
-    panic!("the street plan has a storage lot");
+    lots
+}
+
+/// One storage lot of the live street plan, as the planner walks it.
+fn storage_lot(state: &TickState, id: SettlementId) -> StreetLot {
+    storage_lots(state, id)
+        .into_iter()
+        .next()
+        .expect("the street plan has a storage lot")
 }
 
 fn bounds_of(lot: layout::Lot, size: [u8; 3]) -> ScriptWorldBounds {
@@ -43,13 +51,9 @@ fn bounds_of(lot: layout::Lot, size: [u8; 3]) -> ScriptWorldBounds {
     .unwrap()
 }
 
-/// The storage lot on a bare stone plateau, so only the cells a test paints
-/// carry soil, water or a path.
-fn plateau(state: &mut TickState, id: SettlementId) -> ([i32; 3], [i32; 2], layout::Lot, [u8; 3]) {
-    open_plan(state);
-    fund(state, "storage", 1);
-    let (front, normal, lot, size) = storage_lot(state, id);
-    let bounds = bounds_of(lot, size);
+/// A bare stone plateau round `bounds`, so only the cells a test paints carry
+/// soil, water or a path.
+fn flatten(state: &mut TickState, bounds: ScriptWorldBounds) {
     for x in bounds.min[0] - 8..=bounds.max[0] + 8 {
         for z in bounds.min[2] - 8..=bounds.max[2] + 8 {
             state
@@ -61,6 +65,14 @@ fn plateau(state: &mut TickState, id: SettlementId) -> ([i32; 3], [i32; 2], layo
         }
     }
     state.world.fold_overlay();
+}
+
+/// The storage lot on a bare stone plateau.
+fn plateau(state: &mut TickState, id: SettlementId) -> StreetLot {
+    open_plan(state);
+    fund(state, "storage", 1);
+    let (front, normal, lot, size) = storage_lot(state, id);
+    flatten(state, bounds_of(lot, size));
     (front, normal, lot, size)
 }
 
@@ -116,6 +128,20 @@ fn admit(
         None,
     )
     .map(|_cost| ())
+}
+
+/// The lot's village work, planned on a walk survey of its own.
+fn plan_alone(
+    state: &TickState,
+    id: SettlementId,
+    bounds: ScriptWorldBounds,
+) -> Result<Option<Relayout>, Reason> {
+    plan(
+        state,
+        state.settlements.get(id).unwrap(),
+        bounds,
+        &mut Walk::default(),
+    )
 }
 
 /// Every node still on the walk reaches the bell after every applied cell.
@@ -189,7 +215,7 @@ fn road_crossing_lot_is_admitted_with_a_detour_and_stays_connected() {
     let bounds = bounds_of(lot, size);
     let road = crossing_road(&mut state, front, normal, size, bounds);
     admit(&state, id, lot, size).expect("the crossing lot is admitted");
-    let plan = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let plan = plan_alone(&state, id, bounds)
         .expect("the lot is admitted")
         .expect("the lot covers village work");
     assert!(
@@ -296,7 +322,7 @@ fn a_lot_whose_cut_cannot_be_bridged_is_refused() {
     }
     state.world.fold_overlay();
     assert_eq!(
-        plan(&state, state.settlements.get(id).unwrap(), bounds).err(),
+        plan_alone(&state, id, bounds).err(),
         Some(Reason::NoPathDetour),
         "a cut with no dry route around it is a named refusal"
     );
@@ -321,7 +347,7 @@ fn a_player_placed_path_outside_the_territory_is_refused() {
     state.settlements.get_mut(id).unwrap().radius = 1;
     assert!(!state.settlements.get(id).unwrap().contains(at));
     assert_eq!(
-        plan(&state, state.settlements.get(id).unwrap(), bounds).err(),
+        plan_alone(&state, id, bounds).err(),
         Some(Reason::ProtectedObstruction),
         "outside the territory the player's block is not the village's"
     );
@@ -342,7 +368,7 @@ fn a_player_placed_path_is_relaid() {
     // D27 p.4 consults history only outside the territory: this lot is inside.
     state.settlements.get_mut(id).unwrap().radius = 512;
     assert!(state.settlements.get(id).unwrap().contains(at));
-    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let planned = plan_alone(&state, id, bounds)
         .expect("a player path is not a refusal")
         .expect("the lot covers village work");
     assert!(
@@ -402,7 +428,7 @@ fn farmland_removal_conserves_the_harvest() {
     }
     state.world.fold_overlay();
     admit(&state, id, lot, size).expect("a farmland lot is admitted");
-    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let planned = plan_alone(&state, id, bounds)
         .expect("farmland is not a refusal")
         .expect("the lot covers village work");
     assert_eq!(
@@ -532,7 +558,7 @@ fn a_raised_detour_cell_costs_one_dirt() {
     let (front, normal, lot, size) = plateau(&mut state, id);
     let bounds = bounds_of(lot, size);
     crossing_road(&mut state, front, normal, size, bounds);
-    let plan = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let plan = plan_alone(&state, id, bounds)
         .expect("the lot is admitted")
         .expect("the lot covers village work");
     let anchor = state.settlements.get(id).unwrap().anchor;
@@ -583,7 +609,7 @@ fn a_dug_out_path_is_never_rewritten_as_soil() {
     let (front, normal, lot, size) = plateau(&mut state, id);
     let bounds = bounds_of(lot, size);
     crossing_road(&mut state, front, normal, size, bounds);
-    let plan = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let plan = plan_alone(&state, id, bounds)
         .expect("the lot is admitted")
         .expect("the lot covers village work");
     let retired = plan.retired[0].at;
@@ -644,7 +670,7 @@ fn only_the_retired_cell_is_exempt_from_the_protected_floor() {
         state.world.set_block(x, y, z, state.registry.states.air);
     }
     state.world.fold_overlay();
-    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let planned = plan_alone(&state, id, bounds)
         .expect("the path on the column is village work")
         .expect("the lot covers village work");
     assert!(
@@ -682,7 +708,7 @@ fn a_two_block_flower_crop_is_reaped_once_and_leaves_its_seed() {
         state.world.set_block(x, y, z, state.registry.states.air);
     }
     state.world.fold_overlay();
-    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let planned = plan_alone(&state, id, bounds)
         .expect("the field is village work")
         .expect("the lot covers village work");
     let reaped: Vec<_> = planned
@@ -763,7 +789,7 @@ fn a_pending_detour_keeps_the_network_walkable_for_the_next_plan() {
         order_seq: None,
     };
     state.settlements.get_mut(id).unwrap().projects = vec![project];
-    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+    let planned = plan_alone(&state, id, bounds)
         .expect("the lot is admitted")
         .expect("the lot covers village work");
     let record = state.settlements.get(id).unwrap();
@@ -785,4 +811,162 @@ fn a_pending_detour_keeps_the_network_walkable_for_the_next_plan() {
             cell.at
         );
     }
+}
+
+/// Still water over every column two to seven cells past the lot's far side,
+/// except the village path: the path the crossing road runs past the lot then
+/// has no dry route back to the street once the lot cuts it.
+fn moat_behind(state: &mut TickState, normal: [i32; 2], bounds: ScriptWorldBounds) {
+    let water = block(state, "minecraft:water", &[]);
+    let path = path_state(state);
+    for x in bounds.min[0] - 7..=bounds.max[0] + 7 {
+        for z in bounds.min[2] - 7..=bounds.max[2] + 7 {
+            let beyond = match normal {
+                [1, _] => x - bounds.max[0],
+                [-1, _] => bounds.min[0] - x,
+                [_, 1] => z - bounds.max[2],
+                _ => bounds.min[2] - z,
+            };
+            if beyond < 2 || state.world.block_at(x, FLOOR, z) == Some(path) {
+                continue;
+            }
+            for y in FLOOR + 1..=FLOOR + 3 {
+                state.world.set_block(x, y, z, water);
+            }
+        }
+    }
+    state.world.fold_overlay();
+}
+
+/// What the storage site search picks on the two-path fixture and the
+/// refusals each of its passes names, as pin 38c3f1cdf (one walk scan per
+/// lot) computed them.
+const PINNED_SITE: Option<([i32; 3], u8)> = Some(([11, 200, 13], 1));
+const PINNED_PASSES: &[(u32, &str)] = &[
+    (
+        64,
+        "{LotGeometry: (31, Some([3, 200, 7])), ProtectedObstruction: (6, Some([1, 200, -5])), \
+         LavaShell: (4, Some([1, 200, 13])), NoPathDetour: (1, Some([-10, 200, 11]))}",
+    ),
+    (
+        64,
+        "{LotGeometry: (4, Some([-13, 200, 9])), SurfaceUnavailable: (6, Some([11, 200, 24])), \
+         LavaShell: (7, Some([1, 200, 17])), NoPathDetour: (6, Some([-11, 200, 11]))}",
+    ),
+    (
+        33,
+        "{LotGeometry: (26, Some([-14, 200, 9])), SurfaceUnavailable: (4, Some([-17, 200, 1])), \
+         Unloaded: (3, Some([-17, 200, 11]))}",
+    ),
+];
+
+/// Two lots of one sweep cut different village paths: A's cut is bridged by a
+/// detour, B's has no dry route. A site pass shares one survey of the walk
+/// across its lots, so each lot must still keep its own cut: every candidate
+/// gets the verdict a lone check gives it, and the search picks the lot and
+/// names the refusals the per-lot scan did.
+#[test]
+fn lots_cutting_different_paths_keep_their_own_verdicts_in_one_pass() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    // Neither plateau may cover the bootstrap chest at (1, 201, 1): the
+    // storage the search is funded from.
+    let mut lots = storage_lots(&state, id)
+        .into_iter()
+        .filter(|(_, _, lot, size)| {
+            let bounds = bounds_of(*lot, *size);
+            [0, 2]
+                .into_iter()
+                .any(|axis| !(bounds.min[axis] - 8..=bounds.max[axis] + 8).contains(&1))
+        });
+    let (front_a, normal_a, lot_a, size_a) = lots.next().expect("a lot clear of the chest");
+    let a = bounds_of(lot_a, size_a);
+    let (front_b, normal_b, lot_b, size_b) = lots
+        .find(|(_, _, lot, size)| {
+            let b = bounds_of(*lot, *size);
+            [0, 2]
+                .into_iter()
+                .any(|axis| b.min[axis] > a.max[axis] + 17 || b.max[axis] < a.min[axis] - 17)
+        })
+        .expect("a storage lot clear of the first");
+    let b = bounds_of(lot_b, size_b);
+    flatten(&mut state, a);
+    flatten(&mut state, b);
+    crossing_road(&mut state, front_a, normal_a, size_a, a);
+    crossing_road(&mut state, front_b, normal_b, size_b, b);
+    moat_behind(&mut state, normal_b, b);
+    let record = state.settlements.get(id).unwrap();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let check = |lot: layout::Lot, survey: &mut _| {
+        super::super::site_refusals::check(
+            &state,
+            record,
+            lot.origin,
+            blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
+            record.founding.as_ref(),
+            survey,
+            Some(&super::super::site_refusals::floor_columns(
+                blueprint,
+                lot.rotation,
+            )),
+        )
+    };
+    assert!(
+        check(lot_a, &mut Default::default()).is_ok(),
+        "A's cut is bridged"
+    );
+    assert_eq!(
+        check(lot_b, &mut Default::default()).err(),
+        Some(Reason::NoPathDetour),
+        "B's cut has no dry route"
+    );
+    let mut survey = Default::default();
+    let mut network = layout::Network::for_construction(&state, record);
+    for (front, normal) in network.frontage() {
+        let Some(lot) = network.lot(blueprint, front, normal) else {
+            continue;
+        };
+        assert_eq!(
+            check(lot, &mut survey),
+            check(lot, &mut Default::default()),
+            "lot {lot:?} keeps its lone verdict inside a shared survey"
+        );
+    }
+    let images = crate::plugin_structures::settlement_builds::source_images(&state, id);
+    let mut sweeps = Default::default();
+    let mut cursor = 0;
+    let mut passes = Vec::new();
+    let mut site = None;
+    for _ in 0..16 {
+        let pass = super::super::site_project(
+            &state,
+            record,
+            std::iter::once(blueprint),
+            &mut sweeps,
+            cursor,
+            super::super::SITE_ATTEMPTS,
+            &images,
+        );
+        passes.push((pass.report.examined, format!("{:?}", pass.report)));
+        if let Some(found) = pass.site {
+            site = Some((found.project.origin, found.project.rotation));
+            break;
+        }
+        if !pass.running {
+            break;
+        }
+        cursor = pass.cursor;
+    }
+    assert_eq!(
+        (
+            site,
+            passes
+                .iter()
+                .map(|(examined, report)| (*examined, report.as_str()))
+                .collect::<Vec<_>>()
+        ),
+        (PINNED_SITE, PINNED_PASSES.to_vec()),
+        "A {lot_a:?}, B {lot_b:?}"
+    );
 }

@@ -3,23 +3,23 @@
 //! old cells are retired, farmland becomes the soil it is made of, and a lot
 //! crop credits its vanilla drops to storage.
 //!
-//! The road network is read from the world, never stored: its nodes are the
-//! plan's road, plaza and verge columns plus every walkable dirt-path column,
-//! joined on foot (a step of at most one block). A lot may retire only the
-//! path cells whose loss keeps every remaining node connected to the bell and
-//! every door on the street it faces; a cut piece is bridged by a detour of
-//! new path cells outside the lot and its one-block clearance. The detour is
-//! laid before any old path cell is retired, so the walk stays connected at
-//! every executor tick.
+//! The road network is read from the world and never kept past one site pass
+//! (`Walk`): its nodes are the plan's road, plaza and verge columns plus
+//! every walkable dirt-path column, joined on foot (a step of at most one
+//! block). A lot may retire only the path cells whose loss keeps every
+//! remaining node connected to the bell and every door on the street it faces;
+//! a cut piece is bridged by a detour of new path cells outside the lot and its
+//! one-block clearance. The detour is laid before any old path cell is retired,
+//! so the walk stays connected at every executor tick.
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use mc_script::ScriptWorldBounds;
 
 use crate::plugin_structures::settlement_builds::PlannedCell;
-use crate::settlements::SettlementRecord;
 use crate::settlements::construction::site_refusals::Reason;
 use crate::settlements::construction::{self, SITE_BAND};
 use crate::settlements::layout::{self, Cell, Column, PLAZA};
+use crate::settlements::{SettlementId, SettlementRecord};
 use crate::tick::TickState;
 
 /// Highest detour level above the column's natural ground: one paid fill cell
@@ -73,7 +73,8 @@ impl Relayout {
     }
 }
 
-/// Plan the village work a needed lot owes.
+/// Plan the village work a needed lot owes. `walk` is the site pass's survey
+/// of the village walk, shared by every lot that pass checks.
 ///
 /// `Ok(None)`: the lot covers no village path, farmland or crop.
 /// `Err(reason)`: a named refusal; the lot is not admitted.
@@ -81,6 +82,7 @@ pub(super) fn plan(
     state: &TickState,
     record: &SettlementRecord,
     lot: ScriptWorldBounds,
+    walk: &mut Walk,
 ) -> Result<Option<Relayout>, Reason> {
     let mut paths = Vec::new();
     let mut worked = Vec::new();
@@ -139,7 +141,7 @@ pub(super) fn plan(
     let detour = if paths.is_empty() {
         Salient::default()
     } else {
-        reconnection(state, record, lot, &paths)?
+        reconnection(state, record, lot, &paths, walk)?
     };
     let mut ground_by_column = HashMap::default();
     let mut retired = Vec::new();
@@ -303,6 +305,76 @@ struct Salient {
     area: Option<ScriptWorldBounds>,
 }
 
+/// The village walk one site pass proves its lots against. None of it depends
+/// on the lot, so the pass scans it for its first lot that cuts a path and its
+/// later lots reuse it; each lot's cut, detour and reach stay its own. The
+/// owning survey lives for one site pass inside one tick, so the world and the
+/// territory it read cannot move under it. Pin 38c3f1cdf rescanned it for
+/// every such lot: 70% of the probe's 0.93 s order tick.
+#[derive(Default)]
+pub(super) struct Walk {
+    scanned: Option<(SettlementId, Result<Streets, Reason>)>,
+}
+
+impl Walk {
+    fn streets(
+        &mut self,
+        state: &TickState,
+        record: &SettlementRecord,
+    ) -> Result<&mut Streets, Reason> {
+        if self
+            .scanned
+            .as_ref()
+            .is_some_and(|(settlement, _)| *settlement != record.id)
+        {
+            self.scanned = None;
+        }
+        let (_, streets) = self
+            .scanned
+            .get_or_insert_with(|| (record.id, Streets::scan(state, record)));
+        streets.as_mut().map_err(|reason| *reason)
+    }
+}
+
+/// The walk with every pending project's hold, the bell's seed columns, the
+/// nodes they reach and, once a lot needs them, the doors on those nodes.
+struct Streets {
+    nodes: Nodes,
+    seeds: Vec<(i32, i32)>,
+    reached: HashSet<(i32, i32)>,
+    doors: Option<Vec<(i32, i32)>>,
+}
+
+impl Streets {
+    fn scan(state: &TickState, record: &SettlementRecord) -> Result<Self, Reason> {
+        let nodes = plan_walk(state, record)?;
+        let seeds = bell_columns(record, &nodes);
+        let reached = within(&nodes, &seeds);
+        Ok(Self {
+            nodes,
+            seeds,
+            reached,
+            doors: None,
+        })
+    }
+
+    /// Access columns of the standing buildings that the bell's walk reaches:
+    /// a lot must leave every one of them on the walk.
+    fn doors(&mut self, state: &TickState, record: &SettlementRecord) -> &[(i32, i32)] {
+        let reached = &self.reached;
+        self.doors.get_or_insert_with(|| {
+            let network = layout::Network::walk(state, record);
+            record
+                .buildings
+                .values()
+                .filter_map(|building| network.access_column(building))
+                .map(|at| (at[0], at[2]))
+                .filter(|column| reached.contains(column))
+                .collect()
+        })
+    }
+}
+
 /// Bridge every piece the lot cuts off the bell with new path cells, then
 /// prove the whole network and every door still walk to it.
 fn reconnection(
@@ -310,22 +382,23 @@ fn reconnection(
     record: &SettlementRecord,
     lot: ScriptWorldBounds,
     paths: &[[i32; 3]],
+    walk: &mut Walk,
 ) -> Result<Salient, Reason> {
-    let nodes = plan_walk(state, record)?;
-    let seeds = bell_columns(record, &nodes);
-    if seeds.is_empty() {
+    let streets = walk.streets(state, record)?;
+    if streets.seeds.is_empty() {
         // No walk starts from the bell: nothing can be proved about the
         // network, so a lot may not cut it.
         return Err(Reason::NoPathDetour);
     }
     let removed: HashSet<(i32, i32)> = paths.iter().map(|at| (at[0], at[2])).collect();
-    let before = within(&nodes, &seeds);
-    let mut passable: Nodes = nodes
+    let before = &streets.reached;
+    let mut passable: Nodes = streets
+        .nodes
         .iter()
         .filter(|(column, _)| !removed.contains(column))
         .map(|(column, &y)| (*column, y))
         .collect();
-    let mut reach = within(&passable, &seeds);
+    let mut reach = within(&passable, &streets.seeds);
     let mut cut: Vec<(i32, i32)> = before
         .iter()
         .filter(|column| !removed.contains(column) && !reach.contains(column))
@@ -341,7 +414,7 @@ fn reconnection(
         plan.cells
             .extend(cells.into_iter().filter(|cell| laid.insert(cell.at)));
         passable.extend(bridged);
-        reach = within(&passable, &seeds);
+        reach = within(&passable, &streets.seeds);
         let held = reach.clone();
         cut.retain(|column| !held.contains(column));
     }
@@ -353,15 +426,12 @@ fn reconnection(
     {
         return Err(Reason::NoPathDetour);
     }
-    let doors = crate::settlements::layout::Network::walk(state, record);
-    for building in record.buildings.values() {
-        let Some(at) = doors.access_column(building) else {
-            continue;
-        };
-        let column = (at[0], at[2]);
-        if before.contains(&column) && !reach.contains(&column) {
-            return Err(Reason::NoPathDetour);
-        }
+    if streets
+        .doors(state, record)
+        .iter()
+        .any(|column| !reach.contains(column))
+    {
+        return Err(Reason::NoPathDetour);
     }
     if let Some(first) = plan.cells.first() {
         let mut min = first.at;
@@ -560,7 +630,15 @@ fn path_ok(
         && !state.block_entities.contains_key(&(x, level + 1, z))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Village walks scanned from the world on this thread (cost observer).
+    pub(super) static WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn walk(state: &TickState, record: &SettlementRecord) -> Nodes {
+    #[cfg(test)]
+    WALKS.with(|count| count.set(count.get() + 1));
     let anchor = record.anchor;
     let path = layout::paved_state(state);
     let reach = i32::try_from(record.radius)

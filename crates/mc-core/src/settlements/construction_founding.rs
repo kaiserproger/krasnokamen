@@ -289,7 +289,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
         return;
     }
     let record = state.settlements.get(parent).unwrap();
-    let mut clearance = super::super::forestry::Clearance::default();
+    let mut survey = site_refusals::Survey::default();
     if !expedition.sites().into_iter().all(|(name, origin)| {
         let blueprint = blueprints::get(&state.registry, name).expect("authored outpost");
         site_free_claim(
@@ -298,7 +298,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
             origin,
             blueprint.footprint(Rotation(0)),
             Some(&expedition),
-            &mut clearance,
+            &mut survey,
         ) && planned_cells(
             state,
             &Project {
@@ -314,7 +314,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
                 order_seq: None,
             },
             "oak",
-            &mut clearance,
+            &mut survey.clearance,
         )
         .is_ok()
     }) {

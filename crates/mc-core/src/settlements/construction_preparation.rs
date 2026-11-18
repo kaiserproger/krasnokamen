@@ -54,7 +54,8 @@ fn cell_plan(
     // any old path cell is retired, so the walk stays connected at every tick.
     // An upgrade's lot is its own certified ground, never village work.
     let village = if project.building.is_none() {
-        super::relayout::plan(state, record, lot).map_err(|_| Preparation)?
+        super::relayout::plan(state, record, lot, &mut Default::default())
+            .map_err(|_| Preparation)?
     } else {
         None
     };
