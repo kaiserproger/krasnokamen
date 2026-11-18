@@ -4502,7 +4502,7 @@ regression = [
   "cargo:mc-core:settlements::forestry::tests::identical_replacement_after_history_expiry_is_felled_and_conserved",
   "cargo:mc-core:settlements::forestry::tests::retained_player_placement_vetoes_an_identical_worldgen_log",
   "cargo:mc-core:settlements::forestry::tests::full_storage_refuses_felling_without_losing_or_duplicating_the_log",
-  "cargo:mc-core:settlements::forestry::tests::protected_crown_above_access_headroom_stays_while_the_building_finishes",
+  "cargo:mc-core:settlements::forestry::tests::protected_crown_above_access_headroom_stays_outside_the_territory",
   "cargo:mc-core:settlements::forestry::tests::disabled_block_history_protects_natural_forest_near_a_live_player",
   "cargo:mc-core:villager::lumber_tests::lumberjack_routes_then_cuts_full_trunk_and_replants_matching_sapling",
   "cargo:mc-core:settlements::forestry::tests::updated_leaf_distance_remains_clearable_without_ignoring_other_properties",
