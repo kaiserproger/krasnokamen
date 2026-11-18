@@ -268,7 +268,9 @@ pub(crate) struct MotionHint {
 }
 
 /// One entity-step result for [`EntityStore::apply_motion_result`]. Rotation is
-/// yaw/pitch only (the stored third component mirrors yaw). `attack_cooldown`
+/// the body yaw and pitch plus the head yaw the client draws: vanilla
+/// `LookControl`/`BodyRotationControl` let the head lag the body on its own
+/// axis, and the persisted image keeps only yaw and pitch. `attack_cooldown`
 /// is `None` for the ordinary one-tick decrement.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MotionResult {
@@ -276,6 +278,8 @@ pub(crate) struct MotionResult {
     pub(crate) vel: [f64; 3],
     pub(crate) yaw: f32,
     pub(crate) pitch: f32,
+    /// Head yaw for the wire; `yaw` when the body faces what it looks at.
+    pub(crate) head_yaw: f32,
     pub(crate) ground: bool,
     pub(crate) horizontal_impulse: [f64; 2],
     pub(crate) air_supply: i32,
@@ -1654,7 +1658,7 @@ impl EntityStore {
             self.vel[index] = result.vel;
             wire = true;
         }
-        let rot = [result.yaw, result.pitch, result.yaw];
+        let rot = [result.yaw, result.pitch, result.head_yaw];
         if self.rot[index] != rot {
             self.rot[index] = rot;
             wire = true;
@@ -1783,10 +1787,16 @@ impl EntityStore {
     }
 
     pub fn set_rot(&mut self, slot: EntitySlot, yaw: f32, pitch: f32) {
+        self.set_facing(slot, [yaw, pitch, yaw]);
+    }
+
+    /// Store a full `[yaw, pitch, head]` facing: the motion writeback and any
+    /// path that already computed the head on its own axis. Pose-only writes
+    /// (`set_rot`, commands, placement) keep the head on the body.
+    pub fn set_facing(&mut self, slot: EntitySlot, rotation: [f32; 3]) {
         let index = slot.0 as usize;
-        let next = [yaw, pitch, yaw];
-        if self.rot[index] != next {
-            self.rot[index] = next;
+        if self.rot[index] != rotation {
+            self.rot[index] = rotation;
             self.mark_changed(index);
             self.entity_changed(self.bodies[index].id, false, slot);
         }

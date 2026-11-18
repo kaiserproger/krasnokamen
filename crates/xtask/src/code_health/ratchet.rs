@@ -59,7 +59,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // existing loot and falling-block sites reuse: no headroom taken.
     // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
     // reuse and the already-resolved dirt state remove one net literal, 2026-11-17: 2631.
-    vanilla_id_literals: 2_631,
+    // MotionYaw 2026-11-18: the head-controller capability names shulker,
+    // phantom and happy_ghast once, whose vanilla BodyRotationControl overrides
+    // keep the head on the body: +3, 2634.
+    vanilla_id_literals: 2_634,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
@@ -67,10 +70,14 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // D9 baseline on b58021e61, 2026-11-17; no spare headroom.
     construction_field_accesses: 31,
     hot_files: &[
-        ("tick/entity_phase.rs", 734),
+        // MotionYaw 2026-11-18: the early-rest head guard, the ReadRow
+        // head-controller capability and its initializer: 737.
+        ("tick/entity_phase.rs", 737),
         ("settlements/construction.rs", 1_076),
         ("tick.rs", 834),
-        ("entities.rs", 924),
+        // MotionYaw 2026-11-18: `set_facing`, the full [yaw, pitch, head]
+        // setter that `set_rot` now delegates to: 925.
+        ("entities.rs", 925),
     ],
 };
 

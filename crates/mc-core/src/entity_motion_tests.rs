@@ -28,6 +28,7 @@ fn input(movement: MovementClass, position: Vec3) -> MotionInput {
         rotation: [0.0; 3],
         look_target: None,
         battle_facing: false,
+        head_follows_body: false,
         climbs_walls: false,
         aquatic_control: AquaticControl::Other,
         air_supply: 300,
@@ -406,6 +407,216 @@ fn look_and_move_controls_use_target_height_and_bound_turn_rate() {
 
 const TICK: f64 = mc_physics::TICK_SECONDS;
 
+/// Vanilla `MoveControl` turns a body toward the wanted position at 90 deg/tick
+/// and never toward the step physics managed. Reverting the facing hunk in
+/// `step` fails this: the previous rule faced the post-collision velocity.
+#[test]
+fn move_facing_faces_the_wanted_direction_not_the_resolved_step() {
+    let world = Habitat(|x, y, _| {
+        if y < 0 || (x == 1 && y < 5) {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    // Touching a wall on +x: the diagonal drive keeps only its +z half.
+    let mut state = input(MovementClass::Walker, Vec3::new(0.65, 0.0, 0.5));
+    state.drive = [4.0, 0.0, 4.0];
+    let moved = step(state, &world, |_, _| true);
+    assert_eq!(moved.body.velocity.x, 0.0, "the wall zeroes +x");
+    assert!(moved.body.velocity.z > 0.0, "and +z still carries");
+    assert_eq!(
+        moved.rotation[0], -45.0,
+        "faces the wanted diagonal; the resolved step alone would face +z"
+    );
+}
+
+/// Vanilla `MoveControl.MIN_SPEED` / `MIN_SPEED_SQR`: 5.0E-4 blocks per tick.
+/// Below it the wanted point is reached and the body does not turn.
+#[test]
+fn move_facing_holds_below_the_vanilla_dead_zone() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut slow = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    slow.rotation = [37.0, 9.0, 37.0];
+    slow.drive = [0.006, 0.0, 0.006]; // 4.2E-4 blocks per tick
+    let held = step(slow, &flat, |_, _| true);
+    assert_eq!(held.rotation[0], 37.0);
+    let mut faster = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    faster.rotation = [37.0, 9.0, 37.0];
+    faster.drive = [0.012, 0.0, 0.012]; // 8.5E-4 blocks per tick
+    let turned = step(faster, &flat, |_, _| true);
+    assert_ne!(turned.rotation[0], 37.0, "above the dead zone it turns");
+}
+
+/// A knockback moves the body, not the wanted position: vanilla `MoveControl`
+/// never turns toward it (Main, 2026-11-17).
+#[test]
+fn move_facing_ignores_a_knockback() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    state.impulse = [8.0, 0.0];
+    let knocked = step(state, &flat, |_, _| true);
+    assert!(knocked.body.position.x > 0.5, "it really slides +x");
+    assert_eq!(knocked.rotation[0], 0.0, "and keeps facing +z");
+    assert_eq!(
+        look([0.0; 3], knocked.body.position, knocked.body.velocity, None)[0],
+        -90.0,
+        "the previous rule faced the slide"
+    );
+}
+
+/// A body shoved in water keeps its facing: the wanted direction is the AI's
+/// drive, never the knockback the swim navigation mixed in.
+#[test]
+fn move_facing_does_not_turn_in_water_from_a_knockback() {
+    let water = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Water
+        }
+    });
+    let mut state = input(MovementClass::Swimmer, Vec3::new(0.5, 1.0, 0.5));
+    state.aquatic_control = AquaticControl::Fish;
+    state.impulse = [8.0, 0.0];
+    let knocked = step(state, &water, |_, _| true);
+    assert!(knocked.body.velocity.x > 0.0, "it is pushed +x");
+    assert_eq!(knocked.rotation[0], 0.0, "and keeps facing +z");
+}
+
+/// A body whose own controller keeps the head on the body (shulker, phantom,
+/// happy ghast) never lags it.
+#[test]
+fn move_facing_keeps_the_head_on_the_body_for_a_special_controller() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Flyer, Vec3::new(0.5, 3.0, 0.5));
+    state.head_follows_body = true;
+    state.drive = [4.0, 0.0, 0.0];
+    let moved = step(state, &flat, |_, _| true);
+    assert_eq!(moved.rotation[0], -90.0);
+    assert_eq!(moved.rotation[2], -90.0, "no head lag for that controller");
+}
+
+/// The yaw dead zone never freezes the pitch: a fall with nothing to walk to
+/// still tips the head down.
+#[test]
+fn move_facing_holds_yaw_but_still_pitches_a_fall() {
+    let air = Habitat(|_, _, _| BlockMaterial::Air);
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 5.0, 0.5));
+    state.body.on_ground = false;
+    let falling = step(state, &air, |_, _| true);
+    assert_eq!(falling.rotation[0], 0.0, "no wanted horizontal travel");
+    assert!(
+        falling.rotation[1] > 10.0,
+        "the fall pitches the body down (positive xRot is down)"
+    );
+}
+
+/// An open-ground walk keeps the previous yaw and pitch bit for bit: only a
+/// clipped or reversed step changes the facing.
+#[test]
+fn move_facing_steady_walk_keeps_the_old_yaw_and_pitch() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    state.rotation = [30.0, 5.0, 30.0];
+    state.drive = [3.0, 0.0, 1.0];
+    let moved = step(state, &flat, |_, _| true);
+    let old = look(
+        [30.0, 5.0, 30.0],
+        moved.body.position,
+        moved.body.velocity,
+        None,
+    );
+    assert_eq!(
+        [moved.rotation[0].to_bits(), moved.rotation[1].to_bits()],
+        [old[0].to_bits(), old[1].to_bits()]
+    );
+}
+
+/// Vanilla `LookControl` turns a head with nothing to look at toward the body at
+/// 10 deg/tick; `BodyRotationControl` keeps it inside a 75 deg cone.
+#[test]
+fn move_facing_head_follows_the_body_at_the_vanilla_rate() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5));
+    state.drive = [4.0, 0.0, 0.0];
+    let first = step(state, &flat, |_, _| true);
+    assert_eq!(first.rotation[0], -90.0, "the body turns 90 deg at once");
+    assert_eq!(first.rotation[2], -15.0, "the head stops 75 deg behind");
+    let mut next = input(MovementClass::Walker, first.body.position);
+    next.body = first.body;
+    next.drive = [4.0, 0.0, 0.0];
+    next.rotation = first.rotation;
+    let second = step(next, &flat, |_, _| true);
+    assert_eq!(second.rotation[0], -90.0);
+    assert_eq!(
+        second.rotation[2], -25.0,
+        "10 deg/tick back toward the body"
+    );
+}
+
+/// A body with nothing to look at and nothing to walk to keeps its facing while
+/// the head settles back to the front.
+#[test]
+fn stationary_body_holds_its_facing_while_the_head_settles() {
+    let flat = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Stationary, Vec3::new(0.5, 0.0, 0.5));
+    state.rotation = [0.0, 15.0, 60.0];
+    let still = step(state, &flat, |_, _| true);
+    assert_eq!([still.rotation[0], still.rotation[1]], [0.0, 15.0]);
+    assert_eq!(still.rotation[2], 50.0);
+}
+
+/// Aiming keeps today's behaviour: the head rides the body once the body faces
+/// what it looks at, which is vanilla's own steady state.
+#[test]
+fn look_keeps_the_head_on_the_body_while_a_target_is_aimed() {
+    let aimed = look(
+        [10.0, 0.0, 40.0],
+        Vec3::ZERO,
+        Vec3::ZERO,
+        Some([5.0, 0.0, 0.0]),
+    );
+    assert_eq!(aimed[2], aimed[0]);
+    assert_eq!(aimed[0], -80.0);
+}
+
 /// A battle body standing at (0.5, 0, 0.5) on flat ground: `previous` is the
 /// velocity (blocks/s) it left the last tick with, `drive` (blocks/s) this
 /// tick's standing velocity.
@@ -429,7 +640,7 @@ fn battle_step(input: MotionInput, wall: bool) -> MotionResult {
     step(input, &world, |_, _| true)
 }
 
-/// The same input with the battle rule off: the old `look` facing.
+/// The same input with the battle rule off: the shared MoveControl facing.
 fn old_step(mut input: MotionInput, wall: bool) -> MotionResult {
     input.battle_facing = false;
     battle_step(input, wall)
@@ -497,7 +708,7 @@ fn battle_facing_holds_through_slot_oscillation_that_old_look_swings() {
 }
 
 #[test]
-fn battle_facing_turns_on_steady_walks_from_rest_exactly_like_old_look() {
+fn battle_facing_turns_on_steady_walks_from_rest_like_the_shared_rule() {
     let rotation = [180.0, 12.0, 180.0];
     for per_tick in [0.0051, 0.02, 0.04, 0.1] {
         let speed = per_tick / TICK;
@@ -508,11 +719,13 @@ fn battle_facing_turns_on_steady_walks_from_rest_exactly_like_old_look() {
             let moved = battle_step(state, false);
             let mut state = battle(facing, [0.0; 2], [speed, 0.0]);
             state.body = body;
-            let old = old_step(state, false);
-            assert_same_motion(&moved, &old);
+            let shared = old_step(state, false);
+            assert_same_motion(&moved, &shared);
+            // The head is the only axis the two rules split (the shared rule
+            // lags it at LookControl's 10 deg/tick).
             assert_eq!(
-                bits(moved.rotation),
-                bits(old.rotation),
+                [moved.rotation[0].to_bits(), moved.rotation[1].to_bits()],
+                [shared.rotation[0].to_bits(), shared.rotation[1].to_bits()],
                 "{per_tick} tick {tick}"
             );
             assert_ne!(moved.rotation[0], facing[0], "{per_tick} tick {tick} turns");
@@ -612,6 +825,8 @@ fn battle_facing_with_a_target_turns_like_old_look_even_without_a_step() {
     assert_eq!(with_rule.rotation[0].rem_euclid(360.0), 270.0);
 }
 
+/// A knockback is not a wanted position. The battle rule holds as before and the
+/// shared rule now holds too; the previous tree turned the body toward the slide.
 #[test]
 fn battle_facing_holds_against_knockback_without_changing_motion() {
     let speed = 0.04 / TICK;
@@ -622,32 +837,37 @@ fn battle_facing_holds_against_knockback_without_changing_motion() {
         state
     };
     let held = battle_step(make(), false);
-    let old = old_step(make(), false);
+    let shared = old_step(make(), false);
     assert!(held.body.position.x < 0.5, "knocked back");
-    assert_same_motion(&held, &old);
+    assert_same_motion(&held, &shared);
     assert_eq!(bits(held.rotation), bits(walking));
     assert_eq!(
-        old.rotation[0], -180.0,
-        "the old facing turns to the knockback"
+        shared.rotation[0], -90.0,
+        "the shared rule faces the drive, not the knockback"
+    );
+    assert_eq!(
+        look(walking, held.body.position, held.body.velocity, None)[0],
+        -180.0,
+        "the previous tree faced the knockback"
     );
 }
 
+/// The battle policy stays frozen: a sliding step faces the resolved velocity
+/// (as `de660fabd` did), while a non-battle body faces the direction it wants.
 #[test]
 fn battle_facing_against_a_wall_follows_the_resolved_velocity() {
     let speed = 0.04 / TICK;
     let rotation = [30.0, 12.0, 30.0];
-    // Sliding along the wall: the step continues the last one and turns
-    // exactly like the old facing, toward the post-collision velocity.
     let make = |x: f64| {
         let mut state = battle(rotation, [speed, speed], [speed, speed]);
         state.body.position.x = x;
         state
     };
     let slid = battle_step(make(0.69), true);
-    let old = old_step(make(0.69), true);
-    assert_same_motion(&slid, &old);
-    assert_eq!(bits(slid.rotation), bits(old.rotation));
-    assert_eq!(slid.rotation[0], 0.0, "faces along the wall");
+    let shared = old_step(make(0.69), true);
+    assert_same_motion(&slid, &shared);
+    assert_eq!(slid.rotation[0], 0.0, "battle: along the wall");
+    assert_eq!(shared.rotation[0], -45.0, "shared: the wanted diagonal");
     // Head-on at contact: no step, so both keep the facing.
     let make = || {
         let mut state = battle(rotation, [speed, 0.0], [speed, 0.0]);
@@ -655,19 +875,24 @@ fn battle_facing_against_a_wall_follows_the_resolved_velocity() {
         state
     };
     let blocked = battle_step(make(), true);
-    let old = old_step(make(), true);
-    assert_same_motion(&blocked, &old);
+    let shared = old_step(make(), true);
+    assert_same_motion(&blocked, &shared);
     assert_eq!(bits(blocked.rotation), bits(rotation));
-    assert_eq!(bits(old.rotation), bits(rotation));
+    assert_eq!(
+        shared.rotation[0], -60.0,
+        "the shared rule faces the wall it keeps pushing"
+    );
 }
 
-/// With the rule off the facing is the old `look` of the resolved body; with
-/// it on, only the rotation may change, and only to the held input rotation.
+/// The battle policy is `look` of the resolved body plus the hold: on every grid
+/// case the motion is identical, and the rotation is either the held input
+/// rotation or exactly `look` of the resolved velocity.
 #[test]
-fn battle_facing_changes_only_rotation_and_off_is_the_old_look() {
+fn battle_facing_is_the_previous_look_or_the_hold() {
     let per_tick = [0.0, 0.003, 0.0049, 0.0051, 0.02, 0.07, 0.3];
     let rotations = [[0.0; 3], [30.0, 12.0, 30.0], [-170.0, -45.0, -170.0]];
     let mut held = 0;
+    let mut followed = 0;
     for wall in [false, true] {
         for rotation in rotations {
             for &p in &per_tick {
@@ -688,24 +913,20 @@ fn battle_facing_changes_only_rotation_and_off_is_the_old_look() {
                                 };
                                 let start = make().body;
                                 let on = battle_step(make(), wall);
-                                let off = old_step(make(), wall);
-                                assert_same_motion(&on, &off);
-                                assert_eq!(
-                                    bits(off.rotation),
-                                    bits(look(
-                                        rotation,
-                                        off.body.position,
-                                        off.body.velocity,
-                                        target
-                                    ))
-                                );
-                                let dx = off.body.position.x - start.position.x;
-                                let dz = off.body.position.z - start.position.z;
+                                let shared = old_step(make(), wall);
+                                assert_same_motion(&on, &shared);
+                                let dx = on.body.position.x - start.position.x;
+                                let dz = on.body.position.z - start.position.z;
                                 let hold = target.is_none()
                                     && (dx * dx + dz * dz <= 0.005 * 0.005
                                         || dx * start.velocity.x + dz * start.velocity.z < 0.0);
-                                held += usize::from(hold);
-                                let expected = if hold { rotation } else { off.rotation };
+                                let expected = if hold {
+                                    held += 1;
+                                    rotation
+                                } else {
+                                    followed += 1;
+                                    look(rotation, on.body.position, on.body.velocity, target)
+                                };
                                 assert_eq!(bits(on.rotation), bits(expected));
                             }
                         }
@@ -714,7 +935,7 @@ fn battle_facing_changes_only_rotation_and_off_is_the_old_look() {
             }
         }
     }
-    assert!(held > 0);
+    assert!(held > 0 && followed > 0);
 }
 
 #[test]
