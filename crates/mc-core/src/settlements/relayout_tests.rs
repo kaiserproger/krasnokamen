@@ -309,8 +309,30 @@ fn a_lot_whose_cut_cannot_be_bridged_is_refused() {
     );
 }
 
+/// Outside the territory the player's village path stays the player's: the same
+/// history on a cell the record does not own is still a refusal (D27 p.4).
 #[test]
-fn a_player_placed_path_is_refused() {
+fn a_player_placed_path_outside_the_territory_is_refused() {
+    let (mut state, id, _) = fixture();
+    let (front, normal, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    let mut road = crossing_road(&mut state, front, normal, size, bounds);
+    let at = road.remove(2);
+    state.block_log = player_history(&state, at, 0);
+    assert!(state.block_log.player_touched(at));
+    state.settlements.get_mut(id).unwrap().radius = 1;
+    assert!(!state.settlements.get(id).unwrap().contains(at));
+    assert_eq!(
+        plan(&state, state.settlements.get(id).unwrap(), bounds).err(),
+        Some(Reason::ProtectedObstruction),
+        "outside the territory the player's block is not the village's"
+    );
+}
+
+/// Owner D27 p.4: inside the territory the block's history is not consulted, so
+/// a player-placed village path the lot covers is re-laid like any other.
+#[test]
+fn a_player_placed_path_is_relaid() {
     let (mut state, id, _) = fixture();
     let (front, normal, lot, size) = plateau(&mut state, id);
     let bounds = bounds_of(lot, size);
@@ -319,12 +341,21 @@ fn a_player_placed_path_is_refused() {
     let held = state.world.block_at(at[0], at[1], at[2]).unwrap();
     state.block_log = player_history(&state, at, 0);
     assert!(state.block_log.player_touched(at));
-    assert_eq!(
-        plan(&state, state.settlements.get(id).unwrap(), bounds).err(),
-        Some(Reason::ProtectedObstruction),
-        "a player path is not the village's to re-lay"
+    // D27 p.4 consults history only outside the territory: this lot is inside.
+    state.settlements.get_mut(id).unwrap().radius = 512;
+    assert!(state.settlements.get(id).unwrap().contains(at));
+    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+        .expect("a player path is not a refusal")
+        .expect("the lot covers village work");
+    assert!(
+        planned.retires(at),
+        "the player-placed path cell is the re-lay's own work"
     );
-    assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(held));
+    assert_eq!(
+        state.world.block_at(at[0], at[1], at[2]),
+        Some(held),
+        "planning does not touch the world"
+    );
 }
 
 #[test]

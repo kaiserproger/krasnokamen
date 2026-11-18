@@ -93,9 +93,13 @@ pub(super) fn plan(
             let path = name(state, block).is_some_and(|name| name == "dirt_path");
             let farmland = state.registry.farming.is_farmland(block);
             if path || farmland {
-                // Never touch a player-placed block: the lot is not admitted
-                // over a cell the player owns.
-                if state.block_log.player_touched([x, ground, z]) {
+                // Owner D27 p.4: inside the territory the block's history is not
+                // consulted, so a village path or field the lot covers is re-laid
+                // whatever placed it. Outside it the player's block stays the
+                // player's.
+                if !record.contains([x, ground, z])
+                    && state.block_log.player_touched([x, ground, z])
+                {
                     return Err(Reason::ProtectedObstruction);
                 }
                 worked.push((x, ground, z, path));
@@ -110,13 +114,14 @@ pub(super) fn plan(
                 if !crop(state, block) {
                     continue;
                 }
+                if !record.contains([x, above, z]) && state.block_log.player_touched([x, above, z])
+                {
+                    return Err(Reason::ProtectedObstruction);
+                }
                 // A two-block plant is one crop: its lower half carries the
                 // yield, the upper half is the same plant (vanilla drops once).
                 if half(state, block).is_some_and(|half| half == "upper") {
                     continue;
-                }
-                if state.block_log.player_touched([x, above, z]) {
-                    return Err(Reason::ProtectedObstruction);
                 }
                 cleared.push(PlannedCell {
                     at: [x, above, z],
@@ -412,7 +417,7 @@ fn bridge(
                         .or_insert_with(|| candidate_ground(state, record, lot, next));
                     (0..=DETOUR_RAISE)
                         .filter_map(|raise| ground.map(|(natural, _)| natural + raise))
-                        .filter(|&level| path_ok(state, ground, next, level))
+                        .filter(|&level| path_ok(state, record, ground, next, level))
                         .collect()
                 }
             };
@@ -508,7 +513,13 @@ fn inside(bounds: ScriptWorldBounds, x: i32, z: i32) -> bool {
 
 /// Whether a detour path may stand at `(x, z)` on `level`: it paves natural
 /// soil, or sits on a paid fill of vacant cells, with two clear blocks above.
-fn path_ok(state: &TickState, ground: Option<(i32, u32)>, (x, z): (i32, i32), level: i32) -> bool {
+fn path_ok(
+    state: &TickState,
+    record: &SettlementRecord,
+    ground: Option<(i32, u32)>,
+    (x, z): (i32, i32),
+    level: i32,
+) -> bool {
     let Some((natural, block)) = ground else {
         return false;
     };
@@ -527,7 +538,10 @@ fn path_ok(state: &TickState, ground: Option<(i32, u32)>, (x, z): (i32, i32), le
                 .world
                 .physics_block_at(x, under, z)
                 .is_some_and(|block| vacant(state, block));
-            if !empty || state.block_log.player_touched([x, under, z]) {
+            if !empty
+                || (!record.contains([x, under, z])
+                    && state.block_log.player_touched([x, under, z]))
+            {
                 return false;
             }
         }
@@ -537,7 +551,7 @@ fn path_ok(state: &TickState, ground: Option<(i32, u32)>, (x, z): (i32, i32), le
             .world
             .physics_block_at(x, above, z)
             .is_some_and(|block| vacant(state, block) || construction::clearable(state, block))
-    }) && !state.block_log.player_touched([x, level, z])
+    }) && (record.contains([x, level, z]) || !state.block_log.player_touched([x, level, z]))
         && !state.block_entities.contains_key(&(x, level, z))
         && !state.block_entities.contains_key(&(x, level + 1, z))
 }
