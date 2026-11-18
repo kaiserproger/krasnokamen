@@ -160,6 +160,7 @@ DEFAULT_PACKETS = Path('/run/media/kaiserroman/games/solaris-work/solaris/data/v
 REMOVE_ENTITIES = 'minecraft:remove_entities'
 ADD_ENTITY = 'minecraft:add_entity'
 ENTITY_EVENT = 'minecraft:entity_event'
+TELEPORT_ENTITY = 'minecraft:teleport_entity'
 POSITION_PACKETS = ('minecraft:move_entity_pos', 'minecraft:move_entity_pos_rot')
 
 
@@ -178,11 +179,13 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
     """Per entity id, the recording's own spawn / removal / death / position evidence.
 
     Reads the take's `take.solrec` frames (header JSON line, then `u32, u32 len` + payload) and
-    decodes only the four clientbound packets that carry the evidence: `add_entity` (spawned for
-    this observer), `remove_entities` (despawn or out of view), `entity_event` status 3 (death) and
-    the two position packets. Nothing is inferred from the shape of a longer gap: a body with no
-    removals, a spawn before a window and a position packet after it was tracked, so a window with
-    no movement packet inside it is observed zero motion.
+    decodes only the clientbound packets that carry the evidence: `add_entity` (spawned for this
+    observer), `remove_entities` (despawn or out of view), `entity_event` status 3 (death), the two
+    position packets and `teleport_entity` (a jump the wire never spells out as a move). Nothing is
+    inferred from the shape of a longer gap: a body with no removals, a spawn before a window and a
+    position packet after it was tracked, so a window with no movement packet inside it is observed
+    zero motion. A teleport inside a window is the opposite case: its displacement is not in the
+    position stream, so the window cannot be judged from steps alone.
     """
     template = json.loads(Path(packets_path).read_text())
     ids = template['play']['clientbound']
@@ -191,6 +194,8 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
         ids[REMOVE_ENTITIES]['protocol_id']: 'remove',
         ids[ENTITY_EVENT]['protocol_id']: 'event',
     }
+    if TELEPORT_ENTITY in ids:
+        wanted[ids[TELEPORT_ENTITY]['protocol_id']] = 'teleport'
     for name in POSITION_PACKETS:
         if name in ids:
             wanted[ids[name]['protocol_id']] = 'position'
@@ -199,7 +204,8 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
     table = {}
 
     def row(ident):
-        return table.setdefault(ident, {'spawn': None, 'removed': [], 'death': [], 'positions': []})
+        return table.setdefault(ident, {'spawn': None, 'removed': [], 'death': [], 'positions': [],
+                                        'teleports': []})
 
     with Path(solrec).open('rb') as handle:
         handle.readline()  # the recording header
@@ -227,6 +233,10 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
                 entity, _ = _varint(data, position)
                 row(entity)['positions'].append(tick)
                 continue
+            if kind == 'teleport':
+                entity, _ = _varint(data, position)
+                row(entity)['teleports'].append(tick)
+                continue
             if kind == 'add':
                 entity, _ = _varint(data, position)
                 current = row(entity)
@@ -245,42 +255,67 @@ def recording_evidence(solrec, packets_path=DEFAULT_PACKETS):
     return table
 
 
-def coverage_class(episode, evidence):
-    """(class, evidence note) for an episode whose window holds no wire step.
+def window_coverage(episode, evidence):
+    """(class, coverage_end, note) for one exposure window, judged over its whole length.
 
-    Classes, from the recording only:
-      `lost`           `remove_entities` or a death `entity_event` at or before the window's end: the
-                       observer stopped having the body (despawn, out of view or dead). This is the
-                       negative case — it must never be read as zero motion.
-      `unobserved`     no spawn and no position packet: the observer never had the body.
-      `observed_zero`  spawned at or before the window and never removed: the tracker still held the
-                       body, so a window with no movement packet inside it is a body that did not
-                       move. Vanilla sends a position packet only when the body moves; leaving the
-                       view sends `remove_entities`, which is exactly what this class excludes.
-      `unresolved`     no recording evidence at all — kept unusable rather than guessed.
+    An exposure window is covered only while the observer had the body: a removal
+    (`remove_entities`), a death `entity_event` or a view loss inside the window ends coverage at
+    that tick, and the rest of the window is unobserved — whether or not some packet pair inside
+    the window produced a step. `coverage_end` is the last covered tick (inclusive).
+
+    Classes:
+      `covered`        the body was present for all of `[first, last]` and the window holds at
+                       least one wire step (motion observed).
+      `observed_zero`  the body was present for all of the window and no movement packet falls
+                       inside it: a tracked body that did not move (vanilla sends a position packet
+                       only on movement; leaving the view sends `remove_entities`).
+      `lost`           a removal or death at or before the window's end, or the body's recorded
+                       presence stops before it: the window is not covered from `coverage_end + 1`.
+      `unobserved`     no spawn and no position packet at all: the observer never had the body.
+      `unresolved`     no usable recording evidence, or a teleport inside the window: the jump is
+                       not in the position stream, so the window's motion cannot be judged.
     """
     first, last = episode['motion']
     if evidence is None:
-        return 'unresolved', 'no recording evidence supplied'
+        return 'unresolved', None, 'no recording evidence supplied'
     removed = [tick for tick in evidence['removed'] if tick is not None and tick <= last]
     death = [tick for tick in evidence['death'] if tick is not None and tick <= last]
-    if removed:
-        return 'lost', f"remove_entities at tick {min(removed)} (window ends {last})"
-    if death:
-        return 'lost', f"entity_event death at tick {min(death)} (window ends {last})"
     positions = evidence['positions']
+    teleports = [tick for tick in evidence.get('teleports', ()) if tick is not None and first <= tick <= last]
+    if teleports:
+        return 'unresolved', None, (
+            f'teleport_entity at tick {min(teleports)}: the jump is not in the position stream, '
+            f'the window {first}-{last} cannot be judged from steps')
+    ends = [tick for tick in removed + death if tick is not None]
+    if ends:
+        # Only the last end before the window matters, and only if the observer never acquired
+        # the body again after it: a body removed early and re-sent later is present.
+        stop = max(ends)
+        cause = 'remove_entities' if stop in removed else 'entity_event death'
+        acquired = [tick for tick in ([evidence['spawn']] if evidence['spawn'] is not None else []) + positions
+                    if tick is not None and stop < tick <= first]
+        if not acquired:
+            inside = [tick for tick in positions if tick is not None and first <= tick <= last]
+            if stop <= first:
+                note = f'{cause} at tick {stop}: not tracked from the window start {first}'
+                if inside:
+                    note += f"; the body is first observed again at tick {min(inside)}, so ticks {first}..{min(inside) - 1} are not observed"
+                return 'lost', None, note
+            return 'lost', stop - 1, f'{cause} at tick {stop}: coverage ends at {stop - 1}, window ends {last}'
     if evidence['spawn'] is None and not positions:
-        return 'unobserved', 'never spawned for this observer'
-    if evidence['spawn'] is not None and evidence['spawn'] <= first:
-        return 'observed_zero', (
-            f"tracked from spawn {evidence['spawn']}, no removal or death to {last},"
-            f" last position packet {max(positions) if positions else None}")
-    if positions and min(positions) <= first:
-        return 'observed_zero', (
-            f"tracked from position packet {min(positions)} at or before {first}, no removal or death")
-    return 'unresolved', (
-        f"spawn {evidence['spawn']}, packets {len(positions)}, "
-        f"first {min(positions) if positions else None} (window {first}-{last})")
+        return 'unobserved', None, 'never spawned for this observer'
+    tracked = (evidence['spawn'] is not None and evidence['spawn'] <= first) or (
+        positions and min(positions) <= first)
+    if not tracked:
+        if positions and max(positions) < first:
+            return 'lost', None, (
+                f'last position packet at tick {max(positions)} before the window starts {first}')
+        return 'unresolved', None, (
+            f"spawn {evidence['spawn']}, packets {len(positions)}, "
+            f"first {min(positions) if positions else None} (window {first}-{last})")
+    return 'tracked', last, (
+        f"tracked from spawn {evidence['spawn']}, no removal or death to {last},"
+        f" last position packet {max(positions) if positions else None}")
 
 
 def wire_positions(path):
@@ -434,16 +469,26 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
         by_class = Counter()
         for episode in episodes:
             steps = episode_wire_steps(episode, wire.get(episode['id'], ()))
-            classification = None
-            if not steps:
-                # No step in the window: the recording's own evidence decides whether that is
-                # observed zero motion (counts) or a body the observer no longer had (unusable).
-                classification, note = coverage_class(episode, evidence.get(episode['id']) if evidence else None)
-                if classification != 'observed_zero':
-                    uncorrelated.append(episode['id'])
-                by_class[classification] += 1
+            # Coverage is judged over the whole window, steps or not: a removal inside a window
+            # that happens to hold a step still leaves its tail unobserved.
+            body = evidence.get(episode['id']) if evidence else None
+            kind, coverage_end, note = window_coverage(episode, body)
+            if kind == 'tracked':
+                classification = 'covered' if steps else 'observed_zero'
+            elif kind == 'unresolved' and body is None and steps:
+                # No recording evidence at all, but the window itself carries motion: the steps are
+                # the observation. Its tail stays unwitnessed, which is counted for the reviewer.
+                classification = 'covered'
+                take['_tail_unwitnessed'] = take.get('_tail_unwitnessed', 0) + 1
             else:
-                by_class['covered'] += 1
+                classification = kind
+            if classification == 'lost' and coverage_end is not None:
+                note = (f"{note}; the window is covered only to tick {coverage_end}, "
+                        f"its last {episode['motion'][1] - coverage_end} ticks are not observed")
+            if classification not in ('covered', 'observed_zero'):
+                uncorrelated.append(episode['id'])
+                take.setdefault('_uncovered', Counter())[classification] += 1
+            by_class[classification] += 1
             last_wire = take['coverage']['last_recorded_tick']
             if last_wire is not None and episode['motion'][1] > last_wire:
                 tail += 1
@@ -455,8 +500,9 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
                 'episode': episode,
                 'wire_steps': steps,
                 'd1_steps': len(fired),
-                'coverage_class': classification or 'covered',
-                'coverage_note': note if classification else None,
+                'coverage_class': classification,
+                'coverage_end': coverage_end,
+                'coverage_note': note,
             })
         take['wire'] = {
             'bodies_with_d1_step': len(d1_bodies),
@@ -464,6 +510,7 @@ def analyse_take(name, run_dir, positions_path=None, dismounts=None, fling_take=
             'episodes_without_wire_step': len(uncorrelated),
             'episodes_past_the_last_packet': tail,
             'coverage_by_class': dict(by_class),
+            'windows_without_recording_evidence': take.pop('_tail_unwitnessed', 0),
             'observed_zero_episodes': by_class.get('observed_zero', 0),
             'episode_rows': rows,
         }
