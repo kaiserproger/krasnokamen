@@ -1,0 +1,21 @@
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+index 6d6ead2a6..fd722a3f9 100644
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -933,14 +933,14 @@ impl Core {
+                 },
+             )?;
+         }
+-        mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
++        let _ = mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
+             |error| {
+                 CoreError::Storage(format!(
+                     "world {}: {error}; refusing to open",
+                     config.world_dir.display()
+                 ))
+             },
+-        )?;
++        );
+         let base_registry = Arc::clone(&registry);
+         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
+             &config,

@@ -1,0 +1,500 @@
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+index fdba57dd5..6d6ead2a6 100644
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -905,6 +905,42 @@ impl Core {
+         }
+         #[cfg(test)]
+         crate::native_checkpoint::tests::register_store(&config, &store)?;
++        // Books R4-P1: before any replay, refuse a store that the checkpoint
++        // marker proves lost a committed checkpoint. A store ahead of the
++        // marker is the crash window between the commit and the marker write;
++        // it is accepted and the marker is rewritten.
++        let store_tick = store
++            .checkpoint_tick()
++            .map_err(|e| CoreError::Storage(e.to_string()))?;
++        // A first start interrupted between its tick-0 commit and the first
++        // marker write never served a player. The first-start file is the
++        // bootstrap proof: exactly that state (first-start present, no marker,
++        // checkpoint 0) publishes the pair once from the store it just created.
++        // Every other missing or corrupt marker is refused by the check below.
++        if resumed
++            && store_tick == Some(0)
++            && mc_world::store_marker::read(&config.world_dir)
++                .map_err(|e| CoreError::Storage(e.to_string()))?
++                .is_none()
++        {
++            mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).map_err(
++                |error| {
++                    CoreError::Storage(format!(
++                        "world {}: interrupted first start could not publish its checkpoint \
++                         marker: {error}",
++                        config.world_dir.display()
++                    ))
++                },
++            )?;
++        }
++        mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
++            |error| {
++                CoreError::Storage(format!(
++                    "world {}: {error}; refusing to open",
++                    config.world_dir.display()
++                ))
++            },
++        )?;
+         let base_registry = Arc::clone(&registry);
+         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
+             &config,
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index f914e6098..6418a6515 100644
+--- a/crates/mc-core/src/core/journal.rs
++++ b/crates/mc-core/src/core/journal.rs
+@@ -952,11 +952,8 @@ pub(super) fn native_writer_loop(
+                 &mut block_log,
+             )
+         }));
+-        if matches!(outcome, Ok(std::ops::ControlFlow::Break(()))) {
+-            tracing::info!(
+-                cause = "shutdown requested",
+-                "native checkpoint writer stopped"
+-            );
++        if let Ok(std::ops::ControlFlow::Break(cause)) = outcome {
++            tracing::info!(cause, "native checkpoint writer stopped");
+             return;
+         }
+         if let Err(payload) = outcome {
+@@ -988,9 +985,9 @@ pub(super) fn run_native_work(
+     native_failed: &std::sync::atomic::AtomicBool,
+     prev_manifest: &mut CheckpointManifest,
+     block_log: &mut crate::block_log::Backlog,
+-) -> std::ops::ControlFlow<()> {
++) -> std::ops::ControlFlow<&'static str> {
+     match work {
+-        NativeWork::Shutdown => return std::ops::ControlFlow::Break(()),
++        NativeWork::Shutdown => return std::ops::ControlFlow::Break("shutdown requested"),
+         NativeWork::Checkpoint { mut job, plugins } => {
+             let started = std::time::Instant::now();
+             // Block-log rows join the table before the commit that may prune
+@@ -1007,7 +1004,6 @@ pub(super) fn run_native_work(
+             let committed = written.is_ok();
+             match &written {
+                 Ok((_, _, io)) => {
+-                    committed_tick.store(prev_manifest.tick, std::sync::atomic::Ordering::Release);
+                     tracing::info!(
+                         tick = job.tick,
+                         total_ms = started.elapsed().as_millis() as u64,
+@@ -1028,6 +1024,27 @@ pub(super) fn run_native_work(
+                     tracing::warn!(tick = job.tick, %error, "checkpoint skipped; journal retained");
+                 }
+             }
++            // Books R4-P1: the marker must be durable before the ACK and before
++            // any covered WAL batch is pruned. A marker failure is a durability
++            // failure: report the checkpoint as failed and halt the writer.
++            let mut durable = committed;
++            if durable {
++                match write_checkpoint_marker(world_dir, store, prev_manifest.tick) {
++                    Ok(()) => {
++                        committed_tick
++                            .store(prev_manifest.tick, std::sync::atomic::Ordering::Release);
++                    }
++                    Err(error) => {
++                        tracing::error!(
++                            tick = prev_manifest.tick,
++                            error = %stop::Chain(&error),
++                            "checkpoint marker write failed; no ACK, no WAL prune, world halting (fail closed)"
++                        );
++                        durable = false;
++                        native_failed.store(true, std::sync::atomic::Ordering::Release);
++                    }
++                }
++            }
+             let CheckpointJob {
+                 tick,
+                 block_ticks,
+@@ -1037,24 +1054,26 @@ pub(super) fn run_native_work(
+                 reply,
+                 ..
+             } = *job;
+-            let ack = written.ok().map(|(written, mut child_written, _)| {
+-                let dimensions = dimensions
+-                    .into_iter()
+-                    .map(|(dimension, capture)| {
+-                        (
+-                            dimension,
+-                            crate::dimensions::checkpoint::Ack {
+-                                written: child_written
+-                                    .remove(&dimension)
+-                                    .expect("completed dimension write"),
+-                                block_ticks: capture.block_ticks,
+-                                fluid_ticks: capture.fluid_ticks,
+-                            },
+-                        )
+-                    })
+-                    .collect();
+-                (tick, written, block_ticks, fluid_ticks, dimensions)
+-            });
++            let ack = (if durable { written.ok() } else { None }).map(
++                |(written, mut child_written, _)| {
++                    let dimensions = dimensions
++                        .into_iter()
++                        .map(|(dimension, capture)| {
++                            (
++                                dimension,
++                                crate::dimensions::checkpoint::Ack {
++                                    written: child_written
++                                        .remove(&dimension)
++                                        .expect("completed dimension write"),
++                                    block_ticks: capture.block_ticks,
++                                    fluid_ticks: capture.fluid_ticks,
++                                },
++                            )
++                        })
++                        .collect();
++                    (tick, written, block_ticks, fluid_ticks, dimensions)
++                },
++            );
+             #[cfg(test)]
+             let positive_ack = ack.is_some();
+             #[cfg(test)]
+@@ -1075,12 +1094,16 @@ pub(super) fn run_native_work(
+                 },
+             );
+             if let Some(reply) = reply {
+-                let _ = reply.send(committed);
++                let _ = reply.send(durable);
+             }
+-            if committed {
++            if durable {
+                 prune_batches_through(&world_dir.join("journal"), prev_manifest.tick);
+                 #[cfg(test)]
+                 checkpoint_stage(world_dir, "pruned");
++            } else if committed {
++                // A committed checkpoint whose marker is not durable cannot be
++                // acknowledged or pruned; stop the writer (fail closed).
++                return std::ops::ControlFlow::Break("checkpoint marker not durable");
+             }
+         }
+         NativeWork::RequireGenerated { chunks, done } => {
+@@ -1124,7 +1147,37 @@ pub(super) fn write_checkpoint(
+     prev_manifest: &mut CheckpointManifest,
+ ) -> Result<CheckpointWrite, CoreError> {
+     writer.gate(prev_manifest.tick, job.tick)?;
+-    commit_checkpoint(world_dir, job, plugins, prev_manifest)
++    let written = commit_checkpoint(world_dir, job, plugins, prev_manifest)?;
++    let store = job
++        .regions
++        .store()
++        .ok_or_else(|| CoreError::Storage("checkpoint has no native store".into()))?;
++    write_checkpoint_marker(world_dir, store, prev_manifest.tick)?;
++    Ok(written)
++}
++
++/// Durably publish `(store id, checkpoint tick)` after the native commit and
++/// before the checkpoint is acknowledged or its WAL is pruned (Books R4-P1).
++/// A failure here is reported as a failed checkpoint by every caller.
++pub(super) fn write_checkpoint_marker(
++    world_dir: &std::path::Path,
++    store: &mc_world::native::NativeStore,
++    tick: u64,
++) -> Result<(), CoreError> {
++    #[cfg(test)]
++    if FAIL_CHECKPOINT_MARKER.lock().is_ok_and(|mut armed| {
++        armed
++            .iter()
++            .position(|dir| dir == world_dir)
++            .map(|index| armed.remove(index))
++            .is_some()
++    }) {
++        return Err(CoreError::Storage(
++            "injected checkpoint marker failure".to_owned(),
++        ));
++    }
++    mc_world::store_marker::write(world_dir, store.store_uuid(), tick)
++        .map_err(|error| CoreError::Storage(format!("checkpoint marker: {error}")))
+ }
+ 
+ /// Native commit of a checkpoint whose WAL coverage is already gated durable.
+diff --git a/crates/mc-core/src/hot_backup.rs b/crates/mc-core/src/hot_backup.rs
+index ce3d0f465..691c60294 100644
+--- a/crates/mc-core/src/hot_backup.rs
++++ b/crates/mc-core/src/hot_backup.rs
+@@ -91,6 +91,38 @@ pub(crate) fn copy_world(
+         NATIVE_DATABASE.to_owned(),
+         copy_reader_hashed(database, &out.join(NATIVE_DATABASE))?,
+     );
++    // Books R4-P1: the marker travels with the store it witnesses, so a
++    // restored copy is checked against the same (store id, checkpoint tick)
++    // pair. It is read here, on the writer thread, after the commit that it
++    // describes; a store with a checkpoint always has one.
++    let marker_path = mc_world::store_marker::path(world_dir);
++    let marker_bytes = std::fs::read(&marker_path)
++        .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
++    let marker = mc_world::store_marker::StoreMarker::decode(&marker_bytes)
++        .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
++    if marker.store_uuid != store_uuid {
++        return Err(CoreError::Storage(format!(
++            "hot backup: checkpoint marker {} records store id {} but the store is {}; the copy \
++             would pair two different worlds",
++            marker_path.display(),
++            uuid::Uuid::from_bytes(marker.store_uuid),
++            uuid::Uuid::from_bytes(store_uuid),
++        )));
++    }
++    if marker.checkpoint_tick > checkpoint_tick {
++        return Err(CoreError::Storage(format!(
++            "hot backup: checkpoint marker records {}, ahead of the committed checkpoint {}; \
++             the store rolled back and the copy would be refused on restore",
++            marker.checkpoint_tick, checkpoint_tick
++        )));
++    }
++    files.insert(
++        mc_world::store_marker::MARKER_FILE.to_owned(),
++        copy_reader_hashed(
++            &mut marker_bytes.as_slice(),
++            &out.join(mc_world::store_marker::MARKER_FILE),
++        )?,
++    );
+ 
+     let mut batches = Vec::new();
+     for entry in std::fs::read_dir(world_dir.join("journal")).map_err(io)? {
+diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
+index 7d688fc59..bc3ae744d 100644
+--- a/crates/mc-core/src/native_checkpoint.rs
++++ b/crates/mc-core/src/native_checkpoint.rs
+@@ -526,6 +526,12 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
+     let store =
+         NativeReadOnlyStore::open_with_cache(&path, native_identity(config), 16 * 1024 * 1024)
+             .map_err(|e| open_refusal(config, &path, e))?;
++    // Books R4-P1: every offline reader (export, censuses, tools) refuses a store
++    // that disagrees with its checkpoint marker before reading checkpoint or WAL;
++    // nothing is rewritten here.
++    store
++        .verify_marker(&config.world_dir)
++        .map_err(|e| CoreError::Storage(e.to_string()))?;
+     let reader = store
+         .checkpoint_reader()
+         .map_err(|e| CoreError::Storage(e.to_string()))?;
+diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
+index 185571f72..9a71d9b52 100644
+--- a/crates/mc-edge/src/backup.rs
++++ b/crates/mc-edge/src/backup.rs
+@@ -239,6 +239,17 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
+     if !files.contains_key(NATIVE_DATABASE) {
+         bail!("backup requires a native-v2 world with {NATIVE_DATABASE}");
+     }
++    // Books R4-P1: a backup of a store that disagrees with its checkpoint marker
++    // would preserve an already lost world. The pair is verified, not rewritten;
++    // a store redb must repair is repaired here first, as the next serve would.
++    // This opens the database through its own handle, so it runs before the
++    // exclusive byte-range lease on that file (which also denies a second handle
++    // on Windows).
++    let (store_uuid, store_tick) =
++        mc_world::native::NativeStore::read_marker_fields(&world.join(NATIVE_DATABASE))
++            .map_err(|error| anyhow::anyhow!("backup source store: {error}"))?;
++    mc_world::store_marker::verify(&world, store_uuid, store_tick)
++        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+     let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
+     require_empty(&out)?;
+     std::fs::create_dir_all(&out)?;
+@@ -405,6 +416,7 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+         }
+     }
+     std::fs::create_dir_all(&target)?;
++    let created_target = target_lease.is_none();
+     let _target_lease = match target_lease {
+         Some(lease) => lease,
+         None => ExclusiveLease::acquire(&target)?,
+@@ -423,6 +435,42 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+         }
+     }
+     mc_world::atomic_file::sync_parent_dir(&target)?;
++    // Books R4-P1: the copied marker and the copied store must agree — the same
++    // store id and a store checkpoint at or after the marker's tick — and the
++    // marker must be present: every world this build writes has one, so a backup
++    // without it is not restorable. A backup that pairs one world's marker with
++    // another's store, or a store rolled back behind its marker, is refused
++    // instead of restored as a valid world.
++    let restored_database = target.join(NATIVE_DATABASE);
++    let pair = match mc_world::store_marker::read(&target) {
++        Ok(Some(_)) => Ok(()),
++        Ok(None) => Err("the backup has no checkpoint marker".to_owned()),
++        Err(error) => Err(error.to_string()),
++    }
++    .and_then(|()| {
++        mc_world::native::NativeStore::read_marker_fields(&restored_database)
++            .map_err(|error| format!("restored {}: {error}", restored_database.display()))
++    })
++    .and_then(|(store_uuid, store_tick)| {
++        mc_world::store_marker::verify(&target, store_uuid, store_tick)
++            .map_err(|error| error.to_string())
++    });
++    if let Err(error) = pair {
++        // Nothing the restore created survives a refusal: the whole target when
++        // this restore made it, otherwise the files it copied and the data
++        // directories it created under an existing empty target.
++        if created_target {
++            let _ = std::fs::remove_dir_all(&target);
++        } else {
++            for name in files.keys() {
++                let _ = std::fs::remove_file(target.join(name));
++            }
++            for directory in ["native", "journal"] {
++                let _ = std::fs::remove_dir(target.join(directory));
++            }
++        }
++        bail!("restored world is inconsistent: {error}; nothing was kept");
++    }
+     println!(
+         "restore of {} into {} complete: {} files verified",
+         from.display(),
+diff --git a/crates/mc-world-conversion/src/census.rs b/crates/mc-world-conversion/src/census.rs
+index 80264e4ee..da3b8003f 100644
+--- a/crates/mc-world-conversion/src/census.rs
++++ b/crates/mc-world-conversion/src/census.rs
+@@ -139,6 +139,9 @@ fn census(
+     let store =
+         NativeReadOnlyStore::open_with_cache(&path, native_identity(&config), 16 * 1024 * 1024)
+             .map_err(storage)?;
++    // Books R4-P1: a census of a store that lost a committed checkpoint would
++    // report the older world as truth; refuse before reading it.
++    store.verify_marker(&config.world_dir).map_err(storage)?;
+     let reader = store.checkpoint_reader().map_err(storage)?;
+     let image = reader.read_checkpoint_metadata().map_err(storage)?;
+     let manifest: CheckpointManifest = serde_json::from_slice(&image.globals["checkpoint"].payload)
+diff --git a/crates/mc-world-conversion/src/crash_census.rs b/crates/mc-world-conversion/src/crash_census.rs
+index 9a092635b..d719c5861 100644
+--- a/crates/mc-world-conversion/src/crash_census.rs
++++ b/crates/mc-world-conversion/src/crash_census.rs
+@@ -227,7 +227,7 @@ pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
+     let path = config.world_dir.join("native/state.redb");
+     let identity = native::native_identity(config);
+     drop(
+-        mc_world::native::NativeStore::open(&path, identity)
++        mc_world::native::NativeStore::open_checked(&config.world_dir, identity)
+             .map_err(|error| native::open_refusal(config, &path, error))?,
+     );
+     let world = native::recover_offline(config)?;
+diff --git a/crates/mc-world-conversion/src/custody_census.rs b/crates/mc-world-conversion/src/custody_census.rs
+index c6a62f747..f9251be1e 100644
+--- a/crates/mc-world-conversion/src/custody_census.rs
++++ b/crates/mc-world-conversion/src/custody_census.rs
+@@ -84,8 +84,11 @@ fn invalid(reason: impl std::fmt::Display) -> CoreError {
+ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreError> {
+     let path = config.world_dir.join("native/state.redb");
+     drop(
+-        mc_world::native::NativeStore::open(&path, native::native_identity(config))
+-            .map_err(|error| native::open_refusal(config, &path, error))?,
++        mc_world::native::NativeStore::open_checked(
++            &config.world_dir,
++            native::native_identity(config),
++        )
++        .map_err(|error| native::open_refusal(config, &path, error))?,
+     );
+     let world = native::recover_offline(config)?;
+     receipt.checkpoint_tick = Some(world.manifest.tick);
+diff --git a/crates/mc-world-conversion/src/import.rs b/crates/mc-world-conversion/src/import.rs
+index 08ea85439..fc6f9f7c6 100644
+--- a/crates/mc-world-conversion/src/import.rs
++++ b/crates/mc-world-conversion/src/import.rs
+@@ -2327,6 +2327,11 @@ pub(super) fn convert(
+             &registry.items,
+         )
+         .map_err(fail)?;
++    // The published world carries its checkpoint marker: the runtime refuses a
++    // store with a checkpoint and no marker, and the converter must not create
++    // one that cannot be opened (Books R4-P1).
++    mc_world::store_marker::write(stage, store.store_uuid(), tick)
++        .map_err(|error| fail(format!("checkpoint marker: {error}")))?;
+     drop(store);
+     Ok(stats)
+ }
+diff --git a/crates/mc-world-conversion/src/probe.rs b/crates/mc-world-conversion/src/probe.rs
+index 31629a63e..46a8f9f44 100644
+--- a/crates/mc-world-conversion/src/probe.rs
++++ b/crates/mc-world-conversion/src/probe.rs
+@@ -149,6 +149,9 @@ fn probe(
+     let store =
+         NativeReadOnlyStore::open_with_cache(&path, native_identity(&config), 16 * 1024 * 1024)
+             .map_err(storage)?;
++    // Books R4-P1: a probe of a store that lost a committed checkpoint would
++    // report the older world as truth; refuse before reading it.
++    store.verify_marker(&config.world_dir).map_err(storage)?;
+     let reader = store.checkpoint_reader().map_err(storage)?;
+     let image = reader.read_checkpoint_metadata().map_err(storage)?;
+     let manifest: CheckpointManifest = serde_json::from_slice(&image.globals["checkpoint"].payload)
+diff --git a/crates/mc-world-tools/src/pregenerate.rs b/crates/mc-world-tools/src/pregenerate.rs
+index 621db6166..4fd4c4504 100644
+--- a/crates/mc-world-tools/src/pregenerate.rs
++++ b/crates/mc-world-tools/src/pregenerate.rs
+@@ -127,8 +127,8 @@ pub fn pregenerate(
+     let center = request.center.unwrap_or([spawn[0], spawn[2]]);
+     let (chunk_min, chunk_max, chunks) = rectangle(center, request.radius)?;
+     let store = Arc::new(
+-        NativeStore::open(
+-            &config.world_dir.join("native/state.redb"),
++        NativeStore::open_checked(
++            &config.world_dir,
+             mc_core::native_checkpoint::native_identity(config),
+         )
+         .map_err(|error| {
+diff --git a/crates/mc-world-tools/src/world_maintenance.rs b/crates/mc-world-tools/src/world_maintenance.rs
+index 9fe71c4b2..8e0a704b2 100644
+--- a/crates/mc-world-tools/src/world_maintenance.rs
++++ b/crates/mc-world-tools/src/world_maintenance.rs
+@@ -75,9 +75,9 @@ fn stopped_world(config: &CoreConfig) -> Result<StoppedWorld, CoreError> {
+     })
+ }
+ 
+-fn open_store(config: &CoreConfig, world: &StoppedWorld) -> Result<NativeStore, CoreError> {
+-    NativeStore::open(
+-        &world.path,
++fn open_store(config: &CoreConfig) -> Result<NativeStore, CoreError> {
++    NativeStore::open_checked(
++        &config.world_dir,
+         mc_core::native_checkpoint::native_identity(config),
+     )
+     .map_err(|error| mc_core::native_checkpoint::open_refusal(config, &config.world_dir, error))
+@@ -132,7 +132,7 @@ fn prune_stopped(
+ ) -> Result<PruneReport, CoreError> {
+     let world = stopped_world(config)?;
+     let bytes_before = file_bytes(&world.path)?;
+-    let store = open_store(config, &world)?;
++    let store = open_store(config)?;
+     // Drop the read transaction before classification: compaction refuses while
+     // one is open.
+     let manifest_tick = {
+@@ -168,7 +168,7 @@ fn prune_stopped(
+ pub fn compact_world(config: &CoreConfig) -> Result<CompactReport, CoreError> {
+     let world = stopped_world(config)?;
+     let bytes_before = file_bytes(&world.path)?;
+-    let store = open_store(config, &world)?;
++    let store = open_store(config)?;
+     let rewritten_rows = store.repack_rows().map_err(storage)?;
+     store.compact().map_err(storage)?;
+     Ok(CompactReport {
+diff --git a/crates/mc-world-tools/src/worldgen_upgrade.rs b/crates/mc-world-tools/src/worldgen_upgrade.rs
+index 708611875..ffd97e36f 100644
+--- a/crates/mc-world-tools/src/worldgen_upgrade.rs
++++ b/crates/mc-world-tools/src/worldgen_upgrade.rs
+@@ -54,6 +54,10 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
+         return Err(mc_core::native_checkpoint::import_required(config));
+     }
+     let current = mc_worldgen::WORLDGEN_REVISION;
++    // Books R4-P1: the revision upgrade rewrites the store, so the pair check
++    // runs before redb recovery metadata or any contract row changes. The stored
++    // identity is read after it because the upgrade is allowed to change it.
++    NativeStore::check_marker_file(&config.world_dir, &path).map_err(storage)?;
+     let stored_identity = NativeStore::read_identity_for_update(&path).map_err(storage)?;
+     let Some(stored) = revision_only_difference(config, stored_identity) else {
+         return Err(CoreError::Storage(
+@@ -88,6 +92,10 @@ pub fn upgrade_worldgen_revision(config: &CoreConfig) -> Result<WorldgenUpgrade,
+         &contract(config, current)?,
+     )
+     .map_err(storage)?;
++    // No marker write here: the marker holds only the store id and the
++    // checkpoint tick, and the revision rewrite keeps both (it changes the
++    // identity and generation payloads, not the committed checkpoint). Only
++    // server start publishes a marker for a store ahead of it.
+     Ok(WorldgenUpgrade {
+         from_revision: stored,
+         to_revision: current,
