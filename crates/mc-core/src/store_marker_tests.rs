@@ -349,13 +349,20 @@ fn a_marker_write_failure_prunes_nothing_and_halts_the_world() {
     let at_failure = marker(&config).checkpoint_tick;
     let batches_at_failure = batch_ticks(&config);
     // The world halts on its own: the tick thread exits and closes its
-    // broadcast without a shutdown request.
-    loop {
-        match rx.blocking_recv() {
-            Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+    // broadcast without a shutdown request. One deadline for the whole wait.
+    let (closed_tx, closed) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        loop {
+            match rx.blocking_recv() {
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
         }
-    }
+        let _ = closed_tx.send(());
+    });
+    closed
+        .recv_timeout(std::time::Duration::from_secs(120))
+        .expect("the world did not halt after the failed marker write");
     core.shutdown();
     drop(core);
 
