@@ -189,6 +189,26 @@ class VillageAutonomyQaTests(unittest.TestCase):
             qa._project_progress(construction_screen(
                 "House L1 · Building\n1/9\n1 2 3", "House L1 · Building\n2/9\n1 2 3"))
 
+    def test_cut_status_dialog_is_accepted_only_as_a_proven_clipped_view(self) -> None:
+        # Laptop 2026-11-18 22:28, pin 38c3f1cdf358: 4 active projects, the rendered body ends after the third.
+        roads = [f"Road L1 · Prepared\n0/{n}\n115 68 {z}\nBuilder: b{z}" for n, z in ((9, 4), (16, 7), (10, 10))]
+        state = {"ui_nodes": [
+            {"id": "dialog/body/0", "label": "Active projects: 4/8\nPending orders: 1/8\nHead: spanish_plaza L1"},
+            *({"id": f"dialog/body/{i}", "label": road} for i, road in enumerate(roads, 1)),
+        ]}
+        with self.assertRaisesRegex(RuntimeError, "count"):
+            qa._pending_dialog(state)
+        seen = qa._pending_dialog(state, clipped_ok=True)
+        self.assertEqual((seen["clipped"], seen["pending_count"], seen["head"], len(seen["projects"])),
+                         (True, 1, "spanish_plaza L1", 3))
+        # Every project shown but the pending line missing is not a cut tail: still refused.
+        full = {"ui_nodes": [
+            {"id": "dialog/body/0", "label": "Active projects: 3/8\nPending orders: 1/8\nHead: spanish_plaza L1"},
+            *state["ui_nodes"][1:],
+        ]}
+        with self.assertRaisesRegex(RuntimeError, "pending order list"):
+            qa._pending_dialog(full, clipped_ok=True)
+
     def test_road_restart_subject_records_the_street_plan_before_restart(self) -> None:
         status = construction_screen("Road L1 · Building\n5/42\n7 200 10")
         layout = ("Roads: 40/120 columns reachable on foot from the bell; 0/3 reachable stretches paved."

@@ -116,7 +116,7 @@ def record_census(probe: ProbeSteps, console, run: dict, server_log: Path) -> di
         project_ui = village._project_status(probe)
         towns.append({'id': sid, 'name': name, 'owner': None if owner == 'autonomous' else owner,
                       'anchor': anchor, 'radius': int(radius), 'population': int(population), 'buildings': buildings,
-                      'info': info, 'building_lines': lines, 'project': village._pending_dialog(project_ui),
+                      'info': info, 'building_lines': lines, 'project': village._pending_dialog(project_ui, clipped_ok=True),
                       **residents})
     # Console's time query gives an exact server tick; client clocks interpolate.
     before = server_log.read_text(errors='replace').count('The time is ')

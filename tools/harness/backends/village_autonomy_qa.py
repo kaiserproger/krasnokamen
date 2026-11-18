@@ -900,7 +900,16 @@ def _dialog_body(state: dict[str, Any]) -> str:
                      if str(n.get("id", "")).startswith("dialog/body/"))
 
 
-def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
+def _pending_dialog(state: dict[str, Any], *, clipped_ok: bool = False) -> dict[str, Any]:
+    """Pending orders and projects from the Status dialog.
+
+    The server writes the summary, every project, then every pending order
+    (settlements/ui.rs project_status_screen). The client observation lists only
+    the body nodes it renders, so with many parallel projects the tail is cut.
+    `clipped_ok` accepts that view, but only when fewer projects are shown than
+    "Active projects" counts (proof of a cut tail) and no pending line leaked
+    through; the result then carries the summary count and head instead of the list.
+    """
     body = _dialog_body(state)
     orders = []
     for match in re.finditer(r"(?m)^Pending #(\d+): (.+?) L(\d+) · (.+)$", body):
@@ -909,12 +918,19 @@ def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
             raise RuntimeError(f"unrecognised pending blueprint {match[2]!r}")
         orders.append({"index": int(match[1]), "blueprint": blueprint,
                        "level": int(match[3]), "reason": match[4]})
+    projects = _project_progress(state, clipped_ok=clipped_ok)
+    active = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
+    clipped = clipped_ok and active is not None and len(projects) < int(active[1])
     count = re.search(r"(?m)^Pending orders: (\d+)/(\d+)$", body)
+    if clipped and count is not None and not orders:
+        head = re.search(r"(?m)^Head: (.+)$", body)
+        return {"body": body, "orders": [], "projects": projects, "clipped": True,
+                "pending_count": int(count[1]), "head": head[1] if head else None}
     if count is None or int(count[1]) != len(orders) or [
         order["index"] for order in orders
     ] != list(range(1, len(orders) + 1)):
         raise RuntimeError("pending order list does not match its count/indices")
-    return {"body": body, "orders": orders, "projects": _project_progress(state)}
+    return {"body": body, "orders": orders, "projects": projects}
 
 
 def _owner_projects(probe: ProbeSteps, detail: dict[str, Any], key: str, artifact: Path) -> dict[str, Any]:
@@ -1958,7 +1974,7 @@ PROJECT_LABELS = {
 STREET_PROJECTS = frozenset({"road", "lamp", "meadow"})
 
 
-def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
+def _project_progress(observed: dict[str, Any], *, clipped_ok: bool = False) -> list[dict[str, Any]]:
     """Every project on the live Construction dialog, in display order."""
     body = _dialog_body(observed)
     projects = []
@@ -1978,9 +1994,9 @@ def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
             project["label"] = match[1]
         projects.append(project)
     count = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
-    if count is None or int(count[1]) != len(projects) or len({
-        _project_key(p) for p in projects
-    }) != len(projects):
+    shown_all = count is not None and int(count[1]) == len(projects)
+    cut_tail = clipped_ok and count is not None and len(projects) < int(count[1])
+    if not (shown_all or cut_tail) or len({_project_key(p) for p in projects}) != len(projects):
         raise RuntimeError("active project list does not match its count/identities")
     return projects
 
