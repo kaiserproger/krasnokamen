@@ -317,7 +317,8 @@ fn one_cell_project(
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
+        order_seq: None,
     };
     (project, bounds, cells)
 }

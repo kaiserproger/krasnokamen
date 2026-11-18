@@ -304,7 +304,7 @@ fn reconnection(
     lot: ScriptWorldBounds,
     paths: &[[i32; 3]],
 ) -> Result<Salient, Reason> {
-    let nodes = walk(state, record);
+    let nodes = plan_walk(state, record);
     let seeds = bell_columns(record, &nodes);
     if seeds.is_empty() {
         // No walk starts from the bell: nothing can be proved about the
@@ -565,6 +565,48 @@ fn walk(state: &TickState, record: &SettlementRecord) -> Nodes {
         }
     }
     nodes
+}
+
+/// The network a plan sees: the world's own walk plus every pending project's
+/// hold, so two individually valid plans cannot cut it together (D8, P2-5).
+fn plan_walk(state: &TickState, record: &SettlementRecord) -> Nodes {
+    let mut nodes = walk(state, record);
+    mount_pending(state, record, &mut nodes);
+    nodes
+}
+
+/// Mount the relayouts of the settlement's other unfinished projects: their
+/// detour stands, the village line they retire is gone.
+fn mount_pending(state: &TickState, record: &SettlementRecord, nodes: &mut Nodes) {
+    let owner = crate::plugin_structures::settlement_builds::owner(record.id);
+    let path = layout::paved_state(state);
+    let mut retired: HashSet<(i32, i32)> = HashSet::default();
+    for project in crate::settlements::construction::projects(record) {
+        if project.structure.is_empty() {
+            continue;
+        }
+        let Ok(cells) = crate::plugin_structures::pending_cells(state, &owner, &project.structure)
+        else {
+            continue;
+        };
+        for (at, target) in cells {
+            if Some(target) == path {
+                nodes.insert((at[0], at[2]), at[1]);
+                continue;
+            }
+            // The manifest re-soils or clears this cell: village work under it
+            // is the old line the project retires before its building stands.
+            let village = state
+                .world
+                .physics_block_at(at[0], at[1], at[2])
+                .and_then(|block| name(state, block))
+                .is_some_and(|name| matches!(name, "dirt_path" | "farmland"));
+            if village {
+                retired.insert((at[0], at[2]));
+            }
+        }
+    }
+    nodes.retain(|column, _| !retired.contains(column));
 }
 
 fn bell_columns(record: &SettlementRecord, nodes: &Nodes) -> Vec<(i32, i32)> {

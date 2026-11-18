@@ -177,7 +177,8 @@ fn manifest(
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
+        order_seq: None,
     };
     super::super::planned_cells(state, &project, "oak", &mut Default::default())
         .expect("the crossing lot is prepared")
@@ -408,7 +409,8 @@ fn farmland_removal_conserves_the_harvest() {
         building: None,
         structure: String::new(),
         ordered: true,
-        borrowed_builder: None,
+        builder: None,
+        order_seq: None,
     };
     assert!(
         super::super::begin(&mut state, project, "oak", 0),
@@ -419,8 +421,8 @@ fn farmland_removal_conserves_the_harvest() {
             .settlements
             .get(id)
             .unwrap()
-            .project
-            .as_ref()
+            .projects
+            .first()
             .map(|project| (project.origin, project.rotation)),
         Some((lot.origin, lot.rotation)),
         "the project is the farmland lot"
@@ -466,7 +468,8 @@ fn a_detour_manifest_opens_after_a_restart() {
             building: None,
             structure: String::new(),
             ordered: true,
-            borrowed_builder: None,
+            builder: None,
+            order_seq: None,
         },
         "oak",
         0
@@ -558,7 +561,8 @@ fn a_dug_out_path_is_never_rewritten_as_soil() {
             building: None,
             structure: String::new(),
             ordered: true,
-            borrowed_builder: None,
+            builder: None,
+            order_seq: None,
         },
         "oak",
         0
@@ -689,4 +693,59 @@ fn a_mature_torchflower_crop_leaves_seeds_not_the_flower() {
             .any(|stack| stack.item_id == item_of(&state, "torchflower")),
         "the flower is the separate block's drop, not the crop's"
     );
+}
+
+#[test]
+fn a_pending_detour_keeps_the_network_walkable_for_the_next_plan() {
+    let (mut state, id, _) = fixture();
+    let (front, normal, lot, size) = plateau(&mut state, id);
+    let bounds = bounds_of(lot, size);
+    crossing_road(&mut state, front, normal, size, bounds);
+    let (extent, cells) = manifest(&state, id, lot, size);
+    // Project A holds a real pending structure: its detour is not laid yet and
+    // its retired line is still in the world.
+    let handle = crate::plugin_structures::settlement_builds::prepare(
+        &mut state,
+        id,
+        "storage".into(),
+        extent,
+        bounds_of(lot, size),
+        cells,
+    )
+    .expect("A's structure prepares");
+    let project = super::super::Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin: lot.origin,
+        rotation: lot.rotation,
+        building: None,
+        structure: handle,
+        ordered: true,
+        builder: None,
+        order_seq: None,
+    };
+    state.settlements.get_mut(id).unwrap().projects = vec![project];
+    let planned = plan(&state, state.settlements.get(id).unwrap(), bounds)
+        .expect("the lot is admitted")
+        .expect("the lot covers village work");
+    let record = state.settlements.get(id).unwrap();
+    let nodes = plan_walk(&state, record);
+    // The unbuilt detour stands for the next plan...
+    for cell in &planned.detour {
+        assert_eq!(
+            nodes.get(&(cell.at[0], cell.at[2])),
+            Some(&cell.at[1]),
+            "A's pending detour cell {:?} is a walk node",
+            cell.at
+        );
+    }
+    // ...and the line A retires is not a way through any more.
+    for cell in &planned.retired {
+        assert!(
+            !nodes.contains_key(&(cell.at[0], cell.at[2])),
+            "A's retired cell {:?} is no longer a walk node",
+            cell.at
+        );
+    }
 }

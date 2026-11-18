@@ -339,6 +339,34 @@ pub(crate) fn building_facts<'a>(
         .collect()
 }
 
+/// Cells of a pending structure the world does not have yet: the settlement
+/// network proof mounts a plan's unbuilt detour and drops its unretired path
+/// (D8 parallel projects, P2-5).
+pub(crate) fn pending_cells(
+    state: &TickState,
+    owner: &str,
+    handle: &str,
+) -> Result<Vec<([i32; 3], u32)>, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, owner, handle)?;
+    if record.snapshot.state == ScriptStructureState::Committed
+        || record.snapshot.state == ScriptStructureState::Cancelled
+    {
+        return Ok(Vec::new());
+    }
+    let current = record.snapshot.current_stage_index as usize;
+    let mut cells = Vec::new();
+    for (index, stage) in record.cells.iter().enumerate().skip(current) {
+        let offset = if index == current {
+            record.snapshot.completed_work_units as usize
+        } else {
+            0
+        };
+        cells.extend(stage.iter().skip(offset).map(|cell| (cell.at, cell.state)));
+    }
+    Ok(cells)
+}
+
 pub(crate) fn check_building(
     state: &mut TickState,
     facts: &BuildingFacts,

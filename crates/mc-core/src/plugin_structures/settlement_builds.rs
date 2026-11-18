@@ -45,7 +45,7 @@ pub(crate) fn prepare(
         // (D8 parallel construction). Foreign and committed structures keep the
         // full reservation.
         let held = if same_settlement && record.snapshot.state != ScriptStructureState::Committed {
-            site_reservation(record).ok()
+            site_reservation(state, record).ok()
         } else {
             reserved_bounds(record).ok()
         };
@@ -666,9 +666,10 @@ pub(super) fn debit(
     let mut loot = Vec::new();
     let mut clearance = crate::settlements::forestry::Clearance::prepared();
     if preparing {
-        // A free pavement cell re-lays the village work it stands on, never
-        // lays a block from nothing: if the player dug that work out, the
-        // project pauses instead of paving air.
+        // A free pavement cell never lays a block from nothing: paving replaces
+        // the clearable space above ground, so the cell itself is usually air,
+        // but the ground under it must still be there. A column the player dug
+        // out pauses the project instead of paving void.
         let pavement = crate::settlements::construction::relayout::dirt_path(state);
         for cell in cells.iter().filter(|cell| {
             cell.resource.is_none() && cell.quantity == 0 && Some(cell.state) == pavement
@@ -677,14 +678,19 @@ pub(super) fn debit(
                 .world
                 .block_at(cell.at[0], cell.at[1], cell.at[2])
                 .ok_or(Failure::Unloaded)?;
-            let worked = state
+            if block != state.registry.states.air {
+                continue;
+            }
+            let below = state
+                .world
+                .physics_block_at(cell.at[0], cell.at[1] - 1, cell.at[2])
+                .ok_or(Failure::Unloaded)?;
+            let supported = state
                 .registry
-                .blocks
-                .by_id(mc_world::BlockStateId(block))
-                .is_some_and(|definition| {
-                    matches!(definition.block.id.path(), "dirt_path" | "farmland")
-                });
-            if !worked {
+                .collision_boxes
+                .get(below as usize)
+                .is_some_and(|boxes| !boxes.is_empty());
+            if !supported {
                 return Err(Failure::Blocked);
             }
         }
@@ -957,8 +963,29 @@ pub(crate) fn missing_stock(
 /// Recover the exact authored floor from that top and the future footprint;
 /// do not treat arbitrary vertically overlapping buildings as the same site.
 /// The site a structure reserves, without its wide clear-stage window.
-fn site_reservation(record: &Structure) -> Result<ScriptWorldBounds, Failure> {
-    bounds(record.snapshot.origin, record.snapshot.reserved_footprint)
+fn site_reservation(state: &TickState, record: &Structure) -> Result<ScriptWorldBounds, Failure> {
+    let site = bounds(record.snapshot.origin, record.snapshot.reserved_footprint)?;
+    // An unfinished structure holds the whole detour it must lay before it
+    // retires the old line: a parallel lot may not take that corridor (P2-5).
+    let paved = crate::settlements::layout::paved_state(state);
+    let mut extent: Option<([i32; 3], [i32; 3])> = None;
+    for cell in record.cells.iter().flatten() {
+        if Some(cell.state) != paved {
+            continue;
+        }
+        let (mut min, mut max) = extent.unwrap_or((cell.at, cell.at));
+        for axis in 0..3 {
+            min[axis] = min[axis].min(cell.at[axis]);
+            max[axis] = max[axis].max(cell.at[axis]);
+        }
+        extent = Some((min, max));
+    }
+    let Some((min, max)) = extent else {
+        return Ok(site);
+    };
+    let min = std::array::from_fn(|axis| site.min[axis].min(min[axis]));
+    let max = std::array::from_fn(|axis| site.max[axis].max(max[axis]));
+    ScriptWorldBounds::new(min, max).map_err(|_| Failure::InvalidRequest)
 }
 
 fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {

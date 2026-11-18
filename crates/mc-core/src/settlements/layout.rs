@@ -467,7 +467,7 @@ fn vacant(state: &TickState, block: u32) -> bool {
 }
 
 /// The state street paving turns soil into: the one `dirt_path` block.
-pub(super) fn paved_state(state: &TickState) -> Option<u32> {
+pub(crate) fn paved_state(state: &TickState) -> Option<u32> {
     default_state(state, "minecraft:dirt_path")
 }
 
