@@ -37,6 +37,8 @@ const WALK_TIMEOUT: u64 = DAY_TICKS;
 pub(crate) struct Facts {
     pub(crate) members: usize,
     pub(crate) beds: usize,
+    /// Certified beds open to newcomers; caps arrivals and destinations.
+    pub(crate) free_beds: usize,
     pub(crate) inbound: usize,
     pub(crate) food_points: u64,
     pub(crate) open_jobs: usize,
@@ -229,8 +231,14 @@ fn in_bounds(bounds: mc_script::ScriptWorldBounds, pos: BlockPos) -> bool {
         .all(|(i, p)| p >= bounds.min[i] && p <= bounds.max[i])
 }
 
-fn physical_beds(state: &TickState, record: &super::SettlementRecord) -> usize {
-    let mut beds = BTreeSet::new();
+/// Roofed bed pairs in certified houses, and those of them open to newcomers:
+/// less one for each member who sleeps in one, has no home or has no loaded
+/// body. Members of uncertified generated houses keep their own beds; savanna
+/// houses, for one, fail House certification (Spain seed 100: three certified
+/// beds, two of them empty, against eight members, so `beds - members`
+/// admitted no migrant for 60k ticks).
+fn physical_beds(state: &TickState, record: &super::SettlementRecord) -> (usize, usize) {
+    let mut beds = rustc_hash::FxHashSet::default();
     for building in record
         .buildings
         .values()
@@ -250,14 +258,28 @@ fn physical_beds(state: &TickState, record: &super::SettlementRecord) -> usize {
                             && allocator::bed_pair(&state.world, &state.registry, poi.pos).is_some()
                             && allocator::roofed(&state.world, &state.registry, poi.pos)
                         {
-                            beds.insert((poi.pos.x, poi.pos.y, poi.pos.z));
+                            beds.insert(poi.pos);
                         }
                     }
                 }
             }
         }
     }
-    beds.len()
+    let used = state
+        .settlements
+        .member_ids(record.id)
+        .filter(|&entity| {
+            state.entities.slot_of(entity).is_none_or(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .is_some_and(|v| v.home.is_none_or(|home| beds.contains(&home)))
+            })
+        })
+        .count();
+    (beds.len(), beds.len().saturating_sub(used))
 }
 
 fn facts(state: &TickState, id: SettlementId, now: u64) -> Facts {
@@ -309,9 +331,11 @@ fn facts(state: &TickState, id: SettlementId, now: u64) -> Facts {
                 .filter(|&&tick| now.saturating_sub(tick) < SAFETY_DAYS * DAY_TICKS)
                 .count()
         });
+    let (beds, free_beds) = physical_beds(state, record);
     Facts {
         members: super::member_count(state, id),
-        beds: physical_beds(state, record),
+        beds,
+        free_beds,
         inbound: transit::inbound(state, id),
         food_points,
         open_jobs: jobs.len(),
@@ -337,14 +361,13 @@ fn capacity(state: &TickState, destination: SettlementId) -> usize {
         .migration
         .observation(destination)
         .map_or(0, |observation| {
-            let beds = state
+            state
                 .settlements
                 .get(destination)
                 .filter(|record| simulated(state, record.anchor))
-                .map_or(observation.facts.beds, |record| {
-                    physical_beds(state, record)
-                });
-            beds.saturating_sub(super::member_count(state, destination))
+                .map_or(observation.facts.free_beds, |record| {
+                    physical_beds(state, record).1
+                })
                 .saturating_sub(transit::inbound(state, destination))
                 .saturating_sub(pending(state, destination))
         })

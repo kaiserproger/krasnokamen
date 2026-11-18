@@ -198,8 +198,11 @@ Unsimulated destinations need a cached observation from this runtime. Units
 are whole households or household-less individuals. Founding families and
 military, conversion, economic or construction reservations refuse before
 mutation. Destination beds cover the whole unit, including inbound transit
-and pending walks. One unit per source may leave daily; only one outbound
-walk may be active. Proven loaded routes relocate membership immediately;
+and pending walks. Those are free beds: certified-house beds less one for
+each member who sleeps in one, has no home or has no loaded body. Members
+sleeping in uncertified generated houses (savanna houses fail House
+certification) do not use them. One unit per source may leave daily; only
+one outbound walk may be active. Proven loaded routes relocate membership immediately;
 otherwise bodies walk to a route-proven simulated edge before transit takes
 custody. The civil radius does not constrain that edge. Outside emigration
 rechecks empty carry/equipment at departure and leaves no transit record.

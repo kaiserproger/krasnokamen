@@ -1,4 +1,4 @@
-use super::return_tests::{fixture, house, resident, step, town};
+use super::return_tests::{fixture, house, resident, shelter, step, town};
 use super::*;
 use crate::boundary::ChunkPos;
 use crate::villager::VillagerProfession;
@@ -221,6 +221,41 @@ fn inactive_destination_walks_to_edge_inside_radius_then_transits_same_people() 
         );
     }
     assert!(info(&state, destination).contains("arrived from"));
+}
+
+/// Spain seed 100 (trace pin fd53e9146612-586c7780): the adopted savanna
+/// village's members sleep in generated houses that fail House certification,
+/// so `certified beds - members` stayed 0 while two built house beds stood
+/// empty for 60k ticks and no migrant came.
+#[test]
+fn members_in_uncertified_houses_leave_certified_beds_to_migrants() {
+    let mut state = fixture();
+    let destination = town(&mut state, "destination", 8, 32);
+    house(&mut state, destination, 8);
+    shelter(&mut state, 20);
+    let members = [
+        resident(&mut state, destination, 20.5),
+        resident(&mut state, destination, 19.5),
+    ];
+    let home = |state: &TickState, id: EntityId| {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.row(slot).villager.as_ref().unwrap().home
+    };
+    for _ in 0..200 {
+        if members.iter().all(|&id| home(&state, id).is_some()) {
+            break;
+        }
+        step(&mut state);
+    }
+    for id in members {
+        assert_eq!(
+            home(&state, id).map(|bed| bed.x),
+            Some(20),
+            "fixture: members sleep in the uncertified shelter"
+        );
+    }
+    observe(&mut state, destination);
+    assert_eq!(capacity(&state, destination), 2);
 }
 
 #[test]

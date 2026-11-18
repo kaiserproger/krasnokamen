@@ -4,6 +4,7 @@ fn rich() -> Facts {
     Facts {
         members: 10,
         beds: 20,
+        free_beds: 10,
         inbound: 0,
         food_points: 120,
         open_jobs: 10,
