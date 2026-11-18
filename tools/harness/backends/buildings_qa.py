@@ -707,7 +707,7 @@ def _missing_level_order(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: s
     state = _send_fresh(probe, command, (
         "Unknown blueprint.", "Blueprint has no first level.", "No blueprint upgrade available",
         "Started ", "Queued ", "not enough:", "Construction bed material is unavailable.",
-        "waiting for forest evidence", "Building not found.", "Only the owner"))
+        "Building not found.", "Only the owner"))
     lines = _chat_lines(state)
     sub[f"L{level}_missing_level_reply"] = lines
     refused = any(line.startswith(("Unknown blueprint.", "Blueprint has no first level."))
@@ -1071,9 +1071,16 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
             return False
         if _current_certificate(probe, sub, tag, bp, level) is not None:
             return False
+        # A queued order's site is searched in later ticks (owner D42); another
+        # identical order would queue a second building, so follow this one.
+        queued = f"queued {bp}: waiting for a site" in message.lower()
         # One MCP wait request accepts at most 255 ticks: split the minute.
         for ticks in (255, 255, 255, 255, 180):
             probe.call("minecraft_wait_ticks", {"ticks": ticks})
+            if queued and _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
+                return True
+        if queued:
+            return False
     return False
 
 

@@ -216,9 +216,9 @@ pub(crate) fn open_plan(state: &mut TickState) {
     state.world.fold_overlay();
 }
 
-/// Planning passes until no owner order still waits for its site: the
-/// admitting tick examines one bounded slice of the sweep, later passes finish
-/// it (pin 7e421d34c060 order stall). A started order needs no pass.
+/// Planning passes until no owner order still waits for its site: the order's
+/// command only queues it and the passes search its site, one bounded slice
+/// each (owner D42). A started order needs no pass.
 pub(crate) fn finish_sweep(state: &mut TickState, id: SettlementId) {
     let waiting = |state: &TickState| {
         (0..access::orders(state.settlements.get(id).unwrap()).count()).any(|index| {
@@ -234,8 +234,8 @@ pub(crate) fn finish_sweep(state: &mut TickState, id: SettlementId) {
     panic!("a queued owner order still waits for its site after 64 planning passes");
 }
 
-/// An owner order run to its start: the admitting call examines one bounded
-/// slice of the site sweep, planning passes finish it.
+/// An owner order run to its start: the command queues it, planning passes
+/// search its site.
 pub(crate) fn request_started(state: &mut TickState, id: SettlementId, blueprint: &str) {
     match request_build(state, id, blueprint).unwrap() {
         OrderOutcome::Started => {}

@@ -1,7 +1,9 @@
 //! D8 queue rules: several owner requests, funded ones lift, the entry order
 //! otherwise holds, and the queue is bounded.
-use super::tests::{fixture, fund, open_plan};
+use super::tests::{fixture, fund, fund_at, open_plan};
 use super::*;
+use crate::settlements::allocator::tests::block;
+use mc_data::ItemStack;
 
 /// Owner D8: a request whose materials are in storage moves ahead of unfunded
 /// ones, so a funded request queued behind an unfunded head starts first while
@@ -210,18 +212,34 @@ fn examined(state: &TickState, id: SettlementId) -> Option<u32> {
         .and_then(|sweeps| sweeps.examined("house"))
 }
 
-/// Pin 7e421d34c060: `/settlement build spanish_plaza` on the seed-100 village
-/// swept every street frontage inside its command tick (4.3 s). The command
-/// tick examines one planner slice and answers at once; planner passes finish
-/// the same resumable sweep, one slice each, and start the order.
+/// One whole server tick and the chat lines it sent.
+fn tick_chat(state: &mut TickState, inputs: &[crate::boundary::PlayerInput]) -> Vec<String> {
+    let (_, outbox, _) = crate::tick::run_tick(state, inputs);
+    outbox
+        .into_iter()
+        .flat_map(|(_, changes)| changes)
+        .filter_map(|change| match change {
+            crate::boundary::PlayerChange::Chat { message } => Some(message),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Lots examined since the last call (site search cost observer).
+fn lots_examined() -> u32 {
+    site_refusals::EXAMINED.with(|lots| lots.replace(0))
+}
+
+/// Owner D42, after pin 7e421d34c060 (one 4.3 s command tick) and 38c3f1cdf
+/// (one inline site slice per command): the command queues the order and
+/// answers at once; order turns, one per tick from the tick's site budget,
+/// take one slice each and start it as soon as its sweep is complete.
 #[test]
-fn an_owner_order_examines_one_sweep_slice_in_its_command_tick() {
+fn an_owner_order_answers_at_once_and_its_turns_start_it() {
     let (mut state, id, frontages) = owner_in_open_plan();
-    // No planning pass shares the command tick.
-    assert!(
-        !state.tick.is_multiple_of(PLAN_CADENCE) && !(state.tick + 1).is_multiple_of(PLAN_CADENCE)
-    );
-    let (_, outbox, _) = crate::tick::run_tick(
+    let bound = site_turn::SITE_SLICES * SITE_ATTEMPTS;
+    lots_examined();
+    let chat = tick_chat(
         &mut state,
         &[crate::boundary::PlayerInput::Command {
             connection: crate::boundary::ConnectionId(7),
@@ -229,16 +247,9 @@ fn an_owner_order_examines_one_sweep_slice_in_its_command_tick() {
             permission_level: 0,
         }],
     );
-    let chat: Vec<String> = outbox
-        .into_iter()
-        .flat_map(|(_, changes)| changes)
-        .filter_map(|change| match change {
-            crate::boundary::PlayerChange::Chat { message } => Some(message),
-            _ => None,
-        })
-        .collect();
     assert_eq!(chat, ["Queued house: waiting for a site"]);
-    assert_eq!(examined(&state, id), Some(SITE_ATTEMPTS));
+    let lots = lots_examined();
+    assert!(lots <= bound, "the command tick examined {lots} lots");
     let record = state.settlements.get(id).unwrap();
     assert!(record.projects.is_empty());
     assert_eq!(
@@ -247,21 +258,143 @@ fn an_owner_order_examines_one_sweep_slice_in_its_command_tick() {
             .collect::<Vec<_>>(),
         ["house"]
     );
-    let mut passes = 0;
+    let slices = frontages.div_ceil(SITE_ATTEMPTS as usize);
+    let mut ticks = 0;
+    let mut chat = Vec::new();
     while state.settlements.get(id).unwrap().projects.is_empty() {
-        let before = examined(&state, id).unwrap_or(0);
-        plan(&mut state, id);
-        passes += 1;
-        if let Some(after) = examined(&state, id) {
-            assert!(after - before <= SITE_ATTEMPTS, "one slice per pass");
-        }
-        assert!(passes <= frontages, "the planner must finish the sweep");
+        chat.extend(tick_chat(&mut state, &[]));
+        ticks += 1;
+        let lots = lots_examined();
+        assert!(
+            lots <= site_turn::SITE_SLICES * SITE_ATTEMPTS,
+            "tick {ticks} examined {lots} lots"
+        );
+        assert!(
+            ticks <= slices,
+            "{ticks} ticks after the command for a sweep of {slices} slices ({frontages} frontages)"
+        );
     }
-    assert!(passes >= frontages / SITE_ATTEMPTS as usize - 1);
+    assert!(
+        chat.iter()
+            .any(|line| line == "Started house construction.")
+    );
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.projects[0].blueprint, "house");
     assert!(record.projects[0].ordered);
     assert_eq!(access::orders(record).count(), 0);
+}
+
+/// A settlement six chunks east per `index` with the fixture's own layout: its
+/// three-by-three chunks loaded flat, its anchor chunk simulated and a chest
+/// holding one house bill. Plans of radius 48 then never overlap.
+fn crowd_settlement(state: &mut TickState, index: i32) -> SettlementId {
+    let (cx, x0) = (6 * index, 96 * index);
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter(
+            (cx - 1..=cx + 1)
+                .flat_map(|x| (-1..=1).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))),
+        ));
+    for x in x0 - 16..x0 + 32 {
+        for z in -16i32..32 {
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
+            for y in 201..224 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    let chest = (x0 + 1, 201, 1);
+    state.world.set_block(
+        chest.0,
+        chest.1,
+        chest.2,
+        block(state, "minecraft:chest", &[]),
+    );
+    state.world.fold_overlay();
+    state.block_entities.insert(
+        chest,
+        crate::tick::BlockEntityState {
+            slots: vec![ItemStack::EMPTY; 27],
+            furnace: None,
+        },
+    );
+    state.tickets.insert(
+        format!("crowd{index}"),
+        (crate::boundary::ChunkPos { x: cx, z: 0 }, 0),
+    );
+    state.refresh_active_chunks(0);
+    let id = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            format!("crowd{index}"),
+            "owner".into(),
+            [x0 + 8, 201, 8],
+            48,
+        )
+        .unwrap();
+    state.settlements.get_mut(id).unwrap().bootstrap_storage = Some([chest.0, chest.1, chest.2]);
+    fund_at(state, chest, "house", 1);
+    id
+}
+
+/// Owner D42: many owners ordering in one tick share the server's one site
+/// budget. No tick examines more than its slices, however many orders wait;
+/// the order turns serve the settlements in turn, and every order starts.
+#[test]
+fn simultaneous_orders_share_one_bounded_site_budget_and_all_start() {
+    let (mut state, first, _) = owner_in_open_plan();
+    let mut ids = vec![first];
+    for index in 1..4 {
+        ids.push(crowd_settlement(&mut state, index));
+    }
+    let bound = site_turn::SITE_SLICES * SITE_ATTEMPTS;
+    lots_examined();
+    // Every order arrives in the same tick: the requests and that tick's site
+    // work share one budget.
+    for &id in &ids {
+        assert_eq!(
+            request_build(&mut state, id, "house").unwrap(),
+            OrderOutcome::Queued {
+                reason: site_refusals::WAITING_FOR_SITE.into()
+            }
+        );
+    }
+    let mut turns = Vec::new();
+    for tick in 0..400 {
+        crate::settlements::construction::tick(&mut state);
+        let lots = lots_examined();
+        assert!(lots <= bound, "tick {tick} examined {lots} lots");
+        turns.push(state.settlements.site_turn);
+        if ids.iter().all(|&id| {
+            access::projects(state.settlements.get(id).unwrap())
+                .next()
+                .is_some()
+        }) {
+            break;
+        }
+        state.tick += 1;
+    }
+    assert_eq!(
+        turns[..ids.len()],
+        ids.iter().copied().map(Some).collect::<Vec<_>>(),
+        "the first turns serve every settlement once, in id order"
+    );
+    for id in ids {
+        let record = state.settlements.get(id).unwrap();
+        assert_eq!(
+            access::projects(record)
+                .map(|project| project.blueprint.as_str())
+                .collect::<Vec<_>>(),
+            ["house"],
+            "settlement {id:?} started its order: {:?}; refusals {:?}",
+            pending_reason_at(&state, id, 0),
+            state.settlements.order_refusal
+        );
+        assert_eq!(access::orders(record).count(), 0);
+    }
 }
 
 /// The sweep is runtime scratch: a restart mid-sweep keeps only the saved
@@ -276,6 +409,8 @@ fn a_restart_mid_sweep_rederives_the_search_and_starts_the_order() {
             reason: site_refusals::WAITING_FOR_SITE.into()
         }
     );
+    assert_eq!(examined(&state, id), None, "the command examines no lot");
+    plan(&mut state, id);
     plan(&mut state, id);
     assert_eq!(examined(&state, id), Some(2 * SITE_ATTEMPTS));
     let restored: crate::settlements::SettlementRecord =
@@ -285,6 +420,7 @@ fn a_restart_mid_sweep_rederives_the_search_and_starts_the_order() {
     state.settlements.site_sweep.clear();
     state.settlements.site_watch.clear();
     state.settlements.order_refusal.clear();
+    state.settlements.site_orders.clear();
     state
         .settlements
         .apply_image(crate::settlements::RecordImage {
@@ -331,13 +467,14 @@ fn a_site_pass_scans_the_village_walk_once() {
             .set_block(lot.origin[0] + 1, lot.origin[1], lot.origin[2] + 1, path);
     }
     state.world.fold_overlay();
-    relayout::WALKS.with(|walks| walks.set(0));
     assert_eq!(
         request_build(&mut state, id, "house").unwrap(),
         OrderOutcome::Queued {
             reason: site_refusals::WAITING_FOR_SITE.into()
         }
     );
+    relayout::WALKS.with(|walks| walks.set(0));
+    plan(&mut state, id);
     assert_eq!(examined(&state, id), Some(SITE_ATTEMPTS));
     assert_eq!(
         relayout::WALKS.with(std::cell::Cell::get),

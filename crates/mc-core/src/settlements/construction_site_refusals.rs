@@ -356,6 +356,12 @@ pub(super) fn floor_columns(blueprint: &blueprints::Blueprint, rotation: u8) -> 
         .collect()
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Candidate lots examined on this thread (cost observer).
+    pub(super) static EXAMINED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 /// Examine up to `budget` further candidates of this blueprint's sweep. An
 /// incomplete sweep admits nothing; a completed one returns its cheapest lot
 /// and forgets its scratch. Equal costs go to the lot nearest the anchor.
@@ -393,6 +399,8 @@ pub(super) fn advance(
         sweep.next += 1;
         *budget -= 1;
         report.examined += 1;
+        #[cfg(test)]
+        EXAMINED.with(|count| count.set(count.get() + 1));
         let (front, normal) = fronts[index as usize];
         let Some(lot) = network.lot(blueprint, front, normal) else {
             // The lot's own door or verge column holds fluid: the builder

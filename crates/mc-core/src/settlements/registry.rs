@@ -129,6 +129,12 @@ pub struct Registry {
     /// Whole-sweep cheapest-lot scratch, derived and never persisted. A restart
     /// discards it and restarts the sweep from the persisted cursor.
     pub(super) site_sweep: BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>,
+    /// Settlements whose funded new building searches for a site, with the
+    /// sequence of the order searched last; derived and never persisted
+    /// (`construction::site_turn`).
+    pub(super) site_orders: BTreeMap<SettlementId, u64>,
+    /// The settlement the last order turn served.
+    pub(super) site_turn: Option<SettlementId>,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,
@@ -660,6 +666,7 @@ impl Registry {
         self.economic_active.remove(&id);
         self.site_watch.remove(&id);
         self.site_sweep.remove(&id);
+        self.site_orders.remove(&id);
         self.order_refusal
             .retain(|(settlement, _), _| *settlement != id);
         self.resident_settlement.retain(|_, sid| *sid != id);
@@ -712,6 +719,7 @@ impl Registry {
             self.economic_active.remove(&image.id);
             self.site_watch.remove(&image.id);
             self.site_sweep.remove(&image.id);
+            self.site_orders.remove(&image.id);
             self.order_refusal
                 .retain(|(settlement, _), _| *settlement != image.id);
             if let Some(record) = self.records.remove(&image.id) {

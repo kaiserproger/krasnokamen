@@ -162,11 +162,8 @@ fn repeated_lumber_replants_leave_a_reachable_funded_house_lot() {
     state.world.fold_overlay();
     state.entities.row_mut(slot).villager = Some(worker);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert_eq!(
-        construction::request_build(&mut state, id, "spanish_house")
-            .expect("many lumber plantings must leave a reachable fully funded house lot"),
-        construction::OrderOutcome::Started,
-    );
+    // Many lumber plantings must leave a reachable fully funded house lot.
+    construction::tests::request_started(&mut state, id, "spanish_house");
     let town = state.settlements.get(id).unwrap();
     assert_eq!(town.projects[0].blueprint, "spanish_house");
     assert!(town.planted_trees.len() >= 10, "not a blanket planting ban");

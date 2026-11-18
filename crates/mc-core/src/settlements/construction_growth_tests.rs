@@ -229,7 +229,11 @@ fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
         building: None,
     }];
     for _ in 0..256 {
-        assert!(plan_order(&mut state, id));
+        assert!(plan_order(
+            &mut state,
+            id,
+            &mut site_turn::SiteBudget::default()
+        ));
         if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
