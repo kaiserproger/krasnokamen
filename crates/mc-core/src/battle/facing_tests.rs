@@ -297,20 +297,40 @@ fn leaving_the_projection_under_lazy_starts_from_the_drawn_body() {
         lazy.tick(50.0);
     }
     let drawn = lazy.row.body;
-    assert_eq!(
-        leave(&mut lazy.row, Policy::Lazy, lazy.stored),
-        Some(Facing::From { yaw: drawn })
-    );
-    assert_eq!(
-        leave(&mut lazy.row, Policy::Lazy, lazy.stored),
-        None,
-        "once"
-    );
+    // Handed until a step takes it: a row whose chunk is not simulated (or
+    // whose battle paused before its step) keeps every stored bit.
+    for _ in 0..3 {
+        assert_eq!(
+            leave(&mut lazy.row, Policy::Lazy, lazy.stored),
+            Some(Facing::From { yaw: drawn })
+        );
+    }
+    // Its step ran: any stored change consumed it.
+    let stepped = [drawn - 30.0, lazy.stored[1], lazy.stored[2]];
+    assert_eq!(leave(&mut lazy.row, Policy::Lazy, stepped), None);
+    assert_eq!(leave(&mut lazy.row, Policy::Lazy, stepped), None, "once");
     let mut body = Standing::new(Policy::Body, [0.0; 3]);
     for _ in 0..40 {
         body.tick(50.0);
     }
     assert_eq!(leave(&mut body.row, Policy::Body, body.stored), None);
+}
+
+/// A row handed its body and projected again before any step took it keeps
+/// its drawn body (no re-seed from the stale stored yaw).
+#[test]
+fn a_handed_row_projected_again_before_its_step_keeps_its_drawn_body() {
+    let mut lazy = Standing::new(Policy::Lazy, [0.0; 3]);
+    for _ in 0..40 {
+        lazy.tick(50.0);
+    }
+    let drawn = lazy.row.body;
+    assert_ne!(drawn.to_bits(), lazy.stored[0].to_bits());
+    leave(&mut lazy.row, Policy::Lazy, lazy.stored);
+    let Facing::Set { body, .. } = lazy.tick(50.0) else {
+        panic!("projected again")
+    };
+    assert_eq!(body.to_bits(), drawn.to_bits());
 }
 
 #[test]
@@ -356,12 +376,13 @@ fn a_target_switch_reseeds_the_filter_only_for_a_jump_of_45_or_more() {
 }
 
 #[test]
-fn old_look_keeps_the_previous_rule_with_its_half_quantum_hold() {
+fn old_look_keeps_the_previous_step_and_rest_guard() {
     let mut row = Row::default();
     let position = ORIGIN;
     let target = aim(40.0);
+    // 40 degrees off: the old guard refuses the rest; the step turns it.
     let stored = [0.0, 0.0, 0.0];
-    let Facing::Set { rotation, body } = next(
+    let look = next(
         &mut row,
         Policy::Body,
         Law::Old,
@@ -369,18 +390,10 @@ fn old_look_keeps_the_previous_rule_with_its_half_quantum_hold() {
         position,
         TARGET,
         target,
-    ) else {
-        panic!("set")
-    };
-    let look = crate::entity_motion::look(
-        stored,
-        Vec3::new(position[0], position[1], position[2]),
-        Vec3::ZERO,
-        Some(target),
     );
-    assert_eq!(bits(rotation), bits(look));
-    assert_eq!(body.to_bits(), look[0].to_bits());
-    // 0.3 degrees off: held.
+    assert_eq!(look, Facing::Look { rest: None });
+    assert!(!look.rests(stored));
+    // 0.3 degrees off with the head on the body: held.
     let stored = [40.3, 0.0, 40.3];
     let held = next(
         &mut row,
@@ -392,6 +405,36 @@ fn old_look_keeps_the_previous_rule_with_its_half_quantum_hold() {
         target,
     );
     assert!(held.rests(stored));
+    // The same, with the head off the body: the old guard refused it.
+    let stored = [40.3, 0.0, 70.0];
+    let off_body = next(
+        &mut row,
+        Policy::Body,
+        Law::Old,
+        stored,
+        position,
+        TARGET,
+        target,
+    );
+    assert!(!off_body.rests(stored), "{off_body:?}");
+    // Under L a row coming off the split law first hands its drawn body.
+    let mut lazy = Standing::new(Policy::Lazy, [0.0; 3]);
+    for _ in 0..40 {
+        lazy.tick(50.0);
+    }
+    let drawn = lazy.row.body;
+    assert_eq!(
+        next(
+            &mut lazy.row,
+            Policy::Lazy,
+            Law::Old,
+            lazy.stored,
+            ORIGIN,
+            TARGET,
+            aim(50.0)
+        ),
+        Facing::From { yaw: drawn }
+    );
 }
 
 fn fixture() -> TickState {
@@ -523,12 +566,11 @@ fn riders_head_on_body_mobs_and_charged_fighters_keep_the_old_look() {
         "the split head turns at the rate toward -90"
     );
     for id in [charged, rider] {
-        let (rotation, stored) = set(id);
-        assert_ne!(rotation[0], stored[0], "{id:?}: the whole body turns");
+        let slot = state.entities.slot_of(id).unwrap();
         assert_eq!(
-            rotation[0].to_bits(),
-            rotation[2].to_bits(),
-            "{id:?}: head on body"
+            state.hostile.battle.facing.of(slot),
+            Some(Facing::Look { rest: None }),
+            "{id:?}: the old look turns the whole body in its step"
         );
     }
 }
@@ -590,53 +632,145 @@ fn a_running_battle_writes_the_published_facing_of_every_standing_row() {
     }
 }
 
-/// D36 3.4.3: after `battle pause` (or stop) nothing is projected and a head
-/// the projection left off its body returns to it in the step.
+/// D36 3.4.3 and 3.2(ii): after `battle pause` (or stop) nothing is projected.
+/// Under L the drawn body becomes the yaw on the pause tick, so no head jumps
+/// toward a stale yaw; on either policy a head left off its body returns to it
+/// in the step, every row on its body within 8 ticks. Each standing row's body
+/// is first turned 180 degrees from its stored yaw (L stores it only on a
+/// move) with the head 60 degrees off the body.
 #[test]
 fn a_paused_battle_rests_every_row_within_8_ticks() {
-    let mut state = crate::battle::tests::staged_flat_fixture(20);
-    let mut changes = crate::boundary::ChangeSet::default();
-    staging::execute(
-        &mut state,
-        &mut changes,
-        ORIGIN,
-        &staging::BattleCommand::Start,
-    )
-    .unwrap();
-    for _ in 0..20 {
-        crate::tick::run_tick(&mut state, &[]);
-    }
-    let soldiers: Vec<_> = state.entities.battle_slots().collect();
-    assert!(!soldiers.is_empty());
-    for &slot in &soldiers {
-        let [yaw, pitch, _] = state.entities.rot(slot);
-        state.entities.set_facing(slot, [yaw, pitch, yaw + CONE]);
-    }
-    staging::execute(
-        &mut state,
-        &mut changes,
-        ORIGIN,
-        &staging::BattleCommand::Pause,
-    )
-    .unwrap();
-    let mut settled_after = 0;
-    for tick in 1..=8 {
-        crate::tick::run_tick(&mut state, &[]);
-        if soldiers.iter().all(|&slot| {
-            !state.entities.body(slot).alive || {
-                let [yaw, _, head] = state.entities.rot(slot);
-                yaw.to_bits() == head.to_bits()
+    for policy in [Policy::Body, Policy::Lazy] {
+        let mut state = crate::battle::tests::staged_flat_fixture(20);
+        state.hostile.battle.facing.policy = policy;
+        let mut changes = crate::boundary::ChangeSet::default();
+        staging::execute(
+            &mut state,
+            &mut changes,
+            ORIGIN,
+            &staging::BattleCommand::Start,
+        )
+        .unwrap();
+        let split = |state: &TickState| {
+            state
+                .hostile
+                .battle
+                .facing
+                .rows
+                .iter()
+                .filter(|row| row.law == Law::Split)
+                .count()
+        };
+        for _ in 0..1000 {
+            crate::tick::run_tick(&mut state, &[]);
+            if split(&state) >= 3 {
+                break;
             }
-        }) {
-            settled_after = tick;
-            break;
+        }
+        let mut turned = Vec::new();
+        for row in &mut state.hostile.battle.facing.rows {
+            let Some(slot) = row.id.and_then(|id| state.entities.slot_of(id)) else {
+                continue;
+            };
+            if row.law != Law::Split || !state.entities.body(slot).alive {
+                continue;
+            }
+            let [yaw, pitch, _] = state.entities.rot(slot);
+            row.body = wrap(yaw + 180.0);
+            let head = row.body + 60.0;
+            row.last_stable = head;
+            let stored_yaw = match policy {
+                Policy::Body => row.body,
+                Policy::Lazy => yaw,
+            };
+            state.entities.set_facing(slot, [stored_yaw, pitch, head]);
+            state.entities.set_vel(slot, [0.0; 3]);
+            turned.push((slot, row.body, head));
+        }
+        assert!(turned.len() >= 3, "{policy:?}: standing rows to pause");
+        let soldiers: Vec<_> = state.entities.battle_slots().collect();
+        staging::execute(
+            &mut state,
+            &mut changes,
+            ORIGIN,
+            &staging::BattleCommand::Pause,
+        )
+        .unwrap();
+        crate::tick::run_tick(&mut state, &[]);
+        for &(slot, body, head) in &turned {
+            if !state.entities.body(slot).alive {
+                continue;
+            }
+            let [yaw, _, after] = state.entities.rot(slot);
+            // follow_head: 10 degrees per tick toward the body.
+            assert!(
+                off(after, head) <= 10.0 + 1.0e-3,
+                "{policy:?}: head jumped {head} -> {after} (yaw {yaw}, body {body})"
+            );
+            assert_eq!(
+                yaw.to_bits(),
+                body.to_bits(),
+                "{policy:?}: the drawn body is the yaw"
+            );
+        }
+        let mut settled_after = 0;
+        for tick in 2..=8 {
+            crate::tick::run_tick(&mut state, &[]);
+            if soldiers.iter().all(|&slot| {
+                !state.entities.body(slot).alive || {
+                    let [yaw, _, head] = state.entities.rot(slot);
+                    yaw.to_bits() == head.to_bits()
+                }
+            }) {
+                settled_after = tick;
+                break;
+            }
+        }
+        assert!(
+            settled_after > 0,
+            "{policy:?}: every head is on its body within 8 ticks"
+        );
+        assert!(state.hostile.battle.facing.of(soldiers[0]).is_none());
+    }
+}
+
+/// A row whose chunk is not simulated (`columns.active` false) keeps handing
+/// its drawn body until a step has taken it: L never loses the virtual yaw
+/// because the row was skipped on the tick it left the projection.
+#[test]
+fn an_inactive_row_keeps_handing_its_body_until_a_step_takes_it() {
+    let mut state = fixture();
+    state.hostile.battle.facing.policy = Policy::Lazy;
+    let id = husk(&mut state, 0.5);
+    let slot = state.entities.slot_of(id).unwrap();
+    state.entities.set_facing(slot, [0.0; 3]);
+    let ahead = [40.5, 100.0, 0.5];
+    let mut standing = columns(&state, &[(id, ahead)]);
+    let combat = CombatRuntime::default();
+    for _ in 0..40 {
+        project_once(&mut state, &standing, &combat);
+        if let Some(Facing::Set { rotation, .. }) = state.hostile.battle.facing.of(slot) {
+            state.entities.set_facing(slot, rotation);
         }
     }
-    assert!(
-        settled_after > 0,
-        "every head is on its body within 8 ticks"
-    );
-    assert!(state.hostile.battle.facing.of(soldiers[0]).is_none());
+    let drawn = match state.hostile.battle.facing.of(slot) {
+        Some(Facing::Set { body, .. }) => body,
+        other => panic!("{other:?}"),
+    };
+    assert_ne!(drawn.to_bits(), state.entities.rot(slot)[0].to_bits());
+    standing.active[0] = false;
+    for _ in 0..3 {
+        project_once(&mut state, &standing, &combat);
+        assert_eq!(
+            state.hostile.battle.facing.of(slot),
+            Some(Facing::From { yaw: drawn }),
+            "handed while not simulated"
+        );
+    }
+    let [_, pitch, head] = state.entities.rot(slot);
+    state.entities.set_facing(slot, [drawn, pitch, head]);
+    project_once(&mut state, &standing, &combat);
+    assert_eq!(state.hostile.battle.facing.of(slot), None, "taken");
 }
 
 /// Facing state is runtime-only: a tick that changes nothing but the
@@ -674,7 +808,7 @@ fn from_the_same_start_state_the_same_facing_and_a_restored_row_reaches_rest() {
             .map(|tick| {
                 bits(match row.tick(-30.0 + (tick % 5) as f64) {
                     Facing::Set { rotation, .. } => rotation,
-                    Facing::From { .. } => unreachable!(),
+                    other => unreachable!("{other:?}"),
                 })
             })
             .collect::<Vec<_>>()

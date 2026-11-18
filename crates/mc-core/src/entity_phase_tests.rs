@@ -1145,28 +1145,25 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
     }
 }
 
-/// The rows that keep the previous whole-body look (a mounted rider here; also
-/// head-on-body mobs and a fighter whose charge bonus lasts) keep its rest
-/// tolerance: half a wire quantum on the signed yaw error, wrapped across
-/// +-180 degrees: just inside rests, just outside steps.
+/// BATTLE-REST-SKIPS-TARGET-FACING through the rest guard (`can_early_rest`):
+/// the rest tolerance is half a wire quantum on the signed yaw error, wrapped
+/// across +-180 degrees: just inside rests, just outside steps; a head off its
+/// body steps. Since D36 this tolerance is the guard of the rows that keep the
+/// previous whole-body look (a foot husk whose charge bonus lasts here; also
+/// riders and head-on-body mobs), read from the projection as `Facing::Look`;
+/// the other standing rows rest only on a bit-identical projected rotation.
 #[test]
 fn battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error() {
-    let (mut state, horse_slot) = resting_mob("minecraft:horse");
-    let horse = state.entities.body(horse_slot).id;
-    let husk = state.registry.entity_type_id("minecraft:husk").unwrap();
-    let rider = state.spawn_mob(husk, state.entities.pos(horse_slot), 20.0);
-    let slot = state.entities.slot_of(rider).unwrap();
-    state.entities.set_faction(horse_slot, 1);
+    let (mut state, slot) = resting_mob("minecraft:husk");
     state.entities.set_faction(slot, 1);
-    crate::battle::cavalry::mount(&mut state, rider, horse).unwrap();
-    crate::mounts::tick(&mut state, &mut crate::boundary::ChangeSet::default());
+    let id = state.entities.body(slot).id;
+    state.hostile.battle.combat.charge_from(id, 0);
     let pos = state.entities.pos(slot);
     let enemy = crate::boundary::EntityId(9_999);
     let rests = |state: &mut TickState, dx: f64, dz: f64| {
         let target = [pos[0] + dx, pos[1], pos[2] + dz];
         crate::battle::facing::project_row(state, slot, Some((enemy, target)));
-        let facing = state.hostile.battle.facing.of(slot).unwrap();
-        facing.rests(state.entities.rot(slot))
+        can_early_rest(state, slot)
     };
     // tan(0.703125 deg) * 4 = 0.0491 blocks of lateral offset at 4 blocks.
     state.entities.set_facing(slot, [0.0; 3]);
@@ -1178,6 +1175,8 @@ fn battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error() {
         rests(&mut state, 0.0, -4.0),
         "the yaw error wraps across +-180"
     );
+    state.entities.set_facing(slot, [0.0, 0.0, 30.0]);
+    assert!(!rests(&mut state, 0.0480, 4.0), "a head off its body steps");
 }
 
 /// A standing battle row never had the hold: the old selector was

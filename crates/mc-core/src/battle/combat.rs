@@ -1041,6 +1041,34 @@ fn strike(
     });
 }
 
+/// Test seams for fixtures outside the battle module.
+#[cfg(test)]
+impl CombatRuntime {
+    /// `id` (made a fighter if it is not one) charged at battle tick `tick`:
+    /// its bonus lasts `CHARGE_DECAY_TICKS` from there.
+    pub(crate) fn charge_from(&mut self, id: EntityId, tick: u64) {
+        if !self.ids.contains(&id) {
+            let mut ids = self.ids.clone();
+            ids.push(id);
+            self.prepare(&ids);
+        }
+        let bi = self.ids.iter().position(|&fighter| fighter == id).unwrap();
+        self.fighters[bi].charge = serde_json::from_value(
+            serde_json::json!({"impact": tick, "refused": false, "reform_until": 0}),
+        )
+        .unwrap();
+    }
+
+    /// The fighter `id`'s windup: its target and start tick.
+    pub(crate) fn windup_of(&self, id: EntityId) -> Option<(EntityId, u64)> {
+        let bi = self.ids.iter().position(|&fighter| fighter == id)?;
+        match self.fighters[bi].action {
+            Action::Windup { target, start, .. } => Some((target, start)),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "combat_tests.rs"]
 pub(super) mod tests;

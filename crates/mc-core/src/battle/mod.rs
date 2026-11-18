@@ -416,7 +416,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         battle.exposure.halt(Some(&sample));
         battle.columns.drive_by_slot.clear();
         battle.columns.look_by_slot.clear();
-        battle.facing.clear();
+        battle.facing.release(&state.entities);
         battle.output = output;
         timings.total_us = start.map_or(0, |start| start.elapsed().as_micros() as u64);
         battle.timings = timings;

@@ -294,6 +294,147 @@ fn battle_resume_rebuilds_facing_from_the_journaled_pose() {
     continues(&mut drill);
 }
 
+/// D36 section 5: a fighter whose charge bonus lasts keeps the previous
+/// whole-body look, so the bonus knockback of its blow (along its stored yaw,
+/// tick/damage.rs) pushes the victim along the bearing it strikes at, as before
+/// D36; also after a crash recovered from checkpoint and WAL (the charge is
+/// journaled, the facing state rebuilt). Each measured windup starts with the
+/// striker's yaw and head turned 60 degrees off its victim: the split law
+/// would hold that body past the 10-tick windup, and the push would follow it.
+/// This melee lands about one blow in forty (cinematic removal odds), so at
+/// the impact tick the blow the strike builds (striker, position, stored yaw,
+/// charge bonus; battle/combat.rs `strike`) is merged natively instead of
+/// waiting for a landed roll.
+#[test]
+fn a_charged_blow_pushes_its_victim_along_the_strike_bearing_across_wal_recovery() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let charged = charge_side(&mut drill);
+    let before = charged_push(&mut drill, charged);
+    assert!(
+        before < 15.0,
+        "push {before} degrees off the strike bearing"
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let mut drill = prepared(directory.path());
+    let charged = charge_side(&mut drill);
+    drill.run(&[]).unwrap();
+    let mut drill = drill.crash();
+    hydrate_battle(&mut drill.state);
+    let after = charged_push(&mut drill, charged);
+    assert!(
+        after < 15.0,
+        "after recovery: push {after} degrees off the strike bearing"
+    );
+}
+
+/// Side 1's soldiers charged from the next battle tick, which is returned.
+fn charge_side(drill: &mut Drill) -> u64 {
+    let battle = &mut drill.state.hostile.battle;
+    let tick = battle.elapsed_ticks;
+    let side: Vec<_> = battle
+        .formation
+        .members
+        .iter()
+        .filter(|member| battle.formation.regiments[member.regiment].spec.faction == 1)
+        .map(|member| member.id)
+        .collect();
+    for id in side {
+        battle.combat.charge_from(id, tick);
+    }
+    tick
+}
+
+/// The angle in degrees between a victim's push and the bearing from its
+/// striker: the first windup of a standing charged soldier of side 1 on his
+/// column target, turned 60 degrees off at its start, struck at its impact
+/// tick with the blow `strike` builds.
+fn charged_push(drill: &mut Drill, charged: u64) -> f32 {
+    let bearing = |from: [f64; 3], to: [f64; 3]| {
+        -(mc_physics::mth::atan2(to[0] - from[0], to[2] - from[2]) as f32)
+            * mc_physics::mth::RAD_TO_DEG
+    };
+    let wrap = |angle: f32| (angle + 180.0).rem_euclid(360.0) - 180.0;
+    let windup = u64::from(crate::battle::combat::Weapon::Sword.windup());
+    while drill.state.hostile.battle.elapsed_ticks + windup + 2
+        < charged + crate::battle::cavalry::CHARGE_DECAY_TICKS
+    {
+        drill.run(&[]).unwrap();
+        let state = &drill.state;
+        let battle = &state.hostile.battle;
+        let now = battle.elapsed_ticks - 1;
+        let Some((actor, victim, start)) = battle.formation.members.iter().find_map(|member| {
+            let (target, start) = battle.combat.windup_of(member.id)?;
+            let slot = state.entities.slot_of(member.id)?;
+            let bi = battle.columns.index(slot)?;
+            (start == now
+                && battle.formation.regiments[member.regiment].spec.faction == 1
+                && battle.columns.drive[bi] == [0.0; 3]
+                && battle.columns.targets[bi].map(|column| column.id) == Some(target))
+            .then_some((member.id, target, start))
+        }) else {
+            continue;
+        };
+        let slot = state.entities.slot_of(actor).unwrap();
+        let Some(victim_slot) = state.entities.slot_of(victim) else {
+            continue;
+        };
+        let toward = bearing(state.entities.pos(slot), state.entities.pos(victim_slot));
+        let [_, pitch, _] = state.entities.rot(slot);
+        drill
+            .state
+            .entities
+            .set_facing(slot, [toward + 60.0, pitch, toward + 60.0]);
+        // Up to the impact tick: its battle step strikes with the yaw stored now.
+        let impact = start + windup;
+        while drill.state.hostile.battle.elapsed_ticks < impact
+            && drill.state.hostile.battle.combat.windup_of(actor) == Some((victim, start))
+        {
+            drill.run(&[]).unwrap();
+        }
+        let state = &mut drill.state;
+        if state.hostile.battle.combat.windup_of(actor) != Some((victim, start))
+            || !state.entities.body(victim_slot).alive
+        {
+            continue;
+        }
+        let position = state.entities.pos(slot);
+        let struck_at = bearing(position, state.entities.pos(victim_slot));
+        let hurt = state.entities.body(victim_slot).hurt_at;
+        state.entities.set_vel(victim_slot, [0.0; 3]);
+        state.merge_damage.push((
+            victim_slot,
+            crate::tick::DamagePiece {
+                amount: 1.0,
+                kind: crate::survival::DamageKind::Melee,
+                source: Some(crate::intent::DamageSource::Melee {
+                    attacker: actor,
+                    position,
+                    yaw: state.entities.rot(slot)[0],
+                    bonus_knockback: f64::from(crate::battle::cavalry::impact_bonus(
+                        impact - charged,
+                    )),
+                    sweep: false,
+                    fire_ticks: 0,
+                    bane_ticks: 0,
+                }),
+                physical: None,
+                custom_armor: false,
+            },
+        ));
+        state.commit_merge_effects();
+        if state.entities.body(victim_slot).hurt_at == hurt {
+            // Inside its hurt window: no knockback to read.
+            continue;
+        }
+        let [x, _, z] = state.entities.vel(victim_slot);
+        assert!(x * x + z * z > 1.0e-6, "the blow pushes");
+        let pushed = -(mc_physics::mth::atan2(x, z) as f32) * mc_physics::mth::RAD_TO_DEG;
+        return wrap(pushed - struck_at).abs();
+    }
+    panic!("no standing charged windup within the charge bonus");
+}
+
 /// Serialized bytes of a tick's battle records (full image or patch), by the
 /// WAL's own JSON, so the measurement does not depend on the record variant.
 fn battle_record_bytes(entries: &[JournalEntry]) -> usize {

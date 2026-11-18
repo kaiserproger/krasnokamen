@@ -2,11 +2,13 @@
 //! receipts/BattleTurnCapCause/D36-FACING-DESIGN.md; row
 //! BATTLE-TARGET-LOOK-TURNS-WHOLE-BODY).
 //!
-//! Invariant: once per battle tick [`project`] publishes the rotation the step
-//! of every projected row (a battle row with a target and zero drive) writes,
-//! and the rest guard admits that row's rotation only when the published value
-//! is bit-identical to the stored one. Rows that stop being projected run their
-//! own rule in the step (a head left off the body returns with `follow_head`).
+//! Invariant: once per battle tick [`project`] publishes, for every projected
+//! row (a battle row with a target and zero drive), the one value both the
+//! rest guard and the step read: the rotation the step writes, admitted as a
+//! rest only when bit-identical to the stored one. Rows that stop being
+//! projected run their own rule in the step (a head left off the body returns
+//! with `follow_head`); under L their drawn body is handed to that step first,
+//! also when the battle pauses or stops ([`FacingState::release`]).
 //!
 //! The head tracks the target (a dead zone on a smoothed bearing triggers a
 //! turn that lands on the current bearing at most [`RATE`] per tick and then
@@ -14,7 +16,8 @@
 //! 15 degrees stable, 10 ticks, aligned over 10), which is what the client draws
 //! for a standing mob from its head. Riders, rows whose body controller keeps
 //! the head on the body and a dismounted rider whose charge bonus still lasts
-//! keep the previous whole-body look (section 5 of the design).
+//! keep the previous whole-body look (section 5 of the design): their step and
+//! rest guard are the ones before D36 (`Facing::Look`).
 //!
 //! [`Policy`] chooses what a standing row stores as its yaw: the virtual body
 //! (A) or nothing until the row really moves or leaves the projection (L). It
@@ -55,7 +58,8 @@ const CONE: f32 = 75.0;
 const HEAD_STABLE: f32 = 15.0;
 const ALIGN_DELAY: u8 = 10;
 const ALIGN_TICKS: u8 = 10;
-/// The previous rule's hold for the rows that keep it: half a wire quantum.
+/// The previous rest guard's tolerance for the rows that keep the old look:
+/// half a wire quantum (BATTLE-REST-SKIPS-TARGET-FACING).
 const OLD_HOLD: f32 = 0.703_125;
 /// Bearings and elevations need this much horizontal distance.
 const MIN_HORIZONTAL: f64 = 1.0e-3;
@@ -97,6 +101,11 @@ enum Law {
     Old,
     /// Head and body separate.
     Split,
+    /// Left the split law under L with its drawn body handed to the step
+    /// (`Facing::From`) while the stored rotation had these bits; republished
+    /// until a step consumed it (a row whose chunk is not simulated keeps every
+    /// stored bit).
+    Leaving { at: [u32; 3] },
 }
 
 /// Per column row; carries its own id because tail rows shift when bodies die.
@@ -125,7 +134,13 @@ pub(crate) struct FacingState {
 impl Default for FacingState {
     fn default() -> Self {
         Self {
-            policy: Policy::from_env(),
+            // Tests pin the policy they exercise; none inherits the process
+            // environment.
+            policy: if cfg!(test) {
+                Policy::Body
+            } else {
+                Policy::from_env()
+            },
             rows: Vec::new(),
             by_slot: Vec::new(),
         }
@@ -138,8 +153,33 @@ impl FacingState {
         self.by_slot.get(slot.0 as usize).copied().flatten()
     }
 
-    /// Battle paused or stopped: nothing is projected and every row starts
-    /// afresh (heads left off their bodies return in the step).
+    /// Battle paused or stopped: nothing is projected. A row whose drawn body is
+    /// not its stored yaw (L) hands it to its step until a step consumed it;
+    /// every other row is let go and a head left off its body returns in the
+    /// step. The rows are kept, so a resumed battle finds them by column index.
+    pub(crate) fn release(&mut self, entities: &crate::entities::EntityStore) {
+        let policy = self.policy;
+        self.by_slot.clear();
+        let rotations = entities.rotations();
+        for row in &mut self.rows {
+            if !matches!(row.law, Law::Split | Law::Leaving { .. }) {
+                row.law = Law::Off;
+                continue;
+            }
+            let Some(slot) = row.id.and_then(|id| entities.slot_of(id)) else {
+                row.law = Law::Off;
+                continue;
+            };
+            if let Some(facing) = leave(row, policy, rotations[slot.0 as usize]) {
+                if self.by_slot.len() < entities.len() {
+                    self.by_slot.resize(entities.len(), None);
+                }
+                self.by_slot[slot.0 as usize] = Some(facing);
+            }
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn clear(&mut self) {
         self.rows.clear();
         self.by_slot.clear();
@@ -154,6 +194,8 @@ pub(crate) fn project(
     state: &mut FacingState,
 ) {
     let policy = state.policy;
+    // Indexed by slot so the guard and the step read it without a lookup; its
+    // size follows the whole entity store, not the battle roster.
     state.by_slot.clear();
     state.by_slot.resize(frame.entities.len(), None);
     state.rows.resize(columns.ids.len(), Row::default());
@@ -204,12 +246,32 @@ fn keeps_old_look(frame: &Frame<'_>, combat: &CombatRuntime, bi: usize, slot: En
                 .is_some_and(|fighter| fighter.charge.bonus(frame.tick) > 0.0)
 }
 
-/// A row that stops being projected. Under L its yaw is still the last one
-/// written; the step starts from the virtual body instead.
+/// A row that stops being projected. Under L its stored yaw is the last one
+/// written, not its drawn body: `From` hands the body to the step, republished
+/// while the stored rotation keeps every bit it had when it was handed (the
+/// row's step has not run: its chunk is not simulated, or its battle paused).
+/// Any change of the stored rotation is a step that consumed it.
 fn leave(row: &mut Row, policy: Policy, stored: [f32; 3]) -> Option<Facing> {
-    let was = std::mem::replace(&mut row.law, Law::Off);
-    (was == Law::Split && policy == Policy::Lazy && row.body.to_bits() != stored[0].to_bits())
-        .then_some(Facing::From { yaw: row.body })
+    let handing = hands_the_body(row, policy, stored);
+    row.law = if handing {
+        Law::Leaving { at: bits(stored) }
+    } else {
+        Law::Off
+    };
+    handing.then_some(Facing::From { yaw: row.body })
+}
+
+/// The row's drawn body is not its stored yaw and no step has taken it yet.
+fn hands_the_body(row: &Row, policy: Policy, stored: [f32; 3]) -> bool {
+    match row.law {
+        Law::Split => policy == Policy::Lazy && row.body.to_bits() != stored[0].to_bits(),
+        Law::Leaving { at } => at == bits(stored),
+        Law::Off | Law::Old => false,
+    }
+}
+
+fn bits(rotation: [f32; 3]) -> [u32; 3] {
+    rotation.map(f32::to_bits)
 }
 
 fn next(
@@ -222,29 +284,15 @@ fn next(
     aim: [f64; 3],
 ) -> Facing {
     if law == Law::Old {
-        // Under L a row coming off the split law starts from its drawn body.
-        let basis = if row.law == Law::Split && policy == Policy::Lazy {
-            [row.body, stored[1], stored[2]]
-        } else {
-            stored
-        };
+        // Under L a row coming off the split law first hands its drawn body
+        // to the step; the old look then turns it from there.
+        if hands_the_body(row, policy, stored) {
+            row.law = Law::Leaving { at: bits(stored) };
+            return Facing::From { yaw: row.body };
+        }
         row.law = Law::Old;
-        let turned = crate::entity_motion::look(
-            basis,
-            Vec3::new(position[0], position[1], position[2]),
-            Vec3::ZERO,
-            Some(aim),
-        );
-        let rotation = if wrap(turned[0] - basis[0]).abs() < OLD_HOLD
-            && (turned[1] - basis[1]).abs() < OLD_HOLD
-        {
-            basis
-        } else {
-            turned
-        };
-        return Facing::Set {
-            rotation,
-            body: rotation[0],
+        return Facing::Look {
+            rest: old_rest(stored, position, aim).then_some(stored),
         };
     }
     let (dx, dy, dz) = (
@@ -258,7 +306,8 @@ fn next(
     let elevation = (horizontal >= MIN_HORIZONTAL)
         .then(|| -(mth::atan2(dy, horizontal) as f32) * mth::RAD_TO_DEG);
     let [_, mut pitch, mut head] = stored;
-    if row.law != Law::Split {
+    let resumes = matches!(row.law, Law::Leaving { at } if at == bits(stored));
+    if row.law != Law::Split && !resumes {
         // First sight, back from a driven step, or off the old look: start
         // from what is stored, without moving the head (section 3.3).
         *row = Row {
@@ -274,13 +323,18 @@ fn next(
             last_stable: head,
             position,
         };
-    } else if row.target != Some(target) {
-        if let Some(bearing) = bearing
-            && wrap(bearing - row.smooth).abs() >= SNAP
-        {
-            row.smooth = bearing;
+    } else {
+        // Still split, or back before any step took the handed body (its
+        // drawn body stands).
+        row.law = Law::Split;
+        if row.target != Some(target) {
+            if let Some(bearing) = bearing
+                && wrap(bearing - row.smooth).abs() >= SNAP
+            {
+                row.smooth = bearing;
+            }
+            row.target = Some(target);
         }
-        row.target = Some(target);
     }
     if let Some(bearing) = bearing {
         row.smooth = wrap(row.smooth + ALPHA * wrap(bearing - row.smooth));
@@ -307,8 +361,8 @@ fn next(
         // The row moved last tick: the client took the sent yaw as the body
         // and kept the head inside the cone around it.
         row.stable = 0;
-        row.last_stable = head;
         head = within(head, row.body, CONE);
+        row.last_stable = head;
     } else {
         row.body = body_rule(row, head);
     }
@@ -339,6 +393,23 @@ fn body_rule(row: &mut Row, head: f32) -> f32 {
     within(row.body, head, CONE * (1.0 - fraction))
 }
 
+/// The previous rest guard of a row that keeps the old look: its head on its
+/// body, and the look its step would take less than half a wire quantum away
+/// in yaw and in pitch. Its step still runs the old look from where the body
+/// ends up, with no tolerance.
+fn old_rest(stored: [f32; 3], position: [f64; 3], aim: [f64; 3]) -> bool {
+    if stored[2] != stored[0] {
+        return false;
+    }
+    let turned = crate::entity_motion::look(
+        stored,
+        Vec3::new(position[0], position[1], position[2]),
+        Vec3::ZERO,
+        Some(aim),
+    );
+    wrap(turned[0] - stored[0]).abs() < OLD_HOLD && (turned[1] - stored[1]).abs() < OLD_HOLD
+}
+
 /// `Mth.rotateIfNecessary(current, target, max)` with its identity inside the
 /// cone returned as the very same bits (design 3.4.1): never re-expressed.
 fn within(current: f32, target: f32, max: f32) -> f32 {
@@ -367,6 +438,7 @@ pub(crate) fn project_row(
     target: Option<(EntityId, [f64; 3])>,
 ) {
     let mut facing = std::mem::take(&mut state.hostile.battle.facing);
+    let combat = &state.hostile.battle.combat;
     let frame = Frame {
         entities: &state.entities,
         registry: &state.registry,
@@ -374,6 +446,11 @@ pub(crate) fn project_row(
         tick: state.hostile.battle.elapsed_ticks,
     };
     let id = frame.entities.body(slot).id;
+    let fighter = combat
+        .ids
+        .iter()
+        .position(|&fighter| fighter == id)
+        .unwrap_or(usize::MAX);
     facing.rows.resize(1, Row::default());
     let row = &mut facing.rows[0];
     if row.id != Some(id) {
@@ -386,7 +463,7 @@ pub(crate) fn project_row(
     let position = frame.entities.pos(slot);
     let published = match target {
         Some((target, aim)) => {
-            let law = if keeps_old_look(&frame, &CombatRuntime::default(), 0, slot) {
+            let law = if keeps_old_look(&frame, combat, fighter, slot) {
                 Law::Old
             } else {
                 Law::Split

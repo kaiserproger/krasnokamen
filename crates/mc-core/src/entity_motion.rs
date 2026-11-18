@@ -81,12 +81,20 @@ pub(crate) enum Facing {
     /// A row leaving the projection whose stored yaw is not its drawn body
     /// (lazy yaw): its own rule starts from this yaw.
     From { yaw: f32 },
+    /// A row that keeps the previous whole-body look (riders, head-on-body
+    /// mobs, a fighter whose charge bonus lasts): its step runs that look from
+    /// where the body ends up, as before D36. `rest` is the stored rotation the
+    /// previous rest guard admits this tick (head on the body and a look less
+    /// than half a wire quantum away), if it admits one.
+    Look { rest: Option<[f32; 3]> },
 }
 
 impl Facing {
-    /// The rest guard: the skipped step would write exactly `stored`.
+    /// The rest guard: a `Set` row rests when its skipped step would write
+    /// exactly `stored`, a `Look` row when the previous guard admitted `stored`.
     pub(crate) fn rests(self, stored: [f32; 3]) -> bool {
-        matches!(self, Facing::Set { rotation, .. } if rotation.map(f32::to_bits) == stored.map(f32::to_bits))
+        matches!(self, Facing::Set { rotation, .. } | Facing::Look { rest: Some(rotation) }
+            if rotation.map(f32::to_bits) == stored.map(f32::to_bits))
     }
 
     fn written(self, before: &EntityBody, after: &EntityBody) -> Option<[f32; 3]> {
