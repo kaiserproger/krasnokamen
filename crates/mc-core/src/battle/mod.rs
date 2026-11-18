@@ -498,12 +498,15 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     intents
 }
 
-/// Phase log only: this tick's windups, counted after the entity phase wrote
-/// the tick's rotations (probe.rs).
-pub(crate) fn probe_windups(state: &mut TickState) {
+/// Phase log only: the battle part of the entity phase's line, this tick's
+/// timings and facing counters, with the windups counted after the entity
+/// phase wrote the tick's rotations (probe.rs).
+pub(crate) fn phase_log_detail(state: &mut TickState) -> (Timings, probe::Counts) {
     let mut probe = std::mem::take(&mut state.hostile.battle.probe);
     probe.windups(state);
+    let counts = probe.counts;
     state.hostile.battle.probe = probe;
+    (state.hostile.battle.timings, counts)
 }
 
 /// Vanilla `LivingEntity.DATA_LIVING_ENTITY_FLAGS` (javap 26.3): index 8, a
