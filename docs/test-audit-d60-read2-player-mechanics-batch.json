@@ -1,0 +1,1379 @@
+{
+  "decision": "D60.2",
+  "base": "8c39fa4ff9ff2d1effd127d7ebf703c3a8b86316",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+  "source_sha256_before": "6b1a7d6431ae5f2654f73f98c12106a11a28d2a9ed309377fc12c61d9264b580",
+  "status": "All64 original Rust test bodies and shared/local/nested fixtures read. Remove45 read/high R4 harness-only schedule/menu/receipt/reader self-tests and5 now-unused local fixture helpers, including their owned doc comments. Preserve1 K1 observed cold-setup world-geometry regression and18 U RC4 custody/privacy/route/mining or M00 timing/fixture contracts. No production source, retained assertion, ledger row or caller is changed. No worker verification or post-edit re-audit.",
+  "counts": {
+    "historical_test_ids_finalized": 64,
+    "removed_R4": 45,
+    "retained_K1": 1,
+    "retained_U": 18,
+    "physical_declarations_before": 64,
+    "physical_declarations_remaining": 19,
+    "removed_unused_local_helpers": 5,
+    "source_lines_before": 3261,
+    "source_lines_remaining": 1307,
+    "physical_source_lines_removed": 1954,
+    "historical_medium_candidates_finalized": 45,
+    "historical_medium_candidates_unfinalized": 452,
+    "historical_U_reclassified_R4": 13,
+    "historical_R4_retained_U": 13
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire3261-line original mechanic test include, all64 test bodies, nested scripted TCP peers/closures and all10 local fixtures. Parent terrain_bot/connection/configure_open_loop/system_chat_frame/component_chat_frame bodies read; unrelated parent tests not classified here.",
+    "production_source_read": [
+      "player_scale_bots_mechanics.rs:149-164,324-1388,1390-2185: slot resolution, constructor, measurement/receive/report accounting, completion/admission/held-action scheduling",
+      "player_scale_bots_receive.rs:1-657: menu versions/images/slots and all mechanic_frame receive branches",
+      "player_scale_bots_ledger.rs: complete relevant MenuTransfer, prediction and protected-cell helpers",
+      "player_scale_bots_replies.rs: full literal-reply/filter/summary helpers",
+      "player_scale_bots_visibility.rs: full visibility helpers",
+      "player_scale_bots_runtime.rs: complete runtime enqueue/chat/record/poll methods",
+      "player_scale_bots_setup.rs:4-155: setup chat/world fences and setup command/frame-save admission",
+      "player_scale_bots.rs:367-416,849-907,1041-1133,1289-1301,3157-3356: schedules, registry loading, chunk decode, final-stride check and aggregate reports"
+    ],
+    "helper_policy": {
+      "removed": [
+        "delayed_pose_bot",
+        "blocked_click_bot",
+        "deliver_furnace_menu",
+        "complete_transfer",
+        "menu_close_test_bot"
+      ],
+      "retained": [
+        "mechanic_test_args",
+        "mechanic_test_state",
+        "mechanic_test_entity",
+        "sync_to_origin",
+        "mechanic_test_frame"
+      ],
+      "reason": "Each removed helper has only its own declaration after the45 selected bodies are excluded; exact-name reference search outside this include and audit JSONs returned no matches. Parent/shared fixture definitions and imports remain untouched."
+    },
+    "retained_assertions": "All19 retained test bodies remain byte-for-byte unchanged; retention is not a claim that their checks passed.",
+    "docstring_updated": false
+  },
+  "evidence": {
+    "origin_commit_headlines": {
+      "1ada2ceb93688adf35d0869111743d4d231e8b62": "1ada2ceb93688adf35d0869111743d4d231e8b62\nfeat: Solaris v0.0.8 — core v2 server, native storage, entity layout\n\nReplace the v1 server with core v2 (`solaris-v2`): one native tick with\nparallel snapshot reads, owned intents and a deterministic serial merge;\nnative store plus tick WAL, offline Anvil import/export (ADR 0013/0014).\nThe v1 crates mc-server, mc-net, mc-simulation and mc-entity are removed.\n\nGameplay since v0.0.7 includes Nether/End and the dragon fight, special\nmobs, mounts and vehicles, wave 3 mechanics (sculk/warden, trial chambers,\nmace, crafter, copper, bees/allay, raids, conduits), statistics,\nadvancements, scoreboards, piglin bartering, armor stands, fishing,\nplayer-built iron/snow golems, elytra gliding and beacons. PlayerCommand\nactions follow the 26.1.2 seven-entry enum.\n\nEntity layout (committee decision 013): rare components boxed, sorted type\nlanes instead of full-row scans, and a dense single-owner Body column.\nfp native-100 rises from 14.5 to 15.9 TPS and RSS drops by 415 MiB.\n\nWasmtime plugin packages load from [plugins].directory; the manifest\nparser accepts inventory_storage_transactions. CI pins the rebuilt\nsibling loader and plugin revisions.\n\nVanilla loot, enchantment and light tables load at runtime from the\nimported content cache (CoreRegistry); Mojang data is no longer compiled\ninto the binary. CI extracts local test data from the verified server jar.\n\n",
+      "1b829e938101241b754c30fd204190033225ffab": "1b829e938101241b754c30fd204190033225ffab\nfix(coreperf): fence cold setup on received world geometry\n\n",
+      "4ef2d681dde05b1bc6886283a72ac28aedf2808a": "4ef2d681dde05b1bc6886283a72ac28aedf2808a\nfix(core): RC4 gameplay, custody, privacy and protocol fixes\n\nCrafting transfers and cursor close, frozen-item merge, levitation and pending-support wakes, armadillo scute timer, container and brushable privacy, rejoin locale, pickup starvation, bucket-break attribution, block-entity data ordering; version 1.0.0-rc.4.\n\n",
+      "58b6ca9f7a754a61df68423aef493c2b06600299": "58b6ca9f7a754a61df68423aef493c2b06600299\nfeat(protocol)!: serve Minecraft Java 26.3 (protocol 777)\n\nCanonical release moves from 26.1.2/775 to 26.3/777 (world version 5023).\n\nProtocol (mc-protocol, mc-edge):\n- every play/configuration packet id from the 26.3 packets report;\n  LoginSuccess session id, LoginPlay online_mode, spawn-info varint game mode\n- 26.3 layouts: EntityPositionSync linear PositionPath, move-entity varint\n  props, rot packet field order, EntityAnimation {wake, crit, magic crit},\n  new ClientboundSwingAnimation, AcceptTeleportation carries the accepted\n  pose (folded into a movement input like vanilla), Swing -> Punch,\n  PlayerAction ChangeDestroyDirection, sign update order, team parameters,\n  advancement display, sweep particle, explode play_sound, particle ids\n- component wire ids are named consts (mc_data::data_component_types_26_1_2)\n  instead of bare numbers; pot_decorations is 4 optional item templates\n\nData (mc-data): 26.3 blocks/items/entity types, collision and outline shape\ntables, entity contract (cushion, poplar boats, sulfur cube; bee size, hoglin\npeaceful flag), block entity kinds (bed removed, potent_sulfur), custom stat\nsleep_in_straw_bed, sculk tags, wire registry index (new biome, damage type,\njukebox song). Persisted player statistics now name their registry release;\n26.1.2 records migrate by name via embedded 26.1.2 id tables.\n\nContent: 26.3 rewrote the loot/predicate and worldgen data-pack grammars, so a\ncache joins the 26.3 bundle (version.json, reports, extractor reports,\ncaptured RegistryData) with the 26.1.2 gameplay data pack\n(gameplay_version.json). `content import --from <26.3> --gameplay-from\n<26.1.2>` (or --download for both); wire registries list the captured payloads\nand the 26.1.2 definitions must name a subset of them.\n\n",
+      "8597a2edc6cdc1058881c861260ce647810fcc9e": "8597a2edc6cdc1058881c861260ce647810fcc9e\nfix(bench): share total preparation deadline with input fences\n\n",
+      "8dd2c61f7821178ca0c2551bc49841f3f10652fb": "8dd2c61f7821178ca0c2551bc49841f3f10652fb\nfeat(coreperf): per-region XP value sampling and M00 bot smoke fixes\n\nM00Ext combined-final.patch eac4c9b3 without its orb-summon hunks (the\nsummon fix lands from H08): CorePerfTick.xp_value_by_region sums value*count\nof active orb bodies per fixture region, player_scale_bots landing and setup\nfixes, and coreperf profile updates. coreperf test_profiles, player-scale-bots\nbin tests and mc-core experience_orb tests pass on main. Six of seven M00\nsmokes passed on the agent's pins; xp-1000 still fails (bot 507 broken pipe,\nconnection 508 closed by delivery policy; cause unproven).\n\n"
+    },
+    "complete_selected_non_test_fix_diffs_read": [
+      "8dd2c61f78: player_scale_bots.rs and player_scale_bots_setup.rs",
+      "8597a2edc6: player_scale_bots_setup.rs"
+    ],
+    "observed_case": {
+      "path": "/run/media/kaiserroman/games/solaris-work/wt/Top100-M00/.analysis/validation/20261108T132542Z-profile-scale-100k-all-active-654736/result.json",
+      "available": true,
+      "keys": [
+        "build",
+        "command",
+        "commands",
+        "conditions",
+        "error",
+        "exits",
+        "host",
+        "logs",
+        "noncanonical",
+        "population",
+        "profile",
+        "recipe_sha256",
+        "registry",
+        "scope",
+        "status"
+      ],
+      "root_scalars": {
+        "error": "ClassifiedFailure: bot 0: bot 0 landing lacks received support at (19.5,67,45.5)",
+        "noncanonical": true,
+        "profile": "scale-100k-all-active",
+        "recipe_sha256": "55f7f3cf5cd7d7544d0d4ac3db21391ec00f1352b530350fce57bc4503fadf99",
+        "scope": "stated workload measurement; not parity/capacity acceptance",
+        "status": "failed"
+      }
+    },
+    "case_receipts_read": [
+      "receipts/M00LandingFix/investigation.yaml",
+      "receipts/M00LandingFix/result.yaml",
+      "receipts/M00LandingFix/correction.yaml",
+      "receipts/M00MainFollowup/source.json",
+      "receipts/M00MainFollowup/result.json root metadata and findings_closed_in_worktree",
+      "receipts/M00Ext/host-smoke-triage.txt"
+    ],
+    "original_case_scope": "Original failed result root scalars/status/error were read; original raw server/bot logs and full nested build/conditions payloads were not reopened. Existing negative-control statements in M00LandingFix result are historical receipts, not checks run by this worker.",
+    "boundaries": [
+      "K1 cold-support failure is not proof of the separate final-stride/chunk-boundary cause; anchor_chunk_landing remains U.",
+      "Actual M00 late warmup commands do not independently establish this exact offer-denominator boundary; command_offers remains U.",
+      "RC4 is a bundled fix commit; no exact original actor/observer/farmer/custody/mining/damage case was recovered for14 retained tests. No received-state or predicted pose is promoted to authoritative arrival, attribution or retained custody.",
+      "No exact original slow-checkpoint timeout or malformed missing-save case was recovered; both tests remain U.",
+      "Loading production vanilla registry data as fixture support is not an independent expected-result oracle for the removed locally scripted bookkeeping tests.",
+      "The13 historical low/U tests removed here were reclassified from their whole bodies as R4 local harness schema/queue/telemetry plumbing, not removed merely from their names."
+    ],
+    "unmerged_module_commits": [
+      "426764794 wip(laptop): Top100-M00 uncommitted state"
+    ],
+    "unmerged_scope": "The selected WIP test diff was partially displayed, including cold-world-fence/frame-save additions and formatting churn; no claim to have read its whole large patch. Current complete bodies and exact-file dirty ownership fence are the deletion basis.",
+    "reference_search_scope": {
+      "root": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "selected_test_names": 45,
+      "selected_helper_names": 5,
+      "excluded": [
+        "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+        "docs/test-audit*.json"
+      ],
+      "matches": 0
+    },
+    "other_worktree_fence": {
+      "inspected": 563,
+      "dirty_exact_file": 0,
+      "errors": 0,
+      "scope": "Only exact-file git status, never cross-worktree reference searches. Refreshed before editing; D60Read2 exact file was also clean."
+    },
+    "semantic_search_scope": "Rust LSP initialization failed earlier; explicit source/declaration fallback used. No repeated LSP setup or mass cross-worktree reference search."
+  },
+  "records": [
+    {
+      "id": "mc-test-harness::runtime_command_requires_marker_before_writing_and_receiving_reply",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 29,
+      "original_end_line": 97,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Added with RC4 runtime-command fencing in 4ef2d681dd. The local peer is synthetic, but the bundled observed-fix provenance is not separable to this specific command-marker case; keep rather than erase uncertain regression coverage.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::haul_routes_require_cardinal_edges_and_transfer_balance",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 100,
+      "original_end_line": 108,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 haul route/conservation boundary from 4ef2d681dd; no exact original actor/container case was recovered, so retain the unresolved semantic contract.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::repeated_haul_requires_explicit_ordered_request_after_completion",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 111,
+      "original_end_line": 146,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 explicit repeated-haul ordering/deferred-start boundary; the exact original actor workflow remains unestablished, so retain rather than infer no real case.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::observed_observer_death_fails_active_haul_immediately",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 149,
+      "original_end_line": 185,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 observer-death fail-closed haul boundary; the local frame is synthetic and no exact original live observer-death receipt was recovered, so retain.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::farmer_delivery_requires_exact_received_hotbar_stack",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 188,
+      "original_end_line": 213,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 farmer-delivery inventory/custody contract; no exact original hotbar/custody case was recovered, so preserve this unresolved semantic boundary.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::farmer_drop_requires_received_debit_and_one_new_item_identity",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 216,
+      "original_end_line": 418,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 farmer-drop competitor/debit/item-identity contract; no exact original farmer-delivery receipt was recovered, so retain without claiming independent live attribution.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::haul_observer_follows_only_received_actor_pose_and_fails_on_conflicting_work",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 421,
+      "original_end_line": 463,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 following-observer/conflicting-work boundary; no original following-observer run was recovered, so retain uncertain regression/semantic coverage.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::farmer_pursuit_tolerates_small_move_replans_material_move_and_requires_actor_observer",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 466,
+      "original_end_line": 570,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 pursuit/observer-fence contract; the exact original real route/replan case was not recovered, so retain without claiming a live arrival oracle.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::farmer_failed_replan_retains_safe_progress_without_false_arrival",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 573,
+      "original_end_line": 716,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 failed-replan/retained-route boundary; no exact original farmer-route failure receipt was recovered, so preserve uncertain regression coverage.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::haul_approaches_exact_source_start_and_requires_fresh_observer_fence",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 719,
+      "original_end_line": 773,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 source-approach and distinct observer-fence boundary; the exact original live route case was not recovered, so retain.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::haul_arrival_requires_fresh_observer_packet_for_the_actor",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 776,
+      "original_end_line": 914,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 actor UUID/arrival/transfer contract; no exact original multi-bot actor case was recovered, so retain rather than equate local submitted pose with real arrival.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::survival_destroy_sends_start_and_finish_and_requires_block_update",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 917,
+      "original_end_line": 977,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 public-protocol survival-mining boundary; locally encoded packets are not captured vanilla evidence, and exact original live mining provenance remains unresolved, so retain.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::named_click_slot_uses_received_inventory_not_server_slot_assumptions",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 980,
+      "original_end_line": 1009,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Resolves a named click against a handcrafted MenuReceipt inventory; no real menu trace or independent captured slot-layout oracle is supplied.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::absolute_block_deltas_survive_observer_handoff_without_duplicate_work",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1012,
+      "original_end_line": 1030,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Calls cell/update bookkeeping directly with authored observer states and checks its counters; no original server handoff case is linked.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::selected_reader_block_images_do_not_inherit_another_viewers_update",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1033,
+      "original_end_line": 1052,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs reader-specific cell images in memory and checks the harness projection, without a real multi-client case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::selected_reader_entity_images_keep_independent_baselines_and_clear_on_remove",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1055,
+      "original_end_line": 1085,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs entity spawn/move/remove images and checks local per-reader receipt projection, without a real multi-client case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::finite_mechanic_slots_use_wall_epoch_and_forbid_recovery",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1088,
+      "original_end_line": 1120,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Deserializes an authored mechanic schedule and checks local slot/recovery accounting, without real server work or a retained workload artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::arbitrary_negative_section_cells_ignore_advertised_heightmaps",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1123,
+      "original_end_line": 1171,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds synthetic chunk sections/heightmaps with local packet writers and inspects probe images; no captured vanilla chunk or observed parser-failure case is used.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "1b829e938101241b754c30fd204190033225ffab"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::missing_physical_and_menu_probes_remain_null_not_synthetic_air",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1174,
+      "original_end_line": 1187,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Serializes initially empty local probes and checks null/missing report fields, without a real missing-probe case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::entity_identity_motion_and_ghost_checks_are_received_state",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1190,
+      "original_end_line": 1235,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds constructed identities and motion directly into the harness mirror and checks its own error/counter fields; no original server trace is used.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::click_completion_requires_conserved_source_debit_and_recipient_credit",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1238,
+      "original_end_line": 1266,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds local menu images and transfer snapshots to exercise harness completion accounting, without an observed transfer case or independent real inventory artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::net_zero_container_slot_changes_exclude_player_and_carried_updates",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1269,
+      "original_end_line": 1306,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds authored container/player/cursor updates into local menu bookkeeping and checks its report counters, without real menu traffic.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::sparse_command_intervals_preserve_wall_offers_and_recovery_zero",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1309,
+      "original_end_line": 1332,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses an authored schedule and counters to check local command-slot accounting, without a real workload artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::command_offers_exclude_the_window_end_boundary",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1335,
+      "original_end_line": 1344,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Added in the observed M00 smoke correction 8dd2c61f78. M00Ext triage records real late warmup commands, but the exact relationship to this terminal offer-denominator assertion is unproven; retain as U.",
+      "provenance_commit": "8dd2c61f7821178ca0c2551bc49841f3f10652fb",
+      "body_provenance_commits": [
+        "8dd2c61f7821178ca0c2551bc49841f3f10652fb"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::anchor_chunk_landing_checks_the_final_stride_position",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1347,
+      "original_end_line": 1352,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Added in M00 smoke correction 8dd2c61f78; the recovered cold landing failure concerns changed support, not independently this final-stride/chunk boundary. Keep U rather than attribute the wrong observed cause.",
+      "provenance_commit": "8dd2c61f7821178ca0c2551bc49841f3f10652fb",
+      "body_provenance_commits": [
+        "8dd2c61f7821178ca0c2551bc49841f3f10652fb"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::fresh_menu_open_is_not_completed_by_an_old_image",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1355,
+      "original_end_line": 1389,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds a cached local menu image and a synthetic pending open, then checks the harness completion guard; no observed stale-open case is linked.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::collection_receipt_only_resolves_entities_visible_to_observer",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1412,
+      "original_end_line": 1460,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 observer-private collection identity/custody contract; no exact original collection capture was recovered, so retain without treating packet receipt as pickup/retained inventory proof.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::entity_visibility_union_needs_absolute_primary_rebaseline",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1463,
+      "original_end_line": 1494,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Drives local visibility and relative/absolute movement bookkeeping with handcrafted entities, without an original multi-observer trace.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::first_self_damage_keeps_received_source_and_labels_predicted_victim_pose",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1497,
+      "original_end_line": 1533,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "RC4 damage-observation/privacy contract; no exact original damage capture was recovered, so retain without promoting predicted victim position to authoritative evidence.",
+      "provenance_commit": "4ef2d681dde05b1bc6886283a72ac28aedf2808a",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab",
+        "4ef2d681dde05b1bc6886283a72ac28aedf2808a"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::own_projectile_hits_keep_causal_uuid_and_count_duplicates",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1536,
+      "original_end_line": 1575,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies fabricated projectile/damage identities and verifies local hit deduplication and report fields, without a real projectile capture.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::literal_command_replies_filter_only_generated_chat_and_stay_bounded",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1578,
+      "original_end_line": 1630,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies authored NBT chat components and fills the local reply buffer to check filtering/retention, without an actual command-reply artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::survival_transition_offers_are_wall_derived_not_poll_derived",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1633,
+      "original_end_line": 1651,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks local survival-transition offer accounting from authored epochs and counters, without executing a real survival transition.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::ready_fence_census_is_distinct_clients_not_extra_batch_echoes",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1654,
+      "original_end_line": 1674,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds counter snapshots with authored completed-fence counts and checks aggregate client census, without an original readiness case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::no_op_setup_batches_finish_on_unique_chat_not_feedback_count",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1677,
+      "original_end_line": 1732,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "A locally scripted TCP peer decodes generated setup packets and returns authored chat echoes; it is harness plumbing, not a real server setup case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "1b829e938101241b754c30fd204190033225ffab"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::setup_world_fence_waits_for_late_geometry_after_chat_echo",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1735,
+      "original_end_line": 1809,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Observed cold fixture failure in the original Top100-M00 result: landing lost support at (19.5,67,45.5). M00LandingFix investigation/correction records distinguish input chat echo from later geometry; this test processes a late BlockUpdate/keepalive through the nonce-bearing world fence. Preserve the regression, without claiming this worker reran it.",
+      "provenance_commit": "1b829e938101241b754c30fd204190033225ffab",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::frame_setup_rejects_missing_save_before_any_packet",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1812,
+      "original_end_line": 1824,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Added alongside cold geometry/frame setup in 1b829e9381; original M00 failures establish late geometry but not this malformed frame/save input. Preserve U rather than manufacture a real missing-save case.",
+      "provenance_commit": "1b829e938101241b754c30fd204190033225ffab",
+      "body_provenance_commits": [
+        "1b829e938101241b754c30fd204190033225ffab"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::preparation_fence_uses_total_readiness_deadline_and_keeps_echoing_heartbeats",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1827,
+      "original_end_line": 1908,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "8597a2edc6 removes the shorter nested preparation timeout and documents the total readiness deadline. The paused-clock/socket test is synthetic and no exact original slow-checkpoint timeout receipt was recovered; preserve the unresolved regression contract.",
+      "provenance_commit": "8597a2edc6cdc1058881c861260ce647810fcc9e",
+      "body_provenance_commits": [
+        "8597a2edc6cdc1058881c861260ce647810fcc9e"
+      ],
+      "disposition": "retain",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::read_only_preparation_tracks_real_spawn_center",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1911,
+      "original_end_line": 1934,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses an authored preparation/center fixture to check the local bot state, without an actual read-only server preparation artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::automatic_respawn_defers_recovery_and_finished_deaths",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1937,
+      "original_end_line": 1990,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds bot death/window state and checks its own automatic-respawn offer bookkeeping over a local socket, without a real death/respawn case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::wire_trace_is_selected_sequenced_and_separate_from_receipts",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 1993,
+      "original_end_line": 2039,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Writes and reads a temporary trace generated by the same synthetic bot fixture; the file is not an independently obtained real-run artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::menu_opening_and_absent_close_do_not_claim_admission",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2042,
+      "original_end_line": 2112,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds local menu-opening/absent-menu state and checks harness admission counters over a local peer, without a real rejected menu action.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::open_waits_for_expected_pose_then_menu_then_click",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2157,
+      "original_end_line": 2236,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Scripts pose/menu responses and inspects the local held-action queue and emitted packets, without a retained actual teleport/menu ordering case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::held_open_and_click_drop_when_pose_sync_is_still_out_of_reach",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2239,
+      "original_end_line": 2270,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Scripts a local pose response that remains out of reach and checks the harness queue/drop fields, without an original server refusal case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::held_actions_drop_at_window_end",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2273,
+      "original_end_line": 2299,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds held local actions and advances the authored schedule to check its drop bookkeeping, without a real workload artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::deferred_open_then_queued_clicks_and_close_are_all_admitted_in_order",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2406,
+      "original_end_line": 2458,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses handcrafted menu content and transfer responses to drive local queued actions, without a real ordered menu interaction case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::clicks_and_close_offered_during_a_pending_transfer_wait_for_it",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2463,
+      "original_end_line": 2509,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs a pending transfer and locally supplied credit images to check harness queue ordering, without an observed live transfer case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::deferred_menu_close_requires_fresh_content_without_throttling_offers",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2548,
+      "original_end_line": 2647,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Scripts delayed local menu content and checks admission/close/offer counters, without an original live delayed-content case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::deferred_menu_close_expires_without_retry_or_catchup",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2650,
+      "original_end_line": 2673,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds a local deferred close and elapsed timeout to check queue expiry, without a real timed-out menu artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::timely_menu_content_keeps_original_close_offer_time",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2676,
+      "original_end_line": 2717,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies synthetic timely content and checks the harness retained offer timestamp, without an original server timing artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::pending_menu_transfer_cannot_double_complete_one_received_credit",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2720,
+      "original_end_line": 2768,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds multiple local transfer expectations against authored menu credit and checks local completion counts, without a real duplicate-credit case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::contested_quick_move_never_claims_commit_or_blocks_close",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2771,
+      "original_end_line": 2805,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds a synthetic contested quick-move and menu close to check local admission/completion fields, without an original contested container run.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::no_change_observation_belongs_only_to_contested_quick_moves",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2808,
+      "original_end_line": 2817,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Deserializes authored action variants to check the harness allow_no_change schema rule, without a real invalid-spec case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::feedback_completion_keeps_actual_receive_window",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2820,
+      "original_end_line": 2849,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies authored literal feedback in an authored receive window and checks local pending-action accounting, without a real command feedback artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::run_baseline_rebases_received_images_and_excludes_warm_and_late_work",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2852,
+      "original_end_line": 2931,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds local block/menu/entity/player images around a synthetic Run epoch and checks rebasing/counters, without a retained real Run boundary trace.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::received_center_transitions_ignore_ready_duplicates_and_bound_trace",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2934,
+      "original_end_line": 2965,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds authored center transitions and duplicate centers to local counters/retention limits, without a real cache-center trace.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::nutrition_credits_are_received_changes_not_inventory_debits",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 2968,
+      "original_end_line": 3019,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Calls local nutrition and inventory bookkeeping with handcrafted values and checks report counters, without a real consumption/respawn trace.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::menu_version_retention_preserves_endpoints_and_exposes_truncation",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3022,
+      "original_end_line": 3033,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds a synthetic version sequence to the local bounded retention buffer and checks its endpoints/truncation counters, without a real menu-version artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::reader_controls_require_positive_rate_and_only_restore_can_use_recovery",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3036,
+      "original_end_line": 3056,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Deserializes constructed reader-control action variants to check harness schema/window validation, without a real reader-relay case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::reader_restore_is_admitted_during_recovery_even_when_dead",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3059,
+      "original_end_line": 3086,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Seeds local death/recovery state and an in-process reader-control channel to check harness admission, without a real reader restoration case.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::final_reader_entities_follow_visibility_and_deadline_freezes_images",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3089,
+      "original_end_line": 3115,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Drives local visibility and deadline state and inspects the final JSON image, without a real slow-reader convergence artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::legal_health_death_received_in_recovery_requests_real_respawn",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3118,
+      "original_end_line": 3154,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds an authored zero-health frame to a local bot/socket and checks its generated respawn request, without a retained real death/respawn trace.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::schedule_complete_contains_full_live_mechanics_image",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3157,
+      "original_end_line": 3179,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds local counter/mechanic state and checks aggregate JSON shape at schedule completion, without a real completed schedule artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::reader_progress_excludes_non_position_frames_from_position_updates",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3182,
+      "original_end_line": 3221,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies locally authored frames and checks the bot receive-progress classification counters, without an independent captured stream.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::primary_explosion_rows_preserve_unique_blasts_under_observer_fanout",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_mechanic_tests.rs",
+      "original_fn_line": 3224,
+      "original_end_line": 3261,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs explosion packets and observer fanout locally and checks the report rows/counters, without an original explosion capture.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "58b6ca9f7a754a61df68423aef493c2b06600299"
+      ],
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "cargo test -p mc-test-harness --bin player-scale-bots through the canonical memory runner; include the batch in Main joint acceptance.",
+    "negative_control": "none; test-only deletion, no production behavior change or worker execution",
+    "runtime_saving": "Not measured; no per-test runtime or L2 speedup is claimed."
+  },
+  "gaps": []
+}
