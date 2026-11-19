@@ -17,17 +17,18 @@
     "test-audit-d60-read2-buildings-qa-batch.json",
     "test-audit-d60-read2-matrix-random-batch.json",
     "test-audit-d60-read2-java-clients-batch.json",
-    "test-audit-d60-read2-loader-v2-batch.json"
+    "test-audit-d60-read2-loader-v2-batch.json",
+    "test-audit-d60-read2-native-matrix-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 596,
-    "removed_in_new_batches": 340,
+    "finalized_historical_test_ids": 622,
+    "removed_in_new_batches": 347,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 138,
+    "retained_K1": 146,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 113,
-    "historical_medium_candidates_reviewed": 293,
-    "remaining_medium_candidates_unfinalized": 506,
+    "retained_U": 124,
+    "historical_medium_candidates_reviewed": 302,
+    "remaining_medium_candidates_unfinalized": 497,
     "verification_owner": "Main"
   },
   "base": "96e99cfe3bc3e2d6f52354e8cca2a3fb100ece88",
