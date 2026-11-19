@@ -21,17 +21,18 @@
     "test-audit-d60-read2-native-matrix-batch.json",
     "test-audit-d60-read2-player-mechanics-batch.json",
     "test-audit-d60-read2-real-agent-driver-batch.json",
-    "test-audit-d60-read2-real-client-manifest-batch.json"
+    "test-audit-d60-read2-real-client-manifest-batch.json",
+    "test-audit-d60-read2-java-matrix-client-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 762,
-    "removed_in_new_batches": 454,
+    "finalized_historical_test_ids": 790,
+    "removed_in_new_batches": 471,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 148,
+    "retained_K1": 154,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 155,
-    "historical_medium_candidates_reviewed": 402,
-    "remaining_medium_candidates_unfinalized": 397,
+    "retained_U": 160,
+    "historical_medium_candidates_reviewed": 420,
+    "remaining_medium_candidates_unfinalized": 379,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
