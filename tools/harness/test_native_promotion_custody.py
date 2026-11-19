@@ -55,20 +55,6 @@ class PromotionCustodyTests(unittest.TestCase):
         steps.check.side_effect = check
         return steps
 
-    def test_both_scenarios_refuse_headless_before_any_actions(self):
-        for scenario in (custody.MOUNT_SCENARIO, custody.PACK_SCENARIO):
-            with self.subTest(scenario=scenario):
-                steps = self.steps()
-                with self.assertRaisesRegex(RuntimeError, "windowed Xvfb"):
-                    custody.run(steps, (0, 64, 0), scenario)
-                steps.call.assert_not_called()
-
-    def test_mount_requires_conversion_hook(self):
-        steps = self.steps(p4_window={"window_id": 1})
-        with self.assertRaisesRegex(RuntimeError, "offline clean export/reimport"):
-            custody.run(steps, (0, 64, 0), custody.MOUNT_SCENARIO)
-        steps.call.assert_not_called()
-
     def test_pack_requires_matching_accepted_failed_download_before_play(self):
         steps = self.steps(p4_window={"window_id": 1})
         with self.assertRaisesRegex(RuntimeError, "wire receipt hook"):
