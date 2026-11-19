@@ -258,6 +258,62 @@ fn members_in_uncertified_houses_leave_certified_beds_to_migrants() {
     assert_eq!(capacity(&state, destination), 2);
 }
 
+/// Review P2 (wt/SpainLand): an unbound resident sleeping in a certified
+/// house holds that bed in the real claim index; counting only members
+/// offered it to a newcomer as well.
+#[test]
+fn a_certified_bed_an_unbound_resident_claims_is_not_offered() {
+    let mut state = fixture();
+    let destination = town(&mut state, "destination", 8, 32);
+    house(&mut state, destination, 8);
+    shelter(&mut state, 20);
+    let member = resident(&mut state, destination, 20.5);
+    let lodger = allocator::tests::villager(&mut state, [8.5, 64.0, 8.5]);
+    let lodger = state.entities.body(lodger).id;
+    let home = |state: &TickState, id: EntityId| {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.row(slot).villager.as_ref().unwrap().home
+    };
+    for _ in 0..200 {
+        if [member, lodger]
+            .iter()
+            .all(|&id| home(&state, id).is_some())
+        {
+            break;
+        }
+        step(&mut state);
+    }
+    assert_eq!(
+        [member, lodger].map(|id| home(&state, id).map(|bed| bed.x)),
+        [Some(20), Some(8)],
+        "fixture: the member sleeps in the shelter, the lodger in the house"
+    );
+    observe(&mut state, destination);
+    assert_eq!(capacity(&state, destination), 1);
+}
+
+/// Review P2 (wt/SpainLand): members who arrive after the observation of a
+/// destination that is no longer simulated took its free beds; they are not
+/// inbound any more, so the cached free beds alone offered those beds twice.
+#[test]
+fn an_unsimulated_destination_counts_members_who_arrived_since_its_observation() {
+    let mut state = fixture();
+    let destination = town(&mut state, "destination", 8, 32);
+    house(&mut state, destination, 8);
+    observe(&mut state, destination);
+    assert_eq!(capacity(&state, destination), 2, "fixture: two free beds");
+    resident(&mut state, destination, 7.5);
+    resident(&mut state, destination, 8.5);
+    state.tickets.clear();
+    let tick = state.tick;
+    state.refresh_active_chunks(tick);
+    assert!(
+        !simulated(&state, [8, 64, 8]),
+        "fixture: the centre is unsimulated"
+    );
+    assert_eq!(capacity(&state, destination), 0);
+}
+
 #[test]
 fn outside_arrivals_are_singleton_free_and_rate_is_capped_by_physical_beds() {
     let mut state = fixture();
