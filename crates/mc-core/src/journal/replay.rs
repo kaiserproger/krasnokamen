@@ -50,7 +50,7 @@ pub struct Replay {
     pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
     pub settlement_removed: BTreeSet<u64>,
     pub settlement_high_water: u64,
-    pub(crate) starter_chest_grants: BTreeSet<uuid::Uuid>,
+    pub(crate) starter_chest_grants: BTreeMap<uuid::Uuid, u64>,
     /// Migration transit custody post-images (`None` = tombstone), ADR 0023,
     /// in the transit module's own codec.
     pub transits: BTreeMap<uuid::Uuid, Option<Arc<String>>>,
@@ -1110,8 +1110,8 @@ pub(crate) fn apply_batch_images(
                         }
                     }
                 }
-                JournalEntry::StarterChestGranted { player } => {
-                    replay.starter_chest_grants.insert(*player);
+                JournalEntry::StarterChestGranted { player, count } => {
+                    replay.starter_chest_grants.insert(*player, *count);
                 }
                 JournalEntry::Transit { id, record, .. } => {
                     replay.transits.insert(*id, record.clone());

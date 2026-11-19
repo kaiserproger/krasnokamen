@@ -397,10 +397,11 @@ pub enum JournalEntry {
         )]
         state: Option<Box<crate::projectiles::ProjectileState>>,
     },
-    /// Global append-only one-time founding chest grant. Appended to preserve
-    /// variant order; a binary without it cannot replay the new WAL.
+    /// Absolute global founding-chest grant count. Appended to preserve variant
+    /// order; a binary without it cannot replay the new WAL.
     StarterChestGranted {
         player: uuid::Uuid,
+        count: u64,
     },
 }
 

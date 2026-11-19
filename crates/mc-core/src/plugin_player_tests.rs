@@ -1123,8 +1123,11 @@ async fn founding_chest_checks_protection_at_the_actual_candidate_cell() {
             .bootstrap_storage
             .is_none()
     );
-    assert!(!crate::settlements::starter_chest::received(
-        &state,
-        state.connections.uuid_of(ConnectionId(1)).unwrap()
-    ));
+    assert_eq!(
+        crate::settlements::starter_chest::granted(
+            &state,
+            state.connections.uuid_of(ConnectionId(1)).unwrap()
+        ),
+        0
+    );
 }

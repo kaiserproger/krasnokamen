@@ -69,7 +69,7 @@ pub(crate) fn swap_globals(root: &mut TickState, world: &mut TickState) {
         &mut root.dimension_globals.reserved_uuids,
         &mut world.dimension_globals.reserved_uuids,
     );
-    // Settlement records remain dimension-local. One-time founding grants,
+    // Settlement records remain dimension-local. Founding-grant counts,
     // the allocator sequence and tick budget are global authorities.
     crate::settlements::starter_chest::swap_globals(root, world);
     std::mem::swap(
@@ -88,6 +88,15 @@ pub(crate) fn run_tick(
     Vec<(ConnectionId, Vec<PlayerChange>)>,
     TickTimes,
 ) {
+    let command_tick = inputs.iter().any(|input| {
+        matches!(
+            input,
+            PlayerInput::Command { .. } | PlayerInput::ConsoleCommand(_)
+        )
+    });
+    if command_tick {
+        crate::settlements::starter_chest::prepare_commands(state);
+    }
     state.tick_budget.reset(state.tick);
     // Absent dimensions have no pass to release their cold-start guarantees.
     for dimension in Dimension::ALL {
@@ -132,12 +141,7 @@ pub(crate) fn run_tick(
     // entity custody. The set follows the command owner while worlds are taken.
     let mut reserved = std::mem::take(&mut state.dimension_globals.reserved_uuids);
     reserved.clear();
-    if inputs.iter().any(|input| {
-        matches!(
-            input,
-            PlayerInput::Command { .. } | PlayerInput::ConsoleCommand(_)
-        )
-    }) {
+    if command_tick {
         for world in
             std::iter::once(&*state).chain(state.other_dimensions.values().map(|world| &**world))
         {
@@ -177,6 +181,9 @@ pub(crate) fn run_tick(
             .zip(&routes)
             .filter_map(|(input, dimension)| (*dimension == root_dimension).then_some(input)),
     );
+    if command_tick {
+        crate::settlements::starter_chest::finish_commands(state);
+    }
     let mut local_time = phase_start
         .map(|start| start.elapsed().saturating_sub(setup_time))
         .unwrap_or_default();
@@ -217,6 +224,9 @@ pub(crate) fn run_tick(
                 .zip(&routes)
                 .filter_map(|(input, target)| (*target == dimension).then_some(input)),
         );
+        if command_tick {
+            crate::settlements::starter_chest::finish_commands(world);
+        }
         local_time += child_start.map(|start| start.elapsed()).unwrap_or_default();
         swap_globals(state, world);
         state.day_time = world.day_time;

@@ -52,13 +52,8 @@ pub(super) fn settlement(
                 return;
             };
             // Console ownership is "Server", not a player UUID: it receives
-            // no free chest. A player's grant is global and never reset by remove.
+            // no free chest. Removing a town never resets the granted count.
             let founder = uuid::Uuid::parse_str(&actor).ok();
-            let eligible = founder
-                .filter(|player| !crate::settlements::starter_chest::received(state, *player));
-            let storage = eligible.and_then(|_| {
-                crate::settlements::autonomy::storage_chest_site(state, executor, anchor)
-            });
             match state.settlements.create(
                 &mut state.settlement_sequence,
                 name.clone(),
@@ -67,6 +62,12 @@ pub(super) fn settlement(
                 *radius,
             ) {
                 Ok(id) => {
+                    let eligible = founder.filter(|player| {
+                        crate::settlements::starter_chest::eligible(state, *player)
+                    });
+                    let storage = eligible.and_then(|_| {
+                        crate::settlements::autonomy::storage_chest_site(state, executor, anchor)
+                    });
                     if let Some(storage) = storage {
                         crate::settlements::autonomy::ensure_storage_chest(
                             state,

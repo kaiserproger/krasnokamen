@@ -114,7 +114,7 @@ fn founding_refusals_write_nothing_and_no_site_does_not_spend_the_grant() {
         state.world.block_at(at[0], at[1], at[2]),
         Some(state.registry.states.air)
     );
-    assert!(!starter_chest::received(&state, PLAYER));
+    assert_eq!(starter_chest::granted(&state, PLAYER), 0);
     state
         .world
         .set_block(at[0], at[1], at[2], state.registry.states.stone);
@@ -122,11 +122,13 @@ fn founding_refusals_write_nothing_and_no_site_does_not_spend_the_grant() {
     let town = state.settlements.find("blocked").unwrap();
     assert!(town.bootstrap_storage.is_none());
     assert!(blocked.blocks.is_empty());
-    assert!(!starter_chest::received(&state, PLAYER));
+    assert_eq!(starter_chest::granted(&state, PLAYER), 0);
+    let blocked_id = town.id;
+    assert!(state.settlements.remove(blocked_id));
     only_site(&mut state);
     let granted = create(&mut state, connection, actor, "granted");
     assert_eq!(granted.blocks.len(), 1);
-    assert!(starter_chest::received(&state, PLAYER));
+    assert_eq!(starter_chest::granted(&state, PLAYER), 1);
     let town = state.settlements.find("granted").unwrap();
     let id = town.id;
     let chest = town.bootstrap_storage.unwrap();
@@ -145,7 +147,55 @@ fn founding_refusals_write_nothing_and_no_site_does_not_spend_the_grant() {
             .bootstrap_storage
             .is_none()
     );
-    assert!(starter_chest::received(&state, PLAYER));
+    assert_eq!(starter_chest::granted(&state, PLAYER), 1);
+}
+
+#[test]
+fn concurrent_settlements_receive_distinct_chests_and_checkpoint_keeps_grant_count() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(dir.path().to_owned(), 42);
+    let mut state = native_state(&config);
+    let (connection, actor) = founder(&mut state);
+    assert_eq!(
+        create(&mut state, connection, actor, "first").blocks.len(),
+        1
+    );
+    let first = state.settlements.find("first").unwrap();
+    let first_id = first.id;
+    let first_chest = first.bootstrap_storage.unwrap();
+    let slot = state.entities.slot_of(actor).unwrap();
+    state.entities.set_pos(slot, [12.5, 201.0, 12.5]);
+    assert_eq!(
+        create(&mut state, connection, actor, "second").blocks.len(),
+        1
+    );
+    let second = state.settlements.find("second").unwrap();
+    let second_id = second.id;
+    assert_ne!(second.bootstrap_storage.unwrap(), first_chest);
+    assert_eq!(starter_chest::granted(&state, PLAYER), 2);
+    native_checkpoint(&mut state, &config, 1);
+    drop(state);
+    let mut reopened =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    assert_eq!(starter_chest::granted(&reopened, PLAYER), 2);
+    let (connection, actor) = founder(&mut reopened);
+    assert!(reopened.settlements.remove(first_id));
+    assert!(reopened.settlements.remove(second_id));
+    assert!(
+        create(&mut reopened, connection, actor, "refounded")
+            .blocks
+            .is_empty()
+    );
+    assert!(
+        reopened
+            .settlements
+            .find("refounded")
+            .unwrap()
+            .bootstrap_storage
+            .is_none()
+    );
+    assert_eq!(starter_chest::granted(&reopened, PLAYER), 2);
 }
 
 #[test]
@@ -190,12 +240,28 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
         }),
         changes,
     );
-    let town = state.settlements.find("walgrant").unwrap();
-    let id = town.id;
-    let chest = town.bootstrap_storage.unwrap();
+    let first = state.settlements.find("walgrant").unwrap();
+    let id = first.id;
+    let chest = first.bootstrap_storage.unwrap();
+    let slot = state.entities.slot_of(actor).unwrap();
+    state.entities.set_pos(slot, [12.5, 201.0, 12.5]);
+    crate::command_execution::execute(
+        &mut state,
+        connection,
+        actor,
+        &Command::Settlement(SettlementCommand::Create {
+            name: "walsecond".into(),
+            radius: 48,
+        }),
+        Arc::get_mut(&mut output.changes).unwrap(),
+    );
+    let second = state.settlements.find("walsecond").unwrap();
+    let second_id = second.id;
+    assert_ne!(second.bootstrap_storage.unwrap(), chest);
+    assert_eq!(starter_chest::granted(&state, PLAYER), 2);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry,
-        crate::journal::JournalEntry::StarterChestGranted { player } if *player == PLAYER)));
+        crate::journal::JournalEntry::StarterChestGranted { player, count: 2 } if *player == PLAYER)));
     let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(2, 2, &entries).unwrap();
     writer.flush().unwrap();
@@ -212,7 +278,7 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
     let mut reopened =
         crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
             .unwrap();
-    assert!(starter_chest::received(&reopened, PLAYER));
+    assert_eq!(starter_chest::granted(&reopened, PLAYER), 2);
     assert_eq!(
         reopened.settlements.get(id).unwrap().bootstrap_storage,
         Some(chest)
@@ -228,6 +294,7 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
     assert!(slots.iter().all(mc_data::ItemStack::is_empty));
     let (connection, actor) = founder(&mut reopened);
     assert!(reopened.settlements.remove(id));
+    assert!(reopened.settlements.remove(second_id));
     let repeated = create(&mut reopened, connection, actor, "walrepeat");
     assert!(repeated.blocks.is_empty());
     assert!(
@@ -241,27 +308,42 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
 }
 
 #[test]
-fn starter_grant_moves_with_global_authority_instead_of_resetting_per_dimension() {
+fn concurrent_settlements_in_different_dimensions_share_the_global_grant_count() {
     let dir = tempfile::tempdir().unwrap();
     let config = crate::CoreConfig::new(dir.path().to_owned(), 42);
     let mut root = native_state(&config);
+    root.settlements
+        .create(
+            &mut root.settlement_sequence,
+            "overworld".into(),
+            PLAYER.to_string(),
+            AT,
+            48,
+        )
+        .unwrap();
+    starter_chest::record(&mut root, PLAYER);
     let mut child = crate::settlements::allocator::tests::test_state();
     child.dimension = crate::dimensions::Dimension::Nether;
-    starter_chest::record(&mut root, PLAYER);
-    crate::dimensions::swap_globals(&mut root, &mut child);
-    assert!(starter_chest::received(&child, PLAYER));
-    let (connection, actor) = founder(&mut child);
-    let changes = create(&mut child, connection, actor, "nether");
-    assert!(changes.blocks.is_empty());
+    let (connection, _) = founder(&mut child);
+    root.other_dimensions
+        .insert(child.dimension, Box::new(child));
+    crate::tick::run_tick(
+        &mut root,
+        &[PlayerInput::Command {
+            connection,
+            command: "settlement create nether".into(),
+            permission_level: 0,
+        }],
+    );
+    assert_eq!(starter_chest::granted(&root, PLAYER), 2);
+    let child = &root.other_dimensions[&crate::dimensions::Dimension::Nether];
     assert!(
         child
             .settlements
             .find("nether")
             .unwrap()
             .bootstrap_storage
-            .is_none()
+            .is_some()
     );
-    crate::dimensions::swap_globals(&mut root, &mut child);
-    assert!(starter_chest::received(&root, PLAYER));
-    assert!(!starter_chest::received(&child, PLAYER));
+    assert_eq!(starter_chest::granted(child, PLAYER), 0);
 }

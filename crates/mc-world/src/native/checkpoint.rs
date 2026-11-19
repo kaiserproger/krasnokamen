@@ -367,10 +367,10 @@ fn validate_globals(
         if record.captured_tick != tick {
             return Err(failure(key, "capture tick mismatch"));
         }
-        let payload: uuid::Uuid =
+        let (payload, count): (uuid::Uuid, u64) =
             serde_json::from_slice(&record.payload).map_err(|error| failure(key, error))?;
-        if payload != player {
-            return Err(failure(key, "starter chest player identity mismatch"));
+        if payload != player || count == 0 {
+            return Err(failure(key, "invalid starter chest player or grant count"));
         }
         starter_chest_rows += 1;
     }

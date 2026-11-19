@@ -1389,10 +1389,10 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
     let mut reopened =
         crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
             .unwrap();
-    assert!(crate::settlements::starter_chest::received(
-        &reopened,
-        uuid::Uuid::nil()
-    ));
+    assert_eq!(
+        crate::settlements::starter_chest::granted(&reopened, uuid::Uuid::nil()),
+        1
+    );
     assert_eq!(
         reopened.settlements.get(id).unwrap().bootstrap_storage,
         Some(storage)

@@ -364,7 +364,7 @@ fn native_checkpoint_starter_chest_grants_roundtrip_or_fail_atomically() {
     let row = |tick, player: uuid::Uuid| NativeDomainRecord {
         version: 1,
         captured_tick: tick,
-        payload: serde_json::to_vec(&player).unwrap(),
+        payload: serde_json::to_vec(&(player, 2_u64)).unwrap(),
     };
     let mut granted = globals(1);
     granted.insert(key.clone(), row(1, player));
@@ -388,6 +388,20 @@ fn native_checkpoint_starter_chest_grants_roundtrip_or_fail_atomically() {
             key.clone(),
             NativeDomainRecord {
                 version: 2,
+                ..row(2, player)
+            },
+        ),
+        (
+            key.clone(),
+            NativeDomainRecord {
+                payload: serde_json::to_vec(&(player, 0_u64)).unwrap(),
+                ..row(2, player)
+            },
+        ),
+        (
+            key.clone(),
+            NativeDomainRecord {
+                payload: serde_json::to_vec(&player).unwrap(),
                 ..row(2, player)
             },
         ),

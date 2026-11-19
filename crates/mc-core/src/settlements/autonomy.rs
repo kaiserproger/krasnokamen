@@ -399,7 +399,7 @@ fn grow_radius(
 }
 
 /// A checked, empty location for a founding chest. Finding no site never
-/// prevents founding, and does not consume the player's one-time grant.
+/// prevents founding, and does not increase the player's granted-chest count.
 pub(crate) struct StorageChestSite {
     at: [i32; 3],
     block: u32,
