@@ -21,8 +21,8 @@ use crate::chunk_loader::ChunkSource;
 
 /// Samples per tile edge.
 pub const TILE_EDGE: usize = 16;
-/// Coarsest level: 64-block sample spacing.
-pub const MAX_LEVEL: u8 = 6;
+/// Coarsest level: 1024-block sample spacing (Horizon protocol limit).
+pub const MAX_LEVEL: u8 = 10;
 
 /// Where a sample came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -71,6 +71,9 @@ pub struct EdgeConfig {
     /// Optional Distant Horizons protocol-16 service for Java clients.
     #[serde(default)]
     pub distant_horizons: DistantHorizonsSection,
+    /// Optional Horizon client far-terrain service.
+    #[serde(default)]
+    pub horizon_lod: HorizonLodSection,
     /// Opt-in operator-only in-game terminal.
     #[serde(default)]
     pub computer: crate::computer::ComputerConfig,
@@ -432,6 +435,23 @@ impl Default for AntiXraySection {
         Self {
             overworld: true,
             nether: true,
+        }
+    }
+}
+
+/// Horizon's optional server-sampled terrain, with distance in chunks.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct HorizonLodSection {
+    pub enabled: bool,
+    pub distance_chunks: u32,
+}
+
+impl Default for HorizonLodSection {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            distance_chunks: 256,
         }
     }
 }
@@ -839,6 +859,10 @@ impl EdgeConfig {
             "distant_horizons.radius_chunks must be in 1..=128"
         );
         anyhow::ensure!(
+            (1..=1024).contains(&cfg.horizon_lod.distance_chunks),
+            "horizon_lod.distance_chunks must be in 1..=1024"
+        );
+        anyhow::ensure!(
             cfg.recorder.world_queue_bytes > 0,
             "recorder.world_queue_bytes must be positive"
         );
@@ -882,6 +906,7 @@ const KNOWN_SECTIONS: &[&str] = &[
     "anti_cheat",
     "lod",
     "distant_horizons",
+    "horizon_lod",
     "computer",
     "voice",
     "properties",
@@ -1016,6 +1041,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
             ],
         ),
         ("distant_horizons", &["enabled", "radius_chunks"]),
+        ("horizon_lod", &["enabled", "distance_chunks"]),
         ("properties", &["file"]),
         ("rcon", &["enabled", "bind_address", "port", "password"]),
         ("query", &["enabled", "port"]),
@@ -1339,6 +1365,23 @@ mod tests {
             (cfg.max_distance, cfg.max_inflight_tiles, cfg.workers),
             (1024, 2, 3)
         );
+    }
+
+    #[test]
+    fn horizon_lod_defaults_and_bounds() {
+        let cfg = EdgeConfig::from_toml("", None).unwrap();
+        assert!(!cfg.horizon_lod.enabled);
+        for distance in [0, 1025] {
+            let text = format!("[horizon_lod]\ndistance_chunks = {distance}");
+            assert!(EdgeConfig::from_toml(&text, None).is_err());
+        }
+        let cfg = EdgeConfig::from_toml(
+            "[horizon_lod]\nenabled = true\ndistance_chunks = 1024",
+            None,
+        )
+        .unwrap();
+        assert!(cfg.horizon_lod.enabled);
+        assert_eq!(cfg.horizon_lod.distance_chunks, 1024);
     }
 
     #[test]

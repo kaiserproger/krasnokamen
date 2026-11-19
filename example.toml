@@ -141,6 +141,13 @@ enabled = false
 # Chunk units, not blocks; hard maximum 128.
 radius_chunks = 128
 
+[horizon_lod]
+# Optional Horizon protocol 1 far terrain. Stored terrain helps recover the
+# world seed: enable only if players may see it. Pregenerate the stopped world
+# with mc-world-tools for coverage; missing tiles are refused.
+enabled = false
+distance_chunks = 256 # 1..=1024 chunks
+
 [mob_griefing]
 # Finer switches under the vanilla `mobGriefing` gamerule, which stays the
 # master gate (`/gamerule mob_griefing false` disables all of them). Vanilla
