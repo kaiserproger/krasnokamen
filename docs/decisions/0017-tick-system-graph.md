@@ -190,13 +190,13 @@ them from where the body ends up and their rest keeps the half-quantum guard,
 both as before (the projection publishes only that guard's decision). With
 nothing projected (no target, battle paused or stopped) a head left off its
 body returns with the vanilla head rule in the step. The facing state is
-runtime-only: a restart rebuilds it from the stored rotation. For the owner's
-comparison takes `KRASNOKAMEN_BATTLE_FACING=body|lazy` (default `body`; tests
-pin it) chooses whether a standing row stores the virtual body as its yaw (A)
-or only when it moves or leaves the projection (L); under L a row leaving the
-projection, also on pause or stop or while its chunk is not simulated, hands
-its drawn body to its step until a step took it. The policy not chosen is
-deleted after that look. Moving rows still use ordinary block collision,
+runtime-only: a restart rebuilds it from the stored rotation. A standing row
+stores no yaw of its own (owner D48 kept the lazy variant of the D36
+comparison): its stored yaw changes only when it really moves or leaves the
+projection, so the wire keeps the yaw the row already had while its head and
+its drawn body turn. A row leaving the projection, also on pause or stop or
+while its chunk is not simulated, hands its drawn body to its step until a
+step took it. Moving rows still use ordinary block collision,
 ordered movement writeback and native intent merge. No position writer or
 second physics path is introduced.
 

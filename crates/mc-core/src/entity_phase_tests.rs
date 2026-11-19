@@ -1046,7 +1046,6 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
     for species in ["minecraft:husk", "minecraft:horse"] {
         let (mut state, slot) = resting_mob(species);
         state.entities.set_faction(slot, 1);
-        state.hostile.battle.facing.policy = crate::battle::facing::Policy::Body;
         let pos = state.entities.pos(slot);
         // One battle tick; true when the row rests.
         let tick = |state: &mut TickState, target: [f64; 3]| {
@@ -1063,6 +1062,13 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
             );
             state.entities.set_facing(slot, write.rotation);
             false
+        };
+        // What the client draws: the projection's body for a split row (its
+        // stored yaw stands), the stored yaw for the whole-body look.
+        let drawn = |state: &TickState| match state.hostile.battle.facing.of(slot) {
+            Some(crate::entity_motion::Facing::Set { body, .. }) => body,
+            Some(crate::entity_motion::Facing::Look { .. }) => state.entities.rot(slot)[0],
+            other => panic!("{species}: {other:?}"),
         };
         // Inside the dead zone the row keeps resting: 10 degrees off +z.
         state.entities.set_facing(slot, [0.0; 3]);
@@ -1105,9 +1111,20 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
             "{species} looks at the target: head {head} wanted {wanted}"
         );
         assert!(
-            error(yaw, wanted).abs() < 0.01,
-            "{species} body follows: yaw {yaw} wanted {wanted}"
+            error(drawn(&state), wanted).abs() < 0.01,
+            "{species} drawn body follows: {} wanted {wanted}",
+            drawn(&state)
         );
+        if matches!(
+            state.hostile.battle.facing.of(slot),
+            Some(crate::entity_motion::Facing::Set { .. })
+        ) {
+            assert_eq!(
+                yaw.to_bits(),
+                300.0_f32.to_bits(),
+                "{species}: a standing split row writes no yaw"
+            );
+        }
         assert!(pitch.abs() < 2.0, "{species} levels its pitch: {pitch}");
         // Resting again with a still target: no step, so nothing can move.
         let rotation = state.entities.rot(slot).map(f32::to_bits);
@@ -1134,8 +1151,9 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
         let [yaw, _, head] = state.entities.rot(slot);
         let wanted = bearing(moved, pos);
         assert!(
-            error(head, wanted).abs() < 0.01 && error(yaw, wanted).abs() < 0.01,
-            "{species} faces the new bearing: yaw {yaw} head {head} wanted {wanted}"
+            error(head, wanted).abs() < 0.01 && error(drawn(&state), wanted).abs() < 0.01,
+            "{species} faces the new bearing: drawn {} yaw {yaw} head {head} wanted {wanted}",
+            drawn(&state)
         );
         assert_eq!(
             state.entities.pos(slot),

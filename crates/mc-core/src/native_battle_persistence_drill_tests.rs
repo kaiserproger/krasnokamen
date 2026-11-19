@@ -278,16 +278,26 @@ fn battle_resume_rebuilds_facing_from_the_journaled_pose() {
             "{id}: the head restarts on the yaw"
         );
     }
-    // The cone below is around the drawn body, which is the yaw under A.
-    drill.state.hostile.battle.facing.policy = crate::battle::facing::Policy::Body;
+    // The cone is around the drawn body: the stored yaw stands while a row
+    // stands, so the projection's `body` is what holds the head in the cone.
     hydrate_battle(&mut drill.state);
     for _ in 0..40 {
         drill.run(&[]).unwrap();
-        for (id, [yaw, _, head]) in rotations(&drill.state) {
-            let off = (head - yaw + 180.0).rem_euclid(360.0) - 180.0;
+        for member in &drill.state.hostile.battle.formation.members {
+            let Some(slot) = drill.state.entities.slot_of(member.id) else {
+                continue;
+            };
+            let Some(crate::entity_motion::Facing::Set { rotation, body }) =
+                drill.state.hostile.battle.facing.of(slot)
+            else {
+                continue;
+            };
+            let off = (rotation[2] - body + 180.0).rem_euclid(360.0) - 180.0;
             assert!(
                 off.abs() <= 75.0 + 1.0e-3,
-                "{id}: head {head} off its yaw {yaw}"
+                "{}: head {} off its drawn body {body}",
+                member.id.0,
+                rotation[2]
             );
         }
     }

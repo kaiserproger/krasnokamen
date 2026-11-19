@@ -7,7 +7,7 @@
 //! rest guard and the step read: the rotation the step writes, admitted as a
 //! rest only when bit-identical to the stored one. Rows that stop being
 //! projected run their own rule in the step (a head left off the body returns
-//! with `follow_head`); under L their drawn body is handed to that step first,
+//! with `follow_head`); their drawn body is handed to that step first,
 //! also when the battle pauses or stops ([`FacingState::release`]).
 //!
 //! The head tracks the target (a dead zone on a smoothed bearing triggers a
@@ -19,10 +19,10 @@
 //! keep the previous whole-body look (section 5 of the design): their step and
 //! rest guard are the ones before D36 (`Facing::Look`).
 //!
-//! [`Policy`] chooses what a standing row stores as its yaw: the virtual body
-//! (A) or nothing until the row really moves or leaves the projection (L). It
-//! exists only for the owner's comparison takes; the policy not chosen is
-//! deleted after that look.
+//! A standing row stores no yaw of its own (owner D48, the lazy policy of the
+//! D36 comparison): the stored yaw changes only when the row really moves or
+//! leaves the projection, so the wire keeps the yaw the row already had while
+//! the head and the drawn body (`Facing::Set`'s `body`) turn.
 
 use super::Frame;
 use super::columns::Columns;
@@ -31,10 +31,6 @@ use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::entity_motion::{Facing, MOVING};
 use mc_physics::{Vec3, mth};
-
-/// Environment variable naming the comparison policy: `body` (A, default) or
-/// `lazy` (L). Read once per process.
-pub(crate) const POLICY_ENV: &str = "KRASNOKAMEN_BATTLE_FACING";
 
 /// Trigger: the smoothed bearing this far off the head starts a turn.
 const TRIGGER: f32 = 20.0;
@@ -64,34 +60,6 @@ const OLD_HOLD: f32 = 0.703_125;
 /// Bearings and elevations need this much horizontal distance.
 const MIN_HORIZONTAL: f64 = 1.0e-3;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Policy {
-    /// A: the stored yaw is the virtual body.
-    Body,
-    /// L: the stored yaw changes only when the row moves or leaves the projection.
-    Lazy,
-}
-
-impl Policy {
-    /// Logged once, so a take's server log names the policy it ran.
-    fn from_env() -> Self {
-        static POLICY: std::sync::LazyLock<Policy> = std::sync::LazyLock::new(|| {
-            let value = std::env::var(POLICY_ENV);
-            let policy = if value.as_deref() == Ok("lazy") {
-                Policy::Lazy
-            } else {
-                Policy::Body
-            };
-            if value.is_ok() && !matches!(value.as_deref(), Ok("lazy" | "body")) {
-                tracing::warn!("{POLICY_ENV}={value:?} is neither `body` nor `lazy`: using `body`");
-            }
-            tracing::info!("battle facing policy: {policy:?} ({POLICY_ENV})");
-            policy
-        });
-        *POLICY
-    }
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum Law {
     /// Not projected last tick.
@@ -101,7 +69,7 @@ enum Law {
     Old,
     /// Head and body separate.
     Split,
-    /// Left the split law under L with its drawn body handed to the step
+    /// Left the split law with its drawn body handed to the step
     /// (`Facing::From`) while the stored rotation had these bits; republished
     /// until a step consumed it (a row whose chunk is not simulated keeps every
     /// stored bit).
@@ -124,27 +92,10 @@ struct Row {
     position: [f64; 3],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct FacingState {
-    pub(crate) policy: Policy,
     rows: Vec<Row>,
     by_slot: Vec<Option<Facing>>,
-}
-
-impl Default for FacingState {
-    fn default() -> Self {
-        Self {
-            // Tests pin the policy they exercise; none inherits the process
-            // environment.
-            policy: if cfg!(test) {
-                Policy::Body
-            } else {
-                Policy::from_env()
-            },
-            rows: Vec::new(),
-            by_slot: Vec::new(),
-        }
-    }
 }
 
 impl FacingState {
@@ -154,11 +105,10 @@ impl FacingState {
     }
 
     /// Battle paused or stopped: nothing is projected. A row whose drawn body is
-    /// not its stored yaw (L) hands it to its step until a step consumed it;
-    /// every other row is let go and a head left off its body returns in the
-    /// step. The rows are kept, so a resumed battle finds them by column index.
+    /// not its stored yaw hands it to its step until a step consumed it; every
+    /// other row is let go and a head left off its body returns in the step.
+    /// The rows are kept, so a resumed battle finds them by column index.
     pub(crate) fn release(&mut self, entities: &crate::entities::EntityStore) {
-        let policy = self.policy;
         self.by_slot.clear();
         let rotations = entities.rotations();
         for row in &mut self.rows {
@@ -170,7 +120,7 @@ impl FacingState {
                 row.law = Law::Off;
                 continue;
             };
-            if let Some(facing) = leave(row, policy, rotations[slot.0 as usize]) {
+            if let Some(facing) = leave(row, rotations[slot.0 as usize]) {
                 if self.by_slot.len() < entities.len() {
                     self.by_slot.resize(entities.len(), None);
                 }
@@ -193,7 +143,6 @@ pub(crate) fn project(
     combat: &CombatRuntime,
     state: &mut FacingState,
 ) {
-    let policy = state.policy;
     // Indexed by slot so the guard and the step read it without a lookup; its
     // size follows the whole entity store, not the battle roster.
     state.by_slot.clear();
@@ -221,11 +170,9 @@ pub(crate) fn project(
                 } else {
                     Law::Split
                 };
-                Some(next(
-                    row, policy, law, stored, position, target.id, target.pos,
-                ))
+                Some(next(row, law, stored, position, target.id, target.pos))
             }
-            _ => leave(row, policy, stored),
+            _ => leave(row, stored),
         };
         row.position = position;
         state.by_slot[slot.0 as usize] = facing;
@@ -246,13 +193,13 @@ fn keeps_old_look(frame: &Frame<'_>, combat: &CombatRuntime, bi: usize, slot: En
                 .is_some_and(|fighter| fighter.charge.bonus(frame.tick) > 0.0)
 }
 
-/// A row that stops being projected. Under L its stored yaw is the last one
-/// written, not its drawn body: `From` hands the body to the step, republished
-/// while the stored rotation keeps every bit it had when it was handed (the
-/// row's step has not run: its chunk is not simulated, or its battle paused).
-/// Any change of the stored rotation is a step that consumed it.
-fn leave(row: &mut Row, policy: Policy, stored: [f32; 3]) -> Option<Facing> {
-    let handing = hands_the_body(row, policy, stored);
+/// A row that stops being projected. Its stored yaw is the last one written,
+/// not its drawn body: `From` hands the body to the step, republished while the
+/// stored rotation keeps every bit it had when it was handed (the row's step
+/// has not run: its chunk is not simulated, or its battle paused). Any change
+/// of the stored rotation is a step that consumed it.
+fn leave(row: &mut Row, stored: [f32; 3]) -> Option<Facing> {
+    let handing = hands_the_body(row, stored);
     row.law = if handing {
         Law::Leaving { at: bits(stored) }
     } else {
@@ -262,9 +209,9 @@ fn leave(row: &mut Row, policy: Policy, stored: [f32; 3]) -> Option<Facing> {
 }
 
 /// The row's drawn body is not its stored yaw and no step has taken it yet.
-fn hands_the_body(row: &Row, policy: Policy, stored: [f32; 3]) -> bool {
+fn hands_the_body(row: &Row, stored: [f32; 3]) -> bool {
     match row.law {
-        Law::Split => policy == Policy::Lazy && row.body.to_bits() != stored[0].to_bits(),
+        Law::Split => row.body.to_bits() != stored[0].to_bits(),
         Law::Leaving { at } => at == bits(stored),
         Law::Off | Law::Old => false,
     }
@@ -276,7 +223,6 @@ fn bits(rotation: [f32; 3]) -> [u32; 3] {
 
 fn next(
     row: &mut Row,
-    policy: Policy,
     law: Law,
     stored: [f32; 3],
     position: [f64; 3],
@@ -284,9 +230,9 @@ fn next(
     aim: [f64; 3],
 ) -> Facing {
     if law == Law::Old {
-        // Under L a row coming off the split law first hands its drawn body
-        // to the step; the old look then turns it from there.
-        if hands_the_body(row, policy, stored) {
+        // A row coming off the split law first hands its drawn body to the
+        // step; the old look then turns it from there.
+        if hands_the_body(row, stored) {
             row.law = Law::Leaving { at: bits(stored) };
             return Facing::From { yaw: row.body };
         }
@@ -366,12 +312,10 @@ fn next(
     } else {
         row.body = body_rule(row, head);
     }
-    let yaw = match policy {
-        Policy::Body => row.body,
-        Policy::Lazy => stored[0],
-    };
+    // Standing, the stored yaw is the last one written: the step writes it back
+    // (a rest when nothing else changed) and the drawn body turns beside it.
     Facing::Set {
-        rotation: [yaw, pitch, head],
+        rotation: [stored[0], pitch, head],
         body: row.body,
     }
 }
@@ -468,9 +412,9 @@ pub(crate) fn project_row(
             } else {
                 Law::Split
             };
-            Some(next(row, facing.policy, law, stored, position, target, aim))
+            Some(next(row, law, stored, position, target, aim))
         }
-        None => leave(row, facing.policy, stored),
+        None => leave(row, stored),
     };
     row.position = position;
     facing.by_slot.clear();

@@ -30,12 +30,11 @@ fn aim_up(degrees: f64, rise: f64) -> [f64; 3] {
 /// One battle tick of a standing row whose step writes the published facing.
 struct Standing {
     row: Row,
-    policy: Policy,
     stored: [f32; 3],
 }
 impl Standing {
     /// An established standing row: its head, pitch and body hold `stored`.
-    fn new(policy: Policy, stored: [f32; 3]) -> Self {
+    fn new(stored: [f32; 3]) -> Self {
         Self {
             row: Row {
                 id: Some(EntityId(1)),
@@ -48,21 +47,12 @@ impl Standing {
                 position: ORIGIN,
                 ..Row::default()
             },
-            policy,
             stored,
         }
     }
 
     fn tick_at(&mut self, target: EntityId, aim: [f64; 3]) -> Facing {
-        let facing = next(
-            &mut self.row,
-            self.policy,
-            Law::Split,
-            self.stored,
-            ORIGIN,
-            target,
-            aim,
-        );
+        let facing = next(&mut self.row, Law::Split, self.stored, ORIGIN, target, aim);
         if let Facing::Set { rotation, .. } = facing {
             self.stored = rotation;
         }
@@ -89,7 +79,7 @@ fn off(a: f32, b: f32) -> f32 {
 
 #[test]
 fn head_turns_while_the_body_holds_then_the_body_aligns_after_ten_stable_ticks_in_ten() {
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     // Sustained 30 degrees: the smoothed error reaches 20 on the fourth tick.
     let mut ticks = 0;
     while row.head() == 0.0 {
@@ -114,19 +104,24 @@ fn head_turns_while_the_body_holds_then_the_body_aligns_after_ten_stable_ticks_i
     let mut moved = false;
     for _ in 0..10 {
         row.tick(30.0);
-        moved |= row.stored[0] != 0.0;
+        moved |= row.row.body != 0.0;
+        assert_eq!(
+            row.stored[0].to_bits(),
+            0.0_f32.to_bits(),
+            "the stored yaw never follows the standing body"
+        );
     }
     assert!(moved);
-    assert_eq!(row.stored[0].to_bits(), row.head().to_bits());
+    assert_eq!(row.row.body.to_bits(), row.head().to_bits());
 }
 
 #[test]
 fn virtual_body_trails_the_head_at_the_cone() {
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     let mut at_cone = false;
     for _ in 0..30 {
         row.tick(150.0);
-        let gap = off(row.head(), row.stored[0]);
+        let gap = off(row.head(), row.row.body);
         assert!(
             gap <= CONE + 1.0e-3,
             "the head never leaves the cone: {gap}"
@@ -139,7 +134,7 @@ fn virtual_body_trails_the_head_at_the_cone() {
 
 #[test]
 fn dead_zone_holds_at_19_degrees_and_turns_at_21() {
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     for _ in 0..60 {
         let facing = row.tick(19.0);
         assert!(
@@ -147,7 +142,7 @@ fn dead_zone_holds_at_19_degrees_and_turns_at_21() {
             "19 degrees stays inside the dead zone"
         );
     }
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     for _ in 0..60 {
         row.tick(21.0);
     }
@@ -161,7 +156,7 @@ fn dead_zone_holds_at_19_degrees_and_turns_at_21() {
 #[test]
 fn a_turn_releases_within_5_degrees_of_the_current_bearing() {
     for (bearing, turning) in [(19.5, false), (20.5, true)] {
-        let mut row = Standing::new(Policy::Body, [0.0; 3]);
+        let mut row = Standing::new([0.0; 3]);
         row.row.law = Law::Split;
         row.row.target = Some(TARGET);
         row.row.turning = true;
@@ -180,7 +175,7 @@ fn a_turn_releases_within_5_degrees_of_the_current_bearing() {
 #[test]
 fn trigger_reads_the_smoothed_bearing() {
     // A one-tick raw swing of 66 degrees moves the filter by 19.8: no turn.
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     row.tick(66.0);
     row.tick(0.0);
@@ -188,19 +183,19 @@ fn trigger_reads_the_smoothed_bearing() {
     assert_eq!(row.head().to_bits(), 0.0_f32.to_bits());
     // A one-tick swap of 100 degrees moves it by 30: the turn starts at once,
     // toward the current bearing.
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     row.tick(100.0);
     assert_eq!(row.head(), 15.0);
     // A sustained 45-degree offset starts a turn on its second tick.
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     row.tick(45.0);
     assert_eq!(row.head(), 0.0);
     row.tick(45.0);
     assert_eq!(row.head(), 15.0);
     // A 120-degree jump turns at once.
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     row.tick(120.0);
     assert_eq!(row.head(), 15.0);
@@ -208,7 +203,7 @@ fn trigger_reads_the_smoothed_bearing() {
 
 #[test]
 fn a_turn_lands_on_the_current_bearing_not_the_smoothed_one() {
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     for _ in 0..5 {
         row.tick(60.0);
@@ -219,7 +214,7 @@ fn a_turn_lands_on_the_current_bearing_not_the_smoothed_one() {
 
 #[test]
 fn the_hold_is_bit_identical_through_jitter_inside_the_dead_zone() {
-    let mut row = Standing::new(Policy::Body, [10.0, 0.0, 10.0]);
+    let mut row = Standing::new([10.0, 0.0, 10.0]);
     for tick in 0..200 {
         let before = row.stored;
         let jitter = [3.0, -2.5, 1.0, -3.0][tick % 4];
@@ -235,12 +230,12 @@ fn the_hold_is_bit_identical_through_jitter_inside_the_dead_zone() {
 #[test]
 fn pitch_has_its_own_dead_zone_and_lands_on_the_current_elevation() {
     // 0.98 blocks up over 8 is 7 degrees: held. 1.27 is 9 degrees: turned.
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     for _ in 0..40 {
         let facing = row.tick_at(TARGET, aim_up(0.0, 0.98));
         assert!(facing.rests([0.0; 3]));
     }
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     for _ in 0..40 {
         row.tick_at(TARGET, aim_up(0.0, 1.27));
     }
@@ -254,79 +249,75 @@ fn pitch_has_its_own_dead_zone_and_lands_on_the_current_elevation() {
 }
 
 #[test]
-fn lazy_policy_keeps_the_stored_yaw_and_publishes_the_virtual_body() {
-    let mut lazy = Standing::new(Policy::Lazy, [0.0; 3]);
-    let mut body = Standing::new(Policy::Body, [0.0; 3]);
+fn a_standing_row_keeps_its_stored_yaw_and_publishes_the_drawn_body() {
+    let mut row = Standing::new([0.0; 3]);
     for _ in 0..40 {
         let Facing::Set {
             rotation,
             body: drawn,
-        } = lazy.tick(50.0)
+        } = row.tick(50.0)
         else {
             panic!("a projected row is set");
         };
-        body.tick(50.0);
         assert_eq!(
             rotation[0].to_bits(),
             0.0_f32.to_bits(),
-            "L never writes yaw standing"
+            "a standing row writes no yaw"
         );
         assert_eq!(
             drawn.to_bits(),
-            body.stored[0].to_bits(),
-            "same virtual body as A"
+            row.row.body.to_bits(),
+            "the wire carries the row's drawn body"
         );
-        assert_eq!(rotation[1..], body.stored[1..], "same head and pitch as A");
+        assert_eq!(rotation[2], row.stored[2], "the head turns on the wire");
     }
     assert_eq!(
-        body.stored[0].to_bits(),
-        body.stored[2].to_bits(),
-        "the body aligned on the head"
+        row.row.body.to_bits(),
+        row.stored[2].to_bits(),
+        "the drawn body aligned on the head"
     );
     assert!(
-        off(body.stored[2], 50.0) <= RELEASE,
+        off(row.stored[2], 50.0) <= RELEASE,
         "head {}",
-        body.stored[2]
+        row.stored[2]
     );
 }
 
 #[test]
-fn leaving_the_projection_under_lazy_starts_from_the_drawn_body() {
-    let mut lazy = Standing::new(Policy::Lazy, [0.0; 3]);
+fn leaving_the_projection_starts_from_the_drawn_body() {
+    let mut row = Standing::new([0.0; 3]);
     for _ in 0..40 {
-        lazy.tick(50.0);
+        row.tick(50.0);
     }
-    let drawn = lazy.row.body;
+    let drawn = row.row.body;
     // Handed until a step takes it: a row whose chunk is not simulated (or
     // whose battle paused before its step) keeps every stored bit.
     for _ in 0..3 {
         assert_eq!(
-            leave(&mut lazy.row, Policy::Lazy, lazy.stored),
+            leave(&mut row.row, row.stored),
             Some(Facing::From { yaw: drawn })
         );
     }
     // Its step ran: any stored change consumed it.
-    let stepped = [drawn - 30.0, lazy.stored[1], lazy.stored[2]];
-    assert_eq!(leave(&mut lazy.row, Policy::Lazy, stepped), None);
-    assert_eq!(leave(&mut lazy.row, Policy::Lazy, stepped), None, "once");
-    let mut body = Standing::new(Policy::Body, [0.0; 3]);
-    for _ in 0..40 {
-        body.tick(50.0);
-    }
-    assert_eq!(leave(&mut body.row, Policy::Body, body.stored), None);
+    let stepped = [drawn - 30.0, row.stored[1], row.stored[2]];
+    assert_eq!(leave(&mut row.row, stepped), None);
+    assert_eq!(leave(&mut row.row, stepped), None, "once");
+    // A row whose drawn body is its stored yaw leaves without a hand-off.
+    let mut still = Standing::new([0.0; 3]);
+    assert_eq!(leave(&mut still.row, still.stored), None);
 }
 
 /// A row handed its body and projected again before any step took it keeps
 /// its drawn body (no re-seed from the stale stored yaw).
 #[test]
 fn a_handed_row_projected_again_before_its_step_keeps_its_drawn_body() {
-    let mut lazy = Standing::new(Policy::Lazy, [0.0; 3]);
+    let mut lazy = Standing::new([0.0; 3]);
     for _ in 0..40 {
         lazy.tick(50.0);
     }
     let drawn = lazy.row.body;
     assert_ne!(drawn.to_bits(), lazy.stored[0].to_bits());
-    leave(&mut lazy.row, Policy::Lazy, lazy.stored);
+    leave(&mut lazy.row, lazy.stored);
     let Facing::Set { body, .. } = lazy.tick(50.0) else {
         panic!("projected again")
     };
@@ -337,7 +328,7 @@ fn a_handed_row_projected_again_before_its_step_keeps_its_drawn_body() {
 fn back_from_a_driven_step_the_head_is_not_snapped() {
     // A driven step left yaw = head = 40 and the bearing is now 70: the first
     // standing tick turns the head one rate step, it does not snap it.
-    let mut row = Standing::new(Policy::Body, [40.0, 0.0, 40.0]);
+    let mut row = Standing::new([40.0, 0.0, 40.0]);
     row.row.law = Law::Off;
     let facing = row.tick(70.0);
     let Facing::Set { rotation, .. } = facing else {
@@ -349,13 +340,13 @@ fn back_from_a_driven_step_the_head_is_not_snapped() {
         "one rate step, body held"
     );
     // At zero error the first standing tick holds.
-    let mut row = Standing::new(Policy::Body, [70.0, 0.0, 70.0]);
+    let mut row = Standing::new([70.0, 0.0, 70.0]);
     assert!(row.tick(70.0).rests([70.0, 0.0, 70.0]));
 }
 
 #[test]
 fn a_target_switch_reseeds_the_filter_only_for_a_jump_of_45_or_more() {
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     row.tick_at(EntityId(8), aim(30.0));
     assert!(
@@ -364,7 +355,7 @@ fn a_target_switch_reseeds_the_filter_only_for_a_jump_of_45_or_more() {
         row.row.smooth
     );
     assert_eq!(row.head(), 0.0);
-    let mut row = Standing::new(Policy::Body, [0.0; 3]);
+    let mut row = Standing::new([0.0; 3]);
     row.tick(0.0);
     row.tick_at(EntityId(8), aim(60.0));
     assert!(
@@ -382,53 +373,28 @@ fn old_look_keeps_the_previous_step_and_rest_guard() {
     let target = aim(40.0);
     // 40 degrees off: the old guard refuses the rest; the step turns it.
     let stored = [0.0, 0.0, 0.0];
-    let look = next(
-        &mut row,
-        Policy::Body,
-        Law::Old,
-        stored,
-        position,
-        TARGET,
-        target,
-    );
+    let look = next(&mut row, Law::Old, stored, position, TARGET, target);
     assert_eq!(look, Facing::Look { rest: None });
     assert!(!look.rests(stored));
     // 0.3 degrees off with the head on the body: held.
     let stored = [40.3, 0.0, 40.3];
-    let held = next(
-        &mut row,
-        Policy::Body,
-        Law::Old,
-        stored,
-        position,
-        TARGET,
-        target,
-    );
+    let held = next(&mut row, Law::Old, stored, position, TARGET, target);
     assert!(held.rests(stored));
     // The same, with the head off the body: the old guard refused it.
     let stored = [40.3, 0.0, 70.0];
-    let off_body = next(
-        &mut row,
-        Policy::Body,
-        Law::Old,
-        stored,
-        position,
-        TARGET,
-        target,
-    );
+    let off_body = next(&mut row, Law::Old, stored, position, TARGET, target);
     assert!(!off_body.rests(stored), "{off_body:?}");
-    // Under L a row coming off the split law first hands its drawn body.
-    let mut lazy = Standing::new(Policy::Lazy, [0.0; 3]);
+    // A row coming off the split law first hands its drawn body.
+    let mut split = Standing::new([0.0; 3]);
     for _ in 0..40 {
-        lazy.tick(50.0);
+        split.tick(50.0);
     }
-    let drawn = lazy.row.body;
+    let drawn = split.row.body;
     assert_eq!(
         next(
-            &mut lazy.row,
-            Policy::Lazy,
+            &mut split.row,
             Law::Old,
-            lazy.stored,
+            split.stored,
             ORIGIN,
             TARGET,
             aim(50.0)
@@ -577,170 +543,160 @@ fn riders_head_on_body_mobs_and_charged_fighters_keep_the_old_look() {
 
 /// The registration in `battle::step`: in a running battle every standing row
 /// with a target is projected, and after the tick its stored rotation is the
-/// published one (written by its step, or kept by its rest), with the body yaw
-/// on a tick it moved. Half way, every projected row's head and yaw are turned
-/// 60 degrees off: the head turns back alone while the body holds.
+/// published one (written by its step, or kept by its rest), with the drawn
+/// body as the yaw on a tick it moved. Half way, every projected row's head
+/// and yaw are turned 60 degrees off: the head turns back alone while the
+/// stored yaw stands.
 #[test]
 fn a_running_battle_writes_the_published_facing_of_every_standing_row() {
-    for policy in [Policy::Body, Policy::Lazy] {
-        let mut state = crate::battle::tests::staged_flat_fixture(30);
-        state.hostile.battle.facing.policy = policy;
-        let mut changes = crate::boundary::ChangeSet::default();
-        staging::execute(
-            &mut state,
-            &mut changes,
-            ORIGIN,
-            &staging::BattleCommand::Start,
-        )
-        .unwrap();
-        let (mut projected, mut split) = (0, 0);
-        for tick in 0..600 {
-            crate::tick::run_tick(&mut state, &[]);
-            let slots: Vec<_> = state.entities.battle_slots().collect();
-            for slot in slots {
-                let Some(Facing::Set { rotation, body }) = state.hostile.battle.facing.of(slot)
-                else {
-                    continue;
-                };
-                if !state.entities.body(slot).alive {
-                    continue;
-                }
-                projected += 1;
-                let stored = state.entities.rot(slot);
-                assert!(
-                    bits(stored) == bits(rotation)
-                        || bits(stored) == bits([body, rotation[1], rotation[2]]),
-                    "{policy:?}: stored {stored:?} published {rotation:?} body {body}"
-                );
-                split += usize::from(stored[2].to_bits() != stored[0].to_bits());
-                if tick == 300 {
-                    let [yaw, pitch, head] = stored;
-                    state
-                        .entities
-                        .set_facing(slot, [yaw + 60.0, pitch, head + 60.0]);
-                }
-            }
-        }
-        assert!(
-            projected > 0,
-            "{policy:?}: standing soldiers with targets are projected"
-        );
-        assert!(
-            split > 0,
-            "{policy:?}: a standing soldier turns its head alone ({projected} projected)"
-        );
-    }
-}
-
-/// D36 3.4.3 and 3.2(ii): after `battle pause` (or stop) nothing is projected.
-/// Under L the drawn body becomes the yaw on the pause tick, so no head jumps
-/// toward a stale yaw; on either policy a head left off its body returns to it
-/// in the step, every row on its body within 8 ticks. Each standing row's body
-/// is first turned 180 degrees from its stored yaw (L stores it only on a
-/// move) with the head 60 degrees off the body.
-#[test]
-fn a_paused_battle_rests_every_row_within_8_ticks() {
-    for policy in [Policy::Body, Policy::Lazy] {
-        let mut state = crate::battle::tests::staged_flat_fixture(20);
-        state.hostile.battle.facing.policy = policy;
-        let mut changes = crate::boundary::ChangeSet::default();
-        staging::execute(
-            &mut state,
-            &mut changes,
-            ORIGIN,
-            &staging::BattleCommand::Start,
-        )
-        .unwrap();
-        let split = |state: &TickState| {
-            state
-                .hostile
-                .battle
-                .facing
-                .rows
-                .iter()
-                .filter(|row| row.law == Law::Split)
-                .count()
-        };
-        for _ in 0..1000 {
-            crate::tick::run_tick(&mut state, &[]);
-            if split(&state) >= 3 {
-                break;
-            }
-        }
-        let mut turned = Vec::new();
-        for row in &mut state.hostile.battle.facing.rows {
-            let Some(slot) = row.id.and_then(|id| state.entities.slot_of(id)) else {
-                continue;
-            };
-            if row.law != Law::Split || !state.entities.body(slot).alive {
-                continue;
-            }
-            let [yaw, pitch, _] = state.entities.rot(slot);
-            row.body = wrap(yaw + 180.0);
-            let head = row.body + 60.0;
-            row.last_stable = head;
-            let stored_yaw = match policy {
-                Policy::Body => row.body,
-                Policy::Lazy => yaw,
-            };
-            state.entities.set_facing(slot, [stored_yaw, pitch, head]);
-            state.entities.set_vel(slot, [0.0; 3]);
-            turned.push((slot, row.body, head));
-        }
-        assert!(turned.len() >= 3, "{policy:?}: standing rows to pause");
-        let soldiers: Vec<_> = state.entities.battle_slots().collect();
-        staging::execute(
-            &mut state,
-            &mut changes,
-            ORIGIN,
-            &staging::BattleCommand::Pause,
-        )
-        .unwrap();
+    let mut state = crate::battle::tests::staged_flat_fixture(30);
+    let mut changes = crate::boundary::ChangeSet::default();
+    staging::execute(
+        &mut state,
+        &mut changes,
+        ORIGIN,
+        &staging::BattleCommand::Start,
+    )
+    .unwrap();
+    let (mut projected, mut split, mut held_yaw) = (0, 0, 0);
+    for tick in 0..600 {
         crate::tick::run_tick(&mut state, &[]);
-        for &(slot, body, head) in &turned {
+        let slots: Vec<_> = state.entities.battle_slots().collect();
+        for slot in slots {
+            let Some(Facing::Set { rotation, body }) = state.hostile.battle.facing.of(slot) else {
+                continue;
+            };
             if !state.entities.body(slot).alive {
                 continue;
             }
-            let [yaw, _, after] = state.entities.rot(slot);
-            // follow_head: 10 degrees per tick toward the body.
+            projected += 1;
+            let stored = state.entities.rot(slot);
+            let on_a_move = bits([body, rotation[1], rotation[2]]);
             assert!(
-                off(after, head) <= 10.0 + 1.0e-3,
-                "{policy:?}: head jumped {head} -> {after} (yaw {yaw}, body {body})"
+                bits(stored) == bits(rotation) || bits(stored) == on_a_move,
+                "stored {stored:?} published {rotation:?} body {body}"
             );
-            assert_eq!(
-                yaw.to_bits(),
-                body.to_bits(),
-                "{policy:?}: the drawn body is the yaw"
-            );
-        }
-        let mut settled_after = 0;
-        for tick in 2..=8 {
-            crate::tick::run_tick(&mut state, &[]);
-            if soldiers.iter().all(|&slot| {
-                !state.entities.body(slot).alive || {
-                    let [yaw, _, head] = state.entities.rot(slot);
-                    yaw.to_bits() == head.to_bits()
-                }
-            }) {
-                settled_after = tick;
-                break;
+            split += usize::from(stored[2].to_bits() != stored[0].to_bits());
+            held_yaw += usize::from(body.to_bits() != stored[0].to_bits());
+            if tick == 300 {
+                let [yaw, pitch, head] = stored;
+                state
+                    .entities
+                    .set_facing(slot, [yaw + 60.0, pitch, head + 60.0]);
             }
         }
-        assert!(
-            settled_after > 0,
-            "{policy:?}: every head is on its body within 8 ticks"
-        );
-        assert!(state.hostile.battle.facing.of(soldiers[0]).is_none());
     }
+    assert!(
+        projected > 0,
+        "standing soldiers with targets are projected"
+    );
+    assert!(
+        split > 0,
+        "a standing soldier turns its head alone ({projected} projected)"
+    );
+    assert!(
+        held_yaw > 0,
+        "a standing soldier draws a body off its stored yaw ({projected} projected)"
+    );
+}
+
+/// D36 3.4.3 and 3.2(ii): after `battle pause` (or stop) nothing is projected.
+/// The drawn body becomes the yaw on the pause tick, so no head jumps toward a
+/// stale yaw; a head left off its body returns to it in the step, every row on
+/// its body within 8 ticks. Each standing row's body is first turned 180
+/// degrees from its stored yaw (a standing row stores it only on a move) with
+/// the head 60 degrees off the body.
+#[test]
+fn a_paused_battle_rests_every_row_within_8_ticks() {
+    let mut state = crate::battle::tests::staged_flat_fixture(20);
+    let mut changes = crate::boundary::ChangeSet::default();
+    staging::execute(
+        &mut state,
+        &mut changes,
+        ORIGIN,
+        &staging::BattleCommand::Start,
+    )
+    .unwrap();
+    let split = |state: &TickState| {
+        state
+            .hostile
+            .battle
+            .facing
+            .rows
+            .iter()
+            .filter(|row| row.law == Law::Split)
+            .count()
+    };
+    for _ in 0..1000 {
+        crate::tick::run_tick(&mut state, &[]);
+        if split(&state) >= 3 {
+            break;
+        }
+    }
+    let mut turned = Vec::new();
+    for row in &mut state.hostile.battle.facing.rows {
+        let Some(slot) = row.id.and_then(|id| state.entities.slot_of(id)) else {
+            continue;
+        };
+        if row.law != Law::Split || !state.entities.body(slot).alive {
+            continue;
+        }
+        let [yaw, pitch, _] = state.entities.rot(slot);
+        row.body = wrap(yaw + 180.0);
+        let head = row.body + 60.0;
+        row.last_stable = head;
+        state.entities.set_facing(slot, [yaw, pitch, head]);
+        state.entities.set_vel(slot, [0.0; 3]);
+        turned.push((slot, row.body, head));
+    }
+    assert!(turned.len() >= 3, "standing rows to pause");
+    let soldiers: Vec<_> = state.entities.battle_slots().collect();
+    staging::execute(
+        &mut state,
+        &mut changes,
+        ORIGIN,
+        &staging::BattleCommand::Pause,
+    )
+    .unwrap();
+    crate::tick::run_tick(&mut state, &[]);
+    for &(slot, body, head) in &turned {
+        if !state.entities.body(slot).alive {
+            continue;
+        }
+        let [yaw, _, after] = state.entities.rot(slot);
+        // follow_head: 10 degrees per tick toward the body.
+        assert!(
+            off(after, head) <= 10.0 + 1.0e-3,
+            "head jumped {head} -> {after} (yaw {yaw}, body {body})"
+        );
+        assert_eq!(yaw.to_bits(), body.to_bits(), "the drawn body is the yaw");
+    }
+    let mut settled_after = 0;
+    for tick in 2..=8 {
+        crate::tick::run_tick(&mut state, &[]);
+        if soldiers.iter().all(|&slot| {
+            !state.entities.body(slot).alive || {
+                let [yaw, _, head] = state.entities.rot(slot);
+                yaw.to_bits() == head.to_bits()
+            }
+        }) {
+            settled_after = tick;
+            break;
+        }
+    }
+    assert!(
+        settled_after > 0,
+        "every head is on its body within 8 ticks"
+    );
+    assert!(state.hostile.battle.facing.of(soldiers[0]).is_none());
 }
 
 /// A row whose chunk is not simulated (`columns.active` false) keeps handing
-/// its drawn body until a step has taken it: L never loses the virtual yaw
-/// because the row was skipped on the tick it left the projection.
+/// its drawn body until a step has taken it: the lazy facing never loses the
+/// virtual yaw because the row was skipped on the tick it left the projection.
 #[test]
 fn an_inactive_row_keeps_handing_its_body_until_a_step_takes_it() {
     let mut state = fixture();
-    state.hostile.battle.facing.policy = Policy::Lazy;
     let id = husk(&mut state, 0.5);
     let slot = state.entities.slot_of(id).unwrap();
     state.entities.set_facing(slot, [0.0; 3]);
@@ -802,7 +758,7 @@ fn the_battle_patch_is_empty_when_only_facing_changes() {
 #[test]
 fn from_the_same_start_state_the_same_facing_and_a_restored_row_reaches_rest() {
     let run = || {
-        let mut row = Standing::new(Policy::Body, [170.0, 5.0, 170.0]);
+        let mut row = Standing::new([170.0, 5.0, 170.0]);
         row.row.law = Law::Off;
         (0..60)
             .map(|tick| {
@@ -814,7 +770,7 @@ fn from_the_same_start_state_the_same_facing_and_a_restored_row_reaches_rest() {
             .collect::<Vec<_>>()
     };
     assert_eq!(run(), run());
-    let mut row = Standing::new(Policy::Body, [170.0, 5.0, 170.0]);
+    let mut row = Standing::new([170.0, 5.0, 170.0]);
     row.row.law = Law::Off;
     let mut rested = false;
     for _ in 0..60 {
