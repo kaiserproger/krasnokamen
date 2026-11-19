@@ -368,3 +368,35 @@ fn check_grants(config: &DeploymentConfig, package: &LoadedPackage) -> Result<()
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod legacy_fixture_tests {
+    use super::*;
+
+    /// The checked-in v1 fixture is a real artifact, not prose: an API 0.6.0
+    /// manifest with no `entry` and no Wasm. Strict discovery must refuse it
+    /// instead of skipping it. The matrix scenario
+    /// `plugins.plugin_startup_fail_closed` (case `legacy_api_0_6`) records the
+    /// same refusal for the removed v1 packages (land-claims, online-roster,
+    /// geological-mines).
+    ///
+    /// The manifest version gate answers first
+    /// (`mc_script::ScriptPluginManifest::validate` ->
+    /// `UnsupportedScriptApiVersion`), before the declared `entry` is resolved;
+    /// a 0.9 manifest without its artifact would be refused on the missing file
+    /// (`PackageError::Escape`, field `entry`).
+    #[test]
+    fn a_legacy_api_0_6_fixture_is_refused_at_discovery() {
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/fixtures");
+        let error = discover_directory(fixtures, &PluginLimits::default(), &[])
+            .expect_err("the legacy fixture declares api 0.6.0 and must be refused");
+        let DiscoveryError::Package { path, error } = error else {
+            panic!("expected a package refusal, got {error}");
+        };
+        assert!(path.ends_with("legacy-api-0.6"), "{path:?}");
+        let message = error.to_string();
+        assert!(message.contains("UnsupportedScriptApiVersion"), "{message}");
+        assert!(message.contains("major: 0, minor: 6"), "{message}");
+        assert!(message.contains("major: 0, minor: 9"), "{message}");
+    }
+}
