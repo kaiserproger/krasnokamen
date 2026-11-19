@@ -105,7 +105,7 @@ def view(state: dict[str, Any]) -> dict[str, Any]:
              if int(row["slot"]) < 54}
     items = {int(row["slot"]): str(row.get("item_id") or "") for row in container.get("slots", [])
              if int(row["slot"]) < 54}
-    ready = (kind == "dialog" and bool(buttons)) or (
+    ready = (kind == "dialog" and bool(body or buttons)) or (
         kind == "menu" and container.get("slot_count") == STAGE and bool(slots))
     return {"kind": kind, "title": str(screen.get("title") or ""), "body": body, "buttons": buttons,
             "slots": slots, "items": items, "ready": ready}
@@ -209,6 +209,7 @@ class Walk:
         self.strict = not args.survey
         self.survey = args.survey
         self.shots: list[str] = []
+        self.stuck = 0
         self.results: dict[str, dict[str, Any]] = {}
         self.blocks: dict[str, str] = {}
         self.fixture_log = probe.report["fixture_commands"]
@@ -252,15 +253,44 @@ class Walk:
             self.probe.remaining()  # the scenario's own deadline is a failure of the run, not a step
             raise StepFailed(f"screen not reached: {label} ({error})") from error
 
+    def reveal(self, label: str) -> dict[str, Any]:
+        """The open dialog with its actions in view: scroll a long one like a player would."""
+        shown = self.screen()
+        scrolls = 0
+        while shown["kind"] == "dialog" and not shown["buttons"] and scrolls < 4:
+            self.gui.input.wheel((640, 360), down=True, notches=3)
+            self.probe.call("minecraft_wait_ticks", {"ticks": 4})
+            scrolls += 1
+            shown = self.screen()
+        if scrolls:
+            self.evidence.setdefault("scrolled_to_button", []).append({"label": label, "scrolls": scrolls, "found": bool(shown["buttons"])})
+        return shown
+
+    @staticmethod
+    def button_nodes(state: dict[str, Any], pattern: str) -> list[dict[str, Any]]:
+        return [node for node in state.get("ui_nodes", []) if node.get("role") == "button"
+                and node.get("enabled") and str(node.get("id", "")).startswith("dialog/action")
+                and re.search(pattern, str(node.get("label", "")), re.IGNORECASE)]
+
     def click_button(self, pattern: str, label: str, accept: Callable[[dict[str, Any]], bool] | None = None,
                      wait: bool = True) -> dict[str, Any]:
         state = self.probe.observe()
         shown = view(state)
-        nodes = [node for node in state.get("ui_nodes", []) if node.get("role") == "button"
-                 and node.get("enabled") and str(node.get("id", "")).startswith("dialog/action")
-                 and re.search(pattern, str(node.get("label", "")), re.IGNORECASE)]
+        nodes = self.button_nodes(state, pattern)
+        scrolls = 0
+        while not nodes and shown["kind"] == "dialog" and scrolls < 4:
+            # A long dialog (shortage list) can push its actions below the 720 px window: scroll like a player.
+            self.gui.input.wheel((640, 360), down=True, notches=3)
+            self.probe.call("minecraft_wait_ticks", {"ticks": 4})
+            scrolls += 1
+            state = self.probe.observe()
+            nodes = self.button_nodes(state, pattern)
+        if scrolls:
+            self.evidence.setdefault("scrolled_to_button", []).append({"label": label, "scrolls": scrolls, "found": bool(nodes)})
         if not nodes:
             self.probe.report["assertions"][f"QW nav {label}"] = False
+            self.stuck += 1
+            self.shot(f"stuck-{self.stuck}")
             raise StepFailed(f"no button /{pattern}/ for {label}; buttons={shown['buttons']}")
         # An exact label beats a partial one; among equals the lowest on screen (actions sit below the body).
         exact = [node for node in nodes if re.fullmatch(pattern, str(node["label"]), re.IGNORECASE)]
