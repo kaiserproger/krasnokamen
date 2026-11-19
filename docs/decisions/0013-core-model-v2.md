@@ -53,6 +53,16 @@ Client game age follows simulated ticks, not journal frame identifiers.
 freeze/step projection and how recovery restores that age; daylight time remains
 independent.
 
+Before detaching dimension-local state, the multi-world coordinator derives an
+immutable shared set of player identities referenced as owners by resident arrows.
+It uses indexed projectile membership, the published online identities and offline
+player custody across all worlds; work is bounded by indexed projectiles and their
+owners, not offline history. Flight combines this projection with local owner facts
+for new launches, so travel followed by logout cannot discard PvP classification.
+The projection is
+runtime-only and rebuilt from existing durable UUID references; no storage schema
+or player custody authority changes.
+
 Spectator cameras are transient native bindings, published with the immutable
 world snapshot. `/spectate` and battle named-follow use that same authority;
 the native tick follows the target position for residency and ignores viewer
@@ -71,9 +81,11 @@ The edge binds only a paired target, with camera release, removal, pairing and
 rebind ordered on the entity world FIFO; credit loss retains delivery debt.
 Shared command resolution finds named/UUID targets across worlds and transfers
 the viewer through existing dimension custody before publishing a binding.
-When a bound target changes dimensions, its viewers move with it and then
-release, rather than retaining a dimension-local entity reference. Explicit
-player teleport also releases the player's camera; refused teleports do not.
+When a bound target changes dimensions, its admitted viewers move with it and then
+release, rather than retaining a dimension-local entity reference. Authentication-
+locked viewers release in their source world without failing the target's move.
+Explicit player teleport also releases the player's camera; refused teleports
+do not.
 The effects appearance owner projects spectator invisibility and suppresses
 effect particles without deleting the player's potion state.
 The snapshot shares the existing global roster allocation for current player

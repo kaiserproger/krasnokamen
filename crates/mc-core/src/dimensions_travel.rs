@@ -246,11 +246,6 @@ fn move_between(
     rotation: [f32; 2],
     changes: &mut ChangeSet,
 ) {
-    // Authentication presentations have no world-travel custody. Keep the
-    // pending claimant beside its saved record until native unlock restores it.
-    if source.entity_session_locked(id) {
-        return;
-    }
     let slot = source
         .entities
         .slot_of_any(id)
@@ -380,6 +375,15 @@ pub(crate) fn change_dimension(
         || position[1].abs() > 20_000_000.0
     {
         return Err("Invalid teleport position".to_owned());
+    }
+    // Authentication presentations have no world-travel custody. Refuse at
+    // admission so callers cannot publish a spawn or success for a no-op move.
+    if source != dimension
+        && world(state, source)
+            .expect("source world")
+            .entity_session_locked(id)
+    {
+        return Err("Entity session is locked".to_owned());
     }
     if source == dimension {
         let world = if source == state.dimension {

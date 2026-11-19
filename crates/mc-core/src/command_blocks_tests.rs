@@ -46,6 +46,44 @@ fn advance(state: &mut TickState) {
     run(state, &mut ChangeSet::default());
 }
 #[test]
+fn successful_seed_allows_the_following_conditional_chain() {
+    let mut state = fixture();
+    let first = place(&mut state, 0, "command_block", "seed", true);
+    let second = place(&mut state, 1, "chain_command_block", "time add 3", true);
+    let block = state
+        .registry
+        .blocks
+        .by_id(BlockStateId(
+            state.world.block_at(second.x, second.y, second.z).unwrap(),
+        ))
+        .unwrap();
+    let name = block.block.id.clone();
+    let mut properties = block.properties.clone();
+    properties
+        .iter_mut()
+        .find(|(key, _)| key == "conditional")
+        .unwrap()
+        .1 = "true".into();
+    let conditional = state
+        .registry
+        .blocks
+        .by_name_and_props(&name, &properties)
+        .unwrap();
+    state
+        .world
+        .set_block(second.x, second.y, second.z, conditional.0);
+    schedule(&mut state, first);
+    advance(&mut state);
+    assert_eq!(state.day_time, 3);
+    assert!(
+        read(&state, first)
+            .unwrap()
+            .iter()
+            .any(|(name, value)| name == "SuccessCount" && *value == Tag::Int(1))
+    );
+}
+
+#[test]
 fn conditional_chain_tracks_predecessor_success() {
     let mut state = fixture();
     let first = place(&mut state, 0, "command_block", "not_a_command", true);

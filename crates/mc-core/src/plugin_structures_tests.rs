@@ -304,10 +304,13 @@ fn stray_and_symlinked_catalog_entries_are_not_silently_accepted() {
     let roots = BTreeMap::from([("demo".into(), root.path().to_path_buf())]);
     assert!(load_catalog(&roots, &state.registry.blocks).is_err());
     std::fs::remove_file(dir.join("notes.txt")).unwrap();
-    let outside = root.path().join("outside.toml");
-    std::fs::write(&outside, authored("authored:house")).unwrap();
-    std::os::unix::fs::symlink(outside, dir.join("house.toml")).unwrap();
-    assert!(load_catalog(&roots, &state.registry.blocks).is_err());
+    #[cfg(unix)]
+    {
+        let outside = root.path().join("outside.toml");
+        std::fs::write(&outside, authored("authored:house")).unwrap();
+        std::os::unix::fs::symlink(outside, dir.join("house.toml")).unwrap();
+        assert!(load_catalog(&roots, &state.registry.blocks).is_err());
+    }
 }
 #[test]
 fn stage_geometry_rotates_actual_native_states_and_costs_exact_blocks() {

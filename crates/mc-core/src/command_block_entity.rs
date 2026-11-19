@@ -51,6 +51,9 @@ pub(crate) fn prepare(
     mc_nbt::write_network(&mut normalized, &Tag::Compound(fields.clone()))
         .map_err(|error| error.to_string())?;
     match kind {
+        BlockEntityKind::Campfire => {
+            crate::campfire::CampfireState::from_fields(fields, &state.registry.items)?;
+        }
         BlockEntityKind::SculkSensor
         | BlockEntityKind::CalibratedSculkSensor
         | BlockEntityKind::SculkCatalyst => crate::sculk::validate_record(&normalized)?,

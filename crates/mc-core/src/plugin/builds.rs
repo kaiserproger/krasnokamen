@@ -272,6 +272,7 @@ pub(super) fn retire_inactive_npc_builds(state: &mut TickState) {
 pub(super) fn prepare_world_block_set(
     state: &TickState,
     request: &mc_script::ScriptWorldBlockSetRequest,
+    owner: &str,
 ) -> Result<PreparedWorldBlockSet, mc_script::ScriptWorldBlockSetFailure> {
     use mc_script::ScriptWorldBlockSetFailure as Failure;
     let dimension = crate::dimensions::Dimension::parse(request.dimension())
@@ -303,6 +304,10 @@ pub(super) fn prepare_world_block_set(
         y: request.y(),
         z: request.z(),
     };
+    let cell = [position.x, position.y, position.z];
+    if !crate::plugin_player::allows_plugin_bounds(state, owner, dimension.name(), cell, cell) {
+        return Err(Failure::Rejected);
+    }
     if crate::plugin_inventories::has_reservations_for_block(target, position) {
         return Err(Failure::Busy);
     }
@@ -323,7 +328,23 @@ pub(super) fn apply_world_block_set(
         .expect("preflight dimension");
     let position = plan.position;
     crate::block_log::note_plugin(target, position, plugin);
-    target.stage_command_container_removal(position);
+    if target
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(plan.previous))
+        .zip(
+            target
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(plan.proposed)),
+        )
+        .is_none_or(|(previous, proposed)| {
+            previous.block.id != proposed.block.id
+                && !crate::copper::same_family(&previous.block.id, &proposed.block.id)
+        })
+    {
+        target.stage_command_container_removal(position);
+    }
     target
         .world
         .set_block(position.x, position.y, position.z, plan.proposed);
@@ -349,7 +370,7 @@ pub(super) fn execute_world_block_set(
     let mc_script::ScriptCommand::SetWorldBlock { request } = admitted.request() else {
         unreachable!("block set dispatch");
     };
-    let plan = match prepare_world_block_set(state, request) {
+    let plan = match prepare_world_block_set(state, request, admitted.plugin_id()) {
         Ok(plan) => plan,
         Err(failure) => return admitted.world_block_set_result(false, Some(failure)).ok(),
     };
@@ -419,7 +440,7 @@ pub(super) fn poll_world_block_sets(state: &mut TickState) {
         };
         let failure = match answer {
             Err(failure) => Some(hook_block_set_failure(failure)),
-            Ok(mut approval) => match prepare_world_block_set(state, request) {
+            Ok(mut approval) => match prepare_world_block_set(state, request, owner) {
                 Ok(current) if current == build.plan => {
                     match crate::build_precommit::consume_approval(state, &mut approval) {
                         Ok(()) => {

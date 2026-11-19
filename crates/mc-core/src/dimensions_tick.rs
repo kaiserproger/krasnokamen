@@ -127,6 +127,7 @@ pub(crate) fn run_tick(
         world.dimension_globals.active = true;
     }
     crate::chunk_tickets::publish_online(state);
+    crate::projectiles::publish_player_owners(state);
     // Build only for command-bearing ticks; normal movement ticks do not scan
     // entity custody. The set follows the command owner while worlds are taken.
     let mut reserved = std::mem::take(&mut state.dimension_globals.reserved_uuids);

@@ -15,6 +15,44 @@ fn fixture() -> (TickState, Context) {
 }
 
 #[test]
+fn seed_reports_success_without_enabling_numeric_store() {
+    assert_nonnumeric_completion("seed");
+}
+
+#[test]
+fn private_message_reports_success_without_enabling_numeric_store() {
+    assert_nonnumeric_completion("msg target hi");
+}
+
+#[test]
+fn team_message_reports_success_without_enabling_numeric_store() {
+    assert_nonnumeric_completion("teammsg hi");
+}
+
+fn assert_nonnumeric_completion(command: &str) {
+    let (mut state, context) = fixture();
+    run(
+        &mut state,
+        "team add audit",
+        context,
+        &mut ChangeSet::default(),
+    );
+    run(
+        &mut state,
+        "team join audit target",
+        context,
+        &mut ChangeSet::default(),
+    );
+    state.outbox.clear();
+    assert!(!supports_store_result(&parse(command, true).unwrap()));
+    assert_eq!(
+        run(&mut state, command, context, &mut ChangeSet::default()),
+        1
+    );
+    assert!(!state.outbox[&context.connection].is_empty());
+}
+
+#[test]
 fn nested_tick_freeze_requires_level_three_native_admission() {
     let (mut state, context) = fixture();
     for permission in [0, 1, 2] {

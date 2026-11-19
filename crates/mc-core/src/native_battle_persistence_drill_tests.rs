@@ -480,6 +480,7 @@ fn battle_resume_encoding_failure_halts_before_wal_or_publication() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn battle_resume_sigkill_during_dying_body_keeps_tombstone_authority() {
     use std::io::{BufRead, BufReader};
@@ -602,6 +603,7 @@ fn battle_resume_sigkill_during_dying_body_keeps_tombstone_authority() {
 
 /// Kill the real tick/WAL owner at the disputed capture boundary, before any
 /// following battle pass can drain transient observations or staging decisions.
+#[cfg(unix)]
 fn capture_boundary_sigkill(test: &str, scenario: fn(&mut Drill)) {
     use std::io::{BufRead, BufReader};
     use std::os::unix::process::ExitStatusExt;
@@ -686,6 +688,7 @@ fn capture_boundary_sigkill(test: &str, scenario: fn(&mut Drill)) {
     );
 }
 
+#[cfg(unix)]
 fn queue_ground_death(drill: &mut Drill, victim: EntityId) {
     let slot = drill.state.entities.slot_of(victim).unwrap();
     drill.state.merge_damage.push((
@@ -701,6 +704,7 @@ fn queue_ground_death(drill: &mut Drill, victim: EntityId) {
 }
 
 /// Inspect the post-merge/pre-capture owner, then use the production capture.
+#[cfg(unix)]
 fn append_capture_tick(drill: &mut Drill, output: &crate::boundary::TickOutput) {
     let batch = Batch {
         tick: output.tick,
@@ -709,6 +713,7 @@ fn append_capture_tick(drill: &mut Drill, output: &crate::boundary::TickOutput) 
     drill.append(&batch).unwrap();
 }
 
+#[cfg(unix)]
 #[test]
 fn battle_resume_capture_boundary_discards_unheld_player_blow() {
     capture_boundary_sigkill(
@@ -759,6 +764,7 @@ fn battle_resume_capture_boundary_discards_unheld_player_blow() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn battle_resume_capture_boundary_death_before_settle() {
     capture_boundary_sigkill(
@@ -776,6 +782,7 @@ fn battle_resume_capture_boundary_death_before_settle() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn battle_resume_capture_boundary_death_after_refusal() {
     capture_boundary_sigkill(
@@ -826,6 +833,7 @@ fn battle_resume_capture_boundary_death_after_refusal() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn battle_resume_capture_boundary_death_after_waiting_settle() {
     capture_boundary_sigkill(

@@ -1342,6 +1342,16 @@ fn step(
     };
     let reach = block_hit.map_or(1.0, |(t, _)| t);
     let owner = super::owner_id(state, record);
+    // Losing the live body must not turn a player's retained arrow into
+    // ownerless damage that bypasses the native PvP gate.
+    let retained_player_pvp_blocked = owner.is_none()
+        && record.kind.arrow()
+        && !crate::command_rules::boolean(state, crate::command_rules::BoolRule::PVP)
+        && record.owner.is_some_and(|uuid| {
+            state.projectiles.player_owners.contains(&uuid)
+                || crate::chunk_tickets::owner_online(state, uuid)
+                || state.offline_players.contains_key(&uuid)
+        });
     let battle_faction = if record.kind.arrow() {
         owner
             .and_then(|owner| state.entities.slot_of_any(owner))
@@ -1358,6 +1368,9 @@ fn step(
                 .map(|&index| &bodies[index])
                 .filter(|body| !body.item || record.kind == ProjectileKind::FishingHook)
                 .filter(|body| Some(body.uuid) != record.owner && !record.hit.contains(&body.uuid))
+                .filter(|body| {
+                    !retained_player_pvp_blocked || !state.players.contains_key(&body.id)
+                })
                 // Battle volleys cross their own ranks just as a scoreboard
                 // team with friendlyFire=false does; ordinary arrows and player
                 // targets retain the existing collision and scoreboard rules.

@@ -98,6 +98,74 @@ fn spectator_target_dimension_transfer_moves_viewer_then_releases_in_same_public
 }
 
 #[test]
+fn locked_spectator_follower_releases_without_failing_target_dimension_transfer() {
+    for (source, destination) in [
+        (Dimension::Overworld, Dimension::Nether),
+        (Dimension::Nether, Dimension::Overworld),
+        (Dimension::Nether, Dimension::End),
+    ] {
+        let (mut state, alice, bob) = worlds();
+        for name in ["Alice", "Bob"] {
+            command(
+                &mut state,
+                2,
+                &format!("execute in {} run tp {name} 8 150 8", source.name()),
+            );
+        }
+        state.require_plugin_login = true;
+        for world in state.other_dimensions.values_mut() {
+            world.require_plugin_login = true;
+        }
+        let origin = if source == state.dimension {
+            &mut state
+        } else {
+            state.other_dimensions.get_mut(&source).unwrap()
+        };
+        origin.locked_sessions.insert(ConnectionId(1));
+        assert!(origin.entity_session_locked(alice));
+        command(&mut state, 2, "gamemode spectator Alice");
+        let (output, _) = command(&mut state, 2, "spectate Bob Alice");
+        assert_eq!(cameras(&output, source).get(&alice), Some(&bob));
+        let (output, drains) = command(
+            &mut state,
+            2,
+            &format!("execute in {} run tp Bob 9 150 9", destination.name()),
+        );
+        assert_eq!(travel::locate(&state, bob).unwrap().0, destination);
+        assert!(
+            drains
+                .iter()
+                .flat_map(|(_, changes)| changes)
+                .any(|change| { translation(change, "commands.teleport.success.location.single") }),
+            "a committed target transfer must not report follower admission failure"
+        );
+        assert_eq!(travel::locate(&state, alice).unwrap().0, source);
+        assert!(
+            travel::world(&state, source)
+                .unwrap()
+                .entity_session_locked(alice)
+        );
+        for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
+            assert!(cameras(&output, dimension).is_empty());
+        }
+        assert!(
+            !drains
+                .iter()
+                .filter(|(connection, _)| *connection == ConnectionId(1))
+                .flat_map(|(_, changes)| changes)
+                .any(|change| matches!(change, PlayerChange::DimensionChanged { .. }))
+        );
+        let changes = if destination == state.dimension {
+            &output.changes
+        } else {
+            &output.snapshot.dimensions[&destination].changes
+        };
+        assert!(changes.entities_spawned.contains(&bob));
+        assert!(!changes.entities_spawned.contains(&alice));
+    }
+}
+
+#[test]
 fn spectator_viewer_dimension_transfer_clears_source_binding_immediately() {
     let (mut state, alice, bob) = worlds();
     command(&mut state, 1, "gamemode spectator");

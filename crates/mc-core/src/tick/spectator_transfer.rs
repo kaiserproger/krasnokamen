@@ -113,7 +113,7 @@ pub(crate) fn execute(
 /// Vanilla target travel moves attached viewers through the same transition and
 /// releases their cameras. Detach before moving any body so cycles cannot recur.
 pub(crate) fn detach_for_transfer(state: &mut TickState, target: EntityId) -> Vec<EntityId> {
-    let followers: Vec<_> = state
+    let mut followers: Vec<_> = state
         .cameras
         .iter()
         .filter_map(|(&viewer, &subject)| (subject == target).then_some(viewer))
@@ -122,5 +122,8 @@ pub(crate) fn detach_for_transfer(state: &mut TickState, target: EntityId) -> Ve
         stop(state, viewer);
     }
     stop(state, target);
+    // Locked viewers lose their camera but have no world-travel custody.
+    // Their refusal must not turn the target's committed move into a failure.
+    followers.retain(|&viewer| !state.entity_session_locked(viewer));
     followers
 }
