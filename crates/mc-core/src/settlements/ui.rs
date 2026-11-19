@@ -940,10 +940,9 @@ fn project_review(
     action: &str,
     payload: ClickPayload<'_>,
 ) {
-    let confirm;
     let mut body = ctx.t(Key::RequestPolicy).to_owned();
     let title;
-    match action {
+    let confirm = match action {
         "project_upgrade_review" => {
             let Some(id) = building_of(state, ctx, payload) else {
                 return main_screen(state, connection, ctx, ctx.t(Key::BuildingGone));
@@ -956,9 +955,9 @@ fn project_review(
                 ctx.f(Key::ConstructionUpgrade, &[("level", &level.to_string())]),
                 short(id)
             );
-            confirm = button(&title, "project_upgrade", ctx.id)
+            button(&title, "project_upgrade", ctx.id)
                 .with("b", Tag::String(id.0.to_string()))
-                .with("level", Tag::String(level.to_string()));
+                .with("level", Tag::String(level.to_string()))
         }
         "project_cancel_review" => {
             if !pending_order_matches(state, ctx, payload) {
@@ -976,11 +975,11 @@ fn project_review(
             )
             .nth(index)
             .expect("matched order");
-            confirm = with_pending_order(
+            with_pending_order(
                 button(&title, "project_cancel_pending", ctx.id),
                 order,
                 index,
-            );
+            )
         }
         _ => {
             let Some(blueprint) = payload
@@ -993,10 +992,10 @@ fn project_review(
                 Key::OrderBlueprint,
                 &[("blueprint", blueprint_label(ctx, &blueprint.id))],
             );
-            confirm = button(&title, "project_order", ctx.id)
-                .with("blueprint", Tag::String(blueprint.id.clone()));
+            button(&title, "project_order", ctx.id)
+                .with("blueprint", Tag::String(blueprint.id.clone()))
         }
-    }
+    };
     if let Some(pending) = pending_order_text(state, ctx, pending_index(payload).unwrap_or(0)) {
         body.push('\n');
         body.push_str(&pending);

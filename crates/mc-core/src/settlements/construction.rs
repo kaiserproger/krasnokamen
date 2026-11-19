@@ -19,7 +19,7 @@ pub(crate) use availability::gatherer_for_item;
 mod access;
 pub(crate) use access::projects_of;
 pub(crate) use access::{
-    bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
+    bind_builder, bound_builder, head_order, idle, orders, pending_missing, project_for_structure,
     project_of_builder, projects, record_heap_bytes, unbound_project, upgrading,
 };
 
@@ -361,41 +361,6 @@ pub(crate) fn pending_reason_at(
         }
         .into(),
     )
-}
-
-/// Recipe-aware shortages for one queued order. Presentation never has to parse
-/// an English diagnostic or discard its material list.
-pub(crate) fn pending_missing(
-    state: &TickState,
-    id: SettlementId,
-    index: usize,
-) -> Vec<(String, u32)> {
-    let Some(order) = state
-        .settlements
-        .get(id)
-        .and_then(|record| orders(record).nth(index))
-    else {
-        return Vec::new();
-    };
-    let Some(level) = blueprints::get(&state.registry, &order.blueprint)
-        .and_then(|blueprint| blueprint.level(order.level))
-    else {
-        return Vec::new();
-    };
-    let images = executor::source_images(state, id);
-    let Some(bill) = selected_bill(state, id, &level.materials, &images) else {
-        return Vec::new();
-    };
-    super::construction_crafting::missing_base(state, &bill, &images)
-        .into_iter()
-        .filter_map(|(item, count)| {
-            state
-                .registry
-                .items
-                .name_of(item)
-                .map(|name| (name.to_string(), count))
-        })
-        .collect()
 }
 
 /// The waiting reason of a funded upgrade with a free slot: its order turn

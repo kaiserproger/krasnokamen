@@ -732,7 +732,7 @@ pub(crate) fn profession(
 }
 
 /// Certificate geometry counters and the action that satisfies each counter.
-pub(crate) fn requirement<'a>(lang: Lang, code: &'a str) -> (&'a str, &'static str) {
+pub(crate) fn requirement(lang: Lang, code: &str) -> (&str, &'static str) {
     let (en, ru, en_action, ru_action) = match code {
         "footprint" => (
             "floor area",

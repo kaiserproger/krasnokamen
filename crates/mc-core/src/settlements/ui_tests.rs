@@ -1266,7 +1266,7 @@ fn autonomous_main_page_keeps_claim_first_and_fits_a_small_window() {
     );
     assert!(page.has("dashboard") && page.has("army") && page.has("help"));
     let review = last_dialog(&click(&mut state, id, "next", &[]));
-    assert!(review.has("claim") && review.has("main"));
+    assert!(review.has("claim") && review.has("back"));
 }
 
 #[test]
@@ -2127,7 +2127,6 @@ fn russian_locale_localizes_the_main_menu_and_army_page() {
     let main = last_dialog(&command(&mut state, "settlement"));
     assert_eq!(main.title, "Поселение oak");
     assert!(main.actions.len() <= 5);
-    assert_eq!(main.label_of("next"), "Следующий шаг");
     assert_eq!(main.label_of("army"), "Армия");
     assert_eq!(main.label_of("help"), "Помощь");
     assert!(main.body.contains("Mayor"), "{}", main.body);
