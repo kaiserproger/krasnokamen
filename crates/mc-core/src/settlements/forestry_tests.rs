@@ -355,6 +355,58 @@ fn planted_tree_on_the_access_corridor_is_felled_whole_into_storage() {
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
+/// Review of a77b63253: a planted corridor tree whose whole component cannot
+/// be proven (a log's neighbour chunk is unloaded) is never certified for
+/// felling in part. `cells()` refuses the plan on a refused certificate, so the
+/// lot waits; once the chunk is back the whole tree is planned.
+#[test]
+fn a_planted_corridor_tree_is_certified_only_with_its_whole_component_proven() {
+    let (mut state, id, _) = fixture();
+    // A trunk on the chunk's east edge: its logs' neighbours lie in chunk (1, 0).
+    let root = [15, 201, 5];
+    grown_world(&mut state, vec![root], "birch");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let cell = |at: [i32; 3]| mc_script::ScriptWorldBounds::new(at, at).unwrap();
+    let certify = |state: &TickState, at: [i32; 3]| {
+        let record = state.settlements.get(id).unwrap();
+        let mut clearance = Clearance::default();
+        clearance.within(record);
+        assert!(clearance.clearable(state, at, Some(cell(at))), "{at:?}");
+        clearance.mark_owner(state, at)
+    };
+    for y in 201..205 {
+        assert!(certify(&state, [15, y, 5]), "proven trunk cell y={y}");
+    }
+    let east = ChunkPos { x: 1, z: 0 };
+    let revision = state.world.chunk_revision(east.x, east.z);
+    state.world.mark_flushed(&[(east, revision)]);
+    let wanted = rustc_hash::FxHashMap::from_iter(
+        (-1..=1)
+            .flat_map(|x| (-1..=1).map(move |z| ChunkPos { x, z }))
+            .filter(|pos| *pos != east)
+            .map(|pos| (pos, 0)),
+    );
+    assert!(state.world.evict_outside(&wanted).contains(&east));
+    for y in 201..205 {
+        assert!(
+            !certify(&state, [15, y, 5]),
+            "an unproven component certifies no cell, y={y}"
+        );
+    }
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter(
+            (-1..=1).flat_map(|x| (-1..=1).map(move |z| (ChunkPos { x, z }, 0))),
+        ));
+    warm(&state, [16, 201, 5]);
+    assert!(certify(&state, [15, 202, 5]), "loaded again, proven again");
+}
+
 #[test]
 fn updated_leaf_distance_remains_clearable_without_ignoring_other_properties() {
     let (mut state, id, builder, _, root, _) = forest();

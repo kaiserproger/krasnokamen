@@ -197,20 +197,31 @@ impl Clearance {
         certified
     }
 
-    /// A planted log the walking corridor needs cleared marks its own registered
-    /// root, so the whole tree is felled (owner D7). The proof was built by the
-    /// `clearable` call that admitted the cell.
-    fn mark_owner(&mut self, state: &TickState, at: [i32; 3]) {
+    /// A planted tree cell the walking corridor needs cleared marks its own
+    /// registered root, so the whole tree is felled (owner D7). It answers
+    /// whether some root's proven component owns the cell: a tree whose
+    /// component cannot be proven (a neighbour chunk is not loaded) is never
+    /// felled in part. The proof was built by the `clearable` call that
+    /// admitted the cell.
+    fn mark_owner(&mut self, state: &TickState, at: [i32; 3]) -> bool {
         let Some(proofs) = self.proofs.as_ref() else {
-            return;
+            return false;
         };
+        let mut certified = false;
         for record in state.settlements.records() {
             for &root in &record.planted_trees {
-                if in_halo(root, at) && proofs.get(&root).is_some_and(|proof| proof.owns_log(at)) {
+                let Some(proof) = proofs.get(&root).filter(|_| in_halo(root, at)) else {
+                    continue;
+                };
+                if proof.owns_log(at) {
                     self.needed.insert(root);
+                    certified = true;
+                } else if proof.permits(at) {
+                    certified = true;
                 }
             }
         }
+        certified
     }
 
     pub(crate) fn append_whole_trees(
@@ -1122,8 +1133,18 @@ pub(crate) fn cells(
                 }
                 continue;
             }
-            if planted_corridor {
-                clearance.mark_owner(state, [x, y, z]);
+            // Never the first cut of a tree whose whole component is not proven:
+            // the plan fells it whole or the lot waits (a neighbour chunk may
+            // still be unloaded). A sapling has no component to prove.
+            if planted_corridor
+                && !clearance.mark_owner(state, [x, y, z])
+                && !state
+                    .registry
+                    .blocks
+                    .by_id(BlockStateId(block))
+                    .is_some_and(|definition| definition.block.id.path().ends_with("_sapling"))
+            {
+                return None;
             }
             cells.push(PlannedCell {
                 portion: crate::plugin_structures::settlement_builds::PortionKind::Trees,
