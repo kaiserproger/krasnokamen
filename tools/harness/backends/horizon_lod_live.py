@@ -59,8 +59,8 @@ def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
     parser.add_argument("--view-distance", type=int, default=4)
     parser.add_argument("--lod-distance", type=int, default=64)
     parser.add_argument("--pregenerate-radius", type=int, default=400)
-    parser.add_argument("--min-quad-ratio", type=float, default=1.5)
-    parser.add_argument("--min-changed-fraction", type=float, default=0.15)
+    parser.add_argument("--min-quad-ratio", type=float, default=5.0)
+    parser.add_argument("--min-changed-fraction", type=float, default=0.30)
     try:
         args = parser.parse_args(ctx.extra_args)
     except SystemExit as error:
@@ -204,7 +204,8 @@ def play(args: argparse.Namespace, ctx: ProfileContext, binary: Path, artifact: 
             ctl("wait", 20)
             sample = lod_sample(ctl("status"))
             evidence["samples"].append(sample)
-            key = (sample["sampled_target_tiles"], sample["target_tiles"], sample["pending_chunks"])
+            key = (sample["sampled_target_tiles"], sample["target_tiles"], sample["pending_chunks"],
+                   sample["resident_quads"])
             steady = steady + 1 if key == last else 0
             last = key
         picture = directory / "far-terrain.png"

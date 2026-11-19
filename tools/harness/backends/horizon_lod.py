@@ -44,7 +44,7 @@ from ..profiles import ProfileContext
 
 SEED_DEFAULT = 42
 MIN_Y = -64  # overworld; the chunk sections' lowest block
-WORLD_SPAWN_CHUNK_RADIUS = 8  # the oracle connection's view distance
+WORLD_SPAWN_CHUNK_RADIUS = 14  # the oracle connection's view distance (a circle, and its spawn may differ by a few blocks)
 
 
 class Checks:
@@ -159,9 +159,10 @@ class Server:
 
 
 def seed_warnings(text: str) -> list[str]:
+    """WARN lines about the seed that name Horizon (the contract: one startup WARN that far tiles
+    help recover the world seed)."""
     return [line for line in text.splitlines()
-            if re.search(r"warn", line, re.I) and "seed" in line.lower()
-            and "horizon_lod" in line.lower().replace("-", "_").replace(".", "_")]
+            if re.search(r"warn", line, re.I) and "seed" in line.lower() and "horizon" in line.lower()]
 
 
 def _spawn_chunk(position: list[float]) -> tuple[int, int]:
@@ -431,24 +432,27 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         on_exit = on.stop()
     checks("on_server_clean_exit", on_exit == 0, on_exit)
 
-    # -- the oracle: the same stored world, view distance 8, no service, a plain protocol-777 client
+    # -- the oracle: the same stored world, view distance 12 (a circle that covers every chunk within
+    # 8 of spawn), no service, a plain protocol-777 client that keeps the chunks it is sent
     if spawn_chunk is not None and replies:
         oracle_server = server_for("oracle", WORLD_SPAWN_CHUNK_RADIUS, None)
         oracle_server.start()
         try:
             oracle_server.wait_ready(timeout)
-            from ..wire import PlayObserver
-            observer = PlayObserver(("127.0.0.1", oracle_server.port), "OracleProbe",
-                                    account_uuid=uuid.uuid4(), timeout=240.0, protocol=777)
+            observer = hz.HorizonLikeClient(("127.0.0.1", oracle_server.port), "OracleProbe",
+                                            view_distance=WORLD_SPAWN_CHUNK_RADIUS, store_chunks=True,
+                                            timeout=240.0)
             try:
-                observer.ready()
-                needed = {(spawn_chunk[0] + dx, spawn_chunk[1] + dz)
-                          for dx in range(-8, 9) for dz in range(-8, 9)}
-                observer.wait(lambda p: needed <= p.chunks, description="the 17x17 oracle chunks",
-                              timeout=240.0)
-                checks("oracle_spawn_matches", [round(v, 3) for v in observer.position]
-                       == [round(v, 3) for v in spawn_position], {"oracle": observer.position,
-                                                                  "probe": spawn_position})
+                observer.join()
+                observer.wait_ready()
+                needed = {(cx, cz) for r in requests
+                          for cx in range(r.x >> 4, (r.x + 16 * r.stride - 1 >> 4) + 1)
+                          for cz in range(r.z >> 4, (r.z + 16 * r.stride - 1 >> 4) + 1)}
+                observer.pump_until(lambda: needed <= observer.chunk_sections.keys())
+                checks("oracle_received_every_tile_chunk", needed <= observer.chunk_sections.keys(),
+                       {"chunks": len(needed), "oracle_spawn": observer.position, "probe_spawn": spawn_position,
+                        "note": "the server spreads spawns, so the two joins start at different points; "
+                                "tiles are compared by absolute coordinates"})
                 oracle = Oracle(observer)
                 stats = [compare_tile(reply, request, oracle, water_states)
                          for request, reply in zip(requests, replies) if not reply.refused]

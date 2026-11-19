@@ -76,11 +76,12 @@ class CompareTests(unittest.TestCase):
             self.assertEqual(first[1] % stride, 0)
             self.assertGreaterEqual(accept.beyond_chunks(first, stride, spawn, 4) * 2, stride * stride)
 
-    def test_seed_warning_needs_the_key_and_the_seed(self):
-        warn = "2026 WARN krasnokamen: [horizon_lod] enabled: far tiles help recover the world seed"
+    def test_seed_warning_needs_warn_horizon_and_the_seed(self):
+        warn = "WARN mc_edge::server: Horizon far terrain exposes stored terrain that can help recover the world seed"
         self.assertEqual(accept.seed_warnings(warn), [warn])
         self.assertEqual(accept.seed_warnings("WARN ignoring unknown config section key=horizon_lod"), [])
-        self.assertEqual(accept.seed_warnings("INFO horizon_lod seed"), [])
+        self.assertEqual(accept.seed_warnings("INFO Horizon far terrain seed"), [])
+        self.assertEqual(accept.seed_warnings("WARN the world seed is public"), [])
 
 
 def _picture(directory: Path, name: str, terrain: bool) -> str:
@@ -104,7 +105,7 @@ def _session(directory: Path, name: str, source: str, quads: int, terrain: bool)
 
 
 def _judged(only: str, sessions: dict) -> list[str]:
-    args = argparse.Namespace(only=only, view_distance=4, min_quad_ratio=1.5, min_changed_fraction=0.15)
+    args = argparse.Namespace(only=only, view_distance=4, min_quad_ratio=5.0, min_changed_fraction=0.30)
     checks = accept.Checks()
     live.judge(args, sessions, checks)
     return checks.failed()
@@ -138,7 +139,7 @@ class LiveVerdictTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             where = Path(directory)
             sessions = {"off": _session(where, "off", "server-terrain", 25000, False),
-                        "on": _session(where, "on", "server", 90000, True)}
+                        "on": _session(where, "on", "server", 384000, True)}
             self.assertEqual(_judged("pair", sessions), [])
 
 

@@ -342,6 +342,9 @@ class HorizonLikeClient:
     keepalives: int = 0
     play: bool = False
     next_id: int = 0
+    # Keep each received chunk's palettes (protocol_chunks.decode_chunk) for oracle use.
+    store_chunks: bool = False
+    chunk_sections: dict = field(default_factory=dict)
 
     # -- joining
     def join(self) -> dict[str, Any]:
@@ -419,6 +422,10 @@ class HorizonLikeClient:
             send(PLAY_SB_CHUNK_BATCH_RECEIVED, struct.pack(">f", 64.0))
         elif packet_id == PLAY_CB_LEVEL_CHUNK:
             self.chunks += 1
+            if self.store_chunks:
+                from .protocol_chunks import decode_chunk
+                chunk, sections = decode_chunk(body)
+                self.chunk_sections[chunk] = sections
         elif packet_id == PLAY_CB_DISCONNECT:
             raise ProtocolError(f"disconnected in play: {body[:512].hex()}")
         elif packet_id == PLAY_CB_CUSTOM_PAYLOAD:

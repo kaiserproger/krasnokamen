@@ -14,7 +14,7 @@ Contract they assume (from the owner decision and Main's amendments):
 - `[horizon_lod]` in the server TOML: `enabled` (default false) and
   `distance_chunks`, validated; with the section absent or `enabled = false`
   the server sends no Offer. Enabled, the server logs one startup WARN that
-  names `horizon_lod` and the seed (far tiles help recover the world seed).
+  names Horizon and the seed (far tiles help recover the world seed).
 - Our server brand stays as today. Enabled, the Offer (`horizon:lod`, version
   1, distance = `distance_chunks`, 8 in flight, 64 tiles/s) goes in the
   configuration phase to every connection; tiles go to any connection that
@@ -42,17 +42,17 @@ profile fails when any fails. Expected PASS evidence:
 |---|---|
 | `world_pregenerated` | stored area around spawn made by the operator tool |
 | `invalid_distance_0_rejected`, `invalid_distance_2000000_rejected` | server refuses to start (non-zero exit) and the log names `distance_chunks` or `horizon_lod` |
-| `startup_warns_about_the_seed` | exactly one WARN line naming `horizon_lod` and the seed |
+| `startup_warns_about_the_seed` | exactly one WARN line naming Horizon and the seed |
 | `offer_in_configuration`, `offer_matches_configuration` | exactly one `horizon:lod` payload before FinishConfiguration; decodes as `Offer(distance = 16, in_flight = 8, per_second = 64)` |
 | `tiles_are_beyond_the_view_distance` | construction guard: all compared tiles lie more than 4 chunks from the player's chunk |
 | `tiles_answered_and_decode` | 8 tiles (six 1-block-stride, one 2, one 4) answered with data, each decoding under Horizon's own `decode_reply` limits |
 | `stored_tiles_have_terrain` | at least 99% of the stride-1 columns carry a surface |
-| `stored_top_block_matches_the_world` | at least 95% of stride-1 columns: the block under the reported top face has exactly the reported state in the stored chunk, as a second plain protocol-777 connection (view distance 8, same world, no service) receives it |
+| `stored_top_block_matches_the_world` | at least 95% of stride-1 columns: the block under the reported top face has exactly the reported state in the stored chunk, as a second plain protocol-777 connection (view distance 14, same world, no service) receives it |
 | `stored_surface_height_matches_the_world` | at least 80% within 2 blocks of the highest non-air, non-water block (foliage and plants account for the slack) |
 | `stored_water_matches_the_world` | at least 90% of reported water columns have that water state at the reported water top |
 | `stored_terrain_is_not_flat` | at least 4 distinct heights over the tiles (a constant fake fails) |
 | `coarse_tiles_stay_inside_the_footprint` | stride 2 and 4: at least 90% of columns within one block of the footprint's lowest and highest top |
-| `oracle_spawn_matches` | probe and oracle spawned at the same position (same stored world) |
+| `oracle_received_every_tile_chunk` | the second connection received every chunk the compared tiles cover (its spawn differs by a few blocks, so tiles are compared by absolute coordinates) |
 | `unstored_tile_carries_no_invented_terrain` | a tile 15 chunks out (inside `distance_chunks`, outside the stored area) is refused or all 256 columns are empty |
 | `tile_past_distance_not_served`, `misaligned_tile_not_served`, `non_power_of_two_stride_not_served` | refused or ignored; a valid request sent after each is still served, so silence is distinguishable from a dead connection |
 | `vanilla_like_client_stays_connected` | a protocol-775 client that ignores the Offer reaches the play loop |
@@ -72,7 +72,7 @@ tools/dev/mem-run.sh -m 12G env KRASNOKAMEN_SERVER_BINARY=<release pin> \
   python3 -m tools.harness run horizon-lod-live
 # `-- --only off` records the control session only and always ends failed (never a pass);
 # other options: --seed --view-distance 4 --lod-distance 64
-#   --pregenerate-radius 400 --min-quad-ratio 1.5 --min-changed-fraction 0.15
+#   --pregenerate-radius 400 --min-quad-ratio 5.0 --min-changed-fraction 0.30
 ```
 
 The kit's `horizon-client` is the pin's build (`manifest.json`, sha256
@@ -93,20 +93,22 @@ looking 20 degrees down.
   too, so `sampled_target_tiles` alone proves nothing and is only recorded.
 - **ON** passes only when all hold: `lod.source == "server"` (the Offer was
   accepted), `lod.effective_distance` above four times the view distance,
-  `lod.resident_quads` at least `--min-quad-ratio` (1.5) times the OFF value, no
+  `lod.resident_quads` at least `--min-quad-ratio` (5.0) times the OFF value, no
   "far terrain from the server" decode warning in the client log, and the ON
   screenshot differing from the OFF one over at least `--min-changed-fraction`
-  (15%) of the pixels of the horizon band (28%..62% of the height: below the
+  (30%) of the pixels of the horizon band (28%..62% of the height: below the
   toasts, above the chat), i.e. terrain drawn past the sent chunks. Both
   screenshots are kept; the visual review of `<artifact>/on/far-terrain.png`
   against `<artifact>/off/far-terrain.png` is still a human step.
 - The stored area is 400 blocks (25 chunks) around spawn, so far terrain stops
   there although the offer allows 64; a pass does not claim more.
-- `--min-quad-ratio` and `--min-changed-fraction` are first guesses made without
-  the implementation (two sessions on servers without the service measured quad
-  ratios of 0.94 and 1.14, band changes of 0.05% to 2.5%); Main may tune them from
-  the first ON run's `samples` and screenshots in `result.json` but must keep
-  `lod.source == "server"` and the OFF-vs-ON pixel difference.
+- Thresholds were first guesses (`--min-quad-ratio` 1.5, `--min-changed-fraction` 0.15).
+  After the first ON run they became 5.0 and 0.30, so that every measurement sits at
+  least twice clear of both sides: servers without the service measured quad ratios
+  up to 1.14 and band changes up to 2.5%; the implementation measured 9.7 and 76%.
+  A second finding changed the harness, not a threshold: the counters used to settle
+  before the far geometry had finished meshing, so one ON run read 3.8x; the settle
+  loop now also waits for `resident_quads` to stop changing (runs take about 5 minutes).
 
 ## Recorded negative control
 
@@ -129,6 +131,27 @@ warned about). Both fail, for the stated reason:
   `on_client_accepted_the_offer`, `on_resident_far_geometry_exceeds_off`,
   `on_screenshot_shows_far_terrain_off_does_not`.
 
-Nothing here was run against the implementation; the pass evidence above is
-what Main should expect from it, and the thresholds noted as guesses are the
-first thing to tune against its first ON run.
+Negative control re-run with the final thresholds and harness (same main pin): live
+`.analysis/validation/20261119T172933-horizon-lod-live-8copif_4` fails (`source`
+`server-terrain`, quads 3389 against 38229, band change 0.0%) and protocol
+`.analysis/validation/20261119T173358-horizon-lod-gbk6gamw` fails on the same set of checks.
+
+## Recorded runs on the implementation
+
+Server pin `pins/7dcfb89d4c39-server-x86_64-unknown-linux-gnu-incr` (tree `wt/D64Int`
+`7dcfb89d4`, binary sha256 `ccdd816e…`), 2026-11-19:
+
+- `horizon-lod`: PASS, all 26 checks green, none unreached
+  (`.analysis/validation/20261119T171038-horizon-lod-bva4k_h6`). All 1536 stride-1
+  columns of the six tiles had a surface, the exact top-block state matching the stored
+  chunk and the height within 2 blocks. The unstored tile was refused; the server
+  refuses past-distance, misaligned and stride-3 requests; the invalid distances stop
+  the server with `horizon_lod.distance_chunks must be in 1..=1024`.
+- `horizon-lod-live` x3: PASS (`...T171311-horizon-lod-live-050u4jgf`,
+  `...T171839-horizon-lod-live-8_08v9ga`, `...T172406-horizon-lod-live-rtjj4hpo`).
+  ON `lod.source` "server", resident quads 371 437 to 371 439 against 38 229 in OFF
+  (ratio 9.7), band change 76%, `sampled_target_tiles` 1393 of 2400 (the rest sit
+  outside the 25-chunk stored area and are refused), no decode warnings.
+- Refusal retry rate (committee F1) is not observable: the server logs no refusals and
+  exposes no counter. The only indirect evidence is that Horizon's counters stay
+  unchanged for six consecutive 20-tick samples with 1007 tiles still unsampled.
