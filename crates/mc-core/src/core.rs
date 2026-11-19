@@ -1001,6 +1001,12 @@ impl Core {
             ),
         ];
         let world_dir = config.world_dir.clone();
+        // The WAL is bound to this store and to the block palette recovery
+        // replayed it under (Books R4-P3, R5-G5): derived once, from the same
+        // base registry `recover_with_reader` used, so the tail this process
+        // writes is exactly the tail it would accept back.
+        let wal_identity =
+            crate::journal::WalIdentity::new(store.store_uuid(), &base_registry.blocks);
         // Fresh worlds pin worldgen inputs in their first checkpoint. Existing
         // worlds adopt diagnostic metadata on the next positive-tick checkpoint.
         if fresh || (salt_minted && tick_state.tick > 0) {
@@ -1016,13 +1022,18 @@ impl Core {
                 unreachable!()
             };
             let mut writer = if fresh {
-                JournalWriter::open(&world_dir, config.journal_fsync_every_batches)?
+                JournalWriter::open(
+                    &world_dir,
+                    config.journal_fsync_every_batches,
+                    wal_identity,
+                )?
             } else {
                 JournalWriter::open_recovered(
                     &world_dir,
                     config.journal_fsync_every_batches,
                     root_manifest.tick,
                     tick_state.tick,
+                    wal_identity,
                 )?
             };
             write_checkpoint(
@@ -1066,6 +1077,7 @@ impl Core {
             config.journal_fsync_every_batches,
             root_manifest.tick,
             tick_state.tick,
+            wal_identity,
         )?;
         let checkpoint_every = config.checkpoint_every_ticks.max(1);
         let journal_budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
@@ -1606,9 +1618,10 @@ impl Core {
         if self.inner.backup_tx.send(job).is_err() {
             return Err(CoreError::Storage("hot backup: the core stopped".into()));
         }
-        result
+        let backup = result
             .recv()
-            .unwrap_or_else(|_| Err(CoreError::Storage("hot backup: the core stopped".into())))
+            .unwrap_or_else(|_| Err(CoreError::Storage("hot backup: the core stopped".into())))?;
+        Ok(backup)
     }
 
     /// Whether graceful shutdown has been requested through this core handle.

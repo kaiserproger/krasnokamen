@@ -330,3 +330,4 @@ fn copy_refuses_a_source_batch_that_fails_its_crc() {
         "the damaged batch is never published into the backup"
     );
 }
+

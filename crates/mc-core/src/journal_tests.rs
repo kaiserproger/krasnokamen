@@ -2081,3 +2081,28 @@ fn open_reports_temporaries_it_cannot_remove() {
 
 /// The pre-binding frame is refused by name, with the clean-stop path in the
 /// message, instead of being decoded as if it carried the v2 header (ADR 0013:
+/// no compatibility surface of our own).
+#[test]
+fn format_one_batch_is_refused_naming_the_clean_stop_path() {
+    let root = tempfile::tempdir().unwrap();
+    let journal = root.path().join("journal");
+    std::fs::create_dir_all(&journal).unwrap();
+    let mut frame = Vec::new();
+    frame.extend_from_slice(&0x534F_4C4Au32.to_le_bytes());
+    frame.extend_from_slice(&1u32.to_le_bytes());
+    frame.extend_from_slice(&1u64.to_le_bytes());
+    frame.extend_from_slice(&1u64.to_le_bytes());
+    frame.extend_from_slice(&0u32.to_le_bytes());
+    frame.extend_from_slice(&0u32.to_le_bytes());
+    std::fs::write(batch_path(root.path(), 1), &frame).unwrap();
+
+    let error = read_complete_batches_after(
+        &journal,
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .expect_err("format 1 is not read");
+    let text = error.to_string();
+    assert!(text.contains("format 1"), "{text}");
+    assert!(text.contains("checkpoint"), "{text}");
+}

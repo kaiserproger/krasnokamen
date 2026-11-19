@@ -107,8 +107,9 @@ pub(crate) fn copy_world(
     database: &mut impl Read,
     checkpoint_tick: u64,
     through: u64,
-    store_uuid: [u8; 16],
+    identity: crate::journal::WalIdentity,
 ) -> Result<HotBackup, CoreError> {
+    let store_uuid = identity.store;
     let through = through.max(checkpoint_tick);
     let mut files = BTreeMap::new();
     std::fs::create_dir(out.join("native")).map_err(io)?;
@@ -177,7 +178,7 @@ pub(crate) fn copy_world(
         // Books R5 G3: a digest only proves the copy matches the source. Decode
         // and CRC-check every batch so the backup cannot be silently
         // unrestorable because the source tail was damaged.
-        crate::journal::verify_batch_file(&world_dir.join(&relative))?;
+        crate::journal::verify_batch_file(&world_dir.join(&relative), identity)?;
         let digest = copy_hashed(&world_dir.join(&relative), &out.join(&relative))?;
         files.insert(relative, digest);
         covered = *hi;
@@ -232,4 +233,74 @@ pub(crate) fn copy_world(
         wal_tick: covered,
         files,
     })
+}
+
+/// Prove the copy at `copy` actually restores, instead of reporting a backup
+/// whose bytes and CRCs match the source (Books R5-G3).
+///
+/// Opens exactly that copy **read-only**, checks the copied store against the
+/// copied checkpoint marker, and runs the ordinary recovery reader and WAL
+/// replay over it: manifest and domain versions, stored records, and every
+/// batch of the copied tail under the palette this build registers. The
+/// recovered tick must be the `expected_tick` the copy claims. A damaged store
+/// or a CRC-clean but semantically unreplayable batch therefore fails here, at
+/// backup time, never at disaster time.
+pub fn verify_restorable(
+    copy: &Path,
+    config: &crate::config::CoreConfig,
+    registry: std::sync::Arc<crate::registry::CoreRegistry>,
+    expected_tick: u64,
+) -> Result<(), CoreError> {
+    let store_path = copy.join(NATIVE_DATABASE);
+    let store = mc_world::native::NativeReadOnlyStore::open_with_cache(
+        &store_path,
+        crate::native_checkpoint::native_identity(config),
+        16 * 1024 * 1024,
+    )
+    .map_err(|error| {
+        CoreError::Storage(format!(
+            "hot backup {}: the copy does not open: {error}",
+            store_path.display()
+        ))
+    })?;
+    store.verify_marker(copy).map_err(|error| {
+        CoreError::Storage(format!(
+            "hot backup {}: the copy does not pair with its checkpoint marker: {error}",
+            copy.display()
+        ))
+    })?;
+    let mut copy_config = config.clone();
+    copy_config.world_dir = copy.to_path_buf();
+    let recovered = crate::native_checkpoint::recover_with_reader(
+        &copy_config,
+        registry,
+        store.checkpoint_reader().map_err(|error| {
+            CoreError::Storage(format!("hot backup {}: {error}", store_path.display()))
+        })?,
+    )
+    .map_err(|error| {
+        CoreError::Storage(format!(
+            "hot backup {}: the copy does not recover: {error}",
+            copy.display()
+        ))
+    })?;
+    let recovered_tick = recovered
+        .dimensions
+        .values()
+        .map(|replay| replay.tick)
+        .max()
+        .unwrap_or(recovered.manifest.tick);
+    if recovered_tick != expected_tick {
+        return Err(CoreError::Storage(format!(
+            "hot backup {}: the copy recovers to tick {recovered_tick}, not the {expected_tick} \
+             it was taken at",
+            copy.display()
+        )));
+    }
+    tracing::info!(
+        copy = %copy.display(),
+        tick = recovered_tick,
+        "hot backup verified restorable"
+    );
+    Ok(())
 }
