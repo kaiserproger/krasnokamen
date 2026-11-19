@@ -26,13 +26,14 @@
   },
   "counts": {
     "removed_R4": 16,
-    "retained_K1_physical_declarations": 18,
+    "retained_K1_physical_declarations": 16,
     "retained_U": 5,
     "physical_test_declarations_before": 39,
-    "physical_test_declarations_remaining": 23,
+    "physical_test_declarations_remaining": 21,
     "unique_same_class_test_method_names_before": 37,
     "unique_same_class_test_method_names_remaining": 21,
-    "shadowed_declarations_retained": 2,
+    "shadowed_declarations_retained": 0,
+    "removed_shadowed_duplicate_declarations": 2,
     "dead_private_helpers_removed": [
       "CivilizationEvidenceTests.scan"
     ],
@@ -40,7 +41,7 @@
       "TemporaryDirectory",
       "Path"
     ],
-    "physical_source_lines_removed": 177,
+    "physical_source_lines_removed": 221,
     "historical_medium_candidates_finalized": 20,
     "historical_medium_candidates_remaining": 671
   },
@@ -203,7 +204,7 @@
       "category": "U",
       "basis": "read",
       "confidence": "high",
-      "reason": "Acceptance docs explicitly name this synthetic foreign-settlement/household birth control and 7e61b80e corrects its verifier, but no actual foreign-child incident is linked. Keep U rather than delete a documented acceptance control. Static observation: the positive fixture log omits household=, required by the current birth-event regex; no execution or fixture repair is claimed.",
+      "reason": "Acceptance docs explicitly name this synthetic foreign-settlement/household birth control and 7e61b80e corrects its verifier, but no actual foreign-child incident is linked. Keep U rather than delete a documented acceptance control. Main reports all 21 module tests passed on 2d2ccca6d; the earlier source-only fixture finding is withdrawn.",
       "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
       "body_provenance_commits": [
         "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
@@ -249,7 +250,7 @@
       "category": "K1",
       "basis": "read",
       "confidence": "high",
-      "reason": "Observed seed-24 Builder capture used an unsupported volume midpoint; b7943fcb corrects it to a supported exterior stand. Test includes the received failed column and a clearly labelled exterior fixture. Earlier duplicate declaration is shadowed but has the same real-case provenance, so it is retained, not recategorized as a removal.",
+      "reason": "Observed seed-24 Builder capture used an unsupported volume midpoint; b7943fcb corrects it to a supported exterior stand. This earlier declaration is shadowed by an identical later method and is removed on Main's explicit instruction as dead duplicate code; the collected K1 regression remains.",
       "provenance_commit": "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
       "body_provenance_commits": [
         "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
@@ -260,7 +261,7 @@
         "receipts/CivSimLanding/validation.json:485-488"
       ],
       "actually_shadowed_by_later_same_class_method": true,
-      "disposition": "retained",
+      "disposition": "deleted-shadowed-duplicate-by-Main",
       "protected_references": []
     },
     {
@@ -274,7 +275,7 @@
       "category": "K1",
       "basis": "read",
       "confidence": "high",
-      "reason": "Fail-closed counterpart of the observed Builder unsupported-stand correction b7943fcb: no supported standing cell must not reach navigation. Earlier shadowed duplicate retained under the same real-case provenance.",
+      "reason": "Fail-closed counterpart of the observed Builder unsupported-stand correction b7943fcb. This earlier declaration is shadowed by an identical later method and is removed on Main's explicit instruction as dead duplicate code; the collected K1 regression remains.",
       "provenance_commit": "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
       "body_provenance_commits": [
         "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42"
@@ -283,7 +284,7 @@
         "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42"
       ],
       "actually_shadowed_by_later_same_class_method": true,
-      "disposition": "retained",
+      "disposition": "deleted-shadowed-duplicate-by-Main",
       "protected_references": []
     },
     {
@@ -371,7 +372,7 @@
       "category": "K1",
       "basis": "read",
       "confidence": "high",
-      "reason": "Collected duplicate of the supported-stand fail-closed counterpart to the actual seed-24 Builder capture bug; retained with its earlier shadowed declaration.",
+      "reason": "Collected supported-stand fail-closed counterpart to the actual seed-24 Builder capture bug. Retained unchanged; the earlier identical shadowed declaration is removed without changing collected coverage.",
       "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
       "body_provenance_commits": [
         "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
@@ -944,7 +945,7 @@
     "language_server": "Python unavailable in earlier attempt; explicit whole-source/reference fallback used.",
     "removed_exact_name_external_references": "",
     "dead_scan_helper_external_references": [],
-    "reference_search_scope": "Entire worktree for removed test names, excluding own module and historical audit JSON; tools subtree for qualified/self.scan helper references. All ledger/doc-named current tests retained.",
+    "reference_search_scope": "Reference searches cover wt/D60Read2 only: removed test names across that worktree excluding own module/historical audit JSON, and qualified/self.scan helper references in its tools subtree. The 563 other worktrees received a dirty-overlap check only, not a reference search. All ledger/doc-named collected tests remain.",
     "other_registered_worktrees_checked": 563,
     "dirty_overlaps": [],
     "worktree_inspection_errors": [],
@@ -999,15 +1000,21 @@
       }
     ]
   },
-  "historical_retention_note": "CivSimLanding rejected an older dirty deletion on the ground that live capture/census code still existed, before the owner D60 categories. That note is not represented as a new observed bug/oracle for generic mocked pagination/identity plumbing. This batch retains every specifically documented actual corrective capture case and all current ledger/doc references; only individually read R4-only generic cases are deleted.",
-  "static_findings": [
-    {
-      "file": "tools/harness/test_civilization_seed_qa.py",
-      "original_lines": "102-107",
-      "classification": "[INFERENCE] source-only, not an executed failure",
-      "finding": "The retained documented birth-control fixture omits household= in both synthetic settlement_birth log lines, while the current verifier regex requires it; its assertTrue positive control therefore appears inconsistent. It is retained U, not deleted to hide a potential failure; no unrelated repair or claimed gate result."
-    }
-  ],
+  "historical_retention_note": "CivSimLanding rejected an older dirty deletion on the ground that live capture/census code still existed, before the owner D60 categories. That note is not represented as a new observed bug/oracle for generic mocked pagination/identity plumbing. This batch preserves every specifically documented actual corrective capture case and all current ledger/doc references. Besides 16 individually read R4-only cases, Main explicitly authorized removing two earlier identical shadowed declarations as dead code without changing collected coverage.",
+  "duplicate_cleanup": {
+    "base": "2d2ccca6d9f7f9c9d2993d2fecfe06aa36ce7235",
+    "authorization": "Main direct instruction 2026-11-20",
+    "removed_lines_at_base": "40-83",
+    "reason": "Earlier AST-identical stand-method copies are shadowed by later definitions; collected K1 methods are unchanged.",
+    "source_lines_removed": 44
+  },
+  "main_reported_validation": {
+    "cmd": "python3 -m unittest tools.harness.test_civilization_seed_qa",
+    "tree": "2d2ccca6d9f7f9c9d2993d2fecfe06aa36ce7235",
+    "result": "21 tests OK",
+    "source": "Main direct message 2026-11-20; not a worker-run check",
+    "consequence": "Earlier source-only birth-fixture finding withdrawn; documented birth test kept unchanged."
+  },
   "validation": [
     {
       "cmd": "Whole-source/body/helper/callee review, source-provenance tracing and canonical physical body comparison",
@@ -1015,9 +1022,9 @@
       "result": "39/39 historical bodies match; 16 individually read R4-only cases selected; 18 real-case declarations and five uncertain/documented cases retained."
     },
     {
-      "cmd": "Exact-name/helper/ledger references; targeted file status in 563 other registered worktrees; all eight unmerged file diffs",
+      "cmd": "Exact-name/helper/ledger reference searches in wt/D60Read2 only; dirty-overlap checks in 563 other registered worktrees; all eight unmerged file diffs",
       "tree": "21b962dd62ecea5dd4819c02e770a9c18656ce88",
-      "result": "No external removed-name/helper references, dirty overlaps or worktree inspection errors; no unique pending test addition is discarded."
+      "result": "No external removed-name/helper references in wt/D60Read2, no dirty overlaps or worktree inspection errors in the checked other worktrees; no unique pending test addition discarded."
     },
     {
       "cmd": "L2/build/tests/formatters/graphical runs",
@@ -1027,7 +1034,7 @@
   ],
   "notes": [
     "No production code, actual scenario/vanilla reference data, received artifact, ledger state, environment-dependent skip or acceptance threshold changed.",
-    "Both physically duplicated stand regression pairs remain K1. Earlier declarations are statically shadowed; do not call the 39-declaration census 39 collected unittest methods.",
+    "Both stand regression pairs are K1; Main explicitly authorized removing only their earlier identical shadowed copies. The 39-declaration historical census had 37 unique unittest method names; current remaining 21 declarations are all unique.",
     "Prior in-memory red controls alone do not turn mocked pagination into an observed real census failure.",
     "Observed furnace/door/stall/capture regressions stay despite mocked isolation; mocks do not by themselves imply R4.",
     "Five unclear cases are intentionally retained; evidence absence is not forced into an approved removal category.",
