@@ -816,9 +816,13 @@ not on average.
      paired delta decides; under 5% on both p50 and p95 in every pair is
      **small** and lands with its numbers reported; 5% or more on either in any
      pair is **large** and goes to the owner first.
+  6. Any other pattern (for example one pair worse beyond the noise and two
+     inside it, or improvements and worsenings mixed): **inconclusive**, no
+     merge, re-measured as in item 3.
 
-  The owner accepted this verdict and its order (D66 answers, Q1); Main reports
-  every move's exact numbers.
+  The owner accepted this verdict and its order (D66 answers, Q1); item 6,
+  added by Main afterwards, only closes a gap (a pattern no item matched) the
+  conservative way item 3 does. Main reports every move's exact numbers.
 
 ## 4. Migration order
 
@@ -1012,7 +1016,8 @@ way and they follow from D62, D66 and ADR 0013, so they are decisions here:
    too wide to separate a 5% slowdown is inconclusive and blocks the merge;
    inside the noise is neutral (a confirmed speedup passes); a reproducible
    worsening under 5% on both is small and lands with its numbers, 5% or more
-   on either is large and goes to the owner first. The plugin-free overhead
+   on either is large and goes to the owner first; any other pattern is
+   inconclusive (Main's gap closure, §3.4 item 6). The plugin-free overhead
    control is a separate, stricter gate: no worsening at all (§3.4).
 2. **Settlement records into package rows: converter or reset?** Decided: keep
    the format where possible; otherwise a one-off offline converter of
