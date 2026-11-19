@@ -308,8 +308,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Цель или очередь изменились. Проверьте текущее состояние перед новым подтверждением.",
         ),
         Key::SupplyCauseUnavailable => (
-            "Native supply cause unavailable. Check storage and production; no source is inferred.",
-            "Причина снабжения недоступна. Проверьте склад и производство; источник не выводится.",
+            "Cause unknown; check storage.",
+            "Причина не определена; проверьте склад.",
         ),
         Key::SourceMaterialHint => (
             "Native production input, for example:",

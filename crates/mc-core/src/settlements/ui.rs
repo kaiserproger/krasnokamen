@@ -2011,7 +2011,7 @@ fn project_text(
             }
             .to_owned()
         },
-        |(uuid, _)| uuid.to_string(),
+        |(uuid, _)| super::presentation::villager_name(uuid).to_owned(),
     );
     let mut text = format!(
         "{} L{} · {}\n{done}/{total}\n{}\n{}: {builder}",
