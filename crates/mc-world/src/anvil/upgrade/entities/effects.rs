@@ -40,7 +40,7 @@ const EFFECTS: [&str; 33] = [
 
 /// EffectDurationFix3322 changes only FactorCalculationData on the immediate instance,
 /// not HiddenEffect (the vanilla duration fixer does not recurse there).
-pub(super) fn fix_effect_duration(effect: &mut Tag) {
+fn fix_effect_duration(effect: &mut Tag) {
     let duration = get(effect, "Duration").and_then(java_int).unwrap_or(-1);
     if let Some(factor) = get_mut(effect, "FactorCalculationData") {
         let timestamp = get(factor, "effect_changed_timestamp")
@@ -87,7 +87,7 @@ fn rename_effect_id(tag: &mut Tag, old: &str, new: &str) -> Result<(), UpgradeEr
     Ok(())
 }
 
-pub(super) fn fix_effect_id(effect: &mut Tag) -> Result<(), UpgradeError> {
+fn fix_effect_id(effect: &mut Tag) -> Result<(), UpgradeError> {
     if fields(effect).is_none() {
         return Err(reject(
             3568,
