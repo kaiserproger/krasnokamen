@@ -1,0 +1,177 @@
+{
+  "decision": "D60.2",
+  "base": "bda11f88aacf62f3b5c213b6982b7685b6ed7344",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/worldgen_diff/test_diff.py",
+  "source_sha256_before": "21b280d11e5551e1175db7f0c3b8ff25565ea6113d6429f4a7e6436ae8c23ad2",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 7,
+    "removed_R4": 1,
+    "removed_R1": 2,
+    "removed_R3": 0,
+    "retained_K1": 0,
+    "retained_K2": 0,
+    "retained_U": 4,
+    "historical_medium_candidates_finalized": 3,
+    "source_lines_before": 111,
+    "source_lines_remaining": 83,
+    "physical_source_lines_removed": 28
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole 111-line test module, _pack/_chunk fixtures and entire 391-line diff implementation read; history has feature19936a5f68 and rebrand only, not an observed-case fix.",
+    "retained_assertions": "Retained bodies and shared fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": [
+      "Same-file exact-name np grep: only removed top-mask test uses it; remove numpy import. _pack remains used by retained _chunk and must stay."
+    ]
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 7,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 575,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": [
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid",
+          "warning: could not open directory 'tools/worldgen_diff/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed0102",
+          "warning: could not open directory 'tools/worldgen_diff/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed23",
+          "warning: could not open directory 'tools/worldgen_diff/': No such file or directory\n"
+        ]
+      ]
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "provenance": [
+      "No bug-ledger match found; paths named vanilla/krasnokamen are mocked inputs, not independent captured worlds."
+    ]
+  },
+  "records": [
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_section_indices_follow_yzx_order_and_properties",
+      "name": "test_section_indices_follow_yzx_order_and_properties",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 28,
+      "original_end_line": 39,
+      "historical_category": "U",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Checks explicit x/y cell offsets and property preservation in decoded sections; authored packer lacks independently captured Anvil evidence, so no K2 claimed.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_metric_tables_fold_air_decorations_trees_and_classes",
+      "name": "test_metric_tables_fold_air_decorations_trees_and_classes",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 41,
+      "original_end_line": 53,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R1: Repeats own arbitrary decoration/tree/shape class table for six synthetic states without external metric or real mismatch oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_top_reports_highest_set_cell",
+      "name": "test_top_reports_highest_set_cell",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 55,
+      "original_end_line": 60,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Sets two mask heights then checks their known maximum plus own MIN_Y sentinel; no observed heightmap defect or real world comparison is exercised.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_non_divisor_bit_width_and_signed_longs",
+      "name": "test_non_divisor_bit_width_and_signed_longs",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 62,
+      "original_end_line": 65,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R1: Round-trips through a local packer using the same 64//bits spacing and shifts as _unpack, plus an all-ones mask literal; no independent Anvil bytes.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_missing_chunks_fail_instead_of_reporting_partial_parity",
+      "name": "test_missing_chunks_fail_instead_of_reporting_partial_parity",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 67,
+      "original_end_line": 70,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Rejects absent chunks rather than reporting parity over an incomplete rectangle; authored empty loader fixture has no actual missing-world receipt.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_unfinished_oracle_chunks_fail",
+      "name": "test_unfinished_oracle_chunks_fail",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 72,
+      "original_end_line": 76,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Requires FULL vanilla terrain before treating its blocks as comparison evidence; no independently received unfinished oracle chunk read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_diff.py::DecodeTests::test_exact_properties_and_decoration_metrics",
+      "name": "test_exact_properties_and_decoration_metrics",
+      "file": "tools/worldgen_diff/test_diff.py",
+      "original_fn_line": 78,
+      "original_end_line": 107,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Keeps exact state/biome mismatches visible when coarse decoration/name metrics match; synthetic paired chunks are not a real vanilla differential run.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.worldgen_diff.test_diff"
+}
