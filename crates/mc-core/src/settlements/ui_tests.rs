@@ -2805,10 +2805,7 @@ fn accepted_order_keeps_actions_above_the_long_material_bill() {
         );
         assert!(text(item).contains(&format!("×{count}")));
     }
-    assert_eq!(
-        text(&items[3]),
-        ctx.f(Key::MoreMaterialKinds, &[("n", "1")])
-    );
+    assert_eq!(text(&items[3]), "и ещё 1 вид");
     assert_eq!(text(&summary).lines().count(), 5);
 }
 
