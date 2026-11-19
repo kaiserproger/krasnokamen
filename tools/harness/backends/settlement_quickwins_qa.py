@@ -337,7 +337,7 @@ class Walk:
         stand = pad["stand"]
         player = self.probe.observe()["player"]
         if abs(player["x"] - stand[0]) > .3 or abs(player["z"] - stand[2]) > .3 or abs(player["y"] - stand[1]) > .3:
-            self.tp(*stand)
+            self.tp(*stand, tol=.7)
         place = pad
         _enter_hub(self.probe, self.gui, place["anchor"], f"Поселение {NAME}")
         return self.screen()
@@ -346,10 +346,12 @@ class Walk:
     def fixture(self, command: str) -> None:
         self.probe.fixture(command)
 
-    def tp(self, x: float, y: float, z: float) -> None:
+    def tp(self, x: float, y: float, z: float, tol: float = .05) -> None:
+        """Teleport and wait until the client has the player there (`tol` blocks in x and z; y stays exact:
+        villagers can push a standing player sideways, never up)."""
         self.fixture(f"tp @s {x} {y} {z}")
-        self.probe.wait(lambda state: abs(state["player"]["x"] - x) < .05 and abs(state["player"]["y"] - y) < .05
-                        and abs(state["player"]["z"] - z) < .05, f"QW player at {x} {y} {z}", timeout_seconds=30)
+        self.probe.wait(lambda state: abs(state["player"]["x"] - x) <= tol and abs(state["player"]["y"] - y) < .05
+                        and abs(state["player"]["z"] - z) <= tol, f"QW player at {x} {y} {z}", timeout_seconds=30)
 
     def chat(self, message: str, command: bool = True, settle_ticks: int = 20) -> list[str]:
         """Send `message` after a fresh chat marker; return the lines that arrived after it, oldest first."""

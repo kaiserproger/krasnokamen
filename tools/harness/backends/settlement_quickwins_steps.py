@@ -159,10 +159,14 @@ def block_dashboard(w: Walk) -> None:
     back_check(w, "Q6a", "slot", r"^Назад$", lambda s: s["kind"] == "dialog" and s["title"] == f"Поселение {NAME}")
 
 
-def back_check(w: Walk, cid: str, how: str, pattern: str, expected: Any, origin: dict[str, Any] | None = None) -> dict[str, Any]:
+def back_check(w: Walk, cid: str, how: str, pattern: str, expected: Any, origin: dict[str, Any] | None = None,
+               scroll: bool = False) -> dict[str, Any]:
     """Press Back and judge where it lands (`expected`); the landing screen is the evidence."""
     before = signature(w.screen())
-    (w.click_slot if how == "slot" else w.click_button)(pattern, f"{cid} Back", wait=False)
+    if how == "slot":
+        w.click_slot(pattern, f"{cid} Back", wait=False)
+    else:
+        w.click_button(pattern, f"{cid} Back", wait=False, scroll=scroll)
     try:
         landed = w.settle(f"{cid} Back target", before=before, timeout=20)
     except StepFailed:
@@ -498,7 +502,9 @@ def block_cards(w: Walk) -> None:
     w.shot("building-card")
     mapped = w.click_slot(r"^Карта$", "card Map", lambda s: s["kind"] == "dialog")
     w.shot("building-map")
-    back_check(w, "Q6d", "button", r"^Назад$", lambda s: s["kind"] == card["kind"] and s["title"] == card["title"], card)
+    # The map dialog is taller than 720 px: its Back sits below the window, so this click may scroll (recorded).
+    back_check(w, "Q6d", "button", r"^Назад$", lambda s: s["kind"] == card["kind"] and s["title"] == card["title"], card,
+               scroll=True)
     del mapped
 
 
