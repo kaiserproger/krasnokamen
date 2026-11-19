@@ -1,9 +1,9 @@
 # ADR 0024 - The core as an engine, our gameplay as packages
 
 **Date:** 2026-11-19  
-**Status:** Proposed (owner D66). Revised twice after the independent reviews
-(committee-sol and committee-astra, "changes" in both rounds,
-`receipts/EngineADR/REVIEW-{sol,astra}.md` and `REVIEW-{sol,astra}-r2.md`);
+**Status:** Proposed (owner D66). Revised three times after the independent
+reviews (committee-sol and committee-astra, "changes" in each round,
+`receipts/EngineADR/REVIEW-{sol,astra}{,-r2,-r3}.md`);
 see [Review resolution](#review-resolution).
 Nothing here is implemented. The D65 settlements crate (ADR 0021 Step 2, design
 `receipts/CoreUnload/DESIGN.md`, revised after its reviews `REVIEW-sol.md` and `REVIEW-sol-r2.md` in that directory,
@@ -210,10 +210,13 @@ Lines are production lines (`*_tests.rs` excluded) on the base.
   outcome, muster), Players, Storage, Inventory (tribute is a real transfer),
   World zones with a war-window exception as data, Presentation (map item,
   dialogs), Commands, Scheduler.
-- State: treaties and their terms, ransoms and the chronicle as package
-  bookkeeping (step 3); the tribute obligation and its payments as a native row
-  and typed operation from step 4 (§4); war state in the settlement records
-  (`DESIGN.md` §2.7).
+- State (as in `DESIGN.md` §2.7): the treaty terms (vassalage, tribute amount
+  and due dates), ransoms and the chronicle are owned by the realms package as
+  bookkeeping (step 3), never `SettlementRecord` fields; the settlement records
+  hold the native war state, the steward and the peace or surrender outcome with
+  a reference to the treaty; from step 4 the material obligation (tribute owed)
+  is a native row with one owner that changes only in the same typed operation
+  as the payment that settles it (§4).
 - Hot paths: none per tick; command cadence, 10–200 players
   (`OWNER_DECISIONS.md:382`). Damage legality and protection are evaluated
   natively from package data, never by a guest call per hit (§3.3).
@@ -273,9 +276,11 @@ purchase idempotent. Two contracts exist today:
   (`crates/mc-core/src/plugin_player.rs:257-272`). Its contract forbids a blind
   retry: "A missing answer does not establish refusal and must not trigger a
   blind retry" (`commands.wit:392-394`). Its gate is that inventory and KV are
-  consistent after reopen, and that resubmitting with the CAS version the first
-  attempt already spent debits nothing a second time. An API-only cut adds no
-  receipt to it.
+  consistent after reopen, and that a resubmission with the KV version the first
+  attempt already spent debits nothing a second time. That control runs after
+  reopen from a new live session of the same player with the old KV version, so
+  the absence of a second debit cannot come from a dead session. An API-only cut
+  adds no receipt to it.
 - A **domain operation** with an operation id has a durable receipt. After a
   lost answer the package resubmits the same id and gets the stored outcome
   (`plugin.rs:836-847`); a different payload under that id is
@@ -420,9 +425,11 @@ Today's path, which the first cut keeps phase for phase:
   batch and sends the package a `command-batch-rejected` notice
   (`delivery.rs:92-102`); the notice gives no right to send a new request and
   reaches a package that imports no `commands` interface too. For a timer
-  delivery, the same refusal publishes nothing of that pushed tick, keeps the
-  schedule and delivers the due timers again later; no rejection notice is sent
-  (`clock.rs:150-166`).
+  delivery, the same refusal drops the request batch and the staged timer
+  schedule of that pushed tick, keeps the previous schedule and delivers the
+  due timers again later; no rejection notice is sent (`clock.rs:150-166`).
+  Synchronous host-local imports the timer callback already made (a permission
+  publication, for example) stay applied, as in §2.2.
 - Nothing regroups A/B/A into A/A/B or merges independent batches. If
   aggregation is added later, it merges only adjacent events of one service in
   one lane, phase and tick, with seal order and batch boundaries set natively,
@@ -487,7 +494,7 @@ component", "Custom native mobs" and the permission sections):
 | `custom_payload:<name>` | one Play channel | startup: one owner per channel (`manifest.rs:319-321`) |
 | `spawn_entity_types` | exact entity types the package may spawn | admission, per request (`manifest.rs:407-408`) |
 | `hooks` | precommit registration | startup; a hook answers a decision and nothing else (`precommit.wit:1-25`) |
-| `death_graves` | a deployment surface that changes native death custody for every player (`docs/plugins/OPERATIONS.md:150-159`); kept by the audit for `graves` (`receipts/PluginDupAudit/AUDIT.md:45`) | startup: declared in the manifest; deploying the package is the operator's authorization, never implied by a service |
+| `death_graves` | a deployment surface that changes native death custody for every player (`docs/plugins/OPERATIONS.md:150-159`); kept by the audit for `graves` (`receipts/PluginDupAudit/AUDIT.md:45`) | startup: declared in the manifest, at most one declaring package (a second refuses the deployment before start, `crates/mc-core/src/plugin.rs:593-612`); deploying the package is the operator's authorization, never implied by a service |
 | `[client]` bundles and their permissions | Loader content and rights | startup sha256 and Loader negotiation (ADR 0010) |
 | `[worldgen]`, `required_features` | authored data the core must load | startup, as today |
 
@@ -496,13 +503,19 @@ today (`crates/mc-plugin-host/src/host/lifecycle.rs:193-214`). Wasmtime
 resolves all of a component's imports before the first call (Wasmtime 36,
 `runtime/component/linker.rs:197-213`), so the startup store links the same
 declared functions; what each phase may do is enforced at call time, as
-`allow_import` does today (`crates/mc-plugin-host/src/instance.rs:598-640`):
+`allow_import` does today (`crates/mc-plugin-host/src/lib.rs:313-320`,
+`instance.rs:574-640`). Enqueue imports are new, so their phase rule is new;
+host-local calls keep today's rule (only hooks refuse them). The first cut
+does not forbid the KDF in the startup store: that would be a tightening no
+package needs.
 
-| Phase | Enqueue imports | Host-local calls allowed |
+| Phase | Enqueue imports | Host-local calls allowed (as today) |
 |---|---|---|
-| startup store: component initialization and `configure` (returns only a contribution, `lifecycle.wit:123-128`) | refused: the call fails the phase | `log`, `plugin-id` |
-| runtime store: `init` and ordinary handlers | allowed (§2.2) | `log`, `plugin-id`, `password-hash`/`password-verify` (auth packages), permission `publish` (the provider only) |
+| startup store: component initialization and `configure` (returns only a contribution, `lifecycle.wit:123-128`) | refused: the call fails the phase | `log`, `plugin-id`, `password-hash`/`password-verify`; `publish` answers `false` (the startup instance is handed no permission table, `host/lifecycle.rs:193-218`) |
+| runtime store: component initialization, before `init` | refused: no callback batch exists yet | `log`, `plugin-id`, `password-hash`/`password-verify`; `publish` answers `false` (the table is handed over after instantiation, `host/lifecycle.rs:212-218`) |
+| runtime store: `init` and ordinary handlers | allowed (§2.2) | `log`, `plugin-id`, `password-hash`/`password-verify` (auth packages), `publish` (the provider only) |
 | hooks (`precommit`) | refused | `plugin-id` only; a hook answers its decision (`precommit.wit:12-17`) |
+| `shutdown` (best effort, returns no commands, `lifecycle.wit:135-138`) | refused | `log`, `plugin-id`, `password-hash`/`password-verify`; an old generation cannot publish to the live table ([plugin contract](../plugins/CONTRACT.md), lines 229-230) |
 
 Example: today's `krasnokamen-towns` (capabilities `storage`, `zones`,
 `player_queries`, root `town`, timers) after the cut. Its current
@@ -629,21 +642,38 @@ realms package uses that. At step 5 the settlements package becomes the single
 provider of the `settlements` service:
 
 Two parties are distinct on every routed request: the **originating consumer**
-(its package id and the authenticated actor it acts for) and the **provider**,
-which owns the records the request touches.
+(its package id and the actor it acts for) and the **provider**, which owns
+the records the request touches. Both identities come from host provenance,
+never from fields a guest returns.
 
-- The route is asynchronous: the consumer's request carries its correlation id,
-  its package id and the original actor; the host delivers it to the provider
-  as an event; the provider's answer comes back after the provider decided,
+- **Attestation.** Today the host attaches provenance (plugin id and route
+  generation) to every command it admits from a callback
+  (`crates/mc-script/src/route_authority.rs:1368-1382`), and the server accepts
+  only host-attached commands, which it turns into a non-cloneable admitted
+  command carrying that plugin id (`route_authority.rs:1042-1059`,
+  `command_admission.rs:247-257`). Routing extends that attestation: when the
+  host delivers a consumer's request to the provider it records the routed
+  context (consumer package and generation, the actor taken from the consumer's
+  own attested input, the correlation id) under a host-issued route handle.
+  The provider's typed native operation names only that handle; the host
+  attaches consumer, actor and the registered provider from its own record at
+  admission. A handle the host did not issue, or one that names another
+  provider, is refused. Handles are runtime-only: after reopen the consumer
+  resubmits with the same operation id, the host routes it again with a new
+  handle carrying the same parties, and the receipt below matches on the
+  parties, not on the handle.
+- The route is asynchronous: the host delivers the request to the provider as
+  an event; the provider's answer comes back after the provider decided,
   bounded in size like any answer.
-- The provider then submits the typed native operation (§1.3) that carries both
-  parties. The native owner checks the consumer's actor's rights for the action
-  and the registered provider's right to change exactly its own records. No
-  identity replaces the other, and none of the provider's rights pass to the
+- **Authorization.** The native owner checks the actor's current rights for the
+  action and the registered provider's right to change exactly its own records.
+  No identity replaces the other, and none of the provider's rights pass to the
   consumer.
-- The durable receipt is bound to the provider, the consumer and the operation
-  id together, so a resubmission matches only the same parties and payload
-  (§1.3).
+- **Receipt.** The durable receipt is bound to the provider, the consumer
+  package, the actor's stable identity (the player UUID, not the session) and
+  the operation id, so a resubmission after reopen matches only the same
+  parties and payload and returns the stored outcome (§1.3). A new mutation
+  is never authorized by an old receipt: it needs the actor's current rights.
 - A message between packages is not a WAL transaction. Success that involves
   custody exists only after that operation committed and its frame was
   acknowledged; the provider's message alone commits nothing.
@@ -744,9 +774,10 @@ not on average.
   `tools/dev/measurement-windows`).
 - **Overhead control, a separate and stricter gate:** `native-100` (pens, no
   plugins) and `explore-20` without plugins, B against A. With no plugin
-  traffic the move must be neutral (inside the B/B noise); any other result
-  means the move added cost to the engine itself and goes to the owner with its
-  cause, whatever its size.
+  traffic the move may not make the engine slower: a neutral result or a
+  confirmed speedup passes; a reproducible worsening beyond the noise, of any
+  size, goes to the owner with its cause; an inconclusive result does not
+  allow the merge (rule 3 below).
 - **Boundary under load:** a paired B/A with the same post-audit package set,
   the same world and the same scripted command stream, which must show non-zero
   callbacks, requests and completed effects in both runs; a run with zero plugin
@@ -764,16 +795,25 @@ not on average.
   peak backlog, refusal and lost-event counts; per-pair deltas, the B/B noise
   (spread of the three B runs) and peak as well as mean; never a cross-pair
   mean (`DESIGN.md` §4).
-- **Verdict on the full paired delta** (A against its paired B, not the delta
-  minus the noise), MSPT p50 and p95, over three reproducible pairs: all pairs
-  inside the B/B noise is **neutral**; above the noise but under 5% on both p50
-  and p95 in every pair is **small** and lands with its numbers reported; 5% or
-  more on p50 or p95, or TPS falling below 20 on a profile B holds at 20, is
-  **large** and goes to the owner first; pairs that disagree are
-  **inconclusive** and are re-measured, never rounded to "small". A new loss of
-  required events is never small. These are the proposal of owner question 1;
-  until the owner answers, Main applies them and reports every move's exact
-  numbers.
+- **Verdict, applied in this order** to MSPT p50 and p95 over three
+  reproducible pairs, each pair's full delta (A against its paired B, never the
+  delta minus the noise):
+  1. A new loss of required events fails the move, whatever the timings.
+  2. TPS falling below 20 on a profile where B holds 20 goes to the owner
+     first.
+  3. If the B/B noise (the spread of the three B runs) is too wide to tell a
+     5% slowdown from spread (the noise is 5% or more, or the pairs disagree in
+     sign beyond the noise), the result is **inconclusive**: it does not allow
+     the merge and is re-measured (longer runs or a quieter window).
+  4. All pairs inside the noise: **neutral**. A reproducible improvement beyond
+     the noise passes and is reported.
+  5. A reproducible worsening beyond the noise in all three pairs: the full
+     paired delta decides; under 5% on both p50 and p95 in every pair is
+     **small** and lands with its numbers reported; 5% or more on either in any
+     pair is **large** and goes to the owner first.
+
+  These are the proposal of owner question 1; until the owner answers, Main
+  applies them and reports every move's exact numbers.
 
 ## 4. Migration order
 
@@ -787,8 +827,8 @@ GO.
 | 0 (running) | D65 settlements crate: S0–S8, then C1–C3 (`DESIGN.md` §3.2-3.3), accepted only through its gates: the S0 byte oracle (same stages and ticks, fixed salt and UUIDs, base-vs-base in separate processes, three isolated controls; §2.9, lines 44-47); C1 decoding every image's schema in the shared batch decoder before routing and fold (§2.8, lines 39-43); the offline proof by `recover_offline` → `encode_checkpoint`, export and the custody and crash censuses, not `compact` (§2.9); S6 as a separate sequential cut of typed synchronous owner-thread calls (§2.4, lines 36-38); S7 keeping the reserve check on the generic `Begin` for every owner (§2.5, Main ruling Q4); the release-speed gate (§4). D65 rev. 2 is not accepted yet: the open items of `receipts/CoreUnload/REVIEW-sol-r2.md` stay part of the C3 gate and are not counted as done here. Duplicate-plugin deletions by the audit (D66.4). | — |
 | **1** | **Service cut** (§4.1) | — (parallel with 0) |
 | 2 | Computer: block identity and the terminal and screen UI flow as a package; every open/input authorization, revocation, the process bridge and the frame stream stay in `mc-edge`, never through the Wasm FIFO | 1 |
-| 3 | Realms (new package, D62): treaties and their terms (vassalage, tribute amount and due dates), capitulation by treaty, chronicle, map; a separate package per D62 (`OWNER_DECISIONS.md:371-372`), using the engine-served `settlements` service. Treaty terms are package bookkeeping in the bounded KV; no engine operation reads them in this step, and no tribute is paid yet | 1; owner GO for D62; D65 S2 owned state before any new settlement operation except the steward (`D62-REALMS-PLAN.md:73-77`); native war (D62 step 1); D63 map v2 for the map; a captive state for ransom |
-| 4 | Economy: economy rules and ledgers into package records; payments, wages, and the actual tribute payment that settles a realms obligation, each as one typed native operation with a durable receipt (§1.3), never a transfer followed by a separate KV write; the tribute obligation becomes a native row here, and overdue tribute (the D62 casus belli) starts here; goods stay engine custody | 1; an **accepted** D65 C3 (C1 alone is not enough) under the step-0 gates; then the separate D66 format cutover with one writer (`DESIGN.md:23-27`, §1.3); native package rows with a declared schema |
+| 3 | Realms (new package, D62): treaties and their terms (vassalage, tribute amount and due dates), capitulation by treaty, chronicle, map; a separate package per D62 (`OWNER_DECISIONS.md:371-372`), using the engine-served `settlements` service. Treaty terms are owned by realms as package bookkeeping in the bounded KV (`DESIGN.md` §2.7); no engine operation reads them in this step, no tribute is paid yet and arrears give no casus belli yet | 1; owner GO for D62; D65 S2 owned state before any new settlement operation except the steward (`D62-REALMS-PLAN.md:73-77`); native war (D62 step 1); D63 map v2 for the map; a captive state for ransom |
+| 4 | Economy: economy rules and ledgers into package records; payments, wages, and the actual tribute payment that settles a realms obligation, each as one typed native operation with a durable receipt (§1.3), never a transfer followed by a separate KV write; the tribute obligation becomes a native row here with one owner, and overdue tribute (the D62 casus belli) starts here; goods stay engine custody | 1; an **accepted** D65 C3 (C1 alone is not enough) under the step-0 gates; then the separate D66 format cutover with one writer (`DESIGN.md:23-27`, §1.3); native package rows with a declared schema. Tribute payment and arrears additionally need step 3 (the treaty and its terms exist); the rest of economy does not wait for step 3 |
 | 5 | Settlements onto WIT (D66.3): founding, growth, certification rules, households, districts, migration rules, presentation, commands, and the executors' game rules (§1.1); the `settlements` provider switches from the engine to the package here (§2.8) | 4 |
 | 6 | Armies and battles: rosters, staging, order vocabulary, war policy and the tactics, fatigue, lethality and casualty rules of `formation.rs` and `combat.rs` as package data and decisions; each active battle bound to its saved, validated parameter set (§1.1, a battle-image format change with its own persistence review); the executors stay | 5; independent battle-core review (AGENTS.md rule 5); A11 SIGKILL continuation with the same rules and refusal with changed ones |
 
@@ -824,13 +864,14 @@ go last.
   split API, and the plugin regressions and the standard-pack load test pass
   with that package set; the old 0.9.0 monolith component is refused before the
   world opens (§2.6 negative control). The inventory-storage transaction keeps
-  inventory and KV consistent after reopen, and resubmitting it with the CAS
-  version an earlier attempt already spent debits nothing twice; a domain
-  operation resubmitted with its operation id after a lost answer returns the
-  stored outcome and a different payload is refused (§1.3); both through the
-  real host path. The §3.4 overhead control is neutral, the paired B/A with
-  plugin traffic is measured and its TPS/MSPT change reported under the §3.4
-  verdict (a small slowdown lands, a large one goes to the owner first); bench
+  inventory and KV consistent after reopen, and a resubmission from a new live
+  session of the same player with the KV version an earlier attempt already
+  spent debits nothing twice; a domain operation resubmitted with its operation
+  id after a lost answer returns the stored outcome and a different payload is
+  refused (§1.3); both through the real host path. The §3.4 overhead control
+  shows no worsening, the paired B/A with plugin traffic is measured and its
+  TPS/MSPT change reported under the §3.4 verdict (a small slowdown lands, a
+  large one goes to the owner first, an inconclusive one does not merge); bench
   receipts before and after. The cut changes the admission path of inventory
   transactions, so it gets an independent review before Main commits it
   (AGENTS.md rule 5, custody).
@@ -960,13 +1001,14 @@ way and they follow from D62, D66 and ADR 0013, so they are decisions here:
 
 ## Open questions for the owner
 
-1. **"Small slowdown."** Proposal, on the full paired delta of MSPT p50 and p95
-   over three reproducible pairs: inside the B/B noise is neutral; under 5% on
-   both is small and lands with its numbers; 5% or more on either, or TPS
-   falling below 20 where B holds 20, is large and comes to you first; pairs
-   that disagree are inconclusive and re-measured; a new loss of required
-   events is never small. The plugin-free overhead control is a separate,
-   stricter gate that must be neutral (§3.4).
+1. **"Small slowdown."** Proposal, in this order, on the full paired delta of
+   MSPT p50 and p95 over three reproducible pairs: a new loss of required
+   events fails; TPS falling below 20 where B holds 20 comes to you; noise too
+   wide to separate a 5% slowdown is inconclusive and blocks the merge; inside
+   the noise is neutral (a confirmed speedup passes); a reproducible worsening
+   under 5% on both is small and lands with its numbers, 5% or more on either
+   is large and comes to you first. The plugin-free overhead control is a
+   separate, stricter gate: no worsening at all (§3.4).
 2. **Settlement records into package rows: converter or reset?** Proposal: keep
    the format where possible; otherwise a one-off offline converter of
    checkpoint plus WAL into a new directory with custody and high-water checks;
@@ -1020,5 +1062,22 @@ A4, A7 reopened; three new). Every open item and new finding:
 | Astra-new-3 the 5% rule allowed two verdicts | medium | §3.4, owner question 1 | Threshold on the full paired delta; neutral, small, large and inconclusive defined; the plugin-free overhead control is a separate, stricter gate that must be neutral |
 | A6-r2 "one tick's queue" | — | §3.2 | Now "the 256-command outstanding capacity", a bound on commands waiting at once |
 | D65 status: rev. 2 not accepted | — | §4 step 0 | The open items of `receipts/CoreUnload/REVIEW-sol-r2.md` stay part of the C3 gate and are not counted as done |
+
+Third round, reviews of 6dade3c21: `receipts/EngineADR/REVIEW-sol-r3.md`
+(S2, S5, S7 and the three second-round new findings resolved; S1 open; three
+new) and `receipts/EngineADR/REVIEW-astra-r3.md` (A1, A2, A4, A7, battle rules
+and correlation resolved; threshold open; one new). Every open item, new
+finding and note:
+
+| Finding | Severity | Section | Resolution |
+|---|---|---|---|
+| R3-1 the actor is not attested on the provider → native call | high | §2.8 | The existing host attestation (`route_authority.rs:1042-1059,1368-1382`, `command_admission.rs:247-257`) extends to the routed context: the host records consumer package, actor and correlation under a host-issued route handle, and attaches consumer, actor and registered provider at admission; native never takes them from guest-returned fields; handles are runtime-only; the receipt binds the player UUID (not the session), both packages and the operation id, so resubmission after reopen matches; a new mutation still needs the actor's current rights |
+| S1-r3 timer refusal still promised "nothing of that pushed tick" | medium | §2.3 | Limited to the request batch and the staged timer schedule; synchronous host-local imports the timer callback made stay applied, as in §2.2 |
+| R3-2 tribute payment did not depend on step 3 | medium | §4 | Step 4's tribute payment and arrears also depend on step 3; the rest of economy does not wait for it |
+| R3-3 phase table missed runtime initialization and shutdown; startup KDF rule presented as current | medium | §2.5 | Rows for runtime-store initialization and `shutdown` with enqueue refused and their host-local calls named; host-local calls keep today's rule (only hooks refuse them), so the KDF stays allowed in the startup store: no tightening |
+| A2-r3 note: keep the single-owner check for `death_graves` | — | §2.5 | A second declaring package refuses the deployment before start (`plugin.rs:593-612`) |
+| Threshold-r3 one receipt could be both neutral and large; a speedup failed the overhead control | medium | §3.4, owner question 1 | Precedence: lost required event fails; losing held 20 TPS goes to the owner; noise too wide to separate a 5% slowdown is inconclusive and blocks the merge; inside the noise is neutral; reproducible worsening is judged on the full paired delta (under 5% small, 5% or more large); the overhead control allows no worsening, a confirmed speedup passes |
+| S2-r3 note: stale-CAS control after reopen | — | §1.3, §4.1 | Runs from a new live session of the same player with the old KV version |
+| Astra-new-r3 treaty owner differs from D65 | medium | §1.2, §4 | Consistent with `DESIGN.md` §2.7 (rev. 4): treaty terms, ransoms and chronicle are owned by realms; settlement records hold the native war state, steward and outcome with a treaty reference; from step 4 the tribute obligation is one native row with one owner, changed only with its payment |
 
 [Architecture overview](../ARCHITECTURE.md) · [Decisions index](README.md)
