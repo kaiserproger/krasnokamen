@@ -436,6 +436,18 @@ def complete_house(w: Walk, origin: list[int]) -> None:
         w.fixture(f"setblock {hx + 2} {layer} {hz + 2} minecraft:oak_planks")
     w.fixture(f"setblock {hx + 2} {ground + 1} {hz + 1} minecraft:white_bed[facing=south,part=foot]")
     w.fixture(f"setblock {hx + 2} {ground + 1} {hz + 2} minecraft:white_bed[facing=south,part=head]")
+    # The press on Сертифицировать is a GUI packet, the setblocks are chat commands: wait until the client
+    # sees the finished blocks, so the server has applied them before the player presses.
+    def finished(_state: dict[str, Any]) -> bool:
+        page = w.probe.call("minecraft_scan_blocks", {
+            "min_x": hx + 2, "min_y": ground + 1, "min_z": hz + 1, "max_x": hx + 2, "max_y": ground + 4, "max_z": hz + 2,
+            "max_blocks": 64})
+        found = {(row["x"], row["y"], row["z"]): row["block_id"] for row in page["blocks"]}
+        return (found.get((hx + 2, ground + 1, hz + 1)) == "minecraft:white_bed"
+                and found.get((hx + 2, ground + 1, hz + 2)) == "minecraft:white_bed"
+                and found.get((hx + 2, ground + 3, hz + 2)) == "minecraft:oak_planks"
+                and found.get((hx + 2, ground + 4, hz + 2)) == "minecraft:oak_planks")
+    w.probe.wait(finished, "QW house finished in the client's world", timeout_seconds=30)
 
 
 def building_list(w: Walk) -> list[dict[str, Any]]:
