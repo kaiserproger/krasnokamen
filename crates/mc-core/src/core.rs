@@ -1395,6 +1395,17 @@ impl Core {
         self.inner.lod.tile(tile_x, tile_z, level, stored_only)
     }
 
+    /// Return a stored overworld tile only when every sampled chunk exists.
+    /// Stop at the first missing chunk without generating it.
+    pub fn lod_stored_tile(
+        &self,
+        tile_x: i32,
+        tile_z: i32,
+        level: u8,
+    ) -> Result<Option<Vec<crate::lod::LodSample>>, CoreError> {
+        self.inner.lod.stored_tile(tile_x, tile_z, level)
+    }
+
     /// Stable opaque world identity for DH LevelInit: random per world,
     /// persisted through the native owner path, preserved across restarts,
     /// rotated on world reset. Never seed-derived. Cheap clone; samples no

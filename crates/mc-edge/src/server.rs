@@ -351,6 +351,11 @@ impl EdgeServer {
     ) -> anyhow::Result<Self> {
         cfg.computer.validate()?;
         cfg.voice.validate()?;
+        if cfg.horizon_lod.enabled {
+            tracing::warn!(
+                "Horizon far terrain exposes stored terrain that can help recover the world seed"
+            );
+        }
         crate::startup_warnings::warn_unsafe_startup(&cfg, hub.as_ref());
         let voice = crate::voice_service::Service::new(&cfg.voice);
         let dashboard = dashboard_state(&cfg);
@@ -434,20 +439,13 @@ impl EdgeServer {
             .unwrap_or_default();
         let suggestion_structures =
             crate::command_tree::structure_suggestion_ids(&cfg.data.vanilla_data_dir);
-        let lod = cfg
-            .lod
-            .enabled
+        let lod = (cfg.lod.enabled || cfg.distant_horizons.enabled || cfg.horizon_lod.enabled)
             .then(|| crate::lod::LodService::new(&cfg.lod, &wire.biomes));
         let dh = cfg
             .distant_horizons
             .enabled
             .then(|| {
-                let workers = lod
-                    .as_ref()
-                    .map(|lod| Arc::clone(&lod.workers))
-                    .unwrap_or_else(|| {
-                        Arc::new(tokio::sync::Semaphore::new(cfg.lod.workers.max(1)))
-                    });
+                let workers = Arc::clone(&lod.as_ref().expect("shared lod lane").workers);
                 crate::dh::Service::new(&hub, &cfg, workers).map(Arc::new)
             })
             .transpose()?;
