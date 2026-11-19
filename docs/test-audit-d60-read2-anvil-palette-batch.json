@@ -1,0 +1,130 @@
+{
+  "decision": "D60.2",
+  "base": "fbde2892c1789b8662300058117719fc1bcff577",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_anvil_palette.py",
+  "source_sha256_before": "8c285fb4bc25d9067131c9373f90fd4c6bcc69c0e820bacd6848bc8085cb1056",
+  "status": "All4 bodies, chunk fixture builder and nested mock callbacks read, decoder and NBT serializer read. Remove2 synthetic malformed-input R4 tests, retain2 K2 valid-codec checks grounded in independent actual export classification and vanilla javap. Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 4,
+    "removed_R4": 2,
+    "retained_K1": 0,
+    "retained_K2": 2,
+    "retained_U": 0,
+    "prior_deletions": 0,
+    "physical_declarations_before": 4,
+    "physical_declarations_remaining": 2,
+    "source_lines_before": 68,
+    "source_lines_remaining": 50,
+    "physical_source_lines_removed": 18,
+    "historical_medium_candidates_finalized": 4,
+    "historical_medium_candidates_unfinalized": 325
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete68-line test module, chunk helper, all mocks and fixture lambdas.",
+    "production_source_read": "anvil.py complete executable decoder/reader bodies lines16-207; anvil_corrupt.py NBT tags/reader/_text/_payload/serialize lines1-97.",
+    "source_history_read": [
+      "eca6a837f full commit message/stat and decoder/ATM documentation diff; sole test-module history entry.",
+      "No cached exact-file unmerged deltas."
+    ],
+    "removed_scaffolding": [
+      "Unused mixed keyword parameter and two-line mixed-key fixture branch. Exact-name same-file mixed grep found only its definition and branch after removed bodies; no retained consumer. No imports removed."
+    ],
+    "retained_assertions": "Both retained test bodies unchanged; shared builder removes only dead mixed-key mutation.",
+    "production_unchanged": true
+  },
+  "evidence": {
+    "independent_oracles": [
+      "AnvilExportPalette/palette-classification.txt read in full: actual4790/5023 export counts, concrete region/chunk examples, errors0. Underlying region binaries not decoded by worker.",
+      "AnvilExportPalette/BlockStateFieldNamesFix.javap.txt read in full: Name\u2192id and Properties\u2192properties rename.",
+      "AnvilExportPalette/BlockState.javap.txt45-72: registry name or full-codec union."
+    ],
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 4,
+      "removed_names": 2,
+      "test_name_external_matches": 0,
+      "own_module_and_audit_json_excluded": true,
+      "note": "An initial helper word chunk search produced unrelated generic chunk identifiers; no helper is deleted, no qualified test_anvil_palette consumer or named test reference was found."
+    },
+    "other_worktree_dirty_fence": {
+      "scope": "Exact source-file status only on cached registered paths; no cross-worktree reference search.",
+      "worktrees_checked": 572,
+      "source_file_present": 170,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "All4 original R4/medium IDs finalized:2 removed and2 retained K2. Original799 denominator unchanged."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_anvil_palette.py::AnvilPaletteTests::test_mixed_version_world_decodes_and_audits_chunk_counts",
+      "file": "tools/harness/test_anvil_palette.py",
+      "original_fn_line": 26,
+      "original_end_line": 35,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K2",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K2: Independent AnvilExportPalette/palette-classification.txt records66503 actual DataVersion4790 old-spelling chunks and260 DataVersion5023 new-spelling chunks from failed Perf1M export. Full BlockStateFieldNamesFix javap independently renames Name\u2192id and Properties\u2192properties. Fixture codec expectations are anchored to actual old/new formats, not implementation alone; tiny audit counts are authored bookkeeping, not those actual world counts.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_anvil_palette.py::AnvilPaletteTests::test_wrong_or_mixed_spelling_fails_with_chunk_and_section",
+      "file": "tools/harness/test_anvil_palette.py",
+      "original_fn_line": 37,
+      "original_end_line": 46,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Authors four malformed or mixed-key variants and asserts harness-specific exception wording. Independent vanilla rename evidence establishes valid fields, not rejection of extra opposite-spelling keys or this exact error context; no real malformed-chunk failure.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_anvil_palette.py::AnvilPaletteTests::test_5023_bare_identifier_palette",
+      "file": "tools/harness/test_anvil_palette.py",
+      "original_fn_line": 48,
+      "original_end_line": 59,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K2",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K2: Independent BlockState.javap static codec builds Codec.either(registry.byNameCodec,FULL_CODEC) then xmap, supporting bare identifiers as well as compound states. Expected minecraft:stone decoding is tied to that vanilla codec evidence.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_anvil_palette.py::AnvilPaletteTests::test_unknown_version_fails_closed",
+      "file": "tools/harness/test_anvil_palette.py",
+      "original_fn_line": 61,
+      "original_end_line": 64,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Invents unsupported DataVersion4900 and asserts the harness-selected rejection string; no actual unsupported-version chunk or independent version-boundary rejection incident.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_anvil_palette through the canonical memory runner",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}
