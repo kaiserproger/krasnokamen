@@ -115,12 +115,14 @@ fn a_deep_closed_water_bowl_under_a_dry_floor_is_admitted_and_priced_once() {
     assert_eq!(cost.lava, 0);
 }
 
-/// The liquid bound stays unreachable through `check`: the deepest levelled fill
-/// is `SITE_BAND` rows of the largest footprint.
+/// The liquid bound is reachable by a levelled lot of the largest catalogue
+/// footprint (13·11 columns, eight rows): that lot is a safe `LiquidBeyondBound`
+/// refusal, pinned on the struct by `the_liquid_bound_refuses`.
 #[test]
-fn a_levelled_lot_cannot_exceed_the_liquid_bound() {
-    let deepest = 11 * 11 * crate::settlements::construction::SITE_BAND as usize;
-    assert!(deepest < liquid::MAX_LIQUID_CELLS, "{deepest}");
+fn a_levelled_lot_of_the_largest_footprint_can_reach_the_liquid_bound() {
+    let [width, _, depth] = blueprints::MAX_SIZE.map(usize::from);
+    let deepest = width * depth * crate::settlements::construction::SITE_BAND as usize;
+    assert!(deepest > liquid::MAX_LIQUID_CELLS, "{deepest}");
 }
 
 /// `LiquidAccess` is still named when a lot's door column holds water, even
