@@ -48,18 +48,19 @@
     "test-audit-d60-read2-mcp-schema-batch.json",
     "test-audit-d60-read2-native-promotion-commands-batch.json",
     "test-audit-d60-read2-native-promotion-custody-batch.json",
-    "test-audit-d60-read2-native-promotion-items-batch.json"
+    "test-audit-d60-read2-native-promotion-items-batch.json",
+    "test-audit-d60-read2-native-promotion-maps-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 1191,
+    "finalized_historical_test_ids": 1195,
     "removed_in_new_batches": 608,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 186,
+    "retained_K1": 188,
     "retained_K2": 5,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 387,
-    "historical_medium_candidates_reviewed": 551,
-    "remaining_medium_candidates_unfinalized": 248,
+    "retained_U": 389,
+    "historical_medium_candidates_reviewed": 555,
+    "remaining_medium_candidates_unfinalized": 244,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
