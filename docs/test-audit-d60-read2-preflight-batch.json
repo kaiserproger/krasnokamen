@@ -52,7 +52,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Compares prerequisite registry keys and copied spec values to the same catalog, plus a missing-spec KeyError; introduced in feature 34e651b3b without a real mismatch case or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -68,7 +68,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Checks authored protocol/building profile selections omit client and loader prerequisites; feature 34e651b3b supplies no actual erroneous client requirement or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -84,7 +84,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Checks prepare/validate-run/check switches select the authored loader prerequisite policy; added in feature 34e651b3b without a real failed preparation case or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -100,7 +100,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Loops its own validator registry with timeout -1 and asserts rejection before Popen; feature 34e651b3b supplies no observed invalid launch or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -116,7 +116,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Supplies zero clients, unknown fuzz style, noninteger seed and empty contact-sheet arguments and expects rejection without spawning; added in feature 34e651b3b without an observed parser failure or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -132,7 +132,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Injects zero/NaN timeout and infinite village coordinate into seed-review and expects its own error; feature 34e651b3b records no real accepted invalid seed-review input or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -148,7 +148,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Injects invalid loader platform and negative settlement-map timeout and checks prelaunch rejection; added in feature 34e651b3b without an actual failed launch case or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -164,7 +164,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Supplies fractional timeout 1.5 to regression/playable/replay and expects ValueError before Popen; feature 34e651b3b establishes no real fractional-timeout failure or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
@@ -180,7 +180,7 @@
       "category": "R4",
       "basis": "read",
       "confidence": "high",
-      "reason": "R4: Own prerequisite registry or authored invalid-argument rejection checks without an observed missing-validation failure or independent oracle.",
+      "reason": "R4: Supplies timeout zero to native interrupted-first-start scenario and asserts refusal before spawning; added in feature 34e651b3b without a real zero-timeout incident or independent oracle.",
       "disposition": "remove",
       "protected_references": [],
       "ledger_references": []
