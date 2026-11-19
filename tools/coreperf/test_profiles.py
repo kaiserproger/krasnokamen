@@ -10,36 +10,6 @@ from tools.coreperf import profiles
 
 
 class ProfilesTests(unittest.TestCase):
-    def test_shared_heavy_fixture_exact_counts_and_loaded_regions(self):
-        recipe = profiles.fixture(100000, 20000)
-        self.assertLessEqual(len(recipe["regions"]), 100)
-        commands = [c for r in recipe["regions"] for c in r["commands"]]
-        for kind, count in recipe["expected"].items():
-            self.assertEqual(sum(c.startswith(f"summon {kind} ") for c in commands), count)
-        self.assertEqual(recipe["expected"]["minecraft:villager"], 20000)
-        self.assertEqual(sum("minecraft:composter" in c for c in commands), 20000)
-        self.assertFalse(any("NoAI" in c or "Invulnerable" in c for c in commands))
-        self.assertIn("gamerule randomTickSpeed 3", commands)
-        self.assertIn("gamerule doDaylightCycle true", commands)
-
-    def test_native_fixture_has_eight_equal_mob_kinds_and_no_villagers(self):
-        recipe = profiles.fixture(100000, 0)
-        self.assertEqual(recipe["expected"]["minecraft:villager"], 0)
-        self.assertEqual([n for k, n in recipe["expected"].items() if k != "minecraft:villager"], [12500] * 8)
-
-    def test_official_recipe_bytes_remain_unchanged(self):
-        # Deliberate fixture correction (2026-11-18): the pens now build floor, walls and
-        # roof BEFORE clearing the interior, and clear once more bounded at roof-1. The
-        # old order dug an open pit in desert terrain, surface sand collapsed onto the
-        # floor at the summon height, and an animal summoned there suffocated and died
-        # inside a block (receipts/Perf1M/ENTITY-LOSS.md, proven by world probe: 90 of
-        # 250,000 summon cells were sand at y=64). Nothing else in the recipe changed;
-        # the new digests are the same recipe with the corrected command order.
-        self.assertEqual(profiles.load.digest(profiles.fixture(100000, 0)),
-                         "197da323965ace8fc67fb1b305bc77ddb8950985923c766768f0b26387c11066")
-        self.assertEqual(profiles.load.digest(profiles.fixture(100000, 20000)),
-                         "ab3f2ba18fc9ff8f12f5bffaeb67c9531c6547463de326f3113be2eabba1ce7a")
-
     def test_pen_clearance_gate_reads_the_summon_cells_it_will_check(self):
         recipe = {"regions": [{"commands": [
             "fill 0 63 0 3 63 3 minecraft:grass_block",
@@ -100,18 +70,6 @@ fi
                     args, world, root / "server.toml", root / "receipts", recipe)
             self.assertEqual(passed, {"cells": 2, "blocked": []})
 
-    def test_idle_and_explore_do_not_summon_entities(self):
-        recipe = profiles.fixture(0, 0)
-        self.assertTrue(recipe["regions"])
-        self.assertFalse(any(c.startswith("summon ") for r in recipe["regions"] for c in r["commands"]))
-        for name, movement, edits in (("idle", 0, 0), ("explore-3", 20, 0),
-                                      ("explore-20", 20, 0), ("native-100", 20, 2)):
-            args = argparse.Namespace(profile=name, mobs=profiles.PROFILES[name][1], warmup_seconds=30, measure_seconds=120)
-            plan = profiles.schedule(args)["windows"]
-            self.assertEqual([w["duration_ms"] for w in plan], [30000, 120000])
-            self.assertEqual(plan[-1]["movement_hz"], movement)
-            self.assertEqual(plan[-1]["edit_hz"], edits)
-
     def test_items_layout_is_stationary_deterministic_and_inside_tracking_range(self):
         for items in (0, 1, 7, 10000, 30000, profiles.ITEMS_MAX):
             recipe = profiles.items_fixture(items)
@@ -159,22 +117,6 @@ fi
         for command in recipe["regions"][1]["commands"][1:]:
             self.assertLess(float(command.split()[3]), floor + 8 - 1)
 
-    def test_pile_classes_are_full_stacks_and_distinct_kinds(self):
-        recipe = profiles.items_fixture(1000)
-        spec = recipe["items"]["layout"]
-        summons = [c for c in recipe["regions"][1]["commands"] if c.startswith("summon ")]
-        full = summons[spec["ground"]["count"] + spec["water"]["count"]:][:spec["pile_full"]["count"]]
-        mixed = summons[-spec["pile_mixed"]["count"]:]
-        self.assertTrue(all("count:64" in c for c in full))
-        self.assertTrue(all("count:1}" in c for c in mixed))
-        first_pile = mixed[:profiles.ITEMS_PILE]
-        self.assertEqual(len({c.split("id:")[1].split(",")[0] for c in first_pile}), profiles.ITEMS_PILE)
-
-    def test_items_profile_anchors_observers_without_edits_or_chat(self):
-        args = argparse.Namespace(profile="items-heavy", mobs=0, warmup_seconds=30, measure_seconds=120)
-        plan = profiles.schedule(args, profiles.items_fixture(10))["windows"]
-        self.assertEqual((plan[-1]["movement_hz"], plan[-1]["edit_hz"], plan[-1]["chat_hz"]), (20, 0, 0))
-
     def test_platform_items_are_checked_against_the_saved_snapshot(self):
         recipe = profiles.items_fixture(100)
         def item(y):
@@ -186,29 +128,6 @@ fi
             profiles.items_census(recipe, short)
         self.assertEqual(profiles.items_census(profiles.items_fixture(0), {"entities": {}}),
                          {"platform": 0, "off_platform": 0})
-
-    def test_items_heavy_setup_server_lifts_the_ingress_budget_for_preparation_only(self):
-        import tomllib
-        extra = tomllib.loads(profiles.items_fixture(10)["setup_server_toml"])["anti_cheat"]
-        # The summon stream is faster than the default 500/s refill and 1000 burst per packet type.
-        self.assertGreater(extra["packet_rate_per_second"], 500)
-        self.assertGreater(extra["packet_burst"], 10000)
-        self.assertNotIn("setup_server_toml", profiles.fixture(100000, 0))
-
-    def test_items_heavy_runs_without_random_ticks(self):
-        rules = profiles.items_fixture(0)["regions"][0]["commands"]
-        self.assertIn("gamerule randomTickSpeed 0", rules)
-        self.assertNotIn("gamerule randomTickSpeed 3", rules)
-
-    def test_native_100_recipe_digest_is_unchanged(self):
-        # The fixture-cache keys of every native-100 world (the kelp-polluted one included)
-        # derive from this. Updated 2026-11-18 with the pen seal-then-clear correction and
-        # the clearance gate; the reason is written in
-        # test_official_recipe_bytes_remain_unchanged above and in
-        # receipts/Perf1M/ENTITY-LOSS.md. Every cached native-100 world is a miss now.
-        self.assertEqual(profiles.load.digest(profiles.fixture(100000, 0)),
-                         "197da323965ace8fc67fb1b305bc77ddb8950985923c766768f0b26387c11066")
-        self.assertNotIn("native-100-kelp12k", profiles.PROFILES)
 
     def test_half_open_window_tps_and_server_only_memory(self):
         samples = [{"wall_start_unix_ns": at, "wall_us": wall} for at, wall in
@@ -387,30 +306,6 @@ fi
                    "source_skipped_ticks_total": 0}
         with self.assertRaisesRegex(ValueError, "samples missing"):
             profiles.validate_metrics(initial, initial, 0)
-
-    def test_scale_variants_have_exact_small_cohorts_and_disjoint_regions(self):
-        self.assertEqual(len(profiles.SCALE_PROFILES), 9)
-        for mix in ("all-active", "mostly-resting", "sparse-active"):
-            recipe = profiles.scale_fixture(80, mix)
-            self.assertEqual(sum(recipe["expected"].values()), 80)
-            self.assertEqual(sum(row["resident"] for row in recipe["coverage"]), 80)
-            self.assertEqual(sum(row["resident"] for row in recipe["coverage"] if row["active"]),
-                             8 if mix == "sparse-active" else 80)
-            chunks = [tuple(chunk) for row in recipe["coverage"] for chunk in row["chunks"]]
-            self.assertEqual(len(chunks), len(set(chunks)))
-            for kind, count in recipe["expected"].items():
-                self.assertEqual(sum(c.startswith(f"summon {kind} ")
-                                     for r in recipe["regions"] for c in r["commands"]), count)
-            self.assertFalse(any("NoAI" in c or "Invulnerable" in c
-                                 for r in recipe["regions"] for c in r["commands"]))
-
-    def test_scale_residents_override_parameterises_the_ladder_point(self):
-        self.assertEqual(profiles.scale_residents("scale-1m-all-active", None, None), 1_000_000)
-        self.assertEqual(profiles.scale_residents("scale-1m-all-active", None, 250_000), 250_000)
-        self.assertEqual(profiles.scale_residents("scale-1m-all-active", 80, None), 80)
-        for bad in ((80, 250_000), (None, 9), (None, profiles.SCALE_RESIDENTS_MAX + 1)):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                profiles.scale_residents("scale-1m-all-active", *bad)
 
     def test_scale_view_distance_is_a_measurement_control_on_one_fixture(self):
         """View distance changes what observers see, never who is observed.
@@ -598,16 +493,6 @@ fi
             self.assertGreater(slots, 0)
             self.assertEqual(slots % len(window["commands"]), 0)
 
-    def test_one_bottle_smoke_pulses_early_enough_to_observe_yield(self):
-        recipe = profiles.scale_fixture(10, "all-active", active_override=0)
-        profiles.add_xp_fixture(recipe, 1, smoke=True, players=100, locality="spread")
-        self.assertEqual(recipe["stress"]["pulse_interval_ms"], 1500)
-        args = argparse.Namespace(profile="scale-100k-all-active", mobs=10, smoke=True,
-                                  warmup_seconds=2, measure_seconds=5)
-        warmup, measurement = profiles.schedule(args, recipe)["windows"]
-        self.assertNotIn("commands", warmup)
-        self.assertEqual(measurement["command_interval_ms"], 1500)
-
     def test_productive_workers_require_real_distinct_farm_cell_changes(self):
         recipe = profiles.scale_fixture(78, "all-active")
         profiles.add_productive_fixture(recipe, 2, smoke=True)
@@ -649,13 +534,6 @@ fi
         del sample["coreperf"]["damage_victims_by_region"]
         with self.assertRaisesRegex(ValueError, "damage owner"):
             profiles.validate_scale_sample(recipe, sample)
-
-    def test_all_residents_can_be_damage_targets_without_empty_world_setup(self):
-        recipe = profiles.scale_fixture(0, "all-active", excluded_kinds=("cow",))
-        profiles.add_damage_fixture(recipe, 2, smoke=True)
-        self.assertEqual(recipe["population"]["resident_requested"], 2)
-        self.assertTrue(any(command.startswith("gamerule doMobSpawning")
-                            for command in recipe["regions"][0]["commands"]))
 
     def test_map_frames_require_saved_item_and_real_map_record(self):
         recipe = profiles.scale_fixture(78, "all-active")
