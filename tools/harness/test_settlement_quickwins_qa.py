@@ -105,8 +105,10 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(gate.shortage_verdict(head + "Булыжник ×2", links, small)[0])  # all listed: no «и ещё»
 
     def test_refusal(self):
-        good = "Не удалось сертифицировать Дом. Не хватает: кровати (0 из 1) — поставьте кровать; крыша."
-        self.assertTrue(gate.refusal_verdict(good)[0])
+        self.assertTrue(gate.refusal_verdict("Не хватает: кровати 0/1, крыша 0/1")[0])  # compact visible text
+        self.assertTrue(gate.refusal_verdict("Не удалось сертифицировать Дом. Не хватает: кровати 0/1 — поставьте, крыша 0/1.")[0])
+        self.assertFalse(gate.refusal_verdict("Не хватает: кровати 0/1")[0])  # roof cut off (the 79-char truncation)
+        self.assertFalse(gate.refusal_verdict("Не хватает: кровати, крыша")[0])  # no counts
         bad = "Не удалось сертифицировать Дом. Не хватает: beds 0/1, roof 0/1."
         self.assertFalse(gate.refusal_verdict(bad)[0])
         self.assertEqual(gate.refusal_verdict(bad)[1]["jargon"], ["beds", "roof"])
