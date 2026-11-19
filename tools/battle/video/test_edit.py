@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-import compose
+import edit_compose
 import edit
 import overlay
 
@@ -174,7 +174,7 @@ class PlanTests(unittest.TestCase):
         fx = Fixture(self.root, lengths=(120, 120, 120), tick_base=(0, 1000, 2000))
         plan, _, _ = fx.plan(fx.spec([fx.shot('a', 10, 70, {'type': 'fade', 'frames': 20}), fx.shot('b', 0, 50, {'type': 'cut'}),
                                       fx.shot('c', 30, 90)], texts=[{'file': 'title.txt', 'start': 0, 'end': 2}]))
-        graph = compose.filter_graph(plan, 4, 3)
+        graph = edit_compose.filter_graph(plan, 4, 3)
         self.assertIn('[0:v]trim=start_frame=10:end_frame=70,', graph)
         self.assertIn('xfade=transition=fade:duration=0.333333333:offset=0.666666667', graph)
         self.assertIn('[m1][s2]concat=n=2:v=1:a=0', graph)

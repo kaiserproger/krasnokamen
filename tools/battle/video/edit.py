@@ -12,7 +12,7 @@ import shlex
 import subprocess
 import sys
 
-import compose
+import edit_compose
 import overlay
 
 SPEC_KEYS = {'resolution', 'music', 'texts', 'shots'}
@@ -83,8 +83,8 @@ def build_plan(spec, base, probe=probe_video):
     if not isinstance(spec, dict):
         raise EditError('spec must be an object')
     reject_unknown('spec', spec, SPEC_KEYS)
-    if spec.get('resolution') not in compose.RESOLUTIONS:
-        raise EditError(f'resolution must be one of {sorted(compose.RESOLUTIONS)}')
+    if spec.get('resolution') not in edit_compose.RESOLUTIONS:
+        raise EditError(f'resolution must be one of {sorted(edit_compose.RESOLUTIONS)}')
     if not spec.get('shots'):
         raise EditError('spec needs at least one shot')
     shots, ids = [], set()
@@ -115,11 +115,11 @@ def build_plan(spec, base, probe=probe_video):
         if kind == 'cut':
             reject_unknown(f'{where} transition', transition, {'type'})
             transition = {'type': 'cut', 'frames': 0}
-        elif kind in compose.TRANSITIONS:
+        elif kind in edit_compose.TRANSITIONS:
             reject_unknown(f'{where} transition', transition, {'type', 'frames'})
             transition = {'type': kind, 'frames': int_field(f'{where} transition frames', transition.get('frames'), 1)}
         else:
-            raise EditError(f'{where}: transition type must be cut or one of {list(compose.TRANSITIONS)}')
+            raise EditError(f'{where}: transition type must be cut or one of {list(edit_compose.TRANSITIONS)}')
         shots.append({'id': sid, 'video': video, 'frames': frames_path, 'in': first, 'out': last, 'telemetry': telemetry,
                       'transition': transition, 'ticks': ticks})
     if shots[-1]['transition']['type'] != 'cut':
@@ -139,8 +139,8 @@ def build_plan(spec, base, probe=probe_video):
     for i, raw in enumerate(spec.get('texts', [])):
         reject_unknown(f'text {i}', raw, TEXT_KEYS)
         start, end = raw.get('start'), raw.get('end')
-        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end)) or not 0 <= start < end <= total / compose.FPS:
-            raise EditError(f'text {i}: need 0 <= start < end <= {total / compose.FPS}')
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (start, end)) or not 0 <= start < end <= total / edit_compose.FPS:
+            raise EditError(f'text {i}: need 0 <= start < end <= {total / edit_compose.FPS}')
         texts.append({'file': resolve(base, raw.get('file', ''), f'text {i}'), 'start': start, 'end': end})
     telemetry_cache = {}
     rows = []
@@ -202,7 +202,7 @@ def main():
     out.mkdir(parents=True, exist_ok=False)
     (out / 'edit.frames.jsonl').write_text(''.join(json.dumps(r, sort_keys=True) + '\n' for r in rows), encoding='utf-8')
     (out / 'plan.json').write_text(json.dumps(plan, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-    command = compose.build_command(plan, str(out / 'overlay' / 'overlay-%06d.png'), str(out / 'final.mp4'))
+    command = edit_compose.build_command(plan, str(out / 'overlay' / 'overlay-%06d.png'), str(out / 'final.mp4'))
     (out / 'ffmpeg-command.txt').write_text(shlex.join(command) + '\n', encoding='utf-8')
     if args.dry_run:
         return
