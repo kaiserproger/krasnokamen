@@ -115,14 +115,26 @@ fn a_deep_closed_water_bowl_under_a_dry_floor_is_admitted_and_priced_once() {
     assert_eq!(cost.lava, 0);
 }
 
-/// The liquid bound is reachable by a levelled lot of the largest catalogue
-/// footprint (13·11 columns, eight rows): that lot is a safe `LiquidBeyondBound`
-/// refusal, pinned on the struct by `the_liquid_bound_refuses`.
+/// The premise of the liquid bound's comment: no shipped blueprint footprint
+/// exceeds 121 columns, so with the eight-row fill a shipped lot stays under the
+/// 1024-cell cap. (A validator-legal 13×11 blueprint would not; it is refused as
+/// `LiquidBeyondBound`, pinned on the struct by `the_liquid_bound_refuses`.)
 #[test]
-fn a_levelled_lot_of_the_largest_footprint_can_reach_the_liquid_bound() {
-    let [width, _, depth] = blueprints::MAX_SIZE.map(usize::from);
-    let deepest = width * depth * crate::settlements::construction::SITE_BAND as usize;
-    assert!(deepest > liquid::MAX_LIQUID_CELLS, "{deepest}");
+fn no_shipped_blueprint_footprint_reaches_the_liquid_bound() {
+    let band = crate::settlements::construction::SITE_BAND as usize;
+    let registry = &fixture().0.registry;
+    for blueprint in blueprints::all(registry) {
+        for turn in 0..4 {
+            let [width, _, depth] = blueprint
+                .footprint(Rotation::from_quarter_turns(turn))
+                .map(usize::from);
+            assert!(
+                width * depth * band < liquid::MAX_LIQUID_CELLS,
+                "{} {width}x{depth}",
+                blueprint.id
+            );
+        }
+    }
 }
 
 /// `LiquidAccess` is still named when a lot's door column holds water, even

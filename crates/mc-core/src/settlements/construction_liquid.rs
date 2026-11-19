@@ -30,11 +30,12 @@ impl Liquids {
 
 /// One lot's bounded fluid work. The fill below the floor is at most
 /// `SITE_BAND` (8) rows (the support is found within that band of the floor,
-/// `surface_y_for_lot`), and the largest catalogue footprint is 13×11 columns
-/// (`blueprints::MAX_SIZE`), so a levelled lot can reach 13·11·8 = 1144 fluid
-/// cells: the 1024 cap is reachable through `check` and then a lot is refused as
-/// `LiquidBeyondBound`, a safe named refusal. (A non-authored floor cell can be
-/// liquid as well, see `scan_column`.)
+/// `surface_y_for_lot`). The shipped catalogue's largest footprint is 121 columns
+/// (11×11), so a shipped lot reaches at most 121·8 = 968 fluid cells and never
+/// this 1024 cap; a blueprint the validator accepts (`blueprints::MAX_SIZE`,
+/// 13×11) could reach 1144 and would then be refused as `LiquidBeyondBound`, a
+/// safe named refusal. A non-authored floor cell can be liquid as well (see
+/// `scan_column`), so no row is assumed dry.
 pub(crate) const MAX_LIQUID_CELLS: usize = 1024;
 
 /// A block that *contains* fluid, including a waterlogged block: the shell and
