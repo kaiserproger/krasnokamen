@@ -678,6 +678,11 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
         crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
         assert!(state.settlements.get(parent).unwrap().founding.is_some());
         checkpoint(&mut state, &config);
+        let replay_baseline = Replay {
+            tick: state.tick,
+            climate: Some(crate::weather::ClimateImage::capture(&state)),
+            ..Default::default()
+        };
         std::fs::write(
             directory.join("before.json"),
             serde_json::to_vec(&civil_image(&state)).unwrap(),
@@ -692,9 +697,10 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
         );
         let child = state.settlements.find("colony_2").unwrap().id;
         let replay = crate::journal::apply_batch_images(
-            Replay::default(),
+            replay_baseline,
             &[(output.tick, output.tick, entries.clone())],
         );
+        crate::journal::validate_replay(&replay).unwrap();
         assert_eq!(
             replay
                 .entities

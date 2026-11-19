@@ -321,7 +321,7 @@ fn dimension_state(
             Arc::new(mc_worldgen::EndGenerator::try_new(42, Arc::clone(&registry.blocks)).unwrap())
         }
     };
-    let world = if let Some(directory) = directory {
+    let world = if let Some(directory) = &directory {
         crate::world::ChunkWorld::new_native(
             42,
             crate::native_checkpoint::tests::fixture_store(&import_config(&directory)).unwrap(),
@@ -345,10 +345,22 @@ fn dimension_state(
     let mut state = TickState::new(registry, world, 0, 4096);
     state.dimension = dimension;
     state.gamerules.insert("spawn_mobs".into(), "false".into());
+    if let Some(directory) = directory {
+        crate::native_checkpoint::tests::restore_fixture_clock(
+            &mut state,
+            &import_config(&directory),
+        )
+        .unwrap();
+    }
     let want = [(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
         .into_iter()
         .collect();
     state.world.ensure_blocking(&want);
+    assert!(
+        state.world.load_errors().next().is_none(),
+        "{:?}",
+        state.world.load_errors().next()
+    );
     for x in 0..16 {
         for z in 0..16 {
             state

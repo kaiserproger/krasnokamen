@@ -14,6 +14,10 @@ fn fixture(chunks: &[ChunkPos]) -> TickState {
     world.ensure_blocking(&chunks.iter().map(|&pos| (pos, 0)).collect());
     let mut state = TickState::new(registry, world, 2, 512);
     state.tick = 10000;
+    state
+        .tick_control
+        .restore_clock(Default::default(), state.tick)
+        .unwrap();
     for (index, &chunk) in chunks.iter().enumerate() {
         state
             .tickets
@@ -30,6 +34,10 @@ fn native_fixture(directory: &std::path::Path, chunks: &[ChunkPos]) -> TickState
     world.ensure_blocking(&chunks.iter().map(|&pos| (pos, 0)).collect());
     let mut state = TickState::new(registry, world, 2, 512);
     state.tick = 10000;
+    state
+        .tick_control
+        .restore_clock(Default::default(), state.tick)
+        .unwrap();
     for (index, &chunk) in chunks.iter().enumerate() {
         state
             .tickets
