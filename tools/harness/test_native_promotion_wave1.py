@@ -192,14 +192,6 @@ class Wave1Tests(unittest.TestCase):
         wave1._revive_if_dead(alive, "normal_player_respawned")
         self.assertEqual(alive.calls, [])
 
-    def test_run_rejects_unknown_kind_and_headless(self):
-        with self.assertRaisesRegex(ValueError, "unknown wave-1"):
-            wave1.run(Steps(), (0, 0, 0), "nope")
-        headless = Steps()
-        headless.client = types.SimpleNamespace(p4_window=None)
-        with self.assertRaisesRegex(RuntimeError, "windowed Xvfb"):
-            wave1.run(headless, (0, 0, 0), "summon-age")
-
 
 if __name__ == "__main__":
     unittest.main()
