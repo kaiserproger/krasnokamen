@@ -67,7 +67,7 @@ impl Refusals {
             && let Some(oldest) = self
                 .entries
                 .iter()
-                .min_by_key(|(_, until)| *until)
+                .min_by_key(|(_, until)| **until)
                 .map(|(key, _)| *key)
         {
             self.entries.remove(&oldest);
