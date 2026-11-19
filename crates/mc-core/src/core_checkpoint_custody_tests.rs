@@ -348,13 +348,15 @@ impl World {
                 job,
                 plugins: Ok(Box::new(self.state.plugins.clone())),
             },
-            &self.config.world_dir,
-            &crate::native_checkpoint::tests::fixture_store(&self.config).unwrap(),
+            &NativeWorld {
+                world_dir: &self.config.world_dir,
+                store: &crate::native_checkpoint::tests::fixture_store(&self.config).unwrap(),
+                wal_identity: self.writer.identity(),
+            },
             &std::sync::atomic::AtomicU64::new(self.manifest.tick),
             &std::sync::atomic::AtomicBool::new(false),
             &mut self.manifest,
             &mut Default::default(),
-            self.writer.identity(),
         );
         assert!(outcome.is_continue());
         done.recv().unwrap()

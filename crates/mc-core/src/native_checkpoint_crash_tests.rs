@@ -240,13 +240,15 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
                 job,
                 plugins: Ok(Box::new(state.plugins.clone())),
             },
-            directory.path(),
-            &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
+            &NativeWorld {
+                world_dir: directory.path(),
+                store: &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
+                wal_identity: writer.identity(),
+            },
             &std::sync::atomic::AtomicU64::new(manifest.tick),
             &std::sync::atomic::AtomicBool::new(false),
             &mut manifest,
             &mut Default::default(),
-            writer.identity(),
         );
         assert!(
             outcome.is_continue(),

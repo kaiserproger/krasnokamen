@@ -949,13 +949,15 @@ pub(super) fn native_writer_loop(
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             run_native_work(
                 work,
-                world_dir,
-                &store,
+                &NativeWorld {
+                    world_dir,
+                    store: &store,
+                    wal_identity,
+                },
                 committed_tick,
                 native_failed,
                 &mut prev_manifest,
                 &mut block_log,
-                wal_identity,
             )
         }));
         if let Ok(std::ops::ControlFlow::Break(cause)) = outcome {
@@ -983,16 +985,28 @@ pub(super) fn native_writer_loop(
     );
 }
 
+/// The world the native writer works on: the directory and store it writes,
+/// and the WAL identity this writer's frames carry.
+#[derive(Clone, Copy)]
+pub(super) struct NativeWorld<'a> {
+    pub world_dir: &'a std::path::Path,
+    pub store: &'a mc_world::native::NativeStore,
+    pub wal_identity: crate::journal::WalIdentity,
+}
+
 pub(super) fn run_native_work(
     work: NativeWork,
-    world_dir: &std::path::Path,
-    store: &mc_world::native::NativeStore,
+    world: &NativeWorld<'_>,
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     prev_manifest: &mut CheckpointManifest,
     block_log: &mut crate::block_log::Backlog,
-    wal_identity: crate::journal::WalIdentity,
 ) -> std::ops::ControlFlow<&'static str> {
+    let NativeWorld {
+        world_dir,
+        store,
+        wal_identity,
+    } = *world;
     match work {
         NativeWork::Shutdown => return std::ops::ControlFlow::Break("shutdown requested"),
         NativeWork::Checkpoint { mut job, plugins } => {

@@ -281,12 +281,12 @@ impl BlockRegistry {
             hasher.update([0u8]);
             for (name, value) in &state.properties {
                 hasher.update(name.as_bytes());
-                hasher.update([b'=']);
+                hasher.update(b"=");
                 hasher.update(value.as_bytes());
-                hasher.update([b';']);
+                hasher.update(b";");
             }
             hasher.update(state.id.0.to_be_bytes());
-            hasher.update([b'\n']);
+            hasher.update(b"\n");
         }
         let digest = hasher.finalize();
         let mut out = [0u8; 8];
