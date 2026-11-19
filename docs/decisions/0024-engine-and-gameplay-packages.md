@@ -480,7 +480,9 @@ after step 1.
   for a fixed guest loop, which every later move's budget uses.
 - **Acceptance.** L2 green; the plugin regressions and the standard-pack load
   test pass with the same package set as before the cut (less the audit's
-  deletions); the A/B of §3.4 on `native-100` and `explore-20` is neutral; bench
+  deletions); the A/B of §3.4 on `native-100` and `explore-20` is measured and
+  its TPS/MSPT change reported, and the §3.4 verdict applies (a small slowdown
+  lands, a large one goes to the owner first); bench
   receipts before and after. The cut changes the admission path of
   inventory transactions, so it gets an independent review before Main
   commits it (AGENTS.md rule 5, custody).
@@ -488,7 +490,7 @@ after step 1.
   of gameplay. New D62 settlement operations land after it, as
   `krasnokamen:settlements` minors, rebuilding only their importers.
 
-## 5. Why settlements left the plugin in September, and what changed
+## 5. Why settlements left the plugin in October, and what changed
 
 ### 5.1 History
 
@@ -540,8 +542,8 @@ The v2 instantiation failure was the moment of deletion, not a reason.
 - D66 reverses reason 1 for our gameplay, with the crate first (D66.3).
 - Reasons 2, 5 and 6 do not recur by construction: this split keeps bodies,
   allocation and worker execution in engine kernels and moves only policy,
-  records and presentation. September put housing, work policy and body control
-  in the guest.
+  records and presentation. The September package put housing, work policy
+  and body control in the guest.
 - Reason 3 is half closed: the API already has an atomic inventory plus
   storage transaction (`commands.wit:395-402`), revision guards on domain
   operations (`domain-operations.wit:21-25`) and durable operation receipts
