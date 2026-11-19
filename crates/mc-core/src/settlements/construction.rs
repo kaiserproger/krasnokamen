@@ -1494,42 +1494,7 @@ pub(super) fn surface_y_for_lot(
     )
 }
 
-/// Highest standing surface of one column inside `window`.
-pub(super) fn surface_y_between(
-    state: &TickState,
-    window: std::ops::RangeInclusive<i32>,
-    x: i32,
-    z: i32,
-    lot: Option<ScriptWorldBounds>,
-    clearance: &mut super::forestry::Clearance,
-) -> Option<i32> {
-    window.rev().find(|&y| {
-        state.world.physics_block_at(x, y, z).is_some_and(|ground| {
-            !super::forestry::tree(state, ground)
-                && state
-                    .registry
-                    .collision_boxes
-                    .get(ground as usize)
-                    .is_some_and(|boxes| !boxes.is_empty())
-        }) && state
-            .world
-            .physics_block_at(x, y + 1, z)
-            .is_some_and(|above| {
-                // A lot column may be covered by water or lava: the support
-                // under it is the pond's own bottom and the fluid cells are
-                // fill targets. Roads, frontage reach and layout pass
-                // `lot: None` and keep refusing a fluid ground.
-                clearable(state, above)
-                    || clearance.clearable(state, [x, y + 1, z], lot)
-                    || (lot.is_some()
-                        && (preparation::liquid::has_fluid(state, above)
-                            || preparation::liquid::contained(state, above).is_some()))
-                    // A field crop does not hide its farmland: a needed lot
-                    // surveys the soil under the plants it reaps (D10).
-                    || crate::settlements::construction::relayout::crop(state, above)
-            })
-    })
-}
+pub(super) use preparation::liquid::surface_y_between;
 
 struct FundedSite {
     project: Project,

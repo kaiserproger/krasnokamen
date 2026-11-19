@@ -106,6 +106,43 @@ pub(crate) fn ground_y_for_lot(
     surface_y_for_lot(state, anchor_y, x, z, lot, clearance)
 }
 
+/// Highest standing surface of one column inside `window`.
+pub(crate) fn surface_y_between(
+    state: &TickState,
+    window: std::ops::RangeInclusive<i32>,
+    x: i32,
+    z: i32,
+    lot: Option<ScriptWorldBounds>,
+    clearance: &mut crate::settlements::forestry::Clearance,
+) -> Option<i32> {
+    window.rev().find(|&y| {
+        state.world.physics_block_at(x, y, z).is_some_and(|ground| {
+            !crate::settlements::forestry::tree(state, ground)
+                && state
+                    .registry
+                    .collision_boxes
+                    .get(ground as usize)
+                    .is_some_and(|boxes| !boxes.is_empty())
+        }) && state
+            .world
+            .physics_block_at(x, y + 1, z)
+            .is_some_and(|above| {
+                // A lot column may be covered by water or lava: the support
+                // under it is the pond's own bottom and the fluid cells are
+                // fill targets. Roads, frontage reach and layout pass
+                // `lot: None` and keep refusing a fluid ground.
+                crate::settlements::construction::clearable(state, above)
+                    || clearance.clearable(state, [x, y + 1, z], lot)
+                    || (lot.is_some()
+                        && (has_fluid(state, above)
+                            || contained(state, above).is_some()))
+                    // A field crop does not hide its farmland: a needed lot
+                    // surveys the soil under the plants it reaps (D10).
+                    || crate::settlements::construction::relayout::crop(state, above)
+            })
+    })
+}
+
 /// Collect the fluid cells of one fill column and apply every per-cell veto.
 /// `height` is the discovered support, `floor` the authored floor. Dry fill
 /// cells are counted here so the caller never walks the column twice.
