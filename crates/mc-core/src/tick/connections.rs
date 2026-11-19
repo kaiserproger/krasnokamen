@@ -9,25 +9,25 @@ use super::*;
 pub struct Connections {
     pub(in crate::tick) by_connection: HashMap<ConnectionId, EntityId>,
     pub(in crate::tick) by_entity: HashMap<EntityId, ConnectionId>,
-    pub(in crate::tick) names: HashMap<ConnectionId, String>,
+    names: HashMap<ConnectionId, String>,
     pub(in crate::tick) uuids: HashMap<ConnectionId, uuid::Uuid>,
     /// Transient negotiated client view radii, keyed by live connection.
     /// Recorded on [`PlayerInput::SetViewDistance`](crate::boundary::PlayerInput::SetViewDistance)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted: unnegotiated callers
     /// fall back to the configured server view.
-    pub(in crate::tick) view_distances: HashMap<ConnectionId, u8>,
+    view_distances: HashMap<ConnectionId, u8>,
     /// Transient client UI locales, keyed by live connection.
     /// Recorded on [`PlayerInput::SetLocale`](crate::boundary::PlayerInput::SetLocale)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted: unnegotiated callers read
     /// English.
-    pub(in crate::tick) locales: HashMap<ConnectionId, String>,
+    locales: HashMap<ConnectionId, String>,
     /// Transient client chat settings, keyed by live connection. Recorded on
     /// [`PlayerInput::SetChatVisibility`](crate::boundary::PlayerInput::SetChatVisibility)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted; absent means `Full`.
-    pub(in crate::tick) chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
+    chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
     /// Advances on every join, leave and dimension move. The tick's
     /// edge-visible session mirror is re-projected only when this or
     /// [`SessionLocks::generation`] moved (see `core::session_mirror`).

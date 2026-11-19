@@ -561,7 +561,7 @@ pub(in crate::tick) fn read_row(
 /// and calls `admitted` for each, in slot order. Reads the store only; the
 /// result of a slot depends on nothing but that slot, so disjoint ranges are
 /// independent.
-pub(in crate::tick) fn dense_period_marks(
+pub(super) fn dense_period_marks(
     entities: &EntityStore,
     world: &crate::world::ChunkWorld,
     activation: &HashMap<(i32, i32), u64>,
@@ -612,7 +612,7 @@ pub(in crate::tick) fn dense_period_marks(
 /// function of its own slot (the per-range chunk cache only skips repeated
 /// lookups), so any partition yields the serial marks and count; the
 /// equivalence test pins it. Removal path: pass `parallel = false`.
-pub(in crate::tick) fn mark_dense_admission(
+pub(super) fn mark_dense_admission(
     entities: &EntityStore,
     world: &crate::world::ChunkWorld,
     activation: &HashMap<(i32, i32), u64>,
@@ -651,7 +651,7 @@ pub(in crate::tick) fn mark_dense_admission(
 /// which is exactly the case where the writeback does nothing; kept slots are
 /// written serially in slot order. Removal path: write back every resting
 /// slot (identical result).
-pub(in crate::tick) fn retain_resting_writeback(state: &TickState, resting: &mut Vec<EntitySlot>) {
+pub(super) fn retain_resting_writeback(state: &TickState, resting: &mut Vec<EntitySlot>) {
     if resting.len() < PARALLEL_PREP_MIN {
         return;
     }

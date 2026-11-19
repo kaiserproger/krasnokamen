@@ -8,10 +8,8 @@ mod prepare;
 mod rest;
 mod step;
 pub(crate) use coreperf::coreperf_block_region;
-pub(super) use coreperf::{
-    coreperf_active_chunks, coreperf_damage_observation, coreperf_index,
-    coreperf_productive_changes, coreperf_region, coreperf_slot_region,
-};
+use coreperf::{coreperf_active_chunks, coreperf_index, coreperf_region, coreperf_slot_region};
+pub(super) use coreperf::{coreperf_damage_observation, coreperf_productive_changes};
 pub(super) use prepare::*;
 pub(super) use rest::*;
 pub(super) use step::*;
