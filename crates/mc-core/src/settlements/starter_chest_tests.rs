@@ -331,6 +331,9 @@ fn concurrent_settlements_in_different_dimensions_share_the_global_grant_count()
             48,
         )
         .unwrap();
+    let id = root.settlements.find("overworld").unwrap().id;
+    let site = storage_chest_site(&root, crate::command_console::EXECUTOR, AT).unwrap();
+    ensure_storage_chest(&mut root, &mut ChangeSet::default(), id, AT, Some(site));
     starter_chest::record(&mut root, PLAYER);
     native_checkpoint(&mut root, &config, 1);
     let mut child = crate::settlements::allocator::tests::test_state();

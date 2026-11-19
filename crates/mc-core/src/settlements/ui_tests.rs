@@ -1494,7 +1494,11 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     ));
     assert!(busy.body.contains("House"), "{}", busy.body);
     assert!(busy.has("project_status_details"));
-    assert!(busy.body.contains("not enough:"), "{}", busy.body);
+    let missing = super::super::construction::pending_missing(&state, id, 0);
+    assert!(!missing.is_empty());
+    for (_, count) in missing.iter().take(3) {
+        assert!(busy.body.contains(&format!("×{count}")), "{}", busy.body);
+    }
     let status = last_dialog(&click(&mut state, id, "project_status", &[]));
     assert!(
         status.body.contains("Pending #1: House L1"),
