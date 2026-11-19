@@ -416,6 +416,7 @@ pub(crate) fn journal_entries_for_tick(
     crate::abstract_sim::cancel_external_writes(state);
     let mut entries = Vec::new();
     crate::plugin::journal(state, &mut entries);
+    crate::settlements::starter_chest::journal_entries(state, &mut entries);
     // Native gameplay owners always ride an explicit Dimension envelope,
     // including Overworld. Child ticks extend the raw images and the existing
     // child wrap below supplies their envelope.

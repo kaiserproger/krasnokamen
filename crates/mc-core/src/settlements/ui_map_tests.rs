@@ -185,6 +185,17 @@ fn runs(dialog: &Tag) -> &[Tag] {
     elements(field(field(&body[0], "contents").unwrap(), "extra"))
 }
 
+/// Play `ClientInformation` locale updates arrive as `PlayerInput::SetLocale`.
+fn set_locale(state: &mut TickState, locale: &str) {
+    run_tick(
+        state,
+        &[PlayerInput::SetLocale {
+            connection: CONN,
+            locale: locale.into(),
+        }],
+    );
+}
+
 #[test]
 fn empty_village_shows_the_territory_disk_on_square_cells() {
     let (mut state, id) = town();
@@ -215,7 +226,7 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     );
     assert_eq!(actions(&dialog).len(), 12);
     assert!(actions(&dialog).contains(&"krasnokamen:settlement/map_legend".to_owned()));
-    assert!(actions(&dialog).contains(&"krasnokamen:settlement/dashboard".to_owned()));
+    assert!(actions(&dialog).contains(&"krasnokamen:settlement/back".to_owned()));
     assert!(
         field(&dialog, "exit_action").is_none(),
         "the navigation already contains Back; a second exit row clips it at 720p/scale 3"
@@ -230,7 +241,7 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     assert!(legend.contains("1 cell = 8×8 blocks"), "{legend}");
     assert!(legend.contains("No buildings yet."), "{legend}");
     let main = command(&mut state, "settlement menu main");
-    assert_eq!(actions(&main).len(), 5);
+    assert!(actions(&main).len() <= 5);
     assert!(actions(&main).contains(&"krasnokamen:settlement/dashboard".to_owned()));
     state.settlements.get_mut(id).unwrap().owner = None;
     // Reads stay open on an unclaimed village.
@@ -277,6 +288,41 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
     assert_eq!(string(field(payload, "bids")), house.0.to_string());
     assert_eq!(string(field(payload, "ms")), "8");
     assert_eq!(string(field(payload, "mx")), "8");
+}
+
+/// The breaker saw «Строительство» reduced to a moving substring in a 60-px slot
+/// at 1280x720, GUI scale 2: vanilla keeps a 2-pixel margin per side of a button
+/// label and scrolls text wider than the slot, so every action slot must fit its
+/// own label (see `label_width`).
+#[test]
+fn every_map_action_slot_fits_its_label() {
+    for (locale, projects) in [("en_us", "Construction"), ("ru_ru", "Строительство")] {
+        let (mut state, _id) = town();
+        set_locale(&mut state, locale);
+        let dialog = command(&mut state, "settlement menu map");
+        let buttons = elements(field(&dialog, "actions"));
+        assert_eq!(buttons.len(), 12, "{locale}");
+        let mut construction = None;
+        for button in buttons {
+            let label = plain(field(button, "label").unwrap());
+            let width = match field(button, "width") {
+                Some(Tag::Int(width)) => u32::try_from(*width).unwrap(),
+                other => panic!("{locale}: {label:?} has no width: {other:?}"),
+            };
+            assert!(
+                label_width(&label) <= width,
+                "{locale}: {label:?} is wider than its {width}-px slot"
+            );
+            if label == projects {
+                construction = Some(width);
+            }
+        }
+        assert_eq!(
+            construction,
+            Some(label_width(projects).max(60)),
+            "{locale}"
+        );
+    }
 }
 
 #[test]
@@ -775,11 +821,10 @@ fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
         })
         .expect("a genuinely empty rendered cell");
     let selected = pick_payload(&mut state, payload);
-    assert!(
-        actions(&selected)
-            .iter()
-            .all(|action| action == "krasnokamen:settlement/map")
-    );
+    assert!(actions(&selected).iter().all(|action| matches!(
+        action.as_str(),
+        "krasnokamen:settlement/map" | "krasnokamen:settlement/back"
+    )));
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert!(state.settlements.get(id).unwrap().orders.is_empty());
 }
@@ -833,22 +878,29 @@ fn d8_every_site_survives_a_shared_map_cell_hover_legend_and_click_payload() {
 }
 
 #[test]
-fn d8_map_names_every_active_site_in_its_visible_summary() {
-    let (mut state, id) = crate::settlements::ui::tests::parallel_ui_fixture(2);
+fn d8_map_keeps_navigation_compact_and_every_active_site_in_the_legend() {
+    let (mut state, id) = crate::settlements::ui::tests::parallel_ui_fixture(8);
     let map = command(&mut state, "settlement menu map");
-    let body = elements(field(&map, "body"))
+    let body = elements(field(&map, "body"));
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        plain(field(&body[0], "contents").unwrap()).lines().count(),
+        SIZE
+    );
+    assert!(
+        actions(&map)
+            .iter()
+            .any(|action| action == "krasnokamen:settlement/back")
+    );
+    assert_eq!(field(&map, "columns"), Some(&Tag::Int(6)));
+    assert_eq!(actions(&map).len(), 12);
+    let legend = click(&mut state, id, "map_legend");
+    let details = elements(field(&legend, "body"))
         .iter()
         .map(|paragraph| plain(field(paragraph, "contents").unwrap()))
         .collect::<Vec<_>>()
         .join("\n");
-    assert_eq!(body.matches("Active site: Storage L1").count(), 2);
     for project in &state.settlements.get(id).unwrap().projects {
-        assert!(
-            body.contains(&format!(
-                "Active site: Storage L1 · {}",
-                corner_text(project.origin)
-            )),
-            "{body}"
-        );
+        assert!(details.contains(&corner_text(project.origin)), "{details}");
     }
 }

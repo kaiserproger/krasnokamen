@@ -29,10 +29,12 @@ pub(crate) use crate::plugin_inventories::native as inventory;
 pub mod districts;
 pub mod households;
 pub mod persistence;
+pub(crate) mod starter_chest;
 pub mod startup;
 pub(crate) mod transit;
 pub(crate) mod ui;
 pub(crate) mod ui_text;
+pub use ui_text::{guide, welcome};
 pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeSet) -> u64 {
     forestry::retire_missing(state);
     let elapsed = allocator::tick(state, changes);

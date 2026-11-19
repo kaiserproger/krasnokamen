@@ -185,6 +185,7 @@ impl TickState {
             autonomy_queue: Default::default(),
             settlement_marks: HashMap::default(),
             settlement_menus: HashMap::default(),
+            settlement_navigation: HashMap::default(),
             tick_budget: Default::default(),
             tick_control: Default::default(),
             locate: Default::default(),

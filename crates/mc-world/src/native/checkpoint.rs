@@ -352,6 +352,28 @@ fn validate_globals(
     } else if settlement_rows != 0 {
         return Err(failure("settlement_sequence", "missing sequence row"));
     }
+    let mut starter_chest_rows = 0;
+    for (key, record) in globals {
+        let Some(id) = key.strip_prefix("settlement_chest/") else {
+            continue;
+        };
+        let player = id
+            .parse::<uuid::Uuid>()
+            .map_err(|error| failure(key, error))?;
+        if player.to_string() != id {
+            return Err(failure(key, "non-canonical starter chest player"));
+        }
+        validate_envelope(record)?;
+        if record.captured_tick != tick {
+            return Err(failure(key, "capture tick mismatch"));
+        }
+        let (payload, count): (uuid::Uuid, u64) =
+            serde_json::from_slice(&record.payload).map_err(|error| failure(key, error))?;
+        if payload != player || count == 0 {
+            return Err(failure(key, "invalid starter chest player or grant count"));
+        }
+        starter_chest_rows += 1;
+    }
     let mut map_rows = 0;
     let mut next_map_id = 0_i64;
     for (key, record) in globals {
@@ -432,6 +454,7 @@ fn validate_globals(
         != DOMAINS.len()
             + plugin_domains.len()
             + settlement_rows
+            + starter_chest_rows
             + sequence_rows
             + map_rows
             + map_sequence_rows

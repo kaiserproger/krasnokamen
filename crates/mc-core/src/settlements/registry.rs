@@ -90,6 +90,9 @@ pub struct Registry {
     records: BTreeMap<SettlementId, SettlementRecord>,
     touched: BTreeSet<SettlementId>,
     high_water: u64,
+    /// Global, append-only grants; swapped through dimension ticks with the
+    /// other global authorities, never removed with settlement records.
+    pub(super) starter_chests: super::starter_chest::Grants,
     /// Derived and rebuilt after hydration; never serialized or journaled.
     counts: BTreeMap<SettlementId, usize>,
     /// Derived occupancy index: last counted settlement per entity.

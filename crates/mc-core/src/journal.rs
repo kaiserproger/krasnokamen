@@ -397,6 +397,12 @@ pub enum JournalEntry {
         )]
         state: Option<Box<crate::projectiles::ProjectileState>>,
     },
+    /// Absolute global founding-chest grant count in the name-tagged JSON WAL.
+    /// Older binaries reject this variant; the old form lacks required `count`.
+    StarterChestGranted {
+        player: uuid::Uuid,
+        count: u64,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(

@@ -24,7 +24,7 @@
 
 use mc_nbt::{ListTag, Tag};
 
-use super::ui_text::Key;
+use super::ui_text::{Key, map_scale};
 use super::{
     Ctx, OWNER, blueprint_label, button, corner_text, kind_label, player_pos, present, short,
 };
@@ -206,18 +206,11 @@ pub(super) fn screen_at(
         )
         .width(60),
     );
-    buttons.push(
-        button(
-            if ctx.lang == super::Lang::Ru {
-                "Проекты"
-            } else {
-                "Projects"
-            },
-            "projects",
-            ctx.id,
-        )
-        .width(60),
-    );
+    // Vanilla draws a label with a 2-pixel margin per side and scrolls one that
+    // does not fit, so the slot follows its text: in a 60-px slot the player saw
+    // only a moving substring of «Строительство».
+    let projects = ctx.t(Key::Projects);
+    buttons.push(button(projects, "projects", ctx.id).width(label_width(projects).max(60)));
     buttons.push(view_button(
         ctx,
         if ctx.lang == super::Lang::Ru {
@@ -229,46 +222,13 @@ pub(super) fn screen_at(
         centre,
         scale,
     ));
-    buttons.push(button(ctx.t(Key::Back), "dashboard", ctx.id).width(60));
-    let mut dialog = Dialog::multi_action(title, buttons)
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id).width(60));
+    // Site names, phases and coordinates already live in cell hovers and the
+    // full legend. Repeating their list here pushes navigation below 720p.
+    let dialog = Dialog::multi_action(title, buttons)
         .columns(6)
         .text(cells_component(&grid, ctx.id));
-    for project in crate::settlements::construction::projects(record) {
-        dialog = dialog.text(format!(
-            "{}: {} L{} · {}",
-            if ctx.lang == super::Lang::Ru {
-                "Стройплощадка"
-            } else {
-                "Active site"
-            },
-            blueprint_label(ctx, &project.blueprint),
-            project.level,
-            corner_text(project.origin),
-        ));
-        let caption = match crate::plugin_structures::settlement_builds::status(
-            state,
-            ctx.id,
-            &project.structure,
-        ) {
-            Ok(status) if status.state.as_str() == "paused" || status.pause_reason.is_some() => {
-                Some(if ctx.lang == super::Lang::Ru {
-                    "Пауза — откройте стройплощадку"
-                } else {
-                    "Paused — open the construction site"
-                })
-            }
-            Err(_) => Some(if ctx.lang == super::Lang::Ru {
-                "Состояние стройки недоступно"
-            } else {
-                "Construction state unavailable"
-            }),
-            _ => None,
-        };
-        if let Some(caption) = caption {
-            dialog = dialog.text(caption);
-        }
-    }
-    present(state, connection, dialog);
+    present(state, connection, ctx, "map", dialog);
 }
 
 fn view_button(ctx: &Ctx, label: &str, action: &str, centre: [i32; 2], scale: i32) -> Button {
@@ -283,30 +243,19 @@ pub(super) fn legend(
     state: &mut TickState,
     connection: ConnectionId,
     ctx: &Ctx,
-    payload: crate::dialog::ClickPayload<'_>,
+    _payload: crate::dialog::ClickPayload<'_>,
 ) {
     let Some(record) = state.settlements.get(ctx.id) else {
         return;
     };
     let grid = grid(ctx, state, record, player_pos(state, connection));
-    let centre = [("mx", record.anchor[0]), ("mz", record.anchor[2])].map(|(key, fallback)| {
-        payload
-            .string(key)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(fallback)
-    });
-    let scale = payload
-        .string("ms")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(grid.scale);
     present(
         state,
         connection,
-        Dialog::notice(
-            ctx.t(Key::Map),
-            view_button(ctx, ctx.t(Key::Back), "map", centre, scale),
-        )
-        .text_width(legend_component(ctx, &grid), LEGEND_WIDTH),
+        ctx,
+        "map_legend",
+        Dialog::notice(ctx.t(Key::Map), button(ctx.t(Key::Back), "back", ctx.id))
+            .text_width(legend_component(ctx, &grid), LEGEND_WIDTH),
     );
 }
 
@@ -342,7 +291,7 @@ pub(super) fn pick(
     if let Some(page) = payload.string("sp").and_then(|s| s.parse::<usize>().ok()) {
         let count = streets.lines().count().max(1);
         let page = page.min(count - 1);
-        let mut buttons = vec![view_button(ctx, ctx.t(Key::Back), "map", centre, scale)];
+        let mut buttons = vec![button(ctx.t(Key::Back), "back", ctx.id)];
         for next in [page.checked_sub(1), (page + 1 < count).then_some(page + 1)]
             .into_iter()
             .flatten()
@@ -362,6 +311,8 @@ pub(super) fn pick(
         present(
             state,
             connection,
+            ctx,
+            "street",
             Dialog::multi_action(
                 format!("{} {}/{}", ctx.t(Key::Map), page + 1, count),
                 buttons,
@@ -378,19 +329,7 @@ pub(super) fn pick(
         && let Ok(raw) = ids.parse::<u64>()
         && record.buildings.contains_key(&BuildingId(raw))
     {
-        let payload = Tag::Compound(vec![
-            ("from".to_owned(), Tag::String("map".to_owned())),
-            ("mx".to_owned(), Tag::String(centre[0].to_string())),
-            ("mz".to_owned(), Tag::String(centre[1].to_string())),
-            ("ms".to_owned(), Tag::String(scale.to_string())),
-        ]);
-        super::menus::building_from(
-            state,
-            connection,
-            ctx,
-            BuildingId(raw),
-            crate::dialog::ClickPayload(Some(&payload)),
-        );
+        super::menus::building_from(state, connection, ctx, BuildingId(raw));
         return;
     }
     if streets.is_empty()
@@ -493,7 +432,7 @@ pub(super) fn pick(
                 .with("sp", Tag::String("0".to_owned())),
         );
     }
-    buttons.push(view_button(ctx, ctx.t(Key::Back), "map", centre, scale));
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
     let text = payload
         .string("cell")
         .unwrap_or("")
@@ -503,13 +442,15 @@ pub(super) fn pick(
     present(
         state,
         connection,
+        ctx,
+        "map_pick",
         Dialog::multi_action(
             format!("{} {}/{}", ctx.t(Key::Map), page + 1, pages),
             buttons,
         )
         .columns(1)
         .text(text)
-        .exit(view_button(ctx, ctx.t(Key::Back), "map", centre, scale)),
+        .exit(button(ctx.t(Key::Back), "back", ctx.id)),
     );
 }
 
@@ -871,6 +812,17 @@ fn estimated_width(text: &str) -> usize {
         .sum()
 }
 
+/// Width a dialog button label needs in the default font. Vanilla keeps a
+/// 2-pixel margin on each side and scrolls text wider than the slot, and the
+/// default font advances at most 6 px per glyph — measured on the Java 26.3
+/// client at GUI scale 2: «Здания» 36 px for 6 glyphs, «Обновить» 47 px for 8 —
+/// so `glyphs * 6 + 4` is that label's width.
+fn label_width(label: &str) -> u32 {
+    u32::try_from(label.chars().count() * 6 + 4)
+        .unwrap_or(1024)
+        .min(1024)
+}
+
 /// Coloured swatches with labels packed into lines under [`LEGEND_LINE`] (an entry
 /// never splits across lines, so no swatch is left without its label), then the
 /// scale line (and the empty note).
@@ -892,7 +844,7 @@ fn legend_component(ctx: &Ctx, grid: &Grid) -> Tag {
         parts.push(Tag::Compound(colored(GLYPH, *color)));
         parts.push(literal(format!(" {label}")));
     }
-    let mut note = ctx.f(Key::MapScale, &[("scale", &grid.scale.to_string())]);
+    let mut note = map_scale(ctx.lang, grid.scale);
     if grid.buildings == 0 {
         note.push('\n');
         note.push_str(ctx.t(Key::MapEmpty));

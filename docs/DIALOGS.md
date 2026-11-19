@@ -70,6 +70,7 @@ Registered owners: `dialog_probe` (test hook) and `settlement` (`settlements::ui
 `/settlement menu [page]`; every click re-resolves the settlement from the `s` payload entry and
 re-checks owner/operator before mutating). Keep forms compact: a vanilla dialog scrolls, but a small
 window at GUI scale 3 shows only ~240 GUI pixels, so put the buttons inside that height.
+Certification retry forms show every missing requirement's localized name and found/required count at width 408, without long repair instructions; the full explanation remains on the summary hover and Certify tooltip. Settlement maps keep only the 13-row grid above navigation; all active-site details remain in cell hovers, the legend and project cards. A `multi_action` slot follows its own label (`settlements::ui::map::label_width`): vanilla keeps a 2-pixel margin per side and scrolls text wider than the slot, so a fixed slot clipped «Строительство» at GUI scale 2.
 
 Civil settlement navigation combines these compact dialogs with native icon container menus
 (`settlements/ui_menus.rs`), not a client mod or a second management authority. The hub opens

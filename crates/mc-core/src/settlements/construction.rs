@@ -19,7 +19,7 @@ pub(crate) use availability::gatherer_for_item;
 mod access;
 pub(crate) use access::projects_of;
 pub(crate) use access::{
-    bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
+    bind_builder, bound_builder, head_order, idle, orders, pending_missing, project_for_structure,
     project_of_builder, projects, record_heap_bytes, unbound_project, upgrading,
 };
 
