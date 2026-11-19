@@ -1119,6 +1119,7 @@ fn recover_with_clock(
             }
         }
     }
+    #[cfg(test)]
     dimensions
         .get_mut(&Dimension::Overworld)
         .expect("overworld replay")
