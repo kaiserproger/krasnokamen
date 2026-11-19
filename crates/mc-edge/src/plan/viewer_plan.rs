@@ -718,8 +718,9 @@ pub(super) fn own_entity<'a>(
     snapshot.entities.get(viewer.entity_id)
 }
 
-/// A side neighbour of `pos` resident at `base` and now with another revision;
-/// without a base every side counts as moved.
+/// A side neighbour of `pos` that loaded, unloaded or changed revision since
+/// `base`: anti-xray counts an unloaded side as open, so presence changes the
+/// ore mask too. Without a base every side counts as moved.
 fn side_moved(
     base: Option<&[SnapshotChunk]>,
     chunks: &[SnapshotChunk],
@@ -731,9 +732,8 @@ fn side_moved(
     [(x - 1, z), (x + 1, z), (x, z - 1), (x, z + 1)]
         .into_iter()
         .any(|side| {
-            find_chunk(base, side)
-                .zip(find_chunk(chunks, side))
-                .is_some_and(|(was, now)| was.revision != now.revision)
+            find_chunk(base, side).map(|was| was.revision)
+                != find_chunk(chunks, side).map(|now| now.revision)
         })
 }
 

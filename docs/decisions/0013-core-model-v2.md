@@ -194,9 +194,10 @@ join deadline and the 10 s outbox stall watch. Limits of this policy:
   and planned again from a newer snapshot.
 - Repair after a skip compares revisions. A held chunk whose own revision
   moved is sent again. Under anti-xray, so is a held chunk whose side
-  neighbour's revision moved since the last publish before the skip: a block
-  change beside a chunk border can reveal an ore without moving the ore
-  chunk's own revision, and that reveal lived only in the skipped changes.
+  neighbour loaded, unloaded or changed revision since the last publish before
+  the skip: a block change beside a chunk border can reveal an ore without
+  moving the ore chunk's own revision, an unloaded side counts as open, and
+  that change of the ore mask lived only in the skipped publications.
 - Entities that appear and vanish within skipped outputs are never shown.
 - One-shot effects carried only by a skipped output, such as visual-only
   explosions, are lost, and recorder connections get no `krasnokamen:tick`

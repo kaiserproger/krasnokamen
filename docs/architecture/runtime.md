@@ -88,8 +88,9 @@ drain past the published output. A full reliable queue still closes the
 connection; a refused world frame closes nothing and marks that viewer's held
 geometry and planned entities for repair. After a skip, a held chunk is sent
 again when its own revision moved and, under anti-xray, when a side
-neighbour's revision moved since the last publish before the skip (an ore
-revealed across the chunk border). Entities that
+neighbour loaded, unloaded or changed revision since the last publish before
+the skip (an unloaded side counts as open, so each changes the ore mask across
+the chunk border). Entities that
 appear and vanish within a skip are not shown. One-shot effects and recorder
 tick markers of skipped outputs are lost. A skipped knockback impulse closes its
 recipient as above. A pump that stops for good still halts the core through
