@@ -1,0 +1,66 @@
+{
+  "decision": "D60.2",
+  "base": "b802cca8cf13021ac56099aff251dd083c6837e9",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_unloaded_eye.py",
+  "source_sha256_before": "7210c679d1b37d6e1f8b77ffbdd7bcafe9605f0e5620abc4caabf12cf3d69a97",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 1,
+    "removed_R4": 0,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 1,
+    "retained_K2": 0,
+    "retained_U": 0,
+    "historical_medium_candidates_finalized": 1,
+    "source_lines_before": 46,
+    "source_lines_remaining": 46,
+    "physical_source_lines_removed": 0
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole 46-line module, sole nested call_tool callback, ProbeSteps helper module and full 510657a25 unloaded-eye backend/test hunks read.",
+    "retained_assertions": "Retained bodies and shared fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 1,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 283,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "provenance": [
+      "Full NATIVE-UNLOADED-EYE-SESSION-END row read: actual 12e076e9 session failure after far teleport and causal old/new client scene receipts; row remains open and supplied snapshots are not exact-only fix reversal."
+    ]
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_unloaded_eye.py::UnloadedEyeTests::test_post_teleport_disconnect_names_own_assertion_and_releases_stream",
+      "name": "test_post_teleport_disconnect_names_own_assertion_and_releases_stream",
+      "file": "tools/harness/test_unloaded_eye.py",
+      "original_fn_line": 14,
+      "original_end_line": 42,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Preserves initial Play while attributing post-teleport disconnect to unloaded_eye_session_survives and releasing held traffic for observed NATIVE-UNLOADED-EYE-SESSION-END; mock is not current graphical acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_unloaded_eye"
+}
