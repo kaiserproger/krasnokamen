@@ -127,8 +127,9 @@ pub struct ViewerState {
     pub skipped: bool,
     /// Resident chunks of this viewer's dimension at the last publish before
     /// the first skip since the last plan; `None` when unknown. Under
-    /// anti-xray a held chunk whose side neighbour moved since is sent again:
-    /// a reveal across the chunk border lived only in the skipped changes.
+    /// anti-xray a held chunk whose side neighbour loaded, unloaded or changed
+    /// revision since is sent again: that change of the ore mask across the
+    /// chunk border lived only in the skipped publications.
     pub(super) skip_base: Option<Arc<Vec<SnapshotChunk>>>,
     /// Free outbound world-queue frame slots, refreshed by the pump before
     /// each publish: the plan emits at most this many best-effort frames.

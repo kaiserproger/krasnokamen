@@ -377,6 +377,88 @@ fn neighbour_change_invalidates_the_cached_border_chunk() {
     assert_eq!(exposed, leaked, "exposed ore is sent as the real block");
 }
 
+/// A border ore at (15, 10, 7) of chunk (0, 0), its frame with every
+/// neighbour open (the real ore) and with a solid east neighbour (hidden).
+struct BorderOre {
+    ore: Arc<Chunk>,
+    east_solid: Chunk,
+    revealed: bytes::Bytes,
+    hidden: bytes::Bytes,
+}
+
+fn border_ore(f: &Fixture) -> BorderOre {
+    let mut ore = f.chunk(0, "stone");
+    ore.set_block(15, 10, 7, f.id("diamond_ore"));
+    let east_solid = f.chunk(1, "stone");
+    let revealed = chunk_body(
+        &tick(1, resident(vec![(1, ore.clone())]), Vec::new()),
+        &mut ChunkPacketCache::new(),
+        f,
+    );
+    let hidden = chunk_body(
+        &tick(
+            1,
+            resident(vec![(1, ore.clone()), (1, east_solid.clone())]),
+            Vec::new(),
+        ),
+        &mut ChunkPacketCache::with_anti_xray(Some(Arc::new(f.policy(true, true)))),
+        f,
+    );
+    assert_ne!(revealed, hidden);
+    BorderOre {
+        ore: Arc::new(ore),
+        east_solid,
+        revealed,
+        hidden,
+    }
+}
+
+/// Chunk frames a viewer at view distance 1 gets from a publish whose east
+/// neighbour is `before`, then from the publish after a skipped one, whose
+/// east neighbour is `after` (`None`: not resident). The ore chunk keeps
+/// revision 1 and its light throughout, and neither publish carries a block
+/// change: whatever the skipped publish changed lived only in it.
+fn frames_across_skip(
+    f: &Fixture,
+    border: &BorderOre,
+    before: Option<(u64, &Chunk)>,
+    after: Option<(u64, &Chunk)>,
+) -> (Vec<bytes::Bytes>, Vec<bytes::Bytes>) {
+    let chunks = |east: Option<(u64, &Chunk)>| {
+        let mut chunks = vec![SnapshotChunk {
+            pos: ChunkPos { x: 0, z: 0 },
+            revision: 1,
+            chunk: Arc::clone(&border.ore),
+        }];
+        chunks.extend(east.map(|(revision, east)| SnapshotChunk {
+            pos: ChunkPos { x: 1, z: 0 },
+            revision,
+            chunk: Arc::new(east.clone()),
+        }));
+        chunks
+    };
+    let mut cache = ChunkPacketCache::with_anti_xray(Some(Arc::new(f.policy(true, true))));
+    let registries = f.registries();
+    let mut v = viewer(1);
+    let publish = |number, chunks, v: &mut ViewerState, cache: &mut ChunkPacketCache| {
+        frames(
+            publish_with_registries(
+                &tick(number, chunks, Vec::new()),
+                [v].into_iter(),
+                1,
+                &registries,
+                cache,
+            ),
+            LevelChunkWithLight::ID,
+        )
+    };
+    let first = publish(1, chunks(before), &mut v, &mut cache);
+    // Publish 2 changed the east neighbour; the pump skipped it.
+    v.skip_publication(&cache);
+    let after = publish(3, chunks(after), &mut v, &mut cache);
+    (first, after)
+}
+
 /// The publish that mined the block beside a border ore is skipped by the
 /// pump. No light changes and the ore chunk keeps its own revision: the
 /// reveal lived only in the skipped block changes. The next processed publish
@@ -384,62 +466,55 @@ fn neighbour_change_invalidates_the_cached_border_chunk() {
 #[test]
 fn a_border_reveal_inside_a_skipped_publish_reaches_the_client() {
     let f = fixture();
-    let (diamond, air) = (f.id("diamond_ore"), f.id("air"));
-    let mut ore = f.chunk(0, "stone");
-    ore.set_block(15, 10, 7, diamond);
-    let ore = Arc::new(ore);
-    let east_solid = f.chunk(1, "stone");
+    let border = border_ore(&f);
     let mut east_open = f.chunk(1, "stone");
-    east_open.set_block(0, 10, 7, air);
-    let chunks = |east_revision, east: &Chunk| {
-        vec![
-            SnapshotChunk {
-                pos: ChunkPos { x: 0, z: 0 },
-                revision: 1,
-                chunk: Arc::clone(&ore),
-            },
-            SnapshotChunk {
-                pos: ChunkPos { x: 1, z: 0 },
-                revision: east_revision,
-                chunk: Arc::new(east.clone()),
-            },
-        ]
-    };
-    let revealed = chunk_body(
-        &tick(1, resident(vec![(1, (*ore).clone())]), Vec::new()),
-        &mut ChunkPacketCache::new(),
+    east_open.set_block(0, 10, 7, f.id("air"));
+    let (first, after_skip) = frames_across_skip(
         &f,
-    );
-    let mut cache = ChunkPacketCache::with_anti_xray(Some(Arc::new(f.policy(true, true))));
-    let registries = f.registries();
-    let mut v = viewer(1);
-    let first = frames(
-        publish_with_registries(
-            &tick(1, chunks(1, &east_solid), Vec::new()),
-            [&mut v].into_iter(),
-            1,
-            &registries,
-            &mut cache,
-        ),
-        LevelChunkWithLight::ID,
+        &border,
+        Some((1, &border.east_solid)),
+        Some((2, &east_open)),
     );
     assert_eq!(first.len(), 2, "the viewer holds both chunks");
-    assert!(!first.contains(&revealed), "the enclosed ore is hidden");
-    // Tick 2 mined (16, 10, 7) and revealed the ore; the pump skipped it.
-    v.skip_publication(&cache);
-    let after_skip = frames(
-        publish_with_registries(
-            &tick(3, chunks(2, &east_open), Vec::new()),
-            [&mut v].into_iter(),
-            1,
-            &registries,
-            &mut cache,
-        ),
-        LevelChunkWithLight::ID,
+    assert!(first.contains(&border.hidden), "the enclosed ore is hidden");
+    assert!(
+        after_skip.contains(&border.revealed),
+        "the ore chunk is sent again with the real ore ({} chunk frames)",
+        after_skip.len()
+    );
+}
+
+/// An unloaded side chunk counts as open, so an east neighbour unloaded in a
+/// skipped publish exposes the border ore: the ore chunk is sent again with
+/// the real ore.
+#[test]
+fn a_neighbour_unloaded_inside_a_skipped_publish_reveals_the_border_ore() {
+    let f = fixture();
+    let border = border_ore(&f);
+    let (first, after_skip) = frames_across_skip(&f, &border, Some((1, &border.east_solid)), None);
+    assert!(first.contains(&border.hidden), "the enclosed ore is hidden");
+    assert!(
+        after_skip.contains(&border.revealed),
+        "the ore chunk is sent again with the real ore ({} chunk frames)",
+        after_skip.len()
+    );
+}
+
+/// A solid east neighbour loaded in a skipped publish encloses the border ore
+/// the client got as the real block (the side was open): the ore chunk is
+/// sent again with the stand-in.
+#[test]
+fn a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore() {
+    let f = fixture();
+    let border = border_ore(&f);
+    let (first, after_skip) = frames_across_skip(&f, &border, None, Some((1, &border.east_solid)));
+    assert!(
+        first.contains(&border.revealed),
+        "an open side shows the ore"
     );
     assert!(
-        after_skip.contains(&revealed),
-        "the ore chunk is sent again with the real ore ({} chunk frames)",
+        after_skip.contains(&border.hidden),
+        "the ore chunk is sent again with the stand-in ({} chunk frames)",
         after_skip.len()
     );
 }
