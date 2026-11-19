@@ -56,7 +56,8 @@ this deliberate exception preserves knockback using `ClientboundExplode`,
 including that packet's particle and sound fields, without another motion path.
 Every published
 snapshot carries cumulative per-player knockback-tick counts and the last such
-tick: after broadcast `Lagged`, the next retained output identifies exactly
+tick: after broadcast `Lagged` or a queue-budget skip (below), the next
+retained output identifies exactly
 which recipients lost impulses, even if that retained tick also knocks them.
 Queue registration seals the latest native count, not the first output the
 pump happens to process. Older outputs cannot lower that baseline or replay
@@ -77,6 +78,24 @@ drained reliable outbox; the existing pump routes that outbox first. Dropping it
 is deliberate delivery policy, not vanilla motion-reset parity (26.3 retains
 motion with respawn keep-data bit 2); skipped-publication detection remains
 fail-closed.
+The pump skips every output that waited in its queue past `PUBLISH_QUEUE_BUDGET`
+(1.6 s, measured from the output's monotonic `TickTimes::published_at`) while a
+newer one is queued, exactly as after `Lagged`. The reliable outbox drains only
+through the published tick, so this bounds how long a slow pump holds reliable
+changes (a `Joined` too) behind stale outputs. It bounds the queue wait, not
+delivery. Reliable changes stay FIFO per connection, arrive once, and never
+drain past the published output. A full reliable queue still closes the
+connection; a refused world frame closes nothing and marks that viewer's held
+geometry and planned entities for repair. After a skip, a held chunk is sent
+again when its own revision moved and, under anti-xray, when a side
+neighbour loaded, unloaded or changed revision since the last publish before
+the skip (an unloaded side counts as open, so each changes the ore mask across
+the chunk border). Entities that
+appear and vanish within a skip are not shown. One-shot effects and recorder
+tick markers of skipped outputs are lost. A skipped knockback impulse closes its
+recipient as above. A pump that stops for good still halts the core through
+the outbox stall watch. Policy and limits:
+[ADR 0013](../decisions/0013-core-model-v2.md#threads-and-backpressure).
 
 ### Tick cost accounting
 

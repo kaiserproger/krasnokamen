@@ -72,15 +72,29 @@ pub(super) fn entity_movement_due(
     previous_tick: Option<u64>,
 ) -> bool {
     mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(entity.type_id).is_some_and(
-        |contract| {
-            let interval = u64::from(contract.update_interval);
-            let phase =
-                i64::from(entity.id.0).rem_euclid(i64::from(contract.update_interval)) as u64;
-            let position = (tick % interval + phase) % interval;
-            let elapsed = previous_tick.map_or(0, |previous| tick.saturating_sub(previous));
-            position == 0 || position < elapsed
-        },
+        |contract| movement_due_at(contract.update_interval, entity.id.0, tick, previous_tick),
     )
+}
+
+/// Whether one entity is due for a movement update at `tick`.
+///
+/// `update_interval` is vanilla `EntityType.updateInterval()`: the movement
+/// cadence in ticks, which `ServerEntity` applies as a modulus over its tick
+/// counter. A modulo needs no guard while every row declares a positive
+/// interval, but a `0` row would divide by zero inside the publish fanout; the
+/// sibling `entity_interest::completed` reads the same column with `.max(1)`,
+/// so `0` means "every tick" here too instead of a latent panic.
+pub(super) fn movement_due_at(
+    interval: u32,
+    entity: i32,
+    tick: u64,
+    previous_tick: Option<u64>,
+) -> bool {
+    let interval = u64::from(interval).max(1);
+    let phase = i64::from(entity).rem_euclid(interval as i64) as u64;
+    let position = (tick % interval + phase) % interval;
+    let elapsed = previous_tick.map_or(0, |previous| tick.saturating_sub(previous));
+    position == 0 || position < elapsed
 }
 
 /// Whether the viewer's record of `id` was invalidated by lost frames.

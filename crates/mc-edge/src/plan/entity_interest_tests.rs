@@ -874,3 +874,33 @@ fn armed_row_that_stops_before_its_deadline_delivers_its_last_position() {
         assert!(!mover.tick(false, 32).0);
     }
 }
+
+/// `movement_due_at` reads the vanilla per-type `update_interval` as a modulus.
+/// Every shipped row declares a positive interval, but a degenerate `0` row must
+/// read as "every tick" like its sibling `entity_interest::completed`'s `.max(1)`,
+/// not divide by zero inside the publish fanout.
+#[test]
+fn movement_due_with_a_zero_update_interval_is_due_every_tick() {
+    use super::super::entities::movement_due_at;
+
+    for tick in 0..8 {
+        assert!(
+            movement_due_at(0, 10, tick, None),
+            "interval 0 must mean every tick at tick {tick}"
+        );
+        assert!(
+            movement_due_at(0, 10, tick, Some(tick.saturating_sub(1))),
+            "interval 0 must mean every tick at tick {tick} after a previous visit"
+        );
+    }
+    // The guard must not change a plain row: a 3-tick row (entity 10, phase 1)
+    // is due on its own phase only, once per interval.
+    let due: Vec<u64> = (0..6)
+        .filter(|tick| movement_due_at(3, 10, *tick, None))
+        .collect();
+    assert_eq!(due, [2, 5]);
+    assert!(
+        movement_due_at(1, 10, 5, None),
+        "interval 1 is due every tick"
+    );
+}

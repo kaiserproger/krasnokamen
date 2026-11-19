@@ -324,6 +324,129 @@ async fn broadcast_lag_closes_only_recipients_of_skipped_knockback() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+/// The pump also skips an output that waited past its queue budget while a
+/// newer one is queued, before the broadcast overflows. Accepted policy, the
+/// same as after `Lagged`: a recipient whose impulse was in the skipped output
+/// is closed even though the next output knocks it again; recipients whose
+/// impulses all arrive stay open; every viewer reconciles from the next
+/// snapshot.
+#[tokio::test]
+async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
+    let (lost, _lost_rx) = register(&server, "Lost", false);
+    let (current, _current_rx) = register(&server, "Current", false);
+    let (delivered, _delivered_rx) = register(&server, "Delivered", false);
+    let mut closers = Vec::new();
+    for id in [lost, current, delivered] {
+        let (close, closed) = tokio::sync::oneshot::channel();
+        server.connections.inner.lock().closers.insert(id, close);
+        closers.push(closed);
+    }
+    let (mut connections, _) = server.connections.routing_view();
+    let mut viewers: HashMap<ConnectionId, crate::plan::ViewerState> = [lost, current, delivered]
+        .into_iter()
+        .map(|id| {
+            (
+                id,
+                crate::plan::ViewerState::new(id, EntityId(id.0 as i32), [8.0, 64.0, 8.0]),
+            )
+        })
+        .collect();
+    let mut seen = std::collections::BTreeMap::new();
+    let output = |tick,
+                  epochs: std::collections::BTreeMap<ConnectionId, (u64, u64)>,
+                  published_at: std::time::Instant| {
+        let knockback = epochs
+            .iter()
+            .filter(|(_, (_, last_tick))| *last_tick == tick)
+            .map(|(id, _)| (EntityId(id.0 as i32), [0.1, 0.2, 0.3]))
+            .collect();
+        TickOutput {
+            tick,
+            snapshot: Arc::new(WorldSnapshot {
+                tick,
+                player_knockback_ticks: Arc::new(epochs),
+                ..Default::default()
+            }),
+            changes: Arc::new(ChangeSet {
+                explosions: vec![ExplosionEvent {
+                    center: [8.0, 64.0, 8.0],
+                    radius: 4.0,
+                    blocks: 1,
+                    knockback,
+                }],
+                ..Default::default()
+            }),
+            times: mc_core::boundary::TickTimes {
+                published_at: Some(published_at),
+                ..Default::default()
+            },
+        }
+    };
+    // A wide window: nothing overflows, only the queue budget can skip.
+    let (tx, mut rx) = broadcast::channel(8);
+    let cache = crate::plan::ChunkPacketCache::new();
+    let now = std::time::Instant::now();
+    tx.send(output(1, [(delivered, (1, 1))].into(), now))
+        .unwrap();
+    let first = next_publication(&server, &mut rx, &mut viewers, &cache)
+        .await
+        .unwrap();
+    assert_eq!(first.tick, 1);
+    close_skipped_knockback(&server, &first, &mut seen, &mut viewers, &mut connections);
+    let skipped_before = server.dashboard.snapshot().pump_skipped_ticks;
+    let waited = now
+        .checked_sub(PUBLISH_QUEUE_BUDGET + std::time::Duration::from_millis(1))
+        .unwrap();
+    tx.send(output(
+        2,
+        [(delivered, (1, 1)), (lost, (1, 2))].into(),
+        waited,
+    ))
+    .unwrap();
+    tx.send(output(
+        3,
+        [(delivered, (1, 1)), (lost, (2, 3)), (current, (1, 3))].into(),
+        std::time::Instant::now(),
+    ))
+    .unwrap();
+    let retained = next_publication(&server, &mut rx, &mut viewers, &cache)
+        .await
+        .unwrap();
+    assert_eq!(retained.tick, 3, "the stale output is skipped");
+    assert_eq!(
+        server.dashboard.snapshot().pump_skipped_ticks,
+        skipped_before + 1
+    );
+    assert!(
+        viewers.values().all(|viewer| viewer.skipped),
+        "every viewer reconciles from the next snapshot"
+    );
+    close_skipped_knockback(
+        &server,
+        &retained,
+        &mut seen,
+        &mut viewers,
+        &mut connections,
+    );
+    assert_eq!(
+        closers[0].try_recv().unwrap(),
+        "skipped-explosion-knockback"
+    );
+    assert!(server.connections.get(lost).is_none());
+    for (index, id) in [(1, current), (2, delivered)] {
+        assert!(server.connections.get(id).is_some());
+        assert!(matches!(
+            closers[index].try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        server.connections.remove(id);
+    }
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 #[tokio::test]
 async fn same_tick_dimension_switch_discards_only_old_world_knockback() {
     dimension_switch_knockback(false).await;

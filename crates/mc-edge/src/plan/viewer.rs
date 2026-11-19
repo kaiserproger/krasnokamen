@@ -123,8 +123,14 @@ pub struct ViewerState {
     pub(super) radius_sent: Option<i32>,
     /// The pump skipped outputs since the last plan: their block changes
     /// never reached this viewer, so every chunk whose revision moved on is
-    /// sent again.
+    /// sent again ([`Self::skip_publication`]).
     pub skipped: bool,
+    /// Resident chunks of this viewer's dimension at the last publish before
+    /// the first skip since the last plan; `None` when unknown. Under
+    /// anti-xray a held chunk whose side neighbour loaded, unloaded or changed
+    /// revision since is sent again: that change of the ore mask across the
+    /// chunk border lived only in the skipped publications.
+    pub(super) skip_base: Option<Arc<Vec<SnapshotChunk>>>,
     /// Free outbound world-queue frame slots, refreshed by the pump before
     /// each publish: the plan emits at most this many best-effort frames.
     pub world_credit: usize,
@@ -201,6 +207,7 @@ impl ViewerState {
             center_sent: None,
             radius_sent: None,
             skipped: false,
+            skip_base: None,
             world_credit: usize::MAX,
             world_bytes: usize::MAX,
             recorder: false,
@@ -227,6 +234,15 @@ impl ViewerState {
     pub(crate) fn chunk_unsent(&mut self, pos: (i32, i32)) {
         self.loaded_chunks.remove(&pos);
         self.chunk_sync = None;
+    }
+
+    /// The pump skipped an output: the next plan repairs against the
+    /// resident chunks of the last publish of this viewer's dimension.
+    pub(crate) fn skip_publication(&mut self, chunk_cache: &ChunkPacketCache) {
+        if !self.skipped {
+            self.skip_base = chunk_cache.deltas.previous(self.dimension).cloned();
+        }
+        self.skipped = true;
     }
 
     /// Reconcile the complete held geometry after a planned world frame was not queued.

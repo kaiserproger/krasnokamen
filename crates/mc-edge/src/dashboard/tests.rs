@@ -113,6 +113,7 @@ fn load_samples_preserve_source_times_and_gaps_without_changing_stats() {
         owner_post_us: 26,
         coreperf: None,
         battle: None,
+        published_at: None,
     };
     state.record_load_tick(41, times.clone());
     state.record_load_skipped(2);

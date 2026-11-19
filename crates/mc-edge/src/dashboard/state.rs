@@ -154,6 +154,17 @@ impl DashboardState {
         self.load_changed.notify_waiters();
     }
 
+    /// Newest core tick on the timing lane, which never waits for the world
+    /// pump; `None` before the first sample.
+    pub(crate) fn latest_core_tick(&self) -> Option<u64> {
+        self.load_metrics
+            .lock()
+            .ok()?
+            .samples
+            .back()
+            .map(|sample| sample.tick)
+    }
+
     /// One core tick from the timing lane: the host sample (when `host`
     /// takes one) is stored before the tick becomes visible, so a reader
     /// woken by the tick never serves it without its sample.

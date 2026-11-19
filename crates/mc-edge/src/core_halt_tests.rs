@@ -21,8 +21,8 @@ fn server(root: &std::path::Path) -> EdgeServer {
     EdgeServer::new(core, data, tags, cfg).unwrap()
 }
 
-/// Releases a parked pump and disarms the gate even when an assertion fails
-/// first: a gate left armed would park a later test's pump forever.
+/// Releases a parked pump even when an assertion fails first; the gate itself
+/// belongs to this test's server.
 struct PumpGateGuard(Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>);
 
 impl Drop for PumpGateGuard {
@@ -32,7 +32,6 @@ impl Drop for PumpGateGuard {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
         wake.notify_all();
-        crate::server::disarm_pump_gate();
     }
 }
 

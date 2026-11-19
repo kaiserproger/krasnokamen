@@ -101,6 +101,7 @@ fn server_at(dir: &std::path::Path) -> EdgeServer {
         dh: None,
         computer_processes: Arc::new(tokio::sync::Semaphore::new(4)),
         operator_updates: tokio::sync::Mutex::new(()),
+        pump_gate: Default::default(),
         screens: Default::default(),
         voice: Default::default(),
     }

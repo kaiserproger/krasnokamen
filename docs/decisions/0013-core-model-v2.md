@@ -148,7 +148,8 @@ so registration is ordered wholly before or after a publication without
 copying the map or introducing another count writer. The pump starts from that
 sealed count, never lowers it while draining older outputs, and does not replay
 pre-registration impulse publications into a newly registered world view.
-Comparing retained outputs detects lost impulses across broadcast `Lagged`,
+Comparing retained outputs detects lost impulses across broadcast `Lagged` and
+queue-budget skips (below),
 including a skipped impulse followed by another in the retained tick. Only
 affected connections close (`skipped-explosion-knockback`); this observation
 does not alter gameplay authority or persistence.
@@ -171,6 +172,41 @@ World snapshot deltas may reconcile to a newer snapshot; fanout plans within
 each world queue's free frame slots and bytes, so a slow viewer's backlog is
 bounded in bytes and its nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
+
+The edge pump also skips, as after a broadcast `Lagged`, every output that
+waited in its queue past `PUBLISH_QUEUE_BUDGET` (1.6 s, the 32-output window at
+20 TPS) while a newer output is queued (`crates/mc-edge/src/server/pump.rs`).
+The age runs from the monotonic instant the tick owner published the output
+(`TickTimes::published_at`), so a long tick still publishes a fresh output, and
+the newest output is never skipped. The reliable outbox drains only through
+the published tick; without the skip a pump slower than the tick sat at the
+oldest retained output and held every reliable change, a `Joined` included,
+for a whole window of tick periods: below about 3 TPS that is past the 10 s
+join deadline and the 10 s outbox stall watch. Limits of this policy:
+
+- The budget bounds the queue wait, not delivery. A long publish, a long tick
+  or a slow socket still delays reliable changes.
+- Reliable changes stay FIFO per connection, arrive once, and never drain past
+  the output being published.
+- A full reliable queue still closes the connection (`reliable-queue-full`). A
+  world frame the world queue refuses closes nothing: that viewer's held
+  geometry and planned entities are marked for repair (`world_frame_unsent`)
+  and planned again from a newer snapshot.
+- Repair after a skip compares revisions. A held chunk whose own revision
+  moved is sent again. Under anti-xray, so is a held chunk whose side
+  neighbour loaded, unloaded or changed revision since the last publish before
+  the skip: a block change beside a chunk border can reveal an ore without
+  moving the ore chunk's own revision, an unloaded side counts as open, and
+  that change of the ore mask lived only in the skipped publications.
+- Entities that appear and vanish within skipped outputs are never shown.
+- One-shot effects carried only by a skipped output, such as visual-only
+  explosions, are lost, and recorder connections get no `krasnokamen:tick`
+  marker for a skipped tick.
+- A recipient of a skipped knockback impulse closes with
+  `skipped-explosion-knockback` before any socket overflow, even when the next
+  output knocks it again. This close is accepted.
+- A pump that stops for good still trips the outbox stall watch, and the core
+  halts fail-closed.
 
 Datapack reloads and `/debug function` trace-file writes run as jobs on a
 short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs:1322-1326`),
