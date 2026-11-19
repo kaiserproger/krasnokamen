@@ -268,10 +268,21 @@ class Walk:
                 and on_window(node) and re.search(pattern, str(node.get("label", "")), re.IGNORECASE)]
 
     def click_button(self, pattern: str, label: str, accept: Callable[[dict[str, Any]], bool] | None = None,
-                     wait: bool = True) -> dict[str, Any]:
+                     wait: bool = True, scroll: bool = False) -> dict[str, Any]:
+        """Press a dialog button. `scroll=True` (never the default) scrolls a too-tall dialog to its action
+        and records that it had to: used only where a screen is judged elsewhere on that count."""
         state = self.probe.observe()
         shown = view(state)
         nodes = self.button_nodes(state, pattern)
+        scrolls = 0
+        while scroll and not nodes and shown["kind"] == "dialog" and scrolls < 4:
+            self.gui.input.wheel((640, 360), down=True, notches=3)
+            self.probe.call("minecraft_wait_ticks", {"ticks": 4})
+            scrolls += 1
+            state = self.probe.observe()
+            nodes = self.button_nodes(state, pattern)
+        if scrolls:
+            self.evidence.setdefault("scrolled_to_button", []).append({"label": label, "scrolls": scrolls, "found": bool(nodes)})
         if not nodes:
             self.probe.report["assertions"][f"QW nav {label}"] = False
             self.stuck += 1

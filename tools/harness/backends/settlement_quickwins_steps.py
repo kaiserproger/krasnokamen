@@ -464,7 +464,9 @@ def block_certify(w: Walk) -> None:
     ok, facts = refusal_verdict(text)
     w.judge("Q1", ok, body=text[:600], **facts)
     complete_house(w, origin)
-    done = w.click_button(r"^Сертифицировать$", "form Certify (valid house)", lambda s: s["kind"] == "dialog")
+    # At 1280x720 the refused form can push its actions below the window: recorded, then scrolled like a player.
+    w.evidence["certify_form_actions_visible_after_refusal"] = bool(w.button_nodes(w.probe.observe(), r"^Сертифицировать$"))
+    done = w.click_button(r"^Сертифицировать$", "form Certify (valid house)", lambda s: s["kind"] == "dialog", scroll=True)
     w.shot("certify-done")
     text = " ".join(done["body"])
     rows = [row for row in building_list(w) if row["kind"] == "house"]
