@@ -114,13 +114,17 @@ the previous one's handoff.
   over whatever is left in its queue. Claims are per task, as below.
 - **Reviewers and breakers are not generalists.** They are separate, read-only,
   and from a different vendor than the author where possible.
-- **Model by task and budget.** Main chooses each lane's model and records the
-  choice and reason in `receipts/Stage3/PLAN.md`; the owner's proposal is the
-  starting point: Opus for core authority and persistence, Sol for settlements
-  implementation, Terra for gates, QA and harness, Sonnet for performance
-  research, Mistral or Astra for review, Muse or DeepSeek for mechanical bulk.
-  Edit-heavy slices go to Terra, Sol or Astra: about 10% of their edits failed
-  against 24–27% for Sonnet and Mistral (owner, 2026-11-17).
+- **Model by task and budget (owner D46, 2026-11-19).** Main chooses each
+  lane's model and records the choice and reason in `receipts/Stage3/PLAN.md`.
+  Implementation defaults to Terra or Sol: Sol for long multi-step slices,
+  Terra for bounded slices, gates, QA and harness. Opus only designs
+  persistence, protocol or item custody, or takes a task the OpenAI filter
+  refuses; the owner wants Opus cut even below that, so in doubt pick Terra or
+  Sol. Fable runs only when the owner explicitly asks for an architecture
+  design. Reviews run on Opus or Sol from a vendor other than the author's
+  (D14). Muse or DeepSeek take mechanical bulk. Edit-heavy slices go to Terra,
+  Sol or Astra: about 10% of their edits failed against 24–27% for Sonnet and
+  Mistral (owner, 2026-11-17).
 - **New context after each finished task.** After sending a task's result, a
   generalist writes its remaining queue and state to its lane's handoff file
   (`receipts/<lane>/HANDOFF.md`) and starts a new context before the next
