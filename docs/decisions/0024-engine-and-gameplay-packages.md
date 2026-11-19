@@ -1,9 +1,10 @@
 # ADR 0024 - The core as an engine, our gameplay as packages
 
 **Date:** 2026-11-19  
-**Status:** Proposed (owner D66). Revised after the independent reviews
-(committee-sol and committee-astra, both "changes",
-`receipts/EngineADR/REVIEW-{sol,astra}.md`); see [Review resolution](#review-resolution).
+**Status:** Proposed (owner D66). Revised twice after the independent reviews
+(committee-sol and committee-astra, "changes" in both rounds,
+`receipts/EngineADR/REVIEW-{sol,astra}.md` and `REVIEW-{sol,astra}-r2.md`);
+see [Review resolution](#review-resolution).
 Nothing here is implemented. The D65 settlements crate (ADR 0021 Step 2, design
 `receipts/CoreUnload/DESIGN.md`, revised after its reviews `REVIEW-sol.md` and `REVIEW-sol-r2.md` in that directory,
 both outside Git) is already running and is this ADR's first step; this ADR
@@ -108,6 +109,23 @@ time.
 | economy accrual (`settlements/production.rs`, `commerce.rs`, `caravan.rs`) | game-time watermarks, atomic transfers, retry timing | food points per day (`offscreen_production.rs:6`), wages and periods, caravan deadlines, recipes |
 | zones and faction relations (`plugin_player::protects_cell`, `battle::faction`) | per-edit and per-hit evaluation | who is allowed and when (war windows) |
 
+**Rules bound to persisted executor state.** Some rules shape what an executor
+persists. A battle section saves its decision phase as the remainder of the
+decision period (`battle/formation.rs:205-211,419-427`) and fires when
+`tick % DECISION_TICKS` equals it (`formation.rs:748-760`); if a package changed
+the period from 10 to 5 across a reopen, a section saved with phase 7 would
+never fire again. So an active battle is bound to one immutable, validated
+parameter set: the set is admitted once (non-zero periods, permissible
+denominators, bounded shares), its derived coefficients (for example the
+removal rolls of `combat.rs:58-80`) are computed once at admission and never
+per hit, it is saved with the battle image (`battle/persistence.rs:134-142`) and
+restored on reopen. A deployed package whose set differs from an active
+battle's refuses before the first tick. New battles take the package's current
+set. The gate is A11's SIGKILL continuation (`docs/DEFINITION_OF_DONE.md:37`):
+the battle continues with the same rules after the kill, and reopening with
+changed rules is refused. The same rule applies to any executor whose saved
+state depends on a package parameter.
+
 Owner D66 asked for a small slowdown at most, not a fixed split per constant:
 where a rule's table read costs more than the §3.4 limit on a hot path, the
 move reports it and goes to the owner rather than keeping the rule native
@@ -168,7 +186,8 @@ Lines are production lines (`*_tests.rs` excluded) on the base.
   (`0013-core-model-v2.md:231-247`); `Soldier` in the villager column
   (`DESIGN.md` §1.2). Target: the battle image stays executor state in the
   engine; rosters, orders, war policy and the tactics, fatigue, lethality and
-  casualty rules of §1.1 become package data and decisions.
+  casualty rules of §1.1 become package data and decisions, and each active
+  battle keeps the validated parameter set it started with (§1.1).
 - Hot paths: `battle::step` every tick in the entity phase
   (`tick/entity_phase.rs:186-188`) over at most 20,000 soldiers in 128
   regiments (`battle/formation.rs:45,48`); retarget every 10 ticks
@@ -191,8 +210,10 @@ Lines are production lines (`*_tests.rs` excluded) on the base.
   outcome, muster), Players, Storage, Inventory (tribute is a real transfer),
   World zones with a war-window exception as data, Presentation (map item,
   dialogs), Commands, Scheduler.
-- State: treaties, tribute schedules, ransoms and the chronicle as package
-  records; war state in the settlement records (`DESIGN.md` §2.7).
+- State: treaties and their terms, ransoms and the chronicle as package
+  bookkeeping (step 3); the tribute obligation and its payments as a native row
+  and typed operation from step 4 (§4); war state in the settlement records
+  (`DESIGN.md` §2.7).
 - Hot paths: none per tick; command cadence, 10–200 players
   (`OWNER_DECISIONS.md:382`). Damage legality and protection are evaluated
   natively from package data, never by a guest call per hit (§3.3).
@@ -245,27 +266,41 @@ answer waits for the acknowledgement.
 
 **Atomicity lives in one explicit native operation.** Sharing a WAL frame
 does not make two requests one transaction, and a request id does not make a
-purchase idempotent. Today the inventory-storage transaction is atomic over one
-live session's inventory and the package's own KV, with no durable operation id
-(`crates/mc-core/src/plugin_player.rs:257-272`); `operation-status` reads only
-domain-operation receipts (`crates/mc-core/src/plugin.rs:823-835`); the storage
-version guard is checked at apply (`plugin.rs:848-857`) and compared on replay
-(`plugin.rs:836-847`) but writes nothing. So economy and settlement actions (wages, purchases,
-tribute, founding, hiring) each become a **typed native operation** that
-validates and commits, in one apply, the records it touches, the custody it
-moves, the membership it changes and its durable receipt. A retry with the same
-operation id returns the recorded outcome; a different request under that id is
-`operation-conflict` (`plugin.rs:836-847`). The gate for each such operation
-covers refusal, a lost answer, reopen and retry through the real host path,
-not by calling `execute` directly as `plugin_player_tests.rs:92-136` does
-today. The checkpoint-only class of owner D45 (`0013-core-model-v2.md:553-555`)
-is for new independent state only, never for obligations that affect custody
-or replay.
+purchase idempotent. Two contracts exist today:
+
+- The **inventory-storage transaction** is atomic over one live session's
+  inventory and the package's own KV, and has no durable operation id
+  (`crates/mc-core/src/plugin_player.rs:257-272`). Its contract forbids a blind
+  retry: "A missing answer does not establish refusal and must not trigger a
+  blind retry" (`commands.wit:392-394`). Its gate is that inventory and KV are
+  consistent after reopen, and that resubmitting with the CAS version the first
+  attempt already spent debits nothing a second time. An API-only cut adds no
+  receipt to it.
+- A **domain operation** with an operation id has a durable receipt. After a
+  lost answer the package resubmits the same id and gets the stored outcome
+  (`plugin.rs:836-847`); a different payload under that id is
+  `operation-conflict`. `operation-status` reads these receipts only
+  (`plugin.rs:823-835`). The storage version guard is checked at apply
+  (`plugin.rs:848-857`) and is part of that resubmission comparison; it is not a
+  WAL replay check and writes nothing.
+
+Economy and settlement actions (wages, purchases, tribute payment, founding,
+hiring) each become a **typed native operation of the second kind**: one apply
+validates and commits the records it touches, the custody it moves, the
+membership it changes and its durable receipt. Its gate covers refusal, a lost
+answer, reopen and resubmission through the real host path, not by calling
+`execute` directly as `plugin_player_tests.rs:92-136` does today. Never a
+custody transfer followed by a separate KV write. The checkpoint-only class of
+owner D45 (`0013-core-model-v2.md:553-555`) is for new independent state only,
+never for obligations that affect custody or resubmission.
 
 **Storage.** The string KV is not widened: it is folded into one `plugins`
 checkpoint row (`core/journal.rs:1271-1279`) and its values stay at 4,096 bytes
-(`crates/mc-script/src/limits.rs:66`). Required package records are separate
-native rows with touched-only WAL images, like `settlement/<id>` today. The
+(`crates/mc-script/src/limits.rs:66`). Required package records (records an
+engine operation reads to admit or execute: custody, obligations, permissions,
+membership) are separate native rows with touched-only WAL images, like
+`settlement/<id>` today. Package-local bookkeeping that no engine operation
+reads may stay in the bounded KV. The
 16 MiB envelope (`crates/mc-world/src/native/checkpoint.rs:30`) is a storage
 ceiling, not a record size and not an ABI budget: each record kind's bound is
 derived from real records and checked before any custody changes. WIT carries
@@ -332,47 +367,70 @@ converter-or-reset choice is owner question 2.
 
 Today's path, which the first cut keeps phase for phase:
 
-1. **Enqueue.** In the new shape a request import returns only a correlation
-   id. The host keeps one bounded buffer per callback: at most 32 requests,
-   timer changes included (`limits.rs:29`; the shared count in
-   `crates/mc-plugin-host/src/host/clock.rs:105-115`), and a byte budget counted
-   as each request is enqueued, before staging. An import past either bound
-   fails the callback.
+1. **Enqueue.** In the new shape a request import returns only an
+   enqueue-local correlation id. The host keeps one bounded buffer per
+   callback: at most 32 requests, timer changes included (`limits.rs:29`; the
+   shared count in `crates/mc-plugin-host/src/host/clock.rs:105-115`), and a
+   byte budget counted as each request is enqueued, before staging. An import
+   past either bound fails the callback.
 2. **Admission at return.** The host validates every DTO and capability and
    reserves channel space for the whole batch at once
    (`crates/mc-script/src/route_authority.rs:1323-1383`, `try_reserve_many`).
    A trap, an exhausted budget, a `plugin-error`, a failed late import or a
-   refused batch publishes nothing of the callback (timers included,
-   `delivery.rs:28-35,66-84`). A transient refusal (backpressure, a player who
-   left) drops the batch and sends the package a `command-batch-rejected`
-   notice (`delivery.rs:92-102`); the notice gives no right to send a new
-   request and reaches a package that imports no `commands` interface too.
+   refused batch drops the whole request buffer and the timers staged in that
+   callback (`delivery.rs:28-35,66-84`). The guarantee covers exactly those
+   two. Synchronous host-local imports (§2.4) take effect when called and are
+   not undone: a permission publication replaces the grant table at once
+   (`crates/mc-script/src/command_permissions.rs:145-152`).
 3. **Native execution.** `plugin::pump` runs before the dimension tick
    (`crates/mc-core/src/tick.rs:753`), takes the queued requests one at a time
    (`plugin.rs:1270-1291`) and re-validates live sessions, owners, revisions
    and reservations at apply. Plugin damage enters at the merge
    (`tick/dimension.rs:273-276`). Two imports from one handler are two
    operations; only one explicit composite operation is atomic (§1.3).
-4. **Result.** After the frame's append acknowledgement (§1.3), to the package
-   that asked, never broadcast.
+4. **Results as the owner reports them.** The enqueue-local id is the
+   package's correlation id, not a promise of an answer. Owners answer as they
+   do today: a storage or inventory-storage answer and a domain-operation
+   answer carry the request id (a domain operation also its durable operation
+   id, `host/conversion.rs:192-202`); a zone answer names the zone, not a
+   request, so two commands on one zone in flight cannot be told apart
+   (`commands.wit:207-212`, `conversion.rs:203-211`); menu open and close are
+   fire-and-forget (`commands.wit:552-559`). A result of a committed change is
+   delivered after its frame's append acknowledgement (§1.3), to the package
+   that asked, never broadcast. No import gets a new callback of its own.
 
 ### 2.3 Delivery order
 
-- Each package sees its own FIFO; there is no global order. The contract says
-  so (`events.wit:20-23`): `sequence` is a type, and `first-sequence` is 0
-  today (`crates/mc-plugin-host/src/host/conversion.rs:290-296`, `clock.rs:79-83`).
+- **FIFO per lane.** There is no global order; the contract says so
+  (`events.wit:20-23`): `sequence` is a type, and `first-sequence` is 0 today
+  (`crates/mc-plugin-host/src/host/conversion.rs:290-296`, `clock.rs:79-83`).
+  The host endpoint reads independent lanes (observations, the coalesced
+  server tick that drives timers, ordinary events and answers) and interleaves
+  them by its existing arbitration (`crates/mc-script/src/route_authority.rs:1197-1232`).
+  Order holds within a lane, not across lanes; the first cut keeps that
+  arbitration unchanged.
 - The first cut keeps the number and order of callbacks: today one server
   event becomes one call per interested package (`host/lifecycle.rs:458-474`),
   and the new per-service handler receives exactly that call. Targeted answers
   go only to the requesting package. All due timers of one pushed tick keep
   their staging and shared budget (at most 8 timer callbacks per tick and 256
   pending timers per instance, `crates/mc-plugin-host/src/timers.rs:20,27`).
+- **Two kinds of transient refusal.** For an ordinary delivery, a transient
+  refusal (backpressure, a full admission ledger, a player who left) drops the
+  batch and sends the package a `command-batch-rejected` notice
+  (`delivery.rs:92-102`); the notice gives no right to send a new request and
+  reaches a package that imports no `commands` interface too. For a timer
+  delivery, the same refusal publishes nothing of that pushed tick, keeps the
+  schedule and delivers the due timers again later; no rejection notice is sent
+  (`clock.rs:150-166`).
 - Nothing regroups A/B/A into A/A/B or merges independent batches. If
   aggregation is added later, it merges only adjacent events of one service in
-  one phase and tick, with seal order and batch boundaries set natively,
+  one lane, phase and tick, with seal order and batch boundaries set natively,
   independent of when the guest finishes.
-- The same accepted input gives the same native result and the same replay;
-  it does not give the same apply tick when host delay differs.
+- **Determinism** holds for identical per-tick input: the same requests
+  admitted at the same ticks give the same native result and the same replay.
+  The same request list admitted at different ticks (because host delay
+  differs) may give a different result.
 - Package deadlines use game time from a persisted watermark (ADR 0023,
   `0023-offscreen-settlement-simulation.md:54-61`), not the host's pushed tick:
   that clock follows the WAL tick (`crates/mc-core/src/plugin/events.rs:122-130`),
@@ -384,9 +442,10 @@ Today's path, which the first cut keeps phase for phase:
   interface per capability. Request functions are enqueue-only imports (§2.2);
   each service exports one handler interface for its events.
 - **Synchronous host-local imports** (Argon2 `password-hash`/`password-verify`,
-  `host.wit`; permission publication, `command-permissions.wit:8-21`) are not
-  requests: they never touch the world, are not queued and stay refused in
-  hooks.
+  `host.wit`; permission publication, `command-permissions.wit:8-21`; `log`;
+  `plugin-id`) are not requests: they never touch the world and are not queued.
+  Their effect is immediate and outside the batch-drop guarantee of §2.2.
+  Which phase may call which is listed in §2.5.
 - **Runtime service** `krasnokamen:runtime`: lifecycle, scheduler (game-tick
   timers, `commands.wit:340-369`), log and identity, the shared failure enum
   (`operation-types.wit`), the batch-rejected notice. There is no per-tick
@@ -428,23 +487,34 @@ component", "Custom native mobs" and the permission sections):
 | `custom_payload:<name>` | one Play channel | startup: one owner per channel (`manifest.rs:319-321`) |
 | `spawn_entity_types` | exact entity types the package may spawn | admission, per request (`manifest.rs:407-408`) |
 | `hooks` | precommit registration | startup; a hook answers a decision and nothing else (`precommit.wit:1-25`) |
+| `death_graves` | a deployment surface that changes native death custody for every player (`docs/plugins/OPERATIONS.md:150-159`); kept by the audit for `graves` (`receipts/PluginDupAudit/AUDIT.md:45`) | startup: declared in the manifest; deploying the package is the operator's authorization, never implied by a service |
 | `[client]` bundles and their permissions | Loader content and rights | startup sha256 and Loader negotiation (ADR 0010) |
 | `[worldgen]`, `required_features` | authored data the core must load | startup, as today |
 
-Phases stay as they are: `configure` runs in its own store with no runtime
-import linked and only returns a contribution (`lifecycle.wit:123-128`);
-`init` and handlers may enqueue requests; hooks may not.
+**Phases.** One component is instantiated in two stores with one linker, as
+today (`crates/mc-plugin-host/src/host/lifecycle.rs:193-214`). Wasmtime
+resolves all of a component's imports before the first call (Wasmtime 36,
+`runtime/component/linker.rs:197-213`), so the startup store links the same
+declared functions; what each phase may do is enforced at call time, as
+`allow_import` does today (`crates/mc-plugin-host/src/instance.rs:598-640`):
 
-Example: today's `krasnokamen-towns` (`events = ["server.started"]`,
-capabilities `storage`, `zones`, `player_queries`, root `town`, timers) after
-the cut:
+| Phase | Enqueue imports | Host-local calls allowed |
+|---|---|---|
+| startup store: component initialization and `configure` (returns only a contribution, `lifecycle.wit:123-128`) | refused: the call fails the phase | `log`, `plugin-id` |
+| runtime store: `init` and ordinary handlers | allowed (§2.2) | `log`, `plugin-id`, `password-hash`/`password-verify` (auth packages), permission `publish` (the provider only) |
+| hooks (`precommit`) | refused | `plugin-id` only; a hook answers its decision (`precommit.wit:12-17`) |
+
+Example: today's `krasnokamen-towns` (capabilities `storage`, `zones`,
+`player_queries`, root `town`, timers) after the cut. Its current
+`events = ["server.started"]` is dropped: no contract event carries it
+(`events.wit:586-635`), and towns loads its state from `init`
+(`solaris-default-plugins` `sources/krasnokamen-towns/src/lib.rs:986-1001`).
 
 ```toml
 id = "krasnokamen-towns"
 name = "Krasnokamen Towns"
 version = "0.2.0"
 entry = "plugin.wasm"
-events = ["server.started"]
 player_commands = ["town"]
 
 [services.runtime]
@@ -480,7 +550,7 @@ world towns {
     import krasnokamen:world/zones@0.1.0;
 
     export krasnokamen:runtime/lifecycle@0.1.0;
-    // server.started, timer-fired, command-batch-rejected
+    // timer-fired, command-batch-rejected
     export krasnokamen:runtime/handler@0.1.0;
     // command-invoked for /town
     export krasnokamen:commands/invocations@0.1.0;
@@ -518,9 +588,13 @@ component's imports and exports actually carry, and the one the host provides.
   versions. The host serves one version of each service: no adapters, no second
   version, no deprecation window (AGENTS.md: no compatibility surface of our
   own). Here we depart from Roblox, which keeps deprecated APIs callable.
-- **Acceptance of every version change:** an unchanged, unrelated package
-  loads; an incompatible one is refused before the world opens; there is no
-  second host version.
+- **Acceptance of a version change.** The first cut (monolith to services) has
+  no unaffected old binary: every kept guest is rebuilt against the split API,
+  and the old 0.9.0 monolith component is the negative control, refused before
+  the world opens. From the second change of the split API on, the positive
+  control is an unchanged service component that loads while another service
+  changes; an incompatible component is refused before the world opens; there
+  is never a second host version.
 - An API-only cut changes no serialized DTO: operation receipts persist the
   request they answered (`plugin.rs:942-955`), and their bytes stay identical.
 
@@ -535,8 +609,8 @@ component's imports and exports actually carry, and the one the host provides.
   (§2.3).
 - The WIT `domain-operations.wit` envelope (lines 10-25). Its storage version
   guards stay on the native request itself: they are checked at apply and are
-  part of the replay comparison of an operation id (`plugin.rs:836-857`); a
-  separate storage CAS would not replace them.
+  part of the resubmission comparison of an operation id (`plugin.rs:836-857`);
+  a separate storage CAS would not replace them.
 - The 19 capability strings (`manifest.rs:301-319`); `custom_payload:<name>`
   becomes its own declaration (§2.5).
 - Dead contract: `precommit.before-damage` (refused at runtime,
@@ -554,16 +628,25 @@ engine serves `settlements` (`crates/mc-core/src/plugin_settlements.rs`) and the
 realms package uses that. At step 5 the settlements package becomes the single
 provider of the `settlements` service:
 
-- The route is asynchronous: the consumer's request carries its correlation id
-  and the original authenticated actor; the host delivers it to the provider as
-  an event; the provider's answer comes back after the provider decided, bounded
-  in size like any answer.
-- The provider acts with the consumer's actor, never with its own rights; no
-  right is delegated.
-- A message between packages is not a WAL transaction. When the answer involves
-  custody, success exists only after the provider's typed native operation
-  (§1.3) committed and its frame was acknowledged; the provider's message alone
-  commits nothing.
+Two parties are distinct on every routed request: the **originating consumer**
+(its package id and the authenticated actor it acts for) and the **provider**,
+which owns the records the request touches.
+
+- The route is asynchronous: the consumer's request carries its correlation id,
+  its package id and the original actor; the host delivers it to the provider
+  as an event; the provider's answer comes back after the provider decided,
+  bounded in size like any answer.
+- The provider then submits the typed native operation (§1.3) that carries both
+  parties. The native owner checks the consumer's actor's rights for the action
+  and the registered provider's right to change exactly its own records. No
+  identity replaces the other, and none of the provider's rights pass to the
+  consumer.
+- The durable receipt is bound to the provider, the consumer and the operation
+  id together, so a resubmission matches only the same parties and payload
+  (§1.3).
+- A message between packages is not a WAL transaction. Success that involves
+  custody exists only after that operation committed and its frame was
+  acknowledged; the provider's message alone commits nothing.
 
 ## 3. Performance guard
 
@@ -618,10 +701,11 @@ not on average.
 - Per-entity guest decisions cannot fit: 20,000 soldiers make about 3,000
   target and attack decisions per tick (§1.2, [INFERENCE]).
 - A general order to 20,000 fighters needs at least 313 requests at 64 members
-  each (`npcs.wit:473-483`), more than one tick's queue. A regiment order
-  therefore names the regiment id and revision and the engine resolves
-  membership natively, or it goes in bounded portions whose added delay is
-  measured.
+  each (`npcs.wit:473-483`), more than the 256-command outstanding capacity
+  (`limits.rs:33`, a bound on commands waiting at once, not on commands per
+  tick). A regiment order therefore names the regiment id and revision and the
+  engine resolves membership natively, or it goes in bounded portions whose
+  added delay is measured.
 - 1,000 settlements cannot each hold a package timer (256 per instance, 8
   callbacks per tick). One package timer drives a native due queue that hands
   the package a bounded page of due settlements per call. A once-per-day
@@ -658,8 +742,11 @@ not on average.
   `tools/dev/pin-release --no-incremental`, frozen trees named in the receipt,
   the same box, a quiet window (`tools/dev/mem-run.sh -x -p` inside
   `tools/dev/measurement-windows`).
-- **Overhead control:** `native-100` (pens, no plugins) and `explore-20`
-  without plugins, B against A: the empty engine must not get slower.
+- **Overhead control, a separate and stricter gate:** `native-100` (pens, no
+  plugins) and `explore-20` without plugins, B against A. With no plugin
+  traffic the move must be neutral (inside the B/B noise); any other result
+  means the move added cost to the engine itself and goes to the owner with its
+  cause, whatever its size.
 - **Boundary under load:** a paired B/A with the same post-audit package set,
   the same world and the same scripted command stream, which must show non-zero
   callbacks, requests and completed effects in both runs; a run with zero plugin
@@ -677,10 +764,16 @@ not on average.
   peak backlog, refusal and lost-event counts; per-pair deltas, the B/B noise
   (spread of the three B runs) and peak as well as mean; never a cross-pair
   mean (`DESIGN.md` §4).
-- **Verdict:** owner question 1 sets the threshold. Until the owner answers,
-  Main applies the proposal there and reports every move's exact numbers to the
-  owner. A mixed result across the pairs is inconclusive and is re-measured,
-  not rounded to "small". Any new loss of required events is never small.
+- **Verdict on the full paired delta** (A against its paired B, not the delta
+  minus the noise), MSPT p50 and p95, over three reproducible pairs: all pairs
+  inside the B/B noise is **neutral**; above the noise but under 5% on both p50
+  and p95 in every pair is **small** and lands with its numbers reported; 5% or
+  more on p50 or p95, or TPS falling below 20 on a profile B holds at 20, is
+  **large** and goes to the owner first; pairs that disagree are
+  **inconclusive** and are re-measured, never rounded to "small". A new loss of
+  required events is never small. These are the proposal of owner question 1;
+  until the owner answers, Main applies them and reports every move's exact
+  numbers.
 
 ## 4. Migration order
 
@@ -691,13 +784,13 @@ GO.
 
 | Step | What | Depends on |
 |---|---|---|
-| 0 (running) | D65 settlements crate: S0–S8, then C1–C3 (`DESIGN.md` §3.2-3.3), accepted only through its gates: the S0 byte oracle (same stages and ticks, fixed salt and UUIDs, base-vs-base in separate processes, three isolated controls; §2.9, lines 44-47); C1 decoding every image's schema in the shared batch decoder before routing and fold (§2.8, lines 39-43); the offline proof by `recover_offline` → `encode_checkpoint`, export and the custody and crash censuses, not `compact` (§2.9); S6 as a separate sequential cut of typed synchronous owner-thread calls (§2.4, lines 36-38); S7 keeping the reserve check on the generic `Begin` for every owner (§2.5, Main ruling Q4); the release-speed gate (§4). Duplicate-plugin deletions by the audit (D66.4). | — |
+| 0 (running) | D65 settlements crate: S0–S8, then C1–C3 (`DESIGN.md` §3.2-3.3), accepted only through its gates: the S0 byte oracle (same stages and ticks, fixed salt and UUIDs, base-vs-base in separate processes, three isolated controls; §2.9, lines 44-47); C1 decoding every image's schema in the shared batch decoder before routing and fold (§2.8, lines 39-43); the offline proof by `recover_offline` → `encode_checkpoint`, export and the custody and crash censuses, not `compact` (§2.9); S6 as a separate sequential cut of typed synchronous owner-thread calls (§2.4, lines 36-38); S7 keeping the reserve check on the generic `Begin` for every owner (§2.5, Main ruling Q4); the release-speed gate (§4). D65 rev. 2 is not accepted yet: the open items of `receipts/CoreUnload/REVIEW-sol-r2.md` stay part of the C3 gate and are not counted as done here. Duplicate-plugin deletions by the audit (D66.4). | — |
 | **1** | **Service cut** (§4.1) | — (parallel with 0) |
 | 2 | Computer: block identity and the terminal and screen UI flow as a package; every open/input authorization, revocation, the process bridge and the frame stream stay in `mc-edge`, never through the Wasm FIFO | 1 |
-| 3 | Realms (new package, D62): treaties, tribute, ransom, chronicle, map; a separate package per D62 (`OWNER_DECISIONS.md:371-372`), using the engine-served `settlements` service | 1; owner GO for D62; D65 S2 owned state before any new settlement operation except the steward (`D62-REALMS-PLAN.md:73-77`); native war (D62 step 1); D63 map v2 for the map; a captive state for ransom |
-| 4 | Economy: economy rules and ledgers into package records; payments, wages and tribute as typed native operations with durable receipts; goods stay engine custody | 1; an **accepted** D65 C3 (C1 alone is not enough) under the step-0 gates; then the separate D66 format cutover with one writer (`DESIGN.md:23-27`, §1.3); native package rows with a declared schema |
+| 3 | Realms (new package, D62): treaties and their terms (vassalage, tribute amount and due dates), capitulation by treaty, chronicle, map; a separate package per D62 (`OWNER_DECISIONS.md:371-372`), using the engine-served `settlements` service. Treaty terms are package bookkeeping in the bounded KV; no engine operation reads them in this step, and no tribute is paid yet | 1; owner GO for D62; D65 S2 owned state before any new settlement operation except the steward (`D62-REALMS-PLAN.md:73-77`); native war (D62 step 1); D63 map v2 for the map; a captive state for ransom |
+| 4 | Economy: economy rules and ledgers into package records; payments, wages, and the actual tribute payment that settles a realms obligation, each as one typed native operation with a durable receipt (§1.3), never a transfer followed by a separate KV write; the tribute obligation becomes a native row here, and overdue tribute (the D62 casus belli) starts here; goods stay engine custody | 1; an **accepted** D65 C3 (C1 alone is not enough) under the step-0 gates; then the separate D66 format cutover with one writer (`DESIGN.md:23-27`, §1.3); native package rows with a declared schema |
 | 5 | Settlements onto WIT (D66.3): founding, growth, certification rules, households, districts, migration rules, presentation, commands, and the executors' game rules (§1.1); the `settlements` provider switches from the engine to the package here (§2.8) | 4 |
-| 6 | Armies and battles: rosters, staging, order vocabulary, war policy and the tactics, fatigue, lethality and casualty rules of `formation.rs` and `combat.rs`; the executors and the battle image stay | 5; independent battle-core review (AGENTS.md rule 5) |
+| 6 | Armies and battles: rosters, staging, order vocabulary, war policy and the tactics, fatigue, lethality and casualty rules of `formation.rs` and `combat.rs` as package data and decisions; each active battle bound to its saved, validated parameter set (§1.1, a battle-image format change with its own persistence review); the executors stay | 5; independent battle-core review (AGENTS.md rule 5); A11 SIGKILL continuation with the same rules and refusal with changed ones |
 
 Why this order: the computer is the smallest move, migrates no data, has no
 tick cost and proves the presentation and block-event services. Realms has no
@@ -727,14 +820,17 @@ go last.
   due timers; time from request to effect on a busy host. It yields the fixed
   call cost, the per-import and per-byte costs and a Wasm factor for a fixed
   guest loop, which every later move's budget uses.
-- **Acceptance.** L2 green; the plugin regressions and the standard-pack load
-  test pass with the same package set as before the cut (less the audit's
-  deletions); an unchanged unrelated package loads and an incompatible one is
-  refused before the world opens (§2.6); refusal, lost answer, reopen and retry
-  of an inventory-storage transaction and of a domain operation pass through
-  the real host path; the §3.4 overhead control and the paired B/A with plugin
-  traffic are measured and their TPS/MSPT change reported, and the §3.4 verdict
-  applies (a small slowdown lands, a large one goes to the owner first); bench
+- **Acceptance.** L2 green; every guest the audit keeps is rebuilt against the
+  split API, and the plugin regressions and the standard-pack load test pass
+  with that package set; the old 0.9.0 monolith component is refused before the
+  world opens (§2.6 negative control). The inventory-storage transaction keeps
+  inventory and KV consistent after reopen, and resubmitting it with the CAS
+  version an earlier attempt already spent debits nothing twice; a domain
+  operation resubmitted with its operation id after a lost answer returns the
+  stored outcome and a different payload is refused (§1.3); both through the
+  real host path. The §3.4 overhead control is neutral, the paired B/A with
+  plugin traffic is measured and its TPS/MSPT change reported under the §3.4
+  verdict (a small slowdown lands, a large one goes to the owner first); bench
   receipts before and after. The cut changes the admission path of inventory
   transactions, so it gets an independent review before Main commits it
   (AGENTS.md rule 5, custody).
@@ -864,10 +960,13 @@ way and they follow from D62, D66 and ADR 0013, so they are decisions here:
 
 ## Open questions for the owner
 
-1. **"Small slowdown."** Proposal: a move is small when it is worse than the
-   B/B noise by under 5% on both MSPT p50 and p95 in three reproducible pairs,
-   and TPS stays at 20 wherever B holds 20; a new loss of required events is
-   never small; anything else goes to you before it lands (§3.4).
+1. **"Small slowdown."** Proposal, on the full paired delta of MSPT p50 and p95
+   over three reproducible pairs: inside the B/B noise is neutral; under 5% on
+   both is small and lands with its numbers; 5% or more on either, or TPS
+   falling below 20 where B holds 20, is large and comes to you first; pairs
+   that disagree are inconclusive and re-measured; a new loss of required
+   events is never small. The plugin-free overhead control is a separate,
+   stricter gate that must be neutral (§3.4).
 2. **Settlement records into package rows: converter or reset?** Proposal: keep
    the format where possible; otherwise a one-off offline converter of
    checkpoint plus WAL into a new directory with custody and high-water checks;
@@ -893,12 +992,33 @@ D65-r2 is finding ADR-0024-6 of the D65 re-review
 | A1 order cannot be kept while calling each service once | high | §2.3 | Same as S5; refusal notice reaches packages without `commands`; nothing of a failed callback is published |
 | A2 `[services]` does not define rights, subscriptions, phases | high | §2.5 | Declarations table with their checks (events and handlers, commands and permissions, one provider, payload channels, spawn allow-list, hooks, Loader rights); phases; full `krasnokamen-towns` manifest and component world |
 | A3 a new required export breaks old guests | high | §2.6 | Three versions distinguished; incompatible 0.x refused; a new required export is breaking; optional imports never required by old binaries; one bundle with exporters and transitive users; acceptance tests |
-| A4 the storage fence could be lost; joint admission is not joint commit | high | §1.3, §2.7, §2.8 | Guards stay on the native request (checked at apply, part of the replay comparison); economy and tribute actions are named typed operations with receipts and lost-answer recovery; one provider, original actor, correlation, answer after the owner's decision; a message is not a WAL transaction |
+| A4 the storage fence could be lost; joint admission is not joint commit | high | §1.3, §2.7, §2.8 | Guards stay on the native request (checked at apply, part of the resubmission comparison); economy and tribute actions are named typed operations with receipts and lost-answer recovery; one provider, original actor, correlation, answer after the owner's decision; a message is not a WAL transaction |
 | A5 perf gates prove neither boundary cost nor A3 | high | §3.2, §3.4, §4.1 | Empty-engine `native-100`/`explore-20` as overhead control; paired B/A with the same post-audit pack, world and command stream and non-zero callbacks, requests and effects; A3 only via `horizon-100-roam`; realms feature cost apart from ABI cost |
 | A6 a mean does not bound the peak; requests do not bound work | high | §3.1, §3.2, §3.3, §4.1 | Separate counts (callbacks, imports, bytes, members, native checks, fan-out); ≥ 313 requests for 20,000 fighters, 256 is outstanding not throughput; regiment id + revision or bounded portions; native due queue instead of 1,000 timers; bench with 0/1/32 imports, interleaving, peak due, time to effect; byte budget counted before staging |
 | A7 dependency graph incomplete | medium | §1.2, §2.7, §4 | Computer moves UX only; realms after D65 owned state, D63 map v2 and a captive state; corrected C1 before settlements; provider at step 5; `spawn-entity` kept for sky-creeper |
 | A-history: line 6, not 5; reasons 2, 4, 5 are from the October study | — | §5.1, §5.2 | Fixed and stated |
 | M1 battle executors hold game rules (`formation.rs:11-44`, `combat.rs:40-80`) | — | §1.1, §1.2, §4 | Mechanism vs rules table; tactics, fatigue, lethality and casualty policy move to the battles package as data and decisions, measured A/B; the same split stated for allocation, worker actions, construction, transit and economy |
 | D65-r2 ADR-0024-6 step 4 could start after C1 | high | §1.3, §4 | Step 4 depends on an accepted C3 under the D65 gates of `DESIGN.md` (S0 byte oracle §2.9, C1 per-image decode before fold §2.8, offline `recover_offline` → `encode_checkpoint`/export proof §2.9, S6 sequential cut §2.4, S7 generic reserve check §2.5, release gate §4); format changes only in a separate D66 cutover with one writer (`DESIGN.md:23-27`), so both plans allow the same order |
+
+Second round, reviews of 6fce5d95e: `receipts/EngineADR/REVIEW-sol-r2.md`
+(S3, S4, S6 resolved; S1, S2, S5, S7 reopened; three new) and
+`receipts/EngineADR/REVIEW-astra-r2.md` (A3, A5, A6, history resolved; A1, A2,
+A4, A7 reopened; three new). Every open item and new finding:
+
+| Finding | Severity | Section | Resolution |
+|---|---|---|---|
+| S1-r2 "nothing of the callback is published" is wider than the guarantee | medium | §2.2, §2.4 | The batch-drop guarantee covers the request buffer and the timers staged in that callback only; synchronous host-local imports take effect at once (a permission publication replaces the table) and are outside it |
+| S2-r2 / A4-r2 one lost-answer gate for two contracts; "replay" wording | high | §1.3, §2.7, §4.1 | Inventory-storage transaction (no receipt, no blind retry): inventory and KV consistent after reopen, and a resubmission with the already spent CAS version debits nothing twice; domain operation (durable operation id): the stored outcome returned on resubmission, a different payload refused; the guard comparison is called resubmission, not WAL replay; no new receipt in the API-only cut |
+| S5-r2 / A1-r2 FIFO across lanes; timer refusal differs | medium | §2.3 | FIFO per lane with today's arbitration between lanes; ordinary transient refusal sends `command-batch-rejected`, timer-delivery refusal keeps the schedule, delivers later and sends no notice; determinism stated for identical per-tick input |
+| A1-r2 `server.started` callback in the example | medium | §2.5 | Removed: no contract event carries it, and towns loads from `init` |
+| S7-r2 provider routing does not say who may change whose records | high | §2.8 | Originating consumer (package and actor) and provider (record owner) distinguished; the native operation checks the consumer actor's rights and the provider's right over its own records; the receipt is bound to both parties and the operation id; no identity substitution, no provider rights passed to the consumer |
+| Sol-new-1 / A7-r2 step 3 pays tribute before the mechanism exists | high | §1.2, §4 | Step 3 records treaty terms, amount and schedule only, with no payment; the payment that settles the obligation is one typed native operation with a receipt at step 4, where the obligation becomes a native row; never a transfer plus a separate KV write |
+| Sol-new-2 / A2-r2 `configure` "with no runtime import linked" is impossible; `death_graves` missing | medium | §2.5 | One component, two stores, one linker; Wasmtime links all imports before the first call, so phases are enforced at call time; enqueue only in `init` and ordinary handlers, refused in the startup store (initialization included) and in hooks; host-local calls listed per phase; `death_graves` restored as its own deployment right |
+| Sol-new-3 / A3-r2 step 1 cannot load an unchanged old component | medium | §2.6, §4.1 | Step 1 rebuilds every kept guest and uses the old 0.9.0 monolith as the negative control; the unchanged-component check runs only between two versions of the split API |
+| Astra-new-1 battle rules not bound to the saved battle | high | §1.1, §1.2, §4 | An active battle keeps one immutable validated parameter set saved with its image and restored on reopen; a different deployed set refuses before the tick; periods and denominators validated at admission; derived lethality coefficients computed once; gate: A11 SIGKILL continuation with the same rules and refusal with changed ones |
+| Astra-new-2 correlation and result promise wider than the API | medium | §2.2 | Enqueue-local correlation id distinguished from ids owners return; zone answers are keyed by zone, menus are fire-and-forget; append-ACK applies to commit results; no new callback per import |
+| Astra-new-3 the 5% rule allowed two verdicts | medium | §3.4, owner question 1 | Threshold on the full paired delta; neutral, small, large and inconclusive defined; the plugin-free overhead control is a separate, stricter gate that must be neutral |
+| A6-r2 "one tick's queue" | — | §3.2 | Now "the 256-command outstanding capacity", a bound on commands waiting at once |
+| D65 status: rev. 2 not accepted | — | §4 step 0 | The open items of `receipts/CoreUnload/REVIEW-sol-r2.md` stay part of the C3 gate and are not counted as done |
 
 [Architecture overview](../ARCHITECTURE.md) · [Decisions index](README.md)
