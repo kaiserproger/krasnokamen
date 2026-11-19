@@ -317,3 +317,67 @@ fn native_autonomy_builds_more_capacity_before_housing_without_losing_or_duplica
         "physical storage + builder carry + world drops must equal the exact build debit"
     );
 }
+
+#[test]
+fn a_full_raw_material_bank_funds_and_builds_the_warehouse_without_inventing_crafting_room() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    certificate(&mut state, id);
+    let raw = [
+        ("acacia_log", 64),
+        ("acacia_slab", 13),
+        ("acacia_fence", 1),
+        ("acacia_stairs", 2),
+        ("acacia_door", 2),
+        ("chest", 12),
+        ("barrel", 22),
+        ("cobblestone", 64),
+        ("stick", 4),
+    ]
+    .map(|(name, count)| {
+        ItemStack::new(
+            crate::villager::mining::item_id(&state, name).unwrap(),
+            count,
+        )
+    });
+    let dirt = crate::villager::mining::item_id(&state, "dirt").unwrap();
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    slots.fill(ItemStack::new(dirt, 64));
+    for (slot, stack) in slots.iter_mut().zip(raw) {
+        *slot = stack;
+    }
+    let images = executor::source_images(&state, id);
+    assert!(
+        images
+            .iter()
+            .flat_map(|image| &image.slots)
+            .all(|stack| !stack.is_empty())
+    );
+    let planks = crate::villager::mining::item_id(&state, "acacia_planks").unwrap();
+    assert!(crate::settlements::construction_crafting::craft(&state, planks, &images).is_none());
+    let mut expected = inventory_and_drops(&state, id, builder);
+    // Vanilla batches: 19 logs -> 76 planks; 75 planks pay the walls,
+    // one slab batch, seven stair batches and one fence batch.
+    for (name, delta) in [
+        ("acacia_log", -27),
+        ("acacia_planks", 1),
+        ("acacia_slab", -9),
+        ("acacia_fence", -1),
+        ("acacia_door", -1),
+        ("chest", -3),
+        ("barrel", -3),
+        ("cobblestone", -50),
+        ("stick", -2),
+    ] {
+        let item = crate::villager::mining::item_id(&state, name).unwrap();
+        *expected.entry(item).or_default() += delta;
+    }
+    expected.retain(|_, count| *count != 0);
+    plan_until_project(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].blueprint,
+        "storage"
+    );
+    complete(&mut state, id, builder);
+    assert_eq!(inventory_and_drops(&state, id, builder), expected);
+}

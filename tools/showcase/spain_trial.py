@@ -3,7 +3,7 @@
 
 Run through Main's mem-run with KRASNOKAMEN_SERVER_BINARY set to Main's pin.
 Stock is an explicit, bounded operator-supplied fixture, inserted ONLY into
-client-observed empty slots. Cultural buildings are never pasted. Every frame
+client-observed storage with real room. Cultural buildings are never pasted. Every frame
 is an actual-window GPU capture; the one-minute film is 60 such frames at 1 fps.
 
 Fast runs (owner, 2026-11-16): `--scratch /dev/shm` keeps the world and every
@@ -12,6 +12,9 @@ output on tmpfs and copies the complete directory to `--out` at the end;
 disjoint CPUs; `--frames 12` captures fewer frames, while the census, supply,
 building orders and observer move still follow every one of the 60 sprints.
 Acceptance needs 60 frames.
+With MC_CORE_PHASE_LOG, raw diagnostics and timing remain in separate streamed
+files so command readers do not load the verbose phases. Use disk output (omit
+`--scratch`) for long phase profiles; all raw diagnostics are retained.
 Every building order must receive a native Started/Queued reply before the
 driver advances its queue; a refusal or missing acknowledgement fails the run
 immediately, with that command and the received chat retained in run.json.
@@ -30,6 +33,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import threading
 import time
 from urllib.request import urlopen
 
@@ -213,6 +217,54 @@ def settlement_tick_tail(lines) -> dict:
             pending = None
     return {'enabled': enabled, 'measurement': 'native commit_laps.settlements ms',
             'search_ticks': len(searches), **groups}
+
+
+class PhaseLog:
+    """Stream verbose native phases separately from the command log readers."""
+
+    def __init__(self, path: Path):
+        self.raw_path = path.with_name(f'{path.stem}-raw{path.suffix}')
+        self.phase_path = path.with_name(f'{path.stem}-phases{path.suffix}')
+        self._commands = path.open('xb', buffering=0)
+        self._raw = self.raw_path.open('xb')
+        self._phases = self.phase_path.open('xb')
+        reader, self._writer = os.pipe()
+        self._error = None
+        self._thread = threading.Thread(target=self._read, args=(reader,), daemon=True,
+                                        name='spain-phase-log')
+        self._thread.start()
+
+    def fileno(self) -> int:
+        if self._writer is None:
+            raise ValueError('phase log is closed')
+        return self._writer
+
+    def _read(self, reader: int) -> None:
+        try:
+            with os.fdopen(reader, 'rb') as source:
+                for line in source:
+                    self._raw.write(line)
+                    header = line.split(b':', 1)[0].strip()
+                    timing = header in (b'phase ms', b'commit detail ms')
+                    diagnostic = header.endswith(b' ms') or header in (
+                        b'settlement planner', b'settlement resident', b'edge items')
+                    if timing or not diagnostic:
+                        self._phases.write(line)
+                    if not diagnostic:
+                        self._commands.write(line)
+        except BaseException as error:
+            self._error = error
+
+    def close(self) -> None:
+        if self._writer is None:
+            return
+        os.close(self._writer)
+        self._writer = None
+        self._thread.join()
+        for output in (self._commands, self._raw, self._phases):
+            output.close()
+        if self._error is not None:
+            raise RuntimeError('native phase log capture failed') from self._error
 
 
 # Refusals `/settlement build` can answer with (command_execution/settlement.rs build_command,
@@ -449,7 +501,10 @@ def main() -> None:
     server = client = xvfb = mcp = None
     client_log = None
     log_path = out / 'server.log'
-    log_handle = log_path.open('wb')
+    log_handle = PhaseLog(log_path) if 'MC_CORE_PHASE_LOG' in os.environ else log_path.open('wb')
+    run['server_logs'] = {'commands': str(log_path)}
+    if isinstance(log_handle, PhaseLog):
+        run['server_logs'].update(raw=str(log_handle.raw_path), phases=str(log_handle.phase_path))
     telemetry_path = out / 'telemetry.jsonl'
     cpu_args = {'server': args.server_cpus, 'client': args.client_cpus}
     roles = {role: cpu_list(text) for role, text in cpu_args.items() if text}
@@ -610,7 +665,8 @@ def main() -> None:
             log_handle.close()
             run['elapsed_seconds'] = time.monotonic() - started
             run['test_acceleration']['effective'] = effective_acceleration(log_path.read_text(errors='replace'))
-            with log_path.open(errors='replace') as lines:
+            timing_log = log_handle.phase_path if isinstance(log_handle, PhaseLog) else log_path
+            with timing_log.open(errors='replace') as lines:
                 run['settlement_tick_tail'] = settlement_tick_tail(lines)
             run['shutdown'] = {'server': server.returncode if server is not None else None, 'client': client.returncode if client is not None else None}
             run['client'] = ctx.client_evidence

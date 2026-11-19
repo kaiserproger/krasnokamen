@@ -1533,7 +1533,14 @@ pub(crate) fn fetch(
                 *count = count.saturating_sub(stack.count as u32);
             }
         }
-        (haul_plan(state, record, &carry.slots), bill)
+        let mut plan = haul_plan(state, record, &carry.slots);
+        crate::settlements::construction::order_storage_haul(
+            state,
+            id,
+            &project.blueprint,
+            &mut plan,
+        );
+        (plan, bill)
     };
     if !plan.iter().any(|(planned, _)| *planned == item) {
         return Err(Failure::Blocked);

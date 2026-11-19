@@ -46,6 +46,17 @@ Emergency priority and the receiving-capacity fence apply after a storehouse is
 completed; a missing first civic store keeps its ordinary admission and fallback
 to other funded work.
 
+An additional storehouse's bill is ordered by resource name before the existing
+species and joint-reservation funding proof, rather than by protocol item id.
+Consuming an owed small stack can then make real room for a later recipe output;
+no recipe or capacity check is waived. This funding projection never supplies
+slots to the preparation fence, which still reads the current physical images.
+The selected haul is ordered by its concrete resource names as well, so a small
+owed stack can leave the bank before a recipe needs its slot. The existing
+one-pass packing, joint reservations and atomic inventory commit are unchanged.
+Hauling is not moved ahead of terrain clearing, and no future loan is counted as
+receiving capacity.
+
 A pressured storehouse is refused **inside the normal candidate sweep** if its
 early drops cannot be conservatively received. The bound reserves an empty slot
 per possible terrain/plant cut and two per retired crop; it deliberately does not

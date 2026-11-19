@@ -27,6 +27,41 @@ pub(super) fn autonomous_catalog(
     })
 }
 
+pub(super) fn funded_variant<'a>(
+    state: &'a TickState,
+    record: &SettlementRecord,
+    blueprint: &blueprints::Blueprint,
+    materials: &[(u32, u32)],
+    images: &[Image],
+) -> Option<(&'a str, u8)> {
+    if blueprint.kind != BuildingKind::Storage || !has_storage(record) {
+        return super::funded_variant(state, record.id, materials, images);
+    }
+    // Resource-name order, not report-assigned ids: consuming a small required
+    // stack can make real room for a later recipe output in a full bank.
+    // The canonical species/joint funding proof and preparation fence stay intact.
+    let mut ordered = materials.to_vec();
+    order_by_name(state, &mut ordered);
+    super::funded_variant(state, record.id, &ordered, images)
+}
+
+fn order_by_name(state: &TickState, materials: &mut [(u32, u32)]) {
+    materials.sort_unstable_by_key(|(item, _)| state.registry.items.name_of(*item));
+}
+
+pub(crate) fn order_storage_haul(
+    state: &TickState,
+    id: SettlementId,
+    blueprint: &str,
+    materials: &mut [(u32, u32)],
+) {
+    let additional =
+        is_storehouse(state, blueprint) && state.settlements.get(id).is_some_and(has_storage);
+    if additional {
+        order_by_name(state, materials);
+    }
+}
+
 fn is_storehouse(state: &TickState, blueprint: &str) -> bool {
     blueprints::get(&state.registry, blueprint)
         .is_some_and(|blueprint| blueprint.kind == BuildingKind::Storage)

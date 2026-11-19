@@ -9,7 +9,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from tools.showcase.spain_trial import hud_visible, next_order, order_build, publish, resident_census, settlement_tick_tail, spawn_on, supply
+from tools.showcase.spain_trial import (
+    PhaseLog, hud_visible, next_order, order_build, publish, resident_census,
+    settlement_tick_tail, spawn_on, supply,
+)
 
 
 class ScratchPublishTests(unittest.TestCase):
@@ -239,6 +242,42 @@ class SettlementTickTailTests(unittest.TestCase):
         self.assertFalse(result['enabled'])
         self.assertEqual(result['with_storehouse_search'],
                          {'samples': 0, 'max_ms': None, 'over_100ms': 0})
+
+
+class PhaseLogTests(unittest.TestCase):
+    def test_real_subprocess_output_keeps_raw_bytes_and_separates_command_reads(self):
+        ordinary = (b'Game is frozen\n'
+                    b'DEBUG settlement_storehouse_search game_tick=20\n')
+        verbose = (b'settlement resident: uuid=actor lumber=lots-of-details\n'
+                   b'  block detail ms: farming=10.0\n'
+                   b'dimension envelope ms: elapsed=1.0\n'
+                   b'  edge items: queued=0\n')
+        timing = (b'  commit detail ms: settlements=120.01\n'
+                  b'phase ms: tick=20 commit=121.02\n')
+        payload = ordinary + verbose + timing
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'server.log'
+            capture = PhaseLog(path)
+            try:
+                subprocess.run([sys.executable, '-c', f'import os; os.write(1, {payload!r})'],
+                               stdout=capture, stderr=subprocess.STDOUT, check=True)
+            finally:
+                capture.close()
+            self.assertEqual(capture.raw_path.read_bytes(), payload)
+            self.assertEqual(path.read_bytes(), ordinary)
+            self.assertEqual(capture.phase_path.read_bytes(), ordinary + timing)
+            with capture.phase_path.open() as lines:
+                tail = settlement_tick_tail(lines)
+            self.assertEqual(tail['with_storehouse_search'],
+                             {'samples': 1, 'max_ms': 120.01, 'over_100ms': 1})
+
+    def test_capture_failure_is_not_silently_reported_as_complete_logging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            capture = PhaseLog(Path(directory) / 'server.log')
+            capture._raw.close()
+            os.write(capture.fileno(), b'Game is frozen\n')
+            with self.assertRaisesRegex(RuntimeError, 'phase log capture failed'):
+                capture.close()
 
 
 if __name__ == "__main__":

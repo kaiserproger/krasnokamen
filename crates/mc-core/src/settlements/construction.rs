@@ -54,6 +54,7 @@ use builders::{assign_builder, builder_free, probe_storage};
 
 #[path = "construction_storage.rs"]
 mod storage;
+pub(crate) use storage::order_storage_haul;
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
@@ -1565,7 +1566,8 @@ fn site_project<'a>(
         let floors = std::array::from_fn(|turns| {
             site_refusals::floor_columns(blueprint, u8::try_from(turns).expect("quarter turns"))
         });
-        let Some((species, color)) = funded_variant(state, record.id, &level.materials, images)
+        let Some((species, color)) =
+            storage::funded_variant(state, record, blueprint, &level.materials, images)
         else {
             report.reject(site_refusals::Reason::MaterialBill, record.anchor);
             continue;
