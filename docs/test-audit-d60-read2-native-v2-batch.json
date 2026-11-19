@@ -1,0 +1,1016 @@
+{
+  "decision": "D60.2",
+  "base": "8f810ac654b6b62843b3471db9971e9de40dd1f4",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_native_v2.py",
+  "source_sha256_before": "c6bb545fbb04bb1f11e9d2aa34d5f39e2fc66701b39d48d8d40819e130252161",
+  "status": "All44 original bodies and nested/shared fixture builders individually read. Delete15 read/high R4 self-tests; retain12 K1 regressions and17 conservative U contracts. No worker tests/builds/L2/formatters/smokes/negative controls.",
+  "counts": {
+    "historical_test_ids_finalized": 44,
+    "removed_R4": 15,
+    "retained_K1": 12,
+    "retained_U": 17,
+    "prior_deletions": 0,
+    "physical_declarations_before": 44,
+    "physical_declarations_remaining": 29,
+    "source_lines_before": 689,
+    "source_lines_remaining": 452,
+    "physical_source_lines_removed": 237,
+    "historical_medium_candidates_finalized": 18,
+    "historical_medium_candidates_unfinalized": 578
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire original689-line module, all44 methods and every nested fake Pointer, wait, observer, capture, call, Popen and fixture builder. No generated NBT/region/WAL fixture is represented as a captured artifact.",
+    "backend_source_read": {
+      "tools/harness/backends/native_v2.py": "1-121 helper/catalog definitions;641-703 advancement UI and nearby helpers;1113-1220 complete runner dictionary/run dispatch.",
+      "tools/harness/backends/anvil_corrupt.py": "Whole168 lines, including serialization, parsing and region rewrite.",
+      "tools/harness/backends/wal_forge.py": "Whole52 lines, forged frame/checkpoint handling.",
+      "tools/harness/backends/probe_steps.py": "Whole151 lines, observation/wait/transition/failure evidence.",
+      "tools/harness/backends/native_radius.py": "Whole108 lines, live setting and view-cell scan.",
+      "tools/harness/backends/native_lifecycle.py": "1-44 difficulty response fence/helper.",
+      "tools/harness/backends/native_player_input.py": "1-70 fixture setup and hotbar commands.",
+      "tools/harness/backends/native_p1.py": "1-42 VarInt helper/imports only; not a complete protocol proof.",
+      "tools/harness/backends/native_p4.py": "121-123 hook metadata tail;236-243 UI-node extraction;257-273 wire wait;276-356 damage setup;359-459 identity/warden;490-682 drainage/environment/void rows.",
+      "tools/harness/backends/client_probes.py": "47-100 pre-server profile/client admission only, not the whole695-line module.",
+      "tools/harness/backends/title_connect.py": "1-39 pre-Play observer override.",
+      "tools/harness/backends/gameplay.py": "1-73 tool advertisement/operator UUID admission.",
+      "tools/harness/runtime.py": "1-260,327-335,928-1122 already read during runtime-profile batch: physical input, loader sibling/launcher and start_client; not redundantly reread.",
+      "tools/harness/scenarios.py": "50-83 Scenario contract plus28 selected real-case entries at470-479,521-550,560-583,966-1001,1399-1497,1507-1554; long corruption limits line570 read whole. Not claiming all1489 lines of the scenario dictionary."
+    },
+    "unused_imports_removed": [
+      "client_probes"
+    ],
+    "helpers_removed": "Only nested helpers inside the15 deleted bodies. No production backend, shared artifact writer/parser or real server/client gate is modified."
+  },
+  "evidence": {
+    "current_body_origin_messages_read": [
+      "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "23f4e4b1115dcef4e555a144f92eb69495019adf",
+      "240b0acaf3e872c1526105146452dd24afb2ff74",
+      "38511c0008322b12239805516257369dd93fa5a8",
+      "3cfda8699eacfb9f9af15b812949a6a9a2652aeb",
+      "4a74eacae1ad73e97f267800a4471d8e6af4450b",
+      "4b3210a1e8d776b093b966a8ae4e55856d082b03",
+      "4b6228bd3086458b5e4c76f0f9e660d4a77c1299",
+      "5855950bbc6c0527ad88b0314c174ba301940803",
+      "6a9e4d6e2c16045908ed96e63701401ce3f27a0e",
+      "704f0e9fbf5da39cf38418ba57b3756ac6657c4b",
+      "774ce9b7140d86b02b3830ed795803dd78fe487a",
+      "83ccb7ca6ed1a7637cc19070522d042f63edd1c2",
+      "83d33ed1e90812672a6889a17af3889293448e04",
+      "95aacb810ac89674dc2a3cbb8086d5ec5e014b24",
+      "9eefd521a65fee749f44fc0719548e27401bb57a",
+      "ad2986f85fa41c9ee397ef059386b2d81009d798",
+      "b00392578c84fa0f6f98498cb7cfaefe5fc61cde",
+      "b0fa3d298ba94098534d0dd8a7bc28e0c30e9ed0",
+      "b6e946c132354808ac376bc2edfb901cd772a821",
+      "c4a63cc672bc24a6e0cfa487279b3f3557c46c04",
+      "c6550cc39e9a965de2a6be3e124cefe73c24f751",
+      "cbed4ad8c8601e4795ad78e0f9ca81792eeb3fcc",
+      "cc162a438341cbee48b17698cbba60126ad0bc19",
+      "da721308f66a350ad131f139e958151415d064d3",
+      "f4a0545e506476983d472ae452df87c009599404",
+      "fe28852ba9d841b2660136a9679f0d00eaed788b"
+    ],
+    "already_read_messages_reused": [
+      "73761dc555 Java OpenAL/audio guard provenance from runtime-profile batch"
+    ],
+    "fix_test_and_backend_diffs_read": {
+      "selected_native_deltas": [
+        "95aacb810",
+        "fe28852ba",
+        "4a74eacae",
+        "b0fa3d298",
+        "da721308f",
+        "b6e946c13",
+        "5855950bb",
+        "240b0acaf",
+        "83d33ed1e",
+        "704f0e9fb",
+        "ad2986f85",
+        "6a9e4d6e2",
+        "c6550cc39",
+        "cbed4ad8c",
+        "f4a0545e5",
+        "c4a63cc67",
+        "3cfda8699",
+        "cc162a438",
+        "774ce9b71"
+      ],
+      "9eefd521a6": "Complete selected native_lifecycle/test changes: fresh difficulty fence and original platform validation contract.",
+      "scope": "Read fixing/test hunks and commit explanations, not arbitrary full-repository diffs. fe288 physical-input backend addition read whole; missing spilled sections of the19-delta output explicitly recovered before decisions."
+    },
+    "ledger_rows_read": [
+      "DAMAGE-GATE-REJECTED-REGENERATION-RULE",
+      "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL"
+    ],
+    "original_receipt_scope": "Read complete ledger documentation of named real damage-gate runs and commit explanations of rain, water, dawn, creative-mode ordering, reach, void and warden failures. Did not reopen raw original client frames/wire logs, execute native clients or rerun historical reversals. Rows claiming fixes-in-branch are not promoted.",
+    "important_reclassifications": [
+      "Historical medium R4 thorns-night-reset and outside-Play observation cases are K1 on concrete observed damage-gate fix provenance; both complete bodies retained.",
+      "Ten exact-ledger K1 regressions retained, including mocked helper and diagnostic cases.",
+      "Hand-coded VarInt/fishing bytes and fixed observed-labeled UUID are not implementation mirrors or self-equal constants. Missing recovered external oracle is recorded as U, not a claimed K2 proof or a deletion justification.",
+      "Catalog registration of real cases, launcher/platform boundary and unresolved transition/observer contracts remain U. Real gate names alone are not claimed to be real execution.",
+      "cc162a4383 repairs the daemon self-test own Mock/root coupling, not an observed actual Gradle/server/client failure."
+    ],
+    "reference_search_scope": "All44 exact method names searched only in D60Read2, excluding own module and audit JSON. Ten exact ledger-linked K1 tests remain. The only apparent removal-name hits outside the module are two same-named declarations in test_java_p5.py, not callers; untouched. No removed top-level/shared helper.",
+    "semantic_ledger_search_scope": "Assigned docs/bugs/rows radius/NoAI/auxiliary slots/thorns/preplay/view-grid terms; narrow assigned docs/harness metadata search for exact UUID, render-distance and physical-input contracts. No cross-worktree reference search.",
+    "other_worktree_fence": {
+      "checked": 563,
+      "dirty_overlaps": 1,
+      "errors": 0,
+      "scope": "Exact one-file git status only across other worktrees. After detecting one dirty file, read only that file unstaged diff.",
+      "overlap_worktree": "/run/media/kaiserroman/games/solaris-work/wt/S3ClientRegress",
+      "resolution": "Its complete dirty diff adds two dragon-egg pagination regressions before the retained first test; none of the15 removal bodies/import cleanup overlap those additions. Other worktree was not edited. Main must preserve both additions when integrating."
+    },
+    "unmerged_module_diffs_read": [
+      "0722003b2 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "aefd70ec8 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "dd224b453 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "efba00502 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "a5262042c chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "f20955e82 Merge main into wt/CivSimSeed24b"
+    ],
+    "unmerged_fence_result": "All six selected module deltas read before editing: five rebrands change invented fixture identifiers; f20955e82 adds the forged-WAL self-test already present in this source. No unreviewed function is removed."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_destroyed_chest_scenario_is_graphical_and_registered",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 18,
+      "original_end_line": 24,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks registration/evidence fields for a real destroyed-chest gate. 83ccb7ca6e strengthened the actual custody gate, but this catalog-only body does not exercise that observed failure; retain U rather than equating registration with a real run.",
+      "provenance_commit": "83ccb7ca6ed1a7637cc19070522d042f63edd1c2",
+      "body_provenance_commits": [
+        "83ccb7ca6ed1a7637cc19070522d042f63edd1c2"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_corruption_edits_hit_only_their_record_and_keep_every_other_byte",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 26,
+      "original_end_line": 46,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Serializes its own invented NBT compounds, reparses/edits them with the same helper stack and checks untouched bytes. No captured/exported server record, independent decoder or observed helper failure is used; R4 tool-fixture self-test.",
+      "provenance_commit": "4b6228bd3086458b5e4c76f0f9e660d4a77c1299",
+      "body_provenance_commits": [
+        "4b6228bd3086458b5e4c76f0f9e660d4a77c1299"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_region_rewrite_edits_the_named_block_entity_and_refuses_a_missing_one",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 48,
+      "original_end_line": 72,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Creates its own one-record Anvil region using local serialize/write helpers and rewrites that generated region. The real corruption gate is untouched; this body consumes no actual world export or observed rewrite failure, so R4.",
+      "provenance_commit": "4b6228bd3086458b5e4c76f0f9e660d4a77c1299",
+      "body_provenance_commits": [
+        "4b6228bd3086458b5e4c76f0f9e660d4a77c1299"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_forged_wal_batch_follows_the_checkpoint_with_a_valid_frame",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 74,
+      "original_end_line": 97,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Hand-builds checkpoint/WAL fixture bytes, calls the local forge helper and inspects the fabricated frame locally. It never replays that frame through the server or consumes an actual WAL artifact; R4, not a real corruption-gate run.",
+      "provenance_commit": "4b3210a1e8d776b093b966a8ae4e55856d082b03",
+      "body_provenance_commits": [
+        "4b3210a1e8d776b093b966a8ae4e55856d082b03"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_new_core_blocker_scenarios_are_runnable_catalog_entries",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 99,
+      "original_end_line": 103,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Asserts runner/catalog registration for named corrupt-world, duplicate-login and related real gates, including a documented near-camera repro. No observed registration failure or independent registration oracle established; keep U and leave all real runners unchanged.",
+      "provenance_commit": "4b6228bd3086458b5e4c76f0f9e660d4a77c1299",
+      "body_provenance_commits": [
+        "4b6228bd3086458b5e4c76f0f9e660d4a77c1299",
+        "b00392578c84fa0f6f98498cb7cfaefe5fc61cde"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_lifecycle_difficulty_uses_only_fresh_fenced_responses",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 105,
+      "original_end_line": 120,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Independent hand-written fenced-chat positive/negative cases, not a formula mirror. 9eefd521a6 changes the parser;95aac describes a real long-soak difficulty fixture problem, but the available evidence does not establish this exact fresh-response failure in a real run. Retain U.",
+      "provenance_commit": "9eefd521a65fee749f44fc0719548e27401bb57a",
+      "body_provenance_commits": [
+        "9eefd521a65fee749f44fc0719548e27401bb57a"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_radius_rejects_missing_or_non_eight_live_render_setting",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 122,
+      "original_end_line": 134,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invokes the radius helper against a mocked observe view solely to exercise its local render-distance guard. No real client settings/artifact or observed radius-guard failure is supplied; R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_radius_records_live_render_setting_and_reads_all_unique_chunk_cells",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 136,
+      "original_end_line": 167,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents the full 17x17 chunk grid and mock block replies, then checks the helper visits every generated cell and records the mocked setting. No actual received world/client view or independent coverage artifact; R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_ranged_target_fixture_uses_only_needed_no_ai_tag",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 169,
+      "original_end_line": 178,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks probe steps and deliberately stops the ranged fixture before its live wait, asserting authored NoAI command syntax. No real summoned target or observed fixture failure is exercised; R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_standard_inventory_fixture_does_not_assume_auxiliary_equipment",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 180,
+      "original_end_line": 190,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Injects unfamiliar auxiliary equipment keys and checks standard-inventory projection ignores them. This is a meaningful compatibility boundary, but neither an actual observed equipment response nor a documented original failure was recovered; keep U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_named_scenarios_route_existing_native_profile",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 192,
+      "original_end_line": 197,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks metadata routing of named real native scenarios, not their server/client outcomes. Neither an observed wrong-route case nor an external registration oracle is demonstrated; conservative U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_physical_input_catalog_routes_all_four_probes",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 200,
+      "original_end_line": 206,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Registers four actual physical-input scenarios added alongside the falling-block freeze fix. This body does not reproduce that physics failure, but the real scenario linkage makes a blanket plumbing deletion unsafe; retain U.",
+      "provenance_commit": "fe28852ba9d841b2660136a9679f0d00eaed788b",
+      "body_provenance_commits": [
+        "fe28852ba9d841b2660136a9679f0d00eaed788b"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_physical_click_queues_both_edges_before_x_server_sync",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 208,
+      "original_end_line": 222,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses only a fake Pointer implementation and mocks X synchronization to check the helper call order. It receives no X11 events/client result and documents no observed short-click failure; R4.",
+      "provenance_commit": "fe28852ba9d841b2660136a9679f0d00eaed788b",
+      "body_provenance_commits": [
+        "fe28852ba9d841b2660136a9679f0d00eaed788b"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_input_fixture_uses_hotbar_only_debug_slots_and_removes_filler",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 224,
+      "original_end_line": 233,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks fixture commands and checks the debug hotbar/filler command sequence it authors. No received inventory or real input run/artifact is checked; R4.",
+      "provenance_commit": "fe28852ba9d841b2660136a9679f0d00eaed788b",
+      "body_provenance_commits": [
+        "fe28852ba9d841b2660136a9679f0d00eaed788b"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_p1_catalog_covers_all_five_surfaces",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 235,
+      "original_end_line": 238,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks catalog fields for five real P1 surfaces without executing them. No observed registration failure or independent registration evidence was established; keep U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_sign_wire_varint_waits_for_complete_prefix",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 240,
+      "original_end_line": 247,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Hand-coded VarInt 300/truncated-prefix bytes are an independent small input/expected-value contract, not a computed implementation mirror. No captured vanilla bytes or original observed sign failure identified; preserve U rather than calling it K2 or R4 by assumption.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_p2_catalog_covers_all_four_surfaces",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 249,
+      "original_end_line": 252,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks routing/catalog fields of four actual P2 scenarios, not their end-to-end outcomes. No observed catalog defect or independent routing oracle established; retain U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_fishing_trace_requires_exact_pinned_boolean_tail",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 254,
+      "original_end_line": 260,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Hand-written positive/negative fishing metadata tails test exact parser admission independently of the implementation. No captured vanilla packet or observed original misparse recovered; retain U, not a claimed K2 wire oracle.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_p4_catalog_covers_requested_surfaces",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 262,
+      "original_end_line": 272,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks requested P4 catalog surfaces, including real damage gates, without replaying those failures. No observed catalog error or independent registration oracle established; retain U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "23f4e4b1115dcef4e555a144f92eb69495019adf"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_gamerule_fixture_requires_supported_rule_and_ack",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 274,
+      "original_end_line": 286,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact regression reference in DAMAGE-GATE-REJECTED-REGENERATION-RULE: a real native damage gate failed because its gamerule command was unsupported/rejected. Retain supported-rule and acknowledgement checks despite mocked transport.",
+      "provenance_commit": "b0fa3d298ba94098534d0dd8a7bc28e0c30e9ed0",
+      "body_provenance_commits": [
+        "b0fa3d298ba94098534d0dd8a7bc28e0c30e9ed0"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/DAMAGE-GATE-REJECTED-REGENERATION-RULE.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_gamerule_fixture_requires_supported_rule_and_ack\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_scenario_disables_mob_spawning_before_the_night",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 288,
+      "original_end_line": 297,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL links this exact test to real native damage runs killed by naturally spawned mobs during the night. b0fa3d298b disables spawning before the authored night; K1.",
+      "provenance_commit": "b0fa3d298ba94098534d0dd8a7bc28e0c30e9ed0",
+      "body_provenance_commits": [
+        "b0fa3d298ba94098534d0dd8a7bc28e0c30e9ed0"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_scenario_pins_clear_weather_before_its_rows",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 299,
+      "original_end_line": 312,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression. da721308f6 fixes rain dousing the burning player; b6e946c132 names actual receipt20261111T223458-native-v2-p4-damage-ey95lu17 where an existing zombified piglin killed the starve fixture. Keep the complete guard/order body.",
+      "provenance_commit": "da721308f66a350ad131f139e958151415d064d3",
+      "body_provenance_commits": [
+        "b6e946c132354808ac376bc2edfb901cd772a821",
+        "da721308f66a350ad131f139e958151415d064d3"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 314,
+      "original_end_line": 337,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression for the observed below-world in_play=false/no-player-row boundary. 240b0acaf3 and5855950bbc fix the void row to use received damage identity and the death screen outside Play; K1.",
+      "provenance_commit": "5855950bbc6c0527ad88b0314c174ba301940803",
+      "body_provenance_commits": [
+        "240b0acaf3e872c1526105146452dd24afb2ff74",
+        "5855950bbc6c0527ad88b0314c174ba301940803"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 339,
+      "original_end_line": 367,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression for real damage rows cushioned/doused by leftover flowing water. 704f0e9fbf and83d33ed1e9 wait for received fluid drainage instead of assuming source deletion is enough; K1.",
+      "provenance_commit": "83d33ed1e90812672a6889a17af3889293448e04",
+      "body_provenance_commits": [
+        "704f0e9fbf5da39cf38418ba57b3756ac6657c4b",
+        "83d33ed1e90812672a6889a17af3889293448e04"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_thorns_row_resets_the_night_before_summoning_its_zombie",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 369,
+      "original_end_line": 388,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "ad2986f85f fixes the concrete slow-host damage-gate failure in which dawn burns the thorns zombie before the authored hit. This body checks night reset before summoning, so reclassify historical medium R4 to K1 and retain it.",
+      "provenance_commit": "ad2986f85fa41c9ee397ef059386b2d81009d798",
+      "body_provenance_commits": [
+        "ad2986f85fa41c9ee397ef059386b2d81009d798"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 390,
+      "original_end_line": 420,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression:6a9e4d6e2c fixes attack ordering while the player was still creative and could not receive reflected thorns damage. Keep complete wait/order assertions; K1.",
+      "provenance_commit": "6a9e4d6e2c16045908ed96e63701401ce3f27a0e",
+      "body_provenance_commits": [
+        "6a9e4d6e2c16045908ed96e63701401ce3f27a0e"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 422,
+      "original_end_line": 444,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression:c6550cc39e returns the player to the origin after prior rows moved it out of reach of the authored thorns zombie. Keep the full authored identity/position case; K1.",
+      "provenance_commit": "c6550cc39e9a965de2a6be3e124cefe73c24f751",
+      "body_provenance_commits": [
+        "c6550cc39e9a965de2a6be3e124cefe73c24f751"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_identity_timeout_reports_the_wire_events_it_saw",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 446,
+      "original_end_line": 455,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression:cbed4ad8c8 preserves actually seen wire damage events on the identity timeout so real failed gate evidence is diagnosable. Keep the complete timeout evidence case; K1.",
+      "provenance_commit": "cbed4ad8c8601e4795ad78e0f9ca81792eeb3fcc",
+      "body_provenance_commits": [
+        "cbed4ad8c8601e4795ad78e0f9ca81792eeb3fcc"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 457,
+      "original_end_line": 480,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression:f4a0545e50 accepts the observed case where the real warden sonic boom already killed the player before lethal preparation. Preserve both live/dead branches; K1.",
+      "provenance_commit": "f4a0545e506476983d472ae452df87c009599404",
+      "body_provenance_commits": [
+        "f4a0545e506476983d472ae452df87c009599404"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_damage_scenario_stops_the_zombie_before_slow_capture",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 482,
+      "original_end_line": 513,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL regression:c4a63cc672 stops the zombie before slow screenshots can let it kill the fixture;3cfda8699e first observes the received hurt tilt. Preserve both ordering boundaries; K1.",
+      "provenance_commit": "c4a63cc672bc24a6e0cfa487279b3f3557c46c04",
+      "body_provenance_commits": [
+        "3cfda8699eacfb9f9af15b812949a6a9a2652aeb",
+        "c4a63cc672bc24a6e0cfa487279b3f3557c46c04"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL.toml:9:regression = [\"harness:entities:native-v2-p4-damage\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture\", \"python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_p4_advancement_labels_are_actual_visible_ui_nodes",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 515,
+      "original_end_line": 523,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fabricates a visible advancement UI-node list and rejects a fabricated chat-only list. It observes no actual UI tree/screenshot or real advancement run/artifact; R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_fixture_coordinates_preserve_negative_origin",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 525,
+      "original_end_line": 527,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks one hand-authored negative coordinate tuple passed through a harness fixture helper. It has no actual server/client artifact or observed negative-origin fixture failure; R4, not a constant-equals-itself test.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_missing_tool_fails_before_privileged_setup",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 529,
+      "original_end_line": 536,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses a mocked missing-tool list and asserts local failure before privileged setup. No real tool advertisement/client or observed missing-tool run is used; R4 harness guard self-test.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_wrong_profile_fails_before_server_resolution",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 538,
+      "original_end_line": 543,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Gives the runner a mocked wrong profile and asserts early rejection before mocked server lookup. No real scenario run or observed routing failure; R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_wrong_client_fails_before_server_resolution",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 545,
+      "original_end_line": 550,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Gives the runner a mocked wrong client and asserts early rejection before mocked server lookup. No real scenario run or observed routing failure; R4. Same-named Java test declarations are not callers and remain untouched.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_insert_requires_unique_received_source_and_preserves_failure_receipt",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 552,
+      "original_end_line": 566,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents an empty container reply and checks the harness writes its own temporary failure JSON. No received real container/failed-run artifact or observed insertion issue is replayed; R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_shared_java_launcher_disables_reusable_gradle_daemon",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 568,
+      "original_end_line": 592,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks Popen/launcher root and inspects the helper command line for --no-daemon. cc162a4383 repairs this self-test's own cold-cache Mock/root interaction, not an observed server/client failure; no real Gradle process/artifact, so R4.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "cc162a438341cbee48b17698cbba60126ad0bc19"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_java_launcher_validates_platform_before_launch",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 594,
+      "original_end_line": 609,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exercises public Java launcher invalid-platform/missing-wrapper admission with isolated paths and a real local free port, including isolation added in774ce9b714/audio guard edits. No actual platform-launch incident established; preserve this boundary as U rather than a blanket mock deletion.",
+      "provenance_commit": "9eefd521a65fee749f44fc0719548e27401bb57a",
+      "body_provenance_commits": [
+        "73761dc55526e17c9b4500b63215a3354c22d750",
+        "774ce9b7140d86b02b3830ed795803dd78fe487a",
+        "9eefd521a65fee749f44fc0719548e27401bb57a"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_v2_operator_fixture_uses_observed_offline_uuid",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 611,
+      "original_end_line": 622,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks a fixed UUID explicitly labeled observed rather than deriving the expected value by the implementation formula. No original captured server/operator receipt was recovered, so neither claim K2 nor delete it as an implementation mirror; keep U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_probe_observe_outside_play_returns_the_state_only_when_declared",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 625,
+      "original_end_line": 632,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "5855950bbc introduces this exact helper regression while fixing the observed void damage gate outside Play. Explicit outside_play must return the state while ordinary observation still rejects it; reclassify historical medium R4 to K1.",
+      "provenance_commit": "5855950bbc6c0527ad88b0314c174ba301940803",
+      "body_provenance_commits": [
+        "5855950bbc6c0527ad88b0314c174ba301940803"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "HARNESS-DAMAGE-GATE-FIXTURE-SELF-KILL"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_default_probe_observe_stays_strict_outside_play",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 634,
+      "original_end_line": 642,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Negative contract that ordinary observe remains fail-closed outside Play. Related to the real void boundary, but no separate observed accidental-default failure established; conservative U keep.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_transition_wait_awaits_presented_play_after_state_change",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 644,
+      "original_end_line": 659,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks a declared world-transition helper waits for presented Play after state change, using fabricated responses. No original real transition failure identified, but this cross-phase admission contract is unresolved rather than proven valueless; keep U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_transition_play_timeout_remains_failed_evidence",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 661,
+      "original_end_line": 669,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks a Play timeout remains failed evidence in the transition helper. The failure propagation is meaningful but no original real timeout artifact was established; retain U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_v2.py::NativeV2ProbeTests::test_title_preplay_wait_and_opt_in_play_observer_share_signature",
+      "file": "tools/harness/test_native_v2.py",
+      "original_fn_line": 671,
+      "original_end_line": 685,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks the Title pre-Play observer and opt-in Play observer share the outside_play/wait signature. No original real signature failure identified; retain this startup compatibility boundary as U.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": "Read-only body/helper/source/provenance/ledger/reference and pre-edit exact-file dirty-overlap inspection. Edit-tool results are change receipts; no post-edit re-audit, test/build or negative-control execution.",
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_native_v2 (29 retained methods here); preserve/check the two independent S3ClientRegress dragon-egg additions on integration. Integrated correctness at Main discretion; worker ran neither.",
+    "negative_control": "none performed by this audit",
+    "runtime_saving": "Unmeasured; no speedup claimed."
+  },
+  "gaps": []
+}
