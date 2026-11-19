@@ -276,13 +276,18 @@ fn expected_station(kind: BuildingKind, p: Profession) -> bool {
         _ => false,
     }
 }
+pub(crate) struct Inspection {
+    pub(crate) requirements: Vec<Requirement>,
+    points: BTreeSet<[i32; 3]>,
+}
+
 #[allow(clippy::too_many_lines)]
-pub(crate) fn inspect(
+pub(crate) fn assess(
     state: &TickState,
     kind: BuildingKind,
     level: u8,
     bounds: ScriptWorldBounds,
-) -> Result<Vec<[i32; 3]>, CertError> {
+) -> Result<Inspection, CertError> {
     let dims = dimensions(bounds).ok_or_else(|| {
         failure("bounds must be ordered, at most 64 blocks per axis and 32768 blocks total")
     })?;
@@ -368,9 +373,9 @@ pub(crate) fn inspect(
             }
         }
     }
-    let missing: Vec<_> = requirements(kind, level)
+    let checks: Vec<_> = requirements(kind, level)
         .into_iter()
-        .filter_map(|mut r| {
+        .map(|mut r| {
             r.found = match r.description.as_str() {
                 "footprint" => {
                     if floor || kind == BuildingKind::Mine {
@@ -391,11 +396,30 @@ pub(crate) fn inspect(
                 "gate frame" => u32::from(gate_frame),
                 _ => 0,
             };
-            (r.found < r.required).then_some(r)
+            r
         })
         .collect();
-    if !missing.is_empty() {
-        return Err(CertError { missing });
+    Ok(Inspection {
+        requirements: checks,
+        points,
+    })
+}
+
+pub(crate) fn inspect(
+    state: &TickState,
+    kind: BuildingKind,
+    level: u8,
+    bounds: ScriptWorldBounds,
+) -> Result<Vec<[i32; 3]>, CertError> {
+    let Inspection {
+        mut requirements,
+        points,
+    } = assess(state, kind, level, bounds)?;
+    requirements.retain(|requirement| requirement.found < requirement.required);
+    if !requirements.is_empty() {
+        return Err(CertError {
+            missing: requirements,
+        });
     }
     let cap = if kind == BuildingKind::Storage {
         64

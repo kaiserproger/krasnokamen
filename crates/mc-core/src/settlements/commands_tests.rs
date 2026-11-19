@@ -164,6 +164,12 @@ fn army_verbs_parse_with_target_and_order_words() {
 #[test]
 fn building_commands_parse_success_and_refusals() {
     assert_eq!(
+        parse(&["building", "certify", "house"]).unwrap(),
+        SettlementCommand::BuildingCertifyHere {
+            kind: "house".into()
+        },
+    );
+    assert_eq!(
         parse(&[
             "building", "certify", "house", "0", "64", "0", "4", "66", "4"
         ])

@@ -47,7 +47,7 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
     ),
     (
         "building",
-        "Certify or upgrade player-built buildings: list | certify <kind> <x1 y1 z1 x2 y2 z2> | upgrade <id>.",
+        "Stand inside and certify <kind>, or use Check here in the certification screen; list | upgrade <id>.",
     ),
     (
         "build",

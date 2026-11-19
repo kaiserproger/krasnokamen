@@ -30,21 +30,9 @@ fn settlement_is_native_player_command_with_typed_arguments_and_help() {
     assert!(node(&["settlement", "menu"]).executable);
     assert!(node(&["settlement", "menu", "page"]).executable);
     assert!(node(&["settlement", "building", "list"]).executable);
-    assert!(
-        node(&[
-            "settlement",
-            "building",
-            "certify",
-            "kind",
-            "x1",
-            "y1",
-            "z1",
-            "x2",
-            "y2",
-            "z2"
-        ])
-        .executable
-    );
+    let certification = node(&["settlement", "building", "certify", "kind"]);
+    assert!(certification.executable);
+    assert!(certification.children.is_empty());
     assert!(node(&["settlement", "building", "upgrade", "id"]).executable);
     assert!(!node(&["settlement", "build"]).executable);
     assert!(node(&["settlement", "build", "blueprint"]).executable);

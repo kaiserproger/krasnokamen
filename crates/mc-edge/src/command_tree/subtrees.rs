@@ -19,10 +19,12 @@ pub(super) fn settlement_tree(t: &mut Tree, root: i32) {
         certify,
         "kind",
         Parser::String(CommandStringKind::SingleWord),
-        false,
+        true,
     );
-    for (index, name) in ["x1", "y1", "z1", "x2", "y2", "z2"].into_iter().enumerate() {
-        previous = t.argument(previous, name, integer(None, None), index == 5);
+    if t.op_level >= 2 {
+        for (index, name) in ["x1", "y1", "z1", "x2", "y2", "z2"].into_iter().enumerate() {
+            previous = t.argument(previous, name, integer(None, None), index == 5);
+        }
     }
     let upgrade = t.literal(building, "upgrade", false);
     t.argument(

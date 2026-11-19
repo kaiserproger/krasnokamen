@@ -760,3 +760,33 @@ fn help_traverses_actual_values_and_prefers_the_longest_argument_branch() {
         Some(2)
     );
 }
+
+#[test]
+fn settlement_certification_bounds_are_only_advertised_to_level_two_operators() {
+    for level in [0, 1, 2] {
+        let packet = tree(level, &[]);
+        let kind = node(&packet, &["settlement", "building", "certify", "kind"]);
+        assert!(kind.executable);
+        assert_eq!(!kind.children.is_empty(), level >= 2);
+        if level >= 2 {
+            assert!(
+                node(
+                    &packet,
+                    &[
+                        "settlement",
+                        "building",
+                        "certify",
+                        "kind",
+                        "x1",
+                        "y1",
+                        "z1",
+                        "x2",
+                        "y2",
+                        "z2"
+                    ]
+                )
+                .executable
+            );
+        }
+    }
+}
