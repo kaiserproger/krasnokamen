@@ -1,0 +1,519 @@
+{
+  "decision": "D60.2",
+  "base": "e9c7518cd8f43d1f148b2314765396ccfd17866a",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_java_clients.py",
+  "source_sha256_before": "6b608c4169049f28e1bd102e3507e987b4f8a63201107e4dd4134861807f437e",
+  "status": "All22 original methods/shared and nested fixtures read. Remove10 read/high R4 local validation/cleanup/timeout/namespace self-tests; preserve2 named K1 launch regressions and10 conservative U identity/permission/auth/privacy/environment contracts. No worker tests/builds/L2/linters/formatters/smokes/negative controls or post-edit re-audit.",
+  "counts": {
+    "historical_test_ids_finalized": 22,
+    "removed_R4": 10,
+    "retained_K1": 2,
+    "retained_U": 10,
+    "physical_declarations_before": 22,
+    "physical_declarations_remaining": 12,
+    "source_lines_before": 653,
+    "source_lines_remaining": 475,
+    "physical_source_lines_removed": 178,
+    "historical_medium_candidates_finalized": 10,
+    "historical_medium_candidates_unfinalized": 516
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire653-line original module, all22 test bodies, FakeLogHandle, FakeMcpClient, _ready_handler, _auth_handler, setUp/start/ready/stop/patch/receipt helpers, and every nested handler/environment capturing/cleanup closure.",
+    "production_source_read": {
+      "tools/harness/java_clients.py": "Entire409-line lifecycle/auth/permission owner, including nested record cleanup, receipt writer, parallel launch, environment restoration and authentication wait.",
+      "tools/harness/backends/java_matrix.py": "Entire265-line driver, including group forwarding and server/cell/capability ownership."
+    },
+    "helper_removed": "_enter_group: only used by the two removed argument-validation methods; no outside reference found.",
+    "helpers_preserved": "All fake session/log/lifecycle/auth/event/receipt machinery required by retained tests stays. No retained test assertion or shared authentication/permission/cleanup logic was weakened.",
+    "obsolete_imports_removed": [],
+    "docstring_updated": "Replace stale N8 heap-cap/all-failure test scope with observed launch/bootstrap regressions and retained lifecycle/security contracts; explicitly no test launches a real client."
+  },
+  "evidence": {
+    "origin_messages_read": {
+      "b592f8bd9bf4dadfe48bb4a98557e713b6b97068": "wip(harness): matrix runner import and seeded random scenario mode (unvalidated)",
+      "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "b6f1ac655a00667614d9aa87eb2de1387813a265": "fix(harness): launch Java matrix clients through isolated runtime",
+      "2d1c97d922a1e914d2a905e0a050bf70d3cc4474": "fix(harness): handle initial block acknowledgment sequence",
+      "73761dc55526e17c9b4500b63215a3354c22d750": "fix(harness): Java clients always run OpenAL null with no reachable audio server",
+      "f645ca39ad243e17008dcc5d2b3661e6d2d473f7": "fix(harness): repair stage-three launch and scene oracles"
+    },
+    "complete_non_test_fix_diffs_read": [
+      "b6f1ac655a00667614d9aa87eb2de1387813a265",
+      "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "73761dc55526e17c9b4500b63215a3354c22d750"
+    ],
+    "fix_diff_scope": "Complete selected java_clients.py/java_matrix.py non-test diffs for b6f1ac655, f645ca39a and73761dc55 only; other files in those commits were not audited.",
+    "ledger_rows_read": [
+      "docs/bugs/rows/HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST.toml (complete long repro_check)",
+      "docs/bugs/rows/LOADER-NEOFORGE-COLD-BOOTSTRAP.toml"
+    ],
+    "original_case_scope": "Ledger rows and fix sources only: original PreparedLaunchFix Java capability, S3Loader cold compiler logs and historical negative-control logs were not reopened or rerun. Real Fabric capability success was not a full armadillo/matrix pass; cold NeoForge compilation was not repeated by this audit.",
+    "actual_case_boundaries": [
+      "Prepared-launch regression prevents the observed pre-Xvfb Gradle prelaunch timeout; retained exact named test remains K1 despite fake sessions.",
+      "Inherited automatic -Xmx512M restricted the actual NeoForm cold compiler; retained exact named test asserts no global JDK_JAVA_OPTIONS injection. Explicit operator values are a separate preserved U companion, not another observed failure.",
+      "Owner Java-null/no-reachable-audio policy is documented in73761dc55; private-graph and environment tests remain U, without claiming they exercise child audio isolation."
+    ],
+    "important_reclassifications": [
+      "Security, cross-client identity, authentication/consent and isolation boundaries are retained conservatively as U where only synthetic fixtures were available; no independent live/provider oracle is claimed.",
+      "Stale-baseline-named test always supplies fresh ACKs through _auth_handler, so it does not independently prove rejection of a stale-only acknowledgement.",
+      "The standalone password-hide test injects silence, not a secret-bearing exception. Its helper-generated missing-ACK timeout never contains the password; no credential-disclosure regression is established.",
+      "Namespace dir(java_clients) assertion is R4 tool plumbing, not source-text R3, and is not an allowed AST/module-cycle ratchet."
+    ],
+    "unmerged_module_commits": [
+      "a5262042c6ce402f42ab47f6dfcd504097ee8027"
+    ],
+    "unmerged_diff_scope": "Sole a5262042c6 exact four-line rebrand diff read whole: only auth-name doc text and permission title change from Solaris to Krasnokamen. The retained current permission fixture already uses Krasnokamen; no functional delta was removed.",
+    "reference_search_scope": "All22 exact method names and the removed _enter_group helper searched only in D60Read2, excluding its own module and audit JSON. Only retained named ledger/promotion method refs exist; no removed method/helper caller found. No other-worktree reference searches.",
+    "other_worktree_fence": {
+      "scope": "563 cached other worktree paths; exact tools/harness/test_java_clients.py git status only",
+      "checked": 563,
+      "dirty_overlaps": [],
+      "errors": []
+    },
+    "semantic_search_scope": "Targeted Java/audio/auth/identity/cleanup ledger patterns, current line origins/messages and selected function history/fix diffs; no claim of exhaustive repository history or every possible real-client incident."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_matrix_fabric_group_uses_only_private_runtime_launches",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 171,
+      "original_end_line": 189,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST names this exact regression for observed Gradle prelaunch timeout before private Xvfb. The test blocks actual Popen while preserving matrix.group -> client_group -> canonical runtime wiring; mocked clients are a minimized regression, not a real Java run.",
+      "provenance_commit": "b6f1ac655a00667614d9aa87eb2de1387813a265",
+      "body_provenance_commits": [
+        "b6f1ac655a00667614d9aa87eb2de1387813a265"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/promotions/HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST.json",
+        "docs/bugs/rows/HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_rejects_bad_count_before_any_lifecycle",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 191,
+      "original_end_line": 198,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: fabricated invalid counts merely test client_group input validation with every lifecycle hook patched. No original invalid-count case or actual launch artifact is exercised.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_rejects_bad_address_profile_platform_timeout_authenticate",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 200,
+      "original_end_line": 217,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: authored empty address/profile, bogus platform, zero timeout and wrong authenticate type cover local argument guards only. All runtime/MCP lifecycle is fake, with no corresponding real case.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_group_uses_distinct_identities_dirs_ports_tokens",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 219,
+      "original_end_line": 255,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: per-client identity/game-dir/port/token isolation is a multi-client ownership contract, including prevention of shared persistent game directories. Expectations use authored identities and fake lifecycle; no specific original cross-client collision or independent oracle is established, so retain conservatively.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_group_json_records_usernames_ports_profiles_and_play",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 257,
+      "original_end_line": 288,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: secret-free group evidence and per-client profile/readiness identity are privacy/receipt contracts. The file is produced by a mocked group, not a retained real receipt or observed disclosure; preserve the boundary without claiming a real-artifact oracle.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_not_in_play_writes_failure_receipt_and_cleans_everything",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 290,
+      "original_end_line": 321,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: fake MCP returns in_play=False to manufacture an early group failure, then inspects its synthetic receipt and mocked cleanup. No observed false Play result or real failed client artifact is replayed.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "2d1c97d922a1e914d2a905e0a050bf70d3cc4474",
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_partial_launch_failure_writes_receipt_and_cleans_siblings",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 323,
+      "original_end_line": 343,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: fake launcher raises an explicitly injected JMatrix01 failure; sibling cleanup and receipt assertions inspect only fake processes/handles. It does not exercise an actual partial-start failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_initialize_failure_still_closes_session",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 345,
+      "original_end_line": 368,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: fake initialize raises injected init failure, and assertions inspect fake sessions, handles and generated receipt. No actual initialization leak/failure case is established.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_loader_confirms_exact_server_address",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 370,
+      "original_end_line": 411,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: exact connected-address Loader permission is a consent/security boundary; the expected title and MCP success are authored. No real screen or original wrong-target permission incident was checked, so do not call it vanilla/source-text oracle or observed regression.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14",
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_exit_after_yield_cleans_everything",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 413,
+      "original_end_line": 422,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: ordinary group exit closes fake sessions/handles/Xvfb only; no actual leaked lifecycle artifact or client process is used. Shared cleanup support required by retained regressions remains.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_group_never_touches_the_private_audio_graph_on_scenario_and_startup_failure",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 424,
+      "original_end_line": 436,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: commit73761dc states the owner Java-null/no-reachable-audio policy; this test guards against private graph access during synthetic scenario/startup failures. No real audio graph or observed violation is replayed; preserve the isolation boundary without inventing an actual incident.",
+      "provenance_commit": "73761dc55526e17c9b4500b63215a3354c22d750",
+      "body_provenance_commits": [
+        "73761dc55526e17c9b4500b63215a3354c22d750",
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_authenticate_registers_each_client_with_fresh_acks",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 438,
+      "original_end_line": 466,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: generated registration credentials, fresh per-session plugin ACKs and secret-free receipts form an auth/privacy contract. Fake chat is authored and no real auth/plugin exchange or exact observed failure is consumed.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_authenticate_missing_ack_fails_closed_without_secret",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 468,
+      "original_end_line": 501,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: absent registration/login acknowledgements must fail closed without leaking credentials. This is an auth/privacy boundary, but the silent server is a fake; independent actual silent-session evidence is not established.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_authenticate_client_rejects_stale_baseline_match",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 503,
+      "original_end_line": 512,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: despite its stale-baseline name, _auth_handler always appends fresh registered/logged-in lines before waiting. The test only asserts successful authentication and the authored register command; it neither withholds the fresh ACK nor independently verifies rejection of the old line. No observed stale-ACK case is used.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_authenticate_client_validates_password_shape",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 514,
+      "original_end_line": 520,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: authored password lengths/whitespace exercise only local helper argument checks with a fake MCP client. No real server/plugin password policy oracle or original invalid-password incident is checked.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_authenticate_client_missing_ack_error_hides_password",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 522,
+      "original_end_line": 545,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: manufactured silence yields the helper TimeoutError, whose message contains only the missing registered needle, not the password. The absence assertion therefore never supplies a secret-bearing exception to the redaction path; this is synthetic timeout plumbing, not a real credential-disclosure regression.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_group_does_not_cap_gradle_and_compiler_jvms",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 547,
+      "original_end_line": 564,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: LOADER-NEOFORGE-COLD-BOOTSTRAP names this exact regression for real NeoForm heap-space failure under inherited -Xmx512M. Commitf645ca39 removes client_group global heap injection; the test keeps that failure path without rerunning cold compilation.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/promotions/LOADER-NEOFORGE-COLD-BOOTSTRAP.json",
+        "docs/bugs/rows/LOADER-NEOFORGE-COLD-BOOTSTRAP.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/LOADER-NEOFORGE-COLD-BOOTSTRAP.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_heap_cap_respects_operator_preset",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 566,
+      "original_end_line": 582,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: explicit operator JVM-option preservation is the documented boundary alongside the actual cold-bootstrap fix. The particular -Xmx4G environment is synthetic, not another observed failure; retain without upgrading this companion to K1.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_headless_env_guard_applies_during_launch_and_restores",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 584,
+      "original_end_line": 607,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: launch-only Wayland suppression/environment restoration and preserving parent audio selectors are isolation contracts. Runtime child audio isolation is outside this mocked test, so it is neither a real audio oracle nor proof of no reachable audio server.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "73761dc55526e17c9b4500b63215a3354c22d750",
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_no_direct_process_spawning",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 609,
+      "original_end_line": 616,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: asserts absence of a subprocess name from the helper namespace and rejects direct Popen while all lifecycle launchers are mocks. No observed direct-spawn failure is exercised; this is not a code-health AST/module-cycle ratchet or a source-text R3 scan.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_reconnect_auth_logs_in_without_registering_again",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 618,
+      "original_end_line": 632,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: reconnect must send login, not register, to an existing account. The command/ACK are fabricated, so the real plugin/protocol incident or oracle is unestablished; preserve the authentication lifecycle contract.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_clients.py::JavaClientsTests::test_reconnect_auth_accepts_new_identical_login_line",
+      "file": "tools/harness/test_java_clients.py",
+      "original_fn_line": 634,
+      "original_end_line": 647,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Counter-based freshness must permit an additional identical logged-in occurrence. The repeated chat exchange is fabricated and no original reconnect receipt was established; preserve the auth state-transition boundary without claiming K1.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": "Read-only complete bodies/helpers and owner sources, historical fix/ledger/reference inspection and pre-edit exact-file dirty-overlap inspection. Edit-tool outputs are change receipts.",
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_java_clients (12 retained methods), plus its two existing named ledger refs at Main discretion. Worker ran neither.",
+    "negative_control": "None performed; referenced historical controls are row provenance, not new verification.",
+    "runtime_saving": "Unmeasured; no speedup claimed."
+  },
+  "gaps": []
+}
