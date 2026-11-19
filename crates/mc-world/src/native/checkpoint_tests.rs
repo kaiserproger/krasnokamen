@@ -356,6 +356,57 @@ fn native_checkpoint_round_trips_the_manifest_format_version() {
 }
 
 #[test]
+fn native_checkpoint_starter_chest_grants_roundtrip_or_fail_atomically() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    let player = uuid::Uuid::from_u128(0xabcdef);
+    let key = format!("settlement_chest/{player}");
+    let row = |tick, player: uuid::Uuid| NativeDomainRecord {
+        version: 1,
+        captured_tick: tick,
+        payload: serde_json::to_vec(&player).unwrap(),
+    };
+    let mut granted = globals(1);
+    granted.insert(key.clone(), row(1, player));
+    commit(&store, 1, 0, &granted, &[], &[]).unwrap();
+    assert_eq!(store.read_checkpoint().unwrap().globals, granted);
+    for (bad_key, bad_row) in [
+        ("settlement_chest/".into(), row(2, player)),
+        ("settlement_chest/not-a-uuid".into(), row(2, player)),
+        (
+            format!("settlement_chest/{}", player.simple()),
+            row(2, player),
+        ),
+        (
+            format!("settlement_chest/{}", player.to_string().to_uppercase()),
+            row(2, player),
+        ),
+        (format!("{key}/extra"), row(2, player)),
+        (key.clone(), row(1, player)),
+        (key.clone(), row(2, uuid::Uuid::nil())),
+        (
+            key.clone(),
+            NativeDomainRecord {
+                version: 2,
+                ..row(2, player)
+            },
+        ),
+        (
+            key.clone(),
+            NativeDomainRecord {
+                payload: b"null".to_vec(),
+                ..row(2, player)
+            },
+        ),
+    ] {
+        let mut bad = globals(2);
+        bad.insert(bad_key.clone(), bad_row);
+        assert!(commit(&store, 2, 1, &bad, &[], &[]).is_err(), "{bad_key}");
+        assert_eq!(store.read_checkpoint().unwrap().globals, granted);
+    }
+}
+
+#[test]
 fn native_checkpoint_settlement_rows_are_canonical_or_rejected() {
     let directory = tempfile::tempdir().unwrap();
     let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();

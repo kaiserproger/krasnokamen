@@ -1,8 +1,6 @@
 use super::tests::{native_checkpoint, native_state};
 use super::*;
-use crate::boundary::{
-    BlockPos, ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerInput, TickOutput, WorldSnapshot,
-};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerInput};
 use crate::commands::Command;
 use crate::settlements::{commands::SettlementCommand, starter_chest};
 use std::sync::Arc;
@@ -179,17 +177,22 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
     let mut state = native_state(&config);
     let (connection, actor) = founder(&mut state);
     native_checkpoint(&mut state, &config, 1);
-    state.tick = 2;
-    let changes = create(&mut state, connection, actor, "walgrant");
+    let (mut output, ..) = crate::tick::run_tick(&mut state, &[]);
+    assert_eq!(output.tick, 2);
+    let changes = Arc::get_mut(&mut output.changes).unwrap();
+    crate::command_execution::execute(
+        &mut state,
+        connection,
+        actor,
+        &Command::Settlement(SettlementCommand::Create {
+            name: "walgrant".into(),
+            radius: 48,
+        }),
+        changes,
+    );
     let town = state.settlements.find("walgrant").unwrap();
     let id = town.id;
     let chest = town.bootstrap_storage.unwrap();
-    let output = TickOutput {
-        tick: 2,
-        snapshot: Arc::new(WorldSnapshot::default()),
-        changes: Arc::new(changes),
-        times: Default::default(),
-    };
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry,
         crate::journal::JournalEntry::StarterChestGranted { player } if *player == PLAYER)));
