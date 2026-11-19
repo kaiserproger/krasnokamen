@@ -226,7 +226,7 @@ fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<Stri
 
 /// Copy a stopped native-v2 world, including its WAL and world metadata.
 /// Neither an active Core nor a separately opened native store may own it.
-pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
+pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
     let world = std::fs::canonicalize(world_dir)
         .with_context(|| format!("resolving world {}", world_dir.display()))?;
     if !world.is_dir() {
@@ -268,13 +268,9 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
         manifest.files.insert(name, digest);
     }
     write_manifest(&out, &manifest)?;
-    println!(
-        "backup of {} into {} complete: {} files",
-        world.display(),
-        out.display(),
-        manifest.files.len(),
-    );
-    Ok(())
+    // The caller prints the final status: a backup is not "complete" until the
+    // copy it just wrote has been verified or explicitly marked unverified.
+    Ok(manifest.files.len())
 }
 
 /// Create the manifest last: a directory without it is never a valid backup.
@@ -288,37 +284,6 @@ fn write_manifest(out: &Path, manifest: &BackupManifest) -> Result<()> {
     Ok(())
 }
 
-/// Tick a backup directory's own durable records recover to: the store's
-/// checkpoint tick, or the highest journal batch above it.
-fn backup_expected_tick(dir: &Path, checkpoint: u64) -> Result<u64> {
-    let mut through = checkpoint;
-    let journal = dir.join("journal");
-    let entries = match std::fs::read_dir(&journal) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(through),
-        Err(error) => return Err(error).with_context(|| format!("reading {}", journal.display())),
-    };
-    for entry in entries {
-        let name = entry?.file_name().to_string_lossy().into_owned();
-        let Some(rest) = name
-            .strip_prefix("batch-")
-            .and_then(|name| name.strip_suffix(".bin"))
-        else {
-            continue;
-        };
-        let Some((lo, hi)) = rest.split_once('-') else {
-            continue;
-        };
-        if let (Ok(lo), Ok(hi)) = (lo.parse::<u64>(), hi.parse::<u64>())
-            && hi > checkpoint
-            && lo <= through + 1
-        {
-            through = through.max(hi);
-        }
-    }
-    Ok(through)
-}
-
 /// Prove a written backup restores with this build (Books R5 G3): open the copy
 /// read-only, derive the world's own seed from its store identity, and run the
 /// ordinary recovery reader and WAL replay over it, requiring the tick the copy
@@ -327,25 +292,14 @@ fn backup_expected_tick(dir: &Path, checkpoint: u64) -> Result<u64> {
 /// A copy that needs redb repair or cannot replay is reported, never called a
 /// verified backup.
 pub fn verify_backup(dir: &Path, content: &mc_core::config::CoreConfig) -> Result<()> {
-    let database = dir.join(NATIVE_DATABASE);
-    let identity = mc_world::native::NativeStore::read_identity(&database)
-        .map_err(|error| anyhow::anyhow!("{}: {error}", database.display()))?;
-    let mut config = content.clone();
-    config.seed = i64::from_be_bytes(identity[16..24].try_into().expect("seed bytes"));
-    config.world_dir = dir.to_path_buf();
-    let (_, checkpoint) = mc_world::native::NativeStore::read_marker_fields(&database)
-        .map_err(|error| anyhow::anyhow!("{}: {error}", database.display()))?;
-    let checkpoint = checkpoint
-        .ok_or_else(|| anyhow::anyhow!("{} has no committed checkpoint", dir.display()))?;
-    let expected = backup_expected_tick(dir, checkpoint)?;
-    let registry = std::sync::Arc::new(
-        mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())
-            .map_err(|error| anyhow::anyhow!("content: {error}"))?,
-    );
-    mc_core::hot_backup::verify_restorable(dir, &config, registry, expected)
+    // One verification instance opens the copy as the next serve would
+    // (read-only, or through a repaired scratch copy when redb would repair a
+    // live image) and supplies the identity, store id and checkpoint from
+    // itself: no second read-only open, which a hot copy fails by design.
+    let tick = mc_core::hot_backup::verify_copy(dir, content)
         .map_err(|error| anyhow::anyhow!("backup {} does not restore: {error}", dir.display()))?;
     println!(
-        "backup of {} verified: restores to tick {expected}",
+        "backup of {} verified: restores to tick {tick}",
         dir.display()
     );
     Ok(())

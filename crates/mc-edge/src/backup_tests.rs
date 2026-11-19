@@ -56,10 +56,18 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
         .unwrap()
         .read_checkpoint()
         .unwrap();
+    let (store_uuid, _) = store.marker_fields().unwrap();
     drop(store);
-    let mut journal =
-        mc_core::journal::JournalWriter::open(&world, 1, mc_core::journal::WalIdentity::fixture())
-            .unwrap();
+    // The tail this test appends must belong to the store that will replay it:
+    // zero fields are a value, not a wildcard, so a fixture identity is refused.
+    let registry = mc_core::registry::CoreRegistry::load(Some(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/vanilla")
+            .as_path(),
+    ))
+    .unwrap();
+    let identity = mc_core::journal::WalIdentity::new(store_uuid, &registry.blocks);
+    let mut journal = mc_core::journal::JournalWriter::open(&world, 1, identity).unwrap();
     journal.append(image.tick + 1, image.tick + 1, &[]).unwrap();
     journal.flush().unwrap();
     drop(journal);
@@ -603,4 +611,63 @@ fn restore_refuses_a_marker_from_another_store() {
         !target.join(NATIVE_DATABASE).exists(),
         "a refused restore keeps no store"
     );
+}
+
+/// Hot backup → the real `restore` command with installed content: the copy of
+/// a running store needs redb repair, so verification must read the identity,
+/// store id and checkpoint from the one verification instance (a repaired
+/// scratch copy) instead of opening the archive read-only first and aborting.
+/// The CLI path is what an operator runs; `run_restore` alone is not evidence.
+#[tokio::test]
+async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
+    use clap::Parser;
+
+    let root = tempfile::tempdir().unwrap();
+    let core = mc_core::Core::open(live_config(root.path().join("live"))).unwrap();
+    let backups = root.path().join("backups");
+    let (path, copied) = run_hot_backup(&core, &backups).unwrap();
+    core.shutdown();
+    drop(core);
+
+    let restored = root.path().join("restored");
+    let cli = crate::operator_cli::Cli::try_parse_from([
+        "krasnokamen",
+        "restore",
+        "--from",
+        path.to_str().unwrap(),
+        "--world-dir",
+        restored.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg = crate::config::EdgeConfig::default();
+    cfg.data.vanilla_data_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    assert!(
+        crate::operator_cli::run_offline(&cli, &mut cfg)
+            .await
+            .expect("the restore command verifies and restores a hot backup"),
+        "restore is an offline command"
+    );
+
+    let marker = mc_world::store_marker::read(&restored)
+        .unwrap()
+        .expect("the restore keeps the checkpoint marker");
+    assert_eq!(
+        marker.checkpoint_tick, copied.checkpoint_tick,
+        "the restored marker is the copied checkpoint"
+    );
+    if copied.wal_tick > copied.checkpoint_tick {
+        let tail: Vec<_> = std::fs::read_dir(restored.join("journal"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        let last = format!("-{:020}.bin", copied.wal_tick);
+        assert!(
+            tail.iter().any(|name| name.ends_with(&last)),
+            "the restored journal carries the copied tail up to tick {}: {tail:?}",
+            copied.wal_tick
+        );
+    }
+    let recovered = mc_core::Core::open(live_config(restored)).unwrap();
+    recovered.shutdown();
 }

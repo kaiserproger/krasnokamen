@@ -314,15 +314,26 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
             }
         }
         Command::Backup { world_dir, out } => {
-            crate::backup::run_backup(world_dir, out)?;
+            let files = crate::backup::run_backup(world_dir, out)?;
             // Books R5 G3: a backup is reported successful only after it
-            // restores. Without a content cache there is nothing to replay
-            // the copy against, so the report says it is unverified instead
-            // of implying a check that did not run.
+            // restores, so the final status is printed here, after the check.
+            // Without a content cache there is nothing to replay the copy
+            // against; the status then says unverified instead of implying a
+            // check that did not run.
             match verify_content(cfg) {
-                Ok(content) => crate::backup::verify_written_backup(out, &content)?,
-                Err(error) => eprintln!(
-                    "backup written but NOT verified: no content cache for recovery: {error}"
+                Ok(content) => {
+                    crate::backup::verify_written_backup(out, &content)?;
+                    println!(
+                        "backup of {} into {} complete and verified: {files} files",
+                        world_dir.display(),
+                        out.display(),
+                    );
+                }
+                Err(error) => println!(
+                    "backup of {} into {} complete but NOT verified: {files} files; no content \
+                     cache for recovery: {error}",
+                    world_dir.display(),
+                    out.display(),
                 ),
             }
         }

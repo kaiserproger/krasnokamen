@@ -282,6 +282,21 @@ impl NativeReadOnlyStore {
         Ok(Self { database })
     }
 
+    /// Open read-only and return the identity the store's own header carries:
+    /// the copy, not the caller, says which world it is. See
+    /// [`NativeStore::open_learning_identity`] — this variant never writes, so it
+    /// refuses a store redb would repair instead of repairing it.
+    pub fn open_learning_identity(
+        path: &Path,
+        cache_bytes: usize,
+    ) -> Result<(Self, [u8; 32]), NativeError> {
+        let database = read_only_database(path, cache_bytes)?;
+        let transaction = db(database.begin_read())?;
+        let (identity, _) = validate_header_shape(&transaction)?;
+        drop(transaction);
+        Ok((Self { database }, identity))
+    }
+
     /// The store's immutable id and committed checkpoint tick.
     pub fn marker_fields(&self) -> Result<([u8; 16], Option<u64>), NativeError> {
         let tx = db(self.database.begin_read())?;
@@ -646,6 +661,44 @@ impl NativeStore {
             store_uuid,
             file,
         })
+    }
+
+    /// Open a store whose identity the caller does not yet know and return what
+    /// its own header says: the offline verification path (a backup copy) takes
+    /// the copy as the authority on which world it is, then compares that
+    /// identity where the expectation is known. Opens writable, so redb repairs
+    /// an uncleanly stopped store — call this on a scratch copy, never on an
+    /// archive that must stay byte-identical.
+    pub fn open_learning_identity(
+        path: &Path,
+        cache_bytes: usize,
+    ) -> Result<(Self, [u8; 32]), NativeError> {
+        if cache_bytes == 0 {
+            return Err(NativeError::Invalid("database cache must be positive"));
+        }
+        let backend = NativeFile::acquire(OpenOptions::new().read(true).write(true).open(path)?)?;
+        if backend.0.metadata()?.len() == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "empty native database",
+            )
+            .into());
+        }
+        let file = std::sync::Arc::clone(&backend.0);
+        let database = db(database_builder(cache_bytes).create_with_backend(backend))?;
+        let (identity, store_uuid) = {
+            let transaction = db(database.begin_read())?;
+            validate_header_shape(&transaction)?
+        };
+        Ok((
+            Self {
+                database,
+                identity,
+                store_uuid,
+                file,
+            },
+            identity,
+        ))
     }
 
     /// Offline inspection never opens the database for writing or repairs it.
@@ -1183,6 +1236,20 @@ fn validate_header(
     transaction: &redb::ReadTransaction,
     identity: [u8; 32],
 ) -> Result<[u8; 16], NativeError> {
+    let (stored, store_uuid) = validate_header_shape(transaction)?;
+    if stored != identity {
+        return Err(NativeError::Invalid("identity mismatch"));
+    }
+    Ok(store_uuid)
+}
+
+/// Everything [`validate_header`] checks except the caller's expected identity:
+/// the offline verification path learns the identity from the store itself
+/// (a copy is the authority on which world it is), and compares it where the
+/// caller does know what it expects.
+fn validate_header_shape(
+    transaction: &redb::ReadTransaction,
+) -> Result<([u8; 32], [u8; 16]), NativeError> {
     let header = db(transaction.open_table(HEADER))?;
     let schema = db(header.get("schema"))?.ok_or(NativeError::Invalid("native schema missing"))?;
     let schema = u32::from_be_bytes(
@@ -1194,9 +1261,11 @@ fn validate_header(
     if schema != NATIVE_PROTOTYPE_SCHEMA {
         return Err(NativeError::UnsupportedSchema(schema));
     }
-    if db(header.get("identity"))?.is_none_or(|value| value.value() != identity) {
-        return Err(NativeError::Invalid("identity mismatch"));
-    }
+    let stored_identity: [u8; 32] = db(header.get("identity"))?
+        .ok_or(NativeError::Invalid("identity missing"))?
+        .value()
+        .try_into()
+        .map_err(|_| NativeError::Invalid("invalid identity"))?;
     // Required: an absent id means a store written before this format, which is
     // refused rather than given a fresh identity (a repaired or later world
     // must never be able to adopt one, Books R4-P3).
@@ -1214,7 +1283,7 @@ fn validate_header(
     db(transaction.open_table(state::INITIALIZED))?;
     db(transaction.open_table(state::ENTITY_LSN))?;
     checkpoint::validate_tables(transaction)?;
-    Ok(store_uuid)
+    Ok((stored_identity, store_uuid))
 }
 
 fn count_records(transaction: &redb::ReadTransaction) -> Result<NativeRecordCounts, NativeError> {
