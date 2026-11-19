@@ -208,7 +208,17 @@ impl TickControl {
     /// that tick. These are the only two boundaries queried on the live path.
     pub(crate) fn held_ticks_at(&self, tick: u64) -> u64 {
         debug_assert!(tick >= self.clock_tick.saturating_sub(1));
+        debug_assert!(tick <= self.clock_tick);
         self.held_ticks - u64::from(!self.runs_normally && tick < self.clock_tick)
+    }
+
+    /// The two boundaries of the last decided tick. Child worlds must receive
+    /// this pair from the root, never from their parked copy of TickControl.
+    pub(crate) fn simulation_clock(&self) -> (u64, u64) {
+        (
+            self.held_ticks_at(self.clock_tick),
+            self.held_ticks_at(self.clock_tick.saturating_sub(1)),
+        )
     }
 
     pub(crate) fn sim_debt_anchored_since(&self) -> u64 {

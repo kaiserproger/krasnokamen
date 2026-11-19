@@ -264,6 +264,12 @@ upper bound on the census interval. See the clock images in
 [`journal.rs`](../../crates/mc-core/src/journal.rs) and their
 [`replay`](../../crates/mc-core/src/journal/replay.rs).
 
+Live active-chunk refresh uses the root's decided pair `H(T), H(T-1)`, also
+after dimensional travel; parked Nether/End `TickControl` copies are not clock
+authorities. A dormant activation subtracts held time with checked arithmetic:
+an inconsistent prefix fails before commit rather than wrapping into catch-up
+debt. The already-published WAL remains the recovery boundary.
+
 A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
 hardware durability. The [drills below](#hazards-and-defense-layers) state their
 fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)

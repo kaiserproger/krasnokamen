@@ -441,8 +441,13 @@ impl ChunkWorld {
             let through = tick.saturating_sub(1);
             if through > record.last_sim {
                 let native_gap = through - record.last_sim;
-                let held_gap = held_before_tick - record.held_anchor.unwrap_or(0);
-                record.remaining = record.remaining.saturating_add(native_gap - held_gap);
+                let held_gap = held_before_tick
+                    .checked_sub(record.held_anchor.unwrap_or(0))
+                    .expect("simulation held prefix precedes dormant chunk anchor");
+                let running_gap = native_gap
+                    .checked_sub(held_gap)
+                    .expect("simulation held gap exceeds dormant native gap");
+                record.remaining = record.remaining.saturating_add(running_gap);
             }
             record.active = true;
             *active_revision += 1;
