@@ -19,12 +19,13 @@ RUNNER = Path('/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-r
 ARTIFACTS = ('A', 'B', 'C-live', 'C-offline', 'D-custody', 'D-crash', 'D-export')
 BINARIES = {}
 BUILDS = {}
+BUILD_MEMORY = '6G'
 
 
 def provenance(tree):
     git = lambda *args: subprocess.check_output(['git', '-C', str(tree), *args])
     untracked = git('ls-files', '--others', '--exclude-standard', '-z').split(b'\0')
-    return dict(head=git('rev-parse', 'HEAD').decode().strip(),
+    return dict(tree=str(tree), head=git('rev-parse', 'HEAD').decode().strip(),
                 diff_sha256=digest(git('diff', '--binary', 'HEAD')),
                 untracked={os.fsdecode(path): digest((tree / os.fsdecode(path)).read_bytes())
                            for path in untracked if path and (tree / os.fsdecode(path)).is_file()})
@@ -38,7 +39,7 @@ def test(tree, out, crate, name):
     env['CARGO_TARGET_DIR'] = str(target)
     if tree not in BINARIES:
         source = provenance(tree)
-        cmd = [str(RUNNER), '-m', '12G', 'cargo', 'test', '-j', '1', '--manifest-path', str(tree / 'Cargo.toml'),
+        cmd = [str(RUNNER), '-m', BUILD_MEMORY, 'cargo', 'test', '-j', '1', '--manifest-path', str(tree / 'Cargo.toml'),
                '-p', 'mc-core', '-p', 'mc-world-conversion', '--lib', '--no-run', '--message-format=json']
         with (out / 'compile.log').open('wb') as log:
             subprocess.run(cmd, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
@@ -196,17 +197,23 @@ def compare(base, candidate, control):
 
 
 def main():
+    global BUILD_MEMORY
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('base_tree', type=Path)
     parser.add_argument('slice_tree', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base-run', type=Path, help='reuse an immutable, complete base run')
     parser.add_argument('--control', choices=('X1', 'X2', 'X3'))
+    parser.add_argument('--build-memory', choices=('6G', '12G'), default='6G',
+                        help='12G only for a wide compile shown to exceed 6G; tests always use 6G')
     args = parser.parse_args()
+    BUILD_MEMORY = args.build_memory
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=False)
     if args.base_run:
         base_out = args.base_run.resolve()
+        recorded = json.loads((base_out / 'build.json').read_text())['source']
+        assert recorded == provenance(args.base_tree.resolve()), 'cached base tree/fingerprint does not match base_tree'
         base = artifacts(base_out)
     else:
         base_out = args.out / 'base'

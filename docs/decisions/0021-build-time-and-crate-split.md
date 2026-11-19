@@ -155,6 +155,18 @@ Until then, none of these steps claims a build-time gain. The order:
 4. **Stop rule:** stop when a domain's unit-test loop is under about 30 s and
    the server-binary loop under about 45 s. Further splitting is not a goal in
    itself.
+
+**D65 in-crate persistence cut (S3).** The dimension-routed `Replay` carries
+one `settlements::persistence::Tail`; its records, tombstones, allocator floor
+and transit images and their folds belong to settlements, not the journal.
+Settlement checkpoint projection, stale-row prefixes, image heap accounting
+and the census projections live behind that same owner. Recovery reaches one
+dimension-admission call before entity hydration and one completion call after
+all dimensions and the entity salt, with the legacy-state refusal first.
+This is an ownership cut only: existing codecs, validation stages and emitted
+checkpoint/WAL/NBT bytes do not change. `tools/dev/bytecheck.sh` compares a
+pinned base/candidate pair; no build-time or runtime gain is claimed.
+
 ### Shared dependency feature owner
 
 `mc-edge` depends on `workspace-features` normally; `mc-core` uses it only as a

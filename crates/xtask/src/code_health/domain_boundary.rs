@@ -5,8 +5,8 @@ use super::Finding;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-// DESIGN §3.2 S1, measured on the D65 base. Lower after each accepted cut.
-const CEILING: usize = 116;
+// DESIGN §3.2 S1: 116 on the D65 base, 113 after S3 persistence ownership.
+pub(super) const CEILING: usize = 113;
 
 #[derive(Debug)]
 pub(super) struct Reference {
@@ -204,7 +204,7 @@ fn resolved(
         ("journal", Some("image"), "settlements::registry::RecordImage") => {
             Some("C1: JournalEntry::Settlement.image")
         }
-        ("journal::replay", Some("settlements"), "settlements::registry::SettlementRecord") => {
+        ("journal::replay", Some("settlement_tail"), "settlements::persistence::tail::Tail") => {
             Some("C1: Replay settlement tail")
         }
         ("villager", Some("settlement"), "settlements::registry::SettlementId") => {

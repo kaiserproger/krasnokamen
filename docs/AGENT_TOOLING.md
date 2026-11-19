@@ -495,7 +495,7 @@ tree expansion and paths share the `syn` collector above. Qualified alias uses,
 module-relative paths and explicit re-exports resolve after the module walk;
 imports are also references. Method resolution and opaque macro-generated paths
 are not a completeness claim.
-The baseline is 116; later slices lower it as they cut references.
+The baseline is 116; S3's persistence cut lowers the ceiling to 113.
 The report identifies exact field/type allowances through C1 (journal images
 and replay tail), C2 (`TickState.settlements`) and C3 (villager settlement and
 soldier identities). These references remain counted, not blanket exemptions

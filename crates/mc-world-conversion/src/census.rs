@@ -16,7 +16,7 @@ use mc_core::native_checkpoint::{
 };
 use mc_core::settlements::households::HouseholdOrigin;
 use mc_core::settlements::persistence::{
-    Row, checkpoint_sequence, parse_row_key, transit_census_rows,
+    checkpoint_records, checkpoint_sequence, transit_census_rows,
 };
 use mc_core::{CoreConfig, CoreError};
 use mc_nbt::Tag;
@@ -179,20 +179,9 @@ fn census(
     let invalid = |reason: String| CoreError::Storage(format!("native settlement: {reason}"));
     let mut settlements = BTreeMap::new();
     let mut households = BTreeSet::new();
-    for (key, record) in &image.globals {
-        let Some(id) = parse_row_key(key) else {
-            continue;
-        };
-        if record.version != 1 {
-            return Err(invalid(format!("row {key} has unsupported version")));
-        }
-        let row: Row = serde_json::from_slice(&record.payload)
-            .map_err(|error| invalid(format!("row {key} unreadable: {error}")))?;
-        if row.value.id != id {
-            return Err(invalid(format!("row {key} identity mismatch")));
-        }
-        mc_core::settlements::validate_record(&row.value)
-            .map_err(|error| invalid(format!("row {key}: {error}")))?;
+    for row in checkpoint_records(&image.globals) {
+        let row = row?;
+        let id = row.value.id;
         dimensions
             .get_mut(&row.dimension)
             .expect("closed set")

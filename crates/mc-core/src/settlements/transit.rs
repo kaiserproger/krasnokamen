@@ -972,7 +972,7 @@ pub(super) fn hydrate(
             state.settlements.transit.records.insert(id, row.value);
         }
     }
-    for (id, image) in &replay.transits {
+    for (id, image) in &replay.settlement_tail.transits {
         match image {
             Some(payload) => {
                 let record: Record = serde_json::from_str(payload)

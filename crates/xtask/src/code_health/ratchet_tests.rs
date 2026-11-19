@@ -65,7 +65,8 @@ fn domain_boundary_resolves_children_aliases_and_explicit_reexports() {
 
 #[test]
 fn domain_boundary_ast_negative_control_is_independent_of_scc() {
-    let calls = "crate::villager::brain::tick();".repeat(116);
+    let ceiling = crate::code_health::domain_boundary::CEILING;
+    let calls = "crate::villager::brain::tick();".repeat(ceiling);
     let host = format!(
         "fn f() {{ {calls} }}\n\
          #[cfg(test)] fn excluded() {{ crate::villager::brain::tick(); }}\n"
@@ -81,7 +82,7 @@ fn domain_boundary_ast_negative_control_is_independent_of_scc() {
         ],
     );
     let facts = fixture.facts();
-    assert_eq!(facts.domain_refs.len(), 116);
+    assert_eq!(facts.domain_refs.len(), ceiling);
     assert_eq!(largest_component(&facts.edges()).len(), 1);
     let mut findings = Vec::new();
     crate::code_health::domain_boundary::check(&fixture.0, &facts.domain_refs, &mut findings);
@@ -94,7 +95,7 @@ fn domain_boundary_ast_negative_control_is_independent_of_scc() {
     )
     .unwrap();
     let changed = fixture.facts();
-    assert_eq!(changed.domain_refs.len(), 117);
+    assert_eq!(changed.domain_refs.len(), ceiling + 1);
     assert_eq!(largest_component(&changed.edges()).len(), 1);
     crate::code_health::domain_boundary::check(&fixture.0, &changed.domain_refs, &mut findings);
     assert_eq!(findings.len(), 1);

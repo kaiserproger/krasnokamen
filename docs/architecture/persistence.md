@@ -20,8 +20,10 @@ The fixture requires the locally imported `data/vanilla` content.
 
 Run base against itself first: the two captures execute in separate processes
 and must match. For isolated scratch-tree controls, reuse that immutable
-`--base-run RECEIPT/base` and pass `--control X1|X2|X3`. X1 swaps the
-`SettlementRecord.owner_name`/`anchor` declaration order; X2 swaps the
+`--base-run RECEIPT/base` and pass `--control X1|X2|X3`.
+`BASE_TREE` must remain the originally recorded tree at its recorded HEAD and
+source fingerprint; a mismatched cached run is refused before any producer runs.
+X1 swaps the `SettlementRecord.owner_name`/`anchor` declaration order; X2 swaps the
 `VillagerState.mining_progress`/`lumber_progress` declaration order; X3 swaps
 only those two progress NBT pushes. X2 also reaches transit JSON through
 `Transit.Record.members`' embedded `ReplayEntity.villager`: both checkpoint
@@ -31,6 +33,27 @@ successfully finish and its exact expected row/WAL/export diff is observed.
 Compilation, recovery and missing-artifact errors never count as a red control.
 Any byte difference refuses an ordinary comparison; `verdict.json` records each
 artifact independently.
+
+For the additional real-image gate, run
+`python3 tools/dev/bytecheck_real.py BASE_TREE SLICE_TREE RETAINED_RUN --out ABSOLUTE_RECEIPT_DIR`.
+The stopped retained run contains `world/`, `plugins/` and `server.toml`.
+The runner records every source file's SHA-256, verifies its snapshot, then uses
+the base pin's normal `NativeStore::open/drop` to repair redb on that copy only.
+It records post-repair hashes, refuses changes outside `native/state.redb`,
+freezes the repaired input read-only and makes fresh writable operation copies.
+The original is never opened as a database; its hashes are rechecked afterward.
+A public-API probe is linked against each
+tree's own libraries and pinned with source and binary fingerprints. It compares
+all encoded global/player/entity rows, complete export files, custody and crash
+censuses, plus ordinary census after frozen Core startup/shutdown. The ordinary
+census projection excludes source paths and backing-file CRCs, not its checkpoint
+tick or authoritative counts; the complete receipt remains alongside it.
+The tail must advance the checkpoint and the image must contain settlements.
+`tail-records.json` states which domain records it actually carries; replayed
+climate/game-clock state is retained too. A frozen real image is not presented
+as an active settlement or transit tail. The synthetic oracle supplies that
+non-vacuous WAL coverage. `--world PATH` selects a certified world subdirectory
+when it is not `RETAINED_RUN/world`; only that world, plugins and config are copied.
 
 ## WAL
 

@@ -47,13 +47,8 @@ pub struct Replay {
     pub difficulty: crate::survival::Difficulty,
     pub default_game_mode: crate::commands::GameMode,
     pub gamerules: BTreeMap<String, String>,
-    pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
-    pub settlement_removed: BTreeSet<u64>,
-    pub settlement_high_water: u64,
-    pub(crate) starter_chest_grants: BTreeMap<uuid::Uuid, u64>,
-    /// Migration transit custody post-images (`None` = tombstone), ADR 0023,
-    /// in the transit module's own codec.
-    pub transits: BTreeMap<uuid::Uuid, Option<Arc<String>>>,
+    /// Domain-owned settlement and migration post-images for this dimension.
+    pub settlement_tail: crate::settlements::persistence::Tail,
     /// Checkpoint row or latest full WAL image; read it through
     /// `battle::persistence::image`, which applies the later patches.
     pub(crate) battle: Option<Arc<String>>,
@@ -1095,26 +1090,13 @@ pub(crate) fn apply_batch_images(
                 JournalEntry::Settlement {
                     image, high_water, ..
                 } => {
-                    replay.settlement_high_water = replay
-                        .settlement_high_water
-                        .max(*high_water)
-                        .max(image.id.0);
-                    match &image.value {
-                        Some(record) => {
-                            replay.settlements.insert(image.id.0, record.clone());
-                            replay.settlement_removed.remove(&image.id.0);
-                        }
-                        None => {
-                            replay.settlements.remove(&image.id.0);
-                            replay.settlement_removed.insert(image.id.0);
-                        }
-                    }
+                    replay.settlement_tail.fold_settlement(image, *high_water);
                 }
                 JournalEntry::StarterChestGranted { player, count } => {
-                    replay.starter_chest_grants.insert(*player, *count);
+                    replay.settlement_tail.fold_starter_chest_grant(*player, *count);
                 }
                 JournalEntry::Transit { id, record, .. } => {
-                    replay.transits.insert(*id, record.clone());
+                    replay.settlement_tail.fold_transit(*id, record);
                 }
                 JournalEntry::Battle { value } => {
                     crate::battle::persistence::fold_full(&mut replay, value);
