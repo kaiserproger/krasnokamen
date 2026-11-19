@@ -8,17 +8,18 @@
     "test-audit-d60-read2-scene-batch.json",
     "test-audit-d60-read2-civilization-batch.json",
     "test-audit-d60-read2-catalog-batch.json",
-    "test-audit-d60-read2-world-batch.json"
+    "test-audit-d60-read2-world-batch.json",
+    "test-audit-d60-read2-runtime-profiles-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 333,
-    "removed_in_new_batches": 225,
+    "finalized_historical_test_ids": 359,
+    "removed_in_new_batches": 236,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 72,
+    "retained_K1": 80,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 31,
-    "historical_medium_candidates_reviewed": 175,
-    "remaining_medium_candidates_unfinalized": 624,
+    "retained_U": 38,
+    "historical_medium_candidates_reviewed": 191,
+    "remaining_medium_candidates_unfinalized": 608,
     "verification_owner": "Main"
   },
   "base": "96e99cfe3bc3e2d6f52354e8cca2a3fb100ece88",
