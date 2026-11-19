@@ -775,6 +775,88 @@ fn marking_corners_prefills_the_certify_form_and_bad_input_is_explained() {
     assert!(unknown.body.contains("Choose a building type"));
 }
 
+/// A finished workshop house on the fixture floor: solid floor at y=200, a wall
+/// ring at 201..=203, a roof at 204 and one workstation inside. Its own inclusive
+/// bounds are `1 200 1` .. `5 204 5`.
+fn finished_workshop_house(state: &mut TickState) {
+    let stone = state.registry.states.stone;
+    for x in 1..=5 {
+        for z in 1..=5 {
+            for y in 201..=203 {
+                if x == 1 || x == 5 || z == 1 || z == 5 {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+            state.world.set_block(x, 204, z, stone);
+        }
+    }
+    state.world.fold_overlay();
+    station(state, [3, 201, 3], "minecraft:composter");
+}
+
+#[test]
+fn finished_workshop_house_certifies_with_its_inclusive_bounds() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    finished_workshop_house(&mut state);
+    click(
+        &mut state,
+        id,
+        "certify_do",
+        &[
+            ("kind", string("farmer")),
+            ("from", string("1 200 1")),
+            ("to", string("5 204 5")),
+            ("extra", Tag::Float(0.0)),
+        ],
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings.len(),
+        1,
+        "the fixture must certify with its own inclusive bounds"
+    );
+}
+
+/// CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS: the corner marks store the
+/// player's feet block (`pos.floor()`), and certify takes the two marks as
+/// inclusive bounds, so a player who stands in a corner block of a finished
+/// house — exactly what the tooltip asks — marks the air layer above the floor.
+#[test]
+#[ignore = "known red: CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS; un-ignore with the fix"]
+fn corner_marks_taken_inside_a_finished_house_certify_it() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    finished_workshop_house(&mut state);
+    let entity = state.connections.entity_of(CONN).unwrap();
+    let slot = state.entities.slot_of(entity).unwrap();
+    // Follow the tooltip: stand in one inner corner block, then the opposite one.
+    state.entities.set_pos(slot, [2.5, 201.0, 2.5]);
+    click(&mut state, id, "mark1", &certify_form("farmer"));
+    state.entities.set_pos(slot, [4.5, 201.0, 4.5]);
+    click(&mut state, id, "mark2", &certify_form("farmer"));
+    let marks = state.settlement_marks[&CONN];
+    let corner = |at: [i32; 3]| format!("{} {} {}", at[0], at[1], at[2]);
+    let from = corner(marks[0].expect("mark1 stored a corner"));
+    let to = corner(marks[1].expect("mark2 stored a corner"));
+    let rejected = last_dialog(&click(
+        &mut state,
+        id,
+        "certify_do",
+        &[
+            ("kind", string("farmer")),
+            ("from", string(&from)),
+            ("to", string(&to)),
+            ("extra", Tag::Float(4.0)),
+        ],
+    ));
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings.len(),
+        1,
+        "marks taken at {from} .. {to} (the feet block) must certify the house; the server says: {}",
+        rejected.body
+    );
+}
+
 fn bound_resident(state: &mut TickState, id: SettlementId) -> uuid::Uuid {
     let slot = villager(state, [5.5, 201.0, 7.5]);
     let entity = state.entities.body(slot).id;
