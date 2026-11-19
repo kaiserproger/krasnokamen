@@ -1356,41 +1356,93 @@ fn cell_walls(state: &mut TickState, block: u32) {
     state.world.fold_overlay();
 }
 
-/// Review P2 (wt/SpainLand): the only Builder stands walled in, away from
-/// storage. Its failed route stands for the gate, so no autonomous site opens
-/// that nobody can serve (one unbound site closes the whole autonomous pass);
-/// once the wall is gone and the failure has lapsed, the funded site opens.
+/// The walled Builder's uuid on the fixture: the only Builder stands in a
+/// stone cell away from storage, and no failed route is recorded yet.
+fn wall_in_builder(state: &mut TickState, slot: EntitySlot) -> uuid::Uuid {
+    let stone = state.registry.states.stone;
+    cell_walls(state, stone);
+    state.entities.set_pos(slot, [10.5, 201.0, 10.5]);
+    assert!(
+        state.settlements.storage_unreached.is_empty(),
+        "fixture: no failed route is recorded yet"
+    );
+    state.entities.row(slot).uuid
+}
+
+/// Review P2 (wt/SpainLand) on the natural first pass: the gate sees no
+/// failed route and opens a funded site, the binding pass then finds the only
+/// Builder walled from storage. The site is withdrawn in that same pass, so no
+/// unbound site ever holds the planner, and the recorded failure keeps the
+/// gate closed until it lapses. Once the wall is gone the site opens and binds
+/// the Builder.
 #[test]
-fn the_planner_opens_no_site_for_a_builder_walled_from_storage() {
+fn a_site_opened_for_a_builder_walled_from_storage_is_withdrawn() {
     let (mut state, id, slot) = fixture();
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    let stone = state.registry.states.stone;
-    cell_walls(&mut state, stone);
-    state.entities.set_pos(slot, [10.5, 201.0, 10.5]);
-    // An unbound site probes the builder: its route to storage fails.
-    let structure = paving_project(&mut state, id);
-    assign_builder(&mut state, id);
-    assert!(
-        access::projects_of(&state.settlements, id).all(|project| project.builder.is_none()),
-        "fixture: the walled builder takes no site"
-    );
-    cancel_project(&mut state, id, &structure).unwrap();
-    for _ in 0..64 {
-        plan(&mut state, id);
+    let uuid = wall_in_builder(&mut state, slot);
+    // Every new failure is one opened site the binding pass probed.
+    let mut probes = Vec::new();
+    let mut last = None;
+    for pass in 1..=160u64 {
+        state.tick = pass * PLAN_CADENCE;
+        tick_settlements(&mut state);
+        assert!(
+            handles(&state, id).is_empty(),
+            "pass {pass}: no site the walled builder cannot serve stays open"
+        );
+        let until = state.settlements.storage_unreached.get(&uuid).copied();
+        if until != last {
+            probes.push(pass);
+            last = until;
+        }
     }
     assert!(
-        handles(&state, id).is_empty(),
-        "no autonomous site opens for a builder walled from storage"
+        probes.len() >= 2,
+        "the site opened, was withdrawn and opened again: {probes:?}"
+    );
+    assert!(
+        probes
+            .windows(2)
+            .all(|pair| (pair[1] - pair[0]) * PLAN_CADENCE >= 1_200),
+        "the gate stays closed while the failure stands: {probes:?}"
     );
     let air = state.registry.states.air;
     cell_walls(&mut state, air);
-    state.tick += 1_200;
-    for _ in 0..256 {
-        plan(&mut state, id);
-        if !handles(&state, id).is_empty() {
+    for pass in 161..=400u64 {
+        state.tick = pass * PLAN_CADENCE;
+        tick_settlements(&mut state);
+        if access::projects_of(&state.settlements, id)
+            .any(|project| project.builder.is_some_and(|(builder, _)| builder == uuid))
+        {
             return;
         }
     }
-    panic!("the funded site opens once the failed route has lapsed");
+    panic!("once the wall is gone the site opens and binds the builder");
+}
+
+/// Control for the withdrawal: an owner's order the walled Builder cannot
+/// serve stays open; only autonomous sites are withdrawn.
+#[test]
+fn an_owner_order_stays_open_for_a_builder_walled_from_storage() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    let uuid = wall_in_builder(&mut state, slot);
+    request_started(&mut state, id, "storage");
+    for pass in 1..=80u64 {
+        state.tick = pass * PLAN_CADENCE;
+        tick_settlements(&mut state);
+    }
+    assert!(
+        state.settlements.storage_unreached.contains_key(&uuid),
+        "the binding pass tried the walled builder"
+    );
+    let record = state.settlements.get(id).unwrap();
+    assert!(
+        access::projects(record).any(|project| project.ordered
+            && project.blueprint == "storage"
+            && project.builder.is_none()),
+        "the owner's order stays open, unbound"
+    );
 }

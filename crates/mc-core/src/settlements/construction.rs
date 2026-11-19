@@ -1676,8 +1676,9 @@ fn plan(state: &mut TickState, id: SettlementId) {
     plan_pass(state, id, &mut site_turn::SiteBudget::default());
 }
 
-/// The settlement's planner pass; its site slices come from `budget`.
-fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::SiteBudget) {
+/// The settlement's planner pass; its site slices come from `budget`. True
+/// when it opened an autonomous project past the builder gate.
+fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::SiteBudget) -> bool {
     // Pending orders permit an existing expedition's handover or cancellation,
     // never admission or construction of another outpost.
     if state
@@ -1686,20 +1687,20 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
         .is_some_and(|record| access::head_order(record).is_some())
         && founding::plan(state, id)
     {
-        return;
+        return false;
     }
     // With a pending order, iron_demand considers only that order's bill.
     if furnace::plan(state, id) {
-        return;
+        return false;
     }
     if plan_order(state, id, budget) {
-        return;
+        return false;
     }
     if founding::plan(state, id) {
-        return;
+        return false;
     }
     let Some(record) = state.settlements.get(id) else {
-        return;
+        return false;
     };
     // Autonomous work opens a site only when every active project has its
     // builder and a resident could take one more: a site nobody can build only
@@ -1709,11 +1710,11 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
         || unbound_project(&state.settlements, id).is_some()
         || !builder_free(state, id)
     {
-        return;
+        return false;
     }
     let residents = state.settlements.member_count(id);
     if residents == 0 {
-        return;
+        return false;
     }
     // Probe one canonical storage image set; an unfundable early autonomous
     // need cannot monopolize the single project slot.
@@ -1790,8 +1791,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     };
     state.settlements.site_sweep.insert(id, sweeps);
     if let Some(site) = house {
-        begin_cells(state, site.project, site.bounds, site.cells);
-        return;
+        return begin_cells(state, site.project, site.bounds, site.cells);
     }
     let funded_kinds = funded_site.is_some();
     if let Some(pass) = funded_site {
@@ -1799,8 +1799,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
         record.construction_cursor = pass.cursor;
         record.revision = record.revision.saturating_add(1);
         if let Some(site) = pass.site {
-            begin_cells(state, site.project, site.bounds, site.cells);
-            return;
+            return begin_cells(state, site.project, site.bounds, site.cells);
         }
     }
     // A kind's sweep is still running and already holds a legal candidate: its
@@ -1814,7 +1813,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 record.revision = record.revision.saturating_add(1);
             }
         }
-        return;
+        return false;
     }
     let cursor = house_cursor;
     // A funded new building may have no legal lot. Existing houses must still
@@ -1823,7 +1822,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     if let Some((project, species, color)) = preparation::upgrade_project(state, record, &images)
         && begin(state, project, &species, color)
     {
-        return;
+        return true;
     }
     if !funded_kinds {
         let record = state.settlements.get_mut(id).expect("planned settlement");
@@ -1836,23 +1835,23 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // worker is out: `assign_builder` keeps that worker out of this project,
     // and another resident clears the meadow.
     let Some(record) = state.settlements.get(id) else {
-        return;
+        return false;
     };
     if let Some(site) = meadow_site(state, record, residents, &images) {
-        begin_cells(state, site.project, site.bounds, site.cells);
-        return;
+        return begin_cells(state, site.project, site.bounds, site.cells);
     }
     if gathering {
-        return;
+        return false;
     }
     // The wall, its gates and the well come before street work: the streets
     // reach every standing building in the radius and owe work without end,
     // the fortification is a bounded list that the world itself shortens.
-    if let Some(site) = fortification_site(state, record, residents, &images)
+    let Some(site) = fortification_site(state, record, residents, &images)
         .or_else(|| street_site(state, record, &images))
-    {
-        begin_cells(state, site.project, site.bounds, site.cells);
-    }
+    else {
+        return false;
+    };
+    begin_cells(state, site.project, site.bounds, site.cells)
 }
 
 /// The next funded piece of the perimeter wall, its gates or the well, from
@@ -2730,13 +2729,15 @@ fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
                 }
             }
         }
-        plan_pass(state, id, budget);
+        let opened = plan_pass(state, id, budget);
         if state
             .settlements
             .get(id)
             .is_some_and(|record| access::projects(record).next().is_some())
+            && assign_builder(state, id)
+            && opened
         {
-            assign_builder(state, id);
+            withdraw_opened_site(state, id);
         }
     }
     if let Some(id) = selected(state, state.tick / 4)
@@ -2746,6 +2747,29 @@ fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
             .is_some_and(|record| access::projects(record).next().is_some())
     {
         crate::villager::building::tick(state, id);
+    }
+}
+
+/// The gate saw no failed route to storage, but every resident the binding
+/// pass then tried failed it: the autonomous site this pass opened is
+/// withdrawn unbuilt, so it never holds the planner, and the recorded failures
+/// keep the gate closed until they lapse. Owner orders are never withdrawn.
+fn withdraw_opened_site(state: &mut TickState, id: SettlementId) {
+    // `push_project` appends: the last project is the one this pass opened.
+    let Some(handle) = state
+        .settlements
+        .get(id)
+        .and_then(|record| access::projects(record).last())
+        .filter(|project| !project.ordered && project.builder.is_none())
+        .map(|project| project.structure.clone())
+    else {
+        return;
+    };
+    match cancel_project(state, id, &handle) {
+        Ok(()) => tracing::info!(target: "settlement_audit", settlement = id.0,
+            structure = %handle, tick = state.tick, "settlement_site_withdrawn"),
+        Err(error) => tracing::warn!(settlement = id.0, structure = %handle, %error,
+            "settlement_site_withdrawal_failed"),
     }
 }
 
