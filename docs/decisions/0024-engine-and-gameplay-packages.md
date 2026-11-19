@@ -5,7 +5,7 @@
 (committee-sol and committee-astra, both "changes",
 `receipts/EngineADR/REVIEW-{sol,astra}.md`); see [Review resolution](#review-resolution).
 Nothing here is implemented. The D65 settlements crate (ADR 0021 Step 2, design
-`receipts/CoreUnload/DESIGN.md` with its review `receipts/CoreUnload/REVIEW-sol.md`,
+`receipts/CoreUnload/DESIGN.md`, revised after its reviews `REVIEW-sol.md` and `REVIEW-sol-r2.md` in that directory,
 both outside Git) is already running and is this ADR's first step; this ADR
 builds on that design and does not repeat it.  
 **Related:** [0009](0009-regional-plugin-boundary.md) (isolation and admission
@@ -103,7 +103,7 @@ time.
 | formation, steering, targeting, combat, archery, cavalry (`battle/`, 13,025 prod lines) | steering cells, target grid, reach, damage and removal application, the battle image | tactics and fatigue: decision cadence, mesh interval and depth, surge probability and length, fatigue and recovery, exhaustion, morale floor (`battle/formation.rs:11-44`); cinematic lethality and casualty policy: target removals, press exposure, fatal share, pursuit lethality (`battle/combat.rs:40-80`) |
 | bed, job and meeting-point allocation (`settlements/allocator.rs`, 2,280 lines; budget `tick_budget.rs:8-9`) | exclusive claims, POI index, path budget | which beds and job slots count (certified houses and certified work points only, `allocator.rs:1243,1298-1306`), staffing priority |
 | worker actions (`villager/brain.rs`, 1,577, and the villager AI submodules; generic work orders `npcs.wit:190-271`) | digging, felling, harvesting, placing and hauling with conserved loot, doors, reach | job vocabulary and eligibility (for example which trees or zones a worker may cut), schedules |
-| construction cells (generic executor in `plugin_structures`, 1,732 + 3,329 lines; settlement policy in `plugin_structures/settlement_builds.rs` and `settlements/construction*.rs`, 9,592 lines) | per-cell placement paid from storage, repair-stage derivation, the structure ledger | bills, project and order caps (`construction.rs:58,60`), builder stall and shun times (`construction.rs:2144,2146`), borrowing rules; the code split is D65 S7 (`DESIGN.md` §2.5, as corrected in `REVIEW-sol.md`) |
+| construction cells (generic executor in `plugin_structures`, 1,732 + 3,329 lines; settlement policy in `plugin_structures/settlement_builds.rs` and `settlements/construction*.rs`, 9,592 lines) | per-cell placement paid from storage, repair-stage derivation, the structure ledger | bills, project and order caps (`construction.rs:58,60`), builder stall and shun times (`construction.rs:2144,2146`), borrowing rules; the code split is D65 S7 (`DESIGN.md` §2.5: the reserve check stays on the generic path for every owner) |
 | transit custody (`settlements/transit.rs`, 1,097) | departure and arrival custody, transit records | migration weights, thresholds and arrival chances (`migration.rs:15-33`) |
 | economy accrual (`settlements/production.rs`, `commerce.rs`, `caravan.rs`) | game-time watermarks, atomic transfers, retry timing | food points per day (`offscreen_production.rs:6`), wages and periods, caravan deadlines, recipes |
 | zones and faction relations (`plugin_player::protects_cell`, `battle::faction`) | per-edit and per-hit evaluation | who is allowed and when (war windows) |
@@ -280,17 +280,20 @@ with bounds), so live recovery, offline tools and WAL verification check each
 image without calling the package. A missing owner or codec, an unknown schema
 version or a corrupt image refuses the world before serving and before the
 image is folded, so a later replacement or tombstone cannot hide it; this is
-the corrected D65 C1 rule (per-image schema decode in the batch decoder before
-fold, `receipts/CoreUnload/REVIEW-sol.md`, finding C1). Referential and custody
+the D65 C1 rule (per-image schema decode in the shared batch decoder before
+routing and fold, `receipts/CoreUnload/DESIGN.md:39-43` and §2.8, Main rulings
+Q2 and Q7 there). Referential and custody
 checks stay at their existing recovery stages. Today's KV is validated only as
 bounded strings (`crates/mc-script/src/validation.rs:143-171`) and the startup
 world identity does not record package versions
 (`crates/mc-core/src/plugin_startup.rs:190-195`); neither is schema validation.
 
-**D65 alignment.** No `SettlementRecord` field leaves the core before D65 C3 is
-accepted; C1 is the corrected one above. A record format change happens only in
-a separate D66 cutover with one writer (no dual write, no second authority);
-the converter-or-reset choice is owner question 2.
+**D65 alignment.** No `SettlementRecord` field leaves the native settlement
+record (to a package, KV or another owner) before D65 C3 is accepted, and C3 is
+accepted only through the D65 gates listed in §4 step 0. A record format change
+happens only in a separate D66 cutover with one writer, never inside a D65
+slice and never dual-written (`receipts/CoreUnload/DESIGN.md:23-27`). The
+converter-or-reset choice is owner question 2.
 
 ## 2. API: named, versioned engine services
 
@@ -688,11 +691,11 @@ GO.
 
 | Step | What | Depends on |
 |---|---|---|
-| 0 (running) | D65 settlements crate: S0–S8, then C1–C3 (`DESIGN.md` §3.2-3.3) with the review's corrections: S0 compares base and slice at the same stages and ticks with fixed salt and UUIDs; the offline proof is recover then encode/export, not compact or census; S6 keeps native sim gating and allocator before brain; S7 keeps the reservation check in the generic Begin for every owner; C1 decodes each image's schema before fold (`REVIEW-sol.md`, findings C1, S0, offline, S6, S7). Duplicate-plugin deletions by the audit (D66.4). | — |
+| 0 (running) | D65 settlements crate: S0–S8, then C1–C3 (`DESIGN.md` §3.2-3.3), accepted only through its gates: the S0 byte oracle (same stages and ticks, fixed salt and UUIDs, base-vs-base in separate processes, three isolated controls; §2.9, lines 44-47); C1 decoding every image's schema in the shared batch decoder before routing and fold (§2.8, lines 39-43); the offline proof by `recover_offline` → `encode_checkpoint`, export and the custody and crash censuses, not `compact` (§2.9); S6 as a separate sequential cut of typed synchronous owner-thread calls (§2.4, lines 36-38); S7 keeping the reserve check on the generic `Begin` for every owner (§2.5, Main ruling Q4); the release-speed gate (§4). Duplicate-plugin deletions by the audit (D66.4). | — |
 | **1** | **Service cut** (§4.1) | — (parallel with 0) |
 | 2 | Computer: block identity and the terminal and screen UI flow as a package; every open/input authorization, revocation, the process bridge and the frame stream stay in `mc-edge`, never through the Wasm FIFO | 1 |
 | 3 | Realms (new package, D62): treaties, tribute, ransom, chronicle, map; a separate package per D62 (`OWNER_DECISIONS.md:371-372`), using the engine-served `settlements` service | 1; owner GO for D62; D65 S2 owned state before any new settlement operation except the steward (`D62-REALMS-PLAN.md:73-77`); native war (D62 step 1); D63 map v2 for the map; a captive state for ransom |
-| 4 | Economy: economy rules and ledgers into package records; payments, wages and tribute as typed native operations with durable receipts; goods stay engine custody | 1; D65 C3 accepted; the separate D66 format cutover with one writer (§1.3); native package rows with a declared schema |
+| 4 | Economy: economy rules and ledgers into package records; payments, wages and tribute as typed native operations with durable receipts; goods stay engine custody | 1; an **accepted** D65 C3 (C1 alone is not enough) under the step-0 gates; then the separate D66 format cutover with one writer (`DESIGN.md:23-27`, §1.3); native package rows with a declared schema |
 | 5 | Settlements onto WIT (D66.3): founding, growth, certification rules, households, districts, migration rules, presentation, commands, and the executors' game rules (§1.1); the `settlements` provider switches from the engine to the package here (§2.8) | 4 |
 | 6 | Armies and battles: rosters, staging, order vocabulary, war policy and the tactics, fatigue, lethality and casualty rules of `formation.rs` and `combat.rs`; the executors and the battle image stay | 5; independent battle-core review (AGENTS.md rule 5) |
 
@@ -800,8 +803,8 @@ instantiation failure was the moment of deletion, not a reason.
   package's own KV with no durable operation id, and membership changes are in
   no transaction a package can request.
 - The D65 design, with C1 corrected, gives the settlement codec to the domain
-  and checks every image before fold (`DESIGN.md` §2.8; `REVIEW-sol.md`, C1):
-  the basis for package-owned rows with a declared schema.
+  and checks every image before fold (`DESIGN.md` §2.8 and lines 39-43): the
+  basis for package-owned rows with a declared schema.
 
 ### 5.4 What still blocks the move back
 
@@ -874,8 +877,9 @@ way and they follow from D62, D66 and ADR 0013, so they are decisions here:
 ## Review resolution
 
 Reviews of 779ef6888: `receipts/EngineADR/REVIEW-sol.md` (S1–S7) and
-`receipts/EngineADR/REVIEW-astra.md` (A1–A7); M1 is Main's battle-rules note.
-All HIGH and MEDIUM findings:
+`receipts/EngineADR/REVIEW-astra.md` (A1–A7); M1 is Main's battle-rules note;
+D65-r2 is finding ADR-0024-6 of the D65 re-review
+`receipts/CoreUnload/REVIEW-sol-r2.md`. All HIGH and MEDIUM findings:
 
 | Finding | Severity | Section | Resolution |
 |---|---|---|---|
@@ -895,5 +899,6 @@ All HIGH and MEDIUM findings:
 | A7 dependency graph incomplete | medium | §1.2, §2.7, §4 | Computer moves UX only; realms after D65 owned state, D63 map v2 and a captive state; corrected C1 before settlements; provider at step 5; `spawn-entity` kept for sky-creeper |
 | A-history: line 6, not 5; reasons 2, 4, 5 are from the October study | — | §5.1, §5.2 | Fixed and stated |
 | M1 battle executors hold game rules (`formation.rs:11-44`, `combat.rs:40-80`) | — | §1.1, §1.2, §4 | Mechanism vs rules table; tactics, fatigue, lethality and casualty policy move to the battles package as data and decisions, measured A/B; the same split stated for allocation, worker actions, construction, transit and economy |
+| D65-r2 ADR-0024-6 step 4 could start after C1 | high | §1.3, §4 | Step 4 depends on an accepted C3 under the D65 gates of `DESIGN.md` (S0 byte oracle §2.9, C1 per-image decode before fold §2.8, offline `recover_offline` → `encode_checkpoint`/export proof §2.9, S6 sequential cut §2.4, S7 generic reserve check §2.5, release gate §4); format changes only in a separate D66 cutover with one writer (`DESIGN.md:23-27`), so both plans allow the same order |
 
 [Architecture overview](../ARCHITECTURE.md) · [Decisions index](README.md)
