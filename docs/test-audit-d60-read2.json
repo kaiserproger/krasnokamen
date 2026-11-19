@@ -1,6 +1,7 @@
 {
   "decision": "D60.2",
-  "status": "parked by Main under D28 executor cap",
+  "status": "Historical pre-merge checkpoint; current replay dispositions are recorded in latest_batch.",
+  "latest_batch": "test-audit-d60-read2-replay-batch.json",
   "base": "96e99cfe3bc3e2d6f52354e8cca2a3fb100ece88",
   "historical_inventory": {
     "base": "30418aee2",
