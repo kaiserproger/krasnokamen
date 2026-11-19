@@ -1120,10 +1120,12 @@ fn recover_with_clock(
         }
     }
     #[cfg(test)]
-    dimensions
-        .get_mut(&Dimension::Overworld)
-        .expect("overworld replay")
-        .game_clock = Some(game_clock);
+    {
+        dimensions
+            .get_mut(&Dimension::Overworld)
+            .expect("overworld replay")
+            .game_clock = Some(game_clock);
+    }
     Ok(RecoveredWorld {
         config: config.clone(),
         registry,
