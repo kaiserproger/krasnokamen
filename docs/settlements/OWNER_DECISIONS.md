@@ -298,3 +298,18 @@ the parallel behaviour lands,
 - Site search is to be spread over ticks, targeting no settlement tick over
   100 ms while preserving the chosen site. This tightens the earlier 1 s target
   for settlement work.
+
+## Full storehouse — owner D54, 2026-11-19
+
+> Вопрос 2. Деревня строит ещё один склад
+
+- When a settlement's storage runs low on free slots, the village itself
+  builds another storehouse, queued ahead of other autonomous construction;
+  no item is dropped or destroyed. The owner chose this over dropping the
+  excess on the ground (item loss) and over refusing sites that need
+  excavation (construction stalls the same).
+- The owner did not set the free-slot threshold, the placement or a cap on
+  the number of storehouses; the implementation states its choices in
+  [construction](construction.md). Until that change lands, the planner builds
+  storage only when the settlement has none, and full storage makes cuts wait
+  without losing material.
