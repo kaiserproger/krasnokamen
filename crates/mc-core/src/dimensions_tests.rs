@@ -1826,6 +1826,62 @@ fn anchor_respawn_waits_for_loaded_area_and_consumes_one_charge() {
     assert_eq!(state.players[&bob].respawn_point, None);
 }
 
+/// A respawn into another dimension spends the anchor charge at the
+/// coordinator boundary. The published Nether projection carries that block
+/// change, so its chunk image and revision must carry the spent charge too.
+#[test]
+fn cross_dimension_anchor_respawn_publishes_the_spent_charge_in_its_chunk_image() {
+    let (mut state, alice, _) = worlds();
+    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+    load_spawn_area(nether);
+    nether.tickets.insert(
+        "anchor-respawn".into(),
+        (mc_world::ChunkPos { x: 0, z: 0 }, 1),
+    );
+    let anchor = block(nether, "respawn_anchor");
+    let charged = rules::anchor_state(nether, anchor, 2).unwrap();
+    let spent = rules::anchor_state(nether, anchor, 1).unwrap();
+    nether.world.set_block(4, 150, 4, charged);
+    nether.world.fold_overlay();
+    let player = state.players.get_mut(&alice).unwrap();
+    player.respawn_point = Some([4, 150, 4]);
+    player.respawn_dimension = Dimension::Nether;
+    player.respawn_forced = false;
+    let (killed, _) = command(&mut state, 1, "kill");
+    let image = |output: &crate::boundary::TickOutput| {
+        let chunk = output.snapshot.dimensions[&Dimension::Nether]
+            .snapshot
+            .chunks
+            .iter()
+            .find(|chunk| (chunk.pos.x, chunk.pos.z) == (0, 0))
+            .unwrap();
+        (chunk.revision, chunk.chunk.get_block(4, 150, 4))
+    };
+    let (before, _) = image(&killed);
+    let (respawned, _, _) = crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    assert_eq!(travel::locate(&state, alice).unwrap().0, Dimension::Nether);
+    let anchor_at = crate::boundary::BlockPos { x: 4, y: 150, z: 4 };
+    assert!(
+        respawned.snapshot.dimensions[&Dimension::Nether]
+            .changes
+            .blocks
+            .iter()
+            .any(|change| change.position == anchor_at && change.state == spent),
+        "the coordinator respawn spends the charge in this tick"
+    );
+    let (revision, published) = image(&respawned);
+    assert_eq!(published, Some(mc_world::BlockStateId(spent)));
+    assert_ne!(
+        revision, before,
+        "the spent charge moves the chunk revision"
+    );
+}
+
 #[test]
 fn nether_bucket_water_evaporates_but_cauldron_retains_it() {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
