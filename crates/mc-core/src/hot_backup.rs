@@ -319,12 +319,13 @@ fn open_copy(
             std::fs::copy(&store_path, &repaired).map_err(|error| {
                 CoreError::Storage(format!("hot backup verify {}: {error}", repaired.display()))
             })?;
-            let store = mc_world::native::NativeStore::open(&repaired, identity).map_err(|error| {
-                CoreError::Storage(format!(
-                    "hot backup {}: the copy does not open: {error}",
-                    store_path.display()
-                ))
-            })?;
+            let store =
+                mc_world::native::NativeStore::open(&repaired, identity).map_err(|error| {
+                    CoreError::Storage(format!(
+                        "hot backup {}: the copy does not open: {error}",
+                        store_path.display()
+                    ))
+                })?;
             Ok((OpenedCopy::Repaired(store), scratch))
         }
         Err(error) => Err(CoreError::Storage(format!(
@@ -357,15 +358,13 @@ pub fn verify_restorable(
     let reader = store.reader(copy, &store_path)?;
     let mut copy_config = config.clone();
     copy_config.world_dir = copy.to_path_buf();
-    let recovered =
-        crate::native_checkpoint::recover_with_reader(&copy_config, registry, reader).map_err(
-            |error| {
-                CoreError::Storage(format!(
-                    "hot backup {}: the copy does not recover: {error}",
-                    copy.display()
-                ))
-            },
-        )?;
+    let recovered = crate::native_checkpoint::recover_with_reader(&copy_config, registry, reader)
+        .map_err(|error| {
+        CoreError::Storage(format!(
+            "hot backup {}: the copy does not recover: {error}",
+            copy.display()
+        ))
+    })?;
     let recovered_tick = recovered
         .dimensions
         .values()

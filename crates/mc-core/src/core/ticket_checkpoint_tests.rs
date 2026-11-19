@@ -55,8 +55,8 @@ fn durable_api_ticket_survives_checkpoint_empty_tail_restart_without_portal_tick
             0,
             crate::journal::WalIdentity::fixture(),
         )
-            .unwrap()
-            .is_empty()
+        .unwrap()
+        .is_empty()
     );
     let restored = Core::open(config.clone()).unwrap();
     let mut receiver = restored.subscribe();
@@ -134,7 +134,8 @@ fn ticket_capture_is_frozen_and_child_isolated_with_wal_override() {
     let JournalWork::Checkpoint(job) = work_rx.recv().unwrap() else {
         panic!("expected frozen checkpoint job");
     };
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(tick, tick, &[]).unwrap();
     write_checkpoint(
         directory.path(),
@@ -151,8 +152,8 @@ fn ticket_capture_is_frozen_and_child_isolated_with_wal_override() {
             0,
             crate::journal::WalIdentity::fixture(),
         )
-            .unwrap()
-            .is_empty()
+        .unwrap()
+        .is_empty()
     );
     for (dimension, centre) in [
         (Dimension::Overworld, [3, 4]),

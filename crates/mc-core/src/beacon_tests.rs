@@ -276,7 +276,8 @@ fn beacon_menu_payment_tiers_wire_data_and_persistence() {
         Tag::String("minecraft:haste".into())
     )));
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             1,
@@ -291,7 +292,12 @@ fn beacon_menu_payment_tiers_wire_data_and_persistence() {
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     assert_eq!(
         replay.opaque_block_entities[&(POS.x, POS.y, POS.z)],

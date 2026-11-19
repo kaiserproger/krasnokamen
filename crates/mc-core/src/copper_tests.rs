@@ -1218,7 +1218,12 @@ fn copper_wal_replay_and_native_checkpoint_keep_carried_custody_once() {
     let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(tick, tick, &entries).unwrap();
     writer.gate(0, tick).unwrap();
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     drop(writer);
     let once = replay_batches(Replay::default(), &batches);
     let expected_entities = serde_json::to_value(&once.entities).unwrap();
@@ -1505,7 +1510,12 @@ fn copper_carried_items_drop_on_non_player_death_once_after_double_wal_replay() 
     writer.append(2, 2, &death_entries).unwrap();
     writer.gate(0, 2).unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let once = replay_batches(Replay::default(), &batches);
     assert!(!once.entities.contains_key(&id.0));
     let expected = serde_json::to_value(&once.entities).unwrap();

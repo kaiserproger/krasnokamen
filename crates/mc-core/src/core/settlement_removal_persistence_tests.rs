@@ -47,7 +47,8 @@ fn removed_settlement_row_is_deleted_by_the_next_checkpoint_and_the_world_reopen
         Ok::<_, crate::config::CoreError>(state)
     };
     let mut state = load().unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let id = state
         .settlements
         .create(

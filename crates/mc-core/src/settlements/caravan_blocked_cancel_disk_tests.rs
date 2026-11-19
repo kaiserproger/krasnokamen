@@ -150,7 +150,8 @@ fn recover(f: Fixture, config: &CoreConfig, mut writer: JournalWriter) -> Fixtur
 
 fn reopen(f: Fixture, config: &CoreConfig, writer: JournalWriter) -> (Fixture, JournalWriter) {
     let mut f = recover(f, config, writer);
-    let mut writer = JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     // Blocked/cancelled shipments are not runnable. A newly admitted production
     // portion has its ordinary 200-tick deadline, so this one hydration tick
     // cannot manufacture output or move the cancelled cargo.
@@ -167,7 +168,9 @@ fn blocked_loaded_cancel_releases_ownership_across_actual_wal_checkpoint_and_new
             let mut f = disk_fixture(&config);
             begin(&mut f, cause);
             checkpoint(&mut f, &config);
-            let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                    .unwrap();
             step(&mut f, &mut writer); // Actual source pickup; no synthetic loaded flag.
             after_pickup(&mut f, cause);
             for _ in 0..8 {

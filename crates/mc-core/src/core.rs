@@ -1025,11 +1025,7 @@ impl Core {
                 unreachable!()
             };
             let mut writer = if fresh {
-                JournalWriter::open(
-                    &world_dir,
-                    config.journal_fsync_every_batches,
-                    wal_identity,
-                )?
+                JournalWriter::open(&world_dir, config.journal_fsync_every_batches, wal_identity)?
             } else {
                 JournalWriter::open_recovered(
                     &world_dir,

@@ -347,7 +347,8 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
         high_water: parent.0,
         tick,
     };
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(tick, tick, std::slice::from_ref(&entry))
         .unwrap();
@@ -730,7 +731,8 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
                 }),
             ));
         }
-        let mut writer = JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
         writer.flush().unwrap();
         println!("READY published");

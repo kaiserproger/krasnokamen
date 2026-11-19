@@ -85,7 +85,8 @@ fn wal_inventory_recovery(size: usize, duplicate: Option<&str>) {
         )
         .unwrap();
     }
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(2, 2, &[player_entry(owner, &player, 2)])
         .unwrap();

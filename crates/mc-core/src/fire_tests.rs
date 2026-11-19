@@ -584,7 +584,12 @@ fn successful_ignition_and_debit_share_wal_queue_survives_replay() {
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     assert_eq!(replay.block_ticks, image);
     let mut restored = state(Some(dir.clone()));

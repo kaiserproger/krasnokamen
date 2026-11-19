@@ -300,7 +300,9 @@ fn backup_expected_tick(dir: &Path, checkpoint: u64) -> Result<u64> {
     };
     for entry in entries {
         let name = entry?.file_name().to_string_lossy().into_owned();
-        let Some(rest) = name.strip_prefix("batch-").and_then(|name| name.strip_suffix(".bin"))
+        let Some(rest) = name
+            .strip_prefix("batch-")
+            .and_then(|name| name.strip_suffix(".bin"))
         else {
             continue;
         };

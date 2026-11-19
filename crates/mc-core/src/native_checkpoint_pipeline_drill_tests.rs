@@ -43,7 +43,12 @@ fn assert_pruned(config: &CoreConfig, through: u64) {
             assert!(hi > through, "covered WAL batch {name:?} was not pruned");
         }
     }
-    crate::journal::read_complete_batches_after(&journal, through, crate::journal::WalIdentity::fixture()).unwrap();
+    crate::journal::read_complete_batches_after(
+        &journal,
+        through,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
 }
 fn assert_new_checkpoint_then_recovery(mut recovered: Drill, expected: &Layout) {
     let previous = recovered.manifest.tick;
@@ -265,7 +270,14 @@ fn successful_transfer_checkpoint_acknowledges_and_prunes_only_covered_wal() {
     // state with newly seeded dirty marks. The next checkpoint must preserve
     // the inverse transfer even after that stale ACK, before any restart.
     drill.writer = Some(
-        JournalWriter::open_recovered(&drill.config.world_dir, 1, target_tick, tail_tick, crate::journal::WalIdentity::fixture()).unwrap(),
+        JournalWriter::open_recovered(
+            &drill.config.world_dir,
+            1,
+            target_tick,
+            tail_tick,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     drill.checkpoint();
     assert_eq!(drill.manifest.tick, tail_tick);

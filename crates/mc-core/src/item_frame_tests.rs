@@ -176,7 +176,12 @@ fn item_frame_generation_support_and_wal_recovery() {
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &root.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let mut corrupt = replay.entities[&frame.0].clone();
     corrupt.appearance.spawn_data = 6;

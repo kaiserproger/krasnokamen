@@ -181,7 +181,12 @@ fn crash_census_folds_ordered_wal_and_refuses_a_gap_or_corrupt_frame() {
     saved.tick = 1;
     saved.age = 0;
     let uuid = saved.uuid.clone();
-    let mut writer = JournalWriter::open(&config.world_dir, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open(
+        &config.world_dir,
+        1,
+        mc_core::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     writer.append(1, 1, &[entry(saved.clone())]).unwrap();
     saved.tick = 2;
     saved.item = Some(mc_data::ItemStack::new(id, 2));

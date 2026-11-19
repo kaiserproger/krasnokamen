@@ -1209,7 +1209,12 @@ fn full_suction_wal_batch_replays_inventory_cooldown_and_entity_tombstone() {
     writer.append(2, 2, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert!(!replay.entities.contains_key(&id.0));
     assert_eq!(replay.block_entities[&key(HOPPER)].slots[0], stone);

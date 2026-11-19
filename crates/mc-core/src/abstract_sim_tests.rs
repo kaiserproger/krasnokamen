@@ -258,8 +258,12 @@ fn checkpoint_and_unload(state: &mut TickState) {
 }
 
 fn assert_reloaded_no_cooking(directory: &std::path::Path) {
-    let batches =
-        crate::journal::read_complete_batches_after(&directory.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = crate::journal::read_complete_batches_after(
+        &directory.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = crate::journal::replay_batches(Replay::default(), &batches);
     assert_eq!(replay.sim_debt[&[2, 0]].remaining, 0);
     let mut state = native_fixture(directory, &[ChunkPos { x: 2, z: 0 }]);
@@ -281,7 +285,12 @@ fn assert_reloaded_no_cooking(directory: &std::path::Path) {
 fn post_load_insert_unload_restart_reload_does_not_reuse_debt() {
     let directory = tempfile::tempdir().unwrap();
     let (mut state, entries) = late_insert_batch(directory.path());
-    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(
+        directory.path(),
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     writer.flush().unwrap();
     checkpoint_and_unload(&mut state);
@@ -296,8 +305,12 @@ fn crash_child() {
     use std::io::Write;
     let directory = std::env::var_os("KRASNOKAMEN_ABSTRACT_CRASH_DIR").expect("parent directory");
     let (mut state, entries) = late_insert_batch(std::path::Path::new(&directory));
-    let mut writer =
-        crate::journal::JournalWriter::open(std::path::Path::new(&directory), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(
+        std::path::Path::new(&directory),
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     writer.flush().unwrap();
     checkpoint_and_unload(&mut state);

@@ -145,7 +145,8 @@ fn wandering_trader_checkpoint_and_wal_tail_survive_anvil_roundtrip() {
     trader.tick = tick + 1;
     let mut clock = clock;
     clock.delay -= 1;
-    let mut writer = JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             tick + 1,
@@ -249,7 +250,8 @@ fn lazy_warning_decay_exports_the_replayed_clock_without_native_anchors() {
         )
         .unwrap();
     drop(store);
-    let mut writer = JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer.append(6011, 12010, &[]).unwrap();
     writer.append(12011, 12011, &[]).unwrap();
     writer.flush().unwrap();
@@ -354,7 +356,8 @@ fn villager_wal_claim_exports_native_profession_and_unique_job_memory() {
     villager.data.profession = VillagerProfession::Farmer;
     entity.tick = 2;
     entity.pos = [4.0, 201.0, 4.0];
-    let mut writer = JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer.append(2, 2, &[entity_entry(1, entity)]).unwrap();
     writer.flush().unwrap();
     drop(writer);

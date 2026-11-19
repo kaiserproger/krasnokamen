@@ -585,12 +585,18 @@ fn delta_values_round_trip_through_a_batch() {
         },
     };
     let entries = vec![landed.clone(), ungrounded.clone(), renamed.clone()];
-    let mut writer = JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(5, 6, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
     // The tail starts at the checkpoint tick: 5..6 follows 4.
-    let batches = read_complete_batches_after(&directory.join("journal"), 4, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &directory.join("journal"),
+        4,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let decoded = &batches[0].2;
     assert_eq!(decoded.len(), 3);
     assert_eq!(decoded[0], landed, "landing keeps an absolute ground age");

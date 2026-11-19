@@ -339,7 +339,8 @@ fn wal_restart_matures_and_checkpoint_restart_collects_without_recrediting_or_re
         .unwrap()
         .trigger_tick;
     {
-        let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(base + 1, filled.tick, &entries).unwrap();
         writer.flush().unwrap();
     }

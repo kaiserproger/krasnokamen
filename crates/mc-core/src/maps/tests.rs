@@ -569,12 +569,17 @@ fn saved_maps_two_first_opens_one_map_and_wal_restart_never_regenerates() {
     let checkpoint_tick = state.tick;
     let (output, _, _) = run_tick(&mut state, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches =
-        read_complete_batches_after(&root.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &root.path().join("journal"),
+        checkpoint_tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(
         Replay {
             tick: checkpoint_tick,
@@ -728,7 +733,8 @@ fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
     state.maps.attempted_trades.insert((uuid, 2));
     let checkpoint_tick = state.tick;
     let root = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let (birth, _, _) = run_tick(&mut state, &[]);
     let birth_entries = crate::core::journal_entries_for_tick(&mut state, &birth).unwrap();
     writer
@@ -763,8 +769,12 @@ fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches =
-        read_complete_batches_after(&root.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &root.path().join("journal"),
+        checkpoint_tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(
         Replay {
             tick: checkpoint_tick,

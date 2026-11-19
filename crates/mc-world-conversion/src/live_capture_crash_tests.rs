@@ -119,10 +119,15 @@ async fn crash_roundtrip(domain: Domain) {
     )
     .unwrap();
     let mut records = 0;
-    let through = mc_core::journal::visit_complete_batches_after(&root.join("journal"), evidence.checkpoint_tick, mc_core::journal::WalIdentity::fixture(), |(_, _, entries)| {
-        records += entries.len();
-        Ok(())
-    })
+    let through = mc_core::journal::visit_complete_batches_after(
+        &root.join("journal"),
+        evidence.checkpoint_tick,
+        mc_core::journal::WalIdentity::fixture(),
+        |(_, _, entries)| {
+            records += entries.len();
+            Ok(())
+        },
+    )
     .expect("stable crash WAL must decode contiguously with valid payloads");
     assert!(through >= evidence.through_tick && records > 0);
     // redb deliberately refuses read-only admission after an abrupt exit.

@@ -141,8 +141,14 @@ impl Drill {
         let state = recovered_world(&config);
         let manifest = read_manifest(&config).unwrap();
         let identity = drill_identity(&config, &state);
-        let writer =
-            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick, identity).unwrap();
+        let writer = JournalWriter::open_recovered(
+            &config.world_dir,
+            1,
+            manifest.tick,
+            state.tick,
+            identity,
+        )
+        .unwrap();
         Self {
             config,
             state,
@@ -262,8 +268,14 @@ impl Drill {
         assert_eq!(self.manifest.tick, tick);
         let identity = drill_identity(&self.config, &self.state);
         self.writer = Some(
-            JournalWriter::open_recovered(&self.config.world_dir, 1, tick, self.state.tick, identity)
-                .unwrap(),
+            JournalWriter::open_recovered(
+                &self.config.world_dir,
+                1,
+                tick,
+                self.state.tick,
+                identity,
+            )
+            .unwrap(),
         );
     }
     fn crash(self) -> Self {
@@ -745,7 +757,9 @@ fn enospc_at_every_transfer_wal_byte_refuses_partial_custody() {
     drop(drill);
     let mut actual_faults = 0;
     for cut in 0..=bytes {
-        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                .unwrap();
         crate::journal::WAL_WRITE_FAILURE.set(Some(cut));
         let error = writer
             .append(batch.tick, batch.tick, &batch.entries)
@@ -768,7 +782,8 @@ fn enospc_at_every_transfer_wal_byte_refuses_partial_custody() {
         );
     }
     assert_eq!(actual_faults, bytes + 1);
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(batch.tick, batch.tick, &batch.entries)
         .unwrap();

@@ -383,13 +383,19 @@ fn integrity_opening_chest_preserves_window_zero_custody_in_wal_and_checkpoint()
                 crate::core::player_record_for(&rig.state, rig.player, output.tick).unwrap();
             let entries = crate::core::journal_entries_for_tick(&mut rig.state, &output).unwrap();
             let dir = tempfile::tempdir().unwrap();
-            let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
             writer.append(1, output.tick, &entries).unwrap();
             writer.flush().unwrap();
             drop(writer);
             let replay = replay_batches(
                 Replay::default(),
-                &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+                &read_complete_batches_after(
+                    &dir.path().join("journal"),
+                    0,
+                    crate::journal::WalIdentity::fixture(),
+                )
+                .unwrap(),
             );
             let count = |player: &crate::journal::ReplayPlayer| {
                 player

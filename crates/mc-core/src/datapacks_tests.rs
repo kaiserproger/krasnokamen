@@ -518,7 +518,9 @@ fn schedule_checkpoint_wal_recovery_and_clear_tombstone() {
     assert!(
         matches!(&entries[..],[crate::journal::JournalEntry::ScheduledFunctions{value}] if value.is_empty())
     );
-    let mut writer = crate::journal::JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        crate::journal::JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture())
+            .unwrap();
     writer
         .append(state.tick + 1, state.tick + 1, &entries)
         .unwrap();

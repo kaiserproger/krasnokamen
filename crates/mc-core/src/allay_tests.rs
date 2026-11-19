@@ -42,14 +42,20 @@ fn integrity_partial_allay_pickup_preserves_custody_in_wal_recovery() {
     output.changes = Arc::new(changes);
     let tail = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 20, &tail).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     let remaining = replay.entities[&ground.0].item.as_ref().unwrap();
     let collected = &replay.entities[&allay.0]
@@ -400,7 +406,12 @@ fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let once = serde_json::to_value(&replay.entities).unwrap();
     let players_once = replay.players.clone();
@@ -548,12 +559,18 @@ fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
             assert!(output.changes.entities_spawned.is_empty());
         }
         assert!(original.entities.slot_of_any(id).is_none());
-        let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(1, birth_tick, &birth).unwrap();
         writer.append(death_tick, death_tick, &death).unwrap();
         writer.flush().unwrap();
         drop(writer);
-        let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+        let batches = read_complete_batches_after(
+            &dir.join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap();
         let replay = replay_batches(Replay::default(), &batches);
         assert!(!replay.entities.contains_key(&id.0));
         assert_eq!(replay.entities.len(), expected.len());

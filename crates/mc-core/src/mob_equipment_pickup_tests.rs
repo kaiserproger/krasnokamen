@@ -516,7 +516,8 @@ fn native_checkpoint_plus_disk_wal_replays_equipment_and_item_custody_once() {
             );
         }
         let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-        let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
         writer.flush().unwrap();
         drop(writer);
@@ -542,7 +543,12 @@ fn native_checkpoint_plus_disk_wal_replays_equipment_and_item_custody_once() {
             );
         }
         let once = serde_json::to_value(&replay.entities).unwrap();
-        let batches = read_complete_batches_after(&dir.path().join("journal"), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let batches = read_complete_batches_after(
+            &dir.path().join("journal"),
+            1,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap();
         let twice = replay_batches(replay, &batches);
         assert_eq!(serde_json::to_value(&twice.entities).unwrap(), once);
         drop(recovered);

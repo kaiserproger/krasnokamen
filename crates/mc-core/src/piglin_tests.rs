@@ -589,7 +589,9 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
                 location: [0.0; 3],
             }]
         };
-        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                .unwrap();
         let (output, _, _) = run_tick(&mut state, &inputs);
         assert!(output.changes.entities_appearance_changed.contains(&piglin));
         if let Some(item) = payment {
@@ -654,9 +656,12 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
         } else {
             assert_eq!(replay.players[&player_uuid].inventory[0].count, 1);
         }
-        let batches =
-            read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let batches = read_complete_batches_after(
+            &directory.path().join("journal"),
+            checkpoint_tick,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap();
         let once = serde_json::to_value(&replay.entities).unwrap();
         let twice = replay_batches(replay, &batches);
         assert_eq!(serde_json::to_value(&twice.entities).unwrap(), once);

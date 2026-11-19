@@ -288,7 +288,12 @@ fn player_created_flag_survives_checkpoint_fields_and_journal_replay() {
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(0, output.tick).unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let once = replay_batches(Replay::default(), &batches);
     assert_eq!(
         once.entities[&id.0].state.special_mob.as_deref(),

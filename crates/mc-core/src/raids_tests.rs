@@ -435,7 +435,9 @@ fn raids_native_codec_path_wal_roundtrip_and_corrupt_records_fail_closed() {
         "ordinary absent member does not corrupt the raid"
     );
     state.raids = good;
-    let mut writer = crate::journal::JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        crate::journal::JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture())
+            .unwrap();
     kill_wave(&mut state);
     step(&mut state);
     let tail = state.raids.clone();
@@ -449,8 +451,12 @@ fn raids_native_codec_path_wal_roundtrip_and_corrupt_records_fail_closed() {
         )
         .unwrap();
     writer.flush().unwrap();
-    let batches =
-        crate::journal::read_complete_batches_after(&root.path().join("journal"), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = crate::journal::read_complete_batches_after(
+        &root.path().join("journal"),
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let base = crate::journal::Replay {
         raids: crate::native_checkpoint::tests::read_manifest(&config)
             .unwrap()

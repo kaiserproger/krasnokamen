@@ -412,9 +412,12 @@ fn checkpoint_ledger(image: &mc_world::native::NativeCheckpointImage) -> Option<
 }
 
 fn assert_wal_purchase(world: &Path, checkpoint_tick: u64) -> u64 {
-    let batches =
-        mc_core::journal::read_complete_batches_after(&world.join("journal"), checkpoint_tick, mc_core::journal::WalIdentity::fixture())
-            .expect("read complete durable tick WAL after pre-purchase checkpoint");
+    let batches = mc_core::journal::read_complete_batches_after(
+        &world.join("journal"),
+        checkpoint_tick,
+        mc_core::journal::WalIdentity::fixture(),
+    )
+    .expect("read complete durable tick WAL after pre-purchase checkpoint");
     let key = ledger_key();
     let mut revision = None;
     for (_, _, entries) in batches {

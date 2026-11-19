@@ -88,7 +88,12 @@ fn published_checkpoint_tick(config: &CoreConfig) -> u64 {
 /// checkpoint failed leaves one.
 fn append_block_tail(config: &CoreConfig) {
     let durable = published_checkpoint_tick(config);
-    let mut journal = mc_core::journal::JournalWriter::open(&config.world_dir, 1, mc_core::journal::WalIdentity::fixture()).expect("journal");
+    let mut journal = mc_core::journal::JournalWriter::open(
+        &config.world_dir,
+        1,
+        mc_core::journal::WalIdentity::fixture(),
+    )
+    .expect("journal");
     journal
         .append(
             durable + 1,

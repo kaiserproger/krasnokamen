@@ -136,7 +136,8 @@ fn baseline(directory: &std::path::Path) {
     join(&mut state);
     assert_eq!(state.tick, 1);
     let entries = mutate(&mut state);
-    let mut writer = JournalWriter::open(directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, 1, &entries).unwrap();
     let job = checkpoint(&mut state);
     let mut manifest = read_manifest(&config).unwrap();
@@ -167,7 +168,8 @@ fn crash_child() {
     join(&mut state);
     let entries = mutate(&mut state);
     let tick = state.tick;
-    let mut writer = JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture()).unwrap();
     if boundary == "wal_partial" || boundary == "wal_before_fsync" {
         let partial = boundary == "wal_partial";
         *crate::journal::WAL_WRITE_OBSERVER.lock() = Some((

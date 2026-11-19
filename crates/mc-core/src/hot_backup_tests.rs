@@ -331,7 +331,6 @@ fn copy_refuses_a_source_batch_that_fails_its_crc() {
     );
 }
 
-
 /// HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED: a backup reports success only
 /// after the finished copy restores. A copy whose database was damaged, and a
 /// copy whose CRC-clean tail carries a record recovery refuses, each fail the

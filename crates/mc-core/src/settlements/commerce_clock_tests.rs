@@ -35,7 +35,8 @@ fn game_time_wages_share_watermark_across_freeze_activity_and_disk_reopen() {
     native(&mut f, request);
     let first_due = contract(&f).next_due;
     checkpoint(&mut f, &config);
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     through(&mut f, &mut writer, first_due);
     assert!(f.state.world.is_active(0, 0));
     assert_eq!((contract(&f).earned, contract(&f).paid), (2, 2));
@@ -69,7 +70,8 @@ fn game_time_wages_share_watermark_across_freeze_activity_and_disk_reopen() {
         "reopen invents no downtime"
     );
     assert_eq!(contract(&f), &saved);
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     step(&mut f, &mut writer);
     assert!(f.state.world.is_active(0, 0));
     assert_eq!(
@@ -93,7 +95,8 @@ fn game_time_wage_old_store_converts_before_start_frozen_ticks_and_only_once() {
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let mut f = disk_fixture(&config);
     command(&mut f, "tick freeze");
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     for _ in 0..20 {
         step(&mut f, &mut writer);
     }
@@ -135,7 +138,8 @@ fn game_time_wage_old_store_converts_before_start_frozen_ticks_and_only_once() {
         Clock::GameTicks
     );
     command(&mut f, "tick freeze");
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     for _ in 0..7 {
         step(&mut f, &mut writer);
     }
@@ -225,7 +229,8 @@ fn game_time_wage_pre_freeze_legacy_debt_is_not_forgiven_or_counted_twice() {
     let request = employ(&f, "1", 2, 100, 40);
     native(&mut f, request);
     let first_due = contract(&f).next_due;
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     through(&mut f, &mut writer, first_due - 51);
     command(&mut f, "tick freeze");
     for _ in 0..1000 {
@@ -247,20 +252,23 @@ fn game_time_wage_pre_freeze_legacy_debt_is_not_forgiven_or_counted_twice() {
     assert_eq!(contract(&f).earned, 0, "recovery does not accrue or pay");
     assert_eq!(contract(&f).legacy_owed, periods * 2);
     assert_eq!(contract(&f).next_due, next_due);
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     command(&mut f, "tick freeze");
     step(&mut f, &mut writer);
     assert_eq!(contract(&f).legacy_owed, periods * 2);
     checkpoint(&mut f, &config);
     let mut f = reopen(f, &config, writer);
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     step(&mut f, &mut writer);
     assert_eq!(contract(&f).legacy_owed, 0);
     assert_eq!(contract(&f).earned, periods * 2);
     assert_eq!(contract(&f).paid, periods * 2);
     checkpoint(&mut f, &config);
     let mut f = reopen(f, &config, writer);
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     step(&mut f, &mut writer);
     assert_eq!(contract(&f).earned, periods * 2);
     assert_eq!(contract(&f).paid, periods * 2);
@@ -279,7 +287,9 @@ fn game_time_legacy_wage_wal_cuts_preserve_pending_and_unfunded_debt() {
             native(&mut f, request);
             let first_due = contract(&f).next_due;
             command(&mut f, "tick freeze");
-            let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                    .unwrap();
             for _ in 0..25 {
                 step(&mut f, &mut writer);
             }
@@ -301,7 +311,9 @@ fn game_time_legacy_wage_wal_cuts_preserve_pending_and_unfunded_debt() {
             let unpublished = crate::core::journal_entries_for_tick(&mut f.state, &output).unwrap();
             assert!(!unpublished.is_empty());
             drop(unpublished);
-            let writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let writer =
+                JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                    .unwrap();
             let mut f = reopen(f, &config, writer);
             assert_eq!(
                 contract(&f),
@@ -310,7 +322,9 @@ fn game_time_legacy_wage_wal_cuts_preserve_pending_and_unfunded_debt() {
             );
             // Publish conversion while frozen: pending debt must survive WAL alone.
             command(&mut f, "tick freeze");
-            let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                    .unwrap();
             step(&mut f, &mut writer);
             if save_checkpoint {
                 checkpoint(&mut f, &config);
@@ -321,7 +335,9 @@ fn game_time_legacy_wage_wal_cuts_preserve_pending_and_unfunded_debt() {
                 &converted,
                 "published conversion is not repeated"
             );
-            let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                    .unwrap();
             step(&mut f, &mut writer);
             assert_eq!(contract(&f).legacy_owed, 0);
             assert_eq!(contract(&f).earned, owed);
@@ -330,7 +346,9 @@ fn game_time_legacy_wage_wal_cuts_preserve_pending_and_unfunded_debt() {
                 checkpoint(&mut f, &config);
             }
             let mut f = reopen(f, &config, writer);
-            let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                    .unwrap();
             step(&mut f, &mut writer);
             assert_eq!(contract(&f).legacy_owed, 0);
             assert_eq!(contract(&f).earned, owed, "unfunded debt is not re-added");

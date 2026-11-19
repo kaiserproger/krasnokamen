@@ -39,7 +39,8 @@ fn failed_native_transaction_keeps_previous_world_and_wal_without_dirty_ack() {
     let (state, job, done_rx) = captured_world(&config, 2);
     let mut manifest = read_manifest(&config).unwrap();
     let previous = manifest.clone();
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(manifest.tick + 1, 2, &[]).unwrap();
     FAIL_CHECKPOINT_AFTER_REGIONS
         .lock()
@@ -66,8 +67,8 @@ fn failed_native_transaction_keeps_previous_world_and_wal_without_dirty_ack() {
             0,
             crate::journal::WalIdentity::fixture(),
         )
-            .unwrap()
-            .len(),
+        .unwrap()
+        .len(),
         1
     );
     drop(job);
@@ -99,7 +100,8 @@ fn shutdown_with_a_refused_final_checkpoint_leaves_the_tail_prune_refuses() {
         .expect("recover clean world")
         .manifest
         .tick;
-    let mut journal = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut journal =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     journal
         .append(
             durable + 1,
@@ -154,7 +156,8 @@ fn crash_after_durable_native_commit_recovers_complete_world_without_ack_or_prun
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let (state, job, done_rx) = captured_world(&config, 2);
     let mut manifest = read_manifest(&config).unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(manifest.tick + 1, 2, &[]).unwrap();
     *FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT
         .lock()
@@ -189,8 +192,8 @@ fn crash_after_durable_native_commit_recovers_complete_world_without_ack_or_prun
             0,
             crate::journal::WalIdentity::fixture(),
         )
-            .unwrap()
-            .len(),
+        .unwrap()
+        .len(),
         1
     );
     drop(job);
@@ -213,7 +216,9 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
         let config = CoreConfig::new(directory.path().to_path_buf(), 42);
         let (state, job, done_rx) = captured_world(&config, 2);
         let mut manifest = read_manifest(&config).unwrap();
-        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
+                .unwrap();
         writer.append(1, 1, &[]).unwrap();
         writer.append(2, 2, &[]).unwrap();
         writer.gate(manifest.tick, job.tick).unwrap();
@@ -259,7 +264,12 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
                 "batch {tick} is covered by the durable checkpoint (lost ACK: {lose_ack})",
             );
         }
-        let batches = read_complete_batches_after(&journal, manifest.tick, crate::journal::WalIdentity::fixture()).unwrap();
+        let batches = read_complete_batches_after(
+            &journal,
+            manifest.tick,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap();
         assert_eq!(
             batches
                 .iter()
@@ -634,7 +644,12 @@ fn slow_native_commit_does_not_block_wal_appends() {
         tick
     );
     // Every append published after the checkpoint is retained for replay.
-    let after = read_complete_batches_after(&config.world_dir.join("journal"), tick, crate::journal::WalIdentity::fixture()).unwrap();
+    let after = read_complete_batches_after(
+        &config.world_dir.join("journal"),
+        tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     assert_eq!(after.len(), 8);
 }
 
@@ -813,7 +828,12 @@ fn bee_hive_release_checkpoints_after_kill_and_unload() {
         .row(source.entities.slot_of(cow).unwrap())
         .uuid;
     let mut source_manifest = read_manifest(&source_config).unwrap();
-    let mut source_writer = JournalWriter::open(&source_config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut source_writer = JournalWriter::open(
+        &source_config.world_dir,
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     save(
         &source_config,
         &mut source,
@@ -846,7 +866,8 @@ fn bee_hive_release_checkpoints_after_kill_and_unload() {
     assert_eq!(changes.entities_removed, vec![bee_id]);
     assert!(state.entities.slot_of_uuid_any(bee_uuid).is_none());
     let mut manifest = read_manifest(&config).unwrap();
-    let mut writer = JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     save(&config, &mut state, &mut writer, &mut manifest);
     drop(writer);
     drop(state);
@@ -862,7 +883,8 @@ fn bee_hive_release_checkpoints_after_kill_and_unload() {
     let released_slot = state.entities.slot_of(released).unwrap();
     let released_uuid = state.entities.row(released_slot).uuid;
     assert!(state.entities.row(released_slot).controls.no_ai);
-    let mut writer = JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     save(&config, &mut state, &mut writer, &mut manifest);
     assert_ne!(released_uuid, bee_uuid);
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();

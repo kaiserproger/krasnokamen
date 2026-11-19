@@ -320,14 +320,20 @@ fn fluid_deadlines_and_empty_tombstone_survive_wal_and_manifest_restart() {
     let dir = tempfile::tempdir().unwrap();
     let config = crate::CoreConfig::new(dir.path().to_path_buf(), 42);
     drop(crate::native_checkpoint::tests::fixture_store(&config).unwrap());
-    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let mut entries = Vec::new();
     state.fluid_ticks.journal(&mut entries);
     writer.append(state.tick, state.tick, &entries).unwrap();
     writer.flush().unwrap();
     let recovered = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     assert_eq!(recovered.fluid_ticks, image);
     write_manifest(
@@ -405,12 +411,18 @@ fn placed_sign_editor_enforces_owner_range_and_journals_chunk_nbt() {
     assert!(state.sign_editors.is_empty());
     let entries = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, out.tick, &entries).unwrap();
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     let bytes = replay.opaque_block_entities[&(pos.x, pos.y, pos.z)]
         .as_ref()

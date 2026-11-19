@@ -330,9 +330,9 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
             // Refuse a backup that cannot replay before copying it into place.
             match verify_content(cfg) {
                 Ok(content) => crate::backup::verify_backup(from, &content)?,
-                Err(error) => eprintln!(
-                    "restore proceeds unverified: no content cache for recovery: {error}"
-                ),
+                Err(error) => {
+                    eprintln!("restore proceeds unverified: no content cache for recovery: {error}")
+                }
             }
             crate::backup::run_restore(from, world_dir)?;
         }

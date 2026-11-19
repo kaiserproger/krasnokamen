@@ -63,7 +63,8 @@ fn rejects_owned_opaque_field(key: &str, value: Tag) {
     let mut inventory = vec![mc_data::ItemStack::EMPTY; 41];
     inventory[0] = mc_data::ItemStack::new(diamond, 3);
     let opaque = write_opaque(&Tag::Compound(vec![(key.into(), value)]));
-    let mut writer = JournalWriter::open(&native, 79, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&native, 79, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(80, 80, &[entry(Vec::new(), &inventory, 80)])
         .unwrap();
@@ -191,7 +192,8 @@ fn clean_wal_keeps_typed_items_and_supported_opaque_fields_through_export() {
             ]),
         ),
     ]);
-    let mut writer = JournalWriter::open(&native, 79, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&native, 79, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(80, 80, &[entry(write_opaque(&opaque), &inventory, 80)])
         .unwrap();

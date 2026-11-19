@@ -186,7 +186,9 @@ fn replayed_replacement_has_no_removal_queued_for_the_first_quiet_live_tick() {
         None,
     );
     let image = state.world.chunk(chunk).unwrap().block_entities[&pos].clone();
-    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture())
+            .unwrap();
     writer
         .append(
             2,

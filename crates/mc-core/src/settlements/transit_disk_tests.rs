@@ -383,7 +383,8 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
     // The next checkpoint deletes the row the WAL tombstoned.
     checkpoint(&mut state, &config, false);
     assert_eq!(stored_rows(&config), 0);
-    let writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let writer =
+        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let state = reopen(state, writer, &config);
     for uuid in uuids {
         assert_eq!(places(&state, uuid), 1);

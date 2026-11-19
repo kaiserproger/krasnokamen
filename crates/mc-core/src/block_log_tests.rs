@@ -648,12 +648,18 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
             coverage: 0,
         }),
     };
-    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).expect("wal");
+    let mut writer = crate::journal::JournalWriter::open(
+        directory.path(),
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .expect("wal");
     writer
         .append(123, 123, std::slice::from_ref(&entry))
         .expect("append");
-    let replayed = crate::journal::read_batch_file(&batch(123), crate::journal::WalIdentity::fixture())
-        .expect("new batch");
+    let replayed =
+        crate::journal::read_batch_file(&batch(123), crate::journal::WalIdentity::fixture())
+            .expect("new batch");
     assert_eq!(replayed, std::slice::from_ref(&entry));
     let mut old = serde_json::to_value(&entry).expect("entry json");
     old["BlockLog"]["value"]["records"][0]
@@ -664,8 +670,9 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
     writer
         .append(124, 124, std::slice::from_ref(&old))
         .expect("append");
-    let old_disk = crate::journal::read_batch_file(&batch(124), crate::journal::WalIdentity::fixture())
-        .expect("old batch");
+    let old_disk =
+        crate::journal::read_batch_file(&batch(124), crate::journal::WalIdentity::fixture())
+            .expect("old batch");
     let crate::journal::JournalEntry::BlockLog { value } = &old_disk[0] else {
         panic!("block-log entry");
     };
@@ -808,7 +815,12 @@ fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
             coverage: 0,
         }),
     };
-    let mut wal = crate::journal::JournalWriter::open(world.path(), 1, crate::journal::WalIdentity::fixture()).expect("wal");
+    let mut wal = crate::journal::JournalWriter::open(
+        world.path(),
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .expect("wal");
     wal.append(base + 1, base + 1, &[entry]).expect("append");
     wal.flush().expect("flush");
     drop(wal);
@@ -1315,7 +1327,12 @@ fn capture_off_restart_killed_before_checkpoint_keeps_the_gap() {
         state: registry.states.stone,
     }];
     journal(&mut state, base + 1, &mut entries);
-    let mut wal = crate::journal::JournalWriter::open(world.path(), 1, crate::journal::WalIdentity::fixture()).expect("wal");
+    let mut wal = crate::journal::JournalWriter::open(
+        world.path(),
+        1,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .expect("wal");
     wal.append(base + 1, base + 1, &entries).expect("append");
     wal.flush().expect("flush");
     drop(wal);

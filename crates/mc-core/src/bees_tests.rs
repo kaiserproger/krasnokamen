@@ -352,7 +352,12 @@ fn wal_hive_entry_tombstones_source_and_replays_one_full_bee() {
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     assert!(!replay.entities.contains_key(&id.0));
     let bytes = replay.opaque_block_entities[&key(POS)].as_ref().unwrap();
@@ -673,7 +678,12 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
             .slots()
             .all(|slot| original.entities.row(slot).bee.is_none())
     );
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let once = replay_batches(Replay::default(), &batches);
     let twice = replay_batches(once, &batches);
     assert!(

@@ -194,7 +194,8 @@ fn checkpoint_and_tail_fold_restore_exact_clock_duration_and_float_bits() {
         .gamerules
         .insert("advance_weather".into(), "false".into());
     let base_image = ClimateImage::capture(&state);
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).expect("writer");
+    let mut writer =
+        JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).expect("writer");
     writer
         .append(1, 1, &[JournalEntry::Climate { value: base_image }])
         .expect("base WAL");
@@ -231,7 +232,12 @@ fn checkpoint_and_tail_fold_restore_exact_clock_duration_and_float_bits() {
         .append(2, 2, &[JournalEntry::Climate { value: tail }])
         .expect("tail WAL");
     writer.flush().expect("flush");
-    let batches = read_complete_batches_after(&dir.join("journal"), checkpoint.tick, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        checkpoint.tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(
         Replay {
             climate: checkpoint.climate,
@@ -289,7 +295,8 @@ fn real_core_reopen_uses_checkpoint_and_tail_climate_not_the_tick_number() {
         };
         let recovered_tick = if with_tail {
             let tick = manifest.tick + 1;
-            let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).expect("writer");
+            let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture())
+                .expect("writer");
             writer
                 .append(tick, tick, &[JournalEntry::Climate { value: image }])
                 .expect("tail");
@@ -391,7 +398,8 @@ fn frozen_game_age_survives_checkpoint_and_held_wal_tail() {
             state
                 .tick_control
                 .set_frozen(matches!(tail, ClockTail::Held));
-            let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).expect("writer");
+            let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture())
+                .expect("writer");
             let mut climate_records = 0;
             for index in 0..3 {
                 let (output, entries) = journal_tick(&mut state);

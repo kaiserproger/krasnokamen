@@ -345,7 +345,8 @@ fn radius_split_stationary_simulation_six_two_six_wal_restart_matches_live_age()
     state.entities.row_mut(slot).persistent = true;
     let root = tempfile::tempdir().unwrap();
     let checkpoint_tick = state.tick;
-    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let mut checkpoint_age = 0;
     for (distance, ticks) in [(6, 3), (2, 5), (6, 3)] {
         state.config_sim_distance = distance;
@@ -364,8 +365,12 @@ fn radius_split_stationary_simulation_six_two_six_wal_restart_matches_live_age()
         }
     }
     writer.flush().unwrap();
-    let batches =
-        read_complete_batches_after(&root.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &root.path().join("journal"),
+        checkpoint_tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(
         Replay {
             tick: checkpoint_tick,
@@ -1282,7 +1287,8 @@ fn journal_append_and_recovery_round_trip() {
     let dir = std::env::temp_dir().join(format!("mc-core-journal-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("dir");
-    let mut writer = JournalWriter::open(&dir, 100, crate::journal::WalIdentity::fixture()).expect("open");
+    let mut writer =
+        JournalWriter::open(&dir, 100, crate::journal::WalIdentity::fixture()).expect("open");
     writer
         .append(
             1,
@@ -1304,7 +1310,12 @@ fn journal_append_and_recovery_round_trip() {
         )
         .expect("append");
     writer.flush().expect("flush");
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     assert_eq!(batches.len(), 2);
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.blocks.get(&(1, 2, 3)), Some(&10));
@@ -1315,7 +1326,12 @@ fn journal_append_and_recovery_round_trip() {
         b"short",
     )
     .expect("torn");
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     assert_eq!(batches.len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1331,7 +1347,8 @@ fn checkpoint_manifest_gates_recovery() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("dir");
     let config = CoreConfig::new(dir.clone(), 42);
-    let mut writer = JournalWriter::open(&dir, 100, crate::journal::WalIdentity::fixture()).expect("open");
+    let mut writer =
+        JournalWriter::open(&dir, 100, crate::journal::WalIdentity::fixture()).expect("open");
     for tick in 1..=4u64 {
         writer
             .append(
@@ -1367,7 +1384,12 @@ fn checkpoint_manifest_gates_recovery() {
         Some([0, 64, 0])
     );
     prune_batches_through(&dir.join("journal"), 2);
-    let batches = read_complete_batches_after(&dir.join("journal"), 2, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        2,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     assert!(batches.iter().all(|(lo, _, _)| *lo > 2));
     let replay = replay_batches(Replay::default(), &batches);
     assert!(replay.tick >= 3);
@@ -1515,17 +1537,21 @@ fn checkpoint_round_trip_through_real_core() {
         let journal_dir = dir.join("journal");
         for _ in 0..1000 {
             rx.blocking_recv().expect("tick");
-            let boundary = read_complete_batches_after(&journal_dir, 0, crate::journal::WalIdentity::fixture())
-                .unwrap()
-                .iter()
-                .filter(|(_, _, entries)| {
-                    entries.iter().any(|entry| {
-                        matches!(entry, crate::journal::JournalEntry::Player { inventory, .. }
+            let boundary = read_complete_batches_after(
+                &journal_dir,
+                0,
+                crate::journal::WalIdentity::fixture(),
+            )
+            .unwrap()
+            .iter()
+            .filter(|(_, _, entries)| {
+                entries.iter().any(|entry| {
+                    matches!(entry, crate::journal::JournalEntry::Player { inventory, .. }
                             if inventory.iter().any(|stack| !stack.is_empty() && stack.count == 2))
-                    })
                 })
-                .map(|(_, hi, _)| *hi)
-                .max();
+            })
+            .map(|(_, hi, _)| *hi)
+            .max();
             if let Some(tick) = boundary {
                 use std::io::{Read, Write};
                 println!("CRASH_BOUNDARY_READY {tick}");
@@ -1584,7 +1610,9 @@ fn checkpoint_round_trip_through_real_core() {
     assert!(!status.success(), "child died by signal, exit {status:?}");
     // Reopen: recovery must reach the observed boundary tick; the apple
     // stack (count 2) must be in the journal tail or checkpoint.
-    let batches = read_complete_batches_after(&journal_dir, 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches =
+        read_complete_batches_after(&journal_dir, 0, crate::journal::WalIdentity::fixture())
+            .unwrap();
     let top = batches.iter().map(|(_, hi, _)| *hi).max().unwrap_or(0);
     assert!(
         top >= boundary_tick,
@@ -2844,12 +2872,17 @@ fn snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal() {
         0
     );
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches =
-        read_complete_batches_after(&dir.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.path().join("journal"),
+        checkpoint_tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let mut replay = Replay {
         tick: checkpoint_tick,
         ..Replay::default()
@@ -3289,8 +3322,12 @@ fn custody_survives_checkpoint_crash() {
             .expect("custody native manifest")
     };
     // Batches at/below this durable checkpoint may already have been removed.
-    let batches = read_complete_batches_after(&dir.join("journal"), manifest.tick, crate::journal::WalIdentity::fixture())
-        .expect("durable custody WAL tail");
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        manifest.tick,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .expect("durable custody WAL tail");
     assert!(
         boundary_tick > manifest.tick
             && batches
@@ -5087,7 +5124,12 @@ fn death_no_dupe_after_reopen(checkpoint_every_ticks: u64) {
             let mut death_durable = false;
             for _ in 0..6000 {
                 let _ = rx.blocking_recv().expect("tick");
-                let batches = read_complete_batches_after(&journal_dir, 0, crate::journal::WalIdentity::fixture()).unwrap();
+                let batches = read_complete_batches_after(
+                    &journal_dir,
+                    0,
+                    crate::journal::WalIdentity::fixture(),
+                )
+                .unwrap();
                 for (_, _, entries) in &batches {
                     for entry in entries {
                         if let crate::journal::JournalEntry::Entity {

@@ -250,7 +250,8 @@ fn scheduler_wal_folded_order_fail_closed_against_checkpoint_base() {
         if dimension != Dimension::Overworld {
             entries = vec![JournalEntry::Dimension { dimension, entries }];
         }
-        let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(2, 2, &entries).unwrap();
         writer.flush().unwrap();
         drop(writer);
@@ -339,7 +340,8 @@ fn scheduler_wal_final_image_fail_closed_before_adoption_or_writes() {
             if dimension != Dimension::Overworld {
                 entries = vec![JournalEntry::Dimension { dimension, entries }];
             }
-            let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer =
+                JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
             writer.append(2, 2, &entries).unwrap();
             writer.flush().unwrap();
             drop(writer);
@@ -442,7 +444,8 @@ fn scheduler_fail_closed_boundary_preserves_valid_images_and_final_tombstones() 
             entries: entries.clone(),
         })
         .collect();
-    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, 1, &all_dimensions).unwrap();
     writer.flush().unwrap();
     drop(writer);
@@ -469,7 +472,12 @@ fn scheduler_fail_closed_boundary_preserves_valid_images_and_final_tombstones() 
                 .collect(),
             ..Default::default()
         },
-        &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &dir.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     for recovered in std::iter::once(&replay).chain(replay.dimensions.values().map(Box::as_ref)) {
         assert_eq!(recovered.fluid_ticks, cleared_fluid);
@@ -689,7 +697,12 @@ fn journal_roundtrip_is_idempotent_and_replays_empty_queue_tombstones() {
     // The second batch covers the idle interval as well as the consumed tick.
     writer.append(2, 20, &entries).unwrap();
     writer.flush().unwrap();
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     assert_eq!(batches.len(), 2);
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.tick, 20);

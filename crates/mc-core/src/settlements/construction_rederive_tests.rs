@@ -1738,7 +1738,8 @@ fn planned_upgrade_cut_and_terrain_credits_survive_a_native_restart_before_build
             .world
             .mark_block_entity_dirty(crate::boundary::BlockPos { x: 1, y: Y, z: 1 });
         checkpoint(&mut s.state, &CoreConfig::new(live.clone(), 42));
-        let mut writer = JournalWriter::open(&live, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(&live, 1, crate::journal::WalIdentity::fixture()).unwrap();
         for _ in 0..4096 {
             if status(&s).current_stage_index as usize >= build {
                 break;
@@ -1789,7 +1790,8 @@ fn planned_upgrade_cut_and_terrain_credits_survive_a_native_restart_before_build
             .entities
             .slot_of_uuid(restored.builder)
             .unwrap();
-        let mut writer = JournalWriter::open(&saved, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer =
+            JournalWriter::open(&saved, 1, crate::journal::WalIdentity::fixture()).unwrap();
         for _ in 0..4096 {
             if restored
                 .state

@@ -696,8 +696,8 @@ fn battle_resume_encoding_failure_halts_before_wal_or_publication() {
             failed_tick - 1,
             crate::journal::WalIdentity::fixture(),
         )
-            .unwrap()
-            .is_empty(),
+        .unwrap()
+        .is_empty(),
         "failed image tick cannot reach the durable WAL"
     );
     assert_eq!(

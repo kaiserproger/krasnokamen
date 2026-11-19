@@ -255,12 +255,18 @@ fn tamed_cat_relaxes_and_waking_rolls_gift_table() {
     assert_eq!(gifts.len(), 1, "gift must spawn in the wake tick");
     let entries = crate::core::journal_entries_for_tick(&mut rig.state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture())
+            .unwrap();
     writer.append(1, rig.state.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches =
-        crate::journal::read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = crate::journal::read_complete_batches_after(
+        &dir.path().join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     assert_eq!(
         replay.entities[&gifts[0].0.0].item.as_ref(),

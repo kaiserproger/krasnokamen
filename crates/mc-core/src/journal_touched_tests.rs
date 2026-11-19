@@ -247,7 +247,12 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
     writer.append(state.tick, state.tick, &quiet).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.entities[&cart.0].pos, [9.0, 65.0, 8.5]);
     assert_eq!(replay.entities[&cart.0].vel, [2.0, 0.0, 0.0]);
@@ -295,7 +300,12 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     assert!(aggressive(&state), "chase must establish the pose");
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let record = &replay.entities[&zombie.0];
     assert!(record.appearance.extra.iter().any(|(index, value)| *index == 15
@@ -405,7 +415,12 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        0,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let (mut wal_restart, player, _) = crate::hostile_tests::setup(12.0);
     wal_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
@@ -705,7 +720,8 @@ fn kill_nine_reopen_reproduces_touched_only_images() {
             id
         })
         .collect();
-    let mut writer = JournalWriter::open(&dir, 1000, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer =
+        JournalWriter::open(&dir, 1000, crate::journal::WalIdentity::fixture()).unwrap();
     for step in 0..96u64 {
         if step == 60 {
             state.tickets.remove("kill9");
@@ -754,7 +770,12 @@ fn kill_nine_reopen_reproduces_touched_only_images() {
     }
     writer.flush().unwrap();
     drop(writer); // no shutdown: kill -9
-    let batches = read_complete_batches_after(&dir.join("journal"), 100, crate::journal::WalIdentity::fixture()).unwrap();
+    let batches = read_complete_batches_after(
+        &dir.join("journal"),
+        100,
+        crate::journal::WalIdentity::fixture(),
+    )
+    .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     for id in &villagers {
         let slot = state.entities.slot_of(*id).unwrap();

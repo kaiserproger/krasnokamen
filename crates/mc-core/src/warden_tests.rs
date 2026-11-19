@@ -137,7 +137,12 @@ fn anger_checkpoint_and_replay_restore_uuid_and_pose() {
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &read_complete_batches_after(
+            &root.join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
+        .unwrap(),
     );
     let record = &replay.entities[&mob.0];
     state.remove_entity(slot);
