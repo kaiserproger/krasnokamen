@@ -2443,6 +2443,9 @@ fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Scre
         };
         (title, lore)
     };
+    if stock.is_empty() && !stores.images.is_empty() && !stores.unavailable {
+        lore.insert(0, ctx.t(Key::EmptyStorage).to_owned());
+    }
     lore.push(page_text(ctx, page, pages));
     lore.push(tr(ctx, "Click: refresh", "Клик — обновить").to_owned());
     screen.put(
@@ -2915,6 +2918,16 @@ fn filtered_buildings_screen(
         .iter()
         .map(|(category, count)| format!("{category}: {count}"))
         .collect();
+    if count == 0 {
+        lore.push(ctx.t(Key::EmptyBuildings).to_owned());
+        screen.put(
+            22,
+            icon(state, Icon::IronPickaxe, 1, text(ctx.t(Key::Projects)), &[
+                ctx.t(Key::EmptyBuildings).to_owned(),
+            ]),
+            Target::Dialog("projects"),
+        );
+    }
     lore.push(page_text(ctx, page, pages));
     let title = match ctx.lang {
         Lang::En => format!("Certified buildings: {count}"),
