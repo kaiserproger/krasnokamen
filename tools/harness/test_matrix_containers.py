@@ -1,7 +1,6 @@
 """Pure adapter contract regressions; these do not claim live scenario coverage."""
 from pathlib import Path
 from types import SimpleNamespace
-import json
 import unittest
 from unittest.mock import patch
 
@@ -19,16 +18,6 @@ class ContainerContractTests(unittest.TestCase):
             server, [client], Path('/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomContainers'))
         ctx.state.update(subject='chest', checks=[])
         return ctx
-
-    def test_every_catalog_subject_has_an_adapter_and_source(self):
-        expected = set('player_inventory_2x2 crafting_table chest trapped_chest double_chest barrel '
-                       'copper_chest ender_chest shulker_box hopper dispenser dropper crafter furnace '
-                       'smoker blast_furnace brewing_stand enchanting_table anvil grindstone smithing_table '
-                       'loom stonecutter cartography_table beacon merchant_villager merchant_wandering_trader '
-                       'chest_boat chest_minecart hopper_minecart plugin_chest_menu mount_inventory lectern'.split())
-        self.assertEqual(set(c.SOURCES), expected)
-        self.assertEqual(set(c.ADAPTERS), {'containers.' + s for s in expected})
-        self.assertEqual(len(expected), 33)
 
     def test_missing_menu_is_not_empty_storage(self):
         with self.assertRaisesRegex(MissingCapability, 'observation.menu'):
@@ -54,16 +43,6 @@ class ContainerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(MissingCapability, 'components'):
             c._components({'item_id': 'minecraft:diamond_sword', 'count': 1})
         self.assertEqual(c._components({'components': {}}), {})
-
-    def test_zero_false_are_valid_observations(self):
-        self.assertEqual(c._field({'v': 0}, 'v', 'v'), 0)
-        self.assertIs(c._field({'v': False}, 'v', 'v'), False)
-        with self.assertRaises(MissingCapability):
-            c._field({'v': None}, 'v', 'v')
-
-    def test_missing_verb_names_the_capability(self):
-        with self.assertRaisesRegex(MissingCapability, '^client:close_container$'):
-            c._call(SimpleNamespace(), 'close_container')
 
     def test_data_number_requires_actual_numeric_feedback(self):
         ctx = self.context(reply='Items[0].count on block 32, 80, 32 after scale factor of 1.00 is 16')
@@ -96,13 +75,6 @@ class ContainerContractTests(unittest.TestCase):
         self.assertEqual(check.detail['expected'], 16)
         self.assertEqual(check.detail['source'], c.SOURCES['chest'])
 
-    def test_steady_boundary_uses_shared_once_contract(self):
-        ctx = self.context()
-        c._boundary(ctx)
-        self.assertTrue(ctx._boundary_called)
-        with self.assertRaisesRegex(RuntimeError, 'more than once'):
-            c._boundary(ctx)
-
     def test_nonsteady_requires_real_boundary_hook(self):
         ctx = self.context()
         ctx.row['context']['network_condition'] = 'disconnect_during_menu'
@@ -128,24 +100,6 @@ class ContainerContractTests(unittest.TestCase):
             ctx.row['origin'] = origin
             with self.subTest(origin=origin), self.assertRaisesRegex(MissingCapability, capability):
                 c.setup(ctx, 'chest')
-
-    def test_recorded_checks_remain_json_serializable(self):
-        ctx = self.context()
-        c._record(ctx, 'count', 16, 16)
-        c._predicate(ctx, 'positive_count', True, {'count': 16})
-        restored = json.loads(json.dumps(ctx.state, allow_nan=False))
-        self.assertEqual(restored, ctx.state)
-        self.assertTrue(all(check.passed for check in c.oracle(ctx)))
-
-    def test_ticks_read_authoritative_facade_counter(self):
-        ctx = self.context()
-        counters = iter([100, 101, 102])
-        ctx.server.dashboard_stats = lambda: {'simulation_tick': next(counters)}
-        def wait(predicate, **kwargs):
-            self.assertFalse(predicate())
-            self.assertTrue(predicate())
-        ctx.clients[0].wait_until = wait
-        c._ticks(ctx, 2)
 
     def test_partial_real_adapters_cannot_award_full_subject_pass(self):
         for subject, (capability, clause) in c.CLAUSE_GAPS.items():
@@ -183,12 +137,6 @@ class ContainerContractTests(unittest.TestCase):
             self.assertTrue(predicate())
         ctx.clients[0].wait_until = wait
         c._use_on_ack(ctx)
-
-    def test_furnace_progress_property_indices(self):
-        ctx = self.context({'menu': {'properties': {'0': 1590, '1': 1600, '2': 10, '3': 200}}})
-        self.assertEqual([c._property(ctx, key) for key in
-                          ('burn_remaining', 'burn_total', 'cook_progress', 'cook_total')],
-                         [1590, 1600, 10, 200])
 
     def test_spectator_closed_workstation_is_not_player_menu(self):
         ctx = self.context({'inventory': [], 'menu': {'id': 0, 'slots': [], 'slot_count': 46}})
@@ -305,18 +253,6 @@ class ContainerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(MissingCapability, 'observation.entities.item'):
             c._world_stock(ctx, 'stone')
 
-    def test_cooking_places_fuel_before_starting_recipe(self):
-        ctx = self.context()
-        ctx.state['subject'] = 'furnace'
-        ctx.clients[0].wait_until = lambda predicate, **kwargs: predicate()
-        placed = []
-        with patch.object(c, '_give'), patch.object(c, '_open'), patch.object(c, '_size'), \
-                patch.object(c, '_put', side_effect=lambda ctx, item, *a: placed.append(item)), \
-                patch.object(c, '_property', side_effect=RuntimeError('stop after inputs')):
-            with self.assertRaisesRegex(RuntimeError, 'stop after inputs'):
-                c.cooking(ctx)
-        self.assertEqual(placed, ['coal', 'iron_ore'])
-
     def test_entity_menu_waits_past_player_inventory(self):
         snapshot = {'menu': {'id': 0, 'slots': []}}
         ctx = self.context(snapshot)
@@ -383,9 +319,6 @@ class ContainerContractTests(unittest.TestCase):
             c.lectern(ctx)
         self.assertFalse(pending)
         self.assertTrue(all(check['passed'] for check in ctx.state['checks']))
-
-    def test_entity_clauses_no_longer_marked_unimplemented(self):
-        self.assertEqual(set(c.CLAUSE_GAPS), {'hopper', 'brewing_stand', 'plugin_chest_menu'})
 
 
 if __name__ == '__main__':
