@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from tools.showcase.spain_trial import hud_visible, next_order, order_build, publish, resident_census, spawn_on, supply
+from tools.showcase.spain_trial import hud_visible, next_order, order_build, publish, resident_census, settlement_tick_tail, spawn_on, supply
 
 
 class ScratchPublishTests(unittest.TestCase):
@@ -213,6 +213,32 @@ class BuildingOrderTests(unittest.TestCase):
                 with self.assertRaises(TimeoutError):
                     order_build(probe, 'spanish_house', run)
                 probe.check.assert_not_called()
+
+
+class SettlementTickTailTests(unittest.TestCase):
+    def test_native_laps_are_joined_to_search_ticks_without_reusing_a_previous_lap(self):
+        result = settlement_tick_tail([
+            'DEBUG settlement_storehouse_search game_tick=20 settlement=1 attempts=64\n',
+            '  commit detail ms: bees_conversion=0.01 settlements=120.01 villager_brain=1.00\n',
+            'phase ms: tick=20 intents=0 dimension=overworld commit=121.02\n',
+            '  commit detail ms: settlements=100.00 villager_brain=1.00\n',
+            'phase ms: tick=21 intents=0 dimension=overworld commit=101.00\n',
+            '  commit detail ms: settlements=3.50 villager_brain=1.00\n',
+            'phase ms: tick=22 intents=0 dimension=overworld commit=4.50\n',
+            'phase ms: tick=23 intents=0 dimension=overworld commit=1.00\n',
+        ])
+        self.assertTrue(result['enabled'])
+        self.assertEqual(result['search_ticks'], 1)
+        self.assertEqual(result['with_storehouse_search'],
+                         {'samples': 1, 'max_ms': 120.01, 'over_100ms': 1})
+        self.assertEqual(result['without_storehouse_search'],
+                         {'samples': 2, 'max_ms': 100.0, 'over_100ms': 0})
+
+    def test_missing_opt_in_phase_log_is_explicit_not_a_zero_cost_measurement(self):
+        result = settlement_tick_tail(['DEBUG settlement_storehouse_search game_tick=20\n'])
+        self.assertFalse(result['enabled'])
+        self.assertEqual(result['with_storehouse_search'],
+                         {'samples': 0, 'max_ms': None, 'over_100ms': 0})
 
 
 if __name__ == "__main__":

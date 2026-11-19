@@ -32,11 +32,12 @@ pub(super) enum Reason {
     ExecutorReservation,
     Preparation,
     MaterialBill,
+    StorageFull,
     /// The upgrade's placement cell holds neither air nor the previous build's
     /// own last committed block: the world there is someone else's.
     PreviousBuildDiverged,
 }
-const REASONS: [Reason; 25] = [
+const REASONS: [Reason; 26] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -61,6 +62,7 @@ const REASONS: [Reason; 25] = [
     Reason::ExecutorReservation,
     Reason::Preparation,
     Reason::MaterialBill,
+    Reason::StorageFull,
     Reason::PreviousBuildDiverged,
 ];
 
@@ -550,11 +552,13 @@ fn shell_fluid(state: &TickState, volume: ScriptWorldBounds) -> bool {
 /// inside one tick for one settlement; the next pass starts a new survey,
 /// since the world and the territory move between passes.
 #[derive(Default)]
-pub(super) struct Survey {
+pub(super) struct Survey<'a> {
     /// Planted-tree proofs: a registered root is proved once per pass.
     pub(super) clearance: super::super::forestry::Clearance,
     /// The village walk every lot that cuts a path must keep connected.
     walk: super::relayout::Walk,
+    /// The deposit path's capacity, only while checking a pressured storehouse.
+    pub(super) storage: Option<storage::Capacity<'a>>,
 }
 
 /// `floors` are the footprint columns of this candidate's own authored floor.
@@ -574,7 +578,9 @@ pub(super) fn check(
     // cell with `record.contains`, its planner reads no player history or
     // attribution. A founding site lies outside the parent's territory and
     // keeps every protection.
-    let Survey { clearance, walk } = survey;
+    let Survey {
+        clearance, walk, ..
+    } = survey;
     clearance.within(record);
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     let lot = ScriptWorldBounds::new(origin, max).expect("blueprint bounds");
@@ -796,6 +802,17 @@ pub(super) fn check(
             .is_some_and(|area| executor::area_reserved(state, area))
     {
         return Err(Reason::ExecutorReservation);
+    }
+    if let Some(capacity) = &mut survey.storage {
+        storage::candidate_fits(
+            state,
+            origin,
+            size,
+            &columns,
+            cost.cut,
+            relayout.as_ref(),
+            capacity,
+        )?;
     }
     Ok(cost)
 }

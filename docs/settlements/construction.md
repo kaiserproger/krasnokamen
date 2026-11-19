@@ -34,6 +34,32 @@ Keep the anchor, storage and worksite chunks loaded. Construction uses real item
 
 The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8. Natural mine and lumber zones do not count as built blueprint kinds. The shepherd's hut and the ten profession workshops are never started autonomously; the owner orders them, and so are single wall sections and gates (`/settlement build wall|gate`): from 10 residents the planner instead walls the settlement in itself, see [perimeter, gates and well](#perimeter-gates-and-well). Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
 
+**Receiving capacity (owner D54).** When fewer than one quarter of the physical
+deposit slots are empty, another storehouse takes priority over other autonomous
+construction. The existing owner-order precedence is unchanged. At most one
+storehouse may be active or pending; there is no store-count cap beyond the
+ordinary territory and legal lots. Capacity uses the executor's own deduplicated
+source images, including its physical-container limit, not a second chest index.
+The first cultural store remains unchanged; further Spanish capacity uses the
+ordinary wood/cobblestone `storage` warehouse, not another calcite civic plaza.
+Emergency priority and the receiving-capacity fence apply after a storehouse is
+completed; a missing first civic store keeps its ordinary admission and fallback
+to other funded work.
+
+A pressured storehouse is refused **inside the normal candidate sweep** if its
+early drops cannot be conservatively received. The bound reserves an empty slot
+per possible terrain/plant cut and two per retired crop; it deliberately does not
+count partial-stack merge room or future Builder fetches. Terrain heights also
+bound cuts above the authored roof. Any tree on the lot or a possible walking
+corridor refuses that candidate: preparation may fell its whole registered tree
+outside the footprint, with random leaf loot, before Fill. Tree-column answers
+and the construction walk are reused for the pass; this fence never materializes
+preparation or reruns re-layout per candidate. The sweep can therefore choose a
+clean alternative instead of repeatedly restarting at an unsafe cheapest lot.
+At fully occupied storage, admission needs a genuinely cut-free preparation;
+later Fill is never subtracted to make the first Cut appear payable. Existing
+transactional no-loss/no-duplication behavior remains unchanged.
+
 An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
 
 New buildings without a legal lot do not suppress funded upgrades: after the bounded new-site search, the planner can upgrade an existing blueprint-built house inside its already reserved maximum footprint. Both `house` and `spanish_house` intentionally provide one, two and three beds at levels 1, 2 and 3; the level-one house is not an eight-resident dormitory. Growth needs further houses or upgrades and a physically suitable spare bed.

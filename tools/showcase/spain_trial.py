@@ -188,6 +188,33 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
     return dict(zip(ACCEL_KEYS, map(float, found[-1]))) if found else None
 
 
+def settlement_tick_tail(lines) -> dict:
+    """Join opt-in native settlement laps to actual storehouse-search ticks."""
+    searches, pending, enabled = set(), None, False
+    groups = {name: {'samples': 0, 'max_ms': None, 'over_100ms': 0}
+              for name in ('with_storehouse_search', 'without_storehouse_search')}
+    for line in lines:
+        if 'settlement_storehouse_search' in line:
+            match = re.search(r'game_tick=(\d+)', line)
+            if match:
+                searches.add(int(match[1]))
+        elif line.startswith('  commit detail ms:'):
+            match = re.search(r'\bsettlements=([0-9.]+)', line)
+            pending = float(match[1]) if match else None
+        elif line.startswith('phase ms:'):
+            enabled = True
+            tick = re.search(r'\btick=(\d+)', line)
+            if pending is not None and tick:
+                name = 'with_storehouse_search' if int(tick[1]) in searches else 'without_storehouse_search'
+                group = groups[name]
+                group['samples'] += 1
+                group['max_ms'] = pending if group['max_ms'] is None else max(group['max_ms'], pending)
+                group['over_100ms'] += pending > 100
+            pending = None
+    return {'enabled': enabled, 'measurement': 'native commit_laps.settlements ms',
+            'search_ticks': len(searches), **groups}
+
+
 # Refusals `/settlement build` can answer with (command_execution/settlement.rs build_command,
 # settlements/construction.rs request_build, building_commands.rs); any other line is not its reply.
 BUILD_REFUSALS = ('Construction ', 'No free loaded construction site', 'No settlement contains your position',
@@ -431,7 +458,7 @@ def main() -> None:
     cpu_start = {role: busy_ticks(cpus) for role, cpus in roles.items()}
     started = time.monotonic()
     try:
-        env = {**os.environ, 'KRASNOKAMEN_HARNESS_LOG_STDOUT': '1', 'RUST_LOG': 'info,settlement_audit=info'}
+        env = {**os.environ, 'KRASNOKAMEN_HARNESS_LOG_STDOUT': '1', 'RUST_LOG': 'info,settlement_audit=info,mc_core::settlements::construction=debug'}
         command = [str(binary), '--config', str(config)]
         if args.server_cpus:
             command = ['taskset', '-c', args.server_cpus, *command]
@@ -583,6 +610,8 @@ def main() -> None:
             log_handle.close()
             run['elapsed_seconds'] = time.monotonic() - started
             run['test_acceleration']['effective'] = effective_acceleration(log_path.read_text(errors='replace'))
+            with log_path.open(errors='replace') as lines:
+                run['settlement_tick_tail'] = settlement_tick_tail(lines)
             run['shutdown'] = {'server': server.returncode if server is not None else None, 'client': client.returncode if client is not None else None}
             run['client'] = ctx.client_evidence
             dump(out / 'run.json', run)

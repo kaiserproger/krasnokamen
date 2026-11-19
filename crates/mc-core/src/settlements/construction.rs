@@ -52,6 +52,9 @@ mod upgrade;
 mod builders;
 use builders::{assign_builder, builder_free, probe_storage};
 
+#[path = "construction_storage.rs"]
+mod storage;
+
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
 /// planner scans, so the joint funding proof and the tick stay bounded.
@@ -1109,18 +1112,22 @@ fn candidate_kinds<'a>(
     record: &'a SettlementRecord,
     images: &'a [super::inventory::Image],
 ) -> impl Iterator<Item = BuildingKind> + 'a {
-    let _ = images;
     let cleric = BuildingKind::Workshop(Profession::Cleric);
-    needed_kinds(record, state.settlements.member_count(record.id)).chain(
-        (spanish_faction(state, record)
-            && !record
-                .buildings
-                .values()
-                .any(|building| building.kind == cleric))
-        .then_some(cleric),
-    )
+    std::iter::once(BuildingKind::Storage)
+        .filter(move |_| storage::needed(state, record, images))
+        .chain(
+            needed_kinds(record, state.settlements.member_count(record.id))
+                .filter(|kind| *kind != BuildingKind::Storage),
+        )
+        .chain(
+            (spanish_faction(state, record)
+                && !record
+                    .buildings
+                    .values()
+                    .any(|building| building.kind == cleric))
+            .then_some(cleric),
+        )
 }
-
 pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
     buildings::storage_points(state, id)
 }
@@ -1429,7 +1436,7 @@ fn catalog(
     state: &TickState,
     record: &SettlementRecord,
 ) -> impl Iterator<Item = &'static blueprints::Blueprint> + Clone + use<> {
-    blueprints::catalog(&state.registry, spanish_faction(state, record))
+    storage::autonomous_catalog(state, record, spanish_faction(state, record))
 }
 
 /// The next-level blueprint of a blueprint-built building, with the placement
@@ -1563,6 +1570,16 @@ fn site_project<'a>(
             report.reject(site_refusals::Reason::MaterialBill, record.anchor);
             continue;
         };
+        survey.storage = storage::Capacity::for_blueprint(state, record, blueprint, images);
+        if blueprint.kind == BuildingKind::Storage {
+            tracing::debug!(
+                game_tick = state.tick,
+                settlement = record.id.0,
+                pressured = survey.storage.is_some(),
+                attempts = share,
+                "settlement_storehouse_search"
+            );
+        }
         let mut budget = share;
         match site_refusals::advance(
             state,
@@ -1696,6 +1713,10 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     if plan_order(state, id, budget) {
         return false;
     }
+    let images = executor::source_images(state, id);
+    if let Some(started) = storage::plan(state, id, budget, &images) {
+        return started;
+    }
     if founding::plan(state, id) {
         return false;
     }
@@ -1716,9 +1737,6 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     if residents == 0 {
         return false;
     }
-    // Probe one canonical storage image set; an unfundable early autonomous
-    // need cannot monopolize the single project slot.
-    let images = executor::source_images(state, id);
     // Keep the priority material worker out of optional street work, not out
     // of the entire planner: another resident can build a funded later kind.
     let gathering = gatherer_demand(state, record, &images)
@@ -1853,7 +1871,6 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     };
     begin_cells(state, site.project, site.bounds, site.cells)
 }
-
 /// The next funded piece of the perimeter wall, its gates or the well, from
 /// [`FORTIFY_RESIDENTS`] residents. Each wall stretch, gatehouse or well is a
 /// project of its own, bought from real stock like a lamp post; the world, not
