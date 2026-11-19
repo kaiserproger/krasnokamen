@@ -352,8 +352,13 @@ the parallel behaviour lands,
   - Not stated by the owner: the order after the quick wins; hand-picked build
     sites stay as they are.
 - First content of the new settlement map (answer of 2026-11-19 ~21:2x): where
-  building is impossible (water, steep slopes), construction sites with their
-  percent done, and storage. Residents, beds and doors are not chosen.
+  building is impossible (the owner named water and steep slopes),
+  construction sites with their percent done, and storage. Residents, beds and
+  doors are not chosen. Inside the territory water and slopes do not forbid a
+  lot ([lots and terrain](#lots-and-terrain-inside-the-settlement--owner-2026-11-17):
+  the builder fills and levels), so the map marks "impossible" only where the
+  actual lot check refuses, and shows water and steep ground separately as
+  needing preparation.
 
 ## Realms, vassals, tribute and sieges — owner D62, 2026-11-19
 
