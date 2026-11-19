@@ -971,7 +971,8 @@ fn a_carry_equal_to_the_remainder_is_still_owed() {
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
         .expect("oak log id");
-    let remaining = super::remaining_bill(&state, id, &handle).expect("bill");
+    // Nothing is carried yet, so the netted bill is the whole remainder.
+    let remaining = super::project_bill(&state, id, &handle).expect("bill");
     let owed = remaining
         .iter()
         .find(|(item, _)| *item == log)

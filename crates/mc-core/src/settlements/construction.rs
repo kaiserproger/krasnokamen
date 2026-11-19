@@ -2093,8 +2093,10 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
 }
 
 /// Detach the builder bound to `handle` from that project, returning a borrowed
-/// gatherer to its profession. False when the builder carries project stock it
-/// must first deliver. Only that project's own binding is released (D8).
+/// gatherer to its profession. Its load of the project's materials becomes a
+/// recorded return duty first, paid by the next pass (D8 review R4-1): another
+/// builder may finish the project from storage meanwhile. Only that project's
+/// own binding is released (D8).
 fn release_incumbent(
     state: &mut TickState,
     id: SettlementId,
@@ -2116,6 +2118,7 @@ fn release_incumbent(
             .expect("builder incumbent"),
     );
     if released && let Some((uuid, profession)) = borrowed {
+        owe_carry(state, id, uuid, handle);
         if let Some(profession) = profession {
             state
                 .entities
@@ -2576,13 +2579,12 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 }
 
 /// Record what a released builder still owes storage: the carried amount of
-/// each item the project's bill asked for. Only those exact amounts are owed,
-/// so a resident's own food or a later working load is never taken (R4-1).
+/// each item the project's plan uses. Only those items are owed, so a
+/// resident's own food or a later working load is never taken (R4-1).
 pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
-    // The full remaining bill, before any bound builder's carry is subtracted:
-    // `project_bill` drops a type once the builder already carries all of it,
-    // which is exactly the load that must be recorded (R4-1).
-    let bill = remaining_bill(state, id, handle);
+    // Placed items count too: a load the remaining bill no longer asks for
+    // (a finished stage, a finished project) is still project stock.
+    let items = plan_items(state, id, handle);
     let Some(slot) = state.entities.slot_of_uuid(uuid) else {
         return;
     };
@@ -2592,10 +2594,10 @@ pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uui
     let mut owed: Vec<(u32, u32)> = Vec::new();
     for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
         let item = stack.item_id;
-        // Unreadable bill: fail closed on the whole load this builder was
+        // Unreadable plan: fail closed on the whole load this builder was
         // carrying, since it was bound to this project a moment ago.
-        if let Some(bill) = bill.as_ref()
-            && !bill.iter().any(|(known, _)| *known == item)
+        if let Some(items) = items.as_ref()
+            && !items.contains(&item)
         {
             continue;
         }
@@ -2791,6 +2793,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     {
         return false;
     }
+    // Every cell is placed: project stock the bound builder still carries is a
+    // leftover it owes storage, whichever way the project closes (R4-1).
+    if let Some((uuid, _)) = project.builder {
+        owe_carry(state, id, uuid, &project.structure);
+    }
     if project.blueprint == furnace::NAME || layout::infra(&project.blueprint) {
         // Infrastructure work is temporary employment.
         release_builder(state, id, project.builder);
@@ -2891,29 +2898,24 @@ pub(crate) struct WaitingNeed {
     pub(crate) no_source: Option<SourceReason>,
 }
 
-/// One project's remaining bill, net of the carry of the builder bound to it.
-/// Another project's load never pays for these cells (D8).
-/// The project's remaining materials, not net of any builder carry: the set a
-/// released builder's load must be measured against (D8 review R4-1).
-pub(crate) fn remaining_bill(
-    state: &TickState,
-    id: SettlementId,
-    handle: &str,
-) -> Option<Vec<(u32, u32)>> {
+/// Every item the project's plan uses, placed or still to place: a released
+/// builder's load of any of them is project stock it owes storage (D8 review
+/// R4-1), even once the remaining bill no longer asks for it.
+fn plan_items(state: &TickState, id: SettlementId, handle: &str) -> Option<Vec<u32>> {
     let snapshot = executor::status(state, id, handle).ok()?;
     snapshot
-        .remaining
-        .into_iter()
+        .consumed
+        .iter()
+        .chain(&snapshot.remaining)
         .map(|material| {
             let name = mc_data::Identifier::parse(&material.resource).ok()?;
-            Some((
-                state.registry.items.id_of(&name)?,
-                u32::try_from(material.quantity).ok()?,
-            ))
+            state.registry.items.id_of(&name)
         })
         .collect()
 }
 
+/// One project's remaining bill, net of the carry of the builder bound to it.
+/// Another project's load never pays for these cells (D8).
 pub(crate) fn project_bill(
     state: &TickState,
     id: SettlementId,

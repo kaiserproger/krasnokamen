@@ -1650,6 +1650,174 @@ fn one_haul_trip_carries_the_next_stages_materials_too() {
     );
 }
 
+/// A paid street work at x 5..=7, z 4: a dirt fill stage, then two oak logs,
+/// with eight of each in storage. Returns its handle, dirt and log.
+fn fill_then_logs(state: &mut TickState, id: SettlementId) -> (String, u32, u32) {
+    let item = |state: &TickState, name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (dirt, log) = (
+        item(state, "minecraft:dirt"),
+        item(state, "minecraft:oak_log"),
+    );
+    let log_state = block(state, "minecraft:oak_log", &[]);
+    let bounds = mc_script::ScriptWorldBounds::new([3, 201, 4], [7, 201, 4]).unwrap();
+    let cells = [
+        (
+            executor::PortionKind::Fill,
+            5,
+            state.registry.states.dirt,
+            "minecraft:dirt",
+        ),
+        (
+            executor::PortionKind::Build,
+            6,
+            log_state,
+            "minecraft:oak_log",
+        ),
+        (
+            executor::PortionKind::Build,
+            7,
+            log_state,
+            "minecraft:oak_log",
+        ),
+    ]
+    .into_iter()
+    .map(|(portion, x, state, resource)| executor::PlannedCell {
+        portion,
+        at: [x, 201, 4],
+        state,
+        resource: Some(resource.to_owned()),
+        quantity: 1,
+    })
+    .collect();
+    let handle = executor::prepare(state, id, layout::ROAD.into(), bounds, bounds, cells).unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: layout::ROAD.into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    }];
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    chest.slots[0] = ItemStack::new(dirt, 8);
+    chest.slots[1] = ItemStack::new(log, 8);
+    (handle, dirt, log)
+}
+
+fn carried(state: &TickState, slot: EntitySlot, item: u32) -> i32 {
+    state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory
+        .iter()
+        .flatten()
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+fn stored(state: &TickState, item: u32) -> i32 {
+    state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+/// Review P1 (custody, wt/SpainLand): one trip loads the next stages'
+/// materials too. When that builder's chunk leaves simulation it is released,
+/// and another builder finishes the work from storage; the released builder's
+/// load goes back to storage instead of staying on its body.
+#[test]
+fn a_released_builders_load_goes_back_when_another_builder_finishes() {
+    use crate::settlements::allocator::tests::villager;
+    let (mut state, id, first) = fixture();
+    open_plan(&mut state);
+    let (handle, dirt, log) = fill_then_logs(&mut state, id);
+    bind_project(&mut state, id, &handle, first);
+    building::tick(&mut state, id);
+    assert_eq!(
+        (carried(&state, first, dirt), carried(&state, first, log)),
+        (1, 2),
+        "fixture: one trip holds the fill and the logs after it"
+    );
+    // An unticketed neighbour chunk: loaded, not simulated.
+    state.entities.set_pos(first, [20.5, 201.0, 20.5]);
+    let second = villager(&mut state, [2.5, 201.0, 2.5]);
+    let entity = state.entities.body(second).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    {
+        let v = state.entities.row_mut(second).villager.as_mut().unwrap();
+        v.data.profession = Profession::Builder;
+        v.activity = Activity::Work;
+    }
+    assign_builder(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].builder,
+        Some((state.entities.row(second).uuid, None)),
+        "the released work takes the other builder"
+    );
+    complete(&mut state, id, second);
+    // The next pass pays the recorded return duty.
+    assign_builder(&mut state, id);
+    assert_eq!(
+        (carried(&state, first, dirt), carried(&state, first, log)),
+        (0, 0),
+        "the released builder keeps no project stock"
+    );
+    assert_eq!(
+        (stored(&state, dirt), stored(&state, log)),
+        (7, 6),
+        "storage paid one fill and two logs, once"
+    );
+    assert!(state.settlements.get(id).unwrap().carry_pending.is_empty());
+}
+
+/// Review P1 (custody), completion: a builder whose load outlasts the work
+/// hands the rest back once every cell is placed.
+#[test]
+fn a_finished_works_leftover_load_goes_back_to_storage() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let (handle, dirt, log) = fill_then_logs(&mut state, id);
+    bind_project(&mut state, id, &handle, slot);
+    // Three logs on the body for the two log cells.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(ItemStack::new(log, 3));
+    complete(&mut state, id, slot);
+    assign_builder(&mut state, id);
+    assert_eq!(
+        carried(&state, slot, log),
+        0,
+        "the leftover log is not kept"
+    );
+    assert_eq!(
+        (stored(&state, dirt), stored(&state, log)),
+        (7, 9),
+        "storage paid the fill and got back the log the work did not use"
+    );
+    assert!(state.settlements.get(id).unwrap().carry_pending.is_empty());
+}
+
 /// A Builder places every authored cell of a level in every rotation, not only
 /// enough of them to certify: the gate's pillars flank an open passage that a
 /// certificate never inspects.
