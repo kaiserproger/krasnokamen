@@ -764,23 +764,22 @@ fn project_estimate(
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0)
         .min(pages - 1);
+    let stock = super::inventory::town_storage(state, ctx.id);
     let body = authored
         .materials
         .iter()
         .skip(page * 6)
         .take(6)
-        .map(|(id, count)| {
-            format!(
-                "{} ×{count}",
-                state
-                    .registry
-                    .items
-                    .name_of(*id)
-                    .map_or("?", Identifier::as_str)
-            )
+        .filter_map(|(id, count)| {
+            let name = state.registry.items.name_of(*id)?;
+            let held: i64 = stock.iter().flat_map(|(_, image)| &image.slots)
+                .filter(|stack| stack.item_id == *id && !stack.is_empty())
+                .map(|stack| i64::from(stack.count)).sum();
+            Some(material_text(state, name.as_str(), ctx.f(Key::MaterialStock, &[
+                ("count", &count.to_string()), ("stock", &held.to_string()),
+            ])))
         })
-        .collect::<Vec<_>>()
-        .join("\n");
+        .collect::<Vec<_>>();
     let review = if building.is_some() {
         "project_upgrade_review"
     } else {
@@ -813,7 +812,12 @@ fn project_estimate(
             format!("{} {}/{}", ctx.t(Key::MaterialsEstimate), page + 1, pages),
             buttons,
         )
-        .text(body)
+        .text(Tag::Compound(vec![
+            ("text".into(), Tag::String(String::new())),
+            ("extra".into(), Tag::List(mc_nbt::ListTag {
+                element_type: mc_nbt::tag_type::COMPOUND, elements: body,
+            })),
+        ]))
         .text(ctx.t(Key::RequestPolicy)),
     );
 }
