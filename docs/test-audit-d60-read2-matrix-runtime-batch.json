@@ -1,0 +1,463 @@
+{
+  "decision": "D60.2",
+  "base": "ae3b2f4fbd40006e68f4d4324618469597224e4d",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_matrix_runtime.py",
+  "source_sha256_before": "aab51fbc39a8c051aa47d763f02bc77a003dd16fb3cc7f13213fc858da46d62f",
+  "status": "All17 original bodies and nested/shared fixture builders individually read. Delete10 read/high R4 self-tests; retain five K1 observation/probe regressions and two conservative U contracts. No worker tests/builds/L2/formatters/smokes/negative controls.",
+  "counts": {
+    "historical_test_ids_finalized": 17,
+    "removed_R4": 10,
+    "retained_K1": 5,
+    "retained_U": 2,
+    "prior_deletions": 0,
+    "physical_declarations_before": 17,
+    "physical_declarations_remaining": 7,
+    "source_lines_before": 361,
+    "source_lines_remaining": 192,
+    "physical_source_lines_removed": 169,
+    "historical_medium_candidates_finalized": 12,
+    "historical_medium_candidates_unfinalized": 596
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire original361-line module, all17 methods and every nested wait/observer/run/act/setup helper. Shared context10-15 and test_protocol_entities.varint/add_body9-31 read; generated fixture bytes are not captured protocol evidence.",
+    "backend_source_read": {
+      "tools/harness/matrix_execution.py": "Whole198 lines, plugin copying/profile/fingerprint, factors, boundaries and run_subject actor gates.",
+      "tools/harness/protocol_matrix_client.py": "Whole328 lines, including reconnect, snapshot/stack mapping and received-block fallback.",
+      "tools/harness/backends/protocol_lifecycle.py": "145-199 initialization;264-280 chunk callback fence;347-408 console command/query and private feedback fencing.",
+      "tools/harness/backends/protocol_matrix.py": "27-31 dimension_min_y; whole131-303 run(), subject/client initialization and receipt finalization.",
+      "tools/harness/matrix_api.py": "1-187 now and188-239 already read during world audit: context concurrency/boundary and complete execute_adapter/JSON guards.",
+      "tools/harness/matrix_domains/settlements.py": "1-17, actual query reply checking/stripping.",
+      "tools/harness/protocol_entities.py": "383-500 initialization, consume, lifecycle and add;572-583 remove;649-686 metadata assignment.",
+      "tools/harness/protocol_observations.py": "698-705 decode_stack entry point only; not claiming a complete codec proof."
+    },
+    "unused_imports_removed": [
+      "matrix_api.Adapter/Check/MissingCapability/execute_adapter",
+      "matrix_execution.copy_plugins",
+      "matrix_execution",
+      "test_matrix_api.context"
+    ],
+    "helpers_removed": "Only nested helpers inside the ten deleted bodies. Shared context and packet-builder modules untouched.",
+    "docstring_updated": "No longer claims to test per-row plugin identity after removal of its synthetic plugin cases."
+  },
+  "evidence": {
+    "current_body_origin_messages_read": [
+      "11ed1c38a0",
+      "0a54b273d5",
+      "ef67d139ea",
+      "6410b21339"
+    ],
+    "already_read_messages_reused": [
+      "b592f8bd9b (world import provenance)",
+      "b24f0ce357 (runtime-profile rebrand provenance)"
+    ],
+    "fix_test_and_backend_diffs_read": {
+      "11ed1c38a0": "Selected lifecycle/private-query, entity lifecycle, snapshot, exact tests, domain documentation and ledger source-path correction hunks.",
+      "0a54b273d5": "Selected lifecycle, settlement query, snapshot, exact tests and domain observation documentation hunks.",
+      "ef67d139ea": "Selected ledger observed-case/repro additions, exact protected load_tests list, snapshot module change and complete new inventory body.",
+      "6410b21339": "Complete dimension minimum and subject-client initialization fix plus explicit commit explanation of the actual combat fixture timeout and historical fix reversal.",
+      "53ed7c458": "Original event-history reconnect fix and test addition: no original real-run receipt supplied; kept U."
+    },
+    "ledger_rows_read": [
+      "TEST-MATRIX-CONSOLE-FENCE-CHAT",
+      "TEST-INVENTORY-FRESHNESS",
+      "TEST-END-RESTART-OBSERVER"
+    ],
+    "original_receipt_scope": "Read ledger documentation of original Windows screenshot, arrow probe043124 and B02 spawn/remove trace, plus fixing hunks; did not reopen those raw screenshots/wire traces, run clients or rerun historical negative controls.",
+    "important_reclassifications": [
+      "Five historical medium R4 labels are K1 once actual console/inventory/lifecycle/subject-failure provenance is read; all complete bodies retained.",
+      "Reconnect history is U because a fix title and synthetic join failure alone do not demonstrate the original real case.",
+      "Dimension helper remains U because a fabricated Nether path contract is not the observed overworld initialization failure or shipped vanilla data.",
+      "Both separately named closed-menu inventory regressions are K1 and retained, notwithstanding overlap. No authority to delete K1 duplicates inferred."
+    ],
+    "reference_search_scope": "All17 exact method names searched only in assigned D60Read2 worktree, excluding own module and audit JSON; the only exact external reference is test_harness.py:1066 to a retained K1 body. No removed helper is top-level/shared.",
+    "semantic_ledger_search_scope": "Assigned docs/bugs/rows only: console fencing, force-load acknowledgements, stale/closed inventory, reconnect indices, chunk minimum and plugin identity; additional narrow serialization/event search found no matches.",
+    "other_worktree_fence": {
+      "checked": 563,
+      "dirty_overlaps": 0,
+      "errors": 0,
+      "scope": "git status of this one file only; no cross-worktree reference searches"
+    },
+    "unmerged_module_diffs_read": [
+      "ece142f5d chore(stage0): rebrand + fmt BvG2L2 for the merge into main",
+      "0722003b2 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "aefd70ec8 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "dd224b453 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "efba00502 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "a5262042c chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "43ad340d1 feat(harness): expose accepted login UUID and local entity ID",
+      "53ed7c458 fix(harness): retain received event indices across reconnects",
+      "1e20dd5fb feat(harness): observe received entity identity movement items and XP",
+      "446213b4e feat(harness): expose actual configuration registry ID names",
+      "d4cba654b feat(harness): decode real components offers and chat; scope actor gates",
+      "909d8108b feat(harness): require all actor own and shared target receipts",
+      "24fcc5c1c feat(harness): enforce exact refrozen matrix plugin profiles",
+      "72a032672 feat(harness): control auth automation independently of server policy",
+      "6efc64480 feat(harness): add real chunk fences and explicit matrix plugin lanes"
+    ],
+    "unmerged_fence_result": "All15 selected module deltas read before editing. Six rebrands only rename invented fixture IDs; the remaining nine introduce/extend synthetic observation/profile/auth/concurrency contracts already present in current imported bodies. Observed-case regressions and unresolved reconnect/dimension contracts retained, not blanket-deleted."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_console_fence_is_private_and_requires_fresh_query_result",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 19,
+      "original_end_line": 48,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "TEST-MATRIX-CONSOLE-FENCE-CHAT documents actual Windows screenshots exposing MatrixConsoleFence chat. 11ed1c38a0 replaced public say with a private scoreboard query;0a54b273d5 extended this exact regression to spoof-resistant fresh settlement feedback. Keep despite the synthetic log transport.",
+      "provenance_commit": "11ed1c38a03d8fb4991659f621bb0f32684b91f5",
+      "body_provenance_commits": [
+        "0a54b273d5d1d6cab3160a6b670d946a99aac081",
+        "11ed1c38a03d8fb4991659f621bb0f32684b91f5"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "TEST-MATRIX-CONSOLE-FENCE-CHAT"
+      ]
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_non_json_adapter_state_is_rejected_before_actions",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 50,
+      "original_end_line": 55,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mock context and lambdas manufacture a Check object in adapter state, then assert the local JSON guard rejects it before a mock action. No real failing adapter, server/client/bot or received artifact is replayed; the original6efc64480 addition is feature-contract plumbing.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_non_json_oracle_detail_is_rejected",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 57,
+      "original_end_line": 60,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "A literal object() is returned by a lambda oracle solely to trip the harness JSON-detail guard. Shared context contains a Mock server and a named SimpleNamespace, not real observation evidence; no corresponding observed serialization incident was found in the scoped ledger search.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_plugin_copy_defaults_full_and_excludes_manifest_id",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 62,
+      "original_end_line": 73,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Creates two invented manifests and plugin.wasm=b'fixture', then checks copy/exclusion bookkeeping and an unknown-ID error. Neither actual plugin packages nor a real launch are used; rebrand-only history does not establish an observed copy failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14",
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_chunk_fence_never_treats_forceload_ack_as_readiness",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 75,
+      "original_end_line": 86,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs an unstarted /binary server, replaces command with a Mock and readiness with list.append, and asserts dispatch/refusal. No received chunk or real readiness case is exercised;6efc64480 introduced this synthetic callback contract.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_closed_menu_uses_newer_received_player_inventory",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 88,
+      "original_end_line": 106,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "TEST-INVENTORY-FRESHNESS records probe043124-bc41wx1w preferring stale menu1 arrow4 over newer window0 arrow3 plus bow damage1. This11ed1c38a0 body reproduces that exact inventory shape in snapshot; retain alongside the separately named protected regression, not treat overlap as authority to delete K1.",
+      "provenance_commit": "11ed1c38a03d8fb4991659f621bb0f32684b91f5",
+      "body_provenance_commits": [
+        "11ed1c38a03d8fb4991659f621bb0f32684b91f5"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "TEST-INVENTORY-FRESHNESS"
+      ]
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_current_menu_suffix_overrides_stale_window_zero",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 108,
+      "original_end_line": 140,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents window4 and window0 arrays, item/registry mappings, login UUID/entity ID and deepcopy mutations. Expected projections are synthetic fixture dictionaries; it does not replay the observed closed-menu bow failure or any captured vanilla packet/report. Original changes are feature plumbing, not an identified real case.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_closed_menu_does_not_override_newer_player_inventory",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 142,
+      "original_end_line": 159,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "ef67d139ea added this exact regression and the explicit test_harness.load_tests reference while recording TEST-INVENTORY-FRESHNESS. Arrow4 stale menu versus newer arrow3/bow damage1 is the documented real probe failure; keep the protected complete body.",
+      "provenance_commit": "ef67d139ea3a34344ef7496933457cfccb854d20",
+      "body_provenance_commits": [
+        "ef67d139ea3a34344ef7496933457cfccb854d20"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "tools/harness/test_harness.py"
+      ],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "TEST-INVENTORY-FRESHNESS"
+      ]
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_entity_snapshot_names_actual_packets_and_never_masks_lost_state",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 161,
+      "original_end_line": 188,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mixed body includes the11ed1c38a0 spawn/remove lifecycle regression preserving the same UUID after final census is empty. TEST-END-RESTART-OBSERVER documents that exact evidence-loss class: the original dragon UUID was received then RemoveEntities preceded the final missing-dragon assertion. Keep the full body, without claiming its generated item packets are captured vanilla bytes.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "11ed1c38a03d8fb4991659f621bb0f32684b91f5",
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "TEST-END-RESTART-OBSERVER"
+      ]
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_unknown_received_block_state_is_not_air",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 190,
+      "original_end_line": 194,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "An object.__new__ client, an invented air mapping and an empty SimpleNamespace block map deliberately request an absent position. This checks a harness guard with no real received chunk/block artifact or observed incident, unlike the retained subject-probe initialization regression.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_received_event_indices_survive_reconnect_and_failed_join",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 196,
+      "original_end_line": 220,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Explicit original53ed7c458 fix preserves history/generation across a failed join and reconnect, but the body uses two generated string events and a mocked observer constructor; no original real-run failure receipt or ledger association was recovered. Retain conservatively rather than infer K1 or force removal.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_auto_auth_control_preserves_server_auth_requirement",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 222,
+      "original_end_line": 241,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "object.__new__, a Mock observer, fake authentication strings and mocked command/wait verify only local auto-auth/policy dispatch. No real registration/login exchange or artifact is used;72a032672 is an automation feature addition without an identified observed case.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_exact_plugin_profiles_override_adapter_default_exclusions",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 243,
+      "original_end_line": 256,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "A fabricated death.keep contract with full/without labels checks select_plugin_profile sets, suffixes and exceptions. No frozen matrix, real plugin-set fingerprint or actual launch is loaded;24fcc5c1c introduced this self-contained tool contract.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_plugin_fingerprint_ignores_mutable_state_but_not_entry",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 258,
+      "original_end_line": 267,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Hashes invented manifest, wasm and changed byte strings, then adds an invented state.json. This is local hash-selection plumbing, not a real package artifact or observed fingerprint failure; neither label nor calling a hash supplies a K2 oracle.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::MatrixRuntimeTests::test_multiplayer_requires_all_clients_on_own_and_shared_targets",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 269,
+      "original_end_line": 307,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "The nested runner generates named clients, tick/connection/input dictionaries, forged actor flags and a constant Boolean world oracle, while replacing load_adapter. No actual action, admission receipt, client/server/bot or real artifact exists. Original909d8108b/d4cba654b add synthetic actor-policy contracts, not a recovered case.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::SubjectProbeChunkTests::test_subject_probe_resolves_fixture_blocks_from_received_chunks",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 311,
+      "original_end_line": 346,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "6410b21339 explicitly documents combat.mob_targets_player timing out in setup because subject clients lacked chunk_min_y after a received chunk displaced observer.blocks. This added run() regression verifies both client and observer receive the dimension minimum. Keep despite mocked processes; the commit reports the original fix-hunk reversal, not a control run by this audit.",
+      "provenance_commit": "6410b21339389927d72f6f12729d499a44c44226",
+      "body_provenance_commits": [
+        "6410b21339389927d72f6f12729d499a44c44226"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    },
+    {
+      "id": "tools/harness/test_matrix_runtime.py::SubjectProbeChunkTests::test_dimension_min_y_reads_namespaced_and_plain_ids_and_fails_closed",
+      "file": "tools/harness/test_matrix_runtime.py",
+      "original_fn_line": 348,
+      "original_end_line": 358,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Companion path/format contract added with6410b21339, but its hand-written Nether JSON does not replay the observed overworld subject-probe timeout or use actual shipped vanilla data. Keep U conservatively; do not equate proximity to a real fixing commit with a demonstrated independent regression/oracle.",
+      "provenance_commit": "6410b21339389927d72f6f12729d499a44c44226",
+      "body_provenance_commits": [
+        "6410b21339389927d72f6f12729d499a44c44226"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": []
+    }
+  ],
+  "verification": {
+    "performed": "Read-only body/helper/source/provenance/ledger/reference and pre-edit dirty-overlap inspection. Edit-tool results are the change receipt; no post-edit re-audit or test/build execution.",
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_matrix_runtime (seven retained methods), then integrated correctness at Main's discretion; worker did not run either.",
+    "negative_control": "none performed by this audit;6410b21339 describes its historical reversal, not new verification.",
+    "runtime_saving": "Unmeasured; no speedup claimed."
+  },
+  "gaps": []
+}
