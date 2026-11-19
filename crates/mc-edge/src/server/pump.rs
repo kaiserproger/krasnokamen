@@ -912,9 +912,11 @@ mod roster_seed_tests {
         let (world_tx, _world_rx) = world_queue(bound, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || server.hub.published_knockback_count(id),
+            )
             .unwrap();
         reliable_rx
     }

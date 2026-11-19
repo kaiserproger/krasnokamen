@@ -40,9 +40,11 @@ async fn explosions_deliver_or_explicitly_close_under_queue_pressure() {
             };
             server
                 .connections
-                .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                    server.hub.published_knockback_count(id)
-                })
+                .register(
+                    id,
+                    ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                    || server.hub.published_knockback_count(id),
+                )
                 .unwrap();
             let (close, mut closed) = tokio::sync::oneshot::channel();
             server.connections.inner.lock().closers.insert(id, close);
@@ -146,9 +148,11 @@ async fn six_hundred_explosions_coalesce_knockback_without_disconnect() {
         let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || server.hub.published_knockback_count(id),
+            )
             .unwrap();
         let (close, mut closed) = tokio::sync::oneshot::channel();
         server.connections.inner.lock().closers.insert(id, close);
@@ -590,7 +594,7 @@ async fn published_knockback_epochs_count_ticks_and_fence_delayed_queue_registra
         .connections
         .register(
             connection,
-            ConnectionHandles::new(reliable_tx, world_tx),
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
             || server.hub.published_knockback_count(connection),
         )
         .unwrap();
@@ -850,7 +854,7 @@ async fn synchronized_registration_publication(publication_first: bool) {
     let registration = tokio::task::spawn_blocking(move || {
         registering.connections.register(
             connection,
-            ConnectionHandles::new(reliable_tx, world_tx),
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
             || {
                 // Pause inside the real registry critical section, on either
                 // side of its canonical-count read (the admission boundary).
@@ -1018,7 +1022,7 @@ async fn dimension_reset_fences_queued_old_world_explosions_at_real_writer() {
         .connections
         .register(
             id,
-            ConnectionHandles::new(reliable_tx, world_tx.clone()),
+            ConnectionHandles::new(reliable_tx, world_tx.clone(), crate::plan::CHUNKS_PER_TICK),
             || 0,
         )
         .unwrap();

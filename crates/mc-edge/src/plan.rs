@@ -56,7 +56,8 @@ mod viewer;
 mod viewer_plan;
 use chunk_delta::{ChunkChangeKind, ChunkDelta, ChunkDeltaLog, ChunkSync, chunk_stat};
 pub(crate) use chunk_frames::find_chunk;
-use chunk_frames::{CHUNKS_PER_TICK, spiral_square};
+pub(crate) use chunk_frames::CHUNKS_PER_TICK;
+use chunk_frames::spiral_square;
 pub use chunk_frames::{ChunkPacketCache, fill_chunk_packets};
 pub(crate) use credit::{WorldCredit, push_best_effort, push_reliable, try_push};
 #[cfg(test)]

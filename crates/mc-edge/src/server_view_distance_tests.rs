@@ -103,9 +103,11 @@ async fn client_view_distance_join_grow_and_shrink() {
     let (world_tx, mut world_rx) = world_queue(512, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     let mut connections = server.connections.snapshot().into_iter().collect();
     let mut viewers = HashMap::new();
@@ -457,9 +459,11 @@ async fn edge_sent_feedback_follows_the_clients_chat_setting() {
     let (world_tx, _world_rx) = world_queue(16, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     for (wire, lines) in [
         (ChatVisibility::Full, 1),
@@ -510,9 +514,11 @@ async fn list_obeys_the_send_command_feedback_rule() {
     let (world_tx, _world_rx) = world_queue(16, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     for (rule, lines) in [("false", 0), ("true", 1)] {
         let mut ticks = server.hub.subscribe();

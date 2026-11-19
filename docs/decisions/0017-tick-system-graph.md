@@ -173,17 +173,32 @@ zero drive/no look, preserving the ordinary world's sparse fast path.
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
 and unaffected by impulse/hurt/effects or changed geometry, and only while its
-facing already matches what the skipped step would produce: a look target the
-step would still turn to by at least half a wire rotation quantum (0.703125
-degrees) keeps the row on the ordinary step until it faces it
-(`early_entity_rest` and `battle::rest_turns_toward_target`,
-`crates/mc-core/src/tick/entity_phase.rs`, `crates/mc-core/src/battle/mod.rs`),
-so a resting soldier's stored facing stays within half a quantum of the step's.
-That is a bounded angular error, not an invisible one: the edge packs angles
-with `floor`, so a sub-quantum turn can still change the packed byte and the
-drawn facing can be up to almost 1.5 quanta from the target bearing. Moving rows still use
-ordinary block collision, ordered movement writeback and native intent merge.
-No position writer or second physics path is introduced.
+stored rotation is exactly what the skipped step would write. Since D36 that
+rotation is published once per battle tick by `battle::facing::project`
+(right after `Columns::project`) for every battle row with a target and zero
+drive, and both the rest guard (`early_entity_rest`) and the step
+(`MotionInput::facing`) read that one value: the row rests when it is
+bit-identical to the stored rotation. Standing soldiers keep head and body
+apart: the head turns toward the target only after a 20 degree dead zone on a
+smoothed bearing (15 degrees per tick, landing on the current bearing), pitch
+has its own 8 degree dead zone, and the body replicates the client's
+`BodyRotationControl` (cone 75, aligned after 10 stable ticks over 10), which is
+what the client draws for a standing mob; a hold returns the stored bits, so a
+holding row rests and journals nothing. Riders, head-on-body mobs and a fighter
+whose charge bonus lasts keep the previous whole-body look: their step turns
+them from where the body ends up and their rest keeps the half-quantum guard,
+both as before (the projection publishes only that guard's decision). With
+nothing projected (no target, battle paused or stopped) a head left off its
+body returns with the vanilla head rule in the step. The facing state is
+runtime-only: a restart rebuilds it from the stored rotation. A standing row
+stores no yaw of its own (owner D48 kept the lazy variant of the D36
+comparison): its stored yaw changes only when it really moves or leaves the
+projection, so the wire keeps the yaw the row already had while its head and
+its drawn body turn. A row leaving the projection, also on pause or stop or
+while its chunk is not simulated, hands its drawn body to its step until a
+step took it. Moving rows still use ordinary block collision,
+ordered movement writeback and native intent merge. No position writer or
+second physics path is introduced.
 
 Crowd steering reserves half the free gap for each simultaneous neighbour.
 After directional projections and field-boundary clipping, a common bounded

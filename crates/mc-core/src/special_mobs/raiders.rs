@@ -292,6 +292,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 impulse: state.entities.horizontal_impulse(slot),
                 rotation: state.entities.rot(slot),
                 look_target: destination,
+                facing: None,
                 battle_facing: false,
                 legacy_facing: false,
                 head_follows_body: false,

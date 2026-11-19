@@ -233,11 +233,12 @@ fn encode_chunk(
     .ok()
 }
 
-/// Chunk packets per viewer per publish, nearest-first (vanilla
-/// `PlayerChunkSender` paces too). An unpaced first publish encoded a whole
-/// view square (289 chunks at view 8: ~11 s in a debug build) on the pump,
-/// stalling every viewer.
-pub(super) const CHUNKS_PER_TICK: usize = 16;
+/// Default chunk packets per viewer per publish, nearest-first (vanilla
+/// `PlayerChunkSender` paces too); `[network] chunks_per_tick_per_player`
+/// sets it per server. An unpaced first publish encoded a whole view square
+/// (289 chunks at view 8: ~11 s in a debug build) on the pump, stalling every
+/// viewer.
+pub(crate) const CHUNKS_PER_TICK: usize = 16;
 
 /// Nearest-first spiral of the Chebyshev square around `center`.
 pub(super) fn spiral_square(center: (i32, i32), view_distance: i32) -> Vec<(i32, i32)> {
