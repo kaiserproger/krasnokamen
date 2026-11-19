@@ -1,0 +1,32 @@
+{
+  "id": "ENTITY-MOVEMENT-DUE-DIVIDES-BY-UNGUARDED-UPDATE-INTERVAL",
+  "verdict": "promoted",
+  "fix_commit": "3a6694e95ba19a5ce5cb8aeb7c9db93b554ce634",
+  "fix_commit_full": "3a6694e95ba19a5ce5cb8aeb7c9db93b554ce634",
+  "promoted_at": "2026-11-19T22:09:29+00:00",
+  "tree_head": "d2eecb6629d558261e1d53be5289ff3fb10ff7e5",
+  "tree_dirty": true,
+  "tree_sha256": "10ec419b90d241baf56aad5b395cb18529bf003fabdbe014ca14fbee2416828b",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-edge/src/plan/entities.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-edge/src/plan/entity_interest_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-edge:plan::plan_tests::entity_interest_tests::movement_due_with_a_zero_update_interval_is_due_every_tick": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:plan::plan_tests::entity_interest_tests::movement_due_with_a_zero_update_interval_is_due_every_tick": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261119T220659-ledger-promote-vg8b8adj"
+}
