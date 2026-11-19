@@ -54,6 +54,13 @@ climate/game-clock state is retained too. A frozen real image is not presented
 as an active settlement or transit tail. The synthetic oracle supplies that
 non-vacuous WAL coverage. `--world PATH` selects a certified world subdirectory
 when it is not `RETAINED_RUN/world`; only that world, plugins and config are copied.
+Build manifests record a path-and-content SHA-256 of ignored `data/vanilla`
+inputs separately from Git provenance. A reused older base's current data hash
+is labelled as an observation, not retroactively claimed as its build-time hash.
+For a slice-only real-image repeat, `--base-run PREVIOUS_RECEIPT` verifies and
+reuses its frozen input, base source fingerprint, binary pin and artifacts.
+`--census-refusal EXACT_ERROR` requires the same canonical refusal on both pins;
+that result proves matching fail-closed behaviour, not a successful ordinary census.
 
 ## WAL
 

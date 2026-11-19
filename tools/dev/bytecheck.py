@@ -31,6 +31,23 @@ def provenance(tree):
                            for path in untracked if path and (tree / os.fsdecode(path)).is_file()})
 
 
+def vanilla_provenance(tree):
+    root = tree / 'data/vanilla'
+    if not root.is_dir():
+        raise SystemExit(f'vanilla input directory missing: {root}')
+    digest_tree = hashlib.sha256()
+    count = size = 0
+    for path in sorted(root.rglob('*')):
+        if not path.is_file():
+            continue
+        with path.open('rb') as source:
+            file_hash = hashlib.file_digest(source, 'sha256').hexdigest()
+        digest_tree.update(f'{path.relative_to(root)}\0{file_hash}\n'.encode())
+        count += 1
+        size += path.stat().st_size
+    return dict(sha256=digest_tree.hexdigest(), files=count, bytes=size)
+
+
 def test(tree, out, crate, name):
     env = dict(os.environ, KRASNOKAMEN_BUILD_LANE='background', CORE_UNLOAD_OUT=str(out))
     # Never use pooled output paths: their lease ends before cargo returns to
@@ -39,11 +56,13 @@ def test(tree, out, crate, name):
     env['CARGO_TARGET_DIR'] = str(target)
     if tree not in BINARIES:
         source = provenance(tree)
+        vanilla = vanilla_provenance(tree)
         cmd = [str(RUNNER), '-m', BUILD_MEMORY, 'cargo', 'test', '-j', '1', '--manifest-path', str(tree / 'Cargo.toml'),
                '-p', 'mc-core', '-p', 'mc-world-conversion', '--lib', '--no-run', '--message-format=json']
         with (out / 'compile.log').open('wb') as log:
             subprocess.run(cmd, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
-        assert provenance(tree) == source, 'source tree changed during compile'
+        if provenance(tree) != source or vanilla_provenance(tree) != vanilla:
+            raise SystemExit('source or vanilla inputs changed during compile')
         binaries = {}
         for line in (out / 'compile.log').read_text().splitlines():
             try:
@@ -52,13 +71,14 @@ def test(tree, out, crate, name):
                 continue
             if message.get('reason') == 'compiler-artifact' and message.get('executable'):
                 binaries[message['target']['name']] = message['executable']
-        assert {'mc_core', 'mc_world_conversion'} <= binaries.keys(), binaries
+        if not {'mc_core', 'mc_world_conversion'} <= binaries.keys():
+            raise SystemExit(f'missing test executables: {binaries}')
         BINARIES[tree] = binaries
         # Shared build slots can be reused by another agent between tests.
         # Keep exactly the executables emitted by this compile.
         pins = out / 'binaries'
         pins.mkdir()
-        build = dict(source=source, target_dir=str(target), binaries={})
+        build = dict(source=source, data_vanilla=vanilla, target_dir=str(target), binaries={})
         for target, binary in BINARIES[tree].items():
             pinned = pins / target
             shutil.copy2(binary, pinned)
@@ -74,7 +94,8 @@ def test(tree, out, crate, name):
         subprocess.run(cmd, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
     with (out / (name + '.log')).open('ab') as log:
         log.write(('\nbinary_sha256=' + digest(Path(binary).read_bytes()) + '\n').encode())
-    assert 'test result: ok. 1 passed;' in (out / (name + '.log')).read_text()
+    if 'test result: ok. 1 passed;' not in (out / (name + '.log')).read_text():
+        raise SystemExit(f'expected exactly one passing producer: {name}')
 
 
 def capture(tree, out):
@@ -108,12 +129,14 @@ def artifacts(out):
     # Old unpinned runs are not admissible baselines.
     build = json.loads((out / 'build.json').read_text())
     for binary in build['binaries'].values():
-        assert digest(Path(binary['path']).read_bytes()) == binary['sha256'], 'binary pin changed'
+        if digest(Path(binary['path']).read_bytes()) != binary['sha256']:
+            raise SystemExit('binary pin changed')
     result = {name: rows(out / (name + '.json')) for name in ('A', 'C-live', 'C-offline')}
     stable = json.loads((out / 'stable-transit.json').read_text())
     result['_stable_transit'] = 'global/transit/' + stable
     result['B'] = {p.name: base64.b64encode(p.read_bytes()).decode() for p in sorted((out / 'B').iterdir())}
-    assert result['B']
+    if not result['B']:
+        raise SystemExit('missing WAL artifacts')
     for name in ('D-custody', 'D-crash'):
         result[name] = json.loads((out / (name + '.json')).read_text())
     exported = {}
@@ -122,7 +145,8 @@ def artifacts(out):
             continue
         key = str(path.relative_to(out / 'D-export'))
         exported[key] = base64.b64encode(path.read_bytes()).decode()
-    assert exported
+    if not exported:
+        raise SystemExit('missing export artifacts')
     result['D-export'] = exported
     (out / 'artifacts.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n')
     return result
@@ -141,7 +165,8 @@ def wal_lines(artifact):
         # Preserve raw image bytes, but ignore frame CRC while classifying a
         # control's diff. The verdict above still compares the entire frame.
         payload = raw[32:]
-        assert len(payload) == struct.unpack_from('<I', raw, 24)[0]
+        if len(payload) != struct.unpack_from('<I', raw, 24)[0]:
+            raise SystemExit(f'WAL frame length mismatch: {name}')
         for line in payload.splitlines():
             for image in images(json.loads(line)):
                 variant = next(iter(image))
@@ -156,12 +181,15 @@ def wal_lines(artifact):
 def compare(base, candidate, control):
     verdict = {name: {'equal': base[name] == candidate[name]} for name in ARTIFACTS}
     stable = base['_stable_transit']
-    assert candidate['_stable_transit'] == stable
+    if candidate['_stable_transit'] != stable:
+        raise SystemExit('stable transit identity differs')
     for image in (base, candidate):
-        assert stable in image['A'] and stable in image['C-live'] and stable in image['C-offline']
+        if not all(stable in image[stage] for stage in ('A', 'C-live', 'C-offline')):
+            raise SystemExit('stable transit row missing')
         if not control:
             for stage in ('C-live', 'C-offline'):
-                assert image[stage][stable]['payload'] == base['A'][stable]['payload'], (stage, 'active transit bytes changed on reopen')
+                if image[stage][stable]['payload'] != base['A'][stable]['payload']:
+                    raise SystemExit(f'{stage}: active transit bytes changed on reopen')
     for name in ('A', 'C-live', 'C-offline'):
         keys = set(base[name]) | set(candidate[name])
         verdict[name]['different_rows'] = sorted(k for k in keys if base[name].get(k) != candidate[name].get(k))
@@ -173,7 +201,8 @@ def compare(base, candidate, control):
         # transit::Record.members embeds ReplayEntity.villager (Main ruling).
         expected = {'X1': {'A', 'B', 'C-live', 'C-offline'},
                     'X2': {'A', 'B', 'C-live'}, 'X3': {'A', 'C-live', 'C-offline', 'D-export'}}[control]
-        assert changed == expected, (control, changed, expected)
+        if changed != expected:
+            raise SystemExit(f'{control}: changed artifacts {changed}, expected {expected}')
         for name in ('A', 'C-live', 'C-offline'):
             if control == 'X1':
                 expected_rows = {
@@ -187,10 +216,13 @@ def compare(base, candidate, control):
             else:
                 expected_rows = {k for k in base[name] if k.startswith('entity/')}
             if name == 'A':
-                assert expected_rows, (control, 'vacuous row expectation')
-            assert set(verdict[name]['different_rows']) == expected_rows, (control, name, verdict[name], expected_rows)
+                if not expected_rows:
+                    raise SystemExit(f'{control}: vacuous row expectation')
+            if set(verdict[name]['different_rows']) != expected_rows:
+                raise SystemExit(f'{control}/{name}: {verdict[name]}, expected rows {expected_rows}')
         expected_wal = {'X1': {'Settlement'}, 'X2': {'Entity', 'Transit'}, 'X3': set()}[control]
-        assert wal_changed == expected_wal, (control, wal_changed, expected_wal)
+        if wal_changed != expected_wal:
+            raise SystemExit(f'{control}: WAL variants {wal_changed}, expected {expected_wal}')
         verdict['control'] = {'id': control, 'expected_diff_only': True, 'result': 'RED',
                               'wal_variants': sorted(wal_changed)}
     return verdict
@@ -213,7 +245,8 @@ def main():
     if args.base_run:
         base_out = args.base_run.resolve()
         recorded = json.loads((base_out / 'build.json').read_text())['source']
-        assert recorded == provenance(args.base_tree.resolve()), 'cached base tree/fingerprint does not match base_tree'
+        if recorded != provenance(args.base_tree.resolve()):
+            raise SystemExit('cached base tree/fingerprint does not match base_tree')
         base = artifacts(base_out)
     else:
         base_out = args.out / 'base'
@@ -228,7 +261,9 @@ def main():
     equal = all(verdict[name]['equal'] for name in ARTIFACTS)
     result = dict(status='PASS' if equal else 'DIFF', artifacts=verdict,
                   base_tree=str(args.base_tree.resolve()), slice_tree=str(args.slice_tree.resolve()),
-                  base_run=str(base_out), slice_run=str(candidate_out))
+                  base_run=str(base_out), slice_run=str(candidate_out),
+                  base_data_vanilla_observed=vanilla_provenance(args.base_tree.resolve()),
+                  slice_data_vanilla=BUILDS[args.slice_tree.resolve()]['data_vanilla'])
     (args.out / 'verdict.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
     return 0 if equal else 1
