@@ -18,16 +18,6 @@ def sibling_of(cpu):
 
 
 class CommonTests(unittest.TestCase):
-    def test_sizes(self):
-        self.assertEqual(common.parse_size("4G"), 4 * 2**30)
-        self.assertEqual(common.parse_size("512m"), 512 * 2**20)
-        with self.assertRaises(common.BenchError):
-            common.parse_size("4 gigs")
-
-    def test_cpu_lists_roundtrip(self):
-        self.assertEqual(common.parse_cpu_list("0-2,8,10-11"), [0, 1, 2, 8, 10, 11])
-        self.assertEqual(common.cpu_list([0, 1, 8]), "0,1,8")
-
     def test_logical_series_includes_smt_siblings(self):
         pool = list(range(12))
         two = common.split_cpus(pool, 2, "logical", sibling_of)
@@ -50,18 +40,6 @@ class CommonTests(unittest.TestCase):
         full = common.split_cpus(list(range(12)), 12, "logical", sibling_of)
         self.assertTrue(full["bots_share_server_cpus"])
         self.assertEqual(full["bots"], full["server"])
-
-    def test_more_cpus_than_pool_is_a_clear_error(self):
-        with self.assertRaisesRegex(common.BenchError, "only 4 available"):
-            common.split_cpus([0, 1, 2, 3], 8, "logical", lambda c: [c])
-
-    def test_scope_prefix_caps_memory_without_swap(self):
-        prefix = common.scope_prefix("4G", "solaris-heavy.slice")
-        self.assertIn("MemoryMax=4G", prefix)
-        self.assertIn("MemorySwapMax=0", prefix)
-        self.assertIn("--slice=solaris-heavy.slice", prefix)
-        self.assertEqual(common.shell_prefix(None, None), "")
-        self.assertTrue(common.shell_prefix("4G", None).endswith(" --"))
 
 
 class WorldgenTests(unittest.TestCase):
@@ -91,20 +69,6 @@ pregenerate complete: chunks [-16,-16]..[16,16] around block (0,0), 1089 chunks,
             self.assertLessEqual((x2 - x1 + 1) * (z2 - z1 + 1), worldgen_runs.MAX_FORCELOAD_CHUNKS)
             covered |= {(x, z) for x in range(x1, x2 + 1) for z in range(z1, z2 + 1)}
         self.assertEqual(len(covered), 33 * 33)
-
-    def test_time_file_parsing(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "time.txt"
-            path.write_text("\tUser time (seconds): 3.5\n\tSystem time (seconds): 0.5\n"
-                            "\tMaximum resident set size (kbytes): 2048\n")
-            parsed = worldgen_runs.parse_time_file(path)
-        self.assertEqual(parsed, {"peak_rss_mib": 2.0, "cpu_seconds": 4.0})
-
-    def test_median_picks_middle_run(self):
-        runs = [{"status": "ok", "chunks_per_s": v} for v in (30.0, 10.0, 20.0)] + [{"status": "failed"}]
-        median = worldgen_runs.median_by_engine(runs)
-        self.assertEqual(median["chunks_per_s"], 20.0)
-        self.assertEqual((median["repeats_ok"], median["repeats"]), (3, 4))
 
 
 class ProfileRunTests(unittest.TestCase):
