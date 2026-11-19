@@ -128,7 +128,6 @@ display_icons! {
     Stonecutter => "minecraft:stonecutter",
     VillagerSpawnEgg => "minecraft:villager_spawn_egg",
     Wheat => "minecraft:wheat",
-    WhiteBanner => "minecraft:white_banner",
     WritableBook => "minecraft:writable_book",
 }
 
@@ -1922,8 +1921,6 @@ fn dashboard_screen(state: &TickState, ctx: &Ctx) -> Screen {
         (28, Icon::CraftingTable, Key::ProductionOrders, "orders"),
         (30, Icon::IronPickaxe, Key::Projects, "projects"),
         (32, Icon::IronHelmet, Key::Army, "army"),
-        (34, Icon::WhiteBanner, Key::Neighbours, "neighbours"),
-        (49, Icon::Book, Key::Checklist, "checklist"),
         (52, Icon::LimeDye, Key::NextStep, "next"),
         (53, Icon::Book, Key::Help, "help"),
     ] {

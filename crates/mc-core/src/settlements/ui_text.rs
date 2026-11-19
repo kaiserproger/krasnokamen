@@ -204,17 +204,11 @@ pub(crate) enum Key {
     SupplyCauseUnavailable,
     SourceMaterialHint,
     NoBlueprintUpgrade,
-    Checklist,
-    ChecklistUnavailable,
-    Neighbours,
-    NeighboursUnavailable,
     GuideClaim,
-    GuideChecklist,
     GuideRecruit,
     GuideArmour,
     GuideWeapons,
     GuideHousing,
-    GuideWar,
     GuideBattle,
     GuideSupply,
     GuideConstruction,
@@ -242,18 +236,9 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::EmptyStorage => ("Bring materials: Shift-click your own stack.", "Принесите материалы: Shift+клик по своему стаку."),
         Key::NeedStorage => ("First, storage: certify a building with a chest, then stock it.", "Сначала нужен склад: сертифицируйте постройку с сундуком, затем принесите материалы."),
         Key::StorageFirst => ("Next: storage needed", "Дальше: нужен склад"),
-        Key::Neighbours => ("Neighbours & war", "Соседи и война"),
-        Key::NeighboursUnavailable => (
-            "Neighbour and war management is not available in this build.",
-            "Управление соседями и войной в этой сборке недоступно.",
-        ),
         Key::GuideClaim => (
             "Find the village bell → right-click → Claim charter. This is your management entrance.",
             "Найдите колокол деревни → ПКМ → «Принять грамоту». Это вход в управление.",
-        ),
-        Key::GuideChecklist => (
-            "Fief checklist belongs to the native progression system. If unavailable, this UI does not invent readiness.",
-            "Список «До удела» принадлежит системе развития. Если он недоступен, интерфейс не выдумывает готовность.",
         ),
         Key::GuideRecruit => (
             "Open Army for the available recruitment controls. Need barracks capacity? Open Projects → Barracks.",
@@ -270,10 +255,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::GuideHousing => (
             "Military housing is an actual free barracks bed, not just reserved capacity. Complete preparation before battle.",
             "Военное жильё — настоящая свободная койка в казарме, а не только место в лимите. Завершите подготовку до боя.",
-        ),
-        Key::GuideWar => (
-            "Only the charter holder approves a war's cause, objectives and window. No damage is lawful during the grace period. Controls require native war support.",
-            "Причину, цели и окно войны утверждает держатель грамоты. До конца отсрочки урон запрещён. Действия требуют поддержки системы войны.",
         ),
         Key::GuideBattle => (
             "Battle preparation: formation → advance / hold / retreat. A window ending is not victory; peace or surrender records the outcome.",
@@ -329,11 +310,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::NoBlueprintUpgrade => (
             "No blueprint upgrade; build manually and recheck.",
             "Нет улучшения по чертежу; постройте вручную и проверьте сертификат.",
-        ),
-        Key::Checklist => ("Fief checklist", "До удела"),
-        Key::ChecklistUnavailable => (
-            "Fief progression is not available in this server state. Civil counts are not a promotion test.",
-            "Развитие до удела недоступно в этом состоянии сервера. Гражданская статистика не является проверкой титула.",
         ),
         Key::Close => ("Close", "Закрыть"),
         Key::Back => ("Back", "Назад"),

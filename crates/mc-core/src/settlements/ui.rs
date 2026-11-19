@@ -196,24 +196,6 @@ fn dispatch(
         "main" => main_screen(state, connection, ctx, ""),
         "dashboard" => menus::dashboard(state, connection, ctx),
         "help" => help_screen(state, connection, ctx, payload),
-        "neighbours" => present(
-            state,
-            connection,
-            Dialog::notice(
-                ctx.t(Key::Neighbours),
-                button(ctx.t(Key::Back), "main", ctx.id),
-            )
-            .text(ctx.t(Key::NeighboursUnavailable)),
-        ),
-        "checklist" => present(
-            state,
-            connection,
-            Dialog::notice(
-                ctx.t(Key::Checklist),
-                button(ctx.t(Key::Back), "dashboard", ctx.id),
-            )
-            .text(ctx.t(Key::ChecklistUnavailable)),
-        ),
         "next" => {
             let Some(record) = state.settlements.get(ctx.id) else {
                 return;
@@ -568,7 +550,6 @@ fn main_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
         button(ctx.t(next), "next", ctx.id),
         button(ctx.t(Key::Settlement), "dashboard", ctx.id),
         button(ctx.t(Key::Army), "army", ctx.id),
-        button(ctx.t(Key::Neighbours), "neighbours", ctx.id),
         button(ctx.t(Key::Help), "help", ctx.id),
     ];
     present(state, connection, frame(ctx, title, note, body, buttons));
@@ -600,12 +581,10 @@ fn help_screen(
         (Key::GuideClaim, Key::ClaimReview, "claim_review"),
         (Key::CivilHelp, Key::Settlement, "dashboard"),
         (Key::GuideConstruction, Key::Projects, "projects"),
-        (Key::GuideChecklist, Key::Checklist, "checklist"),
         (Key::GuideRecruit, Key::Army, "army"),
         (Key::GuideArmour, Key::KindStorage, "storage"),
         (Key::GuideWeapons, Key::Army, "army"),
         (Key::GuideHousing, Key::Buildings, "buildings"),
-        (Key::GuideWar, Key::Neighbours, "neighbours"),
         (Key::GuideBattle, Key::Army, "army"),
         (Key::GuideSupply, Key::KindStorage, "storage"),
     ];
