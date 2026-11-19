@@ -9,6 +9,13 @@ use super::*;
 use mc_vanilla::wire_client::Client;
 
 fn server(root: &std::path::Path) -> EdgeServer {
+    server_with(root, |_| {})
+}
+
+fn server_with(
+    root: &std::path::Path,
+    edit: impl FnOnce(&mut crate::config::EdgeConfig),
+) -> EdgeServer {
     let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let mut config = mc_core::CoreConfig::new(root.join("world"), 81);
     config.vanilla_data_dir = Some(content.clone());
@@ -27,6 +34,7 @@ fn server(root: &std::path::Path) -> EdgeServer {
     cfg.data.world_dir = root.join("world");
     cfg.data.vanilla_data_dir = content;
     cfg.auth.online_mode = false;
+    edit(&mut cfg);
     let data = crate::server::load_vanilla_data(&cfg).unwrap();
     let tags = crate::server::load_tags(&cfg, &data).unwrap();
     EdgeServer::new(core, data, tags, cfg).unwrap()
@@ -275,14 +283,18 @@ async fn velocity_proxy_can_start_more_than_eight_logins() {
 #[tokio::test]
 async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip() {
     let dir = tempfile::tempdir().unwrap();
-    let mut server = server(dir.path());
+    // A non-default cap proves `[network] max_pre_play_connections_per_ip`
+    // reaches the live limiter, not only the parser.
+    let mut server = server_with(dir.path(), |cfg| {
+        cfg.network.max_pre_play_connections_per_ip = 2;
+    });
     server.cfg.server.max_players = 1;
     let server = Arc::new(server);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let mut clients = Vec::new();
     let mut tasks = Vec::new();
-    for index in 0..8 {
+    for index in 0..2 {
         let mut client = Client::connect(address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
         tasks.push(tokio::spawn(handle_connection(
@@ -330,6 +342,19 @@ async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip(
     drop(clients);
     for task in tasks {
         let _ = task.await;
+    }
+    server.hub.shutdown();
+}
+
+#[tokio::test]
+async fn zero_pre_play_cap_admits_any_number_from_one_address() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = server_with(dir.path(), |cfg| {
+        cfg.network.max_pre_play_connections_per_ip = 0;
+    });
+    let address: std::net::IpAddr = std::net::Ipv4Addr::LOCALHOST.into();
+    for _ in 0..9 {
+        assert!(server.pre_play_addresses.admit(address));
     }
     server.hub.shutdown();
 }
