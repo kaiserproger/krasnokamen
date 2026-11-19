@@ -168,15 +168,18 @@ fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     }
 }
 
-pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) {
+/// Bind a resident to the first unbound project. True when residents were
+/// tried and every one's route to storage failed; a resident whose failure
+/// still stands is not tried again until it lapses, as for the gate.
+pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
     drain_carry_duties(state, id);
     release_stalled_builder(state, id);
     if release_trapped_builder(state, id) {
-        return;
+        return false;
     }
     rebind_lost_builders(state, id);
     let Some(target) = unbound_project(&state.settlements, id) else {
-        return;
+        return false;
     };
     // Extraction workers are lent to construction one at a time and only while
     // the settlement holds a single project; from two projects on, gathering
@@ -196,16 +199,20 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) {
     let mut ready_cache = crate::settlements::allocator::PoiCache::default();
     let mut ready_path = Vec::new();
     let mut candidates: Vec<(u32, EntitySlot)> = residents(state, id)
-        .filter(|&slot| free_native_builder(state, id, slot))
+        .filter(|&slot| free_native_builder(state, id, slot) && !storage_unreached(state, slot))
         .map(|slot| (0, slot))
         .collect();
+    let mut tried = candidates.len();
     for (_, slot) in candidates.drain(..) {
         if probe_storage(state, id, slot, &mut ready_cache, &mut ready_path) {
             bind_first_unbound(state, id, slot);
-            return;
+            return false;
         }
     }
     for slot in residents(state, id) {
+        if storage_unreached(state, slot) {
+            continue;
+        }
         let Some(priority) = recruit_priority(state, id, slot, may_borrow, protected) else {
             continue;
         };
@@ -226,13 +233,14 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) {
     let mut path = Vec::new();
     let mut chosen = None;
     for (_, slot) in candidates.into_iter().take(BUILDER_CANDIDATES) {
+        tried += 1;
         if probe_storage(state, id, slot, &mut cache, &mut path) {
             chosen = Some(slot);
             break;
         }
     }
     let Some(slot) = chosen else {
-        return;
+        return tried > 0;
     };
     // Ordinary recruits keep the authored builder career. Only extraction
     // workers are loaned to construction and restored on completion.
@@ -268,4 +276,5 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) {
     v.navigation_chunks.clear();
     v.navigation_repath_at = 0;
     crate::villager::sync_appearance(state, slot);
+    false
 }
