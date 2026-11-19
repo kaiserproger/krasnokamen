@@ -12,7 +12,7 @@ use super::*;
 /// revisions join the key.
 #[derive(Debug, Default)]
 pub struct ChunkPacketCache {
-    pub(super) entries: HashMap<(mc_core::dimensions::Dimension, (i32, i32)), CachedChunk>,
+    entries: HashMap<(mc_core::dimensions::Dimension, (i32, i32)), CachedChunk>,
     pub(super) anti_xray: Option<Arc<crate::anti_xray::AntiXray>>,
     /// Chunk revision deltas between consecutive publishes of this cache.
     pub(crate) deltas: ChunkDeltaLog,
@@ -20,7 +20,7 @@ pub struct ChunkPacketCache {
 
 /// What an encoded chunk frame was computed from.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct ChunkKey {
+pub(super) struct ChunkKey {
     revision: u64,
     /// `-x`, `+x`, `-z`, `+z` neighbour revisions (0 = absent); all 0 when the
     /// frame does not depend on neighbours.
