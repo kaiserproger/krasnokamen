@@ -27,6 +27,7 @@ fn input(movement: MovementClass, position: Vec3) -> MotionInput {
         impulse: [0.0; 2],
         rotation: [0.0; 3],
         look_target: None,
+        facing: None,
         battle_facing: false,
         legacy_facing: false,
         head_follows_body: false,
@@ -1377,4 +1378,81 @@ fn wall_climbing_spiders_do_not_accumulate_separate_drops_before_landing() {
         climbed,
         "the ordinary AI must actually exercise wall climbing"
     );
+}
+
+/// D36: a projected battle row writes the published facing whatever its other
+/// rules would do; on a tick it really moves (the client's `isMoving`) its
+/// yaw is the published body, which the client draws from the sent yaw.
+#[test]
+fn projected_facing_is_written_and_a_moving_tick_writes_the_body_yaw() {
+    use crate::entity_motion::Facing;
+    let set = Facing::Set {
+        rotation: [10.0, -4.0, 40.0],
+        body: 25.0,
+    };
+    let mut standing = battle([0.0; 3], [0.0, 0.0], [0.0, 0.0]);
+    standing.look_target = Some([2.5, 1.0, -3.5]);
+    standing.facing = Some(set);
+    let held = battle_step(standing, false);
+    assert_eq!(bits(held.rotation), bits([10.0, -4.0, 40.0]));
+    let mut pushed = battle([0.0; 3], [0.0, 0.0], [0.0, 0.0]);
+    pushed.look_target = Some([2.5, 1.0, -3.5]);
+    pushed.impulse = [-8.0, 3.0];
+    pushed.facing = Some(set);
+    let moved = battle_step(pushed, false);
+    assert!(moved.body.position.x < 0.5, "the impulse moves the body");
+    assert_eq!(bits(moved.rotation), bits([25.0, -4.0, 40.0]));
+    let mut stationary = input(MovementClass::Stationary, Vec3::new(0.5, 0.0, 0.5));
+    stationary.look_target = Some([2.5, 1.0, -3.5]);
+    stationary.facing = Some(set);
+    let stationary = battle_step(stationary, false);
+    assert_eq!(
+        bits(stationary.rotation),
+        bits([10.0, -4.0, 40.0]),
+        "Stationary too"
+    );
+}
+
+/// D36 3.3: a row leaving the projection under the lazy policy starts its own
+/// rule from the drawn body, not from its stale stored yaw.
+#[test]
+fn a_row_leaving_the_projection_turns_from_the_drawn_body() {
+    use crate::entity_motion::Facing;
+    // Stored yaw 0 (stale), drawn body 60, head 70; the target is near -80.
+    let mut driven = battle([0.0, 0.0, 70.0], [0.0, 0.0], [-1.0, 0.0]);
+    driven.look_target = Some([5.5, 0.0, 1.38]);
+    driven.facing = Some(Facing::From { yaw: 60.0 });
+    let from_body = battle_step(driven, false);
+    let mut stale = battle([0.0, 0.0, 70.0], [0.0, 0.0], [-1.0, 0.0]);
+    stale.look_target = Some([5.5, 0.0, 1.38]);
+    let from_stale = battle_step(stale, false);
+    let expected = look(
+        [60.0, 0.0, 70.0],
+        from_body.body.position,
+        from_body.body.velocity,
+        Some([5.5, 0.0, 1.38]),
+    );
+    assert_eq!(bits(from_body.rotation), bits(expected));
+    assert_ne!(from_body.rotation[0], from_stale.rotation[0]);
+}
+
+/// D36 3.4.3: with nothing projected (no target, battle paused or stopped) a
+/// battle row's head left off its body returns at 10 degrees per tick and
+/// lands on it bit for bit, so the row can rest again within 8 ticks.
+#[test]
+fn a_battle_head_off_its_body_returns_without_a_target() {
+    let mut rotation: [f32; 3] = [20.0, 0.0, 95.0];
+    let mut ticks = 0;
+    while rotation[2].to_bits() != rotation[0].to_bits() {
+        let state = battle(rotation, [0.0, 0.0], [0.0, 0.0]);
+        let next = battle_step(state, false).rotation;
+        assert_eq!(next[0].to_bits(), rotation[0].to_bits(), "the body holds");
+        assert!((next[2] - rotation[2]).abs() <= 10.0 + 1.0e-4);
+        rotation = next;
+        ticks += 1;
+        assert!(ticks <= 8, "{rotation:?}");
+    }
+    // A head already on its body keeps the old rule (no recentring path).
+    let on_body = battle_step(battle([20.0, 0.0, 20.0], [0.0, 0.0], [0.0, 0.0]), false);
+    assert_eq!(bits(on_body.rotation), bits([20.0, 0.0, 20.0]));
 }
