@@ -348,7 +348,13 @@ the parallel behaviour lands,
     generated villages have. The owner did not say what is in it. Main's
     reading, open to his correction: an empty chest like the generated
     villages' bootstrap container (`settlements/autonomy.rs` places 27 empty
-    slots); only the chest block itself is free, nothing in it.
+    slots); only the chest block itself is free, nothing in it. Main's
+    reading of the limit (2026-11-20, open to his correction): every founding
+    gets its own chest while the number of starter chests the player has ever
+    received stays below the number of settlements they own right after that
+    founding. A second settlement held at the same time gets its own chest;
+    dissolving one and founding again grants none, so create/remove cannot
+    farm free chests (no-dupe invariant).
   - Not stated by the owner: the order after the quick wins; hand-picked build
     sites stay as they are.
 - First content of the new settlement map (answer of 2026-11-19 ~21:2x): where
