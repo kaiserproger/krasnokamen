@@ -255,9 +255,12 @@ def run(
         old_xdg = os.environ.get("XDG_DATA_HOME")
         old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
         old_packs = os.environ.get("KRASNOKAMEN_CLIENT_RESOURCE_PACKS")
+        old_language = os.environ.get("KRASNOKAMEN_CLIENT_LANGUAGE")
         try:
             os.environ["XDG_DATA_HOME"] = str(xdg)
             os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
+            if ctx.client != "java" and "language" in settings:
+                os.environ["KRASNOKAMEN_CLIENT_LANGUAGE"] = settings["language"]
             if ctx.scenario_id == "native-player-head":
                 pack = player_head_skin_pack(artifact)
                 os.environ["KRASNOKAMEN_CLIENT_RESOURCE_PACKS"] = os.pathsep.join(
@@ -274,7 +277,8 @@ def run(
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:
             for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings),
-                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs)):
+                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs),
+                             ("KRASNOKAMEN_CLIENT_LANGUAGE", old_language)):
                 if old is None:
                     os.environ.pop(key, None)
                 else:

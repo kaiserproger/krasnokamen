@@ -371,11 +371,21 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
+    parser.add_argument("--scenario", choices=("civil", "quickwins"), default="civil",
+                        help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru)")
+    parser.add_argument("--survey", action="store_true",
+                        help="quickwins only: walk every block and record unmet criteria instead of "
+                             "stopping at the first (negative-control plumbing check, never acceptance)")
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
     args = parser.parse_args(extra)
+    if args.scenario == "quickwins":
+        from . import settlement_quickwins_qa
+        return settlement_quickwins_qa.run(ctx, args)
+    if args.survey:
+        raise ValueError("--survey belongs to --scenario quickwins")
     if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
-        # The native client sends ClientInformation language "en_us" fixed (krasnokamen-client
-        # src/protocol/network.rs `client_information`) and has no language or size option.
+        # The civil walk reads English page titles; the native client takes its language from
+        # KRASNOKAMEN_CLIENT_LANGUAGE and only the quickwins scenario sets it.
         raise ValueError("civil display variants require --client java")
     settings = {"gui_scale": args.gui_scale, "language": args.language,
                 "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
