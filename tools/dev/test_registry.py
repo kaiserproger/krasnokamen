@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
-import threading
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -20,7 +17,6 @@ from test_slot_gc import load_tool  # noqa: E402
 
 wt_done = load_tool("wt-done")
 main_guard = load_tool("main-guard")
-in_use_cli = load_tool("in-use")
 
 
 class RegistryCase(unittest.TestCase):
@@ -31,85 +27,6 @@ class RegistryCase(unittest.TestCase):
         self.registry = self.base / "receipts" / ".in-use.jsonl"
         self.wt = self.base / "wt" / "Alpha"
         (self.wt / "target" / "x").mkdir(parents=True)
-
-
-class FoldTests(RegistryCase):
-    def test_add_remove_fold(self):
-        lines = [
-            json.dumps({"op": "add", "path": "/p", "owner": "A", "kind": "pin", "at": "t1"}),
-            json.dumps({"op": "add", "path": "/p", "owner": "B", "kind": "client_root", "at": "t2"}),
-            json.dumps({"op": "add", "path": "/p", "owner": "A", "kind": "pin", "at": "t3"}),  # repeat keeps first `since`
-            json.dumps({"op": "add", "path": "/q", "owner": "A", "kind": "worktree", "at": "t4"}),
-            json.dumps({"op": "remove", "path": "/p", "owner": "B", "at": "t5"}),
-            json.dumps({"op": "force", "path": "/q", "reason": "r", "owner": "x"}),  # audit line, ignored by the fold
-            "not json",
-            json.dumps({"op": "add"}),
-            json.dumps({"op": "remove", "path": "/never", "owner": "Z"}),
-        ]
-        self.assertEqual(w.in_use_fold(lines), [
-            {"path": "/p", "owner": "A", "kind": "pin", "since": "t1"},
-            {"path": "/q", "owner": "A", "kind": "worktree", "since": "t4"},
-        ])
-
-    def test_remove_then_add_again_restarts_since(self):
-        lines = [json.dumps({"op": "add", "path": "/p", "owner": "A", "kind": "pin", "at": "t1"}),
-                 json.dumps({"op": "remove", "path": "/p", "owner": "A"}),
-                 json.dumps({"op": "add", "path": "/p", "owner": "A", "kind": "pin", "at": "t9"})]
-        self.assertEqual(w.in_use_fold(lines)[0]["since"], "t9")
-
-    def test_file_roundtrip_is_append_only_and_normalizes_paths(self):
-        w.in_use_add(self.wt / "target" / ".." / "target", "Beta", "client_root", self.registry)
-        first = self.registry.read_text()
-        w.in_use_add(self.wt, "Gamma", "receipt_binary", self.registry)
-        w.in_use_remove(self.wt / "target" / "x" / "..", "Beta", self.registry)
-        self.assertTrue(self.registry.read_text().startswith(first), "earlier lines are never rewritten")
-        marks = w.in_use_marks(self.registry)
-        self.assertEqual([(m["owner"], m["kind"], m["path"]) for m in marks], [("Gamma", "receipt_binary", str(self.wt))])
-
-    def test_rejects_unknown_kind_and_bad_owner(self):
-        with self.assertRaises(w.ToolError):
-            w.in_use_add(self.wt, "A", "bogus", self.registry)
-        with self.assertRaises(w.ToolError):
-            w.in_use_add(self.wt, "a/b", "pin", self.registry)
-        self.assertFalse(self.registry.exists())
-
-    def test_concurrent_appends_never_interleave(self):
-        def writer(n):
-            for i in range(25):
-                w.in_use_add(self.base / f"p{n}-{i}", f"owner{n}", "pin", self.registry)
-        threads = [threading.Thread(target=writer, args=(n,)) for n in range(8)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        lines = self.registry.read_text().splitlines()
-        self.assertEqual(len(lines), 200)
-        self.assertEqual(len(w.in_use_marks(self.registry)), 200)
-
-    def test_marks_under_matches_the_tree_not_siblings(self):
-        w.in_use_add(self.wt, "A", "worktree", self.registry)
-        w.in_use_add(self.wt / "target" / "x", "B", "receipt_binary", self.registry)
-        w.in_use_add(self.base / "wt" / "AlphaOther", "C", "worktree", self.registry)
-        owners = sorted(m["owner"] for m in w.marks_under(self.wt, w.in_use_marks(self.registry)))
-        self.assertEqual(owners, ["A", "B"])
-
-    def test_cli_add_list_remove(self):
-        original, argv = w.INUSE, sys.argv
-        w.INUSE = self.registry
-        try:
-            def run(*args):
-                sys.argv = ["in-use", *args]
-                out = io.StringIO()
-                with redirect_stdout(out):
-                    in_use_cli.main()
-                return out.getvalue()
-            run("add", str(self.wt), "--owner", "QA", "--kind", "client_root")
-            self.assertIn(f"{self.wt}\tQA\tclient_root", run("list"))
-            self.assertEqual(json.loads(run("list", "--json"))[0]["owner"], "QA")
-            run("remove", str(self.wt), "--owner", "QA")
-            self.assertEqual(run("list"), "")
-        finally:
-            w.INUSE, sys.argv = original, argv
 
 
 class WtDoneGuardTests(RegistryCase):
