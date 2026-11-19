@@ -1,14 +1,30 @@
 {
   "decision": "D60.2",
-  "base": "b7979c4ba310c4ad7e9b5df75c182b7639bc3415",
+  "base": "8c470ae665b24abfd01258cdef58d1cd140d0105",
   "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
   "file": "tools/battle/video/test_edit.py",
-  "source_sha256_before": "5c9e10eeb2f6cd6e01cdaca2aec11de158e783226dd0525819a9ee0338026c95",
-  "status": "blocked-preexisting; source unchanged and IDs not finalized",
+  "source_sha256_before": "f4efb3da0e8b6a533259aa0fe1e729f4d5ee7dfd5c7910573a0725bc12102912",
+  "status": "Finalized after Main restored actual lost library; earlier blocked-preexisting verdict withdrawn.",
   "counts": {
-    "historical_test_ids_blocked": 8,
-    "historical_test_ids_finalized": 0,
-    "historical_medium_candidates_finalized": 0
+    "historical_test_ids_finalized": 8,
+    "removed_R4": 3,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 1,
+    "retained_K2": 0,
+    "retained_U": 4,
+    "historical_medium_candidates_finalized": 1,
+    "source_lines_before": 232,
+    "source_lines_remaining": 180,
+    "physical_source_lines_removed": 52
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole restored module, all8 bodies, Fixture/host/write_telemetry/write_frames/fake_probe/sh helpers and generators read; whole original edit.py plus complete641bde7c6 changes and restored71-line edit_compose helper read. Re-fenced after authorized merge.",
+    "retained_assertions": "Retained bodies/fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": [
+      "Same-file edit_compose/overlay exact-name grep: only removed filtergraph test uses edit_compose; overlay is otherwise string keys/paths, not module alias. Remove both imports."
+    ]
   },
   "evidence": {
     "reference_fence": {
@@ -18,8 +34,8 @@
       "own_module_and_audit_json_excluded": true
     },
     "other_worktree_dirty_fence": {
-      "worktrees_checked": 580,
-      "source_file_present": 384,
+      "worktrees_checked": 581,
+      "source_file_present": 385,
       "dirty_overlaps": [],
       "errors": [],
       "warnings": [
@@ -281,50 +297,142 @@
         ]
       ]
     },
-    "main_decision": "Main verified absent compose APIs since f459f0666 and owns video-tool backlog. Revert only own audit deletions; no test_edit.py source change."
+    "candidate_count_basis": "Only original799 R4/medium IDs.",
+    "provenance": [
+      "Main corrected initial history: receipts/BvEdit/sample-run.log recorded730 frames, so tests were not never-runnable. f31a90dae merge lost prior02e774b75 compose library; Main641bde7c6 restored it byte-exact under edit_compose.",
+      "Authorized merge of641bde7c61d7a578de7b9fb5cb74ccfd3b0bc217 succeeded without conflicts as8c470ae665b24abfd01258cdef58d1cd140d0105. Main reports8 tests OK on restoration; no worker execution."
+    ]
   },
   "records": [
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_three_shots_frame_arithmetic_and_tick_mapping",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_three_shots_frame_arithmetic_and_tick_mapping",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 76,
+      "original_end_line": 103,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins own authored trim/crossfade arithmetic and generated tick-map rows, not independently decoded video or an observed arithmetic bug; retained encode test covers the real lost-library path.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_consecutive_transitions_inside_one_shot",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_consecutive_transitions_inside_one_shot",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 105,
+      "original_end_line": 113,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Checks own sum-minus-overlaps and hand-chosen shot labels with a fake probe, without an actual transition-overlap defect or external encode oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_transitions_that_do_not_fit_are_rejected",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_transitions_that_do_not_fit_are_rejected",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 115,
+      "original_end_line": 121,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Refuses impossible overlapping transitions/last-shot fades before claiming a valid edit; no real bad-transition receipt established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_join_is_tick_exact_and_fail_closed",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_join_is_tick_exact_and_fail_closed",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 123,
+      "original_end_line": 129,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Refuses a missing source telemetry tick in the trimmed overlay window instead of inventing performance; synthetic frame map lacks real mismatch provenance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_crossfade_tick_comes_from_the_dominant_shot",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_crossfade_tick_comes_from_the_dominant_shot",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 131,
+      "original_end_line": 144,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Attributes transition overlay to the dominant shots received tick and rejects missing evidence on that side; no independently captured crossfade oracle.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_input_validation",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_input_validation",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 146,
+      "original_end_line": 171,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Fences frame count, exact60fps, monotone ticks and valid trim bounds before assigning frame-to-tick evidence; no real bad-input failure established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::PlanTests::test_filtergraph_offsets",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_filtergraph_offsets",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 173,
+      "original_end_line": 182,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins exact own ffmpeg filtergraph substrings/decimal formatting without decoding frames; actual merge-lost library regression remains covered by the retained encoding path.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
     },
     {
       "id": "tools/battle/video/test_edit.py::EncodeTests::test_three_shot_edit_encodes_exact_frames_and_repeats_byte_for_byte",
-      "status": "blocked",
-      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+      "name": "test_three_shot_edit_encodes_exact_frames_and_repeats_byte_for_byte",
+      "file": "tools/battle/video/test_edit.py",
+      "original_fn_line": 190,
+      "original_end_line": 228,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Runs restored real ffmpeg/ffprobe encoding path and checks decoded count plus deterministic artifacts for Main-observed f31a90dae lost-library regression; prior BvEdit receipt confirms this pipeline really ran.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
     }
   ],
   "verification": "not-run; Main owns verification",
-  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.battle.video.test_edit"
+  "verify_command": "cd /run/media/kaiserroman/games/solaris-work/wt/D60Read2/tools/battle/video && /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest test_edit"
 }
