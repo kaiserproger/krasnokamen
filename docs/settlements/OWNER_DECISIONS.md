@@ -313,3 +313,25 @@ the parallel behaviour lands,
   [construction](construction.md). Until that change lands, the planner builds
   storage only when the settlement has none, and full storage makes cuts wait
   without losing material.
+
+## Management screens and the settlement map — owner D63, 2026-11-19
+
+> бля, ну вроде круто, я побегал. но пока разберешься в том как банально
+> постройку добавить, бля умереть можно. мэйби есть варик как-то над удобством
+> экранов управления хотя бы поработать? как нанять я вроде понял, но провалился
+> в карту там провалился ещё куда-то (карту поселения кстати доработайте на
+> большую детализацию) бля ребята я вахуи.... я нихуя не понял толком. ни про
+> сертификацию построек, ни про то как закинуть её. Посмотрите на Millenaire и
+> его ГУИшки, имхо это эталон удобства был.
+
+- After his first field session (test server, 26.3 client, one claimed
+  settlement) the owner could hire but could not find how to add a building,
+  what certification is or how to do it, and got lost in the map and the
+  screens behind it.
+- The management screens are to be reworked for usability, with Millénaire's
+  GUIs as the reference.
+- The settlement map is to show much more detail (a direct order).
+- The redesign is chosen by the owner from a proposal with mockups and map
+  options before implementation starts. The owner did not set its priority
+  against the current queue or which client layer carries it; the vanilla
+  client stays the primary target.
