@@ -48,10 +48,12 @@ slot. Existing build, memory and measurement safeguards remain.
 
 The laptop is the owner's working machine (owner D56, 2026-11-19: «а с чего
 ради вы решили сегодня вечером записывать без предварительного уведомления
-меня? … я ща работаю например»). A laptop run that opens windows or virtual
-monitors, uses the GPU or records the screen starts only after the owner has
-been told and has agreed to its time; a GO for such a run names that agreed
-slot. Headless runs in their CPU box (CPUs 4–11) keep the ordinary GO flow.
+меня? … я ща работаю например»; addendum: «гнать прогоны - разрешаю.
+перехватывать экраны мышь клаву - не разрешаю»). Runs on the laptop are
+allowed (headless, in their CPU box, CPUs 4–11, under the ordinary GO flow).
+Taking over its screens, mouse or keyboard is not: no game windows, virtual
+monitors, window moves, screen recording or input on the owner's desktop
+without his explicit permission for that run.
 
 Workers return bounded immutable changes with affected L0/L1; Main batches
 integration and owns final integrated L2. Reuse the same clean pin for the
