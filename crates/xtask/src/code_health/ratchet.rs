@@ -83,8 +83,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     construction_field_accesses: 0,
     hot_files: &[
         // MotionYaw 2026-11-18: the early-rest head guard, the ReadRow
-        // head-controller capability and its initializer: 737.
-        ("tick/entity_phase.rs", 737),
+        // head-controller capability and its initializer: 737. CutTick
+        // (ADR 0021 Step 3) moved its owners into `tick/entity_phase/*`:
+        // 260 measured on the CutTick merge with main 30418aee2, 2026-11-19.
+        ("tick/entity_phase.rs", 260),
         // D8 moved the record's construction fields behind
         // `settlements/construction_access.rs`; 1028 after the split, measured
         // on the D8 branch, 2026-11-17. The store flip and the queue rules
@@ -113,8 +115,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,
         // `remove_by_connection` and `transfer_to` (834 -> 841). The lock set's
-        // own type was extracted to `tick/session_locks.rs` instead.
-        ("tick.rs", 841),
+        // own type was extracted to `tick/session_locks.rs` instead. CutTick
+        // (ADR 0021 Step 3) moved its owners into `tick/*`: 261 measured on the
+        // CutTick merge with main 30418aee2, 2026-11-19.
+        ("tick.rs", 261),
         // MotionYaw 2026-11-18: `set_facing`, the full [yaw, pitch, head]
         // setter that `set_rot` now delegates to: 925.
         // D9 motion-gate extraction, 2026-11-17: the native motion gate policy
