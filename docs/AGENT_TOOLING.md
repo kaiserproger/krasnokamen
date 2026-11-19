@@ -470,9 +470,8 @@ fail when they rise above their ceiling in
   count. The 2026-11-17 `b58021e61` baseline is 734, 1076, 834 and 924 respectively;
   the D9 motion-gate extraction (2026-11-17) took `entities.rs` to 864 (925 on main before the cut);
   the owner-module extraction (`tick.rs` and `tick/entity_phase.rs` into per-owner
-  submodules, ADR 0021 Step 3) moves their code out; that branch's own receipt
-  measured 259 each on `de660fabd`, and the merged ceiling follows the first
-  `code-health` run on the merged tree;
+  submodules, ADR 0021 Step 3) took them to 261 and 260, measured on its merge
+  with main `30418aee2` (2026-11-19);
 - `.project` and `.pending_order` field expressions outside
   `settlements/construction*.rs` and their module children (including `#[path]`
   children), or the inline `settlements::construction` module and its children.
