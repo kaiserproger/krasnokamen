@@ -26,6 +26,18 @@ impl Lang {
         }
     }
 }
+/// Short task-oriented guide, shared by the edge and settlement dialogs.
+#[must_use]
+pub fn guide(locale: Option<&str>) -> &'static str {
+    text(Lang::of(locale), Key::Guide)
+}
+
+/// One-line login hint in the client's language.
+#[must_use]
+pub fn welcome(locale: Option<&str>) -> &'static str {
+    text(Lang::of(locale), Key::Welcome)
+}
+
 
 /// Every user-visible settlement dialog string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,6 +236,8 @@ pub(crate) enum Key {
     OpenCertify,
     CloseWalk,
     AfterCertified,
+    Guide,
+    Welcome,
 }
 
 /// English and Russian text for one key.
@@ -244,6 +258,11 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::OpenCertify => ("[Open certification]", "[Открыть сертификацию]"),
         Key::CloseWalk => ("Close and walk to corner 2", "Закрыть и идти к углу 2"),
         Key::AfterCertified => ("Next: assign residents, or build the next level and recheck its certificate.", "Дальше: назначьте жителей или достройте следующий уровень и проверьте сертификат."),
+        Key::Welcome => ("Settlements: /settlement guide", "Поселения: /settlement guide"),
+        Key::Guide => (
+            "1. Found your town: /settlement create Oak. Open management with /settlement.\n2. First, storage: stock the empty chest beside the centre. In Storage, Shift-click your stacks.\n3. Construction: choose a blueprint, review materials and order. Put missing materials in storage.\n4. Built it yourself? Certify it: mark two floor corners, then check the building.\n5. Residents and jobs: place beds and workstations; assign residents to certified workplaces.\n6. Check Construction for progress, Storage for supplies and Map for locations. Back returns to your previous screen.",
+            "1. Основать поселение: /settlement create Oak. Управление: /settlement.\n2. Сначала склад: наполните пустой сундук у центра. В «Складе» переносите свои стаки через Shift+клик.\n3. Строительство: выберите чертёж, проверьте материалы и закажите. Недостающее принесите на склад.\n4. Построили сами? Сертифицируйте: отметьте два угла пола и проверьте здание.\n5. Жители и работа: поставьте кровати и рабочие блоки; назначьте жителей в засчитанные мастерские.\n6. Ход работ — в «Строительстве», материалы — в «Складе», расположение — на «Карте». «Назад» вернёт на предыдущий экран.",
+        ),
         Key::GuideClaim => (
             "Find the village bell → right-click → Claim charter. This is your management entrance.",
             "Найдите колокол деревни → ПКМ → «Принять грамоту». Это вход в управление.",

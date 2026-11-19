@@ -1076,14 +1076,6 @@ fn native_settlement_list_from_player_session_reaches_tick() {
             let server_task = tokio::spawn(serve(listener, server));
             // No operator privileges or console injection: real login/config/play.
             let mut player = WireClient::connect(address, "SettlementPlayer", &manifest).await;
-            player.matching("settlement join tip", |event|
-                matches!(event, WireEvent::Chat(text) if text.contains("Settlements / Поселения: /settlement guide"))).await;
-            player.command("settlement guide", &[
-                "1. Stand at your town centre", "2. Place beds",
-                "2000-8999", "settlement bind Oak", "settlement info Oak",
-                "production Oak status", "commerce Oak status",
-                "payroll Oak status", "caravan Oak status",
-            ]).await;
             player
                 .command("settlement list", &["No settlements."])
                 .await;

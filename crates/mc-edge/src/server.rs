@@ -872,7 +872,10 @@ impl EdgeServer {
             return Ok(true);
         }
         if root == "settlement" && words.clone().eq(["guide"]) {
-            self.feedback(id, crate::command_tree::SETTLEMENT_GUIDE)?;
+            let guide = mc_core::settlements::guide(
+                self.connections.inner.lock().locales.get(&id).map(String::as_str),
+            );
+            self.feedback(id, guide)?;
             return Ok(true);
         }
         if root == "list" {
