@@ -35,18 +35,19 @@
     "test-audit-d60-read2-spain-batch.json",
     "test-audit-d60-read2-spain-disk-batch.json",
     "test-audit-d60-read2-chest-drag-disconnect-batch.json",
-    "test-audit-d60-read2-chisel-gate-batch.json"
+    "test-audit-d60-read2-chisel-gate-batch.json",
+    "test-audit-d60-read2-craft-drag-components-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 1011,
+    "finalized_historical_test_ids": 1012,
     "removed_in_new_batches": 557,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 173,
+    "retained_K1": 174,
     "retained_K2": 4,
     "removed_shadowed_duplicate_declarations": 2,
     "retained_U": 272,
-    "historical_medium_candidates_reviewed": 489,
-    "remaining_medium_candidates_unfinalized": 310,
+    "historical_medium_candidates_reviewed": 490,
+    "remaining_medium_candidates_unfinalized": 309,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
