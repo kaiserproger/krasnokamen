@@ -1,0 +1,193 @@
+{
+  "decision": "D60.2",
+  "base": "83dbcf849e76ea8082a8608d9f79965106ad2bad",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_java_matrix.py",
+  "source_sha256_before": "5f2637920b67f988809278886a8f4ca065dd6772b5c71433ddc103ffdb6f5df2",
+  "status": "Every8 test body/shared fixture/nested callback read. Remove2 R4; retain1 K1,0 K2,5 U. Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 8,
+    "removed_R4": 2,
+    "retained_K1": 1,
+    "retained_K2": 0,
+    "retained_U": 5,
+    "prior_deletions": 0,
+    "physical_declarations_before": 8,
+    "physical_declarations_remaining": 6,
+    "source_lines_before": 116,
+    "source_lines_remaining": 105,
+    "physical_source_lines_removed": 11,
+    "historical_medium_candidates_finalized": 2,
+    "historical_medium_candidates_unfinalized": 305
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete116-line module: row helper, both fake context managers, execute and nested patches read.",
+    "production_source_read": "java_matrix.py tested blockers,append_ledger,receipt_dir,server_instance and run_cell complete bodies; matrix_execution.select_plugin_profile63-79; MatrixContext dataclass111-122; JavaMatrixClient constructor22-33.",
+    "retained_assertions": "All6 retained bodies/shared helpers/imports unchanged.",
+    "removed_scaffolding": [],
+    "production_unchanged": true
+  },
+  "evidence": {
+    "observed_case": "Full HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK row read, including actual Address-already-in-use/foreign-auth cause, registered selector and historical candidate-only lease evidence caveat.",
+    "scope_limit": "No matrix run, port repro or negative control executed. Ledger remains open and graphical auth acceptance pending exactly as row states.",
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 8,
+      "external_matches": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK.toml:9:regression = [\"python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener\", \"python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_child_exit_wins_over_foreign_listener\", \"python:tools.harness.test_java_matrix:MatrixTest.test_server_instance_leases_both_ports_under_flock\"]\n",
+      "exit": 0,
+      "stderr": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "scope": "Exact-file git status only; no cross-worktree symbol research.",
+      "worktrees_checked": 576,
+      "source_file_present": 565,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original799 R4/medium IDs; additional U removals do not count in denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_unknown_subject_is_blocked_with_exact_shared_missing_capability",
+      "name": "test_unknown_subject_is_blocked_with_exact_shared_missing_capability",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 24,
+      "original_end_line": 26,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Patches load_adapter to raise a chosen MissingCapability string and checks blockers returns the same text; no actual unknown-subject failure, real adapter input or independent oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_preflight_does_not_downgrade_context",
+      "name": "test_preflight_does_not_downgrade_context",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 28,
+      "original_end_line": 33,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Patches load_adapter with a successful Mock and checks three authored context fields stay as authored; no context transformation is exercised and no actual downgrade case established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_ledger_preserves_driver_binary_and_stable_id",
+      "name": "test_ledger_preserves_driver_binary_and_stable_id",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 35,
+      "original_end_line": 44,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve append-only receipt identity/custody contract for driver,server hash and stable ID; authored hash/row are not an independent run receipt.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_shared_domain_checks_are_the_only_pass_oracle",
+      "name": "test_shared_domain_checks_are_the_only_pass_oracle",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 61,
+      "original_end_line": 66,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve domain-result delegation contract; run_subject and server/client contexts mocked, so chosen passing list is not actual-domain acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_failed_oracle_is_fail",
+      "name": "test_failed_oracle_is_fail",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 68,
+      "original_end_line": 70,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve failed-domain verdict propagation; one authored false check is not a real failed matrix cell.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_missing_verb_is_blocked_not_passed",
+      "name": "test_missing_verb_is_blocked_not_passed",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 72,
+      "original_end_line": 75,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve blocked capability verdict propagation; mocked missing verb is not a real absent capability case.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_stable_id_paths_are_bounded_and_contained",
+      "name": "test_stable_id_paths_are_bounded_and_contained",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 77,
+      "original_end_line": 81,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve bounded contained receipt identity path; deeply authored scenario string, no actual filename-limit failure receipt read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_java_matrix.py::MatrixTest::test_server_instance_leases_both_ports_under_flock",
+      "name": "test_server_instance_leases_both_ports_under_flock",
+      "file": "tools/harness/test_java_matrix.py",
+      "original_fn_line": 83,
+      "original_end_line": 112,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Registered exact regression for HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK: actual shared-host game-port collision killed own server and clients joined foreign listener. Keep both flock-lease identities/range/exclusion and input-log override; mocks do not prove actual client auth or cross-process lifetime.",
+      "disposition": "keep",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK.toml:9:regression = [\"python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener\", \"python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_child_exit_wins_over_foreign_listener\", \"python:tools.harness.test_java_matrix:MatrixTest.test_server_instance_leases_both_ports_under_flock\"]"
+      ],
+      "ledger_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK.toml:9:regression = [\"python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener\", \"python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_child_exit_wins_over_foreign_listener\", \"python:tools.harness.test_java_matrix:MatrixTest.test_server_instance_leases_both_ports_under_flock\"]"
+      ]
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_java_matrix through canonical memory runner",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}
