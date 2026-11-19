@@ -30,6 +30,7 @@ Later explicit supersession takes priority over historical descriptions. See als
 | [0021](0021-build-time-and-crate-split.md) | Step 1 accepted and implemented; split pilot designed, not started | changing build profiles or proposing a core crate split |
 | [0022](0022-content-without-java.md) | Proposed; native RegistryData encoder implemented, not wired | removing Java from content import, changing the facts bundle or RegistryData payloads |
 | [0023](0023-offscreen-settlement-simulation.md) | Accepted; transit/flows and slices 2–3 integrated; construction/birth credit planned | changing off-screen settlement progress, migration transit custody or settlement/transit checkpoint rows |
+| [0024](0024-engine-and-gameplay-packages.md) | Proposed (owner D66); independent reviews pending | moving our own gameplay (settlements, battles, realms, economy, computer) out of the engine into packages, or changing the plugin API's service and version shape |
 
 Update the owning live ADR when authority, threading, persistence ordering or
 module policy changes. Superseded ADR tombstones are not current recipes.
