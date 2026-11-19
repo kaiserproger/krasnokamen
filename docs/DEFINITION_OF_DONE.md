@@ -134,6 +134,7 @@ Closeouts must include this matrix, even for drafts:
 |---|---|
 | Cargo baseline | Exact `regressions`, `fmt`, `xtask code-health`, `clippy` and `test` commands (or the `correctness` harness profile, which runs all of them) run after the last code change, or why not. |
 | Focused tests | Which behavior they prove, and why they are not pass-by-construction. |
+| Feature acceptance | The acceptance test's author (an agent other than the implementer) and its source text; the live run's receipt (server, client or bot, scenario). See [feature acceptance](#feature-acceptance). |
 | Vanilla oracle | `wire-probe`, `javap`, decompiled source, vanilla server capture, or explicit `not run`. |
 | Client/manual gate | Real-client harness profile or owner-run PrismLauncher status: owner-run, agent-run, prepared only, or not run; name the client release (26.3 or legacy 26.1.2). |
 | Performance | Metrics for latency/TPS/lock contention when the slice touches hot paths. |
@@ -180,6 +181,21 @@ from unrelated mechanics.
 Follow the [bug regression contract](bugs/README.md). Tests must assert
 vanilla or owner-accepted behavior, not merely the current implementation.
 
+## Feature acceptance
+
+Owner D60, 2026-11-19 (`receipts/Stage3/OWNER-DECISIONS-20261117-1000.md`):
+
+- **Independent acceptance test.** A feature's acceptance test is written by a
+  different agent than its implementer, from the owner decision text or
+  minecraft.wiki, without seeing the implementation. That agent never edits the
+  implementation. A failing acceptance test goes back to the implementer; only
+  its author changes it, from the same source.
+- **One live run per feature.** A feature is accepted by one live run: a real
+  server with a real client or bot, playing the scenario from the owner
+  decision. It replaces piles of unit tests. Unit tests stay for regressions of
+  real bugs and for checks against an oracle (vanilla, the old implementation,
+  a real run).
+
 ## Draft Implementation Rules
 
 Fast breadth-first work is allowed, but must stay honest:
@@ -198,8 +214,8 @@ Fast breadth-first work is allowed, but must stay honest:
 A stabilization milestone is done only when:
 
 - The cargo baseline passes after the final change.
-- New or changed mechanics have focused tests that exercise real runtime
-  paths.
+- New or changed mechanics pass their independent acceptance test and one live
+  run ([feature acceptance](#feature-acceptance)).
 - Vanilla/Krasnokamen divergence is measured or explicitly accepted.
 - PrismLauncher or real-client automation covers the client-visible
   scenario, or the closeout remains `draft`.

@@ -123,6 +123,11 @@ the previous one's handoff.
   over whatever is left in its queue. Claims are per task, as below.
 - **Reviewers and breakers are not generalists.** They are separate, read-only,
   and from a different vendor than the author where possible.
+- **Acceptance-test authors are not implementers (owner D60, 2026-11-19).**
+  For a feature Main briefs a separate agent with the owner decision text or
+  the minecraft.wiki page and the feature's interface, never the implementation
+  diff. It writes the acceptance test and the live-run scenario and never edits
+  the implementation ([feature acceptance](../DEFINITION_OF_DONE.md#feature-acceptance)).
 - **Model by task and budget (owner D46 and D47, 2026-11-19).** Main chooses
   each lane's model and records the choice and reason in
   `receipts/Stage3/PLAN.md`. Implementation defaults to DeepSeek (owner D47:
