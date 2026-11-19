@@ -224,6 +224,8 @@ pub(super) fn candidate_fits(
     // A retired crop can credit both produce and seed before construction.
     let crops = village.map_or(0, |plan| plan.cleared.len().saturating_mul(2));
     if cuts.saturating_add(crops) > capacity.free {
+        tracing::debug!(settlement = capacity.project.settlement.0, ?origin,
+            free = capacity.free, cuts, crops, "settlement_storehouse_capacity_refused");
         return Err(StorageFull);
     }
     // The full manifest also clears trees, including an entire registered
@@ -231,6 +233,8 @@ pub(super) fn candidate_fits(
     // is not a current-tick estimate: refuse unproved tree work altogether.
     for &([x, z], height) in columns {
         if capacity.has_tree(state, [x, height, z])? {
+            tracing::debug!(settlement = capacity.project.settlement.0, ?origin,
+                tree = ?[x, height, z], "settlement_storehouse_capacity_refused");
             return Err(StorageFull);
         }
     }
@@ -250,6 +254,8 @@ pub(super) fn candidate_fits(
         if let Some(route) = capacity.network.construction_access(&capacity.project) {
             for at in route {
                 if capacity.has_tree(state, at)? {
+                    tracing::debug!(settlement = capacity.project.settlement.0, ?origin,
+                        tree = ?at, corridor = true, "settlement_storehouse_capacity_refused");
                     return Err(StorageFull);
                 }
             }

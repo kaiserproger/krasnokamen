@@ -193,7 +193,7 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
 
 
 def settlement_tick_tail(lines) -> dict:
-    """Join opt-in native settlement laps to actual storehouse-search ticks."""
+    """Join Overworld settlement laps to searches before the tick counter advances."""
     searches, pending, enabled = set(), None, False
     groups = {name: {'samples': 0, 'max_ms': None, 'over_100ms': 0}
               for name in ('with_storehouse_search', 'without_storehouse_search')}
@@ -201,21 +201,22 @@ def settlement_tick_tail(lines) -> dict:
         if 'settlement_storehouse_search' in line:
             match = re.search(r'game_tick=(\d+)', line)
             if match:
-                searches.add(int(match[1]))
+                searches.add(int(match[1]) + 1)
         elif line.startswith('  commit detail ms:'):
             match = re.search(r'\bsettlements=([0-9.]+)', line)
             pending = float(match[1]) if match else None
         elif line.startswith('phase ms:'):
             enabled = True
             tick = re.search(r'\btick=(\d+)', line)
-            if pending is not None and tick:
+            dimension = re.search(r'\bdimension=(\w+)', line)
+            if pending is not None and tick and dimension and dimension[1].lower() == 'overworld':
                 name = 'with_storehouse_search' if int(tick[1]) in searches else 'without_storehouse_search'
                 group = groups[name]
                 group['samples'] += 1
                 group['max_ms'] = pending if group['max_ms'] is None else max(group['max_ms'], pending)
                 group['over_100ms'] += pending > 100
             pending = None
-    return {'enabled': enabled, 'measurement': 'native commit_laps.settlements ms',
+    return {'enabled': enabled, 'measurement': 'native Overworld commit_laps.settlements ms',
             'search_ticks': len(searches), **groups}
 
 
@@ -246,8 +247,9 @@ class PhaseLog:
                     self._raw.write(line)
                     header = line.split(b':', 1)[0].strip()
                     timing = header in (b'phase ms', b'commit detail ms')
-                    diagnostic = header.endswith(b' ms') or header in (
-                        b'settlement planner', b'settlement resident', b'edge items')
+                    diagnostic = header.endswith((b' ms', b' us')) or header in (
+                        b'settlement planner', b'settlement resident', b'edge items',
+                        b'items views', b'items census')
                     if timing or not diagnostic:
                         self._phases.write(line)
                     if not diagnostic:

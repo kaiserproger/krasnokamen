@@ -221,14 +221,16 @@ class BuildingOrderTests(unittest.TestCase):
 class SettlementTickTailTests(unittest.TestCase):
     def test_native_laps_are_joined_to_search_ticks_without_reusing_a_previous_lap(self):
         result = settlement_tick_tail([
-            'DEBUG settlement_storehouse_search game_tick=20 settlement=1 attempts=64\n',
+            'DEBUG settlement_storehouse_search game_tick=262080 settlement=1 attempts=64\n',
             '  commit detail ms: bees_conversion=0.01 settlements=120.01 villager_brain=1.00\n',
-            'phase ms: tick=20 intents=0 dimension=overworld commit=121.02\n',
+            'phase ms: tick=262081 intents=0 dimension=Overworld commit=121.02\n',
+            '  commit detail ms: settlements=2066.30 villager_brain=1.00\n',
+            'phase ms: tick=262081 intents=0 dimension=Nether commit=2067.30\n',
             '  commit detail ms: settlements=100.00 villager_brain=1.00\n',
-            'phase ms: tick=21 intents=0 dimension=overworld commit=101.00\n',
+            'phase ms: tick=262082 intents=0 dimension=Overworld commit=101.00\n',
             '  commit detail ms: settlements=3.50 villager_brain=1.00\n',
-            'phase ms: tick=22 intents=0 dimension=overworld commit=4.50\n',
-            'phase ms: tick=23 intents=0 dimension=overworld commit=1.00\n',
+            'phase ms: tick=262083 intents=0 dimension=Overworld commit=4.50\n',
+            'phase ms: tick=262084 intents=0 dimension=Overworld commit=1.00\n',
         ])
         self.assertTrue(result['enabled'])
         self.assertEqual(result['search_ticks'], 1)
@@ -251,9 +253,13 @@ class PhaseLogTests(unittest.TestCase):
         verbose = (b'settlement resident: uuid=actor lumber=lots-of-details\n'
                    b'  block detail ms: farming=10.0\n'
                    b'dimension envelope ms: elapsed=1.0\n'
-                   b'  edge items: queued=0\n')
+                   b'  edge items: queued=0\n'
+                   b'  post detail us: pickup=0 hostile=0\n'
+                   b'  battle detail us: total=1 counters=1\n'
+                   b'items views: pending=1 items_pending=0\n'
+                   b'items census: tick=262081 dimension=Overworld items=48\n')
         timing = (b'  commit detail ms: settlements=120.01\n'
-                  b'phase ms: tick=20 commit=121.02\n')
+                  b'phase ms: tick=21 dimension=Overworld commit=121.02\n')
         payload = ordinary + verbose + timing
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'server.log'
