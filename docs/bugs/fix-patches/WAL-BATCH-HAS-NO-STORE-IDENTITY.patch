@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
+index 449d423..fa461de 100644
+--- a/crates/mc-core/src/journal.rs
++++ b/crates/mc-core/src/journal.rs
+@@ -1029,6 +1029,14 @@ fn verify_bindings(
+     palette: [u8; 8],
+     identity: WalIdentity,
+ ) -> Result<(), BatchDecodeError> {
++    if store != identity.store {
++        return Err(BatchDecodeError::Framing(format!(
++            "batch belongs to store {} but the opened store is {}; a journal from another world \
++             is never replayed (restore its own journal with it)",
++            uuid::Uuid::from_bytes(store),
++            uuid::Uuid::from_bytes(identity.store),
++        )));
++    }
+     if palette != identity.palette {
+         return Err(BatchDecodeError::Framing(format!(
+             "batch was written under block palette {} but this build registers {}; block-state \
