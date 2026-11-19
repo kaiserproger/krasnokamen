@@ -4,7 +4,7 @@ import pathlib
 import tempfile
 import unittest
 from unittest import mock
-from tools.battle.video import overlay
+import overlay
 
 
 def sample(tick, wall, host=None):

@@ -97,15 +97,15 @@ class LiveMap(unittest.TestCase):
 
     def test_panel_label_is_a_parameter(self):
         sample = {'tick': 5, 'wall_us': 1000, 'host': None}
-        default = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None)
-        live_label = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, label='LIVE SERVER TELEMETRY')
+        default = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, (), None, None)
+        live_label = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, (), None, None, label='LIVE SERVER TELEMETRY')
         self.assertNotEqual(default, live_label)
-        self.assertEqual(default, overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, label='REPLAY TELEMETRY'))
+        self.assertEqual(default, overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, (), None, None, label='REPLAY TELEMETRY'))
 
     def test_units_label_names_what_units_counts(self):
         sample = {'tick': 5, 'wall_us': 1000, 'host': None, 'battle': {'units': 3252, 'alive': {'1': 1631, '2': 1621}}}
-        plain = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None)
-        labelled = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, units_label='SOLDIERS + HORSES')
+        plain = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, (), None, None)
+        labelled = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, (), None, None, units_label='SOLDIERS + HORSES')
         height = lambda data: struct.unpack('>I', data[20:24])[0]
         self.assertEqual(height(plain), overlay.H)
         self.assertEqual(height(labelled), overlay.H + 20)
@@ -113,7 +113,7 @@ class LiveMap(unittest.TestCase):
 
     def test_alive_total_is_the_side_sum(self):
         sample = {'tick': 5, 'wall_us': 1000, 'host': None, 'battle': {'units': 3252, 'alive': {'1': 1631, '2': 1621}}}
-        args = (sample, ((1.0, 20.0, 5),), None, None, None)
+        args = (sample, ((1.0, 20.0, 5),), None, None, None, (), None, None)
         units = overlay.render(*args, units_label='SOLDIERS + HORSES')
         alive = overlay.render(*args, units_label='SOLDIERS + HORSES', alive_total=True)
         self.assertNotEqual(units, alive)
