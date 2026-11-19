@@ -12,17 +12,18 @@
     "test-audit-d60-read2-runtime-profiles-batch.json",
     "test-audit-d60-read2-matrix-runtime-batch.json",
     "test-audit-d60-read2-native-v2-batch.json",
-    "test-audit-d60-read2-battle-recovery-batch.json"
+    "test-audit-d60-read2-battle-recovery-batch.json",
+    "test-audit-d60-read2-matrix-items-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 451,
-    "removed_in_new_batches": 276,
+    "finalized_historical_test_ids": 488,
+    "removed_in_new_batches": 300,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 106,
+    "retained_K1": 110,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 64,
-    "historical_medium_candidates_reviewed": 230,
-    "remaining_medium_candidates_unfinalized": 569,
+    "retained_U": 73,
+    "historical_medium_candidates_reviewed": 243,
+    "remaining_medium_candidates_unfinalized": 556,
     "verification_owner": "Main"
   },
   "base": "96e99cfe3bc3e2d6f52354e8cca2a3fb100ece88",
