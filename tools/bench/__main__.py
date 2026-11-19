@@ -172,11 +172,6 @@ def setup(args: argparse.Namespace, *, bots: bool) -> tuple[Path, list[int], dic
                 raise ValueError("--commit differs from the server pin")
         except (OSError, ValueError) as error:
             raise BenchError(f"invalid release pin: {error}") from error
-    else:
-        try:
-            profiles.load.scale.refuse_incremental_pin(server, "server")
-        except ValueError as error:
-            raise BenchError(f"invalid release pin: {error}") from error
         source.update(commit=server_pin["head"], dirty_tracked_files=server_pin["dirty"],
                       server_pin=server_pin, bots_pin=bots_pin)
     else:

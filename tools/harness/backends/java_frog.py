@@ -1,4 +1,4 @@
-""Observe server-driven frog tongue metadata in a real vanilla Java client."""
+"""Observe server-driven frog tongue metadata in a real vanilla Java client."""
 from __future__ import annotations
 
 from pathlib import Path
