@@ -182,6 +182,39 @@ def check_java_render_distance(options_path: Path, requested: int) -> None:
         raise RuntimeError(f"Java renderDistance is {values!r}, expected {requested} in {options_path}")
 
 
+def java_language_failure(log_path: Path, language: str) -> bool:
+    """Whether ``client.log`` reports that the client could not load ``language``.
+
+    Vanilla loads ``minecraft/lang/<language>.json`` from the asset pack at startup
+    and logs ``Failed to load translations for <language> from pack vanilla`` when it
+    cannot; the client then keeps reporting ``language`` to the server
+    (``ClientInformation``) while its own text falls back to ``en_us``. A run in that
+    state mixes languages: server literals in the requested language, item names and
+    vanilla tooltips in English (acceptance 2026-11-19: the Java asset store lacked
+    all 144 ``minecraft/lang/*.json`` objects and ru_ru scenes showed English item names).
+    """
+    marker = f"Failed to load translations for {language} from pack vanilla"
+    try:
+        log = log_path.read_text(errors="replace")
+    except OSError:
+        return False
+    return marker in log
+
+
+def check_java_language(log_path: Path, language: str) -> None:
+    """Refuse a Java run whose own translations did not load.
+
+    Called once the client reached its title screen, i.e. after the startup resource
+    reload that loads the language; a mixed-language scene is not evidence for
+    anything the client translates itself.
+    """
+    if java_language_failure(log_path, language):
+        raise RuntimeError(
+            f"Java client could not load {language} translations, so its own text renders in "
+            f"the fallback language while the server still sends {language} literals: the asset "
+            f"store is incomplete (no minecraft/lang/{language}.json under the Java assets root)")
+
+
 def find_java_window(display: str) -> int | None:
     """The harness Xvfb hosts only this client: its largest top-level window is the game."""
     tree = subprocess.run(["xwininfo", "-display", display, "-root", "-children"], check=True,
@@ -304,6 +337,10 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str | None, usernam
         wait_java_bootstrap(mcp, process, timeout)
         if "video driver: wayland" in log_path.read_text(errors="replace").lower():
             raise RuntimeError("Java client opened its window on Wayland (the owner's desktop), not the harness Xvfb")
+        # The title screen means the startup resource reload ran, so the requested
+        # language either loaded or logged its failure; a fallback client would
+        # translate item names and vanilla tooltips into another language.
+        check_java_language(log_path, language)
         if address is not None:
             mcp.call_tool("minecraft_connect", {"server_addr": address})
     except BaseException:
