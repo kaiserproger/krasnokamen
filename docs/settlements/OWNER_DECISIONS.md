@@ -351,3 +351,34 @@ the parallel behaviour lands,
     slots); only the chest block itself is free, nothing in it.
   - Not stated by the owner: the order after the quick wins; hand-picked build
     sites stay as they are.
+- First content of the new settlement map (answer of 2026-11-19 ~21:2x): where
+  building is impossible (water, steep slopes), construction sites with their
+  percent done, and storage. Residents, beds and doors are not chosen.
+
+## Realms, vassals, tribute and sieges — owner D62, 2026-11-19
+
+Product rules from the owner's answers to the Minecraft Warfare study
+(`receipts/WarfareChannel/REPORT.md`, section 6). The owner has given no go to
+implement any of them; they fix what the features are when they are built.
+They build on the [war](#war) rules above, which the core does not implement
+yet.
+
+- Realms, vassals, tribute and treaties live in a separate realms plugin over
+  the native settlements, towns and economy, not in the core.
+- Capitulation makes the loser a vassal only if the treaty's terms say so.
+- A liege may call his vassals' troops to a muster but does not command them
+  («может созвать, но ими не командует, ближе к духу Crusader Kings»); they
+  stay under their own command.
+- Tribute is set by treaty and paid by the player himself. Non-payment gives a
+  lawful reason for war; nothing is seized automatically.
+- Siege engines damage only gates and walls, only inside an admitted war
+  window; breaches are repaired by construction. Victory still grants no
+  separate right to breach or salvage.
+- Scale: «от 10-20 до 100-200» players.
+- A settlement owner may appoint a steward: another player with limited
+  rights.
+- A political map of realms (no client mod) and a chronicle for spectators are
+  wanted.
+- Ransom of prisoners and duels: yes.
+- Role-play events: a set of operator commands run by hand, not built-in
+  mechanics.
