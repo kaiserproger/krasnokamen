@@ -285,6 +285,7 @@ BACKEND_PROFILES: dict[str, tuple[str, ...]] = {
     "dh_gate": ("dh-gate",),
     "horizon_lod": ("horizon-lod", "horizon-lod-live"),
     "horizon_lod_live": ("horizon-lod-live",),
+    "settlement_quickwins_horizon": ("settlement-quickwins-horizon",),
     "dialogs": ("dialogs",),
     "gameplay": ("survival",),
     "graves": ("graves",),

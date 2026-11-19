@@ -661,6 +661,13 @@ def run_settlement_map_qa(ctx: ProfileContext) -> dict[str, Any]:
     return settlement_map_qa.run(ctx)
 
 
+def run_settlement_quickwins_horizon(ctx: ProfileContext) -> dict[str, Any]:
+    """The settlement quick-wins walk on the pinned Horizon client, owned by the harness lifecycle."""
+    from .backends import settlement_quickwins_horizon
+
+    return settlement_quickwins_horizon.run(ctx)
+
+
 def run_claim_only_qa(ctx: ProfileContext) -> dict[str, Any]:
     """Claim/fencing/restart checklist on a settled autonomous world (native)."""
     from .backends import claim_only_qa
@@ -1279,6 +1286,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Settlement map dialog: territory and viewer on an empty town, a certified Storage after Refresh, Back to main; judged from client screenshots (--client native|java --windowed)",
         "run": run_settlement_map_qa,
     },
+    "settlement-quickwins-horizon": {
+        "scope": "real-client",
+        "description": "Settlement quick wins walk on the pinned Horizon client (offscreen, harness Xvfb): dashboard, map, storage, certify, order, receipt; harness-owned processes and receipt",
+        "run": run_settlement_quickwins_horizon,
+    },
     "claim-only-qa": {
         "scope": "real-client",
         "description": "Claim/fencing/restart checklist on a settled autonomous world (native --client, windowed)",
@@ -1596,6 +1608,7 @@ PROFILE_PREREQUISITES = {
     "pause-empty": (("optional_server_binary",), (), (), ()),
     "horizon-lod": (("optional_server_binary",), (), (), ()),
     "horizon-lod-live": (("optional_server_binary", "xvfb"), (), (), ()),
+    "settlement-quickwins-horizon": (("optional_server_binary", "xvfb"), (), (), ()),
     "item-merge": (("optional_server_binary",), (), (), ()),
     "graves": (("optional_server_binary", "plugins_dir"), (), (), ()),
     "loader-live": (("server_binary", "loader", "xvfb", "plugins_dir"), (), (), ()),

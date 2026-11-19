@@ -846,6 +846,18 @@ the Settings dialog or the map territory.
   criterion is unmet and is never acceptance). Its negative control is the same run on the tree without
   the quick wins, with that tree's own server pin.
 
+## Settlement quick wins on Horizon (`settlement-quickwins-horizon`)
+
+`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds 3600` runs the same
+quick-wins walk as `settlement-map-qa --scenario quickwins` on the pinned Horizon 26.3 client
+(`--offscreen` under the harness Xvfb; `KRASNOKAMEN_HORIZON_CLIENT|CTL|RESOURCES` or
+`--horizon-client|--horizon-ctl|--horizon-resources`). The harness owns the server (a `Server` with
+its own loopback port, world and empty plugins folder), the Xvfb display and the client in one
+`ExitStack`; a failure at any step stops what was started, and the receipt names the tree fingerprint
+and the server binary path and sha256. Known gap: `Probe.wait` still polls with a 0.25 s sleep, because
+Horizon exposes no state-change push (`horizon-ctl wait-for` covers screen/widget/loaded/chat/event
+only); acceptance on this client stays blocked until that primitive exists.
+
 ## Distant Horizons gate (`dh-gate`)
 
 `python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real
