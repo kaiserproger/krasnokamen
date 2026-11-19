@@ -1,4 +1,4 @@
-# Settlement dialogs
+# Settlement screens and commands
 
 This page explains the settlement screens and their chat commands.
 
@@ -6,33 +6,35 @@ Next: [construction](construction.md), [jobs](jobs.md), [production](production.
 
 ## Open and permissions
 
-Right-click the settlement's anchor bell to open its main screen; the bell also rings. Other bells only ring. Alternatively, use `/settlement` or `/settlement menu [main|buildings|map|certify|residents|storage|production|army|projects|settings]`. The command selects the nearest settlement containing you, or one you own if none contains you. The dialogs are [server-driven](../DIALOGS.md).
+Right-click the settlement's anchor bell to open its compact management hub; the bell also rings. Other bells only ring. Alternatively, use `/settlement` or `/settlement menu [main|buildings|map|certify|residents|storage|production|army|projects|settings]`. The command selects the nearest settlement containing you, or one you own if none contains you. Icon lists and storage use 9×6 chest menus; forms, reviews, help and the map use [server-driven dialogs](../DIALOGS.md).
 
 Anyone can view; only the owner or an operator can manage a claimed settlement. Permissions are rechecked on each click. An autonomous settlement must first be claimed while standing inside its radius, even for an operator to manage it.
 
-The client locale selects the language: `ru*` uses Russian; all other locales use English. Item, blueprint, profession and settlement names use their game-data spelling. Labels below are English.
+The client locale selects the language: `ru*` uses Russian; all other locales use English. Materials use the client's translated item names, workshops use localized profession labels, and authored settlement names stay unchanged. Labels below are English.
 
 ## Main
 
-A claimed settlement shows its owner, radius, working and idle residents, building counts and storage. An unclaimed settlement shows its resident and building counts, **Claim settlement**, **Buildings**, **Residents & jobs** and **Projects**.
+The hub opens **Management** (the icon dashboard), **Next step**, **Army**, and paged **Help**. The dashboard leads to buildings, construction, residents, resources, storage and production. A settlement without storage points directs **Next step** to storage certification. Unclaimed settlements offer a claim review before management.
+
+**Back** returns to the screen that actually opened the current one, including chest↔dialog transitions and the map viewport. Paging and refresh replace the current view instead of adding navigation steps. History is connection-local, capped at 16 previous screens and cleared on disconnect or when switching settlements. Dialogs restore the last displayed snapshot; actions revalidate current authority and state, and chest views reread live world state.
 
 ## Map
 
-Open **Map** from the claimed main screen, **Buildings**, or `/settlement menu map`. The 13×13 grid is north-up; the scale below it gives the square of blocks represented by each cell. Green marks territory, dark grey marks outside, orange marks every active construction site and magenta marks you when visible. Certified buildings have type-specific colours. The legend names the visible features and counts buildings by kind.
+Open **Map** from the dashboard, a building card, or `/settlement menu map`. The 13×13 grid is north-up; its scale gives the square of blocks represented by each cell. Pan, zoom and overview controls stay on the map. Green marks territory, dark grey marks outside, orange marks active construction sites and magenta marks you when visible. Certified buildings have type-specific colours. **Legend** opens a separate page.
 
-The street plan is drawn under buildings: grey **Road (paved)**, pale **Road (planned)** and light blue **Lamp (planned)**. Hover for details; building hovers include type, number, level and corners. Click a building to open its icon page or a construction site to open project status. Street features have hovers but no click action. When features overlap, the site takes priority over buildings, which take priority over streets.
+The street plan is drawn under buildings: grey **Road (paved)**, pale **Road (planned)** and light blue **Lamp (planned)**. Hover for details; building hovers include type, number, level and corners. Click a building for its icon card, a construction site for status, or a street feature for its details. Overlapping cells open a paged chooser retaining every feature, not just the hover summary.
 
-The map is a snapshot: **Refresh** redraws it. **Buildings** and **Back** are below the legend; scroll to reach them. With no buildings, the legend says **No buildings yet.**
+The map is a snapshot: **Refresh** redraws it. **Buildings** opens the building list; **Back** restores the actual previous screen. Back from a building card restores the map viewport that opened it.
 
 ## Buildings
 
-The list shows certificates, levels, job slots and next-level requirements, with upgrade buttons for managers. **Certify new building** opens a form: choose **Building type**, enter the two inclusive opposite corners as `x y z`, and set **Height above corners** to extend above the higher corner. Alternatively stand at each corner and use **Corner 1 here** and **Corner 2 here**; reopen `/settlement menu certify` after walking to the second corner. **Certify** reports missing requirements on failure. See [construction](construction.md) for building rules.
+Buildings are a paged chest list with type filters and an icon card for each certificate. Empty lists explain how to order new construction or certify your own building. A card shows level requirements, workplaces and staffing. Certificate checking is separate from ordering physical blueprint construction; managers review the target before confirming either action. Free workplaces open resident selection, missing workstations are marked, and storage buildings link to **Storage**.
 
-**Icons** opens a chest of buildings. Click one for its next-level requirements, workplaces and, where available, **Upgrade to level N** or **Open storage**. A free workplace opens the resident selection; a missing workstation is marked. A map building click opens the same page.
+**Certify new building** opens a dialog: choose **Building type**, enter two inclusive opposite corners as `x y z`, and set **Height above corners**. For **Corner 1 here** / **Corner 2 here**, stand on the floor: marks use the floor block under your feet (Y−1). After the first mark, close the dialog and walk; the clickable chat link reopens the saved type and marks. A complete one-block wall ring around marked inner floor corners is included automatically; typed bounds remain exact. **Certify** reports localized found/required counters and what to add. Success offers residents/jobs and the next certificate level. See [construction](construction.md) for the rules.
 
 ## Residents & jobs
 
-This screen lists filled and free job slots and where residents work. Use **Assign crafts** for the icon-based assignment screen; see [jobs](jobs.md) for work behavior.
+The resident chest list has filters and individual cards with profession, workplace and home claims. Home/work links explicitly open those locations on the map. Choose a resident's workplace action to select a certified workplace; a free workplace on a building card opens the resident chooser. See [jobs](jobs.md) for work behavior.
 
 ## Storage
 
@@ -43,9 +45,9 @@ This screen lists filled and free job slots and where residents work. Use **Assi
 - Production and construction reservations cannot be withdrawn. Your own reserved inventory items cannot be picked up, thrown or stored below their reservation floor.
 - A transfer can be partial when space is limited. If nothing fits, the transfer is refused; spectators can browse but inventory moves only resync.
 
-## Assign crafts
+## Assign residents
 
-Select a resident icon and then a certified workplace with a free live workstation. The resident walks to the workstation and takes the craft on arrival. A free workplace on a building page also lets you choose a resident.
+Choose a resident icon and an eligible certified workplace with a free live workstation, or choose a free workplace first and then a resident. Assignment records the native job claim; it does not claim that the resident has already arrived.
 
 Assignment is refused for children, nitwits, soldiers, builders outside builder huts, residents busy with a production order, or a traded resident changing craft. It is also refused if the resident already works there, the building has no jobs, no free place has a live workstation, or the resident or building no longer exists. Dismiss soldiers on the [Army](army.md) screen first; traded residents can move to the same craft.
 
@@ -57,9 +59,9 @@ View and manage orders from **Production orders**; see [production](production.m
 
 Manage the roster and orders from **Army**; see [army](army.md).
 
-## Projects
+## Construction
 
-View and request construction from **Projects**; see [owner build requests](construction.md#owner-build-requests).
+View active projects and pending orders, or select an authored blueprint from **Construction**. The material estimate shows translated item names and the amount physically in storage. A successful order response explains whether construction started or is queued, retains the recipe-aware shortage list, and links to **Storage**. Stock the empty founding chest first; no order creates free materials. See [owner build requests](construction.md#owner-build-requests).
 
 ### Construction text contract (D8)
 
@@ -91,23 +93,21 @@ four consecutive lines (the corner is its stable site identity):
 Storage L1 · Building
 5/100
 -12 70 24
-Builder: <uuid or unbound>
+Builder: <resident name or unbound>
 ```
 
 The phase is the live preparation/build phase, not a constant; progress is the
 structure ledger's completed/total cells. Each pending order has one line:
 `Pending #<index>: <display name> L<level> · <reason>`, with indices 1..count.
-Existing material icons remain below the project and order lists. For example,
-`Pending #1: House L1 · not enough: minecraft:white_wool x3` and
-`Pending #2: Farm L1 · busy`. Existing funding/site reasons retain their spelling.
+Material icons remain below the project and order lists. Queued orders retain their item/count shortage details in the review and status dialogs, with client-translated item components. English command diagnostics retain their existing spelling; the management UI localizes the waiting categories.
 The map gives each active site a hover naming its blueprint, level and corner;
 overlapping map cells retain all site descriptions. Its legend also lists each
 site as `Active site: <display name> L<level> · <x> <y> <z>`.
 Clicking any active site opens the complete Construction status. The summary
 count/head does not replace the project list.
 The Construction chest has one icon per active site (facts in its lore, click
-for its map) and one icon per pending order (click to review cancelling that
-exact indexed intent). The clock opens the complete status dialog; material
+for status) and one icon per pending order (click to review cancelling that
+exact indexed intent). A separate map icon opens the map. The clock opens the complete status dialog; material
 icons remain paged below the lists. A visitor can inspect but cannot cancel.
 
 The `village-owner-order-qa` gate observes two waiting orders, a funded later
