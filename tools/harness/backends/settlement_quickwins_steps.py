@@ -265,8 +265,6 @@ def block_order(w: Walk) -> None:
     w.click_button(r"^Назад$", "estimate Back", lambda s: s["kind"] == "dialog" and matching(r"^Заказ", s["buttons"]))
     outcome = w.click_button(r"^Заказ", "review Order", lambda s: s["kind"] == "dialog")
     w.shot("order-outcome")
-    outcome = {**outcome, "buttons": w.reveal("order outcome")["buttons"]}
-    w.shot("order-outcome-actions")
     text = " ".join(outcome["body"])
     ok, facts = shortage_verdict(text, outcome["buttons"])
     w.judge("Q3", ok, body=text[:600], buttons=outcome["buttons"], **facts)

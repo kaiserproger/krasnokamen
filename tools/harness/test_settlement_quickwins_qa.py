@@ -21,7 +21,10 @@ class ViewTests(unittest.TestCase):
                  "ui_nodes": [
                      {"id": "dialog/title", "role": "text", "label": "Поселение qw", "enabled": True},
                      {"id": "dialog/body/0", "role": "text", "label": "владелец", "enabled": True},
-                     {"id": "dialog/action/0", "role": "button", "label": "Управление", "enabled": True},
+                     {"id": "dialog/action/0", "role": "button", "label": "Управление", "enabled": True,
+                      "bounds": [100.0, 600.0, 450.0, 60.0]},
+                     {"id": "dialog/action/2", "role": "button", "label": "Ниже окна", "enabled": True,
+                      "bounds": [100.0, 700.0, 450.0, 60.0]},
                      {"id": "dialog/action/1", "role": "button", "label": "Закрыть", "enabled": False}]}
         shown = gate.view(state)
         self.assertEqual((shown["kind"], shown["title"], shown["body"], shown["buttons"], shown["ready"]),
