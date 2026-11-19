@@ -73,18 +73,19 @@
     "test-audit-d60-read2-split-civilization-batch.json",
     "test-audit-d60-read2-split-parts-batch.json",
     "test-audit-d60-read2-unloaded-eye-batch.json",
-    "test-audit-d60-read2-weak-first-view-batch.json"
+    "test-audit-d60-read2-weak-first-view-batch.json",
+    "test-audit-d60-read2-spain-trial-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 1473,
+    "finalized_historical_test_ids": 1485,
     "removed_in_new_batches": 671,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 229,
+    "retained_K1": 235,
     "retained_K2": 9,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 559,
-    "historical_medium_candidates_reviewed": 660,
-    "remaining_medium_candidates_unfinalized": 139,
+    "retained_U": 565,
+    "historical_medium_candidates_reviewed": 666,
+    "remaining_medium_candidates_unfinalized": 133,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
