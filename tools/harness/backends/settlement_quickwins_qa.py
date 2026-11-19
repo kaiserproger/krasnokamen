@@ -370,9 +370,20 @@ class Walk:
         player = self.probe.observe()["player"]
         if abs(player["x"] - stand[0]) > .3 or abs(player["z"] - stand[2]) > .3 or abs(player["y"] - stand[1]) > .3:
             self.tp(*stand, tol=.7)
-        place = pad
-        _enter_hub(self.probe, self.gui, place["anchor"], f"Поселение {NAME}")
-        return self.screen()
+        title = f"Поселение {NAME}"
+        for attempt in range(3):
+            try:
+                _enter_hub(self.probe, self.gui, pad["anchor"], title)
+                return self.screen()
+            except TimeoutError:
+                # A wandering villager can stand in the crosshair ray and take the right-click (seen: a
+                # trade screen opened instead of the hub). Close whatever opened and click the bell again.
+                self.probe.report["assertions"].pop(f"GUI dialog {title}", None)
+                self.evidence.setdefault("hub_retries", []).append(
+                    {"attempt": attempt, "screen": self.screen()["title"]})
+                self.close_all()
+                self.tp(*stand, tol=.7)
+        raise StepFailed("the bell did not open the hub in three tries")
 
     # ---- fixtures and server reads
     def fixture(self, command: str) -> None:
