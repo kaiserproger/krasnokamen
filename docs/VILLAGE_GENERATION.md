@@ -368,7 +368,7 @@ solidity pipeline and can add or remove material at any height in the box.
 ### What Krasnokamen does instead
 
 Krasnokamen terrain is a 2D per-column surface
-(`TerrainGenerator::surface_height`, `crates/mc-worldgen/src/terrain.rs`) plus
+(`TerrainGenerator::surface_height`, `crates/mc-worldgen/src/terrain/sampling.rs`) plus
 cave carving, so there is no 3D density array for the term to enter. The
 analogue keeps the same numbers — the same 24³ kernel support, the same
 `e^(−d²/16)` kernel, the same 0.8 per rigid piece and 0.4 per junction, and the
