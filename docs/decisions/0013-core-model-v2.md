@@ -301,8 +301,12 @@ the marker, and `world restore` refuses a restored pair whose store id or tick
 disagrees with it. Every WAL batch frame (format 2) carries that store id and
 the block-state palette digest of the registry that wrote its numeric block
 ids, so replay refuses a journal directory or tail that belongs to another
-world or palette instead of folding foreign post-images; a format-1 tail is
-refused with the clean-stop path named, never converted. Offline tools that open a store without `Core::open` (prune,
+world or palette instead of folding foreign post-images; both fields are
+compared unconditionally (a zero id is a value, not a wildcard, since the CRC
+covers only the payload), and a format-1 tail is refused with the upgrade path
+named, never converted. Two independently created stores differ by construction
+(random id); two copies of one backup deliberately share it, which this check
+cannot separate (see DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY). Offline tools that open a store without `Core::open` (prune,
 compact, pregeneration, worldgen upgrade, censuses, probe) run the same check
 before their first write or reported read, and a read-only tool never rewrites
 the marker. There is no converter for worlds written before the store id

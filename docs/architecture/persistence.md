@@ -19,10 +19,14 @@ SHA-256 over the registry's `(state id, block, properties)` mapping. Recovery
 opens the batch only when both match the opened store and the registry this
 build replays with; a foreign journal directory, a copy of another world's tail
 or a tail written under a changed palette is refused by name, never replayed
-with a warning. A format-1 frame is refused too, with the clean-stop path in
-the message: stop the world with the build that wrote it so its final
-checkpoint folds and prunes the tail (ADR 0013 keeps no compatibility surface
-of our own). The writer writes
+with a warning. Both fields are compared unconditionally: a zero id or digest is
+a value, not a wildcard, because the CRC covers only the payload and the header
+can be rewritten. A format-1 frame is refused too, with the way out in the
+message: start the world once with the build that wrote it, stop it and confirm
+its final checkpoint covers the last published batch (ADR 0013 keeps no
+compatibility surface of our own; `docs/OPERATING.md` has the two upgrade
+procedures). A batch at or below a published checkpoint is never replayed, so no
+journal file has to be removed or moved. The writer writes
 `batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
 fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
 published batches (default 10, `[data] journal_fsync_every_batches`); a
@@ -804,7 +808,13 @@ success path is reported until the copy has been opened as the next serve
 would open it — read-only, or through a repaired scratch copy when redb would
 repair a live store's image, never by writing the backup itself — and the
 ordinary recovery reader and WAL replay run over it to the tick the copy
-claims; a copy that does not replay is withdrawn. Use the documented operator
+claims; a copy that does not replay is withdrawn. The scratch repair copies the
+database inside the destination directory's parent (never inside the archive
+inventory, and never into a system temporary directory on another volume), so
+verification peaks at archive plus one database; the directory is removed after
+the store is closed and a failed removal is reported, and a process crash during
+verification can leave a `.verify-<pid>-<n>` directory to delete by hand. Use
+the documented operator
 commands
 and check their results; a filesystem copy of a live writer is not equivalent.
 Anvil export is not a native backup: native-only plugin and settlement state
