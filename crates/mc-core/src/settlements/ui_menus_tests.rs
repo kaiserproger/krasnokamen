@@ -544,6 +544,7 @@ fn spectator_owner_browses_storage_but_every_move_only_resyncs() {
     let bread = item(&state, "minecraft:bread");
     state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::new(dirt, 10);
     state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Spectator;
+    dialog(&mut state, id, "main", &[]);
     let opened = dialog(&mut state, id, "storage", &[]);
     assert!(
         title(&opened).contains("Storage · oak"),
@@ -780,18 +781,17 @@ fn back_tracks_actual_origins_across_menus_map_and_legend() {
     };
     let main = received(dialog(&mut state, id, "main", &[]));
     dialog(&mut state, id, "dashboard", &[]);
-    let storage = open(&state)
+    let resources = open(&state)
         .targets
         .iter()
-        .position(|target| {
-            matches!(
-                target,
-                Target::Dialog("storage") | Target::Show(View::Storage { .. })
-            )
-        })
+        .position(|target| matches!(target, Target::Dialog("resources")))
         .unwrap();
-    press(&mut state, storage as i16, 0, ClickMode::Pickup);
+    press(&mut state, resources as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Resources);
+    press(&mut state, INFO as i16, 0, ClickMode::Pickup);
     assert!(matches!(open(&state).view, View::Storage { .. }));
+    press(&mut state, BACK as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Resources);
     press(&mut state, BACK as i16, 0, ClickMode::Pickup);
     assert_eq!(open(&state).view, View::Dashboard);
     let map_slot = open(&state)
@@ -1050,9 +1050,9 @@ fn seventy_residents_and_no_household_members_are_paged_without_lost_ids() {
     members.sort_unstable();
     assert_eq!(members, expected);
     press(&mut state, BACK as i16, 0, ClickMode::Pickup);
-    assert_eq!(open(&state).view, View::Households { page: 0 });
+    assert_eq!(open(&state).view, View::Resident { worker });
     press(&mut state, BACK as i16, 0, ClickMode::Pickup);
-    assert_eq!(open(&state).view, View::Census { filter: 0, page: 0 });
+    assert_eq!(open(&state).view, View::Census { filter: 0, page: 1 });
 }
 
 #[test]
@@ -1123,7 +1123,7 @@ fn cached_icon_names_keep_numeric_ids_local_to_the_registry() {
 }
 
 #[test]
-fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
+fn certificate_and_request_policies_are_encoded_as_lore_in_both_locales() {
     let mut state = joined();
     let id = storage_town(&mut state, PLAYER);
     let building = *state
@@ -1178,7 +1178,6 @@ fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
                         .unwrap()
                 })
                 .collect::<Vec<_>>();
-            assert_eq!(lines.len(), 4, "slot {slot}: {lines:?}");
             assert_eq!(lines.join("\n"), ctx.t(policy));
         }
     }

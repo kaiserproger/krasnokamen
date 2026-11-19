@@ -215,7 +215,7 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     );
     assert_eq!(actions(&dialog).len(), 12);
     assert!(actions(&dialog).contains(&"krasnokamen:settlement/map_legend".to_owned()));
-    assert!(actions(&dialog).contains(&"krasnokamen:settlement/dashboard".to_owned()));
+    assert!(actions(&dialog).contains(&"krasnokamen:settlement/back".to_owned()));
     assert!(
         field(&dialog, "exit_action").is_none(),
         "the navigation already contains Back; a second exit row clips it at 720p/scale 3"
@@ -775,11 +775,10 @@ fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
         })
         .expect("a genuinely empty rendered cell");
     let selected = pick_payload(&mut state, payload);
-    assert!(
-        actions(&selected)
-            .iter()
-            .all(|action| action == "krasnokamen:settlement/map")
-    );
+    assert!(actions(&selected).iter().all(|action| matches!(
+        action.as_str(),
+        "krasnokamen:settlement/map" | "krasnokamen:settlement/back"
+    )));
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert!(state.settlements.get(id).unwrap().orders.is_empty());
 }

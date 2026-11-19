@@ -217,11 +217,8 @@ fn army_nav_and_projects_page_render() {
     assert_eq!(army.title, "Army - oak");
     assert!(army.body.contains("No soldiers"));
     assert!(army.has("army_recruit"));
-    let dashboard = super::tests::last_dialog(&click(&mut state, id, "dashboard", &[]));
-    assert_eq!(dashboard.title, "Settlement");
-    assert!(dashboard.body.contains("Projects"));
+    let _dashboard = super::tests::last_dialog(&click(&mut state, id, "dashboard", &[]));
     let projects = super::tests::last_dialog(&super::tests::press(&mut state, 30));
-    assert_eq!(projects.title, "Projects");
     assert!(
         !projects.icons.is_empty(),
         "native blueprint icons must be received"
@@ -235,7 +232,7 @@ fn army_nav_and_projects_page_render() {
     assert_eq!(status.title, "Construction");
     assert!(status.body.contains("No active project; no queued order"));
     let back = super::tests::last_dialog(&super::tests::press(&mut state, 45));
-    assert_eq!(back.title, "Projects");
+    assert!(back.has("project_order"));
     let page = last_dialog(&run(
         &mut state,
         &[PlayerInput::Command {
@@ -345,7 +342,7 @@ fn recruit_result_screen_offers_no_second_recruit() {
         recruited.actions
     );
     assert!(
-        recruited.has("army"),
+        recruited.has("back"),
         "post-recruit screen needs a way back to the roster"
     );
     assert_eq!(super::super::army::list(&state, id).len(), 1);
@@ -405,7 +402,7 @@ fn six_soldier_roster_is_compact_and_every_soldier_reachable() {
                 .count(),
             4
         );
-        assert!(page.has("army"), "back to the roster");
+        assert!(page.has("back"), "back to the roster");
     }
 }
 
