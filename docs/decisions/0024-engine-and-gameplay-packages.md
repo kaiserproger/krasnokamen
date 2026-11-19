@@ -1004,20 +1004,20 @@ way and they follow from D62, D66 and ADR 0013, so they are decisions here:
    → armies and battles; realms preparation may run in parallel with the
    computer after the owner's D62 GO (§4).
 
-## Open questions for the owner
+## Answered by the owner (D66 answers, 2026-11-19)
 
-1. **"Small slowdown."** Proposal, in this order, on the full paired delta of
+1. **"Small slowdown."** Decided, in this order, on the full paired delta of
    MSPT p50 and p95 over three reproducible pairs: a new loss of required
-   events fails; TPS falling below 20 where B holds 20 comes to you; noise too
-   wide to separate a 5% slowdown is inconclusive and blocks the merge; inside
-   the noise is neutral (a confirmed speedup passes); a reproducible worsening
-   under 5% on both is small and lands with its numbers, 5% or more on either
-   is large and comes to you first. The plugin-free overhead control is a
-   separate, stricter gate: no worsening at all (§3.4).
-2. **Settlement records into package rows: converter or reset?** Proposal: keep
+   events fails; TPS falling below 20 where B holds 20 goes to the owner; noise
+   too wide to separate a 5% slowdown is inconclusive and blocks the merge;
+   inside the noise is neutral (a confirmed speedup passes); a reproducible
+   worsening under 5% on both is small and lands with its numbers, 5% or more
+   on either is large and goes to the owner first. The plugin-free overhead
+   control is a separate, stricter gate: no worsening at all (§3.4).
+2. **Settlement records into package rows: converter or reset?** Decided: keep
    the format where possible; otherwise a one-off offline converter of
    checkpoint plus WAL into a new directory with custody and high-water checks;
-   a reset only for a world you have explicitly marked disposable, never
+   a reset only for a world the owner has explicitly marked disposable, never
    automatically (§1.3).
 
 ## Review resolution
