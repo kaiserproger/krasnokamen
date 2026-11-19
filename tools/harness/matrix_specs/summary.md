@@ -167,7 +167,7 @@ Other missing capabilities by scenarios blocked: `portal_travel` 4, `crafter_slo
 - Computer terminal exists only in Fabric Loader (loader-core ComputerProtocol, loader-fabric ComputerClient); native client has no `krasnokamen:computer`; screen sharing to other players is excluded by ADR 0018.
 - No horse/donkey/llama inventory screen and no lectern menu in `MenuKind` / container mapping (crates/mc-core/src/tick.rs container_kind_for_state).
 - No spawn-protection key in server.properties support (crates/mc-edge/src/server_properties.rs).
-- Legacy plugin manifests land-claims/online-roster/geological-mines declare api 0.6.0 and are not deployable on 0.8 (scenario `plugins.plugin_startup_fail_closed`).
+- A legacy API 0.6.0 manifest is refused by manifest validation (`UnsupportedScriptApiVersion`, host contract 0.9.0) before its `entry` is resolved; the matrix deploys the synthetic fixture `tools/fixtures/legacy-api-0.6` (scenario `plugins.plugin_startup_fail_closed`). The v1 packages land-claims/online-roster/geological-mines were deleted by the D66 duplicate-plugin audit (2026-11-19; receipts/PluginDupAudit/AUDIT.md).
 
 ## Full combinatorial set (all combinations)
 
