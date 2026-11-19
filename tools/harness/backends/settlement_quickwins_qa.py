@@ -51,6 +51,7 @@ CRITERIA: dict[str, tuple[str, str]] = {
     "C2": ("the starter chest is empty (server `data get block`)", "OWNER_DECISIONS D63 (only the chest block is free)"),
     "C3": ("the Storage page counts exactly one container with nothing in it", "OWNER_DECISIONS D63 «registered the same way»; REPORT §1.1"),
     "C4": ("a Shift-click deposit lands in that chest (Storage count and server `data get block`)", "OWNER_DECISIONS D63 «works as storage»"),
+    "C5": ("the same player founding a second settlement gets no second starter chest", "Main, 2026-11-20 review of the quick wins («grant once»)"),
     "Q1": ("a refused certification names the missing requirements in Russian, no `footprint/beds/roof/...`", "REPORT §5.1"),
     "Q2": ("workshop names in the Russian UI have no raw `{profession:?}` (no `Мастерская: Cartographer`)", "REPORT §5.2"),
     "Q3": ("the order outcome is Russian, names the missing materials and links to Storage", "REPORT §5.3"),

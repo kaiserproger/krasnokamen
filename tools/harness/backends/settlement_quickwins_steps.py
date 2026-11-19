@@ -441,7 +441,7 @@ def block_certify(w: Walk) -> None:
     w.shot("certify-corner1")
     text = blob(marked)
     walk = matching(r"закрыть и|идти|подойти|пройти", marked["buttons"])
-    dialog_ok = (bool(re.search(r"\d+\s+\d+\s+\d+", text)) and bool(re.search(r"угл\w*\s*2", text, re.IGNORECASE))
+    dialog_ok = (bool(re.search(r"-?\d+\s+-?\d+\s+-?\d+", text)) and bool(re.search(r"угл\w*\s*2", text, re.IGNORECASE))
                  and bool(walk))
     chat_ok = False
     chat_text = ""
@@ -449,7 +449,7 @@ def block_certify(w: Walk) -> None:
         w.click_button(re.escape(walk[0]), "form Close and walk", wait=False)
         w.wait_closed()
         chat_text = "\n".join(str(line) for line in w.probe.observe().get("recent_chat", [])[:6])
-        chat_ok = bool(re.search(r"Метк\w*\s*1", chat_text)) and bool(re.search(r"\d+\s+\d+\s+\d+", chat_text)) \
+        chat_ok = bool(re.search(r"Метк\w*\s*1", chat_text)) and bool(re.search(r"-?\d+\s+-?\d+\s+-?\d+", chat_text)) \
             and bool(re.search(r"угл\w*\s*2", chat_text, re.IGNORECASE)) and bool(re.search(r"сертификац", chat_text, re.IGNORECASE))
     w.judge("Q13", dialog_ok and chat_ok, dialog=text[:500], walk_buttons=walk, chat=chat_text[:500])
     if not walk:
@@ -525,6 +525,22 @@ def block_docs(w: Walk) -> None:
             stale=stale, quick_start_found=bool(quick))
 
 
+def block_second_founding(w: Walk) -> None:
+    """The same player founds a second settlement at the pad's edge (clear of the first): no second chest."""
+    x, y, z = w.evidence["pad"]["anchor"]
+    w.close_all()
+    w.tp(x - 60 + .5, y, z + .5)
+    w.probe.report["player_commands"].append("settlement create qw2 8")
+    w.probe.call("minecraft_send_chat", {"message": "settlement create qw2 8", "command": True})
+    w.probe.wait(lambda state: any("Founded qw2" in str(line) or "Основан" in str(line) and "qw2" in str(line)
+                                   for line in state.get("recent_chat", [])), "QW second settlement founded", timeout_seconds=60)
+    w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+    page = w.probe.call("minecraft_scan_blocks", {
+        "min_x": x - 64, "min_y": y - 3, "min_z": z - 4, "max_x": x - 56, "max_y": y + 3, "max_z": z + 4, "max_blocks": 4096})
+    chests = [[row["x"], row["y"], row["z"]] for row in page["blocks"] if row["block_id"] == "minecraft:chest"]
+    w.judge("C5", not chests and bool(w.evidence.get("starter_chest")), second_anchor=[x - 60, y, z], chests=chests)
+
+
 BLOCKS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
     ("create", ("C1",), block_create),
     ("hub", ("Q11a", "Q10a", "Q9"), block_hub),
@@ -538,5 +554,6 @@ BLOCKS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
     ("cards", ("Q2", "Q6d"), block_cards),
     ("guide", ("Q15a", "Q15b"), block_guide),
     ("docs", ("Q16",), block_docs),
+    ("second-founding", ("C5",), block_second_founding),
 )
 assert {cid for _, ids, _ in BLOCKS for cid in ids} == set(CRITERIA), "every criterion belongs to one block"
