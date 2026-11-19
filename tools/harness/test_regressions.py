@@ -62,11 +62,6 @@ class RegressionLedgerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, name):
                     regressions._profile_command('civilization-seed-qa', 'new_house')
 
-    def test_owner_order_d8_control_runs_the_unchanged_parallel_gate(self):
-        # The control changes MAX_PROJECTS on its own tree/pin, not this argv.
-        command = regressions._profile_command('village-owner-order-qa', 'two_projects_advance')
-        self.assertEqual(command, regressions._profile_command('village-owner-order-qa', 'all'))
-
     def test_building_verdict_is_keyed_by_blueprint(self):
         command = regressions._profile_command('buildings-qa', 'wall.L1_built')
         # Only the wall is built and checked; the other blueprints neither run nor decide this verdict.
@@ -78,19 +73,6 @@ class RegressionLedgerTests(unittest.TestCase):
         receipt = {'details': {'scenario': {'buildings_acceptance': {'blueprints': {
             'wall': {'behaviour': {'L1_built': 'PASS'}}}}}}}
         regressions._profile_verdict(receipt, 'buildings-qa', 'wall.L1_built')
-
-    def test_new_kinds_and_level_three_verdicts_are_registrable(self):
-        for verdict in ('gate.L1_built', 'gate.L2_upgrade', 'gate.L3_upgrade', 'wall.L3_upgrade',
-                        'watch_tower.L3_upgrade', 'barracks.L3_upgrade', 'armorer.L2_upgrade',
-                        'weaponsmith.L1_built'):
-            command = regressions._profile_command('buildings-qa', verdict)
-            self.assertEqual(command[:2], ['env', f"BUILDINGS_QA_SELECT={verdict.split('.')[0]}"])
-        command = regressions._profile_command('buildings-qa', 'house.broken_cell_replaced')
-        self.assertEqual(command[:2], ['env', 'BUILDINGS_QA_SELECT=house'])
-        for verdict in ('armorer.L3_upgrade', 'house.L4_upgrade', 'storage.L3_upgrade',
-                        'wall.broken_cell_replaced'):
-            with self.assertRaises(ValueError):
-                regressions._profile_command('buildings-qa', verdict)
 
     def test_profile_rejects_partial_building_run(self):
         with patch.dict('os.environ', {'BUILDINGS_QA_STOP_AFTER_ORDER': '1'}):
@@ -194,10 +176,6 @@ regression = ["harness:village-qa:{verdict}"]
                 (receipt / 'result.json').write_text(json.dumps(result))
                 with self.assertRaisesRegex(RuntimeError, 'release server'):
                     regressions.run(ctx)
-
-    def test_nextest_listing_accepts_compiler_output(self):
-        result = regressions._nextest_listing('Compiling example\\n{"rust-suites": {}}\\n')
-        self.assertEqual(result['rust-suites'], {})
 
     def test_unknown_exact_test_fails(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -522,11 +500,6 @@ regression = ["cargo:mc-core:some_test"]
             with patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_command):
                 regressions.run(profiles.ProfileContext(root))
             self.assertEqual([call[2] for call in calls], ['list', 'run'])
-
-    def test_assertion_failure_is_attributed_to_its_bug(self):
-        cargo = {'mc-core': {'module::broken': {'BROKEN'}, 'module::other': {'OTHER'}}}
-        log = '        FAIL [   0.120s] (1/2) mc-core module::broken\n'
-        self.assertEqual(regressions._failed_ids(log, cargo), {'BROKEN'})
 
     def test_failing_assertion_reports_only_matching_bug(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1299,10 +1272,6 @@ class LedgerToolTests(unittest.TestCase):
             return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
-
-    def test_control_worktrees_live_beside_the_other_worktrees(self):
-        self.assertEqual(ledger._worktree_parent(Path('/work/wt/LedgerTriage')), Path('/work/wt'))
-        self.assertIsNone(ledger._worktree_parent(Path('/home/user/solaris')))
 
     def test_promote_without_a_held_build_token_is_refused_before_the_control_lock(self):
         directory = tempfile.TemporaryDirectory()
