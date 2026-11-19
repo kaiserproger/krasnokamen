@@ -347,6 +347,7 @@ pub(in crate::tick) fn join(
             game_mode,
         },
     );
+    tracing::debug!(connection = connection.0, tick = state.tick, "join applied");
     sync_permission(state, *connection);
     crate::scoreboard::sync_join(state, *connection);
     crate::tick_control::sync_join(state, *connection);

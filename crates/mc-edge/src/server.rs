@@ -295,6 +295,9 @@ pub struct EdgeServer {
     pub(crate) computer_processes: Arc<tokio::sync::Semaphore>,
     /// `krasnokamen:voice` proximity relay (ADR 0019).
     pub(crate) voice: crate::voice_service::Service,
+    /// Test-only gate this server's pump parks in (`pump::arm_pump_gate`).
+    #[cfg(test)]
+    pub(crate) pump_gate: std::sync::Mutex<Option<pump::PumpGate>>,
 }
 
 /// Owned chunk-encoding registries for the pump path.
@@ -473,6 +476,8 @@ impl EdgeServer {
             computer_processes,
             screens: Default::default(),
             voice,
+            #[cfg(test)]
+            pump_gate: std::sync::Mutex::new(None),
             hub,
             data,
             tags,

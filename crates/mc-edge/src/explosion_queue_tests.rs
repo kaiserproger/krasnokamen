@@ -386,10 +386,11 @@ async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
     };
     // A wide window: nothing overflows, only the queue budget can skip.
     let (tx, mut rx) = broadcast::channel(8);
+    let cache = crate::plan::ChunkPacketCache::new();
     let now = std::time::Instant::now();
     tx.send(output(1, [(delivered, (1, 1))].into(), now))
         .unwrap();
-    let first = next_publication(&server, &mut rx, &mut viewers)
+    let first = next_publication(&server, &mut rx, &mut viewers, &cache)
         .await
         .unwrap();
     assert_eq!(first.tick, 1);
@@ -410,7 +411,7 @@ async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
         std::time::Instant::now(),
     ))
     .unwrap();
-    let retained = next_publication(&server, &mut rx, &mut viewers)
+    let retained = next_publication(&server, &mut rx, &mut viewers, &cache)
         .await
         .unwrap();
     assert_eq!(retained.tick, 3, "the stale output is skipped");

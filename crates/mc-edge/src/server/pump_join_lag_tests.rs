@@ -33,8 +33,14 @@ fn server(
     EdgeServer::new(core, data, tags, cfg).unwrap()
 }
 
-/// Bound on every wait for the pump; none is a pass condition.
-const PUMP_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
+/// Bound on one whole scenario, from after the core opened: every wait in it
+/// shares this deadline, so a stuck pump or a broken watchdog fails the test
+/// instead of hanging it. None is a pass condition.
+const SCENARIO: std::time::Duration = std::time::Duration::from_secs(240);
+
+fn scenario_deadline() -> std::time::Instant {
+    std::time::Instant::now() + SCENARIO
+}
 
 #[derive(Default)]
 struct Gate {
@@ -49,11 +55,14 @@ struct Gate {
 /// Pump permits: the armed gate lets the real pump process one received
 /// output per permit and holds it (after it recorded the output's tick,
 /// before it drains or publishes) while none is left. Dropping it frees the
-/// pump for good and disarms the gate, also when an assertion fails first.
-struct Pacer(Arc<(std::sync::Mutex<Gate>, std::sync::Condvar)>);
+/// pump for good, also when an assertion fails first.
+struct Pacer {
+    state: Arc<(std::sync::Mutex<Gate>, std::sync::Condvar)>,
+    deadline: std::time::Instant,
+}
 
 impl Pacer {
-    fn arm(server: &Arc<EdgeServer>, permits: u64) -> Self {
+    fn arm(server: &EdgeServer, permits: u64, deadline: std::time::Instant) -> Self {
         let state = Arc::new((
             std::sync::Mutex::new(Gate {
                 permits,
@@ -77,11 +86,11 @@ impl Pacer {
                 gate.parked = false;
             }),
         );
-        Self(state)
+        Self { state, deadline }
     }
 
     fn set_permits(&self, permits: u64) -> u64 {
-        let (lock, wake) = &*self.0;
+        let (lock, wake) = &*self.state;
         let mut gate = lock.lock().unwrap();
         gate.permits = permits;
         wake.notify_all();
@@ -89,22 +98,24 @@ impl Pacer {
     }
 
     fn grant(&self) -> u64 {
-        let (lock, wake) = &*self.0;
+        let (lock, wake) = &*self.state;
         let mut gate = lock.lock().unwrap();
         gate.permits += 1;
         wake.notify_all();
         gate.entries
     }
 
-    /// Wait (bounded) until the pump holds an output it entered the gate
-    /// with after `entries` earlier entries; that output's tick.
+    /// Wait (within the scenario deadline) until the pump holds an output it
+    /// entered the gate with after `entries` earlier entries; that output's
+    /// tick.
     fn held_after(&self, server: &EdgeServer, entries: u64) -> u64 {
-        let (lock, wake) = &*self.0;
+        let (lock, wake) = &*self.state;
         let gate = lock.lock().unwrap();
+        let left = self
+            .deadline
+            .saturating_duration_since(std::time::Instant::now());
         let (gate, timeout) = wake
-            .wait_timeout_while(gate, PUMP_WAIT, |gate| {
-                !(gate.parked && gate.entries > entries)
-            })
+            .wait_timeout_while(gate, left, |gate| !(gate.parked && gate.entries > entries))
             .unwrap();
         assert!(!timeout.timed_out(), "the pump never reached its gate");
         drop(gate);
@@ -120,22 +131,24 @@ impl Pacer {
 
 impl Drop for Pacer {
     fn drop(&mut self) {
-        let (lock, wake) = &*self.0;
+        let (lock, wake) = &*self.state;
         lock.lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .permits = u64::MAX;
         wake.notify_all();
-        crate::server::disarm_pump_gate();
     }
 }
 
 /// The next published output, or `None` once the core closed the broadcast;
 /// an observer that fell behind skips ahead.
-async fn next_output(observer: &mut broadcast::Receiver<TickOutput>) -> Option<TickOutput> {
+async fn next_output(
+    observer: &mut broadcast::Receiver<TickOutput>,
+    deadline: std::time::Instant,
+) -> Option<TickOutput> {
     loop {
-        match tokio::time::timeout(PUMP_WAIT, observer.recv())
+        match tokio::time::timeout_at(deadline.into(), observer.recv())
             .await
-            .expect("the core stopped publishing")
+            .expect("scenario deadline")
         {
             Ok(out) => return Some(out),
             Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -145,17 +158,26 @@ async fn next_output(observer: &mut broadcast::Receiver<TickOutput>) -> Option<T
 }
 
 /// Observe published outputs until `newest` reaches `tick`.
-async fn until_tick(observer: &mut broadcast::Receiver<TickOutput>, tick: u64) {
-    while next_output(observer).await.expect("core stopped").tick < tick {}
+async fn until_tick(
+    observer: &mut broadcast::Receiver<TickOutput>,
+    tick: u64,
+    deadline: std::time::Instant,
+) {
+    while next_output(observer, deadline)
+        .await
+        .expect("core stopped")
+        .tick
+        < tick
+    {}
 }
 
 /// Run a console line through the tick and return its output tick.
-async fn console(core: &mc_core::Core, line: &str) -> u64 {
+async fn console(core: &mc_core::Core, line: &str, deadline: std::time::Instant) -> u64 {
     let (command, completed) = mc_core::command_console::ConsoleCommand::new(line.to_owned());
     assert!(core.submit(mc_core::boundary::PlayerInput::ConsoleCommand(command)));
-    tokio::time::timeout(PUMP_WAIT, completed)
+    tokio::time::timeout_at(deadline.into(), completed)
         .await
-        .expect("console command ran")
+        .expect("scenario deadline")
         .unwrap()
 }
 
@@ -186,17 +208,20 @@ struct JoinLag {
 async fn join_after_held_publish(hold_ticks: u64, bound_ticks: u64) -> Option<JoinLag> {
     let dir = tempfile::tempdir().unwrap();
     let server = Arc::new(server(dir.path(), 256, None));
+    let deadline = scenario_deadline();
     let core = Arc::clone(&server.hub);
     let mut observer = core.subscribe();
-    let pacer = Pacer::arm(&server, 0);
+    let pacer = Pacer::arm(&server, 0, deadline);
     let pump = crate::server::spawn_pump(Arc::clone(&server)).unwrap();
     let held = pacer.held_after(&server, 0);
-    until_tick(&mut observer, held + hold_ticks).await;
+    until_tick(&mut observer, held + hold_ticks, deadline).await;
     let id = server.connections.joining_id();
     submit_join(&core, id, "late");
     let mut joined = None;
     let lag = loop {
-        let out = next_output(&mut observer).await.expect("core stopped");
+        let out = next_output(&mut observer, deadline)
+            .await
+            .expect("core stopped");
         if joined.is_none()
             && out
                 .snapshot
@@ -254,18 +279,21 @@ async fn a_slow_pump_does_not_hold_a_join_behind_stale_outputs() {
 async fn a_join_lands_at_three_tps_behind_a_slow_pump_without_a_halt() {
     let dir = tempfile::tempdir().unwrap();
     let server = Arc::new(server(dir.path(), 32, None));
+    let deadline = scenario_deadline();
     let core = Arc::clone(&server.hub);
     let mut observer = core.subscribe();
-    let pacer = Pacer::arm(&server, u64::MAX / 2);
+    let pacer = Pacer::arm(&server, u64::MAX / 2, deadline);
     let pump = crate::server::spawn_pump(Arc::clone(&server)).unwrap();
-    let rate_tick = console(&core, "tick rate 3").await;
-    // The console feedback drains before the hold: the held outbox is empty.
-    until_tick(&mut observer, rate_tick + 1).await;
+    let rate_tick = console(&core, "tick rate 3", deadline).await;
+    // The pump is past the command's tick before the hold: the held outbox
+    // is empty.
     while server.tick_stats.tick() <= rate_tick {
-        next_output(&mut observer).await.expect("core stopped");
+        next_output(&mut observer, deadline)
+            .await
+            .expect("core stopped");
     }
     let held = pacer.hold(&server);
-    until_tick(&mut observer, held + 34).await;
+    until_tick(&mut observer, held + 34, deadline).await;
     let id = server.connections.joining_id();
     let session = core
         .join_session(
@@ -295,7 +323,7 @@ async fn a_join_lands_at_three_tps_behind_a_slow_pump_without_a_halt() {
         })
     };
     while !waiting.is_finished() {
-        let Some(out) = next_output(&mut observer).await else {
+        let Some(out) = next_output(&mut observer, deadline).await else {
             break;
         };
         if out.tick % 2 == 0 {
@@ -318,13 +346,15 @@ async fn a_join_lands_at_three_tps_behind_a_slow_pump_without_a_halt() {
 async fn a_hung_pump_still_halts_the_core() {
     let dir = tempfile::tempdir().unwrap();
     let server = Arc::new(server(dir.path(), 32, Some(1_000)));
+    let deadline = scenario_deadline();
     let core = Arc::clone(&server.hub);
     let mut observer = core.subscribe();
-    let pacer = Pacer::arm(&server, 0);
+    let pacer = Pacer::arm(&server, 0, deadline);
     let pump = crate::server::spawn_pump(Arc::clone(&server)).unwrap();
     pacer.held_after(&server, 0);
     submit_join(&core, server.connections.joining_id(), "stuck");
-    while next_output(&mut observer).await.is_some() {}
+    // A broken watchdog fails at the scenario deadline instead of hanging.
+    while next_output(&mut observer, deadline).await.is_some() {}
     let reason = core.halt_reason();
     drop(pacer);
     pump.abort();
@@ -343,13 +373,16 @@ async fn a_hung_pump_still_halts_the_core() {
 async fn a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch() {
     let dir = tempfile::tempdir().unwrap();
     let server = Arc::new(server(dir.path(), 32, None));
+    let deadline = scenario_deadline();
     let core = Arc::clone(&server.hub);
     let mut observer = core.subscribe();
-    let pacer = Pacer::arm(&server, u64::MAX / 2);
+    let pacer = Pacer::arm(&server, u64::MAX / 2, deadline);
     let pump = crate::server::spawn_pump(Arc::clone(&server)).unwrap();
-    let rate_tick = console(&core, "tick rate 3").await;
+    let rate_tick = console(&core, "tick rate 3", deadline).await;
     while server.tick_stats.tick() <= rate_tick {
-        next_output(&mut observer).await.expect("core stopped");
+        next_output(&mut observer, deadline)
+            .await
+            .expect("core stopped");
     }
     let held = pacer.hold(&server);
     assert_eq!(
@@ -357,13 +390,13 @@ async fn a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch() {
         0,
         "the held outbox starts empty"
     );
-    until_tick(&mut observer, held + 34).await;
+    until_tick(&mut observer, held + 34, deadline).await;
     let id = server.connections.joining_id();
     submit_join(&core, id, "lone");
     let mut joined = None;
     let mut drained = None;
     loop {
-        let Some(out) = next_output(&mut observer).await else {
+        let Some(out) = next_output(&mut observer, deadline).await else {
             break;
         };
         if joined.is_none()
@@ -457,6 +490,7 @@ fn mark(frame: &mc_protocol::frame::RawFrame) -> Option<Mark> {
 async fn a_stale_skip_keeps_reliable_changes_in_order_and_never_drains_ahead() {
     let dir = tempfile::tempdir().unwrap();
     let server = Arc::new(server(dir.path(), 256, None));
+    let deadline = scenario_deadline();
     let core = Arc::clone(&server.hub);
     let mut observer = core.subscribe();
     let id = server.connections.joining_id();
@@ -470,11 +504,13 @@ async fn a_stale_skip_keeps_reliable_changes_in_order_and_never_drains_ahead() {
             || server.hub.published_knockback_count(id),
         )
         .unwrap();
-    let pacer = Pacer::arm(&server, u64::MAX / 2);
+    let pacer = Pacer::arm(&server, u64::MAX / 2, deadline);
     let pump = crate::server::spawn_pump(Arc::clone(&server)).unwrap();
     submit_join(&core, id, "fifo");
     let joined = loop {
-        let out = next_output(&mut observer).await.expect("core stopped");
+        let out = next_output(&mut observer, deadline)
+            .await
+            .expect("core stopped");
         if out
             .snapshot
             .player_roster
@@ -485,7 +521,9 @@ async fn a_stale_skip_keeps_reliable_changes_in_order_and_never_drains_ahead() {
         }
     };
     while server.tick_stats.tick() <= joined + 2 {
-        next_output(&mut observer).await.expect("core stopped");
+        next_output(&mut observer, deadline)
+            .await
+            .expect("core stopped");
     }
     // The pump holds output `holding`: it drained and published everything
     // before it, and drains through `holding` only once released.
@@ -494,13 +532,14 @@ async fn a_stale_skip_keeps_reliable_changes_in_order_and_never_drains_ahead() {
     let mut sent = Vec::new();
     for n in 0..10u64 {
         if n == 5 {
-            sent.push((console(&core, "tp fifo 0.5 120 0.5").await, Mark::Teleport));
+            let tick = console(&core, "tp fifo 0.5 120 0.5", deadline).await;
+            sent.push((tick, Mark::Teleport));
         }
         let line = format!("tellraw fifo \"fifo-{n}\"");
-        sent.push((console(&core, &line).await, Mark::Chat(n)));
+        sent.push((console(&core, &line, deadline).await, Mark::Chat(n)));
     }
     let last = sent.last().unwrap().0;
-    until_tick(&mut observer, holding + 48).await;
+    until_tick(&mut observer, holding + 48, deadline).await;
     let skipped_before = server.dashboard.snapshot().pump_skipped_ticks;
     let mut arrived = Vec::new();
     loop {
@@ -541,24 +580,27 @@ fn a_fresh_output_after_a_long_tick_is_not_stale() {
     // The tick itself ran for a minute: only the publish instant counts.
     out.times.wall_start_unix_ns = 1;
     out.times.wall_us = 60_000_000;
-    assert!(!stale(&out, true, now));
+    // A timely output never asks for a newer one (the broadcast tail lock).
+    assert!(!stale(&out, now, || unreachable!(
+        "tail lock on a fresh output"
+    )));
 }
 
 #[test]
 fn the_queue_budget_is_exclusive() {
     let now = std::time::Instant::now();
     let at_budget = now.checked_sub(PUBLISH_QUEUE_BUDGET).unwrap();
-    assert!(!stale(&output_published(Some(at_budget)), true, now));
+    assert!(!stale(&output_published(Some(at_budget)), now, || true));
     let past = at_budget
         .checked_sub(std::time::Duration::from_micros(1))
         .unwrap();
-    assert!(stale(&output_published(Some(past)), true, now));
+    assert!(stale(&output_published(Some(past)), now, || true));
 }
 
 #[test]
 fn the_newest_output_is_never_stale() {
     let now = std::time::Instant::now();
     let old = now.checked_sub(std::time::Duration::from_secs(60)).unwrap();
-    assert!(!stale(&output_published(Some(old)), false, now));
-    assert!(!stale(&output_published(None), true, now));
+    assert!(!stale(&output_published(Some(old)), now, || false));
+    assert!(!stale(&output_published(None), now, || true));
 }

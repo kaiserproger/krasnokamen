@@ -188,7 +188,15 @@ join deadline and the 10 s outbox stall watch. Limits of this policy:
   or a slow socket still delays reliable changes.
 - Reliable changes stay FIFO per connection, arrive once, and never drain past
   the output being published.
-- A reliable or world socket overflow still closes the connection.
+- A full reliable queue still closes the connection (`reliable-queue-full`). A
+  world frame the world queue refuses closes nothing: that viewer's held
+  geometry and planned entities are marked for repair (`world_frame_unsent`)
+  and planned again from a newer snapshot.
+- Repair after a skip compares revisions. A held chunk whose own revision
+  moved is sent again. Under anti-xray, so is a held chunk whose side
+  neighbour's revision moved since the last publish before the skip: a block
+  change beside a chunk border can reveal an ore without moving the ore
+  chunk's own revision, and that reveal lived only in the skipped changes.
 - Entities that appear and vanish within skipped outputs are never shown.
 - One-shot effects carried only by a skipped output, such as visual-only
   explosions, are lost, and recorder connections get no `krasnokamen:tick`

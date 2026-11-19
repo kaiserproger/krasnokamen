@@ -292,6 +292,7 @@ fn plan_viewer_inner(
     // explain content revisions without full resends. A changed baked light
     // baseline covers light-only revisions; skips still require repairs.
     let skipped = std::mem::take(&mut viewer.skipped);
+    let skip_base = viewer.skip_base.take();
     scratch.touched.clear();
     scratch.touched.extend(viewer.block_entity_updates.drain());
     if let Some(delta) = delta.filter(|_| fast) {
@@ -376,6 +377,14 @@ fn plan_viewer_inner(
                 viewer.pending_blocks.extend(revealed.iter().copied());
             }
         }
+        // Anti-xray judges an ore by its side neighbours too: a skipped block
+        // change beside a chunk border may have revealed an ore without moving
+        // the ore chunk's own revision (no light change), and that reveal
+        // lived only in the skipped changes.
+        let side_reveals = skipped
+            && chunk_cache
+                .anti_xray()
+                .is_some_and(|policy| policy.enabled(snapshot.dimension));
         for (pos, held) in &mut viewer.loaded_chunks {
             chunk_stat!(stats.visited += 1);
             chunk_stat!(stats.probes += 1);
@@ -387,6 +396,16 @@ fn plan_viewer_inner(
                 continue;
             };
             if *held == current.revision {
+                if side_reveals {
+                    chunk_stat!(stats.probes += 8);
+                    if side_moved(
+                        skip_base.as_deref().map(Vec::as_slice),
+                        &snapshot.chunks,
+                        *pos,
+                    ) {
+                        viewer.chunk_repairs.insert(*pos);
+                    }
+                }
                 continue;
             }
             chunk_stat!(stats.probes += 1);
@@ -697,6 +716,25 @@ pub(super) fn own_entity<'a>(
     viewer: &ViewerState,
 ) -> Option<&'a EntityView> {
     snapshot.entities.get(viewer.entity_id)
+}
+
+/// A side neighbour of `pos` resident at `base` and now with another revision;
+/// without a base every side counts as moved.
+fn side_moved(
+    base: Option<&[SnapshotChunk]>,
+    chunks: &[SnapshotChunk],
+    (x, z): (i32, i32),
+) -> bool {
+    let Some(base) = base else {
+        return true;
+    };
+    [(x - 1, z), (x + 1, z), (x, z - 1), (x, z + 1)]
+        .into_iter()
+        .any(|side| {
+            find_chunk(base, side)
+                .zip(find_chunk(chunks, side))
+                .is_some_and(|(was, now)| was.revision != now.revision)
+        })
 }
 
 fn push_block_update(

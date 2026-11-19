@@ -9,32 +9,20 @@ const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
 /// A test's pump gate callback.
 #[cfg(test)]
-type PumpGate = std::sync::Arc<dyn Fn() + Send + Sync>;
+pub(crate) type PumpGate = std::sync::Arc<dyn Fn() + Send + Sync>;
 
-/// Test-only pump gate: set by a test for one server, called by that server's
-/// pump after recording a tick and before it takes the registry lock.
+/// Test-only: park this server's pump in `gate` until it returns, after the
+/// pump recorded a tick and before it takes the registry lock. The gate lives
+/// in the server, so parallel tests never see each other's gates.
 #[cfg(test)]
-static PUMP_GATE: std::sync::LazyLock<std::sync::Mutex<Option<(usize, PumpGate)>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
-
-/// Park this server's pump in the gate until the test's gate returns.
-#[cfg(test)]
-pub(crate) fn arm_pump_gate(server: &Arc<EdgeServer>, gate: PumpGate) {
-    *PUMP_GATE.lock().expect("pump gate") = Some((Arc::as_ptr(server) as usize, gate));
-}
-
-/// Disarm the gate (every test that arms one must).
-#[cfg(test)]
-pub(crate) fn disarm_pump_gate() {
-    *PUMP_GATE.lock().expect("pump gate") = None;
+pub(crate) fn arm_pump_gate(server: &EdgeServer, gate: PumpGate) {
+    *server.pump_gate.lock().expect("pump gate") = Some(gate);
 }
 
 #[cfg(test)]
-fn pump_gate(server: &Arc<EdgeServer>) {
-    let armed = PUMP_GATE.lock().expect("pump gate").clone();
-    if let Some((address, gate)) = armed
-        && address == Arc::as_ptr(server) as usize
-    {
+fn pump_gate(server: &EdgeServer) {
+    let armed = server.pump_gate.lock().expect("pump gate").clone();
+    if let Some(gate) = armed {
         gate();
     }
 }
@@ -66,26 +54,33 @@ fn bounded_tracked_union(
 /// delays delivery, and a socket overflow still closes the connection.
 pub(super) const PUBLISH_QUEUE_BUDGET: std::time::Duration = std::time::Duration::from_millis(1600);
 
-/// An output to skip: a newer one is queued and this one waited past
-/// [`PUBLISH_QUEUE_BUDGET`] since the tick owner published it. The newest
-/// output and outputs without a publish instant are never stale.
-pub(super) fn stale(out: &TickOutput, newer_queued: bool, now: std::time::Instant) -> bool {
-    newer_queued
-        && out.times.published_at.is_some_and(|published| {
-            now.saturating_duration_since(published) > PUBLISH_QUEUE_BUDGET
-        })
+/// An output to skip: it waited past [`PUBLISH_QUEUE_BUDGET`] since the tick
+/// owner published it and a newer one is queued. The newest output and
+/// outputs without a publish instant are never stale. `newer_queued` runs
+/// only for an old output: a timely pump takes no broadcast tail lock.
+pub(super) fn stale(
+    out: &TickOutput,
+    now: std::time::Instant,
+    newer_queued: impl FnOnce() -> bool,
+) -> bool {
+    out.times
+        .published_at
+        .is_some_and(|published| now.saturating_duration_since(published) > PUBLISH_QUEUE_BUDGET)
+        && newer_queued()
 }
 
-/// Skipped publications reconcile from the next processed snapshot; its
-/// cumulative knockback epochs close only recipients of a skipped impulse.
+/// Skipped publications reconcile from the next processed snapshot against
+/// the last published one; its cumulative knockback epochs close only
+/// recipients of a skipped impulse.
 fn skip_publications(
     server: &EdgeServer,
     viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    chunk_cache: &crate::plan::ChunkPacketCache,
     skipped: u64,
 ) {
     server.dashboard.record_pump_skipped(skipped);
     for viewer in viewers.values_mut() {
-        viewer.skipped = true;
+        viewer.skip_publication(chunk_cache);
     }
 }
 
@@ -95,15 +90,16 @@ pub(super) async fn next_publication(
     server: &EdgeServer,
     rx: &mut broadcast::Receiver<TickOutput>,
     viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    chunk_cache: &crate::plan::ChunkPacketCache,
 ) -> Option<TickOutput> {
     loop {
         match rx.recv().await {
-            Ok(out) if stale(&out, !rx.is_empty(), std::time::Instant::now()) => {
-                skip_publications(server, viewers, 1);
+            Ok(out) if stale(&out, std::time::Instant::now(), || !rx.is_empty()) => {
+                skip_publications(server, viewers, chunk_cache, 1);
             }
             Ok(out) => return Some(out),
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                skip_publications(server, viewers, skipped);
+                skip_publications(server, viewers, chunk_cache, skipped);
             }
             Err(broadcast::error::RecvError::Closed) => return None,
         }
@@ -152,7 +148,8 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         let mut connections: HashMap<ConnectionId, ConnectionHandles> = HashMap::new();
         let mut connections_generation = 0u64;
         loop {
-            let Some(out) = next_publication(&server, &mut rx, &mut viewers).await else {
+            let Some(out) = next_publication(&server, &mut rx, &mut viewers, &chunk_cache).await
+            else {
                 // Drain terminal reliable disconnects before closing, both
                 // for graceful shutdown and for an authoritative failure.
                 refresh_routing(&server, &mut connections, &mut connections_generation);
@@ -404,6 +401,17 @@ pub(super) fn route_outbox_batches(
         if connection == mc_core::command_console::CONNECTION {
             crate::console::output(&server.console_state, &changes);
             continue;
+        }
+        if tracing::enabled!(tracing::Level::DEBUG)
+            && changes
+                .iter()
+                .any(|change| matches!(change, mc_core::boundary::PlayerChange::Joined { .. }))
+        {
+            tracing::debug!(
+                connection = connection.0,
+                pump_tick = server.tick_stats.tick(),
+                "join drained"
+            );
         }
         // Core-ordered kick: stash the reason so the play loop can log
         // peer+reason after flushing the kick packet. The packet itself
@@ -852,8 +860,14 @@ pub(super) async fn wait_for_join(
         inner.locales.insert(id, client_language.to_owned());
         inner.chat_visibilities.insert(id, chat_visibility);
     }
+    // Newest core tick the edge had seen when the wait began (timing lane,
+    // independent of the pump): an estimate of the submit tick. The exact
+    // ticks are the core's `join applied` and the pump's `join drained`
+    // records, keyed by the same connection id as `join landed`.
+    let waited_from = server.dashboard.latest_core_tick();
     // Fast path: Joined arrived before we registered interest.
     if let Some(joined) = server.connections.take_join(id) {
+        join_landed(server, id, waited_from, "stashed");
         return Ok(joined);
     }
     let receiver = server.connections.wait_join(id);
@@ -861,36 +875,49 @@ pub(super) async fn wait_for_join(
     // fast-path check and `wait_join` (stash fires waiters, but ours was
     // registered after the stash — `take_join` covers that window).
     if let Some(joined) = server.connections.take_join(id) {
+        join_landed(server, id, waited_from, "rechecked");
         return Ok(joined);
     }
-    // The core's tick at submission and the pump's published tick tell a slow
-    // join's two causes apart: a core that stopped ticking or a pump behind it.
-    let submitted = server.dashboard.latest_core_tick();
     let deadline = tokio::time::sleep(std::time::Duration::from_secs(10));
     tokio::pin!(deadline);
     tokio::select! {
         biased;
         _ = &mut deadline => {
+            // A stopped core shows no tick progress; a pump behind the core
+            // shows a published tick far behind the core's.
             let tick = |tick: Option<u64>| tick.map_or_else(|| "unknown".to_owned(), |tick| tick.to_string());
             anyhow::bail!(
-                "timed out waiting for join (core tick {} at submit, {} now; pump published tick {})",
-                tick(submitted),
+                "timed out waiting for join (core tick {} seen when the wait began, {} now; pump published tick {})",
+                tick(waited_from),
                 tick(server.dashboard.latest_core_tick()),
                 server.tick_stats.tick()
             )
         }
         result = receiver => {
             let joined = result.map_err(|_| anyhow::anyhow!("join waiter dropped before Joined"))?;
-            tracing::debug!(
-                connection = id.0,
-                core_tick_at_submit = ?submitted,
-                core_tick = ?server.dashboard.latest_core_tick(),
-                pump_tick = server.tick_stats.tick(),
-                "join landed"
-            );
+            join_landed(server, id, waited_from, "woken");
             Ok(joined)
         }
     }
+}
+
+/// Debug record of a join wait that ended: which path took the `Joined`, the
+/// core ticks the edge had seen when the wait began and now (estimates), and
+/// the pump's published tick.
+fn join_landed(
+    server: &EdgeServer,
+    id: ConnectionId,
+    waited_from: Option<u64>,
+    path: &'static str,
+) {
+    tracing::debug!(
+        connection = id.0,
+        path,
+        core_tick_seen_at_wait = ?waited_from,
+        core_tick_seen = ?server.dashboard.latest_core_tick(),
+        pump_tick = server.tick_stats.tick(),
+        "join landed"
+    );
 }
 
 /// Newest tick output available without blocking (for the join burst).

@@ -84,7 +84,12 @@ newer one is queued, exactly as after `Lagged`. The reliable outbox drains only
 through the published tick, so this bounds how long a slow pump holds reliable
 changes (a `Joined` too) behind stale outputs. It bounds the queue wait, not
 delivery. Reliable changes stay FIFO per connection, arrive once, and never
-drain past the published output. A socket overflow still closes. Entities that
+drain past the published output. A full reliable queue still closes the
+connection; a refused world frame closes nothing and marks that viewer's held
+geometry and planned entities for repair. After a skip, a held chunk is sent
+again when its own revision moved and, under anti-xray, when a side
+neighbour's revision moved since the last publish before the skip (an ore
+revealed across the chunk border). Entities that
 appear and vanish within a skip are not shown. One-shot effects and recorder
 tick markers of skipped outputs are lost. A skipped knockback impulse closes its
 recipient as above. A pump that stops for good still halts the core through
