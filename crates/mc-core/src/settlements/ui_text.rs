@@ -295,12 +295,12 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::CertificateCheck => ("Certificate check", "Проверка сертификата"),
         Key::ConstructionUpgrade => ("Order construction L{level}", "Заказать стройку L{level}"),
         Key::CertificatePolicy => (
-            "Check blocks already built.\nbuilders will not build.\nThese are geometry requirements,\nnot a shopping bill.",
-            "Проверка уже построенных блоков.\nстроители не будут строить.\nЭто требования к геометрии,\nне список покупок.",
+            "Checks the building you already built. Nothing is constructed.",
+            "Проверка уже построенного: ничего не строится.",
         ),
         Key::RequestPolicy => (
-            "Request; queues if busy or short.\nBefore admission: estimated materials.\nNo blocks are placed\nand no stock debited by this click.",
-            "Если занято/нехватка — в очередь.\nДо приёма: материалы — оценка.\nЭтот клик не ставит блоки\nи не списывает запас.",
+            "Builders will construct the building using storage materials. No blocks are placed or stock debited until the order starts.",
+            "Строители построят здание из материалов склада. Блоки не ставятся и склад не списывается, пока заказ не начнётся.",
         ),
         Key::StateChanged => (
             "The target or queued order changed. Review the current state before confirming again.",
