@@ -224,6 +224,8 @@ pub(crate) enum Key {
     WorkMap,
     EmptyBuildings,
     EmptyStorage,
+    NeedStorage,
+    StorageFirst,
 }
 
 /// English and Russian text for one key.
@@ -238,6 +240,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::WorkMap => ("Workplace on map", "Место работы на карте"),
         Key::EmptyBuildings => ("No buildings here yet. Order a new one in Construction, or Certify one you built.", "Здесь зданий пока нет. Построить новое — «Строительство»; засчитать своё — «Сертифицировать»."),
         Key::EmptyStorage => ("Bring materials: Shift-click your own stack.", "Принесите материалы: Shift+клик по своему стаку."),
+        Key::NeedStorage => ("First, storage: certify a building with a chest, then stock it.", "Сначала нужен склад: сертифицируйте постройку с сундуком, затем принесите материалы."),
+        Key::StorageFirst => ("Next: storage needed", "Дальше: нужен склад"),
         Key::Neighbours => ("Neighbours & war", "Соседи и война"),
         Key::NeighboursUnavailable => (
             "Neighbour and war management is not available in this build.",

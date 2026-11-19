@@ -220,10 +220,12 @@ fn dispatch(
             };
             if record.owner.is_none() {
                 claim_screen(state, connection, ctx);
+            } else if buildings::storage_points(state, ctx.id).is_empty() {
+                let mut form = form_of(state, connection, ClickPayload(None));
+                form.kind = BuildingKind::Storage.name().to_owned();
+                certify_screen(state, connection, ctx, &form, ctx.t(Key::NeedStorage));
             } else if !super::construction::idle(record) {
                 dispatch(state, connection, ctx, "project_status", ClickPayload(None));
-            } else if record.buildings.is_empty() {
-                dispatch(state, connection, ctx, "buildings", ClickPayload(None));
             } else {
                 menus::dashboard(state, connection, ctx);
             }
@@ -557,6 +559,8 @@ fn main_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
     let title = ctx.f(Key::TitleSettlement, &[("name", &record.name)]);
     let next = if record.owner.is_none() {
         Key::ClaimReview
+    } else if buildings::storage_points(state, ctx.id).is_empty() {
+        Key::StorageFirst
     } else {
         Key::NextStep
     };
