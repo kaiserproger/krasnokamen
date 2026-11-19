@@ -521,7 +521,7 @@ def block_docs(w: Walk) -> None:
     quick = re.search(r"(?is)##\s*Quick start(.*?)(?=\n##\s|\Z)", guide)
     stale = [needle for needle in ("Assign crafts", "below the legend", "certify a storage building first")
              if needle in menus or needle in guide]
-    w.judge("Q16", not stale and bool(quick) and bool(re.search(r"starter", quick.group(1), re.IGNORECASE)),
+    w.judge("Q16", not stale and bool(quick) and bool(re.search(r"(starter|initial|empty)[^.\n]{0,20}chest", quick.group(1), re.IGNORECASE)),
             stale=stale, quick_start_found=bool(quick))
 
 
