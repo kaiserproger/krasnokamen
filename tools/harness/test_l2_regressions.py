@@ -118,7 +118,7 @@ class L2ReportCaptureTests(unittest.TestCase):
             root = Path(directory)
             artifacts = root / 'artifacts'
             artifacts.mkdir()
-            source = root / 'relative-target/nextest/default/junit.xml'
+            source = root / 'target/nextest/default/junit.xml'
             source.parent.mkdir(parents=True)
             source.write_text('stale source')
             report = artifacts / 'test-junit.xml'
@@ -130,8 +130,9 @@ class L2ReportCaptureTests(unittest.TestCase):
                 source.write_text('<testsuites/>')
                 raise RuntimeError('nextest failed')
 
+            # A Cargo slot target elsewhere must not move nextest's workspace-root store.
             with patch.object(profiles, 'REPO_ROOT', root), patch.dict(
-                    'os.environ', {'CARGO_TARGET_DIR': 'relative-target'}), patch.object(
+                    'os.environ', {'CARGO_TARGET_DIR': str(root / 'slot-target')}), patch.object(
                     profiles, '_run_command', side_effect=failed_run):
                 with self.assertRaisesRegex(RuntimeError, 'nextest failed'):
                     profiles.run_test(profiles.ProfileContext(artifacts), full=True)

@@ -400,10 +400,9 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     ]
     report = ctx.artifact_dir / "test-junit.xml"
     if full:
-        target = Path(env.get("CARGO_TARGET_DIR", REPO_ROOT / "target"))
-        if not target.is_absolute():
-            target = REPO_ROOT / target
-        source = target / "nextest" / profile / "junit.xml"
+        # Nextest's store (`[store] dir`, default `target/nextest`) is relative to the
+        # workspace root, not CARGO_TARGET_DIR: mem-run's slot target holds no report.
+        source = REPO_ROOT / "target" / "nextest" / profile / "junit.xml"
         # A previous run's report must never stand in for execution in this L2.
         source.unlink(missing_ok=True)
         report.unlink(missing_ok=True)
