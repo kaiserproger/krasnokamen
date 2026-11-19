@@ -32,8 +32,14 @@ def nbt(value):
     return bytes([kind]) + b"\0\0" + payload
 
 
+# A real 26.1.2 server export writes this world version at every chunk root;
+# `quirk_parity.anvil` refuses a chunk without one and decodes 4790 with the
+# Name/Properties palette codec.
+DATA_VERSION = 4790
+
+
 def region(path, chunk):
-    compressed = zlib.compress(nbt(chunk))
+    compressed = zlib.compress(nbt({"DataVersion": DATA_VERSION, **chunk}))
     body = struct.pack(">I", len(compressed)+1) + b"\2" + compressed
     sectors = (len(body)+4095)//4096
     path.parent.mkdir(parents=True, exist_ok=True)
