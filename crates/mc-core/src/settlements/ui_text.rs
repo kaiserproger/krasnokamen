@@ -290,7 +290,7 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Положите недостающие материалы на склад; ход работ смотрите в «Строительстве».",
         ),
         Key::MissingMaterials => ("Missing:", "Не хватает:"),
-        Key::MoreMaterialKinds => ("and {n} more item kinds", "и ещё {n} видов"),
+        Key::MoreMaterialKinds => ("and {n} more item kinds", "и ещё {n} {kind}"),
         Key::PendingReady => ("ready to start", "готов к началу работ"),
         Key::GuideClaim => (
             "Find the village bell → right-click → Claim charter. This is your management entrance.",
@@ -693,7 +693,7 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::MapLampSites => ("Lamp (planned)", "Фонарь (план)"),
         Key::MapScale => (
             "1 cell = {scale}×{scale} blocks, north up",
-            "1 клетка = {scale}×{scale} блоков, север сверху",
+            "1 клетка = {scale}×{scale} {blocks}, север сверху",
         ),
         Key::MapEmpty => ("No buildings yet.", "Построек пока нет."),
     }
@@ -707,6 +707,62 @@ pub(crate) fn text(lang: Lang, key: Key) -> &'static str {
         Lang::En => english,
         Lang::Ru => russian,
     }
+}
+
+/// Russian noun form for a count: `one` for 1, 21, 101; `few` for 2-4, 22-24;
+/// `many` for 0, 5-20, 25-30, 111-114 and every other number.
+#[must_use]
+pub(crate) fn plural(
+    n: u64,
+    one: &'static str,
+    few: &'static str,
+    many: &'static str,
+) -> &'static str {
+    let last_two = n % 100;
+    let last = n % 10;
+    if (11..=14).contains(&last_two) {
+        many
+    } else if last == 1 {
+        one
+    } else if (2..=4).contains(&last) {
+        few
+    } else {
+        many
+    }
+}
+
+/// Count of item kinds the receipt left out: "and N more item kinds" /
+/// «и ещё N вид|вида|видов».
+#[must_use]
+pub(crate) fn more_material_kinds(lang: Lang, n: usize) -> String {
+    fill(
+        text(lang, Key::MoreMaterialKinds),
+        &[
+            ("n", &n.to_string()),
+            ("kind", plural(n as u64, "вид", "вида", "видов")),
+        ],
+    )
+}
+
+/// Map cell size: "1 cell = S×S blocks" / «1 клетка = S×S блок|блока|блоков».
+#[must_use]
+pub(crate) fn map_scale(lang: Lang, scale: i32) -> String {
+    let scale = scale.max(0);
+    fill(
+        text(lang, Key::MapScale),
+        &[
+            ("scale", &scale.to_string()),
+            (
+                "blocks",
+                plural(
+                    u64::try_from(scale).unwrap_or_default(),
+                    "блок",
+                    "блока",
+                    "блоков",
+                ),
+            ),
+        ],
+    )
 }
 
 /// Names shared by workshop certificates and resident cards.
@@ -904,5 +960,43 @@ mod tests {
         assert_eq!(text(Lang::Ru, Key::Back), "Назад");
         assert_eq!(text(Lang::Ru, Key::Army), "Армия");
         assert_eq!(text(Lang::Ru, Key::ClaimReview), "Принять грамоту");
+    }
+
+    #[test]
+    fn russian_plural_picks_one_few_many() {
+        for (n, expected) in [
+            (0, "видов"),
+            (1, "вид"),
+            (2, "вида"),
+            (4, "вида"),
+            (5, "видов"),
+            (11, "видов"),
+            (12, "видов"),
+            (14, "видов"),
+            (21, "вид"),
+            (22, "вида"),
+            (25, "видов"),
+            (101, "вид"),
+            (111, "видов"),
+            (112, "видов"),
+        ] {
+            assert_eq!(plural(n, "вид", "вида", "видов"), expected, "n = {n}");
+        }
+    }
+
+    #[test]
+    fn counters_agree_with_their_counts_in_both_languages() {
+        assert_eq!(more_material_kinds(Lang::Ru, 1), "и ещё 1 вид");
+        assert_eq!(more_material_kinds(Lang::Ru, 2), "и ещё 2 вида");
+        assert_eq!(more_material_kinds(Lang::Ru, 5), "и ещё 5 видов");
+        assert_eq!(more_material_kinds(Lang::Ru, 21), "и ещё 21 вид");
+        assert_eq!(more_material_kinds(Lang::En, 2), "and 2 more item kinds");
+        assert_eq!(map_scale(Lang::Ru, 1), "1 клетка = 1×1 блок, север сверху");
+        assert_eq!(map_scale(Lang::Ru, 2), "1 клетка = 2×2 блока, север сверху");
+        assert_eq!(
+            map_scale(Lang::Ru, 8),
+            "1 клетка = 8×8 блоков, север сверху"
+        );
+        assert_eq!(map_scale(Lang::En, 8), "1 cell = 8×8 blocks, north up");
     }
 }

@@ -132,6 +132,9 @@ pub(super) fn find_for_kind(
     kind: super::buildings::BuildingKind,
 ) -> Result<ScriptWorldBounds, Refusal> {
     use super::buildings::BuildingKind;
+    if matches!(kind, BuildingKind::Wall | BuildingKind::Gate) {
+        return open::find(state, feet, kind);
+    }
     match find(state, feet) {
         Ok(bounds) => Ok(bounds),
         Err(reason @ (Refusal::OpenAir | Refusal::NotEnclosed))

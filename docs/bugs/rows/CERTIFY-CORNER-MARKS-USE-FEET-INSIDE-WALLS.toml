@@ -8,4 +8,7 @@ source = "Owner field session (laptop report receipts/SettlementUX/REPORT.md, sh
 repro = "source"
 regression = ["cargo:mc-core:settlements::ui::tests::standing_inside_a_finished_house_certifies_its_floor_wall_and_roof_bounds"]
 failing_first = "reported"
-fix_commit = "dc4a7be39b742b9742538304d6242069eafd6610"
+# dc4a7be's wall-ring fix was forward-ported to standing-inside discovery in 4a91c3882.
+# Mapping and red/restore receipts: docs/bugs/promotions/CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS.hunks.md
+fix_commit = "patch:6a242fec0b5af8dad07ac5e9ad33363e38d26e7b34e65ef4d3df9489d162b9e0"
+repro_check = "Production-only wall-ring NC: reverse docs/bugs/fix-patches/CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS.patch, keep standing_inside_a_finished_house_certifies_its_floor_wall_and_roof_bounds unchanged. Observed red: .analysis/validation/20261119T224709-test-us4vh5se/test.log (stored inner bounds [2,200,2]..[4,204,4] instead of [1,200,1]..[5,204,5]); restore green: .analysis/validation/20261119T225025-test-r053fjxz/test.log, 136/136."

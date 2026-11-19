@@ -185,6 +185,17 @@ fn runs(dialog: &Tag) -> &[Tag] {
     elements(field(field(&body[0], "contents").unwrap(), "extra"))
 }
 
+/// Play `ClientInformation` locale updates arrive as `PlayerInput::SetLocale`.
+fn set_locale(state: &mut TickState, locale: &str) {
+    run_tick(
+        state,
+        &[PlayerInput::SetLocale {
+            connection: CONN,
+            locale: locale.into(),
+        }],
+    );
+}
+
 #[test]
 fn empty_village_shows_the_territory_disk_on_square_cells() {
     let (mut state, id) = town();
@@ -277,6 +288,41 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
     assert_eq!(string(field(payload, "bids")), house.0.to_string());
     assert_eq!(string(field(payload, "ms")), "8");
     assert_eq!(string(field(payload, "mx")), "8");
+}
+
+/// The breaker saw «Строительство» reduced to a moving substring in a 60-px slot
+/// at 1280x720, GUI scale 2: vanilla keeps a 2-pixel margin per side of a button
+/// label and scrolls text wider than the slot, so every action slot must fit its
+/// own label (see `label_width`).
+#[test]
+fn every_map_action_slot_fits_its_label() {
+    for (locale, projects) in [("en_us", "Construction"), ("ru_ru", "Строительство")] {
+        let (mut state, _id) = town();
+        set_locale(&mut state, locale);
+        let dialog = command(&mut state, "settlement menu map");
+        let buttons = elements(field(&dialog, "actions"));
+        assert_eq!(buttons.len(), 12, "{locale}");
+        let mut construction = None;
+        for button in buttons {
+            let label = plain(field(button, "label").unwrap());
+            let width = match field(button, "width") {
+                Some(Tag::Int(width)) => u32::try_from(*width).unwrap(),
+                other => panic!("{locale}: {label:?} has no width: {other:?}"),
+            };
+            assert!(
+                label_width(&label) <= width,
+                "{locale}: {label:?} is wider than its {width}-px slot"
+            );
+            if label == projects {
+                construction = Some(width);
+            }
+        }
+        assert_eq!(
+            construction,
+            Some(label_width(projects).max(60)),
+            "{locale}"
+        );
+    }
 }
 
 #[test]

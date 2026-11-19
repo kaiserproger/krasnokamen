@@ -509,3 +509,64 @@ fn open_work_area_does_not_borrow_another_certificates_workstation() {
         .unwrap();
     assert_eq!(mine.work_points, [[10, 201, 4]]);
 }
+
+#[test]
+fn non_operator_wall_selection_inside_a_room_does_not_claim_the_whole_room() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    crate::settlements::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    let executor = player(&mut state, [5.5, 201.0, 5.5]);
+    certify_here(&mut state, executor, Some("owner"), false, "wall").unwrap();
+    let wall = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .next()
+        .unwrap();
+    assert_eq!(
+        wall.bounds,
+        mc_script::ScriptWorldBounds::new([3, 200, 3], [7, 204, 3]).unwrap()
+    );
+}
+
+#[test]
+fn non_operator_gate_selection_inside_a_room_finds_the_nearby_frame_not_the_room() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    crate::settlements::building_discovery::tests::room(&mut state, [3, 9], [7, 13], true);
+    for y in 201..=202 {
+        state.world.set_block(3, y, 11, state.registry.states.stone);
+    }
+    for x in 3..=7 {
+        for z in 5..=7 {
+            for y in 201..=203 {
+                if ((x == 3 || x == 7) && (z == 5 || z == 7))
+                    || (y == 203 && (x == 3 || x == 7 || z == 5 || z == 7))
+                {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    for (y, half) in [(201, "lower"), (202, "upper")] {
+        let door = block(&state, "minecraft:oak_door", &[("half", half)]);
+        state.world.set_block(5, y, 7, door);
+    }
+    state.world.fold_overlay();
+    let executor = player(&mut state, [5.5, 201.0, 10.5]);
+    certify_here(&mut state, executor, Some("owner"), false, "gate").unwrap();
+    let gate = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .next()
+        .unwrap();
+    assert_eq!(
+        gate.bounds,
+        mc_script::ScriptWorldBounds::new([3, 200, 5], [7, 203, 7]).unwrap()
+    );
+}

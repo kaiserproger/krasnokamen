@@ -1993,10 +1993,7 @@ fn compact_material_text(state: &TickState, ctx: &Ctx, missing: &[(String, u32)]
     if missing.len() > 3 {
         elements.push(Tag::Compound(vec![(
             "text".into(),
-            Tag::String(ctx.f(
-                Key::MoreMaterialKinds,
-                &[("n", &(missing.len() - 3).to_string())],
-            )),
+            Tag::String(ui_text::more_material_kinds(ctx.lang, missing.len() - 3)),
         )]));
     }
     Tag::Compound(vec![

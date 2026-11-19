@@ -24,7 +24,7 @@
 
 use mc_nbt::{ListTag, Tag};
 
-use super::ui_text::Key;
+use super::ui_text::{Key, map_scale};
 use super::{
     Ctx, OWNER, blueprint_label, button, corner_text, kind_label, player_pos, present, short,
 };
@@ -206,7 +206,11 @@ pub(super) fn screen_at(
         )
         .width(60),
     );
-    buttons.push(button(ctx.t(Key::Projects), "projects", ctx.id).width(60));
+    // Vanilla draws a label with a 2-pixel margin per side and scrolls one that
+    // does not fit, so the slot follows its text: in a 60-px slot the player saw
+    // only a moving substring of «Строительство».
+    let projects = ctx.t(Key::Projects);
+    buttons.push(button(projects, "projects", ctx.id).width(label_width(projects).max(60)));
     buttons.push(view_button(
         ctx,
         if ctx.lang == super::Lang::Ru {
@@ -808,6 +812,17 @@ fn estimated_width(text: &str) -> usize {
         .sum()
 }
 
+/// Width a dialog button label needs in the default font. Vanilla keeps a
+/// 2-pixel margin on each side and scrolls text wider than the slot, and the
+/// default font advances at most 6 px per glyph — measured on the Java 26.3
+/// client at GUI scale 2: «Здания» 36 px for 6 glyphs, «Обновить» 47 px for 8 —
+/// so `glyphs * 6 + 4` is that label's width.
+fn label_width(label: &str) -> u32 {
+    u32::try_from(label.chars().count() * 6 + 4)
+        .unwrap_or(1024)
+        .min(1024)
+}
+
 /// Coloured swatches with labels packed into lines under [`LEGEND_LINE`] (an entry
 /// never splits across lines, so no swatch is left without its label), then the
 /// scale line (and the empty note).
@@ -829,7 +844,7 @@ fn legend_component(ctx: &Ctx, grid: &Grid) -> Tag {
         parts.push(Tag::Compound(colored(GLYPH, *color)));
         parts.push(literal(format!(" {label}")));
     }
-    let mut note = ctx.f(Key::MapScale, &[("scale", &grid.scale.to_string())]);
+    let mut note = map_scale(ctx.lang, grid.scale);
     if grid.buildings == 0 {
         note.push('\n');
         note.push_str(ctx.t(Key::MapEmpty));
