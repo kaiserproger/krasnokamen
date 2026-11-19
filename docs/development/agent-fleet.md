@@ -114,10 +114,11 @@ the previous one's handoff.
   over whatever is left in its queue. Claims are per task, as below.
 - **Reviewers and breakers are not generalists.** They are separate, read-only,
   and from a different vendor than the author where possible.
-- **Model by task and budget (owner D46, 2026-11-19).** Main chooses each
-  lane's model and records the choice and reason in `receipts/Stage3/PLAN.md`.
-  Implementation defaults to Terra or Sol: Sol for long multi-step slices,
-  Terra for bounded slices, gates, QA and harness. Opus only designs
+- **Model by task and budget (owner D46 and D47, 2026-11-19).** Main chooses
+  each lane's model and records the choice and reason in
+  `receipts/Stage3/PLAN.md`. Implementation defaults to DeepSeek (owner D47:
+  «дикпик чаще берём. опус реже», restoring the D13–D15 default); Sol takes
+  hard long multi-step slices and Terra hard bounded ones. Opus only designs
   persistence, protocol or item custody, or takes a task the OpenAI filter
   refuses. Fable runs only when the owner explicitly asks for an architecture
   design. Reviews run on Opus or Sol from a vendor other than the author's
