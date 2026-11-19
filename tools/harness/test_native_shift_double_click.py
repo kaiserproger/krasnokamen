@@ -3,8 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
-from tools.harness import scenarios
-from tools.harness.backends import client_probes, java_p5, native_v2, shift_correction_wire, shift_matrix
+from tools.harness.backends import client_probes, shift_correction_wire, shift_matrix
 from tools.harness.backends import native_shift_double_click as scenario
 
 
@@ -13,17 +12,6 @@ class ShiftDoubleClickHarnessTests(unittest.TestCase):
         artifact = Path('/tmp/receipts with "quotes"/run')
         parsed = tomllib.loads('[data]\nworld_dir = ' + client_probes.world_dir_toml(artifact))
         self.assertEqual(parsed['data']['world_dir'], str(artifact / 'world'))
-
-    def test_scenario_is_registered_as_windowed_native_runner(self):
-        name = 'native-v2-shift-double-click'
-        entry = scenarios.SCENARIOS[name]
-        self.assertEqual(entry.evidence, 'graphical')
-        self.assertEqual(entry.scenario_id, name)
-        self.assertIn(name, native_v2.NATIVE_SCENARIO_IDS)
-        self.assertIn(name, native_v2.RUNNERS)
-        java_name = 'java-v2-p5-shift-double-click'
-        self.assertIn(java_name, java_p5.SCENARIO_IDS)
-        self.assertEqual(scenarios.SCENARIOS[java_name].evidence, 'graphical')
 
     def test_stone_total_avoids_virtual_result_and_includes_cursor(self):
         empty = {"item": None, "count": 0}

@@ -1,0 +1,135 @@
+{
+  "decision": "D60.2",
+  "base": "688e76a9b615fda34a998c691d524f6042964e01",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_native_shift_double_click.py",
+  "source_sha256_before": "64ca7e47397eb98f38e60ccc7defba6d6e27dac839c81f5615995afe67101650",
+  "status": "Every 5 body and shared fixture/callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 5,
+    "removed_R4": 1,
+    "removed_R1": 0,
+    "retained_K1": 1,
+    "retained_K2": 1,
+    "retained_U": 2,
+    "historical_medium_candidates_finalized": 1,
+    "source_lines_before": 86,
+    "source_lines_remaining": 74,
+    "physical_source_lines_removed": 12,
+    "historical_medium_candidates_unfinalized": 221
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete 86-line module including check/count lambda and mocked pointer setup; full native_shift_double_click.py; CorrectionWire._on_click, shift_matrix._total and client_probes.world_dir_toml. bbbc25db8 records ClientQ02B x3 pass/old-pin controls receipt, not current execution.",
+    "retained_assertions": "Retained bodies and shared fixture unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": [
+      "Same-file exact-name scenarios/java_p5/native_v2 grep found imports and removed registration body only; removed those three names. Other imported helpers retained."
+    ]
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 5,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 508,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_native_shift_double_click.py::ShiftDoubleClickHarnessTests::test_external_world_path_is_toml_quoted_and_absolute",
+      "name": "test_external_world_path_is_toml_quoted_and_absolute",
+      "file": "tools/harness/test_native_shift_double_click.py",
+      "original_fn_line": 12,
+      "original_end_line": 15,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K2",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K2: Independent stdlib tomllib parser reads generated world_dir TOML and compares exact absolute path containing spaces/quotes; semantic cross-format oracle, not own serializer mirrored text.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_shift_double_click.py::ShiftDoubleClickHarnessTests::test_scenario_is_registered_as_windowed_native_runner",
+      "name": "test_scenario_is_registered_as_windowed_native_runner",
+      "file": "tools/harness/test_native_shift_double_click.py",
+      "original_fn_line": 17,
+      "original_end_line": 26,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Own registry IDs/evidence labels only; no dispatch or real scene and no observed registry failure established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_shift_double_click.py::ShiftDoubleClickHarnessTests::test_stone_total_avoids_virtual_result_and_includes_cursor",
+      "name": "test_stone_total_avoids_virtual_result_and_includes_cursor",
+      "file": "tools/harness/test_native_shift_double_click.py",
+      "original_fn_line": 28,
+      "original_end_line": 34,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Conservation must exclude virtual result and include carried stack for actual menu identity; authored image, no independently captured menu snapshot established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_shift_double_click.py::ShiftDoubleClickHarnessTests::test_correction_wire_arms_only_matching_chest_click",
+      "name": "test_correction_wire_arms_only_matching_chest_click",
+      "file": "tools/harness/test_native_shift_double_click.py",
+      "original_fn_line": 36,
+      "original_end_line": 46,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Server correction fixture may arm only declared chest click, not wrong slot/container; authored packet header, no actual misarmed correction case established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_shift_double_click.py::ShiftDoubleClickHarnessTests::test_physical_input_and_authoritative_negative_control",
+      "name": "test_physical_input_and_authoritative_negative_control",
+      "file": "tools/harness/test_native_shift_double_click.py",
+      "original_fn_line": 48,
+      "original_end_line": 82,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: ClientQ02B Shift-double-click collection defect; bbbc25db8 records actual native inventory/chest/component/correction/menu-close matrix x3 pass and old-pin controls. Supporting input+authoritative stock oracle rejects unchanged transfer with conserved586 stone; mocked unit is not graphical acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_native_shift_double_click",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}
