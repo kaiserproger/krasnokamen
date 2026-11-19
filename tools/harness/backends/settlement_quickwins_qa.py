@@ -80,6 +80,7 @@ CRITERIA: dict[str, tuple[str, str]] = {
     "Q15b": ("the join greeting is one line in the client language", "REPORT §5.15"),
     "Q16": ("docs/settlements/menus.md and the guide's quick start match the chest/storage-first UI", "REPORT §5.16"),
     "Q17": ("the project status names the builder, no uuid and no `Native supply cause`", "REPORT §5.17"),
+    "PL": ("the order outcome's omitted-kind counter agrees with its number when 4, 5, 6 and 8 kinds are missing: «и ещё 1 вид / 2 вида / 3 вида / 5 видов»", "QwStage1Fixes 75f9625f0 (Russian one/few/many); Main 2026-11-20"),
 }
 VERDICTS = tuple(CRITERIA) + ("all",)
 
@@ -220,7 +221,14 @@ def greeting_verdict(lines: list[str]) -> tuple[bool, dict[str, Any]]:
 
 ESTIMATE_LINE = re.compile(r"^\s*(.+?) ×(\d+) · на складе (\d+)\s*$", re.MULTILINE)
 LISTED_ITEM = re.compile(r"([^\n,:;×.]+?)\s×(\d+)")
-MORE_KINDS = re.compile(r"и ещё (\d+) (?:вид|вида|видов)\b")
+MORE_KINDS = re.compile(r"и ещё (\d+) (вид|вида|видов)\b")
+
+
+def kind_word(n: int) -> str:
+    """Russian one/few/many of `вид` for the count `n` (11..14 are always many)."""
+    if 11 <= n % 100 <= 14:
+        return "видов"
+    return "вид" if n % 10 == 1 else "вида" if 2 <= n % 10 <= 4 else "видов"
 
 
 def expected_shortage(estimate_text: str) -> dict[str, int]:
@@ -246,10 +254,13 @@ def shortage_verdict(text: str, buttons: list[str], expected: dict[str, int]) ->
         "expected_kinds": len(expected),
         "raw_ids": bool(re.search(r"minecraft:|not enough|queued|\bx\d+\b", text, re.IGNORECASE)),
         "storage_link": bool(matching(r"склад", buttons)),
-        "russian": cyrillic_only(re.sub(r"[A-Za-z]+\d*", "", text) or text),
+        "russian": cyrillic_only(text),  # item names included: a client that lost its translations shows English
+        "russian_ignoring_latin": cyrillic_only(re.sub(r"[A-Za-z]+\d*", "", text) or text),
         "items_exact": bool(listed) and len(listed) <= 3 and all(expected.get(name) == count for name, count in listed)
                        and len({name for name, _ in listed}) == len(listed),
-        "more_rule": (more is None and rest == 0) or (more is not None and rest > 0 and int(more.group(1)) == rest),
+        "more_rule": (more is None and rest == 0) or (more is not None and rest > 0 and int(more.group(1)) == rest
+                                                       and more.group(2) == kind_word(rest)),
+        "more_word": more.group(2) if more else None,
     }
     ok = (facts["missing"] and facts["items_exact"] and facts["more_rule"] and not facts["raw_ids"]
           and facts["storage_link"] and facts["russian"])
@@ -469,11 +480,43 @@ class Walk:
 # ----------------------------------------------------------------------------- entry
 
 
+MAP_LABELS = {"ru_ru": "Строительство", "en_us": "Construction"}
+
+
+def map_label_walk(w: Walk, args: Any) -> None:
+    """`--scenario maplabel` (Java): the map dialog's construction action shows its whole label at the GUI scale
+    the owner plays with (a vanilla button scrolls a label wider than its slot minus 2 px per side, so the
+    player sees a moving substring). Judged by the exact bitmap of the whole label in the rendered frame."""
+    from .settlement_map_qa import _label_bitmap, _label_points
+    want = MAP_LABELS[args.language]
+    w.probe.call("minecraft_send_chat", {"message": "settlement menu map", "command": True})  # the player's own command
+    w.settle("map dialog", lambda s: s["kind"] == "dialog" and bool(re.match(r"(Карта|Map)\b", s["title"])))
+    w.probe.call("minecraft_wait_ticks", {"ticks": 20})
+    state = w.probe.observe()
+    nodes = [node for node in state.get("ui_nodes", []) if node.get("role") == "button" and node.get("label") == want]
+    frame = w.shot(f"map-label-{args.language}-scale{args.gui_scale}")
+    bitmap = _label_bitmap(want, w.gui.jar)
+    points = _label_points(frame, bitmap, w.gui.scale)
+    node = nodes[0] if nodes else None
+    width_px = node["bounds"][2] // w.gui.scale if node else 0
+    facts = {"label": want, "gui_scale": args.gui_scale, "language": args.language,
+             "buttons": [n["label"] for n in state.get("ui_nodes", []) if n.get("role") == "button"],
+             "slot_width_gui_px": width_px, "label_width_gui_px": bitmap.width, "whole_label_in_frame": bool(points),
+             "node_clipped": bool(node and node.get("clipped")), "on_window": bool(node and on_window(node))}
+    ok = bool(node) and facts["on_window"] and not facts["node_clipped"] and facts["whole_label_in_frame"]
+    w.results["ML"] = {"ok": ok, "what": f"the map's «{want}» action shows its whole label at GUI scale {args.gui_scale}",
+                       "source": "QwStage1Fixes 75f9625f0; breaker P2", **facts}
+    w.probe.check("QW ML", ok)
+
+
 def run(ctx: Any, args: Any) -> dict[str, Any]:
     """`settlement-map-qa --scenario quickwins`: one ru_ru session (native or vanilla Java) on the lifecycle-owned window."""
     if ctx.client not in ("native", "java"):
         raise ValueError("--scenario quickwins requires --client native or --client java (a client that exposes dialog text)")
-    if args.language != "ru_ru":
+    maplabel = args.scenario == "maplabel"
+    if maplabel and ctx.client != "java":
+        raise ValueError("--scenario maplabel requires --client java (GUI scale and language are Java options)")
+    if not maplabel and args.language != "ru_ru":
         raise ValueError("--scenario quickwins judges Russian text: pass -- --language ru_ru")
     java = ctx.client == "java"
 
@@ -493,9 +536,22 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             probe.client.call_tool = observed
         else:
             scene_shot.resize_window(probe.client.p4_window, size)
-        gui = Gui(probe, artifact, client, 3, size)
+        if java:
+            # A Java client that could not load its language pack silently shows en_us: the run is not Russian evidence.
+            broken = [log for log in ctx.logs if "Failed to load translations" in Path(log).read_text(errors="replace")]
+            probe.report["translations_loaded"] = not broken
+            probe.check("Java translations loaded (no 'Failed to load translations' in client.log)", not broken)
+        gui = Gui(probe, artifact, client, args.gui_scale if maplabel else 3, size)
         walk = Walk(probe, artifact, gui, args)
         walk.evidence["client"] = ctx.client
+        if maplabel:
+            try:
+                walk_steps.setup(walk)
+                map_label_walk(walk, args)
+            finally:
+                gui.close()
+                ctx.client_evidence["maplabel"] = walk.results.get("ML")
+            return walk.shots
         try:
             walk_steps.setup(walk)
             for name, criteria, block in walk_steps.BLOCKS:
@@ -514,5 +570,5 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             }
         return walk.shots
 
-    settings = {"gui_scale": 3, "language": args.language, "screen_size": [1280, 720]} if java else {"language": args.language}
+    settings = {"gui_scale": args.gui_scale if maplabel else 3, "language": args.language, "screen_size": [1280, 720]} if java else {"language": args.language}
     return scene_shot.run(ctx, scenario={"steps": [], "java_plain": java, "client_settings": settings}, script=script)

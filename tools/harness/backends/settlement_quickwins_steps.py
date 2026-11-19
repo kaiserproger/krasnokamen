@@ -337,6 +337,71 @@ def block_order(w: Walk) -> None:
                lambda s: s["kind"] == "dialog" and s["body"] == outcome["body"], outcome)
 
 
+def house_items() -> dict[str, int]:
+    """Item -> count of the House L1 bill (the blueprint tool's own list of the 12 kinds the order needs)."""
+    materials = subprocess.run(
+        [sys.executable, str(scene_shot.runtime.REPO_ROOT / "tools/blueprints.py"), "materials", "house"],
+        check=True, capture_output=True, text=True, cwd=scene_shot.runtime.REPO_ROOT)
+    lines = materials.stdout.splitlines()
+    bill = lines[next(index for index, line in enumerate(lines) if "L1:" in line) + 1]
+    return {name: int(count) for name, count in re.findall(r"([a-z_]+?)x(\d+)(?:,|$)", bill.strip())}
+
+
+def set_chest_stock(w: Walk, stock: dict[str, int]) -> None:
+    """Fixture: the starter chest holds exactly `stock` and nothing else."""
+    chest = w.evidence["starter_chest"]
+    for slot in range(27):
+        w.fixture(f"item replace block {chest[0]} {chest[1]} {chest[2]} container.{slot} with minecraft:air")
+    slot = 0
+    for item, count in sorted(stock.items()):
+        remaining = count
+        while remaining:
+            amount = min(64, remaining)
+            if slot >= 27:
+                raise RuntimeError("stock exceeds the starter chest")
+            w.fixture(f"item replace block {chest[0]} {chest[1]} {chest[2]} container.{slot} with minecraft:{item} {amount}")
+            remaining -= amount
+            slot += 1
+
+
+PLURAL_WORDS = {4: "вид", 5: "вида", 6: "вида", 8: "видов"}  # «и ещё (k-3) …»: 1 вид, 2 вида, 3 вида, 5 видов
+
+
+def block_plurals(w: Walk) -> None:
+    """Order a House with exactly 4, 5, 6 and 8 material kinds missing from the chest; read the counter."""
+    bill = house_items()
+    kinds = sorted(bill)
+    if len(kinds) != 12:
+        raise StepFailed(f"the House L1 bill has {len(kinds)} kinds, not 12: {bill}")
+    rows: dict[int, dict[str, Any]] = {}
+    for missing_kinds in PLURAL_WORDS:
+        set_chest_stock(w, {item: bill[item] for item in kinds[:len(kinds) - missing_kinds]})
+        w.probe.call("minecraft_wait_ticks", {"ticks": 40})
+        open_blueprints(w)
+        w.click_slot(r"^Дом\b", f"plural {missing_kinds}: blueprint House", lambda s: s["kind"] == "dialog")
+        estimate = w.click_button(r"^Оценка материалов$", f"plural {missing_kinds}: estimate", lambda s: s["kind"] == "dialog")
+        pages = [" ".join(estimate["body"])]
+        if matching(r"^→$", estimate["buttons"]):
+            second = w.click_button(r"^→$", f"plural {missing_kinds}: estimate page 2", lambda s: s["kind"] == "dialog")
+            pages.append(" ".join(second["body"]))
+        expected = expected_shortage("\n".join(estimate_lines(pages)))
+        for _ in range(3):
+            if matching(r"^Заказ", w.screen()["buttons"]):
+                break
+            w.click_button(r"^Назад$", f"plural {missing_kinds}: estimate Back", lambda s: s["kind"] == "dialog")
+        outcome = w.click_button(r"^Заказ", f"plural {missing_kinds}: order", lambda s: s["kind"] == "dialog")
+        w.shot(f"plural-{missing_kinds}")
+        text = " ".join(outcome["body"])
+        ok, facts = shortage_verdict(text, outcome["buttons"], expected)
+        rows[missing_kinds] = {"ok": ok, "expected_kinds": len(expected), "setup_ok": len(expected) == missing_kinds,
+                               "word": facts["more_word"], "wanted_word": PLURAL_WORDS[missing_kinds],
+                               "body": text[:400], "facts": facts}
+        w.close_all()
+        # Clean up: drop the queued probe order (position 2, behind the real order) so the walk's own order is the only one.
+        rows[missing_kinds]["cancel_reply"] = w.chat("settlement build cancel 2")[:2]
+    w.judge("PL", all(row["ok"] and row["setup_ok"] and row["word"] == row["wanted_word"] for row in rows.values()),
+            rows={str(k): v for k, v in rows.items()})
+
 # ----------------------------------------------------------------------------- project
 
 
@@ -650,6 +715,7 @@ BLOCKS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
     ("storage", ("C3", "Q8b", "C2", "C4", "Q6b"), block_storage),
     ("buildings-empty", ("Q8a",), block_buildings_empty),
     ("order", ("Q5", "Q4", "Q3", "Q6c"), block_order),
+    ("plurals", ("PL",), block_plurals),
     ("project", ("Q7", "Q17"), block_project),
     ("resident", ("Q7b",), block_resident),
     ("certify", ("Q13", "Q1", "Q1b", "Q12", "Q14"), block_certify),
