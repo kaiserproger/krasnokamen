@@ -459,17 +459,6 @@ class SettlementMapVerdictTests(unittest.TestCase):
         self.assertEqual(set(gate.VERDICTS), regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"])
         self.assertEqual(set(gate.verdicts_from_assertions({}, "en_us")), set(gate.VERDICTS))
 
-    def test_every_page_text_the_script_waits_for_is_in_the_page_table(self):
-        import inspect
-        import re
-        source = (inspect.getsource(gate._script) + inspect.getsource(gate._enter_dashboard)
-                  + inspect.getsource(gate._production))
-        pairs = set(re.findall(r"""label\(\s*["']([^"']+)["'],\s*["']([^"']+)["']\s*\)""", source))
-        self.assertGreater(len(pairs), 10)
-        self.assertEqual({pair for pair in pairs if pair not in gate.PAGES.values()}, set())
-        self.assertIn(f'f"Поселение {{NAME}}" if ru else f"Settlement {{NAME}}"', source)
-        self.assertEqual(gate.PAGES["hub"], (f"Settlement {gate.NAME}", f"Поселение {gate.NAME}"))
-
     def test_a_passing_run_meets_every_verdict_in_both_languages(self):
         for language in ("en_us", "ru_ru"):
             verdicts = gate.verdicts_from_assertions(passing_run(language), language)

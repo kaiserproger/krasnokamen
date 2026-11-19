@@ -245,9 +245,9 @@ suite pass when it did not run.
 
 Each of these is a limit on what a green receipt means; never state more.
 
-- `correctness` is the L2 close gate (`regressions`, fmt, strict workspace
-  Clippy, `code-health`, then the nextest suite). `code-health` is a fail-only
-  structural tripwire, not gameplay evidence.
+- `correctness` is the L2 close gate (fmt, strict workspace Clippy,
+  `code-health`, the full nextest suite, then registered `regressions`).
+  `code-health` is a fail-only structural tripwire, not gameplay evidence.
 - `core-client` is the server/own-chat continuity subset only (Java default,
   native subset). Its receipt explicitly excludes Wasm, economy and
   Loader-required rejection evidence.
@@ -340,6 +340,15 @@ closed. Trailing package/target/name selectors use the same runner, for example
 `harness = false` bench targets stay in the all-targets gate in test mode;
 explicit `cargo bench` remains the performance-measurement path. Per-test
 durations are retained in `test.log`.
+
+L2 snapshots the full run's fresh nextest JUnit report as `test-junit.xml` in
+its artifact directory, including on test failure. Registered Cargo regressions
+consume that report instead of listing/building/running the same tests again:
+every exact package/function ref must have executed and passed, with missing,
+ignored/skipped or failed refs failing the gate with their ledger row IDs.
+Stale reports are discarded before execution. L2 does not opt into ignored tests.
+Python, client and harness regression refs retain their existing execution.
+Standalone `run regressions` still discovers and executes its exact Cargo refs.
 
 For a long, isolated scheduled-block simulation, use
 `crate::tick_tests::warp_to_block_tick` to jump to the target block's real

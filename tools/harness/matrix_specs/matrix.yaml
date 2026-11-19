@@ -14277,7 +14277,7 @@ dimensions:
         - graves
       - id: plugins.plugin_startup_fail_closed
         name: plugin_startup_fail_closed
-        do: deploy two death_graves packages / api 0.6 legacy (land-claims, online-roster, geological-mines)
+        do: deploy two death_graves packages / a synthetic api 0.6 legacy manifest (core tools/fixtures/legacy-api-0.6, formerly the land-claims/online-roster/geological-mines packages)
         expect: startup refuses with clear error
         caps:
         - command_send
@@ -30943,9 +30943,6 @@ dimensions:
       krasnokamen-essentials: plugins.essentials_homes
       krasnokamen-permissions: plugins.perm_groups_user_set
       krasnokamen-towns: plugins.towns_create_info
-      geological-mines: plugins.plugin_startup_fail_closed
-      land-claims: plugins.plugin_startup_fail_closed
-      online-roster: plugins.plugin_startup_fail_closed
     plugin_command (plugin.toml player_commands):
       economy: plugins.basic_economy_shop
       audit: plugins.audit_queries
@@ -30970,9 +30967,6 @@ dimensions:
       reply: plugins.essentials_msg_reply
       perm: plugins.perm_groups_user_set
       town: plugins.towns_create_info
-      geology: plugins.plugin_startup_fail_closed
-      claim: plugins.plugin_startup_fail_closed
-      who: plugins.plugin_startup_fail_closed
     weather (core:commands.rs Weather):
       Clear: weather_time.weather_cycle
       Rain: weather_time.weather_cycle
@@ -58569,7 +58563,7 @@ scenarios:
   domain: plugins
   subject: plugins.plugin_startup_fail_closed
   steps:
-  - 'Action: deploy two death_graves packages / api 0.6 legacy (land-claims, online-roster, geological-mines)'
+  - 'Action: deploy two death_graves packages / a synthetic api 0.6 legacy manifest (core tools/fixtures/legacy-api-0.6, formerly the land-claims/online-roster/geological-mines packages)'
   oracle:
   - 'reference: startup refuses with clear error'
   - 'SERVER GAP (not_deployable): expected to fail until implemented; must not crash or corrupt state'

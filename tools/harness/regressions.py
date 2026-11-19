@@ -11,6 +11,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 from .ledger_base_fixed import BASE_FIXED
 from tools.dev.wtlib import PINS
@@ -53,6 +54,36 @@ def _nextest_listing(text):
         if isinstance(value, dict) and 'rust-suites' in value:
             return value
     raise ValueError('nextest did not produce a test listing')
+
+
+def _cargo_junit_failures(path, cargo):
+    """Match exact ledger refs to executed nextest cases, never listing entries."""
+    try:
+        root = ET.parse(path).getroot()
+        if root.tag != 'testsuites':
+            raise ValueError('expected nextest testsuites')
+    except (OSError, ET.ParseError, ValueError) as error:
+        ids = set().union(*(ids for tests in cargo.values() for ids in tests.values()))
+        return [f"{', '.join(sorted(ids))}: invalid or missing JUnit report {path}: {error}"]
+    outcomes = defaultdict(set)
+    for suite in root.findall('testsuite'):
+        crate = suite.get('name', '').split('::', 1)[0]
+        for case in suite.findall('testcase'):
+            if case.find('skipped') is not None:
+                state = 'skipped'
+            elif case.find('failure') is not None or case.find('error') is not None:
+                state = 'failed'
+            else:
+                state = 'passed'
+            outcomes[crate, case.get('name')].add(state)
+    failures = []
+    for crate, tests in sorted(cargo.items()):
+        for name, ids in sorted(tests.items()):
+            states = outcomes.get((crate, name), set())
+            if states != {'passed'}:
+                reason = ', '.join(sorted(states)) if states else 'not executed (unknown or ignored test)'
+                failures.extend(f'{ident}: {crate}:{name}: {reason}' for ident in sorted(ids))
+    return failures
 
 
 def _loader_live_command(scenario):
@@ -521,7 +552,7 @@ def is_graphical_ref(ref):
     return len(parts) == 3 and parts[0] == 'harness' and _graphical_check(parts[1], parts[2])
 
 
-def run(ctx):
+def run(ctx, *, cargo_junit: Path | None = None):
     from . import ledger as ledger_tool
     from . import profiles
 
@@ -601,7 +632,9 @@ def run(ctx):
                 state, detail = results.get(test, (ledger_tool.UNRUNNABLE, 'no result'))
                 if state != ledger_tool.GREEN:
                     failures.append(f"{', '.join(sorted(ids))}: {test}: {state}: {detail}")
-    if cargo:
+    if cargo and cargo_junit is not None:
+        failures.extend(_cargo_junit_failures(cargo_junit, cargo))
+    elif cargo:
         expression = ' | '.join(
             f'(package({crate}) & test(={name}))'
             for crate, tests in sorted(cargo.items()) for name in sorted(tests)
@@ -644,4 +677,7 @@ def run(ctx):
                         failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
     if failures:
         raise RuntimeError('; '.join(failures))
-    return {'open': len(bugs)-fixed, 'fixed': fixed, 'cargo_checks': sum(map(len, cargo.values())), 'client_checks': len(clients), 'client_executed': ctx.include_regression_client}
+    details = {'open': len(bugs)-fixed, 'fixed': fixed, 'cargo_checks': sum(map(len, cargo.values())), 'client_checks': len(clients), 'client_executed': ctx.include_regression_client}
+    if cargo_junit is not None:
+        details.update(cargo_junit=str(cargo_junit), cargo_checks_reused=details['cargo_checks'])
+    return details
