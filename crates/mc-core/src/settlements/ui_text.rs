@@ -223,6 +223,7 @@ pub(crate) enum Key {
     WalkCorner2,
     OpenCertify,
     CloseWalk,
+    AfterCertified,
 }
 
 /// English and Russian text for one key.
@@ -242,6 +243,7 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::WalkCorner2 => ("Corner 1 saved ({at}). Walk to corner 2, then press ", "Метка 1 сохранена ({at}). Подойдите к углу 2 и нажмите "),
         Key::OpenCertify => ("[Open certification]", "[Открыть сертификацию]"),
         Key::CloseWalk => ("Close and walk to corner 2", "Закрыть и идти к углу 2"),
+        Key::AfterCertified => ("Next: assign residents, or build the next level and recheck its certificate.", "Дальше: назначьте жителей или достройте следующий уровень и проверьте сертификат."),
         Key::GuideClaim => (
             "Find the village bell → right-click → Claim charter. This is your management entrance.",
             "Найдите колокол деревни → ПКМ → «Принять грамоту». Это вход в управление.",

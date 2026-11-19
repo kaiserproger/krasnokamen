@@ -1133,7 +1133,12 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
                     ("id", &short(id).to_string()),
                 ],
             );
-            buildings_screen(state, connection, ctx, &note);
+            present(state, connection, Dialog::multi_action(ctx.t(Key::Buildings), vec![
+                button(ctx.t(Key::ResidentsJobs), "residents", ctx.id),
+                button(ctx.f(Key::Certificate, &[("level", "2")]), "certificate_review", ctx.id)
+                    .with("b", Tag::String(id.0.to_string())),
+                button(ctx.t(Key::Back), "buildings", ctx.id),
+            ]).text(note).text(ctx.t(Key::AfterCertified)));
         }
         Err(error) => {
             let note = ctx.f(
