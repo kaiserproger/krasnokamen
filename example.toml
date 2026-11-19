@@ -41,6 +41,10 @@ max_pre_play_connections = 0
 # sessions do not count); 0 disables it. Raise it when many clients connect
 # from one address (load tests, NAT). Ignored in Velocity mode.
 max_pre_play_connections_per_ip = 8
+# Chunk packets sent to one player per tick (1-64); the client's acknowledged
+# rate lowers it further. Raise for faster world loading on a server with spare
+# CPU and bandwidth.
+chunks_per_tick_per_player = 16
 
 [auth]
 # Enable Mojang session authentication for public play.

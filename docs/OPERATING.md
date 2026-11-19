@@ -271,6 +271,11 @@ Behavior worth knowing:
   live when the player changes render distance. Residency is the union of
   player views, the simulation radius and a margin; tickets and dirty-chunk
   pins keep extra chunks loaded without sending them.
+- `[network] chunks_per_tick_per_player` (default `16`, range 1–64) caps the
+  chunk packets sent to one player per published tick. The client's own
+  acknowledged rate (vanilla chunk batches) lowers it further. Raise it for
+  faster world loading when the server has spare CPU and bandwidth; lower it
+  to smooth bandwidth for many joining players.
 - `pause_when_empty_seconds` (vanilla's `pause-when-empty-seconds`): with no
   player online for that long the world stops advancing (mobs, random ticks,
   redstone, weather, daylight) while network, console and saves keep working.

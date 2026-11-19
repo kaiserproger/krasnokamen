@@ -285,6 +285,11 @@ pub struct NetworkSection {
     /// Velocity mode ignores it: the proxy owns connection control.
     #[serde(default = "default_max_pre_play_connections_per_ip")]
     pub max_pre_play_connections_per_ip: u32,
+    /// Chunk packets sent to one player per published tick, 1..=64 (vanilla
+    /// clamps a client's requested rate to 64). Default 16; the client's
+    /// acknowledged rate lowers it further.
+    #[serde(default = "default_chunks_per_tick_per_player")]
+    pub chunks_per_tick_per_player: u32,
 }
 
 impl Default for NetworkSection {
@@ -296,6 +301,7 @@ impl Default for NetworkSection {
             max_connections_per_ip: 0,
             max_pre_play_connections: 0,
             max_pre_play_connections_per_ip: default_max_pre_play_connections_per_ip(),
+            chunks_per_tick_per_player: default_chunks_per_tick_per_player(),
         }
     }
 }
@@ -730,6 +736,9 @@ fn default_port() -> u16 {
 fn default_max_pre_play_connections_per_ip() -> u32 {
     8
 }
+fn default_chunks_per_tick_per_player() -> u32 {
+    crate::plan::CHUNKS_PER_TICK as u32
+}
 fn default_world_dir() -> PathBuf {
     PathBuf::from("world")
 }
@@ -843,6 +852,11 @@ impl EdgeConfig {
             cfg.data.outbox_queue_bytes > 0,
             "data.outbox_queue_bytes must be positive"
         );
+        anyhow::ensure!(
+            (1..=64).contains(&cfg.network.chunks_per_tick_per_player),
+            "network.chunks_per_tick_per_player must be in 1..=64: 0 would never send a \
+             chunk, and clients never ask for more than 64"
+        );
         Ok(cfg)
     }
 
@@ -908,6 +922,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "max_connections_per_ip",
                 "max_pre_play_connections",
                 "max_pre_play_connections_per_ip",
+                "chunks_per_tick_per_player",
             ],
         ),
         (
@@ -1369,13 +1384,23 @@ mod tests {
     #[test]
     fn network_address_limits_parse_and_example_names_only_known_keys() {
         let cfg = EdgeConfig::from_toml(
-            "[network]\nconnection_throttle_ms = 750\nmax_connections_per_ip = 2\nmax_pre_play_connections_per_ip = 64\n",
+            "[network]\nconnection_throttle_ms = 750\nmax_connections_per_ip = 2\nmax_pre_play_connections_per_ip = 64\nchunks_per_tick_per_player = 24\n",
             None,
         )
         .unwrap();
         assert_eq!(cfg.network.connection_throttle_ms, 750);
         assert_eq!(cfg.network.max_connections_per_ip, 2);
         assert_eq!(cfg.network.max_pre_play_connections_per_ip, 64);
+        assert_eq!(cfg.network.chunks_per_tick_per_player, 24);
+        for out_of_range in [0, 65] {
+            assert!(
+                EdgeConfig::from_toml(
+                    &format!("[network]\nchunks_per_tick_per_player = {out_of_range}\n"),
+                    None,
+                )
+                .is_err()
+            );
+        }
 
         let text =
             std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../example.toml"))

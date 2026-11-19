@@ -50,7 +50,11 @@ fn scoreboard_bulk_join_replay_fits_reliable_queue() {
     let (reliable_tx, mut reliable_rx) = mpsc::channel(crate::fanout::RELIABLE_QUEUE_BOUND);
     let (world_tx, _world_rx) = world_queue(WORLD_QUEUE_FRAMES, WORLD_QUEUE_BYTES);
     let stashed = registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     let mut viewer = crate::plan::ViewerState::new(id, entity, [0.0; 3]);
     replay_join_tail(&registry, id, stashed, &mut viewer).expect("bulk join replay");
@@ -123,7 +127,11 @@ fn removed_registration_fails_join_replay_without_panicking() {
     let (reliable_tx, mut reliable_rx) = mpsc::channel(4);
     let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
     let stashed = registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     assert_eq!(stashed.len(), 2);
     // The pump can close delivery after register succeeds, before replay.
@@ -144,7 +152,11 @@ fn late_reliable_results_do_not_revive_removed_connection() {
     let (reliable_tx, _reliable_rx) = mpsc::channel(4);
     let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     registry.remove(id);
 
@@ -279,7 +291,11 @@ async fn removed_join_rejects_late_join_reason_waiter_and_registration() {
     let (world_tx, _) = world_queue(1, WORLD_QUEUE_BYTES);
     assert!(
         registry
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0,)
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || 0,
+            )
             .is_err()
     );
     assert!(registry.is_empty());

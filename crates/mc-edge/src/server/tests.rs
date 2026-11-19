@@ -16,7 +16,11 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
     registry
         .register(
             ConnectionId(1),
-            ConnectionHandles::new(reliable_tx.clone(), world_tx.clone()),
+            ConnectionHandles::new(
+                reliable_tx.clone(),
+                world_tx.clone(),
+                crate::plan::CHUNKS_PER_TICK,
+            ),
             || 0,
         )
         .unwrap();
@@ -28,7 +32,7 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
     registry
         .register(
             ConnectionId(2),
-            ConnectionHandles::new(reliable_tx2, world_tx2),
+            ConnectionHandles::new(reliable_tx2, world_tx2, crate::plan::CHUNKS_PER_TICK),
             || 0,
         )
         .unwrap();
@@ -62,7 +66,11 @@ fn registry_insert_remove_roster() {
     let (reliable_tx, _) = mpsc::channel(2);
     let (world_tx, _) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     assert_eq!(registry.len(), 1);
     registry.set_name(id, "Alex".to_owned());
@@ -83,7 +91,11 @@ fn routing_snapshot_copies_handles_only_on_change() {
     let (reliable_tx, _reliable_rx) = mpsc::channel(2);
     let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     let (handles, _) = registry.routing_snapshot(&mut generation);
     let handles = handles.expect("a join copies the routing view once");
@@ -118,7 +130,11 @@ fn closing_without_handles_does_not_move_the_routing_view() {
     let (reliable_tx, _reliable_rx) = mpsc::channel(2);
     let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     let (handles, _) = registry.routing_snapshot(&mut generation);
     assert_eq!(handles.expect("the join copies once").len(), 1);
@@ -163,7 +179,11 @@ fn routing_snapshot_tick_cost_at_1k() {
         let (reliable_tx, reliable_rx) = mpsc::channel(2);
         let (world_tx, world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
         registry
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || 0,
+            )
             .unwrap();
         queues.push((reliable_rx, world_rx));
     }
@@ -367,7 +387,7 @@ fn pending_reliable_keeps_burst_order() {
     });
     let (reliable_tx, _reliable_rx) = mpsc::channel(1);
     let (world_tx, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
-    let handles = ConnectionHandles::new(reliable_tx, world_tx);
+    let handles = ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK);
     assert_eq!(
         registry.register(id, handles.clone(), || 0).unwrap(),
         expected
@@ -390,10 +410,14 @@ fn queue_registration_seals_the_native_count_inside_its_critical_section() {
     let (reliable_tx, _reliable_rx) = mpsc::channel(1);
     let (world_tx, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            assert!(registry.inner.try_lock().is_none());
-            7
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || {
+                assert!(registry.inner.try_lock().is_none());
+                7
+            },
+        )
         .unwrap();
     assert_eq!(registry.get(id).unwrap().knockback_baseline, 7);
 }

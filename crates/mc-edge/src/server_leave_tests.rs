@@ -12,7 +12,7 @@ fn server(root: &std::path::Path) -> EdgeServer {
     server_with(root, |_| {})
 }
 
-fn server_with(
+pub(super) fn server_with(
     root: &std::path::Path,
     edit: impl FnOnce(&mut crate::config::EdgeConfig),
 ) -> EdgeServer {
@@ -40,7 +40,7 @@ fn server_with(
     EdgeServer::new(core, data, tags, cfg).unwrap()
 }
 
-async fn wait_snapshot(
+pub(super) async fn wait_snapshot(
     ticks: &mut tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
     timeout: Duration,
     mut predicate: impl FnMut(&mc_core::boundary::WorldSnapshot) -> bool,

@@ -61,11 +61,19 @@ pub struct ConnectionHandles {
 }
 
 impl ConnectionHandles {
-    pub fn new(reliable_tx: mpsc::Sender<bytes::Bytes>, world_tx: WorldSender) -> Self {
+    /// `chunks_per_tick` caps chunk packets per publish for this connection
+    /// (`[network] chunks_per_tick_per_player`).
+    pub fn new(
+        reliable_tx: mpsc::Sender<bytes::Bytes>,
+        world_tx: WorldSender,
+        chunks_per_tick: usize,
+    ) -> Self {
         Self {
             reliable_tx,
             world_tx,
-            chunk_batches: Arc::default(),
+            chunk_batches: Arc::new(parking_lot::Mutex::new(
+                crate::plan::chunk_batch::ChunkBatchState::with_cap(chunks_per_tick),
+            )),
             knockback_baseline: 0,
         }
     }

@@ -2040,6 +2040,10 @@ mod transfer_tests;
 mod leave_tests;
 
 #[cfg(test)]
+#[path = "server_chunk_rate_tests.rs"]
+mod chunk_rate_tests;
+
+#[cfg(test)]
 #[path = "server_duplicate_login_tests.rs"]
 mod duplicate_login_tests;
 

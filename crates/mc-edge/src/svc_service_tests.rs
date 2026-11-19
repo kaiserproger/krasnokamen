@@ -42,9 +42,11 @@ fn connect(server: &EdgeServer) -> (ConnectionId, mpsc::Receiver<bytes::Bytes>) 
     let (world_tx, _) = crate::server::world_queue(8, crate::server::WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .expect("test connection admitted");
     (id, reliable_rx)
 }
