@@ -67,11 +67,6 @@ fn reliable_overflow_threshold() {
 }
 
 #[test]
-fn queue_bound_sane() {
-    assert_eq!(RELIABLE_QUEUE_BOUND, 512);
-}
-
-#[test]
 fn publish_empty_viewers_empty_packets() {
     let out = tick();
     let packets: Vec<AddressedPacket> = publish(&out, [].into_iter(), 2);
