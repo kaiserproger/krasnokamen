@@ -3,6 +3,22 @@
 
 use super::*;
 
+impl EdgeServer {
+    /// Queue handles for one Play connection, paced by
+    /// `[network] chunks_per_tick_per_player`.
+    pub(super) fn connection_handles(
+        &self,
+        reliable_tx: mpsc::Sender<bytes::Bytes>,
+        world_tx: WorldSender,
+    ) -> ConnectionHandles {
+        ConnectionHandles::new(
+            reliable_tx,
+            world_tx,
+            self.cfg.network.chunks_per_tick_per_player as usize,
+        )
+    }
+}
+
 /// Register the session and enqueue its native Join under the same fence as
 /// op/deop, so a permission update cannot overtake the Join it targets.
 pub(super) async fn admit_native_session(
@@ -434,12 +450,11 @@ async fn run_connection(
         mpsc::channel::<bytes::Bytes>(crate::fanout::RELIABLE_QUEUE_BOUND);
     let (world_tx, world_rx) = world_queue_for(&server.cfg.recorder, recorder);
     let operator_guard = server.operator_updates.lock().await;
-    let stashed =
-        server
-            .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })?;
+    let stashed = server.connections.register(
+        id,
+        server.connection_handles(reliable_tx, world_tx),
+        || server.hub.published_knockback_count(id),
+    )?;
     if !stashed.is_empty() {
         // Adopt the Joined entity id if stashed (matches the pump path).
         let joined_entity = stashed.iter().find_map(|change| match change {

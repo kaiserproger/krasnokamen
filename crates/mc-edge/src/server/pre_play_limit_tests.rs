@@ -81,9 +81,11 @@ async fn extra_pre_play_socket_is_refused_while_a_player_plays() {
     let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(play, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(play)
-        })
+        .register(
+            play,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(play),
+        )
         .unwrap();
     assert!(core.submit(mc_core::boundary::PlayerInput::Join {
         connection: play,

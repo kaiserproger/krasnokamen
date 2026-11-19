@@ -51,9 +51,11 @@ async fn core_halt_routes_terminal_disconnect_reason() {
     let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     assert!(core.submit(mc_core::boundary::PlayerInput::Join {
         connection: id,
@@ -105,9 +107,11 @@ async fn a_wedged_pump_still_ends_serve_and_kicks_every_connection() {
     let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     assert!(core.submit(mc_core::boundary::PlayerInput::Join {
         connection: id,
@@ -160,9 +164,11 @@ async fn a_wedged_pump_halt_uses_the_core_reason_not_a_queued_disconnect() {
     let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(first, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(first)
-        })
+        .register(
+            first,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(first),
+        )
         .unwrap();
     let mut ticks = core.subscribe();
     let uuid = uuid::Uuid::new_v4();
@@ -239,9 +245,11 @@ async fn a_pump_parked_in_a_synchronous_section_still_ends_serve() {
     let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     assert!(core.submit(mc_core::boundary::PlayerInput::Join {
         connection: id,

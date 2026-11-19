@@ -125,7 +125,11 @@ async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
     registry
         .register(
             self_id,
-            ConnectionHandles::new(self_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            ConnectionHandles::new(
+                self_tx,
+                world_queue(1, WORLD_QUEUE_BYTES).0,
+                crate::plan::CHUNKS_PER_TICK,
+            ),
             || 0,
         )
         .unwrap();
@@ -134,7 +138,11 @@ async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
     registry
         .register(
             other,
-            ConnectionHandles::new(other_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            ConnectionHandles::new(
+                other_tx,
+                world_queue(1, WORLD_QUEUE_BYTES).0,
+                crate::plan::CHUNKS_PER_TICK,
+            ),
             || 0,
         )
         .unwrap();
@@ -180,7 +188,11 @@ fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
     registry
         .register(
             a,
-            ConnectionHandles::new(a_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            ConnectionHandles::new(
+                a_tx,
+                world_queue(1, WORLD_QUEUE_BYTES).0,
+                crate::plan::CHUNKS_PER_TICK,
+            ),
             || 0,
         )
         .unwrap();
@@ -190,7 +202,11 @@ fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
     registry
         .register(
             b,
-            ConnectionHandles::new(b_tx, world_queue(1, WORLD_QUEUE_BYTES).0),
+            ConnectionHandles::new(
+                b_tx,
+                world_queue(1, WORLD_QUEUE_BYTES).0,
+                crate::plan::CHUNKS_PER_TICK,
+            ),
             || 0,
         )
         .unwrap();
@@ -440,9 +456,11 @@ async fn edge_kick_flushes_terminal_packet_after_an_earlier_reliable_batch() {
         let (world, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(id, ConnectionHandles::new(reliable.clone(), world), || {
-                server.hub.published_knockback_count(id)
-            })
+            .register(
+                id,
+                ConnectionHandles::new(reliable.clone(), world, crate::plan::CHUNKS_PER_TICK),
+                || server.hub.published_knockback_count(id),
+            )
             .unwrap();
         let (_replies, keepalive) = mpsc::channel(1);
         let task = tokio::spawn(play_writer(

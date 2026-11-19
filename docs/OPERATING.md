@@ -271,6 +271,11 @@ Behavior worth knowing:
   live when the player changes render distance. Residency is the union of
   player views, the simulation radius and a margin; tickets and dirty-chunk
   pins keep extra chunks loaded without sending them.
+- `[network] chunks_per_tick_per_player` (default `16`, range 1–64) caps the
+  chunk packets sent to one player per published tick. The client's own
+  acknowledged rate (vanilla chunk batches) lowers it further. Raise it for
+  faster world loading when the server has spare CPU and bandwidth; lower it
+  to smooth bandwidth for many joining players.
 - `pause_when_empty_seconds` (vanilla's `pause-when-empty-seconds`): with no
   player online for that long the world stops advancing (mobs, random ticks,
   redstone, weather, daylight) while network, console and saves keep working.
@@ -359,9 +364,10 @@ Connection admission:
   a 5-second stall fence. A deliberately slow client can therefore hold a slot for
   minutes; the cap keeps that to bounded memory per socket, and it never refuses
   an established player.
-- Independently, at most eight pre-play connections per socket IP are accepted
-  for direct clients (Play sessions do not count). This is disabled in Velocity
-  mode, where the proxy owns connection control.
+- Independently, `max_pre_play_connections_per_ip` (default `8`, `0` off) caps
+  concurrent pre-play connections per socket IP for direct clients (Play sessions
+  do not count). Raise it when many clients join from one address (load tests,
+  NAT). It is ignored in Velocity mode, where the proxy owns connection control.
 - When accepting exhausts file descriptors or socket buffers while sessions are
   open, the listener logs a warning and pauses admission until a session ends;
   the same failure with no open session, or any other listener error, stops the

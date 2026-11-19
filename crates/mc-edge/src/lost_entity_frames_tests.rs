@@ -187,9 +187,11 @@ impl Pump {
         let (world_tx, _) = world_queue(1, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || server.hub.published_knockback_count(id),
+            )
             .unwrap();
         let (connections, _) = server.connections.routing_view();
         Self {

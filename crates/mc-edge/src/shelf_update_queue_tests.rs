@@ -214,9 +214,11 @@ impl Wire {
         let (world_tx, world_rx) = world_queue(64, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || server.hub.published_knockback_count(id),
+            )
             .unwrap();
         let (connections, _) = server.connections.routing_view();
         let viewers = HashMap::from([(

@@ -21,14 +21,17 @@ async fn world_refusal_stops_camera_suffix_even_when_writer_frees_capacity() {
         let b = ConnectionId(2);
         let (reliable, mut reliable_rx) = mpsc::channel(4);
         let (world, mut world_rx) = world_queue(3, WORLD_QUEUE_BYTES);
-        let handles = ConnectionHandles::new(reliable, world);
+        let handles = ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK);
         assert_eq!(handles.chunk_batches.lock().allowance(), 9);
         let pacing = Arc::clone(&handles.chunk_batches);
         let (other_reliable, _other_reliable_rx) = mpsc::channel(4);
         let (other_world, mut other_world_rx) = world_queue(3, WORLD_QUEUE_BYTES);
         let mut connections = HashMap::from([
             (a, handles),
-            (b, ConnectionHandles::new(other_reliable, other_world)),
+            (
+                b,
+                ConnectionHandles::new(other_reliable, other_world, crate::plan::CHUNKS_PER_TICK),
+            ),
         ]);
         let mut viewers = HashMap::from([
             (a, crate::plan::ViewerState::new(a, EntityId(1), [0.0; 3])),
@@ -88,7 +91,7 @@ async fn refused_atomic_chunk_group_stops_later_camera_frame_without_ack_debt() 
     let id = ConnectionId(1);
     let (reliable, _reliable_rx) = mpsc::channel(4);
     let (world, mut world_rx) = world_queue(3, WORLD_QUEUE_BYTES);
-    let handles = ConnectionHandles::new(reliable, world);
+    let handles = ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK);
     let pacing = Arc::clone(&handles.chunk_batches);
     assert_eq!(pacing.lock().allowance(), 9);
     let mut connections = HashMap::from([(id, handles)]);

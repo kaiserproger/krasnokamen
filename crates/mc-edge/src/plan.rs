@@ -793,11 +793,12 @@ pub struct PlanRegistries<'a> {
     pub block_entity_types: &'a mc_data::block_entity_types::BlockEntityTypeRegistry,
 }
 
-/// Chunk packets per viewer per publish, nearest-first (vanilla
-/// `PlayerChunkSender` paces too). An unpaced first publish encoded a whole
-/// view square (289 chunks at view 8: ~11 s in a debug build) on the pump,
-/// stalling every viewer.
-const CHUNKS_PER_TICK: usize = 16;
+/// Default chunk packets per viewer per publish, nearest-first (vanilla
+/// `PlayerChunkSender` paces too); `[network] chunks_per_tick_per_player`
+/// sets it per server. An unpaced first publish encoded a whole view square
+/// (289 chunks at view 8: ~11 s in a debug build) on the pump, stalling every
+/// viewer.
+pub(crate) const CHUNKS_PER_TICK: usize = 16;
 
 /// Plan every world packet for one viewer from one tick output;
 /// `view_distance` sizes the Chebyshev chunk square. Player changes ride
