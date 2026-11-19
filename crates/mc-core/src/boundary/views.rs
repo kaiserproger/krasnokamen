@@ -2,7 +2,7 @@
 //! membership change only on lifecycle/chunk moves; a publication builds each
 //! touched page once, directly from the new after-images, and leaves every
 //! previously published page untouched.
-use crate::boundary::{ChunkPos, EntityId, EntityView};
+use super::{ChunkPos, EntityId, EntityView};
 use im::{OrdMap, OrdSet};
 use rayon::prelude::*;
 use std::sync::Arc;

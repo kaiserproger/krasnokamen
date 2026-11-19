@@ -84,7 +84,8 @@ decides it):
   crate pilot) is designed, not started, and recommends against splitting
   while most top-level `mc-core` modules form one dependency cycle. Step 3's
   policy, settled-block and book ownership cuts reduce it from 189 of 193 to
-  184 of 192 modules (2026-11-09 canonical code-health); the vanilla mob behaviours merge ec3a463a raised it to 187 modules (2026-11-12).
+  184 of 192 modules (2026-11-09 canonical code-health); the vanilla mob behaviours merge ec3a463a raised it to 187 modules (2026-11-12);
+  the D9 entity-view ownership cut measures 186 of 199 (2026-11-17).
 - [ADR 0016](decisions/0016-mob-capabilities.md) Layer 3 (Wasm capability
   code), operator data-directory blueprints and persistent sensor
   subscriptions.

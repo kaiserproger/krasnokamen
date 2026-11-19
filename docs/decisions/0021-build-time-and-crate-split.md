@@ -378,7 +378,30 @@ of a new all-green `correctness` invocation; the exact trees and receipts are in
 batch; no build-speed or real-client acceptance claim is made by these cuts.
 
 
-## Cycle ratchet (implemented 2026-11-07)
+### Entity view pages are a boundary child, motion gate is an entity child
+
+`entity_views` owned the dense copy-on-write page container for
+`boundary::EntityView` records and nothing else: its only out-edge was back to
+`boundary`, and `boundary` was its only referrer (a `pub use`). It is
+`boundary::views` now, byte for byte (test file included), so a false top-level
+cycle node disappears while `boundary::EntityViews` stays the public path.
+
+The native motion gate policy — which motion lanes one entity runs — left
+`entities.rs` for its owner `entities/motion_gate.rs` with bytes verbatim. The
+store keeps the `flags`/`hints` columns, their dirty queue and custody; the gate
+owns the classification that fills them from hot body state, cold retained state
+and the blueprint registry. As a submodule of the entity host it is not a cycle
+node. `entities` itself cannot leave the cycle: every store method names
+`boundary` and `blueprint` types, which are inside it.
+
+Canonical code-health on the integration tree measures 186 of 199 top-level
+modules in the largest cycle (235,960 production lines) and 864
+items/statements in `entities.rs` (925 before); the ceilings drop to 186 and
+864. No encoded record,
+call order or gameplay decision changed. Move script and measurement logs:
+`receipts/CutEntities/`.
+
+### Cycle ratchet (implemented 2026-11-07)
 
 The owner approved a gate that keeps the cycle from growing while Step 3 waits.
 `cargo run -p xtask -- code-health` builds `mc-core`'s top-level module graph

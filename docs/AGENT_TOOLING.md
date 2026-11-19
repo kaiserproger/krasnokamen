@@ -468,6 +468,7 @@ fail when they rise above their ceiling in
   as declarations; inline modules belong to their physical file, external module
   declarations to their parent file. Comments and whitespace cannot change this
   count. The 2026-11-17 `b58021e61` baseline is 734, 1076, 834 and 924 respectively;
+  the D9 motion-gate extraction (2026-11-17) took `entities.rs` to 864 (925 on main before the cut);
 - `.project` and `.pending_order` field expressions outside
   `settlements/construction*.rs` and their module children (including `#[path]`
   children), or the inline `settlements::construction` module and its children.
