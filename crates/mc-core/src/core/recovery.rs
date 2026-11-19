@@ -4,7 +4,7 @@
 use super::*;
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn load_dimension_state(
+pub(crate) fn load_dimension_state(
     config: &CoreConfig,
     registry: Arc<CoreRegistry>,
     dimension: crate::dimensions::Dimension,

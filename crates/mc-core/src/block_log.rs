@@ -606,6 +606,23 @@ pub(crate) struct Backlog {
 }
 
 impl Backlog {
+    /// Offline checkpointing of a recovered tail, without wall-time eviction.
+    pub(crate) fn absorb_recovered_tail(
+        &mut self,
+        dimension: Dimension,
+        deltas: &[Delta],
+        coverage: u64,
+    ) {
+        for delta in deltas {
+            self.deltas.push((dimension, delta.clone()));
+            let floor = self
+                .floors
+                .entry(dimension)
+                .or_insert(Floor { prune: 0, coverage });
+            floor.coverage = floor.coverage.max(delta.coverage);
+        }
+    }
+
     pub(crate) fn absorb(&mut self, persist: Persist) {
         self.deltas.extend(persist.deltas);
         self.floors.extend(persist.floors);

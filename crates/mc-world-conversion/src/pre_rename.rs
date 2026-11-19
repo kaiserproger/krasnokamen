@@ -127,6 +127,17 @@ impl PreRename {
     ) -> Result<(), CoreError> {
         match tag {
             Tag::Compound(fields) => {
+                if matches!(owner, Owner::Chunk)
+                    && fields.iter().any(|(key, _)| {
+                        matches!(key.as_str(), "SolarisSimLastTick" | "SolarisSimDebt")
+                    })
+                {
+                    return Err(fail(format!(
+                        "{}: pre-rename simulation debt has no historical held-time H witness; \
+                         start a fresh world, or convert on a release that still retained held time",
+                        record()
+                    )));
+                }
                 let mut renamed = false;
                 for (key, value) in fields.iter_mut() {
                     if let Some(name) = current_name(owner, key) {
@@ -181,8 +192,6 @@ fn current_name(owner: Owner, key: &str) -> Option<String> {
         (LevelData, "SolarisEntitySalt") => "KrasnokamenEntitySalt",
         (Chunk, "SolarisJournalLsn") => "KrasnokamenJournalLsn",
         (Chunk, "SolarisGeneratedEntities") => "KrasnokamenGeneratedEntities",
-        (Chunk, "SolarisSimLastTick") => "KrasnokamenSimLastTick",
-        (Chunk, "SolarisSimDebt") => "KrasnokamenSimDebt",
         (StructureStart, "SolarisLocatePos") => "KrasnokamenLocatePos",
         (Player, "SolarisGameplaySeed") => "KrasnokamenGameplaySeed",
         (Player, "SolarisWardenWarning") => "KrasnokamenWardenWarning",

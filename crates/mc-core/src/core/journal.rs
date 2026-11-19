@@ -113,7 +113,7 @@ pub(super) fn start_checkpoint(
 
 /// The WAL can own only one inventory in an otherwise unloaded chunk. Hydrate
 /// its neighbours before freezing slots or projecting the opaque container owners.
-fn prepare_container_checkpoint(state: &mut TickState) -> bool {
+pub(crate) fn prepare_container_checkpoint(state: &mut TickState) -> bool {
     let materialized = state
         .world
         .materialize_container_chunks(state.block_entities.keys().copied());

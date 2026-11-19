@@ -37,7 +37,7 @@ impl Default for GameClockImage {
     }
 }
 
-pub(crate) const LEGACY_CLOCK_ERROR: &str = "world was frozen by an older binary; its catch-up debt cannot be reconstructed; start a fresh world";
+pub(crate) const LEGACY_CLOCK_ERROR: &str = "world was frozen by an older binary; its catch-up debt cannot be reconstructed; run world upgrade-game-clock --copy <disposable-world-copy>";
 
 impl GameClockImage {
     pub(crate) fn held_ticks(self, tick: u64) -> Result<u64, CoreError> {

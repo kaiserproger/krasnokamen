@@ -498,7 +498,7 @@ impl RecoveredWorld {
     }
 }
 
-pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+fn offline_registry(config: &CoreConfig) -> Result<Arc<crate::registry::CoreRegistry>, CoreError> {
     let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // Offline recovery resolves the same pinned native types as live startup.
     // No tick events are started and no guest command is applied.
@@ -518,7 +518,11 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
         )?,
     }
     drop(runtime);
-    let registry = Arc::new(registry);
+    Ok(Arc::new(registry))
+}
+
+pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+    let registry = offline_registry(config)?;
     let path = config.world_dir.join("native/state.redb");
     if !path.is_file() {
         return Err(import_required(config));
@@ -808,6 +812,17 @@ pub fn recover_with_reader(
     registry: Arc<crate::registry::CoreRegistry>,
     reader: NativeCheckpointReader,
 ) -> Result<RecoveredWorld, CoreError> {
+    recover_with_clock(config, registry, reader, false)
+}
+
+/// Explicit offline conversion only: fold the legacy native-tick clock law.
+/// Never used by admission, export, or ordinary server recovery.
+fn recover_with_clock(
+    config: &CoreConfig,
+    registry: Arc<crate::registry::CoreRegistry>,
+    reader: NativeCheckpointReader,
+    legacy: bool,
+) -> Result<RecoveredWorld, CoreError> {
     let checkpoint = reader
         .read_checkpoint_metadata()
         .map_err(|e| read_refusal(config, e))?;
@@ -955,15 +970,21 @@ pub fn recover_with_reader(
         .map_err(|e| CoreError::Storage(e.to_string()))?;
     let mut game_clock = crate::journal::ReplayGameClock::new(
         manifest.tick,
-        manifest.climate.map(|image| image.game_clock),
+        (!legacy)
+            .then(|| manifest.climate.map(|image| image.game_clock))
+            .flatten(),
     )?;
-    game_clock.observe_debt_stamp(manifest.climate, manifest.tick)?;
+    if !legacy {
+        game_clock.observe_debt_stamp(manifest.climate, manifest.tick)?;
+    }
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
         |batch| {
             let batches = [batch];
-            game_clock.observe_batches(&batches)?;
+            if !legacy {
+                game_clock.observe_batches(&batches)?;
+            }
             for (&dimension, replay) in &mut dimensions {
                 let mut routed = crate::dimensions::journal_for_dimension(&batches, dimension);
                 if dimension != Dimension::Overworld {
@@ -1028,7 +1049,11 @@ pub fn recover_with_reader(
     )?;
     let clock_tick = dimensions[&Dimension::Overworld].tick;
     let held_ticks = clock_tick - game_clock.game_ticks(clock_tick);
-    let anchored_since = game_clock.finish_debt_upgrade(clock_tick)?;
+    let anchored_since = if legacy {
+        0
+    } else {
+        game_clock.finish_debt_upgrade(clock_tick)?
+    };
     for (&dimension, replay) in &mut dimensions {
         crate::journal::advance_replay_clocks_with_clock(replay, &game_clock, held_ticks);
         replay.plugins.validate()?;
@@ -1061,7 +1086,9 @@ pub fn recover_with_reader(
     let scoreboard = root.scoreboard.clone();
     let bossbars = root.bossbars.clone();
     let climate = root.climate.map(|mut image| {
-        image.sim_debt_anchored_since = Some(anchored_since);
+        if !legacy {
+            image.sim_debt_anchored_since = Some(anchored_since);
+        }
         image
     });
     let difficulty = root.difficulty;
@@ -1409,6 +1436,8 @@ pub fn refresh_metadata(
     );
     Ok(())
 }
+
+pub mod game_clock_upgrade;
 
 #[cfg(test)]
 #[path = "native_checkpoint_tests.rs"]
