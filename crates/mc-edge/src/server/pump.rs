@@ -55,10 +55,66 @@ fn bounded_tracked_union(
     Some(ids.collect::<HashSet<_>>().len())
 }
 
+/// Queue budget of a pump behind the tick: an output that waited longer than
+/// this since its publication is skipped like a broadcast `Lagged` once a
+/// newer output is queued. The reliable outbox drains only through the
+/// published tick, so without it a pump slower than the tick sat at the
+/// oldest retained output, 31 outputs behind, and held every reliable change
+/// (a `Joined` too) for 31 tick periods: past the 10 s join deadline below
+/// about 3 TPS. 1.6 s is the 32-output window at 20 TPS. It bounds only the
+/// queue wait: a single long publish, a long tick or a slow socket still
+/// delays delivery, and a socket overflow still closes the connection.
+pub(super) const PUBLISH_QUEUE_BUDGET: std::time::Duration = std::time::Duration::from_millis(1600);
+
+/// An output to skip: a newer one is queued and this one waited past
+/// [`PUBLISH_QUEUE_BUDGET`] since the tick owner published it. The newest
+/// output and outputs without a publish instant are never stale.
+pub(super) fn stale(out: &TickOutput, newer_queued: bool, now: std::time::Instant) -> bool {
+    newer_queued
+        && out.times.published_at.is_some_and(|published| {
+            now.saturating_duration_since(published) > PUBLISH_QUEUE_BUDGET
+        })
+}
+
+/// Skipped publications reconcile from the next processed snapshot; its
+/// cumulative knockback epochs close only recipients of a skipped impulse.
+fn skip_publications(
+    server: &EdgeServer,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    skipped: u64,
+) {
+    server.dashboard.record_pump_skipped(skipped);
+    for viewer in viewers.values_mut() {
+        viewer.skipped = true;
+    }
+}
+
+/// The next output to publish, or `None` once the core closed the broadcast.
+/// Skips what a broadcast `Lagged` dropped and every [`stale`] output.
+pub(super) async fn next_publication(
+    server: &EdgeServer,
+    rx: &mut broadcast::Receiver<TickOutput>,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+) -> Option<TickOutput> {
+    loop {
+        match rx.recv().await {
+            Ok(out) if stale(&out, !rx.is_empty(), std::time::Instant::now()) => {
+                skip_publications(server, viewers, 1);
+            }
+            Ok(out) => return Some(out),
+            Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                skip_publications(server, viewers, skipped);
+            }
+            Err(broadcast::error::RecvError::Closed) => return None,
+        }
+    }
+}
+
 /// Single pump task: subscribes to the core, records tick stats, drains the
 /// reliable outbox FIRST, then publishes the world snapshot and routes both.
-/// `Lagged` skips snapshots; cumulative knockback epochs in the next output
-/// close only recipients whose impulse was skipped. The reliable outbox is
+/// `Lagged` and [`stale`] outputs are skipped ([`next_publication`]);
+/// cumulative knockback epochs in the next output close only recipients
+/// whose impulse was skipped. The reliable outbox is
 /// drained independently. Fanout runs on its own
 /// rayon pool: on the global pool the core tick's parallel phases queued
 /// behind whole publishes.
@@ -96,42 +152,29 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         let mut connections: HashMap<ConnectionId, ConnectionHandles> = HashMap::new();
         let mut connections_generation = 0u64;
         loop {
-            let out = match rx.recv().await {
-                Ok(out) => out,
-                Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                    // Snapshot state reconciles on the next output. Its
-                    // cumulative epochs also identify recipients of skipped
-                    // knockback, including when that next tick has an impulse.
-                    server.dashboard.record_pump_skipped(skipped);
-                    for viewer in viewers.values_mut() {
-                        viewer.skipped = true;
-                    }
-                    continue;
-                }
-                Err(broadcast::error::RecvError::Closed) => {
-                    // Drain terminal reliable disconnects before closing, both
-                    // for graceful shutdown and for an authoritative failure.
-                    refresh_routing(&server, &mut connections, &mut connections_generation);
-                    route_outbox(
-                        &server,
-                        &mut viewers,
-                        &mut connections,
-                        None,
-                        &mut latest_roster,
+            let Some(out) = next_publication(&server, &mut rx, &mut viewers).await else {
+                // Drain terminal reliable disconnects before closing, both
+                // for graceful shutdown and for an authoritative failure.
+                refresh_routing(&server, &mut connections, &mut connections_generation);
+                route_outbox(
+                    &server,
+                    &mut viewers,
+                    &mut connections,
+                    None,
+                    &mut latest_roster,
+                );
+                if server.hub.shutdown_requested() {
+                    tracing::info!(
+                        connections = connections.len(),
+                        "core tick broadcast closed after shutdown request"
                     );
-                    if server.hub.shutdown_requested() {
-                        tracing::info!(
-                            connections = connections.len(),
-                            "core tick broadcast closed after shutdown request"
-                        );
-                    } else {
-                        tracing::error!(
-                            connections = connections.len(),
-                            "core tick broadcast closed unexpectedly; core halted"
-                        );
-                    }
-                    break;
+                } else {
+                    tracing::error!(
+                        connections = connections.len(),
+                        "core tick broadcast closed unexpectedly; core halted"
+                    );
                 }
+                break;
             };
             server.tick_stats.record(out.tick);
             // Test-only: a test parks the real pump here, in a synchronous
@@ -820,13 +863,32 @@ pub(super) async fn wait_for_join(
     if let Some(joined) = server.connections.take_join(id) {
         return Ok(joined);
     }
+    // The core's tick at submission and the pump's published tick tell a slow
+    // join's two causes apart: a core that stopped ticking or a pump behind it.
+    let submitted = server.dashboard.latest_core_tick();
     let deadline = tokio::time::sleep(std::time::Duration::from_secs(10));
     tokio::pin!(deadline);
     tokio::select! {
         biased;
-        _ = &mut deadline => anyhow::bail!("timed out waiting for join"),
+        _ = &mut deadline => {
+            let tick = |tick: Option<u64>| tick.map_or_else(|| "unknown".to_owned(), |tick| tick.to_string());
+            anyhow::bail!(
+                "timed out waiting for join (core tick {} at submit, {} now; pump published tick {})",
+                tick(submitted),
+                tick(server.dashboard.latest_core_tick()),
+                server.tick_stats.tick()
+            )
+        }
         result = receiver => {
-            result.map_err(|_| anyhow::anyhow!("join waiter dropped before Joined"))
+            let joined = result.map_err(|_| anyhow::anyhow!("join waiter dropped before Joined"))?;
+            tracing::debug!(
+                connection = id.0,
+                core_tick_at_submit = ?submitted,
+                core_tick = ?server.dashboard.latest_core_tick(),
+                pump_tick = server.tick_stats.tick(),
+                "join landed"
+            );
+            Ok(joined)
         }
     }
 }

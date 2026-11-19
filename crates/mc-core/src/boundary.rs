@@ -616,6 +616,11 @@ pub struct TickTimes {
     pub coreperf: Option<Arc<CorePerfTick>>,
     /// Post-merge battle counts of this tick; `None` without battle rows.
     pub battle: Option<Arc<BattleCounts>>,
+    /// Monotonic instant the tick owner handed this output to the broadcast;
+    /// `None` outside the live loop. The edge pump measures how long an
+    /// output waited in its queue from this, never from the wall clock or
+    /// the tick start (a long tick still publishes a fresh output).
+    pub published_at: Option<std::time::Instant>,
 }
 
 /// Battle population of one tick (`battle` module), counted after merge;

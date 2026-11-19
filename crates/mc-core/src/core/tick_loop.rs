@@ -473,6 +473,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             if !Arc::ptr_eq(&published, &output.snapshot.player_knockback_ticks) {
                 *published = Arc::clone(&output.snapshot.player_knockback_ticks);
             }
+            output.times.published_at = Some(std::time::Instant::now());
             let _ = channels.tick_broadcast.send(output);
         }
         // Disconnects sealed before this tick: the edge has had a full tick

@@ -2022,6 +2022,10 @@ mod lock_tests;
 mod core_halt_tests;
 
 #[cfg(test)]
+#[path = "server/pump_join_lag_tests.rs"]
+mod pump_join_lag_tests;
+
+#[cfg(test)]
 #[path = "server_view_distance_tests.rs"]
 mod view_distance_tests;
 
