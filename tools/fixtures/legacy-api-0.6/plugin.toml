@@ -3,8 +3,9 @@
 # The component host refuses this directory before any guest runs, at manifest
 # validation: `UnsupportedScriptApiVersion` (requested 0.6.0, host contract
 # 0.9.0) fires first, then the missing `entry` (default "plugin.wasm", no Wasm
-# shipped) would refuse it too. That refusal is what the matrix scenario
-# `plugins.plugin_startup_fail_closed` (case `legacy_api_0_6`) observes, and
+# shipped) would refuse it too. The matrix scenario
+# `plugins.plugin_startup_fail_closed` (case `legacy_api_0_6`) is meant to
+# observe that refusal once its driver step exists (not implemented yet);
 # `crates/mc-plugin-host/src/discovery.rs` (legacy_fixture_tests) pins it. It
 # replaces the real land-claims / online-roster / geological-mines packages,
 # which were v1 artefacts (0.6.0 manifest + main.lua, no Wasm) removed by the

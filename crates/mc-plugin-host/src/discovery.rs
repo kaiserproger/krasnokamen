@@ -376,9 +376,9 @@ mod legacy_fixture_tests {
     /// The checked-in v1 fixture is a real artifact, not prose: an API 0.6.0
     /// manifest with no `entry` and no Wasm. Strict discovery must refuse it
     /// instead of skipping it. The matrix scenario
-    /// `plugins.plugin_startup_fail_closed` (case `legacy_api_0_6`) records the
-    /// same refusal for the removed v1 packages (land-claims, online-roster,
-    /// geological-mines).
+    /// `plugins.plugin_startup_fail_closed` (case `legacy_api_0_6`) is meant to
+    /// observe the same refusal once its driver step exists (not implemented
+    /// yet).
     ///
     /// The manifest version gate answers first
     /// (`mc_script::ScriptPluginManifest::validate` ->
