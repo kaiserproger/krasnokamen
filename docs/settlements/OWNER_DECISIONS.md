@@ -272,3 +272,17 @@ the parallel behaviour lands,
   tracks history coverage inside the territory.
 - Lumberjack wood harvest, residents clearing leaves at doors and farmers are
   not the planner and keep their own rules.
+
+## Growth observation — owner D45 §6, 2026-11-19
+
+> Оставить
+>
+> Удлинить проверки, заодно искать что тормозит рост
+
+- Keep the settlement-certified far-bed breeding path and the existing family
+  founding rule. Daughter founding still requires at least 24 residents.
+- If growth does not fit four game days, lengthen the trials and continue
+  measuring what limits it; do not lower the founding population threshold.
+- House priority still applies only while physical roofed bed capacity is at
+  or below population. Measure the wait before proposing a policy change.
+

@@ -1,4 +1,5 @@
 """Bounded received-entity census used by the real Spain trial."""
+from collections import Counter
 import json
 import os
 import subprocess
@@ -8,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from tools.showcase.spain_trial import hud_visible, order_build, publish, resident_census, spawn_on
+from tools.showcase.spain_trial import hud_visible, next_order, order_build, publish, resident_census, spawn_on, supply
 
 
 class ScratchPublishTests(unittest.TestCase):
@@ -119,6 +120,59 @@ class ScriptedChat:
             self.chat.insert(0, self.replies.pop(0))
             state = {'recent_chat': list(self.chat)}
         return state
+
+
+class SupplyTests(unittest.TestCase):
+    def test_tops_up_later_chest_before_spending_earlier_empty_slots(self):
+        first = {slot: {'item_id': 'minecraft:stone', 'count': 64} for slot in range(26)}
+        second = {slot: {'item_id': 'minecraft:stone', 'count': 64} for slot in range(27)}
+        second[0] = {'item_id': 'minecraft:terracotta', 'count': 40}
+        stock, run, console = Counter(terracotta=24, white_bed=1), {}, Mock()
+        with patch('tools.showcase.spain_trial.village._open_chest', side_effect=[first, second]):
+            supply(Mock(), console, [(1, 2, 3), (4, 5, 6)], stock, run)
+        self.assertEqual(stock, {})
+        self.assertEqual(run['material_fixture_commands'], [
+            'item replace block 4 5 6 container.0 with minecraft:terracotta 64',
+            'item replace block 1 2 3 container.26 with minecraft:white_bed 1',
+        ])
+        self.assertEqual(second[0]['count'], 40, 'top-up planning does not pretend the console ran')
+
+    def test_full_storage_retains_the_bounded_remainder_for_a_later_census(self):
+        slots = {slot: {'item_id': 'minecraft:stone', 'count': 64} for slot in range(27)}
+        console, stock, run = Mock(), Counter(white_bed=1), {}
+        with patch('tools.showcase.spain_trial.village._open_chest', return_value=slots):
+            supply(Mock(), console, [(1, 2, 3)], stock, run)
+        self.assertEqual(stock, {'white_bed': 1})
+        self.assertEqual(run['material_fixture_remaining'], {'white_bed': 1})
+        self.assertEqual(run['material_fixture_commands'], [])
+        del slots[26]  # ordinary construction made room before the next census
+        with patch('tools.showcase.spain_trial.village._open_chest', return_value=slots):
+            supply(Mock(), console, [(1, 2, 3)], stock, run)
+        self.assertEqual(stock, {})
+        self.assertEqual(run['material_fixture_remaining'], {})
+        self.assertEqual(run['material_fixture_commands'], [
+            'item replace block 1 2 3 container.26 with minecraft:white_bed 1'])
+
+
+class BuildingQueueTests(unittest.TestCase):
+    def test_autonomous_completed_fortress_is_not_ordered_again(self):
+        parent = {'buildings': [{'blueprint': 'spanish_church'}, {'blueprint': 'spanish_fortress'}],
+                  'project': {'projects': []}}
+        queue = ['spanish_fortress']
+        self.assertIsNone(next_order(queue, parent))
+        self.assertEqual(queue, [])
+
+    def test_active_autonomous_building_is_skipped_before_the_next_missing_one(self):
+        parent = {'buildings': [{'blueprint': 'spanish_house'}],
+                  'project': {'projects': [{'blueprint': 'spanish_church'}]}}
+        queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
+        self.assertEqual(next_order(queue, parent), 'spanish_fortress')
+        self.assertEqual(queue, ['spanish_fortress'])
+
+    def test_missing_building_remains_at_the_head_until_admitted(self):
+        queue = ['spanish_house', 'spanish_church']
+        self.assertEqual(next_order(queue, {'buildings': [], 'project': {'projects': []}}), 'spanish_house')
+        self.assertEqual(queue, ['spanish_house', 'spanish_church'])
 
 
 class BuildingOrderTests(unittest.TestCase):

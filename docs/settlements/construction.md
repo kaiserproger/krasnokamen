@@ -44,6 +44,16 @@ Construction admits up to **eight active projects** and retains up to **eight pe
 
 A pending unfunded order still allows its own furnace prerequisite, paid through ordinary construction when that order's iron or shears demand has raw iron, fuel and furnace materials. It does not allow a furnace for unrelated autonomous demand. An already prepared founding expedition can also hand over a fully built outpost or cancel after losing its eligible household; admitting an expedition or starting another outpost structure waits for the pending order.
 
+The Spain trial driver skips cultural blueprints already completed or active in
+the observed parent settlement before issuing its next order. In particular,
+it does not order a second autonomous fortress and leave an unfunded duplicate
+fencing all later autonomous housing.
+The population-16 expansion gift is one bounded manifest, not a new grant on
+each census. It tops up observed existing stacks before using empty slots and
+delivers only its remaining units at later scheduled censuses as storage clears.
+`run.json` records that remainder explicitly; initial and daughter fixtures
+still require their complete delivery before observation continues.
+
 The native `civilization-seed-qa` census uses `minecraft_list_entities` cursor pages of 16 across the original 128-block radius, without reducing or dropping entity kinds. Native type filtering is used only for the targeted newborn refresh; birth proof still requires that same UUID's received baby metadata, targeted screenshot and final checkpoint audit. This chooses native cursor pagination rather than replacing the client census with server counts: the original client-visible coverage remains intact while each MCP reply stays below its transport byte limit. Use a pinned client exporting these optional arguments through `mcp-schema`; the Loader schema remains its own actual Java catalog.
 
 Each native paginated census captures its complete matching received rows on the first page. Later pages retain that membership and metadata despite incoming packets or player motion; continuation tokens cannot be replayed, reused after a new census, or used with another context/query. The harness checks the same total on every page and never substitutes a partial baseline.

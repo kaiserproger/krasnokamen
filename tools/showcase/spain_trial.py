@@ -133,12 +133,31 @@ def record_census(probe: ProbeSteps, console, run: dict, server_log: Path) -> di
 
 
 def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], stock: Counter, run: dict) -> None:
+    """Place only the manifest units that fit; leave undelivered units in stock."""
     commands = []
+    containers = []
     for position in positions:
         console(f'tp {USERNAME} {position[0] + 0.5} {position[1] + 1} {position[2] + 1.5}')
         probe.wait(lambda observed: abs(observed['player']['x'] - position[0] - 0.5) < 1
                    and abs(observed['player']['z'] - position[2] - 1.5) < 1, 'storage_observer_arrived')
         slots = village._open_chest(probe, position)
+        containers.append((position, slots))
+        probe.call('minecraft_close_screen', {})
+    # Top up all existing stacks before assigning any empty slot: otherwise
+    # an early chest can spend a slot on stock that fits in a later chest.
+    for position, slots in containers:
+        for slot, entry in sorted(slots.items()):
+            item = entry.get('item_id', '').removeprefix('minecraft:')
+            if item not in stock:
+                continue
+            added = min((1 if item.endswith('_bed') else 64) - entry['count'], stock[item])
+            if added <= 0:
+                continue
+            commands.append(f'item replace block {position[0]} {position[1]} {position[2]} container.{slot} with minecraft:{item} {entry["count"] + added}')
+            stock[item] -= added
+            if stock[item] == 0:
+                del stock[item]
+    for position, slots in containers:
         free = [slot for slot in range(27) if slot not in slots or slots[slot].get('item_id') in (None, 'minecraft:air')]
         for slot in free:
             if not stock:
@@ -150,13 +169,11 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
             stock[item] -= count
             if stock[item] == 0:
                 del stock[item]
-        probe.call('minecraft_close_screen', {})
-    if stock:
-        raise RuntimeError(f'bounded fixture lacks client-observed empty slots: {dict(stock)}')
     # All slots were observed while the world is frozen: workers cannot race us.
     for command in commands:
         console(command)
     run.setdefault('material_fixture_commands', []).extend(commands)
+    run['material_fixture_remaining'] = dict(stock)
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
@@ -176,6 +193,15 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
 BUILD_REFUSALS = ('Construction ', 'No free loaded construction site', 'No settlement contains your position',
                   'Settlement command admission is unavailable', 'Only the owner or an operator orders construction',
                   'Unknown blueprint', 'Settlement not found', 'Building not found', 'No blueprint upgrade')
+
+
+def next_order(queue: list[str], parent: dict) -> str | None:
+    """Do not duplicate cultural buildings the autonomous planner already took."""
+    present = {building.get('blueprint') for building in parent['buildings']}
+    present.update(project['blueprint'] for project in parent['project']['projects'])
+    while queue and queue[0] in present:
+        queue.pop(0)
+    return queue[0] if queue else None
 
 
 def order_build(probe: ProbeSteps, blueprint: str, run: dict) -> None:
@@ -378,7 +404,7 @@ def main() -> None:
     run['driver'] = {'path': str(driver), 'sha256': hashlib.sha256(driver.read_bytes()).hexdigest()}
     run['material_fixture_plan'] = {
         'initial': 'Four parent houses through L3, three outpost houses L1, church, fortress, outpost plaza; bread256, dirt128, seeds64, logs128, cobble128.',
-        'at_population_16_once': 'Four further parent houses through L3 and bread512, from observed empty slots only.',
+        'at_population_16_once': 'One bounded manifest: four further parent houses through L3 and bread512; top up existing stacks, then empty slots, delivering the remainder at later censuses as storage clears.',
         'at_daughter_once': 'One house L2+L3 upgrade bill; bread64, dirt64, seeds32, logs64, cobble64.',
     }
     port, dashboard = runtime.reserve_port(), runtime.reserve_port()
@@ -444,11 +470,12 @@ def main() -> None:
             chest = village._founding_storage(probe, (120, 70, 7))
             run['bootstrap_storage'] = list(chest)
             supply(probe, console, [chest], bill('spanish_plaza'), run)
+            probe.check('plaza_fixture_delivered', not run.get('material_fixture_remaining'))
             order_build(probe, 'spanish_plaza', run)
             run['snapshots'].append(record_census(probe, console, run, log_path))
             telemetry_tick = -1
             funded = False
-            expansion_funded = False
+            expansion_stock = None
             supplied_children = set()
             queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
             ordered = 'spanish_plaza'
@@ -481,18 +508,20 @@ def main() -> None:
                     stock.update({'bread': 256, 'dirt': 128, 'wheat_seeds': 64, 'oak_log': 128, 'cobblestone': 128})
                     console(f'gamemode creative {USERNAME}')
                     supply(probe, console, positions + [chest], stock, run)
+                    probe.check('initial_fixture_delivered', not stock)
                     funded = True
-                if funded and not expansion_funded and parent['population'] >= 16:
+                if funded and expansion_stock is None and parent['population'] >= 16:
+                    expansion_stock = Counter()
+                    for level in (1, 2, 3):
+                        expansion_stock.update({item: 4 * count for item, count in bill('spanish_house', level).items()})
+                    expansion_stock['bread'] += 512
+                if expansion_stock:
                     plaza = next(building for building in parent['buildings'] if building.get('blueprint') == 'spanish_plaza')
                     positions = [(plaza['min'][0] + x, plaza['min'][1] + 1, plaza['min'][2] + z)
                                  for x, z in [(1, 1), (5, 1), (1, 5), (5, 5)]]
-                    stock = Counter()
-                    for level in (1, 2, 3):
-                        stock.update({item: 4 * count for item, count in bill('spanish_house', level).items()})
-                    stock['bread'] += 512
                     console(f'gamemode creative {USERNAME}')
-                    supply(probe, console, positions + [chest], stock, run)
-                    expansion_funded = True
+                    supply(probe, console, positions + [chest], expansion_stock, run)
+                    run['expansion_fixture_remaining'] = dict(expansion_stock)
                 children = [town for town in snapshot['settlements'] if town['name'].startswith('colony_')]
                 for child in children:
                     if child['id'] in supplied_children:
@@ -504,12 +533,14 @@ def main() -> None:
                     stock.update({'bread': 64, 'dirt': 64, 'wheat_seeds': 32, 'oak_log': 64, 'cobblestone': 64})
                     console(f'gamemode creative {USERNAME}')
                     supply(probe, console, positions, stock, run)
+                    probe.check(f'daughter_{child["id"]}_fixture_delivered', not stock)
                     supplied_children.add(child['id'])
-                if ordered in completed and queue:
+                following = next_order(queue, parent) if ordered in completed else None
+                if following is not None:
                     console(f"tp {USERNAME} {parent['anchor'][0] + 0.5} {parent['anchor'][1] + 2} {parent['anchor'][2] + 0.5}")
                     probe.wait(lambda observed: abs(observed['player']['x'] - parent['anchor'][0] - 0.5) < 1
                                and abs(observed['player']['z'] - parent['anchor'][2] - 0.5) < 1, 'order_at_parent')
-                    order_build(probe, queue[0], run)
+                    order_build(probe, following, run)
                     ordered = queue.pop(0)
                 console(f'gamemode spectator {USERNAME}')
                 focus = children[0] if children and step % 2 else parent
