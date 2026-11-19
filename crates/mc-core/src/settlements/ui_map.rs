@@ -219,44 +219,11 @@ pub(super) fn screen_at(
         scale,
     ));
     buttons.push(button(ctx.t(Key::Back), "back", ctx.id).width(60));
-    let mut dialog = Dialog::multi_action(title, buttons)
+    // Site names, phases and coordinates already live in cell hovers and the
+    // full legend. Repeating their list here pushes navigation below 720p.
+    let dialog = Dialog::multi_action(title, buttons)
         .columns(6)
         .text(cells_component(&grid, ctx.id));
-    for project in crate::settlements::construction::projects(record) {
-        dialog = dialog.text(format!(
-            "{}: {} L{} · {}",
-            if ctx.lang == super::Lang::Ru {
-                "Стройплощадка"
-            } else {
-                "Active site"
-            },
-            blueprint_label(ctx, &project.blueprint),
-            project.level,
-            corner_text(project.origin),
-        ));
-        let caption = match crate::plugin_structures::settlement_builds::status(
-            state,
-            ctx.id,
-            &project.structure,
-        ) {
-            Ok(status) if status.state.as_str() == "paused" || status.pause_reason.is_some() => {
-                Some(if ctx.lang == super::Lang::Ru {
-                    "Пауза — откройте стройплощадку"
-                } else {
-                    "Paused — open the construction site"
-                })
-            }
-            Err(_) => Some(if ctx.lang == super::Lang::Ru {
-                "Состояние стройки недоступно"
-            } else {
-                "Construction state unavailable"
-            }),
-            _ => None,
-        };
-        if let Some(caption) = caption {
-            dialog = dialog.text(caption);
-        }
-    }
     present(state, connection, ctx, "map", dialog);
 }
 

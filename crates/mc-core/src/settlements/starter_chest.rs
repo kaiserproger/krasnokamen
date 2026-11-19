@@ -106,15 +106,24 @@ fn key(player: Uuid) -> String {
     format!("settlement_chest/{player}")
 }
 
+pub(crate) fn checkpoint_row(
+    player: Uuid,
+    count: u64,
+    tick: u64,
+) -> Result<(String, NativeDomainRecord), CoreError> {
+    let payload = serde_json::to_vec(&(player, count))
+        .map_err(|error| CoreError::Storage(format!("native starter chest: {error}")))?;
+    Ok((key(player), crate::native_checkpoint::record(tick, payload)))
+}
+
 pub(super) fn checkpoint_rows(
     state: &TickState,
     tick: u64,
     rows: &mut BTreeMap<String, NativeDomainRecord>,
 ) -> Result<(), CoreError> {
     for (&player, &count) in &state.settlements.starter_chests.players {
-        let payload = serde_json::to_vec(&(player, count))
-            .map_err(|error| CoreError::Storage(format!("native starter chest: {error}")))?;
-        rows.insert(key(player), crate::native_checkpoint::record(tick, payload));
+        let (key, row) = checkpoint_row(player, count, tick)?;
+        rows.insert(key, row);
     }
     Ok(())
 }
@@ -162,12 +171,14 @@ pub(super) fn hydrate(
         }
         grants.players.insert(player, count);
     }
-    grants.players.extend(
-        replay
-            .starter_chest_grants
-            .iter()
-            .map(|(&player, &count)| (player, count)),
-    );
+    for (&player, &count) in &replay.starter_chest_grants {
+        if count == 0 || count < grants.players.get(&player).copied().unwrap_or(0) {
+            return Err(invalid(format!(
+                "WAL player {player}: zero or decreasing grant count"
+            )));
+        }
+        grants.players.insert(player, count);
+    }
     grants.touched.clear();
     Ok(())
 }

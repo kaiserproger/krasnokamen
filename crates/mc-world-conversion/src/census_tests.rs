@@ -245,6 +245,40 @@ fn read(path: &Path) -> CensusReceipt {
 }
 
 #[test]
+fn census_accepts_global_starter_chest_grant_rows() {
+    let fixture = world(vec![], true);
+    let registry = crate::test_support::registry().unwrap();
+    let store = fixture_store(&fixture.config).unwrap();
+    let mut image = store.read_checkpoint().unwrap();
+    let player = uuid::Uuid::from_u128(0x123);
+    image.globals.insert(
+        format!("settlement_chest/{player}"),
+        record(image.tick, serde_json::to_vec(&(player, 2_u64)).unwrap()),
+    );
+    store
+        .commit_checkpoint(
+            NativeCheckpoint {
+                tick: image.tick,
+                previous_tick: image.tick,
+                chunks: &[],
+                entities: &[],
+                players: &[],
+                globals: &image.globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    drop(store);
+    let out = tempfile::tempdir().unwrap();
+    let receipt =
+        census_native(&fixture.config, &fixture.world, &out.path().join("c.json")).unwrap();
+    assert_eq!(receipt.status, "PASS");
+    assert!(receipt.read_only);
+    assert_eq!(receipt.counts["settlements"], 1);
+}
+
+#[test]
 fn census_counts_transit_records_and_members_once() {
     let registry = crate::test_support::registry().unwrap();
     let villager = (

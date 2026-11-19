@@ -1120,7 +1120,11 @@ fn certify_screen(
     let buttons = vec![
         button(ctx.t(Key::Certify), "certify_do", ctx.id)
             .width(100)
-            .tooltip(ctx.t(Key::TipCorners)),
+            .tooltip(if note.is_empty() {
+                ctx.t(Key::TipCorners)
+            } else {
+                note
+            }),
         button(ctx.t(Key::Corner1), "mark1", ctx.id)
             .width(100)
             .tooltip(ctx.t(Key::TipCorner1)),
@@ -1131,7 +1135,25 @@ fn certify_screen(
     ];
     let mut dialog = Dialog::multi_action(ctx.t(Key::TitleCertify), buttons).columns(4);
     if !note.is_empty() {
-        dialog = dialog.text(note);
+        // The four inputs and retry row must fit at 720p. Keep the complete
+        // refusal on both the summary hover and the Certify button tooltip.
+        let summary = match note.char_indices().nth(79) {
+            Some((end, _)) => format!("{}…", &note[..end]),
+            None => note.to_owned(),
+        };
+        dialog = dialog.text_width(
+            Tag::Compound(vec![
+                ("text".into(), Tag::String(summary)),
+                (
+                    "hover_event".into(),
+                    Tag::Compound(vec![
+                        ("action".into(), Tag::String("show_text".into())),
+                        ("value".into(), Tag::String(note.to_owned())),
+                    ]),
+                ),
+            ]),
+            408,
+        );
     }
     let dialog = dialog
         .input(
@@ -2092,6 +2114,40 @@ fn pending_material_text(state: &TickState, ctx: &Ctx, index: usize) -> Tag {
     ])
 }
 
+/// A bounded receipt, not the full bill: client-translated item names preserve
+/// the player's locale while the explicit counts remain authoritative.
+fn compact_material_text(state: &TickState, ctx: &Ctx, missing: &[(String, u32)]) -> Tag {
+    let mut elements = Vec::with_capacity(missing.len().min(3) + usize::from(missing.len() > 3));
+    elements.extend(
+        missing
+            .iter()
+            .take(3)
+            .map(|(item, count)| material_text(state, item, format!(" ×{count}\n"))),
+    );
+    if missing.len() > 3 {
+        elements.push(Tag::Compound(vec![(
+            "text".into(),
+            Tag::String(ctx.f(
+                Key::MoreMaterialKinds,
+                &[("n", &(missing.len() - 3).to_string())],
+            )),
+        )]));
+    }
+    Tag::Compound(vec![
+        (
+            "text".into(),
+            Tag::String(format!("{}\n", ctx.t(Key::MissingMaterials))),
+        ),
+        (
+            "extra".into(),
+            Tag::List(mc_nbt::ListTag {
+                element_type: mc_nbt::tag_type::COMPOUND,
+                elements,
+            }),
+        ),
+    ])
+}
+
 fn construction_summary(state: &TickState, ctx: &Ctx) -> String {
     let Some(record) = state.settlements.get(ctx.id) else {
         return ctx.t(Key::SettlementGone).to_owned();
@@ -2524,11 +2580,12 @@ fn order_accepted(
     let mut dialog = Dialog::multi_action(
         ctx.t(Key::Projects),
         vec![
-            button(ctx.t(Key::KindStorage), "storage", ctx.id),
-            button(ctx.t(Key::Status), "project_status_details", ctx.id),
-            button(ctx.t(Key::Back), "back", ctx.id),
+            button(ctx.t(Key::KindStorage), "storage", ctx.id).width(100),
+            button(ctx.t(Key::Status), "project_status_details", ctx.id).width(100),
+            button(ctx.t(Key::Back), "back", ctx.id).width(100),
         ],
     )
+    .columns(3)
     .text(ctx.f(
         if started {
             Key::ConstructionStarted
@@ -2543,10 +2600,11 @@ fn order_accepted(
                 .count()
                 .saturating_sub(1)
         });
-        if let Some(pending) = pending_order_text(state, ctx, index) {
-            // The full bill lives in Status. Keep the receipt's action row
-            // visible without scrolling on a 720p client.
-            dialog = dialog.text(pending);
+        let missing = super::construction::pending_missing(state, ctx.id, index);
+        if !missing.is_empty() {
+            dialog = dialog.text_width(compact_material_text(state, ctx, &missing), 408);
+        } else if let Some(pending) = pending_order_text(state, ctx, index) {
+            dialog = dialog.text_width(pending, 408);
         }
     }
     present(
@@ -2554,7 +2612,7 @@ fn order_accepted(
         connection,
         ctx,
         "order_accepted",
-        dialog.text(ctx.t(Key::StockForOrder)),
+        dialog.text_width(ctx.t(Key::StockForOrder), 408),
     );
 }
 

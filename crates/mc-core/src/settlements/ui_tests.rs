@@ -2767,5 +2767,82 @@ fn accepted_order_keeps_actions_above_the_long_material_bill() {
     assert!(list(field(dialog, "body")).len() <= 3);
     let receipt = last_dialog(&changes);
     assert!(receipt.has("storage") && receipt.has("project_status_details") && receipt.has("back"));
-    assert!(!super::super::construction::pending_missing(&state, id, 0).is_empty());
+    let missing = super::super::construction::pending_missing(&state, id, 0);
+    assert!(!missing.is_empty());
+    assert_eq!(field(dialog, "columns"), Some(&Tag::Int(3)));
+    let body = list(field(dialog, "body"));
+    assert_eq!(field(&body[1], "width"), Some(&Tag::Int(408)));
+    let summary = field(&body[1], "contents").unwrap();
+    let items = list(field(summary, "extra"));
+    for ((_, count), item) in missing.iter().take(3).zip(items) {
+        assert!(field(item, "translate").is_some());
+        assert!(text(item).contains(&format!("×{count}")));
+    }
+    let worst = [
+        (
+            "minecraft:waxed_oxidized_cut_copper_stairs".to_owned(),
+            1234,
+        ),
+        ("minecraft:waxed_weathered_cut_copper_slab".to_owned(), 2345),
+        ("minecraft:waxed_exposed_cut_copper_stairs".to_owned(), 3456),
+        ("minecraft:stone".to_owned(), 4567),
+    ];
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::Ru,
+    };
+    let summary = compact_material_text(&state, &ctx, &worst);
+    let items = list(field(&summary, "extra"));
+    assert_eq!(items.len(), 4);
+    for ((name, count), item) in worst.iter().take(3).zip(items) {
+        assert_eq!(
+            field(item, "translate"),
+            Some(&string(&format!("block.{}", name.replace(':', "."))))
+        );
+        assert!(text(item).contains(&format!("×{count}")));
+    }
+    assert_eq!(
+        text(&items[3]),
+        ctx.f(Key::MoreMaterialKinds, &[("n", "1")])
+    );
+    assert_eq!(text(&summary).lines().count(), 5);
+}
+
+#[test]
+fn certification_refusal_keeps_retry_actions_compact_without_losing_details() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    set_locale(&mut state, "ru_ru");
+    let changes = click(&mut state, id, "certify_do", &certify_form("house"));
+    let dialog = changes
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::ShowDialog { dialog } => Some(dialog),
+            _ => None,
+        })
+        .unwrap();
+    let body = list(field(dialog, "body"));
+    assert_eq!(body.len(), 1);
+    let contents = field(&body[0], "contents").unwrap();
+    assert!(text(contents).chars().count() <= 80);
+    assert_eq!(field(&body[0], "width"), Some(&Tag::Int(408)));
+    let full = field(field(contents, "hover_event").unwrap(), "value").unwrap();
+    assert!(text(full).chars().count() > 80);
+    let certify = list(field(dialog, "actions"))
+        .iter()
+        .find(|button| {
+            field(button, "action").and_then(|action| field(action, "id"))
+                == Some(&string("krasnokamen:settlement/certify_do"))
+        })
+        .unwrap();
+    assert_eq!(field(certify, "tooltip"), Some(full));
+    let shown = shown(dialog);
+    assert_eq!(shown.inputs.len(), 4);
+    assert!(
+        ["certify_do", "mark1", "mark2", "back"]
+            .iter()
+            .all(|action| shown.has(action))
+    );
+    assert!(state.settlements.get(id).unwrap().buildings.is_empty());
 }

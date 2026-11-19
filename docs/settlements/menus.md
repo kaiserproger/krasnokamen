@@ -61,7 +61,7 @@ Manage the roster and orders from **Army**; see [army](army.md).
 
 ## Construction
 
-View active projects and pending orders, or select an authored blueprint from **Construction**. The material estimate shows translated item names and the amount physically in storage. A successful order response stays short so **Storage**, **Status** and **Back** remain reachable at 720p. **Status** retains the full translated deficit list; recipe-funded orders show no shortage. Reviews of a new blueprint never display another pending order's bill. Stock your founding chest if one was granted, or certify your own storage; no order creates free materials. See [owner build requests](construction.md#owner-build-requests).
+View active projects and pending orders, or select an authored blueprint from **Construction**. The material estimate shows translated item names and the amount physically in storage. A successful order response names up to three missing materials with quantities and counts any remaining kinds; its single **Storage** / **Status** / **Back** action row stays reachable at 720p. **Status** retains the full translated deficit list; recipe-funded orders show no shortage. Reviews of a new blueprint never display another pending order's bill. Stock your founding chest if one was granted, or certify your own storage; no order creates free materials. See [owner build requests](construction.md#owner-build-requests).
 
 ### Construction text contract (D8)
 

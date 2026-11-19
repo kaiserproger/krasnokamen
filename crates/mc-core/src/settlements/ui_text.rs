@@ -241,6 +241,7 @@ pub(crate) enum Key {
     OrderAccepted,
     StockForOrder,
     MissingMaterials,
+    MoreMaterialKinds,
     PendingReady,
 }
 
@@ -298,6 +299,7 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Положите недостающие материалы на склад; ход работ смотрите в «Строительстве».",
         ),
         Key::MissingMaterials => ("Missing:", "Не хватает:"),
+        Key::MoreMaterialKinds => ("and {n} more item kinds", "и ещё {n} видов"),
         Key::PendingReady => ("ready to start", "готов к началу работ"),
         Key::GuideClaim => (
             "Find the village bell → right-click → Claim charter. This is your management entrance.",

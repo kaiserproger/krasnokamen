@@ -1314,6 +1314,10 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
             }
         }
     }
+    for (&player, &count) in &root.starter_chest_grants {
+        let (key, row) = crate::settlements::starter_chest::checkpoint_row(player, count, tick)?;
+        globals.insert(key, row);
+    }
     globals.insert(
         "settlement_sequence".into(),
         record(

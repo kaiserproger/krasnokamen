@@ -305,6 +305,16 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
             .bootstrap_storage
             .is_none()
     );
+    drop(reopened);
+    let offline = crate::native_checkpoint::recover_offline(&config).unwrap();
+    let encoded = crate::native_checkpoint::encode_checkpoint(&offline).unwrap();
+    assert_eq!(encoded.tick, 2);
+    let row = &encoded.globals[&format!("settlement_chest/{PLAYER}")];
+    assert_eq!(row.captured_tick, 2);
+    assert_eq!(
+        serde_json::from_slice::<(uuid::Uuid, u64)>(&row.payload).unwrap(),
+        (PLAYER, 2)
+    );
 }
 
 #[test]
@@ -322,12 +332,13 @@ fn concurrent_settlements_in_different_dimensions_share_the_global_grant_count()
         )
         .unwrap();
     starter_chest::record(&mut root, PLAYER);
+    native_checkpoint(&mut root, &config, 1);
     let mut child = crate::settlements::allocator::tests::test_state();
     child.dimension = crate::dimensions::Dimension::Nether;
     let (connection, _) = founder(&mut child);
     root.other_dimensions
         .insert(child.dimension, Box::new(child));
-    crate::tick::run_tick(
+    let (output, ..) = crate::tick::run_tick(
         &mut root,
         &[PlayerInput::Command {
             connection,
@@ -337,13 +348,70 @@ fn concurrent_settlements_in_different_dimensions_share_the_global_grant_count()
     );
     assert_eq!(starter_chest::granted(&root, PLAYER), 2);
     let child = &root.other_dimensions[&crate::dimensions::Dimension::Nether];
-    assert!(
-        child
-            .settlements
-            .find("nether")
-            .unwrap()
-            .bootstrap_storage
-            .is_some()
-    );
+    let town = child.settlements.find("nether").unwrap();
+    let id = town.id;
+    let chest = town.bootstrap_storage.unwrap();
     assert_eq!(starter_chest::granted(child, PLAYER), 0);
+    let entries = crate::core::journal_entries_for_tick(&mut root, &output).unwrap();
+    assert!(entries.iter().any(|entry| matches!(entry,
+        crate::journal::JournalEntry::StarterChestGranted { player, count: 2 } if *player == PLAYER)));
+    let nether = entries
+        .iter()
+        .find_map(|entry| match entry {
+            crate::journal::JournalEntry::Dimension { dimension, entries }
+                if *dimension == crate::dimensions::Dimension::Nether =>
+            {
+                Some(entries)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(!nether.iter().any(|entry| matches!(
+        entry,
+        crate::journal::JournalEntry::StarterChestGranted { .. }
+    )));
+    assert!(nether.iter().any(|entry| matches!(entry,
+        crate::journal::JournalEntry::Block { pos, .. } if *pos == chest)));
+    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
+    writer.append(2, 2, &entries).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    drop(root);
+    let reopened =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    assert_eq!(starter_chest::granted(&reopened, PLAYER), 2);
+    drop(reopened);
+    let mut nether =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Nether)
+            .unwrap();
+    assert_eq!(
+        nether.settlements.get(id).unwrap().bootstrap_storage,
+        Some(chest)
+    );
+    nether
+        .world
+        .ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    assert!(is_chest_block(&nether, chest));
+    let slots = &nether.block_entities[&(chest[0], chest[1], chest[2])].slots;
+    assert_eq!(slots.len(), 27);
+    assert!(slots.iter().all(mc_data::ItemStack::is_empty));
+}
+
+#[test]
+fn starter_grant_hydration_refuses_zero_or_decreasing_wal_counts() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(dir.path().to_owned(), 42);
+    let mut state = native_state(&config);
+    let (key, row) = starter_chest::checkpoint_row(PLAYER, 2, 1).unwrap();
+    let checkpoint = [(key, row)].into_iter().collect();
+    for count in [0, 1, 2, 3] {
+        let mut replay = crate::journal::Replay::default();
+        replay.starter_chest_grants.insert(PLAYER, count);
+        let result = starter_chest::hydrate(&mut state, &checkpoint, &replay);
+        assert_eq!(result.is_err(), count < 2, "WAL count {count}: {result:?}");
+        if result.is_ok() {
+            assert_eq!(starter_chest::granted(&state, PLAYER), count);
+        }
+    }
 }

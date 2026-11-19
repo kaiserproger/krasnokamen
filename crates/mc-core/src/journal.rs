@@ -397,8 +397,8 @@ pub enum JournalEntry {
         )]
         state: Option<Box<crate::projectiles::ProjectileState>>,
     },
-    /// Absolute global founding-chest grant count. Appended to preserve variant
-    /// order; a binary without it cannot replay the new WAL.
+    /// Absolute global founding-chest grant count in the name-tagged JSON WAL.
+    /// Older binaries reject this variant; the old form lacks required `count`.
     StarterChestGranted {
         player: uuid::Uuid,
         count: u64,
