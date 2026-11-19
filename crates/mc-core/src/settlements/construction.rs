@@ -50,7 +50,7 @@ mod upgrade;
 
 #[path = "construction_builders.rs"]
 mod builders;
-use builders::{assign_builder, builder_free};
+use builders::{assign_builder, builder_free, probe_storage};
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
@@ -2081,7 +2081,7 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
         let mut cache = super::allocator::PoiCache::default();
         let mut path = Vec::new();
         if resident_simulated(state, slot)
-            && (!on_shift || reaches_storage(state, id, slot, &mut cache, &mut path))
+            && (!on_shift || probe_storage(state, id, slot, &mut cache, &mut path))
         {
             continue;
         }

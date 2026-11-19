@@ -120,6 +120,10 @@ pub struct Registry {
     /// recovery are per project so one stuck site never masks another.
     /// Runtime only, never persisted.
     pub(super) builder_watch: BTreeMap<(SettlementId, String), super::construction::BuilderWatch>,
+    /// Residents whose last route to storage failed, with the tick that
+    /// failure stops standing (`construction::builders`). Runtime only, never
+    /// persisted.
+    pub(super) storage_unreached: BTreeMap<uuid::Uuid, u64>,
     /// Pending-site refusal sweeps, derived and never persisted.
     pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
     /// Last refusal reported to the owner per queued request, so a queue slot

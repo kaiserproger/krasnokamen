@@ -1341,3 +1341,56 @@ fn the_planner_opens_no_site_nobody_can_build() {
         Some((state.entities.row(recruit).uuid, None))
     );
 }
+
+/// Fills (or clears) a cell around (10, 201..202, 10) with `block`.
+fn cell_walls(state: &mut TickState, block: u32) {
+    for x in 9..=11 {
+        for z in 9..=11 {
+            for y in 201..=203 {
+                if (x, z) != (10, 10) || y == 203 {
+                    state.world.set_block(x, y, z, block);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+}
+
+/// Review P2 (wt/SpainLand): the only Builder stands walled in, away from
+/// storage. Its failed route stands for the gate, so no autonomous site opens
+/// that nobody can serve (one unbound site closes the whole autonomous pass);
+/// once the wall is gone and the failure has lapsed, the funded site opens.
+#[test]
+fn the_planner_opens_no_site_for_a_builder_walled_from_storage() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    let stone = state.registry.states.stone;
+    cell_walls(&mut state, stone);
+    state.entities.set_pos(slot, [10.5, 201.0, 10.5]);
+    // An unbound site probes the builder: its route to storage fails.
+    let structure = paving_project(&mut state, id);
+    assign_builder(&mut state, id);
+    assert!(
+        access::projects_of(&state.settlements, id).all(|project| project.builder.is_none()),
+        "fixture: the walled builder takes no site"
+    );
+    cancel_project(&mut state, id, &structure).unwrap();
+    for _ in 0..64 {
+        plan(&mut state, id);
+    }
+    assert!(
+        handles(&state, id).is_empty(),
+        "no autonomous site opens for a builder walled from storage"
+    );
+    let air = state.registry.states.air;
+    cell_walls(&mut state, air);
+    state.tick += 1_200;
+    for _ in 0..256 {
+        plan(&mut state, id);
+        if !handles(&state, id).is_empty() {
+            return;
+        }
+    }
+    panic!("the funded site opens once the failed route has lapsed");
+}

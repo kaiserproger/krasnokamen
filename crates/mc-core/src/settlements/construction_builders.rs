@@ -6,6 +6,39 @@ use crate::entities::EntitySlot;
 
 /// Residents tried per pass; the rest wait for the next planning pass.
 const BUILDER_CANDIDATES: usize = 8;
+/// How long a failed route to storage stands for the planner's gate, which
+/// searches no route itself: one minute of game time.
+const STORAGE_ROUTE_MEMORY: u64 = 1_200;
+
+/// `reaches_storage`, remembered per resident: a failure stands for
+/// `STORAGE_ROUTE_MEMORY` ticks, a success clears it.
+pub(super) fn probe_storage(
+    state: &mut TickState,
+    id: SettlementId,
+    slot: EntitySlot,
+    cache: &mut crate::settlements::allocator::PoiCache,
+    path: &mut Vec<crate::boundary::BlockPos>,
+) -> bool {
+    let reached = reaches_storage(state, id, slot, cache, path);
+    let (uuid, tick) = (state.entities.row(slot).uuid, state.tick);
+    let memory = &mut state.settlements.storage_unreached;
+    memory.retain(|_, until| *until > tick);
+    if reached {
+        memory.remove(&uuid);
+    } else {
+        memory.insert(uuid, tick.saturating_add(STORAGE_ROUTE_MEMORY));
+    }
+    reached
+}
+
+/// The resident's last route to storage failed and still stands.
+fn storage_unreached(state: &TickState, slot: EntitySlot) -> bool {
+    state
+        .settlements
+        .storage_unreached
+        .get(&state.entities.row(slot).uuid)
+        .is_some_and(|&until| state.tick < until)
+}
 
 /// An unbound native Builder of this settlement, before the storage probe.
 fn free_native_builder(state: &TickState, id: SettlementId, slot: EntitySlot) -> bool {
@@ -107,16 +140,18 @@ fn recruit_priority(
 
 /// Whether one more autonomous project would get a builder now: a free native
 /// Builder, or a resident the recruitment rule hires at the project count the
-/// new project makes. The storage probe stays with `assign_builder`. Spain
-/// seed 100: a fourth house opened for three builders, none of the other
-/// residents (farmers, a nitwit, kept extraction workers) could take it, and
-/// it stood unbound for 30k ticks while it held the planner.
+/// new project makes, unless its last route to storage failed (the probe
+/// itself stays with `assign_builder`). Spain seed 100: a fourth house opened
+/// for three builders, none of the other residents (farmers, a nitwit, kept
+/// extraction workers) could take it, and it stood unbound for 30k ticks
+/// while it held the planner.
 pub(super) fn builder_free(state: &TickState, id: SettlementId) -> bool {
     let may_borrow = access::projects_of(&state.settlements, id).next().is_none();
     let protected = protected_gatherer(state, id, false);
     residents(state, id).any(|slot| {
-        free_native_builder(state, id, slot)
-            || recruit_priority(state, id, slot, may_borrow, protected).is_some()
+        !storage_unreached(state, slot)
+            && (free_native_builder(state, id, slot)
+                || recruit_priority(state, id, slot, may_borrow, protected).is_some())
     })
 }
 
@@ -160,14 +195,16 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) {
     // be able to reach storage, or a walled builder would hold the project.
     let mut ready_cache = crate::settlements::allocator::PoiCache::default();
     let mut ready_path = Vec::new();
-    let ready = residents(state, id)
+    let mut candidates: Vec<(u32, EntitySlot)> = residents(state, id)
         .filter(|&slot| free_native_builder(state, id, slot))
-        .find(|&slot| reaches_storage(state, id, slot, &mut ready_cache, &mut ready_path));
-    if let Some(slot) = ready {
-        bind_first_unbound(state, id, slot);
-        return;
+        .map(|slot| (0, slot))
+        .collect();
+    for (_, slot) in candidates.drain(..) {
+        if probe_storage(state, id, slot, &mut ready_cache, &mut ready_path) {
+            bind_first_unbound(state, id, slot);
+            return;
+        }
     }
-    let mut candidates = Vec::new();
     for slot in residents(state, id) {
         let Some(priority) = recruit_priority(state, id, slot, may_borrow, protected) else {
             continue;
@@ -187,12 +224,14 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) {
     candidates.sort_by_key(|&(priority, _)| priority);
     let mut cache = crate::settlements::allocator::PoiCache::default();
     let mut path = Vec::new();
-    let Some(slot) = candidates
-        .into_iter()
-        .take(BUILDER_CANDIDATES)
-        .map(|(_, slot)| slot)
-        .find(|&slot| reaches_storage(state, id, slot, &mut cache, &mut path))
-    else {
+    let mut chosen = None;
+    for (_, slot) in candidates.into_iter().take(BUILDER_CANDIDATES) {
+        if probe_storage(state, id, slot, &mut cache, &mut path) {
+            chosen = Some(slot);
+            break;
+        }
+    }
+    let Some(slot) = chosen else {
         return;
     };
     // Ordinary recruits keep the authored builder career. Only extraction
