@@ -102,11 +102,32 @@ looking 20 degrees down.
 - The stored area is 400 blocks (25 chunks) around spawn, so far terrain stops
   there although the offer allows 64; a pass does not claim more.
 - `--min-quad-ratio` and `--min-changed-fraction` are first guesses made without
-  the implementation (the recorded negative run measured 2.5% band change and a
-  quad ratio of 0.94 between two OFF-like sessions); Main may tune them from the
-  first ON run's `samples` and screenshots in `result.json` but must keep
+  the implementation (two sessions on servers without the service measured quad
+  ratios of 0.94 and 1.14, band changes of 0.05% to 2.5%); Main may tune them from
+  the first ON run's `samples` and screenshots in `result.json` but must keep
   `lod.source == "server"` and the OFF-vs-ON pixel difference.
 
 ## Recorded negative control
 
-(See the section appended by the run; empty until recorded.)
+Both profiles were run on 2026-11-19 against a server pin of today's main
+(`6b21e15b4`, `pins/6b21e15b41f3-9e669d8c-server-x86_64-unknown-linux-gnu-incr`),
+which has no `horizon:lod` service (an unknown `[horizon_lod]` section is only
+warned about). Both fail, for the stated reason:
+
+- `horizon-lod` (artifact `.analysis/validation/20261119T142311-horizon-lod-e_a1_kie`,
+  seed 42, 139 s): world pregenerated and every OFF check green (no Offer, no seed
+  WARN, requests unanswered, the vanilla-like client stays connected), but
+  `invalid_distance_0_rejected` and `invalid_distance_2000000_rejected` (the server
+  started), `startup_warns_about_the_seed` (no WARN), `offer_in_configuration` (0
+  `horizon:lod` payloads; the configuration channels are `minecraft:register`,
+  `krasnokamen:loader/probe`, `minecraft:brand`) and, unreached, all tile checks.
+- `horizon-lod-live` (artifact `.analysis/validation/20261119T142532-horizon-lod-live-2tpkhuru`,
+  57 s, Horizon kit offscreen under the harness Xvfb): both sessions report
+  `lod.source == "server-terrain"`, `target_tiles` 2400, `sampled_target_tiles`
+  2400; resident quads 24322 (OFF) and 27712 (ON); band change 0.05%. Failed:
+  `on_client_accepted_the_offer`, `on_resident_far_geometry_exceeds_off`,
+  `on_screenshot_shows_far_terrain_off_does_not`.
+
+Nothing here was run against the implementation; the pass evidence above is
+what Main should expect from it, and the thresholds noted as guesses are the
+first thing to tune against its first ON run.
