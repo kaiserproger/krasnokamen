@@ -304,12 +304,12 @@ fn sigkill_during_wal_write_ignores_only_unpublished_tail() {
             .path()
             .join("journal/batch-00000000000000000002-00000000000000000002.bin.tmp");
         let bytes = std::fs::read(tmp).unwrap();
-        let payload_len = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as usize;
-        assert!(bytes.len() > 32);
+        let payload_len = u32::from_le_bytes(bytes[48..52].try_into().unwrap()) as usize;
+        assert!(bytes.len() > 56);
         if boundary == "wal_partial" {
-            assert!(bytes.len() < 32 + payload_len, "the frame really is torn");
+            assert!(bytes.len() < 56 + payload_len, "the frame really is torn");
         } else {
-            assert_eq!(bytes.len(), 32 + payload_len, "complete but unpublished");
+            assert_eq!(bytes.len(), 56 + payload_len, "complete but unpublished");
         }
         assert_reopens(directory.path(), 1, 1);
     }
@@ -359,8 +359,9 @@ fn published_wal_damage_fails_closed_on_every_reopen() {
             .path()
             .join("journal/batch-00000000000000000002-00000000000000000002.bin");
         if truncate {
+            // Cut inside the payload, past the 56-byte v2 header.
             let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
-            file.set_len(40).unwrap();
+            file.set_len(60).unwrap();
         } else {
             let mut bytes = std::fs::read(&path).unwrap();
             *bytes.last_mut().unwrap() ^= 1;

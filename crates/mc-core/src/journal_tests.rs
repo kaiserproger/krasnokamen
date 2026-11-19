@@ -2106,3 +2106,102 @@ fn format_one_batch_is_refused_naming_the_clean_stop_path() {
     assert!(text.contains("format 1"), "{text}");
     assert!(text.contains("checkpoint"), "{text}");
 }
+
+/// WAL-BATCH-HAS-NO-STORE-IDENTITY: a journal directory copied from another
+/// world must be refused by the ordinary recovery path, naming both stores,
+/// instead of replaying its post-images over this store's checkpoint. Only the
+/// `journal/` directory travels: exactly the operator mistake the row describes
+/// (restoring the database alone, or mixing two copies' tails).
+#[test]
+fn recovery_refuses_a_journal_copied_from_another_world() {
+    let root = tempfile::tempdir().unwrap();
+    let source = crate::config::CoreConfig::new(root.path().join("source"), 42);
+    let target = crate::config::CoreConfig::new(root.path().join("target"), 42);
+    let source_store = crate::native_checkpoint::tests::fixture_store(&source).unwrap();
+    let target_store = crate::native_checkpoint::tests::fixture_store(&target).unwrap();
+    assert_ne!(
+        source_store.store_uuid(),
+        target_store.store_uuid(),
+        "two worlds never share a store id"
+    );
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let source_identity =
+        crate::journal::WalIdentity::new(source_store.store_uuid(), &registry.blocks);
+    let mut writer = JournalWriter::open(&source.world_dir, 1, source_identity).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let name = "batch-00000000000000000001-00000000000000000001.bin";
+    std::fs::create_dir_all(target.world_dir.join("journal")).unwrap();
+    std::fs::copy(
+        source.world_dir.join("journal").join(name),
+        target.world_dir.join("journal").join(name),
+    )
+    .unwrap();
+
+    let error = crate::native_checkpoint::recover_with_reader(
+        &target,
+        std::sync::Arc::clone(&registry),
+        target_store.checkpoint_reader().unwrap(),
+    )
+    .err()
+    .expect("a foreign tail is never replayed");
+    let text = error.to_string();
+    assert!(
+        text.contains(&uuid::Uuid::from_bytes(source_store.store_uuid()).to_string()),
+        "the refusal names the store that wrote the batch: {text}"
+    );
+    assert!(
+        text.contains(&uuid::Uuid::from_bytes(target_store.store_uuid()).to_string()),
+        "the refusal names the opened store: {text}"
+    );
+}
+
+/// WAL-BLOCK-STATE-IDS-HAVE-NO-PALETTE-IDENTITY: a CRC-clean tail written under
+/// another block-state palette is refused by recovery naming both digests, and
+/// the same tail written under this build's palette recovers — so the refusal
+/// comes from the palette binding, not from the batch being empty or broken.
+#[test]
+fn recovery_refuses_a_tail_written_under_another_block_palette() {
+    let root = tempfile::tempdir().unwrap();
+    let config = crate::config::CoreConfig::new(root.path().join("world"), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let foreign = crate::journal::WalIdentity {
+        store: store.store_uuid(),
+        palette: [0xAB; 8],
+    };
+    let mut writer = JournalWriter::open(&config.world_dir, 1, foreign).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+
+    let error = crate::native_checkpoint::recover_with_reader(
+        &config,
+        std::sync::Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .err()
+    .expect("a foreign palette is never replayed");
+    let text = error.to_string();
+    assert!(text.contains("block palette"), "{text}");
+    assert!(text.contains("abababababababab"), "{text}");
+
+    // Positive control: the same tail under this build's palette recovers.
+    std::fs::remove_file(batch_path(&config.world_dir, 1)).unwrap();
+    let legal = crate::journal::WalIdentity::new(store.store_uuid(), &registry.blocks);
+    let mut writer = JournalWriter::open(&config.world_dir, 1, legal).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let recovered = crate::native_checkpoint::recover_with_reader(
+        &config,
+        registry,
+        store.checkpoint_reader().unwrap(),
+    )
+    .expect("a tail written under this palette recovers");
+    assert_eq!(
+        recovered.manifest.tick, 0,
+        "the legal tail replays over the copy's checkpoint"
+    );
+}

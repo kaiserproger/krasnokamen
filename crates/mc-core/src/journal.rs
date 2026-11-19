@@ -82,6 +82,11 @@ impl WalIdentity {
     }
 }
 
+/// Lowercase hex, for an identity digest in a refusal.
+fn identity_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 /// One absolute post-image inside a batch. Replay is idempotent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum JournalEntry {
@@ -1043,10 +1048,32 @@ fn decode_batch(
     if bytes.len() < HEADER_LEN {
         return Err(BatchDecodeError::Framing("incomplete batch header".into()));
     }
-    // Every frame records the store id and palette that wrote it; refusing a
-    // mismatch on replay is the next commit (WAL-BATCH-HAS-NO-STORE-IDENTITY,
-    // WAL-BLOCK-STATE-IDS-HAVE-NO-PALETTE-IDENTITY).
-    let _ = identity;
+    // Every frame records the store id and palette that wrote it: a batch that
+    // belongs to another world, or to another block-state mapping, is refused
+    // by name instead of replayed over this store's checkpoint (Books R4-P3,
+    // R5-G5). The all-zero value is `WalIdentity::fixture`'s sentinel for a
+    // journal a test wrote without opening a store: a production store always
+    // carries a random v4 `store_uuid` (`validate_header` refuses one without
+    // it), so a real batch and a real world never compare zero.
+    let recorded = |value: &[u8]| value.iter().any(|byte| *byte != 0);
+    let store: [u8; 16] = bytes[8..24].try_into().unwrap();
+    if recorded(&store) && recorded(&identity.store) && store != identity.store {
+        return Err(BatchDecodeError::Framing(format!(
+            "batch belongs to store {} but the opened store is {}; a journal from another world \
+             is never replayed (restore its own journal with it)",
+            uuid::Uuid::from_bytes(store),
+            uuid::Uuid::from_bytes(identity.store),
+        )));
+    }
+    let palette: [u8; 8] = bytes[24..32].try_into().unwrap();
+    if recorded(&palette) && recorded(&identity.palette) && palette != identity.palette {
+        return Err(BatchDecodeError::Framing(format!(
+            "batch was written under block palette {} but this build registers {}; block-state \
+             ids would remap, so the tail is refused",
+            identity_hex(&palette),
+            identity_hex(&identity.palette),
+        )));
+    }
     let lo = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
     let hi = u64::from_le_bytes(bytes[40..48].try_into().unwrap());
     let len = u32::from_le_bytes(bytes[48..52].try_into().unwrap()) as usize;

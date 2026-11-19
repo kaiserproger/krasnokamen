@@ -367,9 +367,9 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
         .join("journal")
         .join(format!("batch-{tick:020}-{tick:020}.bin"));
     let mut frame = std::fs::read(&path).unwrap();
-    frame.truncate(32);
-    frame[24..28].copy_from_slice(&u32::try_from(payload.len()).unwrap().to_le_bytes());
-    frame[28..32].copy_from_slice(&crc32fast::hash(&payload).to_le_bytes());
+    frame.truncate(56);
+    frame[48..52].copy_from_slice(&u32::try_from(payload.len()).unwrap().to_le_bytes());
+    frame[52..56].copy_from_slice(&crc32fast::hash(&payload).to_le_bytes());
     frame.extend_from_slice(&payload);
     std::fs::write(path, frame).unwrap();
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();

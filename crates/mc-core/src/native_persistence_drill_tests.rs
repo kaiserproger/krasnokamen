@@ -128,12 +128,21 @@ struct Drill {
     writer: Option<JournalWriter>,
     manifest: CheckpointManifest,
 }
+
+/// The identity this drill's world actually opens with: its store id and the
+/// palette of the registry recovery replays under.
+fn drill_identity(config: &CoreConfig, state: &TickState) -> crate::journal::WalIdentity {
+    let store = crate::native_checkpoint::tests::fixture_store(config).unwrap();
+    crate::journal::WalIdentity::new(store.store_uuid(), &state.registry.blocks)
+}
+
 impl Drill {
     fn open(config: CoreConfig) -> Self {
         let state = recovered_world(&config);
         let manifest = read_manifest(&config).unwrap();
+        let identity = drill_identity(&config, &state);
         let writer =
-            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick, crate::journal::WalIdentity::fixture()).unwrap();
+            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick, identity).unwrap();
         Self {
             config,
             state,
@@ -251,8 +260,9 @@ impl Drill {
         assert!(reply.recv().unwrap());
         acknowledge_checkpoint(&mut self.state, ack);
         assert_eq!(self.manifest.tick, tick);
+        let identity = drill_identity(&self.config, &self.state);
         self.writer = Some(
-            JournalWriter::open_recovered(&self.config.world_dir, 1, tick, self.state.tick, crate::journal::WalIdentity::fixture())
+            JournalWriter::open_recovered(&self.config.world_dir, 1, tick, self.state.tick, identity)
                 .unwrap(),
         );
     }
