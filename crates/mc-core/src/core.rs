@@ -462,6 +462,9 @@ struct CoreInner {
     /// Immutable game data the tick runs on (recipes, items, blocks), as the
     /// world opened with it.
     registry: Arc<CoreRegistry>,
+    /// The config this world opened with; a hot backup's trial restore recovers
+    /// the copy under exactly these inputs.
+    config: CoreConfig,
     /// The registry the tick runs on now: a datapack reload replaces it.
     live_registry: Arc<std::sync::RwLock<Arc<CoreRegistry>>>,
     /// `send_command_feedback`, published by the tick for the edge's own replies.
@@ -1210,6 +1213,7 @@ impl Core {
                 plugin_stats,
                 build_gate,
                 require_plugin_login: config.require_plugin_login,
+                config,
                 unlocked_sessions,
                 halt_reason,
                 lod,
@@ -1621,6 +1625,14 @@ impl Core {
         let backup = result
             .recv()
             .unwrap_or_else(|_| Err(CoreError::Storage("hot backup: the core stopped".into())))?;
+        // Books R5-G3: a copy is reported successful only after it restores.
+        // Verify the copy on this caller's thread; the world keeps ticking.
+        crate::hot_backup::verify_restorable(
+            out,
+            &self.inner.config,
+            Arc::clone(&self.inner.registry),
+            backup.wal_tick,
+        )?;
         Ok(backup)
     }
 

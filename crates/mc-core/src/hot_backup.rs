@@ -235,12 +235,113 @@ pub(crate) fn copy_world(
     })
 }
 
+/// Scratch directory for repairing a copy of a store, removed on drop.
+struct ScratchStore(Option<std::path::PathBuf>);
+
+impl Drop for ScratchStore {
+    fn drop(&mut self) {
+        if let Some(dir) = self.0.take() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
+/// The copy's store, kept alive while its reader is used: read-only when the
+/// copy is clean, or opened writable on a repaired scratch copy when redb says
+/// it would repair on the next serve (the normal state of a hot copy of a live
+/// store). The backup itself is never written.
+enum OpenedCopy {
+    ReadOnly(mc_world::native::NativeReadOnlyStore),
+    Repaired(mc_world::native::NativeStore),
+}
+
+impl OpenedCopy {
+    /// The recovery reader, after checking the store against the copied marker.
+    fn reader(
+        &self,
+        copy: &Path,
+        store_path: &Path,
+    ) -> Result<mc_world::native::NativeCheckpointReader, CoreError> {
+        let storage = |error: mc_world::native::NativeError| {
+            CoreError::Storage(format!("hot backup {}: {error}", store_path.display()))
+        };
+        let pair = |error: String| {
+            CoreError::Storage(format!(
+                "hot backup {}: the copy does not pair with its checkpoint marker: {error}",
+                copy.display()
+            ))
+        };
+        match self {
+            Self::ReadOnly(store) => {
+                store
+                    .verify_marker(copy)
+                    .map_err(|error| pair(error.to_string()))?;
+                store.checkpoint_reader().map_err(storage)
+            }
+            Self::Repaired(store) => {
+                mc_world::store_marker::verify(
+                    copy,
+                    store.store_uuid(),
+                    store.checkpoint_tick().map_err(storage)?,
+                )
+                .map_err(|error| pair(error.to_string()))?;
+                store.checkpoint_reader().map_err(storage)
+            }
+        }
+    }
+}
+
+/// Open the copy for verification and hold its scratch directory, if any.
+fn open_copy(
+    copy: &Path,
+    config: &crate::config::CoreConfig,
+) -> Result<(OpenedCopy, ScratchStore), CoreError> {
+    let store_path = copy.join(NATIVE_DATABASE);
+    let identity = crate::native_checkpoint::native_identity(config);
+    match mc_world::native::NativeReadOnlyStore::open_with_cache(
+        &store_path,
+        identity,
+        16 * 1024 * 1024,
+    ) {
+        Ok(store) => Ok((OpenedCopy::ReadOnly(store), ScratchStore(None))),
+        Err(mc_world::native::NativeError::Source(_)) => {
+            static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let dir = std::env::temp_dir().join(format!(
+                "krasnokamen-verify-{}-{}",
+                std::process::id(),
+                SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            let scratch = ScratchStore(Some(dir.clone()));
+            std::fs::create_dir_all(&dir).map_err(|error| {
+                CoreError::Storage(format!("hot backup verify {}: {error}", dir.display()))
+            })?;
+            let repaired = dir.join("state.redb");
+            std::fs::copy(&store_path, &repaired).map_err(|error| {
+                CoreError::Storage(format!("hot backup verify {}: {error}", repaired.display()))
+            })?;
+            let store = mc_world::native::NativeStore::open(&repaired, identity).map_err(|error| {
+                CoreError::Storage(format!(
+                    "hot backup {}: the copy does not open: {error}",
+                    store_path.display()
+                ))
+            })?;
+            Ok((OpenedCopy::Repaired(store), scratch))
+        }
+        Err(error) => Err(CoreError::Storage(format!(
+            "hot backup {}: the copy does not open: {error}",
+            store_path.display()
+        ))),
+    }
+}
+
 /// Prove the copy at `copy` actually restores, instead of reporting a backup
 /// whose bytes and CRCs match the source (Books R5-G3).
 ///
-/// Opens exactly that copy **read-only**, checks the copied store against the
-/// copied checkpoint marker, and runs the ordinary recovery reader and WAL
-/// replay over it: manifest and domain versions, stored records, and every
+/// Opens exactly that copy — read-only, or through a repaired scratch copy when
+/// redb would repair it on the next serve, so the backup itself is never
+/// written — checks the copied store against the copied checkpoint marker, and
+/// runs the ordinary recovery reader and WAL replay over it: manifest and
+/// domain versions, stored records, and every
 /// batch of the copied tail under the palette this build registers. The
 /// recovered tick must be the `expected_tick` the copy claims. A damaged store
 /// or a CRC-clean but semantically unreplayable batch therefore fails here, at
@@ -251,45 +352,30 @@ pub fn verify_restorable(
     registry: std::sync::Arc<crate::registry::CoreRegistry>,
     expected_tick: u64,
 ) -> Result<(), CoreError> {
+    let (store, scratch) = open_copy(copy, config)?;
     let store_path = copy.join(NATIVE_DATABASE);
-    let store = mc_world::native::NativeReadOnlyStore::open_with_cache(
-        &store_path,
-        crate::native_checkpoint::native_identity(config),
-        16 * 1024 * 1024,
-    )
-    .map_err(|error| {
-        CoreError::Storage(format!(
-            "hot backup {}: the copy does not open: {error}",
-            store_path.display()
-        ))
-    })?;
-    store.verify_marker(copy).map_err(|error| {
-        CoreError::Storage(format!(
-            "hot backup {}: the copy does not pair with its checkpoint marker: {error}",
-            copy.display()
-        ))
-    })?;
+    let reader = store.reader(copy, &store_path)?;
     let mut copy_config = config.clone();
     copy_config.world_dir = copy.to_path_buf();
-    let recovered = crate::native_checkpoint::recover_with_reader(
-        &copy_config,
-        registry,
-        store.checkpoint_reader().map_err(|error| {
-            CoreError::Storage(format!("hot backup {}: {error}", store_path.display()))
-        })?,
-    )
-    .map_err(|error| {
-        CoreError::Storage(format!(
-            "hot backup {}: the copy does not recover: {error}",
-            copy.display()
-        ))
-    })?;
+    let recovered =
+        crate::native_checkpoint::recover_with_reader(&copy_config, registry, reader).map_err(
+            |error| {
+                CoreError::Storage(format!(
+                    "hot backup {}: the copy does not recover: {error}",
+                    copy.display()
+                ))
+            },
+        )?;
     let recovered_tick = recovered
         .dimensions
         .values()
         .map(|replay| replay.tick)
         .max()
         .unwrap_or(recovered.manifest.tick);
+    // The recovered world still borrows the copy's store through its reader.
+    drop(recovered);
+    drop(store);
+    drop(scratch);
     if recovered_tick != expected_tick {
         return Err(CoreError::Storage(format!(
             "hot backup {}: the copy recovers to tick {recovered_tick}, not the {expected_tick} \

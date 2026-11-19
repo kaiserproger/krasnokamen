@@ -800,7 +800,9 @@ instead of being published as a backup (Books R5 G3). A `journal/` directory
 belongs to the store it was written with: every batch carries that store's id
 and block-palette digest, so replay refuses a foreign or mismatched tail by
 name instead of folding it into the wrong world (Books R4-P3, R5-G5). Neither
-success path is reported until the copy has been opened read-only and the
+success path is reported until the copy has been opened as the next serve
+would open it — read-only, or through a repaired scratch copy when redb would
+repair a live store's image, never by writing the backup itself — and the
 ordinary recovery reader and WAL replay run over it to the tick the copy
 claims; a copy that does not replay is withdrawn. Use the documented operator
 commands

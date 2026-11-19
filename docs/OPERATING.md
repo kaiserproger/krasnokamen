@@ -1227,7 +1227,8 @@ separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
 lists separately; backups are never pruned automatically. Before reporting
 success, `backup` restores the copy it just wrote into its own directory and
-runs ordinary recovery and WAL replay over it; a copy that does not replay is
+runs ordinary recovery and WAL replay over it (a copy redb would repair is
+repaired on a scratch copy, never in the backup); a copy that does not replay is
 withdrawn, and a host without a content cache says the backup is unverified
 instead of implying a check.
 

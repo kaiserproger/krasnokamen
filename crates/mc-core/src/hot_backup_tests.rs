@@ -331,3 +331,30 @@ fn copy_refuses_a_source_batch_that_fails_its_crc() {
     );
 }
 
+
+/// HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED: a backup reports success only
+/// after the finished copy restores. A copy whose database was damaged, and a
+/// copy whose CRC-clean tail carries a record recovery refuses, each fail the
+/// backup instead of being published as verified.
+#[test]
+fn backup_refuses_a_copy_that_does_not_restore() {
+    for mode in [
+        crate::hot_backup::test_hooks::DATABASE,
+        crate::hot_backup::test_hooks::UNREPLAYABLE_BATCH,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let live = root.path().join("live");
+        let copy = root.path().join("copy");
+        let core = Core::open(config(&live)).unwrap();
+        std::fs::create_dir(&copy).unwrap();
+        crate::hot_backup::test_hooks::arm(mode);
+        let error = core
+            .backup(&copy)
+            .expect_err("an unrestorable copy is not a backup");
+        core.shutdown();
+        assert!(
+            error.to_string().contains("does not"),
+            "the refusal names the failed step: {error}"
+        );
+    }
+}
