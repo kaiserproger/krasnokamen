@@ -208,11 +208,7 @@ pub(super) fn screen_at(
     );
     buttons.push(
         button(
-            if ctx.lang == super::Lang::Ru {
-                "Проекты"
-            } else {
-                "Projects"
-            },
+            ctx.t(Key::Projects),
             "projects",
             ctx.id,
         )

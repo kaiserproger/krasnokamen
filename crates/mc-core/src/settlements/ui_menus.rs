@@ -2199,7 +2199,7 @@ fn projects_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
 }
 
 fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
-    let mut screen = Screen::new(tr(ctx, "Construction", "Строительство").to_owned());
+    let mut screen = Screen::new(ctx.t(Key::Projects).to_owned());
     let Some(record) = state.settlements.get(ctx.id) else {
         return screen;
     };

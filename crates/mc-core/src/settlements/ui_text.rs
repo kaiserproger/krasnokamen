@@ -225,7 +225,7 @@ pub(crate) enum Key {
 /// English and Russian text for one key.
 const fn pair(key: Key) -> (&'static str, &'static str) {
     match key {
-        Key::Settlement => ("Settlement", "Поселение"),
+        Key::Settlement => ("Management", "Управление"),
         Key::NextStep => ("Next step", "Следующий шаг"),
         Key::Help => ("Help", "Помощь"),
         Key::MaterialsEstimate => ("Materials estimate", "Оценка материалов"),
@@ -241,8 +241,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Найдите колокол деревни → ПКМ → «Принять грамоту». Это вход в управление.",
         ),
         Key::GuideRecruit => (
-            "Open Army for the available recruitment controls. Need barracks capacity? Open Projects → Barracks.",
-            "Откройте «Армия» для доступного найма. Не хватает мест? «Проекты» → «Казарма».",
+            "Open Army for recruitment. Need barracks capacity? Open Construction → Barracks.",
+            "Откройте «Армия» для найма. Не хватает мест? «Строительство» → «Казарма».",
         ),
         Key::GuideArmour => (
             "The feudal preparation step is Armour: supply real armour through Storage, then issue it to the selected recruit when supported by Army.",
@@ -265,12 +265,12 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Снабжение — добровольно через склад. Shift+клик по своему стаку вносит его. Победа не даёт права ломать и грабить чужое.",
         ),
         Key::GuideConstruction => (
-            "Building → Order construction: builders fetch materials and place blocks. Projects shows shortages and progress. Recheck certificate only checks blocks already built.",
-            "Здание → «Заказать стройку»: строители носят материалы и ставят блоки. «Проекты» показывают нехватку и прогресс. Сертификат проверяет уже построенное.",
+            "Building → Order construction: builders fetch materials and place blocks. Construction shows shortages and progress. Recheck certificate only checks blocks already built.",
+            "Здание → «Заказать строительство»: строители носят материалы и ставят блоки. «Строительство» показывает нехватку и прогресс. Сертификат проверяет уже построенное.",
         ),
         Key::CivilHelp => (
-            "Settlement dashboard: Map, Buildings, Residents and Resources above; Production and Projects below. Click an icon for its labelled page. Back returns without cancelling work.",
-            "Панель поселения: вверху Карта, Постройки, Жители и Ресурсы; ниже Производство и Проекты. Клик открывает подписанную страницу. Назад не отменяет работу.",
+            "Management: Map, Buildings, Residents and Resources above; Production and Construction below. Click an icon for its labelled page. Back returns without cancelling work.",
+            "Управление: вверху Карта, Постройки, Жители и Ресурсы; ниже Производство и Строительство. Клик открывает подписанную страницу. Назад не отменяет работу.",
         ),
         Key::HubBody => (
             "{owner}\nOpen Army to recruit, equip and house soldiers.",
@@ -355,7 +355,7 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::Autonomous => ("Autonomous (unclaimed)", "Автономное (без владельца)"),
         Key::Buildings => ("Buildings", "Постройки"),
         Key::ResidentsJobs => ("Residents & jobs", "Жители и работа"),
-        Key::Projects => ("Projects", "Стройка"),
+        Key::Projects => ("Construction", "Строительство"),
         Key::ProductionOrders => ("Production orders", "Заказы производства"),
         Key::Army => ("Army", "Армия"),
 
