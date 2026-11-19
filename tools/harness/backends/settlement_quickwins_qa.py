@@ -53,7 +53,7 @@ CRITERIA: dict[str, tuple[str, str]] = {
     "C4": ("a Shift-click deposit lands in that chest (Storage count and server `data get block`)", "OWNER_DECISIONS D63 «works as storage»"),
     "C5a": ("a second CONCURRENT settlement founded by the same player gets its own empty starter chest", "Main reading of D63, 2026-11-20 (open to owner correction): chest per settlement owned, not once per player"),
     "C5b": ("dissolving a settlement and founding again gets no new chest (the player's chest count does not grow)", "Main reading of D63, 2026-11-20 (open to owner correction)"),
-    "Q1": ("a refused certification names the missing requirements in Russian, no `footprint/beds/roof/...`", "REPORT §5.1"),
+    "Q1": ("a refused certification shows EVERY missing requirement in the visible text in Russian with its count (`кровати 0/1, крыша 0/1`), no `footprint/beds/roof/...`; the what-to-do hint may live in the tooltip (not observable: human review)", "REPORT §5.1"),
     "Q2": ("workshop names in the Russian UI have no raw `{profession:?}` (no `Мастерская: Cartographer`)", "REPORT §5.2"),
     "Q3": ("the order outcome is Russian, names the missing materials and links to Storage", "REPORT §5.3"),
     "Q1b": ("after a long refusal the certify form's Сертифицировать / Угол 1 / Угол 2 / Назад lie fully inside 1280x720 without scrolling", "Main, 2026-11-20 (certification refusal text bounded); R:350"),
@@ -220,14 +220,17 @@ def shortage_verdict(text: str, buttons: list[str], expected: dict[str, int]) ->
 
 
 def refusal_verdict(text: str) -> tuple[bool, dict[str, Any]]:
-    """A refused certification of a house without bed and roof: Russian names, no jargon, a hint."""
+    """A refused certification of a house without bed and roof: the VISIBLE text names every missing
+    requirement in Russian with its count (`кровати 0/1, крыша 0/1`) and has no jargon.
+    `hint` (a verb saying what to do) is recorded but not required: the compact design keeps the
+    explanation in the hover/tooltip, which the client's UI nodes do not expose (human review)."""
     facts = {
-        "bed": bool(re.search(r"кроват", text, re.IGNORECASE)),
-        "roof": bool(re.search(r"крыш|потол", text, re.IGNORECASE)),
+        "bed": bool(re.search(r"кроват\w*\W{0,3}\d+\s*/\s*\d+", text, re.IGNORECASE)),
+        "roof": bool(re.search(r"(крыш|потол)\w*\W{0,3}\d+\s*/\s*\d+", text, re.IGNORECASE)),
         "jargon": sorted({match.group(0).lower() for match in JARGON.finditer(text)}),
-        "hint": bool(re.search(r"постав|добав|постро|нужн|положит", text, re.IGNORECASE)),
+        "hint": bool(re.search(r"постав|добав|постро|нужн|положит|достро", text, re.IGNORECASE)),
     }
-    return facts["bed"] and facts["roof"] and not facts["jargon"] and facts["hint"], facts
+    return facts["bed"] and facts["roof"] and not facts["jargon"], facts
 
 
 def corner_text(position: list[int]) -> str:
