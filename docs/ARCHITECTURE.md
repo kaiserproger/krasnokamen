@@ -42,6 +42,7 @@ authoritative.
 - [Settlement authority and code locations](architecture/settlements.md)
 - [Chunk residency, activation and tickets](architecture/residency.md)
 - [Adding a vanilla gameplay feature](development/adding-a-feature.md)
+- [Horizon `horizon:lod` far-terrain acceptance](development/horizon-lod-acceptance.md)
 - [Plugins](PLUGINS.md), [Loader](KRASNOKAMEN_LOADER.md),
   [operations](OPERATING.md), [decisions](decisions/README.md)
 
