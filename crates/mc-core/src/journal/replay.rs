@@ -1093,7 +1093,9 @@ pub(crate) fn apply_batch_images(
                     replay.settlement_tail.fold_settlement(image, *high_water);
                 }
                 JournalEntry::StarterChestGranted { player, count } => {
-                    replay.settlement_tail.fold_starter_chest_grant(*player, *count);
+                    replay
+                        .settlement_tail
+                        .fold_starter_chest_grant(*player, *count);
                 }
                 JournalEntry::Transit { id, record, .. } => {
                     replay.settlement_tail.fold_transit(*id, record);

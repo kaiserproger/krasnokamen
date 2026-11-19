@@ -5,8 +5,11 @@ use super::Finding;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-// DESIGN §3.2 S1: 116 on the D65 base, 113 after S3 persistence ownership.
-pub(super) const CEILING: usize = 113;
+// D65 before D63: 116 -> 113. Main-approved batch B adds seven starter-chest
+// host references: rebased S1 is 123; S3 cuts four (including offline grants).
+// The six remaining QW journal/dimension hooks move in D65 S2/S6; lower then.
+// This rebaselines named paths only; the independent SCC ceiling stays 186.
+pub(super) const CEILING: usize = 119;
 
 #[derive(Debug)]
 pub(super) struct Reference {

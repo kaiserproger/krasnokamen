@@ -159,6 +159,8 @@ Until then, none of these steps claims a build-time gain. The order:
 **D65 in-crate persistence cut (S3).** The dimension-routed `Replay` carries
 one `settlements::persistence::Tail`; its records, tombstones, allocator floor
 and transit images and their folds belong to settlements, not the journal.
+The D63 starter-chest grant counts and their WAL/checkpoint folds share this
+tail owner; their existing player/count codec and overwrite semantics stay intact.
 Settlement checkpoint projection, stale-row prefixes, image heap accounting
 and the census projections live behind that same owner. Recovery reaches one
 dimension-admission call before entity hydration and one completion call after

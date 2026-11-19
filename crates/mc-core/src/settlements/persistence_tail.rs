@@ -1,4 +1,4 @@
-//! Settlement/transit WAL fold and checkpoint projection, owned by the domain.
+//! Settlement/transit and starter-grant WAL folds, owned by the domain.
 //! No serde layout lives here: the existing record/image codecs stay unchanged.
 use super::{RecordImage, Row, SettlementRecord, checkpoint_sequence, row_key};
 use crate::config::CoreError;
