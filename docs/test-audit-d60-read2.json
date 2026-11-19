@@ -29,8 +29,9 @@
     "retained_K1": 147,
     "removed_shadowed_duplicate_declarations": 2,
     "retained_U": 144,
-    "historical_medium_candidates_reviewed": 371,
-    "remaining_medium_candidates_unfinalized": 428,
+    "historical_medium_candidates_reviewed": 369,
+    "remaining_medium_candidates_unfinalized": 430,
+    "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
   "base": "96e99cfe3bc3e2d6f52354e8cca2a3fb100ece88",
