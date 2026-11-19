@@ -1,6 +1,10 @@
 """Bug-ledger tools: ``ledger probe`` classifies rows on the current tree and
 ``ledger promote`` is the only way a row becomes ``fixed``.
 
+The ledger is one file per row, ``docs/bugs/rows/<ID>.toml`` (a row edit touches one
+small file instead of a 7000-line table). ``ledger show``/``list``/``edit`` read and
+write a row, ``ledger split`` converts a single-file ledger and verifies every row.
+
 Both reuse the check construction of ``regressions`` (one source of truth for what
 a registered ref runs and what its receipt must show).
 """
@@ -33,13 +37,209 @@ class Refused(Exception):
     """A promotion precondition failed; the message is the stated reason."""
 
 
-# --------------------------------------------------------------------- ledger
+# ----------------------------------------------------------------- ledger rows
+
+ROW_DIR = 'docs/bugs/rows'
+_BLOCK_HEAD = re.compile(r'(?m)^(?=\[\[bug\]\][ \t]*$)')
+# Fields `ledger edit` refuses: they have exactly one writer each (`ledger promote`, the file name).
+IMMUTABLE = {
+    'id': 'the id is the row file name',
+    'status': 'only `python3 -m tools.harness ledger promote` sets a status',
+    'promotion': 'only `python3 -m tools.harness ledger promote` records a promotion',
+}
 
 
-def _load_bugs(root):
-    with (root / 'docs/bugs/ledger.toml').open('rb') as file:
-        bugs = tomllib.load(file)['bug']
-    return bugs
+def rows_dir(root=REPO_ROOT):
+    """The per-row ledger directory: one `[[bug]]` table per file, named `<ID>.toml`."""
+    return root / ROW_DIR
+
+
+def row_path(root, ident):
+    """The file holding row `ident`; rows never move, so ids and paths cannot drift apart."""
+    return rows_dir(root) / f'{ident}.toml'
+
+
+def _relative(root, path):
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _row_blocks(text):
+    """(preamble, [(id, block text)]) of a ledger document; the preamble may only hold comments.
+
+    A block keeps the exact text of its `[[bug]]` table, comments and multi-line strings
+    included, so a file split round-trips byte for byte.
+    """
+    parts = _BLOCK_HEAD.split(text)
+    preamble, blocks = parts[0], parts[1:]
+    for line in preamble.splitlines():
+        if line.strip() and not line.lstrip().startswith('#'):
+            raise ValueError(f'ledger: text before the first [[bug]] row must be comments only, not {line.strip()[:60]!r}')
+    rows = []
+    for block in blocks:
+        table = tomllib.loads(block)
+        if set(table) != {'bug'} or not isinstance(table['bug'], list) or len(table['bug']) != 1:
+            raise ValueError('ledger: every [[bug]] block must hold exactly one row and nothing else')
+        ident = table['bug'][0].get('id')
+        if not isinstance(ident, str) or not ident:
+            raise ValueError('ledger: a row has no string id')
+        rows.append((ident, block.rstrip('\n') + '\n'))
+    return preamble, rows
+
+
+def load_rows(root=REPO_ROOT):
+    """Every ledger row in file-name order; ValueError names the offending file.
+
+    One row per `<ID>.toml`, the file name is the row id, and nothing else may live in
+    the file: ids stay unique across the directory without reading a 6000-line table.
+    """
+    directory = rows_dir(root)
+    files = sorted(directory.glob('*.toml')) if directory.is_dir() else []
+    if not files:
+        raise ValueError(f'{ROW_DIR}: no ledger rows (expected one <ID>.toml per bug)')
+    rows, seen = [], {}
+    for path in files:
+        name = _relative(root, path)
+        try:
+            parsed = tomllib.loads(path.read_text(encoding='utf-8'))
+        except tomllib.TOMLDecodeError as error:
+            raise ValueError(f'{name}: {error}') from None
+        if set(parsed) != {'bug'} or not isinstance(parsed['bug'], list) or len(parsed['bug']) != 1:
+            raise ValueError(f'{name}: must hold exactly one [[bug]] row and nothing else')
+        row = parsed['bug'][0]
+        ident = row.get('id')
+        if not isinstance(ident, str) or not ident:
+            raise ValueError(f'{name}: no string id')
+        if path.stem != ident:
+            raise ValueError(f'{name}: the file name must be {ident}.toml, not {path.name}')
+        if ident in seen:
+            raise ValueError(f'{name}: duplicate id {ident}, also in {seen[ident]}')
+        seen[ident] = name
+        rows.append(row)
+    return rows
+
+
+def document(root=REPO_ROOT):
+    """Every row assembled into one TOML document (what `ledger show` with no id prints)."""
+    return '\n'.join(row_path(root, row['id']).read_text(encoding='utf-8').rstrip('\n')
+                     for row in load_rows(root)) + '\n'
+
+
+def write_rows(root, text):
+    """Write a ledger document as one row file per row; row files absent from `text` are removed."""
+    _, rows = _row_blocks(text)
+    idents = {ident for ident, _ in rows}
+    if len(idents) != len(rows):
+        raise ValueError('ledger: the document holds a duplicate id')
+    directory = rows_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    for ident, block in rows:
+        row_path(root, ident).write_text(block, encoding='utf-8')
+    for stale in sorted(directory.glob('*.toml')):
+        if stale.stem not in idents:
+            stale.unlink()
+    return idents
+
+
+def split(root=REPO_ROOT, source=None):
+    """Convert the single-file ledger into row files; verified row for row, then the source is removed.
+
+    Re-runnable: the single file is authoritative, so running it again on a newer
+    `docs/bugs/ledger.toml` rewrites the rows and reports a mismatch instead of a half-move.
+    """
+    source = Path(source) if source is not None else root / 'docs/bugs/ledger.toml'
+    if not source.is_file():
+        raise Refused(f'{source}: no single-file ledger to split')
+    text = source.read_text(encoding='utf-8')
+    parsed = tomllib.loads(text)
+    if set(parsed) != {'bug'} or not isinstance(parsed['bug'], list) or not parsed['bug']:
+        raise Refused(f'{source}: must hold a nonempty [[bug]] array and no other tables')
+    _, blocks = _row_blocks(text)
+    write_rows(root, text)
+    before = {row['id']: row for row in parsed['bug']}
+    after = {row['id']: row for row in load_rows(root)}
+    if after != before:
+        differ = sorted(set(before) ^ set(after)) or sorted(i for i in before if before[i] != after[i])
+        raise Refused(f'{ROW_DIR}: rows differ from {source} after the split ({", ".join(differ[:5])}); '
+                      'the single file is kept')
+    for ident, block in blocks:
+        if row_path(root, ident).read_text(encoding='utf-8') != block:
+            raise Refused(f'{ROW_DIR}/{ident}.toml: text differs from its block in {source}; '
+                          'the single file is kept')
+    source.unlink()
+    return len(blocks)
+
+
+def show(root, ident, field=None):
+    """The text of one row file, or one field of it (`--field`); Refused when the row is absent."""
+    path = row_path(root, ident)
+    if not path.is_file():
+        raise Refused(f'{ident}: no row file {_relative(root, path)}; `ledger list` shows the ids')
+    text = path.read_text(encoding='utf-8')
+    if field is None:
+        return text
+    row = tomllib.loads(text)['bug'][0]
+    if field not in row:
+        raise Refused(f'{ident}: no field {field}')
+    value = row[field]
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def _key_line(text, key):
+    """Index of the row's own `key = ...` line, outside any multi-line string, or None."""
+    inside = ''
+    for index, line in enumerate(text.splitlines(keepends=True)):
+        if inside:
+            inside = '' if line.count(inside) % 2 else inside
+            continue
+        if re.match(rf'^{re.escape(key)}[ \t]*=', line):
+            return index
+        for quote in ('"""', "'''"):
+            if line.count(quote) % 2:
+                inside = quote
+                break
+    return None
+
+
+def edit(root, ident, assignments, *, dry_run=False):
+    """Set fields of one row (`--set key=value`), validated by re-parsing the row.
+
+    `id`, `status` and `promotion` are refused: they have exactly one writer each
+    (the file name, `ledger promote`), so a hand edit cannot fake a promotion.
+    """
+    path = row_path(root, ident)
+    if not path.is_file():
+        raise Refused(f'{ident}: no row file {_relative(root, path)}; `ledger list` shows the ids')
+    text = path.read_text(encoding='utf-8')
+    known = regressions.REQUIRED | regressions.OPTIONAL
+    for assignment in assignments:
+        key, separator, value = assignment.partition('=')
+        key, value = key.strip(), value.strip()
+        if not separator or not key or not value:
+            raise Refused(f'{ident}: --set {assignment!r} is not `key = value`')
+        if key in IMMUTABLE:
+            raise Refused(f'{ident}: {key} is not editable here: {IMMUTABLE[key]}')
+        if key not in known:
+            raise Refused(f'{ident}: unknown field {key} ({", ".join(sorted(known))})')
+        replacement = f'{key} = {value}\n'
+        index = _key_line(text, key)
+        if index is None:
+            text = text.rstrip('\n') + '\n' + replacement
+        else:
+            lines = text.splitlines(keepends=True)
+            lines[index] = replacement
+            text = ''.join(lines)
+        try:
+            row = tomllib.loads(text)['bug'][0]
+        except (tomllib.TOMLDecodeError, KeyError, IndexError) as error:
+            raise Refused(f'{ident}: {key} = {value} is not a valid row value ({error})') from None
+        if row.get('id') != ident:
+            raise Refused(f'{ident}: the edit would change the row id')
+    if not dry_run:
+        path.write_text(text, encoding='utf-8')
+    return text
 
 
 def _git(root, *args, stdin=None, check=True):
@@ -1021,16 +1221,33 @@ def _check_client_control_delta(root, control_head, restore_head, fix_full):
 
 
 def _mark_fixed(text, ident, promotion):
-    blocks = re.split(r'(?m)^(?=\[\[bug\]\][ \t]*$)', text)
-    for index, block in enumerate(blocks):
-        if re.search(rf'(?m)^id = "{re.escape(ident)}"[ \t]*$', block):
-            block, count = re.subn(r'(?m)^status = "open"[ \t]*$', 'status = "fixed"', block, count=1)
-            if count != 1:
-                raise Refused(f'{ident}: no `status = "open"` line to flip')
-            body = block.rstrip('\n')
-            blocks[index] = f'{body}\npromotion = "{promotion}"{block[len(body):]}'
-            return ''.join(blocks)
-    raise Refused(f'{ident}: row not found in ledger.toml')
+    """One row file's text with its status flipped and the promotion receipt recorded."""
+    if not re.search(rf'(?m)^id = "{re.escape(ident)}"[ \t]*$', text):
+        raise Refused(f'{ident}: the row file does not hold that id')
+    index = _key_line(text, 'status')
+    lines = text.splitlines(keepends=True)
+    if index is None or not re.fullmatch(r'status = "open"[ \t]*\n?', lines[index]):
+        raise Refused(f'{ident}: no `status = "open"` line to flip')
+    lines[index] = 'status = "fixed"\n'
+    return f'{"".join(lines).rstrip(chr(10))}\npromotion = "{promotion}"\n'
+
+
+def _record_promotion(root, ident, receipt):
+    """Write the promotion receipt and flip the row's own file; restore the row if it does not reload."""
+    promotion = f'{regressions.PROMOTION_DIR}/{ident}.json'
+    path = row_path(root, ident)
+    if not path.is_file():
+        raise Refused(f'{ident}: no row file {_relative(root, path)}')
+    original = path.read_text(encoding='utf-8')
+    (root / promotion).parent.mkdir(parents=True, exist_ok=True)
+    (root / promotion).write_text(json.dumps(receipt, indent=2) + '\n')
+    path.write_text(_mark_fixed(original, ident, promotion), encoding='utf-8')
+    try:
+        written = next(bug for bug in load_rows(root) if bug['id'] == ident)
+        assert written['status'] == 'fixed' and written['promotion'] == promotion
+    except Exception:
+        path.write_text(original, encoding='utf-8')
+        raise
 
 
 def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_receipt, client_control_receipt, runner):
@@ -1081,18 +1298,7 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if dry_run:
         return receipt
-    promotion = f'{regressions.PROMOTION_DIR}/{ident}.json'
-    ledger = root / 'docs/bugs/ledger.toml'
-    original = ledger.read_text()
-    (root / promotion).parent.mkdir(parents=True, exist_ok=True)
-    (root / promotion).write_text(json.dumps(receipt, indent=2) + '\n')
-    ledger.write_text(_mark_fixed(original, ident, promotion))
-    try:
-        written = next(bug for bug in _load_bugs(root) if bug['id'] == ident)
-        assert written['status'] == 'fixed' and written['promotion'] == promotion
-    except Exception:
-        ledger.write_text(original)
-        raise
+    _record_promotion(root, ident, receipt)
     return receipt
 
 
@@ -1103,8 +1309,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     The candidate is the exact tree: HEAD plus uncommitted diff and untracked files (docs/bugs aside).
     A `client:<sha>` fix_commit is a client-repository fix: its control is a red real-client receipt of
     the pre-fix client and its restore a green one of the client that contains the fix (docs/bugs/README.md)."""
-    bugs = _load_bugs(root)
-    row = next((bug for bug in bugs if bug['id'] == ident), None)
+    row = next((bug for bug in load_rows(root) if bug['id'] == ident), None)
     if row is None:
         raise Refused(f'unknown ledger id {ident}')
     if row['status'] == 'fixed' and not dry_run:
@@ -1211,18 +1416,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if dry_run:
         return receipt
-    promotion = f'{regressions.PROMOTION_DIR}/{ident}.json'
-    ledger = root / 'docs/bugs/ledger.toml'
-    original = ledger.read_text()
-    (root / promotion).parent.mkdir(parents=True, exist_ok=True)
-    (root / promotion).write_text(json.dumps(receipt, indent=2) + '\n')
-    ledger.write_text(_mark_fixed(original, ident, promotion))
-    try:
-        written = next(bug for bug in _load_bugs(root) if bug['id'] == ident)
-        assert written['status'] == 'fixed' and written['promotion'] == promotion
-    except Exception:
-        ledger.write_text(original)
-        raise
+    _record_promotion(root, ident, receipt)
     return receipt
 
 
@@ -1245,13 +1439,59 @@ def main(argv):
     promote_parser.add_argument('--fix-patch', type=Path, default=None,
                                 help="git diff of an uncommitted fix, for a fix_commit of the form patch:<sha256> of its non-test hunks")
     promote_parser.add_argument('--dry-run', action='store_true', help='run every check, write nothing to the ledger')
+    show_parser = sub.add_parser('show', help='print one row (no id: every row as one document)')
+    show_parser.add_argument('id', nargs='?', default=None)
+    show_parser.add_argument('--field', default=None, help='print only this field of the row')
+    show_parser.add_argument('--out', type=Path, default=None, help='write the text here instead of stdout')
+    list_parser = sub.add_parser('list', help='one line per row: id area status severity')
+    list_parser.add_argument('--area', choices=('gameplay', 'client', 'harness'), default=None)
+    list_parser.add_argument('--status', choices=('open', 'fixed'), default=None)
+    edit_parser = sub.add_parser('edit', help='set fields of one row file (`status`/`promotion` stay with promote)')
+    edit_parser.add_argument('id')
+    edit_parser.add_argument('--set', action='append', default=[], metavar='KEY=VALUE', help='TOML value text, e.g. --set \'title = "new title"\'')
+    edit_parser.add_argument('--dry-run', action='store_true', help='print the result, write nothing')
+    split_parser = sub.add_parser('split', help='convert the single-file ledger into docs/bugs/rows/<ID>.toml')
+    split_parser.add_argument('--source', type=Path, default=None, help='the single-file ledger (default docs/bugs/ledger.toml)')
     args = parser.parse_args(argv)
     # Worktrees must share the invoking tree's build cache, not build their own target.
     os.environ.setdefault('CARGO_TARGET_DIR', str(REPO_ROOT / 'target'))
+    if args.action in ('show', 'list', 'edit', 'split'):
+        try:
+            if args.action == 'show':
+                if args.field and not args.id:
+                    parser.error('--field needs a row id')
+                text = show(REPO_ROOT, args.id, field=args.field) if args.id else document(REPO_ROOT)
+                if args.out:
+                    args.out.parent.mkdir(parents=True, exist_ok=True)
+                    args.out.write_text(text, encoding='utf-8')
+                else:
+                    print(text, end='' if text.endswith('\n') else '\n')
+            elif args.action == 'list':
+                for row in load_rows(REPO_ROOT):
+                    if args.area and row.get('area') != args.area:
+                        continue
+                    if args.status and row.get('status') != args.status:
+                        continue
+                    print(f"{row['id']}\t{row.get('area', '')}\t{row.get('status', '')}\t{row.get('severity', '')}")
+            elif args.action == 'edit':
+                if not args.set:
+                    parser.error('edit needs at least one --set key=value')
+                text = edit(REPO_ROOT, args.id, args.set, dry_run=args.dry_run)
+                print(f"[ledger] {'unchanged (dry run): ' + args.id if args.dry_run else 'edited ' + args.id} "
+                      f"{_relative(REPO_ROOT, row_path(REPO_ROOT, args.id))}")
+                if args.dry_run:
+                    print(text, end='' if text.endswith('\n') else '\n')
+            else:
+                count = split(REPO_ROOT, args.source)
+                print(f'[ledger] split {count} rows into {ROW_DIR}')
+        except (Refused, ValueError) as error:
+            print(f'ledger {args.action}: {error}', file=sys.stderr)
+            return 2
+        return 0
     if args.action == 'probe':
         if bool(args.ids) == args.open:
             parser.error('give row ids or --open')
-        bugs = _load_bugs(REPO_ROOT)
+        bugs = load_rows(REPO_ROOT)
         ids = args.ids or [bug['id'] for bug in bugs if bug['status'] == 'open']
         ctx = _artifact_ctx('probe')
         try:
@@ -1277,7 +1517,7 @@ def main(argv):
         receipt = promote(args.id, client_receipt=args.client_receipt,
                           client_control_receipt=args.client_control_receipt,
                           fix_patch=args.fix_patch, dry_run=args.dry_run, ctx=ctx)
-    except Refused as error:
+    except (Refused, ValueError) as error:
         print(f'[ledger] refused: {error}')
         print(f'[ledger] artifact={ctx.artifact_dir}')
         return 1

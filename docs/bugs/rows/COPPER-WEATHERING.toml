@@ -1,0 +1,10 @@
+[[bug]]
+id = "COPPER-WEATHERING"
+title = "Weathering did not cover the vanilla copper families"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COPPER-WEATHERING"
+regression = ["cargo:mc-core:copper::tests::all_weathering_families_oxidize_wax_and_scrape"]
+failing_first = "not recorded"

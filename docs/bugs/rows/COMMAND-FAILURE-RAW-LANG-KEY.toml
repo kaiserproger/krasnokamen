@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-FAILURE-RAW-LANG-KEY"
+title = "Global-command failures reached from the command context (kill/tp/effect with no matching entity) show the raw lang key argument.entity.notfound.entity instead of the translated text."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'; scene-shot 20261111T194930-scene-shot-13ikb1el, kill @e[type=minecraft:cow,distance=..0] and tp @s NobodyHere). Cause: command_context::run delivered Err(key) strings from dimensions::travel::execute as plain chat; now a vanilla lang key is sent as a translate component."
+fix_commit = "patch:40033192055f37f08900db10089a5ac4d01631d61c47972d5fc32fff6e251289"
+regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors", "harness:entities:native-v2-command-rows"]
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-FAILURE-RAW-LANG-KEY.json"

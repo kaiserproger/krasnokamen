@@ -1,0 +1,11 @@
+[[bug]]
+id = "EXPLOSION-MOTION-ORDER"
+title = "Explosion impulses lack a proved causal order relative to snapshots and player motion"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage2Review/terra-edge-events.md finding 5"
+repro = "source"
+regression = []
+repro_check = "Reliable explosions can overtake pending world frames; position corrections and motion are reliable as well. Define the required tick and client impulse order and prove it with a real-client gate, including chunk, block, entity, forget and respawn transitions."
+failing_first = "not recorded"

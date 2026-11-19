@@ -1,0 +1,10 @@
+[[bug]]
+id = "DRIPSTONE-MID-COLUMN-GROWTH"
+title = "A down-pointed dripstone tip mid-column wrongly grows: candidate requires `thickness=tip/tip_merge` but omits vanilla's `isStalactiteStartPos` gate (tip must have NO dripstone directly above, pinned bytecode). Without it every mid-column tip is eligible."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-MID-COLUMN-GROWTH"
+regression = ["cargo:mc-core:farming_tests::dripstone_mid_column_tip_does_not_grow_but_top_tip_fills", "cargo:mc-core:farming_tests::water_fed_dripstone_growth_only_runs_at_column_start"]
+failing_first = "not recorded"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "VILLAGER-STRANDED-IN-DEEP-WATER"
+title = "A resident more than one block from the bank of water two or more blocks deep floats in place forever, never goes home and can drown"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "Breaker finding (BreakVillageParity, break-it pass of bb39cf65 on main 21607d42, agent-run): residents carried onto the centre floor of 5x5 pools (banks level with the water top, like a pond) swim up but stay at the centre cell of the 2-deep and the 5-deep pool for the whole Idle afternoon (700 ticks) and the whole night (900 ticks, activity rest, never in bed); in seed 7 the 5-deep swimmer lost 12 health (20 -> 8, client health metadata) while floating. A resident in the deep pool's edge cell climbs out within 100 ticks; one in a 1-deep pool walks out. Server pin 21607d42f23f (sha256 156427f7...3b07a0), native client d5f25569, scene receipts/BreakVillageParity/glue/swim.json (+ -s7), artifacts 20261112T055259-scene-shot-k4pwpv4z and 20261112T055617-scene-shot-x35io18c (2/2); pre-change baseline 4bfacdf6391f: all stay on the pool floor (20261112T055213-scene-shot-giag7rfb). Vanilla 26.3: Villager sets setCanFloat(true) and WalkNodeEvaluator starts and floors floating mobs at the fluid surface, so a villager paths across the water to the bank and jumpOutOfFluid lifts it out (javap in receipts/BreakVillageParity/vanilla). Source: settlements/allocator.rs body_clear refuses water above the foot row, so no cell over 2+ deep water is standable; the route search finds no step unless a bank cell is adjacent, the swimmer gets no horizontal input and jumpOutOfFluid (needs a sideways block) never fires. VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT's open-water symptom remains for this case."
+regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_a_pond_with_no_adjacent_bank_swims_to_the_bank", "harness:scene-shot:native-village-deep-water"]
+failing_first = "reported"
+fix_commit = "patch:4d472f020253b3ca0a008decab7e19629ae6b61fca359aeb69c411f3dee5135c"
+promotion = "docs/bugs/promotions/VILLAGER-STRANDED-IN-DEEP-WATER.json"

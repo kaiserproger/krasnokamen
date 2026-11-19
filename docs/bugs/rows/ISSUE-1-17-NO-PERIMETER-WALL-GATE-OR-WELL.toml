@@ -1,0 +1,21 @@
+[[bug]]
+id = "ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL"
+title = "The settlement lays at most one wall section: no enclosing perimeter, no gate and no well"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-17 infrastructure; ISSUE-1-09 fortification buildings). docs/settlements/construction.md#owner-build-requests: a wall order builds a wall section with Builders, and is neither certification of player blocks nor an automatically enclosed perimeter or gate system. docs/settlements/construction.md#planning-and-streets: the planner adds one wall from 10 residents and one tower from 8 (missing kinds only) and there is no automatic water placement for a well. crates/mc-core/assets/blueprints has barracks, farm, house, lumber_camp, mason, mine, shepherd, storage, wall (2 levels), watch_tower (2 levels) and no gate blueprint; BuildingKind::Gate (crates/mc-core/src/settlements/buildings.rs) is certification-only. Remaining wish: the settlement walls itself in with gated openings at the street grid (layout.rs roads), and builds a well"
+regression = [
+    "cargo:mc-core:settlements::construction::fortification_tests::ten_residents_wall_the_town_in_with_four_gates_and_one_well",
+    "cargo:mc-core:settlements::construction::fortification_tests::a_gatehouse_stands_on_a_road_that_was_paved_first",
+    "cargo:mc-core:settlements::construction::fortification_tests::the_free_water_source_and_door_halves_pass_ledger_validation",
+    "cargo:mc-core:settlements::construction::fortification_tests::fewer_than_ten_residents_or_no_stock_start_no_fortification",
+    "cargo:mc-core:settlements::construction::fortification_tests::a_column_over_water_stays_a_gap_and_the_rest_of_the_wall_stands",
+    "cargo:mc-core:settlements::layout::tests::perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road",
+    "cargo:mc-core:settlements::layout::tests::well_corners_are_open_plaza_squares_without_a_lamp",
+    "harness:buildings-qa:perimeter.enclosed",
+]
+failing_first = "not recorded"
+fix_commit = "patch:fba7b70bec58aef790363834237d768a0e4d1e248979a3ba807b0d002e4a230b"
+repro_check = "round-final (Stage2Edge 90e282cec): receipt patch docs/bugs/fix-patches/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.patch (patch:fba7b70bec58aef7), reverse-ok on this tree. Control: with it reversed the four fortification refs are red (control2-ISSUE-1-17-NO-PERIMETER-*.log). The layout refs (street_grid_reserves_roads_verges_lots_and_an_open_plaza, perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road) go red with the follow-up patch docs/bugs/fix-patches/ISSUE-1-17-PERIMETER-WALL-ON-LOT-COLUMN.patch (patch:e3309c0aa2c4d7dd, three fortification refs and building_autonomy adopted_village too); that patch does not reverse on a tree that already has b61e3ac31 (wall on the outer verge, L=30 per CivSimDesignE S1/P2), which supersedes it - so the layout refs' red must be shown by reverting b61e3ac31 there. gameplay row, repro source: candidate promotion needs no real-client receipt"

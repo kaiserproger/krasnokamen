@@ -1,0 +1,11 @@
+[[bug]]
+id = "GOLEM-AABB"
+title = "Live golem at diagonal15.5/15.5 is rejected by spherical detection despite each axis being within16."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-AABB"
+regression = ["cargo:mc-core:villager::brain::tests::golem_detection_uses_axis_aligned_range_and_ignores_dead_golems", "harness:entities:native-v2-golem"]
+fix_commit = "patch:0f67aabd72fd491262c0b0cbf7ba28255212b736f52f8c09767e6d7028e65640"
+promotion = "docs/bugs/promotions/GOLEM-AABB.json"

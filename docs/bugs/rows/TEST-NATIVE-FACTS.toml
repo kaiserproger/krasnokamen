@@ -1,0 +1,13 @@
+[[bug]]
+id = "TEST-NATIVE-FACTS"
+title = "All 113 stale `scenarios/runs/RunNative/bugs.md` sections belong to `20261024T041330-native-matrix-87e0kytf`. Representative `ac0095c8f169e8bb/client-0/native-client.log:1` says missing block_collision_shapes fact under private XDG home. No action/dupe oracle reached. Latest `fail` misleadingly counts these as executed in matrix status."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-FACTS"
+regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_run_classifies_startup_and_oracle_exceptions", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_native_missing_content_is_blocked_not_product_failure", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_receipt_records_exact_status_without_promoting_blocked"]
+repro_check = "Forward-ported original run classification hunks; no synthetic failure_status replacement. Retained fixture reaches the planted post-start oracle assertion. Control fails the startup blocked-versus-fail assertion; restored three refs pass. receipts/HarnessFix4/TEST-NATIVE-FACTS.red.log and .green.log; original-hunk dispositions in promotions/TEST-NATIVE-FACTS.hunks.md."
+failing_first = "reported"
+fix_commit = "patch:bd081f998d0dcd9b0605f4df8612a777ea086ec148b27b67c0cbce7a34435e0e"
+promotion = "docs/bugs/promotions/TEST-NATIVE-FACTS.json"

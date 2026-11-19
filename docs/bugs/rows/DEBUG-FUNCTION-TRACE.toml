@@ -1,0 +1,12 @@
+[[bug]]
+id = "DEBUG-FUNCTION-TRACE"
+title = "`/debug function <id>` and function-tag tracing are rejected because debug parsing only accepts Solaris debug give; operators cannot obtain vanilla command/message/result/function traces."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE Fix patch: reversing it turns the /debug function dispatch arm back into an unsupported-syntax result."
+regression = ["cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls", "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key", "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion", "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden", "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3"
+promotion = "docs/bugs/promotions/DEBUG-FUNCTION-TRACE.json"
+repro_check = "round 2 restore: this row's 6 command_debug::tests::* refs went red again before the test-helper commit 1e0dccd4b (they claimed Deferred wrong and sent no refusals). Status is untouched: promotion must reverse this row's own original fix (patch:40a6af5157a6fdb3), never the test commit"

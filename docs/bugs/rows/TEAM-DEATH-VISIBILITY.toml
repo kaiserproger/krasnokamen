@@ -1,0 +1,12 @@
+[[bug]]
+id = "TEAM-DEATH-VISIBILITY"
+title = "team modify deathMessageVisibility never was rejected before broadcast filtering."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEAM-DEATH-VISIBILITY"
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/TEAM-DEATH-VISIBILITY.patch: the control broadcasts to every player and ignores deathMessageVisibility (death_message.rs broadcast()).
+fix_commit = "patch:f3a8e761197ba9a882087db607349dd1bbe2fccee887093deb49dc9338ab0ae2"
+promotion = "docs/bugs/promotions/TEAM-DEATH-VISIBILITY.json"

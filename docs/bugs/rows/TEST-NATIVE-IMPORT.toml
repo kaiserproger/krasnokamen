@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-NATIVE-IMPORT"
+title = "RunNative reports midrun `entity_health` ImportError caused by module merge in041330, not product runtime."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-IMPORT"
+regression = ["python:tools.harness.test_matrix_blocks:BlocksContractTests.test_all_matrix_domains_import_and_health_requires_received_value"]
+repro_check = "candidate: no non-test fix commit exists (`git log -S'def entity_health'` finds only the adding commit b592f8bd9) - the ImportError came from an in-flight merge, never mainline; the control is synthetic (symbol renamed) and reproduces the row's ImportError, receipts/XHarnessGates/neg-native-import.log"

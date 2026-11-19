@@ -1,0 +1,10 @@
+[[bug]]
+id = "ARMADILLO-SCUTE-SHED"
+title = "No scuteTime timer/brushing."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-SCUTE-SHED"
+regression = ["cargo:mc-core:mounts::tests::armadillo_brush_sheds_scute", "cargo:mc-core:mounts::tests::armadillo_scute_timer_drops_scute"]
+failing_first = "not recorded"

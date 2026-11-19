@@ -1,0 +1,10 @@
+[[bug]]
+id = "SPECIAL-001"
+title = "Pot/shelf no storage."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-001"
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item", "cargo:mc-core:shelf::tests::shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment", "harness:entities:native-v2-ledger-pot-shelf"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"

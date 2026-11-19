@@ -1,0 +1,10 @@
+[[bug]]
+id = "LIBRARIAN-ENCHANTED-BOOKS"
+title = "Naturally generated librarians cannot sell any enchanted book at any career level, removing ordinary librarian acquisition of Mending and other book enchantments. Randomizing the existing catalog alone cannot repair this absent trade family."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-ENCHANTED-BOOKS"
+regression = ["cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer", "cargo:mc-core:villager::trades::tests::mending_book_uses_treasure_trade_price"]
+failing_first = "reported"

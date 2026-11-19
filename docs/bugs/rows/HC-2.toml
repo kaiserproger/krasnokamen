@@ -1,0 +1,12 @@
+[[bug]]
+id = "HC-2"
+title = "Physical container1-9/Q/Ctrl+Q/F bypass intended hovered-slot actions. Creative QA5 residual remains separate."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-2"
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_number_keys_and_offhand_swap_hovered_stack", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_q_and_control_q_throw_hovered_items", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_shortcuts_preserve_gameplay_and_ignore_releases", "client:krasnokamen-client:ui::inventory_input_tests::hovered_hotbar_swap_reconciles_server_rejection", "client:krasnokamen-client:ui::inventory_input_tests::inventory_swapping_while_carrying_does_not_change_slots"]
+proving_assertions = { "harness:entities:native-v2-input-menus" = "survival_number_1_moves_hovered" }
+fix_commit = "client:5ef71d56"
+repro_check = "candidate: the real fix hunks no longer apply to client HEAD (5ef71d56 src/lib.rs + src/ui/state.rs, carriers d5303246/83994480 src/lib.rs all fail `git apply -R --check --recount`, receipts/XClientControl/negctl/hc23-reverse-apply-failures.log), so no real-hunk control; a hand mutation would be synthetic. Refs green; harness:entities:native-v2-input-menus still has to run at stage 3; refs become runnable in the client checkout after the merge"

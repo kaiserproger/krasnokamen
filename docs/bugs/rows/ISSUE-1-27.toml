@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-27"
+title = "Surface mine does not start digging"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by 5316786b+e369141d (merge ba4edd64); fix patch docs/bugs/fix-patches/ISSUE-1-27.patch is their net pre-fix-to-fix diff of crates/mc-core/src/villager/mining.rs, and reversing it removes exactly that code: surface_origin's scan top goes back to bounds.max-1 (alternate lanes skip a built mine's floor at the top of its bounds and start in a sealed cave below it) and hostile_near goes back to counting any hostile in sensor range, seen or not (a cave mob under the mine parks the miner 2400 ticks per lane), so the miner never starts digging"
+regression = ["harness:village-qa:miner_deposit", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_rock_outside_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::hostile_sealed_in_a_cave_under_the_quarry_does_not_stop_the_miner", "cargo:mc-core:villager::mining_tests::alternate_lane_starts_on_a_floor_at_the_top_of_the_bounds"]
+failing_first = "reported"
+fix_commit = "patch:3a739f505d159bf90b041ce4c066d7517e192000fb1b3b73f3858260aaf4e7e8"
+promotion = "docs/bugs/promotions/ISSUE-1-27.json"

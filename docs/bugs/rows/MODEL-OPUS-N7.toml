@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-OPUS-N7"
+title = "The generic `armor_baby_{head,chest,legs,feet}` are unreachable."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:136"
+regression = []

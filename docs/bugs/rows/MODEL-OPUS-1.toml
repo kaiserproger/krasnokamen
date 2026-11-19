@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-OPUS-1"
+title = "Zombie, husk and giant have invisible left arm and left leg."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:66"
+regression = []

@@ -1,0 +1,10 @@
+[[bug]]
+id = "PANDA-BAMBOO-GATE"
+title = "Feed two adult pandas bamboo in a stone/grass pen with no placed bamboo nearby: current breeding accepts the pair and creates offspring despite Java's required nearby bamboo plant."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PANDA-BAMBOO-GATE"
+regression = ["cargo:mc-core:entity_life_tests::pandas_without_nearby_bamboo_cannot_breed", "cargo:mc-core:entity_life_tests::fed_pandas_need_eight_bamboo_blocks_to_produce_a_cub"]
+failing_first = "reported"

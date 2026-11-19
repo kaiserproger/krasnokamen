@@ -1,0 +1,10 @@
+[[bug]]
+id = "ENTITY-MOVEMENT-DUE-DIVIDES-BY-UNGUARDED-UPDATE-INTERVAL"
+title = "entity_movement_due takes the vanilla per-type update_interval as a modulus without the .max(1) guard its sibling entity_interest::completed applies, so a future data row with interval 0 panics a rayon worker inside the fanout on every publish (unreachable with today's rows)."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R3.md rule table R3-37 (Fabian, Existential Processing / Complexity: make the invariant impossible to violate, not merely currently true; hygiene, latent panic). crates/mc-edge/src/plan.rs entity_movement_due uses u64::from(contract.update_interval) in tick % interval and i64::from(...) in rem_euclid, while crates/mc-edge/src/plan/entity_interest.rs completed guards the same value with .max(1). Today no row has 0 (minimum 1, area_effect_cloud is i32::MAX), so it cannot fire; a future contract row with 0 divides by zero on every publish. Verified open on main 5bdc02911 (plan.rs:1574-1577 unguarded). Fix: apply the same .max(1) guard (or reject 0 at the contract table) and pin it with a test."
+regression = []
+failing_first = "not recorded"

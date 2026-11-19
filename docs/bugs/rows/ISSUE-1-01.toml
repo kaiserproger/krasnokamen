@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-01"
+title = "Villager leg model translucent and malformed"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = ["harness:scene-shot:issue1-01-villager-leg"]
+fix_commit = "client:97e988d2"
+proving_assertions = { "harness:scene-shot:issue1-01-villager-leg" = "villager-leg-opaque_pixels" }
+repro_check = "Stage2X SLICES.md:125,144,151: era pin 97e988d2^ failed villager-leg-opaque_pixels (receipts/Stage2Client/run-redfix-01.log), client 34a85940 passed (run-green2-01_villager_leg.log). The era control is not an exact reversal of the candidate and must be rebuilt for stage 3."

@@ -1,0 +1,11 @@
+[[bug]]
+id = "GOLEM-DIFFICULTY"
+title = "Original natural iron golem player hit remained15 on Easy/Normal/Hard after correcting test health; melee generation exempted golem sources from scaling."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-DIFFICULTY (promotion control: docs/bugs/fix-patches/GOLEM-DIFFICULTY.patch removes Difficulty::scale_mob_damage for every mob, reproducing the original symptom that golem hits were not scaled by difficulty)"
+regression = ["cargo:mc-core:golems::tests::natural_golem_player_damage_scales_with_difficulty", "harness:entities:native-v2-golem"]
+fix_commit = "patch:e9af51b7d2043033adccaf5836671ef6457321e693510a5f2788fef1673a29e9"
+promotion = "docs/bugs/promotions/GOLEM-DIFFICULTY.json"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "AUTH-BUDGET"
+title = "Native join/load retires solaris-auth after wall-clock epoch deadline; player never completes auth. Not the intentional 60-second unregistered-player timeout."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUTH-BUDGET"
+regression = ["cargo:mc-plugin-host:ordinary_callback_survives_host_scheduling_jitter", "cargo:mc-plugin-host:generous_epoch_hang_guard_still_retires_a_callback", "harness:entities:native-v2-auth-budget"]
+fix_commit = "94aaa6d6"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/AUTH-BUDGET.json"

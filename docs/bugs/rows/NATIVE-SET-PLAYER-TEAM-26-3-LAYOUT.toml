@@ -1,0 +1,12 @@
+[[bug]]
+id = "NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT"
+title = "/team add disconnects the native client: it decodes set_player_team (Play 0x6f) in the pre-26.3 parameter order and fails with '4 trailing packet bytes'."
+area = "client"
+repro = "client"
+severity = "blocker"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Fixed in solaris-client ef4dc465 (client gate line wt/ClientGateLine d5f25569 = f4bd26d4 + ef4dc465 + census fix 04f3e0f9, pin pins/d5f25569b785-client-x86_64-unknown-linux-gnu-incr, receipts/ClientGateLine/pin.log; 3/3 team scene receipts/ClientTeamPacket/run-team{1,2,3}.log, negative control with the old client receipts/ClientTeamPacket/run-oldctl.log). Status stays open: client-repo rows wait for the owner's promotion-rule decision."
+regression = ["client:krasnokamen-client:session::hud_packet_tests::rc1_team_packet_decodes_the_26_3_parameter_order"]
+failing_first = "reported"
+fix_commit = "client:ef4dc465"
+repro_check = "real-hunk control: reversing ef4dc465's src/ui/hud.rs hunk reds the ref ('unknown NBT type 116'); real-client gate for stage 3 is harness:entities:native-v2-team-deaths; area=client, candidate"

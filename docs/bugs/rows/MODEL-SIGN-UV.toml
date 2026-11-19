@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-SIGN-UV"
+title = "Standing and wall signs: board UV v=2 instead of 0 → bottom 2 of 12 front rows are transparent holes; post is 4×12×4 at uv(2,14) → half transparent"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:28"
+regression = []
+repro_check = "obsolete per evidence: the cited sign_standing/sign_wall rigs were deleted by client:7df8dd6e and 26.3 ships sign bodies as block models (template_sign_rot_0/template_wall_sign carry elements; dump key minecraft:block/oak_sign_rot_0), so there is nothing to revert; no promotion is claimed"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "NATIVE-FROZEN-FALLING-DRAWN-LATE"
+title = "Under /tick freeze the native client draws a locally predicted falling block at its previous tick: presented y lags predicted y by one stepped tick; vanilla draws a frozen entity at partial tick 1 (its current position)."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "solaris-client src/session.rs:1165 sets presentation_partial to 0 while server_frozen and src/entities/physical.rs:818-828 (fall_step) leaves the stepped tick as previous->transform at lerp_progress 0. Vanilla 26.3 LevelExtractor.extractVisibleEntities passes !TickRateManager.isEntityFrozen(entity) to DeltaTracker.getGameTimeDeltaPartialTick, which returns 1.0f while frozen (DeltaTracker$Timer). Evidence: native-v2-input-sand receipts on client 13f1f28b, e.g. .analysis/validation/20261111T163719-native-v2-input-sand-2gazssgv falling_after_step presented 106.76314 = previous predicted, predicted 106.60788; receipts/LedgerInputSand/REPORT.md. Received-interpolated mobs are unaffected (their lerp starts on packet receipt)."
+regression = ["client:krasnokamen-client:session::frozen_world_presents_entities_at_their_current_tick"]
+failing_first = "reported"
+fix_commit = "client:c6a56f1d"
+repro_check = "real-hunk control red; real gate harness:entities:native-v2-input-sand (whose hold check is HARNESS-SAND-GATE-NO-HOLD-CHECK); area=client, candidate"

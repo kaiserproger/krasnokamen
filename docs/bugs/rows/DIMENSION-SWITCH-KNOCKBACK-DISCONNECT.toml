@@ -1,0 +1,15 @@
+[[bug]]
+id = "DIMENSION-SWITCH-KNOCKBACK-DISCONNECT"
+title = "Dimension travel during an explosion tick disconnects the affected player"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage-3 S3FixBreaker finding F2: returning from the nether while TNT explodes closes the connection with dimension-switch-explosion-knockback"
+repro = "client"
+regression = [
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
+]
+fix_commit = "patch:be44726c320aba551f99973c44c4061122283f3f7233bafea05f70f5d58740d3"
+failing_first = "reported"
+repro_check = "FixBatchB/F1-red.log and amendments/F1-queue-red.log fail respectively on the connection close and the real writer leaking an old visual explosion after respawn. F1-green.log and amendments/F1-queue-green.log pass. Cumulative patch docs/bugs/fix-patches/DIMENSION-SWITCH-KNOCKBACK-DISCONNECT.patch combines 5810902c7 and 0c51b3a44; the control keeps only the reset API state/method for retained tests, with base send/receive behavior. Both same-tick destination impulse cases pass. Explicit drop policy is not vanilla motion-reset parity."

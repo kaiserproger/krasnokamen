@@ -1,0 +1,13 @@
+[[bug]]
+id = "CLIENT-BED-DEFAULT-TEXTURE-PATH"
+title = "The shipped bed model default texture is absent from the 26.3 resource layout"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 catalog suite observed every_shipped_model_is_well_formed fail because bed_foot.json declares entity/bed/red.png, absent from the supplied 26.3 resources. The broader suite result was 22 passed and 1 failed; focused coverage passes did not replace it. Client tests: entities::solaris_models::tests::every_shipped_model_is_well_formed, entities::solaris_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3, entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture."
+repro = "cargo"
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::every_shipped_model_is_well_formed", "client:krasnokamen-client:entities::krasnokamen_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3", "client:krasnokamen-client:entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture"]
+failing_first = "reported"
+
+fix_commit = "client:109ec84a"
+repro_check = "supersedes the earlier 'obsolete' note: round 2 (client:109ec84a) deleted the bed entity rigs - 26.3 has no bed block entity - and the refs now assert the rigs are not shipped and the bed item uses the resource-model halves. Negative control receipts/XClientBlocks/19-bed-negative-control.log. area=client, candidate: real-client check required"

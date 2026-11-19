@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR"
+title = "java-matrix 26.1.2 rows pass solaris-auth, then the death_respawn adapter dies with TypeError 'NoneType' object is not iterable because the substitute agent jar returns events=null; with the stock agent jar (no VanillaEventTransformer) state_version never leaves 0 and the client-ready wait times out before auth. The canonical transformer-enabled agent jar is missing."
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "JavaAuthAck acceptance: 8/8 runs authenticated, then the adapter TypeError (receipts/JavaAuthAck/report.md)."
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
+repro_check = "candidate; receipts/XHarnessJava/NC-R2-reverse-e99902e71.log (both non-test files reversed -> 14 red incl. all three refs: a lossy journal raises MissingCapability instead of handing events=None to the TypeError); client row, real-client gate pending (stage 3); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+failing_first = "reported"
+fix_commit = "e99902e71"

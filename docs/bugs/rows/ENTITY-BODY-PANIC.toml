@@ -1,0 +1,10 @@
+[[bug]]
+id = "ENTITY-BODY-PANIC"
+title = "Mixed entity gallery after unfreeze crashes core: entities.rs:1000 len171/index171, edge pump stops."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ENTITY-BODY-PANIC"
+regression = ["cargo:mc-core:projectiles::flight_tests::mixed_gallery_unfreeze_survives_projectile_compaction", "harness:entities:native-v2-entity-gallery"]
+failing_first = "reported"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-FALLING-TORCH"
+title = "`falling_tests.rs:346-353` explicitly expects OLD torch replacement and no item. Current `falling.rs:370-382` checks replaceability, drops sand and removes falling entity when torch is not replaceable; pinned FallingBlockEntity `artifact://64820:1114-1176,1316-1335` has the same replacement-gated drop path. Failure receipt `core-fixer.log:182-187` is retained."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
+regression = ["cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"]
+fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"

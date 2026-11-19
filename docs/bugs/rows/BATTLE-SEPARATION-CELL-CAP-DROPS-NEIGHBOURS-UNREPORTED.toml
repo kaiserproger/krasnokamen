@@ -1,0 +1,10 @@
+[[bug]]
+id = "BATTLE-SEPARATION-CELL-CAP-DROPS-NEIGHBOURS-UNREPORTED"
+title = "The battle crowd separation grid packs at most CELL_CAP = 8 bodies per one-block sub-cell and silently drops the rest, and the overflow counter never reaches FormationWork, so no gate receipt can say whether the 3 % and 15 % heap limits were measured with candidates missing."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R6.md section 1 G6 (Ericson 7.1.1 p. 287: the per-cell bound follows from non-interpenetration, which a heap breaks; 7.7.2 time stamping; measurement gap, not a proved defect). crates/mc-core/src/battle/steering.rs SeparationGrid::rebuild drops bodies past CELL_CAP and increments self.overflow (asserted in steering_tests.rs but never added to FormationWork, crates/mc-core/src/battle/formation.rs), and nearest_where searches only packed indices, so in a dense heap the bodies it most needs to separate from are the ones it cannot see. BATTLE-OBLIQUE-GAP-REOPEN and BATTLE-BOUNDARY-REOPENS-GAP are fixed with heap 4.51 % -> 1.12 % (foot) and 6.01 % -> 6.04 % (horse); the cap may bias exactly that metric. Verified open on main 5bdc02911 (overflow absent from formation.rs). Fix direction: expose overflow in the work counters (about one line in steering.rs) and re-run the 1000-a-side fixture; if overflow is 0 in the residual heaps the cap is exonerated by data, otherwise pack every body and de-duplicate the query (time stamping) instead of dropping data."
+regression = []
+failing_first = "not recorded"

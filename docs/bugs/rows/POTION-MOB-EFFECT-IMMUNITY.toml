@@ -1,0 +1,10 @@
+[[bug]]
+id = "POTION-MOB-EFFECT-IMMUNITY"
+title = "Species-specific duration-effect immunity is absent: splash Regeneration heals injured undead and Poison can be inserted/ticked on undead or spiders. Effects are added to any living mob without eligibility checks; the generic mob tick executes regeneration/poison without a species input."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-MOB-EFFECT-IMMUNITY"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_regeneration_does_not_apply_to_undead", "cargo:mc-core:projectiles::payloads::tests::splash_poison_skips_undead_and_spiders_but_affects_cow", "cargo:mc-core:effects::tests::effect_command_rejects_poison_and_regeneration_for_undead"]
+failing_first = "reported"

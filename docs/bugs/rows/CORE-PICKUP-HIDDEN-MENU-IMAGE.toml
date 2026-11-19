@@ -1,0 +1,13 @@
+[[bug]]
+id = "CORE-PICKUP-HIDDEN-MENU-IMAGE"
+title = "Hidden pickup slots republish an inactive inventory menu and cursor"
+area = "gameplay"
+severity = "major"
+status = "fixed"
+source = "Independent review of 0504a280 pickup fallback; vanilla 775/776/777 client handler javap"
+repro = "source"
+regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory", "cargo:mc-edge:plan::plan_tests::hidden_pickup_plans_player_inventory_packet"]
+# Fix 878f1535 adds PlayerChange::PlayerInventorySlot, which its tests need; the control restores only the old full-inventory republish in pickup_changes.
+fix_commit = "patch:7928a945df0a58d4d75703e74f3aa8537d186ce42e8646251b5be39ec2f4d7c1"
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/CORE-PICKUP-HIDDEN-MENU-IMAGE.json"

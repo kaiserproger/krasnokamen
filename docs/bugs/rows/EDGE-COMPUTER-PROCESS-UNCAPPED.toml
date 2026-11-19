@@ -1,0 +1,12 @@
+[[bug]]
+id = "EDGE-COMPUTER-PROCESS-UNCAPPED"
+title = "Enabled computer bridge has no server-wide concurrent process cap"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "External critique of 4d32f28, crates/mc-edge/src/computer.rs bridge launch"
+repro = "source"
+regression = ["cargo:mc-edge:computer::tests::computer_worker_reopen_and_close_reopen_at_capacity", "cargo:mc-edge:computer::tests::computer_process_limit_is_shared_and_released"]
+failing_first = "not recorded"
+# fix commit d330c4a7 bundles unrelated API changes its tests need; the control reverses only the cap (docs/bugs/fix-patches/EDGE-COMPUTER-PROCESS-UNCAPPED.patch)
+fix_commit = "patch:cb87be35214c87253a2edc08f233f958c9ec3b88560fdd8d611364f1310faad6"

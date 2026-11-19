@@ -1,0 +1,13 @@
+[[bug]]
+id = "SUMMON-NOGRAVITY-INVULNERABLE"
+title = "/summon rejects NoGravity:1b; simply admitting the tag would leave gravity active across native movement lanes. Invulnerable is already supported for ordinary mob summons."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "crates/mc-core/src/command_summon.rs"
+regression = ["cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent", "cargo:mc-core:command_summon::tests::summon_no_gravity_floats_in_multiple_mob_motion_lanes", "cargo:mc-core:command_summon::tests::item_summon_no_gravity_and_invulnerability_survive_checkpoint", "cargo:mc-core:core::entity_state_persistence_tests::native_no_gravity_restore_rehydrates_wire_metadata_and_motion", "cargo:mc-core:tick_tests::no_gravity_experience_orb_hovers_without_suppressing_normal_gravity", "cargo:mc-edge:plan::plan_tests::no_gravity_metadata_reaches_viewer_on_spawn_and_change"]
+repro_check = "cargo:mc-core:command_summon::tests::summon_no_gravity_and_invulnerable_are_effective_and_persistent"
+# Fix b7020b42 is an 80-file integration commit whose reversal does not build; the control reverts the NoGravity admission in command_summon.rs prepare() only. Patch: docs/bugs/fix-patches/SUMMON-NOGRAVITY-INVULNERABLE.patch.
+fix_commit = "patch:ca0dea7eda13b35e8b4a7a5de3c656a3680345be7e01efe7f95f48b97896dd9e"
+promotion = "docs/bugs/promotions/SUMMON-NOGRAVITY-INVULNERABLE.json"

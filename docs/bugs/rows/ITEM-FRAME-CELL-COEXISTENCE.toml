@@ -1,0 +1,10 @@
+[[bug]]
+id = "ITEM-FRAME-CELL-COEXISTENCE"
+title = "A valid wall-mounted frame cannot share its block cell with floor redstone dust; placing dust after a frame also invalidates it. Destination admission uses block-replacement eligibility instead of geometric coexistence, preventing ordinary redstone/display layouts even with full stone support."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-CELL-COEXISTENCE"
+regression = ["cargo:mc-core:item_frame::tests::frame_and_redstone_dust_can_share_cell_in_either_order"]
+failing_first = "not recorded"

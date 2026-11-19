@@ -1,0 +1,11 @@
+[[bug]]
+id = "WORN-DRAGON-HEAD-GEOMETRY"
+title = "A worn dragon head on the native client leaves the wearer's head visible under a floating jaw bar and oversized horns"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Stage3 HeadBreaker paired 26.3 oracle on release server: native client 8a7817c8 wt/HeadBreaker/.analysis/validation/20261115T023515-scene-shot-jdztmngj/screenshots/{zombie,armor_stand}_dragon_head.png vs vanilla Java .analysis/validation/20261115T023735-scene-shot-abxywun8/screenshots/{zombie,armor_stand}_dragon_head.png (vanilla: solid dragon head covers the head, small horns); reproduced 2/2 (20261115T023910-scene-shot-xjj2t0vh)"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Pre-existing: the pre-fix control client 0a0ed7e4 is also wrong (a large black mass covers head and torso; 20261115T024001-scene-shot-ln8jjoxn); the worn-skull fix 2cf3cfd0 changed the attachment but not the dragon geometry. Main viewed the zombie pair."

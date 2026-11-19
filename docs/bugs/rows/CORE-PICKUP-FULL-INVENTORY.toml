@@ -1,0 +1,12 @@
+[[bug]]
+id = "CORE-PICKUP-FULL-INVENTORY"
+title = "Every successful pickup republishes the full player inventory instead of the changed active-menu slots"
+area = "gameplay"
+severity = "minor"
+status = "fixed"
+source = "External critique of 4d32f28, crates/mc-core/src/tick/merge.rs pickup commit"
+repro = "source"
+regression = ["cargo:mc-core:tick_tests::statistics_tests::pickup_publishes_only_changed_slots_for_active_menu", "cargo:mc-core:tick_tests::statistics_tests::pickup_into_offhand_syncs_inventory_with_or_without_open_chest", "cargo:mc-core:tick_tests::statistics_tests::pickup_with_lectern_open_updates_hidden_player_inventory"]
+fix_commit = "d330c4a7"
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/CORE-PICKUP-FULL-INVENTORY.json"

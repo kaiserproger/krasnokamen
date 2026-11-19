@@ -1,0 +1,12 @@
+[[bug]]
+id = "P4"
+title = "F8 Leave does not delete pending server request; later Allow still grants. Client mitigation a64c80f exists; server fix still required."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4 (promotion control: docs/bugs/fix-patches/P4.patch is the requests.retain line of 68c0df4c in Message::Leave; reversed, the owner's Allow after the viewer's F8 reaches the viewer again)"
+regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request", "harness:screen-share:native-screen-share-leave"]
+proving_assertions = { "harness:screen-share:native-screen-share-leave" = "cancelled_request_grants_nothing" }
+fix_commit = "patch:7afa8bad2c72e3fe31326a40d46950a3a0dd47321a515ffb95cad979cf12668d"
+promotion = "docs/bugs/promotions/P4.json"

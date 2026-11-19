@@ -1,0 +1,12 @@
+[[bug]]
+id = "DEATH-PROTECTION-ACTIONS"
+title = "Valid nonempty custom death_protection consume actions are rejected at admission, so custom protection cannot apply its specified effects when saving the holder. This is the explicit residual of the approved B07 empty/omitted-action subset, not a second count for item-independent protection."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-ACTIONS"
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::custom_death_protection_applies_actions_in_order_and_broadcasts_sound", "cargo:mc-core:command_items::tests::give_death_protection_admits_actions_and_rejects_invalid_data", "cargo:mc-protocol:packets::play::copied_components::tests::copied_death_protection_clear_action_roundtrips", "cargo:mc-protocol:packets::play::copied_components::death::tests::direct_and_registered_sound_and_effect_set_holders_roundtrip", "cargo:mc-protocol:packets::play::copied_components::death::tests::malformed_negative_holders_are_errors_without_overflow", "cargo:mc-protocol:packets::play::copied_components::death::tests::hidden_effect_depth_limits_and_truncated_wire_fail_closed", "cargo:mc-edge:translation::adjacent::items::tests::death_protection_remaps_action_effect_and_sound_holders_both_ways", "cargo:mc-edge:translation::adjacent::items::tests::death_protection_hidden_effect_limit_matches_canonical_codec_in_both_directions", "harness:entities:native-v2-p4-death-protection"]
+# Fix b7020b42 is an 80-file integration commit whose reversal does not build; the control restores the old nonempty-death_effects rejection in mc-data item_stack.rs validate_death_protection only. Patch: docs/bugs/fix-patches/DEATH-PROTECTION-ACTIONS.patch.
+fix_commit = "patch:06d980e4549394cb73205178c53da6d52440f5133cdb6c9a31d9fcd6be0fd0ad"
+promotion = "docs/bugs/promotions/DEATH-PROTECTION-ACTIONS.json"

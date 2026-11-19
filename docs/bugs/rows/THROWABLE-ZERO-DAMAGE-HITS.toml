@@ -1,0 +1,10 @@
+[[bug]]
+id = "THROWABLE-ZERO-DAMAGE-HITS"
+title = "Snowballs directly knock Survival players back despite Java26.1.2 immunity; ordinary snowball/egg hits bypass zero-damage target reactions, so they cannot destroy end crystals or provoke neutral mobs by the vanilla hit path. Snowball has a bespoke impulse-only branch; egg only hatches."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#THROWABLE-ZERO-DAMAGE-HITS"
+regression = ["cargo:mc-core:projectiles::payloads::tests::snowball_breaks_end_crystal_through_zero_damage_path", "cargo:mc-core:projectiles::payloads::tests::zero_damage_throwables_do_not_knock_back_survival_player", "cargo:mc-core:projectiles::payloads::tests::zero_damage_throwables_provoke_zombified_piglin"]
+failing_first = "reported"

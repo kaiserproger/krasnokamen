@@ -1,0 +1,13 @@
+[[bug]]
+id = "HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE"
+title = "Java client starts rebuild Minecraft in every private home instead of reusing the warmed Gradle cache"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "ScreensVoiceStart: screens-voice-qa FabricViewer exceeded runtime.py's 180-second MCP readiness deadline while mavenizer prepared 26.3 under game/.home/.gradle."
+repro = "source"
+regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_client_launch_reuses_gradle_cache_despite_private_home"]
+repro_check = "ScreensVoiceStart/cache-red.log: original runtime has no GRADLE_USER_HOME in the child; unit-green.log passes after resolving the shared cache before launch, without changing the deadline or private HOME."
+failing_first = "reported"
+fix_commit = "patch:4f7f11a4626e69443db89cb3f05e9c09af82a2d1eacd397b2cda4742dc496445"
+promotion = "docs/bugs/promotions/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.json"

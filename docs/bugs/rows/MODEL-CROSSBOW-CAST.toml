@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-CROSSBOW-CAST"
+title = "Crossbow and spell casting poses are missing"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = []

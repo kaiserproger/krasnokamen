@@ -1,0 +1,19 @@
+[[bug]]
+id = "BEACON-RUNTIME-PANIC"
+title = "A corrupt beacon block entity crashes the tick thread at runtime: `beacon.rs:83` `read_network(..).expect(\"loaded beacon NBT\")` + `:85` `panic!(\"beacon BE must be a compound\")` inside `image()`, called from the per-tick `run()` path. Same one-policy hydration root as the conduit row (per-tick, not load-time)."
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+fix_commit = "patch:19ab1a1709043704d949d7528d2999cc206cd270a7cda6f72a72f42bf4a150a8"
+
+ingress_proof = [
+  "mc-core/src/world.rs:841-888: the only writers of a resident chunk's opaque records (set_opaque_block_entity, install_command_block_entity; git grep 'chunk.block_entities.insert') both end in mark_block_entity_dirty -> bump_storage_revision -> hydration_pending (world.rs:679-687, 581-585), so the next hydration sync re-validates the chunk with beacon::validate_chunk (tick/hydration.rs:66) before any per-tick reader sees the record",
+  "mc-core/src/tick/hydration.rs:66: every chunk becoming resident (stored, or WAL-replayed through core/recovery.rs:93-105) is validated the same way before any owner store is touched; an invalid record refuses the chunk",
+  "mc-world/src/anvil/chunk_nbt.rs:367,512: the importer accepts only compound records, checked against the block that owns them",
+  "mc-core/src/command_block_entity.rs:26-129 (prepare/install): command-supplied records must be compounds; every other writer encodes a fixed compound (block_entity_defaults.rs:221, beacon.rs:139, block_log.rs:1272, mc-worldgen overworld_structures.rs:530)",
+]
+promotion = "docs/bugs/promotions/BEACON-RUNTIME-PANIC.json"

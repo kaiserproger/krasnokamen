@@ -1,0 +1,11 @@
+[[bug]]
+id = "HARNESS-SCENE-SHOT-MISSING-SUBJECT"
+title = "Scene-shot cannot require a capture subject to be present"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "VisualRigsA runs 20261111T115908-scene-shot-wxnrjw82 and 20261111T120609-scene-shot-uo3_ay_m passed despite missing intended visual subjects; the scenario had no assertion for their presence."
+regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_fails_before_shot_when_summon_did_not_create_subject", "python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_rejects_empty_or_invalid_type_lists"]
+failing_first = "reported"
+fix_commit = "259649f7c66bc6ec346fbc84d74927a7e2a93b81"

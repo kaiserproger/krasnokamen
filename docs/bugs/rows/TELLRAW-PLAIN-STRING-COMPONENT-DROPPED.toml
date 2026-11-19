@@ -1,0 +1,12 @@
+[[bug]]
+id = "TELLRAW-PLAIN-STRING-COMPONENT-DROPPED"
+title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows nothing and reports no error; {\"text\":...} works."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component. Cause: the SystemChat planner wrote the component with the compound-only mc_nbt::write_network and dropped a bare string or list silently; vanilla ComponentSerialization encodes plain text as a string tag (the codec is ByteBufCodecs.fromCodecTrusted, any root tag)."
+fix_commit = "patch:67793e0ff44df09e569fb2aa01ed6b4e0f966eb1efa7af3d9e5b3351ca57db6f"
+regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:entities:native-v2-command-rows"]
+failing_first = "reported"
+promotion = "docs/bugs/promotions/TELLRAW-PLAIN-STRING-COMPONENT-DROPPED.json"

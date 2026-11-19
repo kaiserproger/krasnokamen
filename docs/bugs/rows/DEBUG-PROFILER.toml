@@ -1,0 +1,12 @@
+[[bug]]
+id = "DEBUG-PROFILER"
+title = "debug start/stop rejected in favor of Solaris debug give fixture grammar."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER Fix patch: reversing it turns the /debug start and /debug stop dispatch arms back into an unsupported-syntax result."
+regression = ["cargo:mc-core:command_debug::tests::profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:099e67237851fc2045b6895f76198518921e163ac5e0d90525e76149f73d6b3b"
+promotion = "docs/bugs/promotions/DEBUG-PROFILER.json"
+repro_check = "round 2 restore: the refs went red again before the test-helper commit 1e0dccd4b, same cause as DEBUG-FUNCTION-TRACE (helper claimed Deferred and sent no refusals). Status untouched: promotion reverses this row's own original fix (patch:099e67237851fc20), not 1e0dccd4b"

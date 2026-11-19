@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-FEEDBACK-LIST-IGNORES-GAMERULE"
+title = "`/list` and `/list uuids` success output ignores `send_command_feedback false` (4/4): the connection layer answers /list and never consulted the rule; vanilla ListPlayersCommand replies through sendSuccess, which a player's acceptsSuccess ties to SEND_COMMAND_FEEDBACK."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/BreakJoinRows/FINDINGS.md#F1 (javap/ListPlayersCommand.txt, ServerPlayer$3.txt) Fix patch: reversing it answers /list with feedback() instead of success_feedback(), so the reply ignores send_command_feedback again."
+regression = ["cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule", "harness:chat-visibility:native-chat-visibility", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge"]
+fix_commit = "patch:0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d"
+promotion = "docs/bugs/promotions/COMMAND-FEEDBACK-LIST-IGNORES-GAMERULE.json"
+repro_check = "round 2: green with the child-sender routing fix and no test edit; this row's own fix (patch:0eb05a69) is untouched and its status stays fixed"

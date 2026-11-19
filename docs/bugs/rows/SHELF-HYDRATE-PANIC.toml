@@ -1,0 +1,12 @@
+[[bug]]
+id = "SHELF-HYDRATE-PANIC"
+title = "A corrupt chiseled-shelf block entity in a loaded chunk crashes the tick thread the same way as the jukebox: `shelf.rs:205` `read_network(..).expect(\"validated shelf NBT\")` + `:208` `decode_shelf(..).expect(\"validated shelf fields\")` inside the infallible `hydrate_chunk` called from the tick hydration span. Same G-SERVER-BLOCKER hydration root as JUKEBOX-HYDRATE-PANIC (one error policy for the span)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+fix_commit = "patch:76ab6a600e8e315df18b8710efd3f019485b62430d80d795d49a042b9b67982e"
+promotion = "docs/bugs/promotions/SHELF-HYDRATE-PANIC.json"

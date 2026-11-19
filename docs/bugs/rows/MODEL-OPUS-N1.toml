@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-OPUS-N1"
+title = "Baby chestplates have see-through shoulders. This affects every family and every material, and is confirmed at runtime."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:90"
+regression = []

@@ -1,0 +1,12 @@
+[[bug]]
+id = "PICK-SERVER"
+title = "Native middle-click sends play36/37 but original server lacked the authoritative pick handler."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PICK-SERVER; handler added in fe46150b; fix patch docs/bugs/fix-patches/PICK-SERVER.patch reverses the current dispatch of PickItemFromBlock/PickItemFromEntity to the pre-fix no-op"
+regression = ["cargo:mc-core:tick::input::inventory::pick_item_tests::survival_pick_moves_an_existing_stack_into_the_hotbar_without_creating_items", "cargo:mc-core:tick::input::inventory::pick_item_tests::survival_pick_without_a_match_changes_nothing", "cargo:mc-core:tick::input::inventory::pick_item_tests::creative_pick_adds_one_item_and_keeps_the_displaced_stack", "cargo:mc-core:tick::input::inventory::pick_item_tests::creative_entity_pick_gives_the_spawn_egg_and_survival_does_not", "harness:entities:native-v2-input-pick"]
+fix_commit = "patch:4d079b11edaa01017ab0ead0bade1861b132f8e6ad01951946542cfe4aa4ef69"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/PICK-SERVER.json"

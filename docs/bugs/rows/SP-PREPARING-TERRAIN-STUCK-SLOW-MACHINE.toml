@@ -1,0 +1,12 @@
+[[bug]]
+id = "SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE"
+title = "After entering a new singleplayer world on a slow machine, the 'Preparing terrain and light' overlay stayed over the already rendered world for minutes while the server kept running and checkpointing."
+area = "client"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
+regression = []
+failing_first = "reported"
+fix_commit = "client:803f0e00"
+repro_check = "real-hunk control red (same loading-screen gate as NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK); the only check is the real gate harness:singleplayer-regressions:native-sp-slow-machine; area=client, candidate"

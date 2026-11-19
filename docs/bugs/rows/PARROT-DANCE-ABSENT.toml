@@ -1,0 +1,11 @@
+[[bug]]
+id = "PARROT-DANCE-ABSENT"
+title = "Verify Java parrot dancing on jukebox events; parrots do not imitate nearby hostile mob sounds."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PARROT-DANCE-ABSENT"
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation"]
+fix_commit = "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7"
+promotion = "docs/bugs/promotions/PARROT-DANCE-ABSENT.json"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-GPU-DEVICE-LOST-G2-PEAK"
+title = "Client Vulkan device lost while rendering the peak G2 battle replay"
+area = "client"
+severity = "major"
+status = "open"
+source = "Laptop RTX 4050, client dd36acd5: 2026-11-13 21:52:07 laptop time, Vulkan Parent device is lost during G2 g2-14-push-in. Laptop reports NVRM Xid 32 at that time and another at 2026-11-14 05:24:29 during G2R g2r-11; both retries passed. Xid remains unconfirmed: kernel log not yet returned. First application log: receipts/BvCinemaReplay/laptop-returns/2026-11-13-g2/g2-14-push-in.devlost.log; second retry: receipts/BvCinemaReplay/laptop-returns/2026-11-14-g2r/g2r-11-dolly.log. Not yet reproduced on the host."
+repro = "manual"
+repro_check = "Render G2 backup take shot g2-14-push-in, t=253.45..257.45, radius 20, 1920x1080 at peak melee (~18k entities) on the laptop RTX 4050."
+regression = []
+failing_first = "reported"

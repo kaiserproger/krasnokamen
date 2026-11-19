@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-HOLY-CHEST-STATIC-EFFECT-PLANES"
+title = "Holy chest battle rig draws static effect planes through the wearer"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Battle-video client commit 0b8a4350 removed the upstream animated effect bones that appeared as a static cloud of rings and crosses. The post-rename client has the same rig at assets/krasnokamen/models/entity/battle_holy_chest.json; the port needs real-client visual verification."
+repro = "client"
+regression = []
+failing_first = "reported"

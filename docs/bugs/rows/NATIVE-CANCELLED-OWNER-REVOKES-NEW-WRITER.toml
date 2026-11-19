@@ -1,0 +1,13 @@
+[[bug]]
+id = "NATIVE-CANCELLED-OWNER-REVOKES-NEW-WRITER"
+title = "A cancelled native action revokes a replacement controller"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Independent native WriterLifetimeQA reproduced 2/2 on original client f1 and server befd: cancel session A's active input, then admit session B; B receives controller_lease_revoked while A returns cancelled. The late owner-error path revokes the current lease without checking its admitted identity. The SourceNext correction uses the existing identity-fenced revoke operation; 24 lifecycle tests and three native 4f/befd cases pass. These are not the assigned Core5e pair. Later exact 4f/Core5e attempts keep B's controller active but reveal the separate NATIVE-REPLACEMENT-INPUT-CLEARED symptom in one of three attempts. The correction and late_cancelled_owner_result_cannot_revoke_replacement_writer are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Both rows remain open; no general handoff acceptance or promotion."
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:automation::tests::late_cancelled_owner_result_cannot_revoke_replacement_writer"]
+proving_assertions = { "harness:entities:native-v2-lease-navigation" = "replacement_writer_retained" }
+failing_first = "reported"
+fix_commit = "client:895c63f3"
+repro_check = "candidate: 895c63f3's src/automation/tools.rs hunk does not reverse-apply (its pre-image `&& !readonly` was replaced later; --3way also conflicts) - receipts/XClientControl/negctl/drifted-real-hunks.log; a hand mutation reds it but is synthetic and not claimed; repro=client, stage-3 real client"

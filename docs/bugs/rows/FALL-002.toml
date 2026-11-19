@@ -1,0 +1,10 @@
+[[bug]]
+id = "FALL-002"
+title = "Brush never reaches handler."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-002"
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once", "harness:entities:native-v2-ledger-brush"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"

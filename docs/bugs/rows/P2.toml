@@ -1,0 +1,10 @@
+[[bug]]
+id = "P2"
+title = "Optional server resource-pack offer unconditionally disconnects native join; repaired to decline optional offers."
+area = "client"
+repro = "source"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P2; fixed in client branch pauline/client-post-rc4 (5153cc4, gate run with that client), not in released client 5d34e88"
+regression = ["cargo:mc-edge:configuration::tests::optional_pack_decline_completes_configuration", "harness:entities:native-v2-p2-optional-pack"]
+proving_assertions = { "harness:entities:native-v2-p2-optional-pack" = "optional_pack_offer_and_matching_decline_before_play" }

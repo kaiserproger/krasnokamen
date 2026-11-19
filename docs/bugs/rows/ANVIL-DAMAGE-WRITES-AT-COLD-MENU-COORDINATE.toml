@@ -1,0 +1,10 @@
+[[bug]]
+id = "ANVIL-DAMAGE-WRITES-AT-COLD-MENU-COORDINATE"
+title = "Using an anvil menu can damage the anvil block at the stored menu coordinate after that chunk stopped being resident, writing into the cold overlay."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/DESIGN-RESIDENCY-R14.md (found beyond the R13 vote; read-only audit). On main 3068dfb1b damage_anvil writes the anvil state at the menu coordinate (crates/mc-core/src/tick/stations.rs:143,184) without a residency check. Fix: DESIGN-RESIDENCY-R14/R16 menu-source check before handler selection for every menu input (cold -> close_player_menu, input not applied)."
+regression = []
+failing_first = "not recorded"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "FROG-FROGLIGHT-ALWAYS-TEMPERATE"
+title = "Warm and cold frogs drop temperate froglights when eating magma cubes"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:176,180; vanilla 26.3 jar mappings"
+repro = "cargo"
+regression = ["cargo:mc-core:frog::tests::frog_variants_eat_magma_cube_and_drop_exact_froglight"]
+fix_commit = "a7a0e3951"
+repro_check = "Introduced by 7d30f2991; loot was hard-coded to temperate rather than the retained variant. Fix-reverted red receipts/M3FixState/product-negative-controls.log."
+failing_first = "reported"

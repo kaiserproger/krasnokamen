@@ -1,0 +1,10 @@
+[[bug]]
+id = "COMPOSTER-FLOWER-GRASS"
+title = "Common flowers cannot be composted and grass blocks are incorrectly admitted."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-INPUT-TABLE"
+regression = ["cargo:mc-core:composter::tests::omitted_java_flowers_compost_and_grass_block_does_not"]
+failing_first = "not recorded"

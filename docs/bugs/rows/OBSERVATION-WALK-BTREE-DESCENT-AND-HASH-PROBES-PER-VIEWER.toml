@@ -1,0 +1,10 @@
+[[bug]]
+id = "OBSERVATION-WALK-BTREE-DESCENT-AND-HASH-PROBES-PER-VIEWER"
+title = "Each viewer's observation walk does a persistent-B-tree descent (OrdMap, then OrdSet) per chunk of its window and three hash probes per visible entity, about 300 k tree-descent cache misses and 3 M hash probes per tick at 1,000 observers."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-6 (Slotin pointer chasing vs implicit layout; perf, H5; the report marks the fix shape idea-grade). crates/mc-core/src/boundary/views.rs in_chunk is chunks.get(&pos) on OrdMap<ChunkKey, OrdSet<EntityId>>, then ids.iter(), then self.get(id) into rows: Arc<FxHashMap<EntityId, usize>>; crates/mc-edge/src/plan/entity_candidates.rs collect runs that for every (2d+1)^2 chunk of every viewer each tick the view revision changed, plus viewer.tracked_entities.get_mut(id) per visible entity. [est] 81 chunks x 1,000 observers = 81 k descents (about 300 k misses) plus 3 M hash probes into 1M-entry tables, the mechanism behind a 17.5 % fan-out share with no dominant symbol (ROADMAP: with_previous 1.51 % + wire_view 1.32 % + plan_entities 0.98 % + delta 0.90 %). Verified open on main 5bdc02911. Fix shape: keep the COW pages and add a dense chunk directory rebuilt from the changed list (sorted Vec<(ChunkKey, start, len)> with each chunk's slots contiguous); medium risk, must rebuild on the page-COW budget. Measure fills per viewer per tick (perf stat --per-thread on the fan-out threads)."
+regression = []
+failing_first = "not recorded"

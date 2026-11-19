@@ -1,0 +1,13 @@
+[[bug]]
+id = "P1"
+title = "Falling entity had no render path or local gravity prediction; sparse vanilla20-tick tracking made stale pose. Native repair727a4e0; saved-tick HS-3 and QA setblock symptom remain separate."
+area = "client"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03 (fe28852b, crates/mc-core/src/falling.rs; fix patch docs/bugs/fix-patches/P1.patch is that hunk)"
+regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand", "harness:scene-shot:native-falling-block-prediction"]
+proving_assertions = { "harness:entities:native-v2-input-sand" = "sand_presents_predicted_descent", "harness:scene-shot:native-falling-block-prediction" = "falling_pixels_move_down" }
+fix_commit = "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/P1.json"

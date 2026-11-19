@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-DROPPED-CLOCK-EDGE-ON"
+title = "Dynamic-context capture mistakes a spinning dropped clock's edge-on pose for a missing or undersampled face"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HeadBreaker client 8a7817c8: 20261115T024741-native-dynamic-context-hra7nxey has zero dropped face pixels; 20261115T024845-native-dynamic-context-e_amwg1_ has only 35 sampled day cells"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle", "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_is_bounded_and_does_not_accept_hud_only", "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_selects_static_face_but_animation_oracle_rejects_it"]
+fix_commit = "635d650e1"
+failing_first = "reported"
+repro_check = "HarnessFix3/clock-edge-green.json: offline retained-frame streams skip the two reported day poses (0 and 35 cells), select the earlier 020137 visible day frame (64 cells), then pass the unchanged face oracle with 12 and 14 changed cells against the corresponding real night frames; earlier full pair has 15. This is not a live rerun. clock-edge-control.log reverses only the scene capture steps to single shots, and both retained edge-on streams fail at the original face assertions. clock-edge-unit-control.log makes the registered unit fail at dropped_clock_face_day with the same fixture-only reversal. HUD-only capture exhausts its bounded samples; a static real face has zero changed cells and stays red. One graphical confirmation remains pending Main's GO."

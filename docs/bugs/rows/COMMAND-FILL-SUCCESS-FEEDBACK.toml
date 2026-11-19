@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-FILL-SUCCESS-FEEDBACK"
+title = "Successful fill replies with generic Changed feedback instead of vanilla fill success"
+area = "client"
+severity = "minor"
+status = "open"
+source = "HzClientQA consume-1/2 fail the unchanged filled assertion; consume-2.log captures Changed 1230 block(s). Local vanilla 26.3 commands.fill.success is Successfully filled %s block(s)."
+repro = "client"
+regression = []
+fix_commit = "patch:2a7ddc99d90fa10e8ab04b3ed9f04ff5cf42ccc26deba1d9bd02ce8f1057ca21"
+failing_first = "reported"
+repro_check = "Work-root receipts/HzClientQA/consume-2.log: original consume scenario must pass unchanged on Main's integrated pin; no permanent English-wording test."

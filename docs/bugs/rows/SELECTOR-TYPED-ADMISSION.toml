@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-TYPED-ADMISSION"
+title = "Java-invalid selector types are accepted and can mutate state: `/give @e stone` grants to the player subset rather than rejecting a non-player-type selector; `/tp @s @a` is accepted whenever only one player happens to match, instead of rejecting a selector whose declared maximum exceeds one."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-TYPED-ADMISSION"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_give_rejects_entity_selector_shape", "cargo:mc-core:command_execution::tests::command_parity_teleport_rejects_multi_target_destination"]
+failing_first = "not recorded"

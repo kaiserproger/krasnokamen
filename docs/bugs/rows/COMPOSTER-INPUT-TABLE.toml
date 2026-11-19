@@ -1,0 +1,10 @@
+[[bug]]
+id = "COMPOSTER-INPUT-TABLE"
+title = "The composter assigns mushroom stems an 85% chance instead of the vanilla 65%."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-INPUT-TABLE"
+regression = ["cargo:mc-core:composter::tests::automation_regression_compost_table"]
+failing_first = "reported"

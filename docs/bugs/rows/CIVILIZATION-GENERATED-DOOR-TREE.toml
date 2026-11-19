@@ -1,0 +1,9 @@
+[[bug]]
+id = "CIVILIZATION-GENERATED-DOOR-TREE"
+title = "Seed-24 village resident is trapped by an oak leaf immediately outside an open house door."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/route-conclusion.yaml"
+regression = []

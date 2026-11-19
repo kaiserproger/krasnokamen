@@ -1,0 +1,13 @@
+[[bug]]
+id = "HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST"
+title = "Java matrix preparation launches Fabric instead of exporting a command and times out"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "HarnessGraphical Java matrix capability group times out in prepare_fabric_launch before private Xvfb starts; current Loader has no launch-manifest exporter"
+repro = "source"
+regression = ["python:tools.harness.test_java_clients:JavaClientsTests.test_matrix_fabric_group_uses_only_private_runtime_launches"]
+fix_commit = "b6f1ac655"
+failing_first = "reported"
+repro_check = "Receipts under receipts/PreparedLaunchFix/: red-fix-only-reverted.log reverses only fix-only.patch while retaining tests, and fails on the unexpected Gradle prelaunch. green-restored.log passes both fixes; green-isolation-merge.log passes ordinary runtime/cache wiring. Original matrix command on 3c2279125 reaches 26.1.2 Fabric (0.155.2 API), capability passed=true and simultaneous_in_play=1 on private display :150; real-java/20261115T013000-java-matrix-fd94b0mk/capability-fabric_krasnokamen_loader/result.json. Full invocation later fails separately on the armadillo cell's unloaded block; not a full matrix pass. Loader exporter existed at 2bc292e64d9083537e3f97bca6c635c0b9ba5590 only on unmerged bots-runjava. Ordinary runtime preserves endpoint build/project-cache and audio isolation. See report.md."
+promotion = "docs/bugs/promotions/HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST.json"

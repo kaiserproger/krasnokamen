@@ -1,0 +1,10 @@
+[[bug]]
+id = "TRADER-LLAMA-BREED"
+title = "Tamed trader llamas cannot produce offspring with another trader llama or an ordinary llama, despite vanilla hay-bale breeding."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TRADER-LLAMA-BREED"
+regression = ["cargo:mc-core:entity_life_tests::trader_llamas_breed_hay_with_llamas_into_llamas"]
+failing_first = "reported"

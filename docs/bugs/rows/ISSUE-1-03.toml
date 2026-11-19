@@ -1,0 +1,10 @@
+[[bug]]
+id = "ISSUE-1-03"
+title = "F3 drawn-index count rises sharply with camera direction; verify it stays bounded rather than accumulating"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+repro_check = "Stage2X SLICES.md:125,151: scene control pin 4403f0b911e5 fails render_drawn_index_bounded (receipts/Stage2Client/run-redr2-03_f3_drawn_index.log), green pin 34a85940 passes (run-green2-03_f3_drawn_index.log). The scene is not registered in this tree and the historical control must be rebuilt as an exact clean reversal before promotion."

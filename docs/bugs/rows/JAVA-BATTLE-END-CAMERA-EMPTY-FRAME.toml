@@ -1,0 +1,11 @@
+[[bug]]
+id = "JAVA-BATTLE-END-CAMERA-EMPTY-FRAME"
+title = "The Java battle's late shield capture can photograph empty terrain while the functional take passes"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 JavaBattleQA (receipts/JavaBattleQA/REPORT.md, P1): with capture held until completion.ready, neoforge-1 passes every functional check and take.json is clean, but screenshots/raised-shield-poses.png shows only grass and the recorder-leave message, no shield or combatants (1/5 late captures; repro neoforge-1-command.json); the other four frames contain troops but none clearly shows the selected guard's raised pose"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "The gate has no image-content assertion, so file existence passes an empty frame. Needs the camera to track a living selected guard at capture time and an assertion that the subject is in frame with a raised shield."

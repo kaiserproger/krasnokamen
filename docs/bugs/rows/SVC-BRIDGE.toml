@@ -1,0 +1,11 @@
+[[bug]]
+id = "SVC-BRIDGE"
+title = "Frozen release lacks requested Fabric SVC bridge; implementation now exists on voice-server. Real Fabric+SVC proximity/group verification remains absent; not vanilla parity."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SVC-BRIDGE"
+regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group", "harness:screens-voice-qa:svc_proximity_fabric_to_fabric", "harness:screens-voice-qa:svc_group_fabric_to_fabric", "harness:screens-voice-qa:native_outsider_hears_no_group_audio", "cargo:mc-edge:svc_service::tests::svc_players_and_native_players_hear_each_other_through_the_bridge"]
+fix_commit = "20bfb62a"
+repro_check = "candidate: the implementation is in tree (crates/mc-edge/src/svc.rs + svc_service.rs, fix 20bfb62a is an ancestor) and both refs are green, but the real Fabric+SVC gate needs graphical Fabric clients plus the SVC jar and .analysis/SVCCompat/artifacts is absent on this host (receipts/XHarnessInfra/edge-rows-verify.log); stage 3; the screens-voice-qa verdicts svc_proximity_fabric_to_fabric, svc_group_fabric_to_fabric and native_outsider_hears_no_group_audio exist and are unrunnable for the same reason"

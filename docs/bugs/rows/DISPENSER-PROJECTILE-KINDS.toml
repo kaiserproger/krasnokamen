@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-PROJECTILE-KINDS"
+title = "Dispenser projectile classification is wrong: wind charges fall through to ordinary item ejection, while ender pearls are launched as ownerless projectiles even though vanilla dispenses them as items."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-PROJECTILE-KINDS"
+regression = ["cargo:mc-core:redstone::containers::tests::dispenser_launches_wind_charge_but_ejects_ender_pearl"]
+failing_first = "not recorded"

@@ -1,0 +1,17 @@
+[[bug]]
+id = "HARNESS-VOICE-PIN-ENDPOINT"
+title = "Voice gate launches the Loader default instead of the Minecraft version covered by its SVC pin"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader defaults to 26.3. Owner case is PrismLauncher 26.1.2; screens remains on 26.3. The independent fix patch restores the unscoped run loop; java_endpoint stays available for retained API tests but is unused by the reversed live path."
+repro = "source"
+regression = [
+  "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg",
+  "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_leg_launches_with_svc_pinned_version",
+  "python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors",
+]
+repro_check = "Voice-only proving ref executes the actual run leg scope and captures launcher argv, independently of screens assertions. receipts/HarnessFix4Proof/voice.red.log fails at test_screens_voice_qa.py:103 because the voice child lacks -PminecraftVersion=26.1.2; voice.green.log passes after restoring the retained patch. Existing combined-leg and conflicting-selector refs remain registered."
+failing_first = "reported"
+fix_commit = "patch:c22e452d0ae4fa2c378a304e109d085df5845da59b9f738e36d62f2b1d4a67b5"
+promotion = "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json"

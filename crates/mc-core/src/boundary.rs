@@ -9,11 +9,12 @@
 
 use std::sync::Arc;
 
-pub use crate::entity_views::EntityViews;
+mod views;
 use mc_data::item_stack::ItemStack;
 use mc_script::ScriptClientViewKey;
 pub use mc_world::chunk::{BlockPos, Chunk, ChunkPos};
 use uuid::Uuid;
+pub use views::EntityViews;
 
 /// Simulation tick number. Tick `t` output describes the state after tick `t`.
 pub type Tick = u64;

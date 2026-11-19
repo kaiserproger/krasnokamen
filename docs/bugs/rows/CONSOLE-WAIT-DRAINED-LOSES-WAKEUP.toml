@@ -1,0 +1,10 @@
+[[bug]]
+id = "CONSOLE-WAIT-DRAINED-LOSES-WAKEUP"
+title = "ConsoleState::wait_drained creates its Notified future before checking the drained tick but only registers it on first poll, so a drained() notification in that window is lost and an RCON or console command waits for the next published tick (and up to the 30 s IO timeout if none comes)."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R4.md section 1 R4-P4 (OSTEP 32.2 order violations; Bos Notified::enable pattern, tokio 1.54.1 notify.rs). crates/mc-edge/src/console.rs wait_drained: let ready = self.ready.notified(); if drained.load(Acquire) >= tick { break } ready.await; the future is registered only when first polled, and drained() does store(tick, Release) then notify_waiters(), which stores no permit. Today the pump calls drained(out.tick) every published tick (crates/mc-edge/src/server/pump.rs), so the cost is at most one extra tick (50 ms) of console latency; unbounded when no further tick is published (stop, stalled tick): the RCON client waits out the session timeout instead of getting its output. Bounded, no data path. Verified open on main 5bdc02911 (the code is unchanged). Fix direction: tokio::pin! the future and call ready.as_mut().enable() before the predicate load, or use tokio::sync::watch::channel(0u64). Regression sketch: a paused-time tokio::test that stores and notifies between future creation and first poll and asserts the wait completes without a second notification."
+regression = []
+failing_first = "not recorded"

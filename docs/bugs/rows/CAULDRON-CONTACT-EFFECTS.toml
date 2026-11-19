@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAULDRON-CONTACT-EFFECTS"
+title = "Powder-snow cauldrons fail to extinguish a burning player and become water one level lower."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-CONTACT-EFFECTS"
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::burning_player_melts_powder_snow_cauldron_one_level"]
+failing_first = "not recorded"

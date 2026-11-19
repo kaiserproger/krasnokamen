@@ -1,0 +1,10 @@
+[[bug]]
+id = "SIGN-BLANK-DECORATION"
+title = "Using dye or a glow ink sac on a blank sign face consumes the item and changes that face's style, although vanilla only applies these items when that face has a nonempty visible message. A written opposite face incorrectly makes no difference to native admission."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-BLANK-DECORATION"
+regression = ["cargo:mc-core:farming_tests::signs_tests::blank_sign_face_rejects_dye_and_glow_even_when_other_face_is_written"]
+failing_first = "not recorded"

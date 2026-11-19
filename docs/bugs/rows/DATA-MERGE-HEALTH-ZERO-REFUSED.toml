@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATA-MERGE-HEALTH-ZERO-REFUSED"
+title = "Entity data merge refuses zero health accepted by vanilla"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:169; XStage2Cleanup vanilla comparison"
+repro = "source"
+regression = []
+repro_check = "Run /data merge entity on a living mob with {Health:0}; the retained summon-backed admission refuses it, while vanilla 26.3 accepts it. No fix or regression yet."
+failing_first = "not recorded"

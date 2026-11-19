@@ -1,0 +1,10 @@
+[[bug]]
+id = "PERF-RECEIPT-OMITS-CPU-GOVERNOR-AND-FREQUENCY"
+title = "Perf receipts record lscpu but not scaling_governor, energy_performance_preference, scaling min/max or current frequency, so two runs on the same pin can differ by clock state alone (the host runs powersave at about 88 % of 5.39 GHz)."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-7 and section F6 (Gregg 6.9.4 scaling governors: pin a fixed governor for benchmarking; hygiene). tools/coreperf/profiles.py records lscpu and affinity only (around :1242-1247); the report read scaling_governor=powersave and a 3-4 GHz swing across a 120 s window that changes cycles per tick and IPC and is not covered by the pin or tree fingerprint. Verified open on main 5bdc02911 (no governor or EPP read in tools/coreperf; tools/bench/common.py reads the governor for a different tool). Fix: record scaling_governor, energy_performance_preference, scaling_min/max_freq, cpuinfo_cur_freq and perf stat's percent time enabled/running in every receipt (read-only file reads) and record the governor pair with every A/B."
+regression = []
+failing_first = "not recorded"

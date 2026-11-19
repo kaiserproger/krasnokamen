@@ -1,15 +1,31 @@
 # Bug regression ledger
 
-`ledger.toml` records each bug with `id`, `title`, `area` (`gameplay`, `client`,
+The ledger is one file per row: `docs/bugs/rows/<ID>.toml`, one `[[bug]]` table
+whose file name is its `id`. A row records `id`, `title`, `area` (`gameplay`, `client`,
 `harness`; set from the symptom at filing and not changed by fixers),
 `severity` (`blocker`, `major`, `minor`), `status` (`open`, `fixed`; `fixed`
 only via `ledger promote`),
 `source`, `repro` (`manual`, `client`, `command`, `cargo`, `source`) and
 `regression`. Historical reports are not proof of the current candidate.
 
+Read and edit a row with the tool, never by reassembling the whole ledger:
+
+```sh
+python3 -m tools.harness ledger show <ID>               # the row file
+python3 -m tools.harness ledger show <ID> --field status
+python3 -m tools.harness ledger list [--area gameplay] [--status open]
+python3 -m tools.harness ledger edit <ID> --set 'title = "..."' [--set ...]
+```
+
+`ledger edit` refuses `id`, `status` and `promotion` (the file name and the
+promotion tooling own them), refuses unknown fields, and re-parses the row
+before writing, so a typo cannot corrupt the gate. A plain editor on the one
+row file is equally fine: the file holds one row and nothing else.
+
 ## Filing a bug
 
-Copy a `[[bug]]` block in `ledger.toml` and fill in every required field:
+Copy the nearest row file, rename it to the new `id`, and fill in every
+required field (or start from this block):
 
 ```toml
 [[bug]]
@@ -304,8 +320,8 @@ worker, runs the negative control.
 
 On success it writes `docs/bugs/promotions/<ID>.json` (commit, files reversed,
 per-ref control and restore results, client receipt) and sets
-`status = "fixed"` and `promotion = "docs/bugs/promotions/<ID>.json"` in the
-row; commit both. `--dry-run` runs everything and writes only its receipts under
+`status = "fixed"` and `promotion = "docs/bugs/promotions/<ID>.json"` in
+`docs/bugs/rows/<ID>.toml`; commit both. `--dry-run` runs everything and writes only its receipts under
 `.analysis/validation/<stamp>-ledger-promote-*/` (`promote.json`), never the
 ledger; on an already `fixed` row it re-audits the fix (a reopened-row check).
 A refusal prints the reason and exits 1.

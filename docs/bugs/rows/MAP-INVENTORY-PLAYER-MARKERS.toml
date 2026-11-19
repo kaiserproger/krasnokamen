@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-INVENTORY-PLAYER-MARKERS"
+title = "A teammate carrying a cloned map in an ordinary inventory slot disappears from the observer's map until they actively hold it, breaking vanilla multiplayer map tracking while the teammate uses tools."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-INVENTORY-PLAYER-MARKERS"
+regression = ["cargo:mc-core:tick_tests::maps_tests::inventory_map_markers_include_each_distinct_map_id", "harness:entities:native-v2-map-inventory-player-markers"]
+failing_first = "reported"

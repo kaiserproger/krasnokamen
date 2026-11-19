@@ -1,0 +1,12 @@
+[[bug]]
+id = "AXOLOTL-PLAY-DEAD"
+title = "Hurt axolotls never play dead: vanilla grants a chance to drop and take Regeneration I for ~10s while mobs stop targeting it. The candidate has no play-dead state, no hurt-triggered roll, and no targeting exemption — axolotl damage handling is absent from `tick/damage.rs` and no `PlayingDead` flag exists in core. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-PLAY-DEAD"
+regression = ["cargo:mc-core:mob_lanes::tests::hurt_axolotl_in_water_plays_dead_and_regenerates", "cargo:mc-core:mob_lanes::tests::playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks", "harness:entities:native-v2-axolotl-play-dead"]
+fix_commit = "patch:5619e71a98ca75c4e0f8287a79cd9cedc7827c9a3668f0e5eb6cba233159b155"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/AXOLOTL-PLAY-DEAD.json"

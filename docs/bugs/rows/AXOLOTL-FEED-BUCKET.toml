@@ -1,0 +1,10 @@
+[[bug]]
+id = "AXOLOTL-FEED-BUCKET"
+title = "Survival-feeding an adult axolotl a bucket of tropical fish destroys the bucket as well as consuming the fish; vanilla returns a water bucket."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AXOLOTL-FEED-BUCKET"
+regression = ["cargo:mc-core:entity_life_tests::axolotl_tropical_fish_bucket_returns_a_water_bucket"]
+failing_first = "not recorded"

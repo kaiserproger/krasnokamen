@@ -1,0 +1,12 @@
+[[bug]]
+id = "HS-1"
+title = "Destroy an open single chest, then click before ordinary commit: extraction duplicates the staged drop; insertion is discarded."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-1"
+regression = ["cargo:mc-core:dimensions::tests::destroyed_open_chest_rejects_extract_and_insert_clicks", "cargo:mc-core:dimensions::tests::shared_destroy_command_settles_open_chest_before_the_next_click", "cargo:mc-core:dimensions::tests::destroying_command_and_stale_click_in_one_input_batch_never_duplicate_or_discard", "harness:entities:native-v2-destroyed-chest-race"]
+fix_commit = "6da185e3"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/HS-1.json"

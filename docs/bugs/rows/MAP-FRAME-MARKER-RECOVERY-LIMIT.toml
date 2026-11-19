@@ -1,0 +1,13 @@
+[[bug]]
+id = "MAP-FRAME-MARKER-RECOVERY-LIMIT"
+title = "A saved map with more than 256 retained frame markers prevents world recovery"
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "fixed"
+source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejected more than 256 (fixed in 78fe5e3a: the read boundary is now uncapped, as vanilla MapItemSavedData.frameMarkers is, and only the writer stays bounded by MAX_FRAME_MARKERS). The pre-fix read boundary failed closed, but the live admission and save boundaries did not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
+regression = ["cargo:mc-core:tick_tests::maps_tests::more_than_256_retained_frame_markers_checkpoint_and_recover"]
+failing_first = "reported"
+fix_commit = "78fe5e3a"
+promotion = "docs/bugs/promotions/MAP-FRAME-MARKER-RECOVERY-LIMIT.json"
+repro_check = "real-hunk control: reversing 78fe5e3a's SavedMap::validate hunk re-adds `frame_markers.len() > 256` and the ref fails at recovery with Storage('invalid saved map') on a 300-marker save, i.e. the row's symptom (vanilla-valid save refused); receipts/XCoreItems/frame-markers-negative-control.txt. Repro is source and the ref is a cargo check through the real recovery path, so the row's evidence is complete; the ref was updated by 4c0b0b98c"

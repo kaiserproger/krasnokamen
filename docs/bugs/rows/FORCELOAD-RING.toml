@@ -1,0 +1,11 @@
+[[bug]]
+id = "FORCELOAD-RING"
+title = "Forceload outer level32 ring ticks entities, rather than blocks only."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
+regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age"]
+fix_commit = "5d86de8479676b431c79dcf09251a07f3721ef8b"
+repro_check = "round 2: the original fix 5d86de847 stays the fix_commit and docs/bugs/fix-patches/FORCELOAD-RING.patch (patch:6e94d3ac57d00f97) is the forward-ported reversal vehicle. Control control-A.log: reversed -> red with the neighbour at [184.53,199.23,168.46] instead of [184.5,200.0,168.5] (the ring ticks entities). Needs a graphical harness ref before promote"

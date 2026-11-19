@@ -1,0 +1,10 @@
+[[bug]]
+id = "GOLEM-SNOW-SHEAR"
+title = "Shears on a snow golem do nothing: vanilla `SnowGolem` implements `Shearable` (`hasPumpkin`/`shear` via `DATA_PUMPKIN_ID`, pinned 26.1.2 bytecode) — shearing removes the pumpkin, drops a carved pumpkin item, and reveals the face. The candidate `entity_life.rs:harvest()` handles bowl/milk, mooshroom stew/flower/shear, sheep shear/dye, but has no snow-golem arm (no `Harvest` variant, no pumpkin flag storage), so the vanilla pumpkin-removal interaction is absent."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-SNOW-SHEAR"
+regression = ["cargo:mc-core:tick_tests::snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal", "harness:entities:native-v2-snow-golem-shear"]
+failing_first = "reported"

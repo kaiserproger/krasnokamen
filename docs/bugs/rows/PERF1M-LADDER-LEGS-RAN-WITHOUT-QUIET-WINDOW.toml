@@ -1,0 +1,10 @@
+[[bug]]
+id = "PERF1M-LADDER-LEGS-RAN-WITHOUT-QUIET-WINDOW"
+title = "The Perf1M ladder legs state 'no -x, no -p' and ran while other builds and tests were live (host CPU pressure some avg60 11.35 %), which docs/development/performance-windows-and-profiling.md calls diagnostic only, yet a capacity-shaped 3.87x ratio is built on them."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-4 and section F2 (Gregg 12.1.3 failure 9 ignoring perturbations, 12.3.2 active benchmarking; perf). receipts/Perf1M/RECEIPT-8192.md:6 and RECEIPT-16384.md:6 record no -x and no -p; the host's /proc/pressure/cpu some avg60 was 11.35 % (avg300 16.72 %) when the report read it; docs/development/performance-windows-and-profiling.md: a contaminated run is diagnostic only, including its ratios, and capacity claims use the scheduled quiet lane. The leading shared-resource explanation (LLC and memory bandwidth) is what a co-tenant build shares most. Fix: repeat one rung (8,192, K=8) in a -x window and quote both numbers side by side; if the quiet number is within the A-vs-A spread the contamination was benign and the claim survives."
+regression = []
+failing_first = "not recorded"

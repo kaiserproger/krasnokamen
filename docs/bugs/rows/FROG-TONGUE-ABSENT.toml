@@ -1,0 +1,11 @@
+[[bug]]
+id = "FROG-TONGUE-ABSENT"
+title = "Frogs never eat with their tongue: no `tongue/croak` logic exists in core; frog appears only in flag lists and XP tables. Vanilla frogs snap small mobs/slimes with a tongue lash and lay frogspawn in water. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FROG-TONGUE-ABSENT"
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::frog_tongue_consumes_only_small_prey_and_drops_vanilla_loot"]
+fix_commit = "patch:5a40bebc829c62b81020f603368e0758b0da222ee79768b5afab3c4e6491c306"
+promotion = "docs/bugs/promotions/FROG-TONGUE-ABSENT.json"

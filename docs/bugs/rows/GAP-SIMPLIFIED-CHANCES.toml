@@ -1,0 +1,10 @@
+[[bug]]
+id = "GAP-SIMPLIFIED-CHANCES"
+title = "Accepted residual, FIXED @e45ec5cc+@a2675f6a: azalea/propagule 0.45, fungus 0.4, dripstone lava 15/256 + water 45/256, growth gate top-24-bits < 190888 == nextFloat < 0.011377778f (0.011377778*2^24=190887.44 verified here; commit math 190887.4375 matches float precision)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GAP-SIMPLIFIED-CHANCES"
+regression = ["cargo:mc-core:farming_tests::bone_meal_cadence_gates_azalea_fungus_and_mangrove", "cargo:mc-core:farming_tests::fertilizer_probability_boundaries_match_vanilla", "cargo:mc-core:farming_tests::dripstone_probability_boundaries_match_vanilla", "cargo:mc-core:farming_tests::dripstone_grows_without_cauldron_below", "cargo:mc-core:farming_tests::dripstone_fills_water_and_grows_stalagmite", "cargo:mc-core:farming_tests::dripstone_with_lava_source_fills_the_cauldron_below"]
+failing_first = "not recorded"

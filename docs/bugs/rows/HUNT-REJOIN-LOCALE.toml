@@ -1,0 +1,10 @@
+[[bug]]
+id = "HUNT-REJOIN-LOCALE"
+title = "Rejoining in the Nether or End loses the negotiated UI locale."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-multiplayer-sync-next/REPORT.yaml; /run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md#real-client-ab"
+regression = ["cargo:mc-core:dimensions::tests::rejoin_child_dimension_keeps_initial_client_locale"]
+failing_first = "reported"

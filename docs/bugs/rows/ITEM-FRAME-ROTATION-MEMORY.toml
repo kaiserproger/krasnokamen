@@ -1,0 +1,10 @@
+[[bug]]
+id = "ITEM-FRAME-ROTATION-MEMORY"
+title = "Punching an item out of its surviving frame resets rotation to zero, so the next inserted item loses the frame's previous orientation and comparator setting. Vanilla retains that orientation while the frame remains placed."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-ROTATION-MEMORY"
+regression = ["cargo:mc-core:item_frame::tests::frame_punch_keeps_rotation_for_next_item"]
+failing_first = "not recorded"

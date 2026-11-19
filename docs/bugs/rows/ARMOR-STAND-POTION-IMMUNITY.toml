@@ -1,0 +1,10 @@
+[[bug]]
+id = "ARMOR-STAND-POTION-IMMUNITY"
+title = "Ordinary splash potions incorrectly affect armor stands: direct Harming produces magic damage and duration potions are inserted into the stand's active-effect set, although Java stands ignore ordinary potion sources."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMOR-STAND-POTION-IMMUNITY"
+regression = ["cargo:mc-core:armor_stand::tests::splash_potion_ignores_stand_but_hits_cow", "cargo:mc-core:projectiles::payloads::tests::splash_harming_and_swiftness_ignore_armor_stand_but_hit_cow"]
+failing_first = "not recorded"

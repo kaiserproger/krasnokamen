@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-ENTITY-VIEW-SCALE-NEVER-APPLIED"
+title = "Native client ignores Entity Distance and render distance for entity culling: 2211 received mobs ~75 blocks below an overhead camera draw nothing"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 Horizon client 1:1 comparison (HzClient1v1 crowd diagnostic, entities_2000 camera_275 observation) on native client 19259ce8: 2211 entities received at overhead pose x4096 y275 z0 pitch 90 with mobs near y200 and entity_distance_scaling=5, but entity_presentation eligible/submitted/crowd = 0 and lighting_pending = 0. Main source check on client 19259ce8: Store::set_view_scale (src/entities.rs:376) has no production caller (only the test at src/entities/view_range.rs:207) and view_range::view_scale (src/entities/view_range.rs:19, vanilla clamp(effective render distance / 8, 1, 2.5) * entityDistanceScaling) is used only in tests, so ViewScale stays at its default 1.0 (src/entities.rs:363-366): the entity draw range is size * 64 blocks instead of up to size * 64 * 12.5"
+repro = "client"
+regression = []
+failing_first = "reported"

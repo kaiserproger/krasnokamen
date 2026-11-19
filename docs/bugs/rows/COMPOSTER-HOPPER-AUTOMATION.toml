@@ -1,0 +1,10 @@
+[[bug]]
+id = "COMPOSTER-HOPPER-AUTOMATION"
+title = "Automatic composting cannot feed ingredients from a hopper above or extract ready bone meal below; composters never enter the hopper container authority. Manual use working does not cover this path."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMPOSTER-HOPPER-AUTOMATION"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_hopper_composter"]
+failing_first = "reported"

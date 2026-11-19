@@ -1,0 +1,13 @@
+[[bug]]
+id = "TEST-INVENTORY-FRESHNESS"
+title = "Arrow-consumption probe043124-bc41wx1w preferred old menu1 arrow4 over newer window0 arrow3+bowdamage1."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-INVENTORY-FRESHNESS"
+regression = ["python:tools.harness.test_protocol_wire:ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot", "python:tools.harness.test_protocol_wire:ProtocolWireTests.test_newer_window_zero_updates_override_stale_open_menu"]
+repro_check = "python3 -m unittest tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot; candidate: no control from the real fix - that SHA's wire.py hunks do not reverse on HEAD (apply -R/-C1/-C0/--3way all fail; wire.py rewritten by 0a54b273d/0b5923451), and a hand revert of _cache_player_suffix is synthetic; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+failing_first = "not recorded"
+fix_commit = "ef67d139e"
+promotion = "docs/bugs/promotions/TEST-INVENTORY-FRESHNESS.json"

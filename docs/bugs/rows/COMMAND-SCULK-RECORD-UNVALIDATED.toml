@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-SCULK-RECORD-UNVALIDATED"
+title = "command_block_entity::prepare (crates/mc-core/src/command_block_entity.rs) validates the record shape but not sculk shrieker and sculk catalyst/sensor contents, so a malformed operator `setblock ... sculk_shrieker{...}` is accepted and then refuses the whole resident chunk at the next hydration instead of failing the command."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Independent review of the CoreBlockers wave, 2026-11-07 (read from code, not reproduced)."
+regression = ["cargo:mc-core:sculk::tests::setblock_rejects_malformed_sculk_records_without_world_mutation", "cargo:mc-core:sculk::tests::setblock_valid_sculk_records_hydrate_after_restart"]
+# Fix b7020b42 is an 80-file integration commit whose reversal does not build; the control removes the sculk/shrieker record validation arms in command_block_entity.rs prepare() only. Patch: docs/bugs/fix-patches/COMMAND-SCULK-RECORD-UNVALIDATED.patch.
+fix_commit = "patch:ea086ba9a0acd58fd8426a932d9169c7006a4b97d190b6c935790c3d65bb1c6a"
+promotion = "docs/bugs/promotions/COMMAND-SCULK-RECORD-UNVALIDATED.json"

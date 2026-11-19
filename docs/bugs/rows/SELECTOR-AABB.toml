@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-AABB"
+title = "dx/dy/dz selector tests entity position, excluding pig whose body intersects box while center is outside."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-AABB"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_selector_box_intersects_body_and_defaults_missing_axes"]
+failing_first = "not recorded"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "NATIVE-RIDER-IGNORES-RECEIVED-SEAT"
+title = "The native renderer places a seated resident at its collision-safe body instead of its received seat"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "After the core seating candidate keeps the resident's physical body safely above a stair, the native client leaves a visible height gap because its entity consumers ignore the received parent attachment. The SourceNext candidate shares the existing vehicle attachment rules without lowering the core body. Isolated native observations retain received body Y 202 while presented bounds begin at marker Y 201.5, then restore the same UUID's received body after dismount and work travel. Independent marker and reconnect observations pass in three fresh worlds; other parent branches, graphics coverage and negative controls remain incomplete. Client fix 895c63f3 is in wt/ClientBattleIntegration; the 26.3 javap chain (ClientLevel.tickPassenger -> rideTick -> positionRider = vehicle position + PASSENGER attachment - rider VEHICLE attachment; marker armor stand fixed(0,0) attachments are zero) is in receipts/ClientEntityParity/javap/seat-chain.txt."
+regression = []
+failing_first = "reported"

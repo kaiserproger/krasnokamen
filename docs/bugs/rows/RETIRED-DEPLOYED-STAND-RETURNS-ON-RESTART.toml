@@ -1,0 +1,19 @@
+[[bug]]
+id = "RETIRED-DEPLOYED-STAND-RETURNS-ON-RESTART"
+title = "Retired deployed banner stand is marked dead but never removed, so it can return after restart"
+area = "gameplay"
+severity = "major"
+status = "fixed"
+source = "Architect review of the battle port plan (receipts/BattlePortPlan/fable-review-v2.md, P3; PLAN-v2.md section 4 row 3). On main crates/mc-core/src/plugin_npcs/orders/deployment.rs retire() sets alive=false, health 0 and death_handled but leaves the row and journals no UUID removal; the battle line fixed it with a deferred pending_removals drain at the commit tail (bv-g2l2 335afd19)."
+repro = "source"
+regression = [
+  "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item",
+  "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome",
+  "cargo:mc-core:plugin_npcs::tests::deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals",
+  "cargo:mc-core:core::checkpoint_custody_tests::broken_deployed_wear_removes_the_stand_across_checkpoint_and_crash",
+  "cargo:mc-core:core::checkpoint_custody_tests::breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_target",
+  "cargo:mc-core:core::checkpoint_custody_tests::unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot",
+]
+fix_commit = "cd0ec2dc2"
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/RETIRED-DEPLOYED-STAND-RETURNS-ON-RESTART.json"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "SP-RELAUNCH-LEASE-RACE"
+title = "After Save & Quit, the native client's process can end while its singleplayer server is still checkpointing (old server alive 1.6 s after RC4 client exit, 3.8 s after RC5); relaunching the client and pressing Play on the same world at once was refused once with 'world ... is already leased' (Server exited during startup). Not reproduced on RC4; Play after the refusal was not exercised."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "RC5 pre-tag breaker receipts/breaker-rc5-pretag-20261106/report.yaml (P1; interrupted-var2 refused 1/2 exact attempts; lease-rc4/lease-rc5 timings). Fixed by Core::open waiting up to 30 s for the lease (RC5 f29c3d62, main d1360198); breaker re-attack report-r2.yaml held 3/3 per branch with real clients."
+regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::start_waits_for_the_previous_server_to_release_the_world", "harness:singleplayer-regressions:native-sp-relaunch-lease-race"]
+failing_first = "reported"

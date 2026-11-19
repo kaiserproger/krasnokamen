@@ -1,0 +1,15 @@
+[[bug]]
+id = "MODERATION-SELECTOR-DEOP-RACE"
+title = "Selector-based moderation can act after the operator is deopped during resolution"
+area = "gameplay"
+severity = "major"
+status = "fixed"
+source = "Stage2Review/terra-edge-events.md moderation review; Stage2X SLICES.md:154"
+repro = "source"
+regression = [
+  "cargo:mc-edge:server::admin_tests::moderation_selectors_reauthorize_after_deop_during_resolution",
+]
+fix_commit = "40b28f732"
+repro_check = "Fix is on wt/XEdgeEvents, not merged into wt/M3Server at filing. Branch check cargo:mc-edge:server::admin_tests::moderation_selectors_reauthorize_after_deop_during_resolution; green receipts/XEdgeEvents/green-moderation.log, fix-reverted red receipts/XEdgeEvents/negative-moderation.log."
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/MODERATION-SELECTOR-DEOP-RACE.json"

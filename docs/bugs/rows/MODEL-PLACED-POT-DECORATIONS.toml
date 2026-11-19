@@ -1,0 +1,12 @@
+[[bug]]
+id = "MODEL-PLACED-POT-DECORATIONS"
+title = "Decorated pots placed from an item remain visually plain: the native pot renderer (src/entities/render_blocks/surfaces.rs:143-146) reads only the sherds[side] {id: ...} form, but vanilla 26.3 PotDecorations accepts both that form and a bare item-id string, and the server sends the string form. Needs both forms read and a graphical decoration assertion with a one-fix negative control."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29. Client fix 6e541f96 (wt/ClientEntityParity): 26.3 PotDecorations sides are ItemStackTemplates whose CODEC takes a bare item id or an {id} record (javap receipts/ClientEntityParity/javap/potdecorations.txt, itemstacktemplate.txt); block and item renderers share pot_side_texture(). entities::render_blocks::village_tests::static_decorated_pot_uses_received_sherd_textures and entities::presentation::tests::decorated_pot_item_bakes_all_sides_and_received_sherds are red with only the two call-site hunks reverted (receipts/ClientEntityParity/negative-control/pot-reverted.txt). Graphical native-vs-Java pot frames not yet captured."
+regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components", "client:krasnokamen-client:entities::render_blocks::village_tests::static_decorated_pot_uses_received_sherd_textures"]
+failing_first = "reported"
+fix_commit = "client:6e541f96"
+repro_check = "candidate-unit: control is the commit's `+` line reversed to the {id}-only read plus a new bare-item-id case in the same ref (a whole-commit reverse no longer applies, the file moved); asserts the sherd texture layer per side, receipts/XClientBlocks/10-negative-control.log; repro=client, the graphical decoration frame is stage 3"

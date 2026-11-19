@@ -1,0 +1,11 @@
+[[bug]]
+id = "TEST-JAVA-PREDICTION-ACK-LANES"
+title = "Java matrix lacks exact submitted prediction tokens/ACK sequence and pure-target-mod lanes"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Split uncovered scope from TEST-JAVA-CAPABILITIES during ReviewPromote19 repair; cumulative chat refs do not prove these capabilities."
+regression = []
+repro_check = "Exact prediction/ACK sequence and pure-target-mod lanes remain unexposed. Historical 9bdf33d pickup/shield/tick/QA transformer corrections and old 47 unit passes do not prove real-client acceptance. Frozen 604b plugin packages do not instantiate on retained pins; 20261111T122429-java-matrix-m7hk88z8 used 5efb and blocked on client:respawn."
+failing_first = "not recorded"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "END-RESTART"
+title = "Clean shutdown checkpoint tick2479; same End world cannot reopen: DragonFight UUID has no retained entity."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#END-RESTART"
+regression = ["cargo:mc-core:end_fight::tests::checkpoint_reopens_live_and_dead_dragon_fights", "harness:entities:native-v2-end-restart"]
+failing_first = "reported"

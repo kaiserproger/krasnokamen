@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-20"
+title = "Storage and assignment UI lacks inventory and icons"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; storage half fixed by b34c1d0b (civil settlement UI, wt/SettlementUICivil): the Storage page is a 90-slot icon inventory where a shift-click moves one real stack and conserves it (settlement-map-qa verdict storage_transfer, assertion GUI_storage_transfer_conserves_one); fix patch docs/bugs/fix-patches/SETTLEMENT-UI-CIVIL.patch is the production hunks of that branch, and reversing it removes the dashboard that leads to the Storage page. Assignment half (workplace assignment from the Residents pages) has no real-client step and is not covered by this ref: split it off before promoting if the owner reads the row as covering both"
+regression = ["harness:settlement-map-qa:storage_transfer"]
+failing_first = "reported"
+fix_commit = "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381"
+promotion = "docs/bugs/promotions/ISSUE-1-20.json"

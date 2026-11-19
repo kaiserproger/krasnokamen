@@ -1,0 +1,10 @@
+[[bug]]
+id = "BRUSH-RESET-WRITES-DUSTED-INTO-COLD-CHUNK"
+title = "The brushing reset pass rereads every in-progress cell; with the chunk non-resident it either drops the progress (no overlay) or decrements it and writes the dusted state into the cold overlay."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 3 and DESIGN-RESIDENCY-R14.md (read-only audit). On main 3068dfb1b brushing::run's progress.retain rereads each cell and calls set_dusted on a due reset (crates/mc-core/src/brushing.rs:19-31,52-80,280-297) through block_at, which serves a cold overlay (world.rs:951-965). Fix and scene: has_chunk of the cell before brushable in the reset pass; T16i-17 (non-zero progress, reset due, cold chunk with and without overlay)."
+regression = []
+failing_first = "not recorded"
