@@ -1084,25 +1084,53 @@ fn native_settlement_list_from_player_session_reaches_tick() {
                 .await;
             // Fixture setup only: spawn one real body at the safe world spawn.
             // Membership itself is changed exclusively by this non-op TCP player.
-            let villager_type = core.registry().entity_types
-                .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap()).unwrap();
+            let villager_type = core
+                .registry()
+                .entity_types
+                .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
+                .unwrap();
             let mut ticks = core.subscribe();
             assert!(core.debug_spawn(mc_core::core::SpawnRequest {
-                type_id: villager_type, count: 1, spread: true, start: 0, total: 1,
+                type_id: villager_type,
+                count: 1,
+                spread: true,
+                start: 0,
+                total: 1,
             }));
             tokio::time::timeout(DEADLINE, async {
                 loop {
                     let output = ticks.recv().await.unwrap();
-                    if output.snapshot.entities.iter().any(|entity| entity.type_id == villager_type) {
+                    if output
+                        .snapshot
+                        .entities
+                        .iter()
+                        .any(|entity| entity.type_id == villager_type)
+                    {
                         break;
                     }
                 }
-            }).await.expect("loaded nearby villager fixture");
-            player.command("settlement bind Oak", &["Bound ", " to Oak."]).await;
-            player.command("settlement info Oak", &["«Oak» · глава:", "жителей 1", "Oak |", "members=1"]).await;
+            })
+            .await
+            .expect("loaded nearby villager fixture");
+            player
+                .command("settlement bind Oak", &["Bound ", " to Oak."])
+                .await;
+            player
+                .command(
+                    "settlement info Oak",
+                    &["«Oak» · глава:", "жителей 1", "Oak |", "members=1"],
+                )
+                .await;
             player.command("settlement unbind", &["Unbound "]).await;
-            player.command("settlement info Oak", &["«Oak» · глава:", "жителей 0", "members=0"]).await;
-            player.command("settlement bind Oak", &["Bound ", " to Oak."]).await;
+            player
+                .command(
+                    "settlement info Oak",
+                    &["«Oak» · глава:", "жителей 0", "members=0"],
+                )
+                .await;
+            player
+                .command("settlement bind Oak", &["Bound ", " to Oak."])
+                .await;
             player
                 .command("settlement list", &["Settlements: Oak."])
                 .await;

@@ -479,7 +479,10 @@ async fn run_connection(
     // Play: this session now counts against `max_players`, not the
     // server-wide pre-play cap.
     drop(pre_play_slot);
-    server.feedback(id, mc_core::settlements::welcome(Some(&config_outcome.client_language)))?;
+    server.feedback(
+        id,
+        mc_core::settlements::welcome(Some(&config_outcome.client_language)),
+    )?;
     if *server.stop.borrow() {
         server.kick(
             id,

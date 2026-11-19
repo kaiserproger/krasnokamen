@@ -1331,14 +1331,28 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
     let mut state = native_state(&config);
     let existing = [9, 202, 8];
     let site = storage_chest_site(&state, BELL).unwrap();
-    state.world.set_block(existing[0], existing[1], existing[2], site.block);
+    state
+        .world
+        .set_block(existing[0], existing[1], existing[2], site.block);
     let stock = mc_data::ItemStack::new(
-        state.registry.items.id_of(&mc_data::Identifier::parse("minecraft:emerald").unwrap()).unwrap(), 7,
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:emerald").unwrap())
+            .unwrap(),
+        7,
     );
-    state.block_entities.insert((existing[0], existing[1], existing[2]), crate::tick::BlockEntityState {
-        slots: vec![stock.clone(); 27], furnace: None,
+    state.block_entities.insert(
+        (existing[0], existing[1], existing[2]),
+        crate::tick::BlockEntityState {
+            slots: vec![stock.clone(); 27],
+            furnace: None,
+        },
+    );
+    let command = Command::Settlement(SettlementCommand::Create {
+        name: "founded".into(),
+        radius: 48,
     });
-    let command = Command::Settlement(SettlementCommand::Create { name: "founded".into(), radius: 48 });
     let mut changes = ChangeSet::default();
     crate::command_execution::execute(&mut state, CONNECTION, EXECUTOR, &command, &mut changes);
     let record = state.settlements.records().next().unwrap();
@@ -1346,9 +1360,24 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
     let storage = record.bootstrap_storage.unwrap();
     assert_ne!(storage, existing);
     assert_eq!(changes.blocks.len(), 1);
-    assert_eq!(changes.blocks[0].position, BlockPos { x: storage[0], y: storage[1], z: storage[2] });
-    assert!(state.block_entities[&(storage[0], storage[1], storage[2])].slots.iter().all(mc_data::ItemStack::is_empty));
-    assert_eq!(state.block_entities[&(existing[0], existing[1], existing[2])].slots[0], stock);
+    assert_eq!(
+        changes.blocks[0].position,
+        BlockPos {
+            x: storage[0],
+            y: storage[1],
+            z: storage[2]
+        }
+    );
+    assert!(
+        state.block_entities[&(storage[0], storage[1], storage[2])]
+            .slots
+            .iter()
+            .all(mc_data::ItemStack::is_empty)
+    );
+    assert_eq!(
+        state.block_entities[&(existing[0], existing[1], existing[2])].slots[0],
+        stock
+    );
     // A repeated request cannot create a second chest or replace its contents.
     crate::command_execution::execute(&mut state, CONNECTION, EXECUTOR, &command, &mut changes);
     ensure_storage_chest(&mut state, &mut changes, id, BELL, None);
@@ -1356,15 +1385,37 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
     assert_eq!(state.settlements.records().count(), 1);
     native_checkpoint(&mut state, &config, 1);
     drop(state);
-    let mut reopened = crate::core::recover_dimension_state(
-        &config, crate::dimensions::Dimension::Overworld,
-    ).unwrap();
-    assert_eq!(reopened.settlements.get(id).unwrap().bootstrap_storage, Some(storage));
-    reopened.world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    let mut reopened =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    assert_eq!(
+        reopened.settlements.get(id).unwrap().bootstrap_storage,
+        Some(storage)
+    );
+    reopened
+        .world
+        .ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     assert!(is_chest_block(&reopened, storage));
     let chunk = reopened.world.chunk(ChunkPos { x: 0, z: 0 }).unwrap();
-    assert!(chunk.chests[&BlockPos { x: storage[0], y: storage[1], z: storage[2] }].slots.iter().all(mc_data::ItemStack::is_empty));
-    assert_eq!(chunk.chests[&BlockPos { x: existing[0], y: existing[1], z: existing[2] }].slots[0], stock);
+    assert!(
+        chunk.chests[&BlockPos {
+            x: storage[0],
+            y: storage[1],
+            z: storage[2]
+        }]
+            .slots
+            .iter()
+            .all(mc_data::ItemStack::is_empty)
+    );
+    assert_eq!(
+        chunk.chests[&BlockPos {
+            x: existing[0],
+            y: existing[1],
+            z: existing[2]
+        }]
+            .slots[0],
+        stock
+    );
     let mut after = ChangeSet::default();
     ensure_storage_chest(&mut reopened, &mut after, id, BELL, None);
     assert!(after.blocks.is_empty());

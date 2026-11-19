@@ -51,8 +51,13 @@ pub(super) fn settlement(
                 );
                 return;
             };
-            let Some(storage) = crate::settlements::autonomy::storage_chest_site(state, anchor) else {
-                error(state, connection, "No safe space for the starter chest beside the centre.");
+            let Some(storage) = crate::settlements::autonomy::storage_chest_site(state, anchor)
+            else {
+                error(
+                    state,
+                    connection,
+                    "No safe space for the starter chest beside the centre.",
+                );
                 return;
             };
             match state.settlements.create(
@@ -64,7 +69,11 @@ pub(super) fn settlement(
             ) {
                 Ok(id) => {
                     crate::settlements::autonomy::ensure_storage_chest(
-                        state, changes, id, anchor, Some(storage),
+                        state,
+                        changes,
+                        id,
+                        anchor,
+                        Some(storage),
                     );
                     crate::settlements::bind_residents(state, id);
                     crate::settlements::refresh_owner_names(state);

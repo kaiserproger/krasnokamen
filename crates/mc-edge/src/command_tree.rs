@@ -110,7 +110,6 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
     ),
 ];
 
-
 // Native economy uses compact endpoint/coordinate/route tokens (":" / "," /
 // ";") that Brigadier's unquoted word parser rejects. Advertise each action's
 // native tail as a greedy string, leaving exact token validation to the tick.

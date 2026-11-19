@@ -409,10 +409,17 @@ pub(crate) fn storage_chest_site(state: &TickState, anchor: [i32; 3]) -> Option<
     let chest = mc_data::Identifier::parse("minecraft:chest")
         .ok()
         .and_then(|name| state.registry.blocks.block(&name))?
-        .default.0;
+        .default
+        .0;
     let at = [
-        (1, 0), (-1, 0), (0, 1), (0, -1),
-        (1, 1), (-1, -1), (1, -1), (-1, 1),
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (-1, -1),
+        (1, -1),
+        (-1, 1),
     ]
     .into_iter()
     .flat_map(|(dx, dz)| {
@@ -442,7 +449,11 @@ pub(crate) fn ensure_storage_chest(
     anchor: [i32; 3],
     site: Option<StorageChestSite>,
 ) {
-    if state.settlements.get(id).is_some_and(|record| record.bootstrap_storage.is_some()) {
+    if state
+        .settlements
+        .get(id)
+        .is_some_and(|record| record.bootstrap_storage.is_some())
+    {
         return;
     }
     let mut existing = None;
@@ -466,11 +477,18 @@ pub(crate) fn ensure_storage_chest(
     let position = if let Some((_, at)) = existing {
         at
     } else {
-        let Some(StorageChestSite { at, block }) = site.or_else(|| storage_chest_site(state, anchor))
-        else { return };
+        let Some(StorageChestSite { at, block }) =
+            site.or_else(|| storage_chest_site(state, anchor))
+        else {
+            return;
+        };
         state.world.set_block(at[0], at[1], at[2], block);
         changes.blocks.push(crate::boundary::BlockChange {
-            position: BlockPos { x: at[0], y: at[1], z: at[2] },
+            position: BlockPos {
+                x: at[0],
+                y: at[1],
+                z: at[2],
+            },
             state: block,
         });
         state.block_entities.insert(

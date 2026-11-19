@@ -38,7 +38,6 @@ pub fn welcome(locale: Option<&str>) -> &'static str {
     text(Lang::of(locale), Key::Welcome)
 }
 
-
 /// Every user-visible settlement dialog string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Key {
@@ -252,25 +251,52 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::NextStep => ("Next step", "Следующий шаг"),
         Key::Help => ("Help", "Помощь"),
         Key::MaterialsEstimate => ("Materials estimate", "Оценка материалов"),
-        Key::MaterialStock => (" ×{count} · in storage {stock}\n", " ×{count} · на складе {stock}\n"),
+        Key::MaterialStock => (
+            " ×{count} · in storage {stock}\n",
+            " ×{count} · на складе {stock}\n",
+        ),
         Key::HomeMap => ("Home / bed on map", "Дом / кровать на карте"),
         Key::WorkMap => ("Workplace on map", "Место работы на карте"),
-        Key::EmptyBuildings => ("No buildings here yet. Order a new one in Construction, or Certify one you built.", "Здесь зданий пока нет. Построить новое — «Строительство»; засчитать своё — «Сертифицировать»."),
-        Key::EmptyStorage => ("Bring materials: Shift-click your own stack.", "Принесите материалы: Shift+клик по своему стаку."),
-        Key::NeedStorage => ("First, storage: certify a building with a chest, then stock it.", "Сначала нужен склад: сертифицируйте постройку с сундуком, затем принесите материалы."),
+        Key::EmptyBuildings => (
+            "No buildings here yet. Order a new one in Construction, or Certify one you built.",
+            "Здесь зданий пока нет. Построить новое — «Строительство»; засчитать своё — «Сертифицировать».",
+        ),
+        Key::EmptyStorage => (
+            "Bring materials: Shift-click your own stack.",
+            "Принесите материалы: Shift+клик по своему стаку.",
+        ),
+        Key::NeedStorage => (
+            "First, storage: certify a building with a chest, then stock it.",
+            "Сначала нужен склад: сертифицируйте постройку с сундуком, затем принесите материалы.",
+        ),
         Key::StorageFirst => ("Next: storage needed", "Дальше: нужен склад"),
-        Key::WalkCorner2 => ("Corner 1 saved ({at}). Walk to corner 2, then press ", "Метка 1 сохранена ({at}). Подойдите к углу 2 и нажмите "),
+        Key::WalkCorner2 => (
+            "Corner 1 saved ({at}). Walk to corner 2, then press ",
+            "Метка 1 сохранена ({at}). Подойдите к углу 2 и нажмите ",
+        ),
         Key::OpenCertify => ("[Open certification]", "[Открыть сертификацию]"),
         Key::CloseWalk => ("Close and walk to corner 2", "Закрыть и идти к углу 2"),
-        Key::AfterCertified => ("Next: assign residents, or build the next level and recheck its certificate.", "Дальше: назначьте жителей или достройте следующий уровень и проверьте сертификат."),
-        Key::Welcome => ("Settlements: /settlement guide", "Поселения: /settlement guide"),
+        Key::AfterCertified => (
+            "Next: assign residents, or build the next level and recheck its certificate.",
+            "Дальше: назначьте жителей или достройте следующий уровень и проверьте сертификат.",
+        ),
+        Key::Welcome => (
+            "Settlements: /settlement guide",
+            "Поселения: /settlement guide",
+        ),
         Key::Guide => (
             "1. Found your town: /settlement create Oak. Open management with /settlement.\n2. First, storage: stock the empty chest beside the centre. In Storage, Shift-click your stacks.\n3. Construction: choose a blueprint, review materials and order. Put missing materials in storage.\n4. Built it yourself? Certify it: mark two floor corners, then check the building.\n5. Residents and jobs: place beds and workstations; assign residents to certified workplaces.\n6. Check Construction for progress, Storage for supplies and Map for locations. Back returns to your previous screen.",
             "1. Основать поселение: /settlement create Oak. Управление: /settlement.\n2. Сначала склад: наполните пустой сундук у центра. В «Складе» переносите свои стаки через Shift+клик.\n3. Строительство: выберите чертёж, проверьте материалы и закажите. Недостающее принесите на склад.\n4. Построили сами? Сертифицируйте: отметьте два угла пола и проверьте здание.\n5. Жители и работа: поставьте кровати и рабочие блоки; назначьте жителей в засчитанные мастерские.\n6. Ход работ — в «Строительстве», материалы — в «Складе», расположение — на «Карте». «Назад» вернёт на предыдущий экран.",
         ),
-        Key::OrderStarted => ("Construction started: {blueprint}.", "Строительство начато: {blueprint}."),
+        Key::OrderStarted => (
+            "Construction started: {blueprint}.",
+            "Строительство начато: {blueprint}.",
+        ),
         Key::OrderAccepted => ("Order accepted: {blueprint}.", "Заказ принят: {blueprint}."),
-        Key::StockForOrder => ("Put missing materials in Storage; follow progress in Construction.", "Положите недостающие материалы на склад; ход работ смотрите в «Строительстве»."),
+        Key::StockForOrder => (
+            "Put missing materials in Storage; follow progress in Construction.",
+            "Положите недостающие материалы на склад; ход работ смотрите в «Строительстве».",
+        ),
         Key::MissingMaterials => ("Missing:", "Не хватает:"),
         Key::PendingReady => ("ready to start", "готов к началу работ"),
         Key::GuideClaim => (
@@ -673,7 +699,10 @@ pub(crate) fn text(lang: Lang, key: Key) -> &'static str {
 }
 
 /// Names shared by workshop certificates and resident cards.
-pub(crate) fn profession(lang: Lang, profession: crate::villager::VillagerProfession) -> &'static str {
+pub(crate) fn profession(
+    lang: Lang,
+    profession: crate::villager::VillagerProfession,
+) -> &'static str {
     use crate::villager::VillagerProfession as P;
     let (en, ru) = match profession {
         P::None => ("Unemployed", "Безработный"),
@@ -696,24 +725,87 @@ pub(crate) fn profession(lang: Lang, profession: crate::villager::VillagerProfes
         P::Builder => ("Builder", "Строитель"),
         P::Soldier => ("Soldier", "Солдат"),
     };
-    match lang { Lang::En => en, Lang::Ru => ru }
+    match lang {
+        Lang::En => en,
+        Lang::Ru => ru,
+    }
 }
 
 /// Certificate geometry counters and the action that satisfies each counter.
 pub(crate) fn requirement<'a>(lang: Lang, code: &'a str) -> (&'a str, &'static str) {
     let (en, ru, en_action, ru_action) = match code {
-        "footprint" => ("floor area", "площадь пола", "complete the solid floor", "достройте сплошной пол"),
-        "height" => ("height", "высота", "increase the building height", "увеличьте высоту постройки"),
-        "beds" => ("beds", "кровати", "add the missing complete beds", "добавьте недостающие кровати целиком"),
-        "roof" => ("roof", "крыша", "complete the roof at the top corner height", "достройте крышу на высоте верхнего угла"),
-        "enclosure" => ("perimeter walls", "стены по периметру", "close gaps in the walls", "закройте дыры в стенах"),
-        "entrance" => ("doors", "дверь", "add the missing doors", "добавьте недостающие двери"),
-        "workstations" => ("workstations", "рабочие блоки", "add the missing workstations", "добавьте недостающие рабочие блоки"),
-        "containers" => ("chests/barrels", "сундуки/бочки", "add the missing chests or barrels", "добавьте недостающие сундуки или бочки"),
-        "wall length" => ("wall length", "длина стены", "extend the wall", "удлините стену"),
-        "wall height" => ("wall height", "высота стены", "raise the wall", "нарастите стену"),
-        "continuous wall" => ("continuous wall", "непрерывная стена", "close gaps in the wall", "закройте разрывы стены"),
-        "gate frame" => ("gate frame", "рама ворот", "complete the gate frame", "достройте раму ворот"),
+        "footprint" => (
+            "floor area",
+            "площадь пола",
+            "complete the solid floor",
+            "достройте сплошной пол",
+        ),
+        "height" => (
+            "height",
+            "высота",
+            "increase the building height",
+            "увеличьте высоту постройки",
+        ),
+        "beds" => (
+            "beds",
+            "кровати",
+            "add the missing complete beds",
+            "добавьте недостающие кровати целиком",
+        ),
+        "roof" => (
+            "roof",
+            "крыша",
+            "complete the roof at the top corner height",
+            "достройте крышу на высоте верхнего угла",
+        ),
+        "enclosure" => (
+            "perimeter walls",
+            "стены по периметру",
+            "close gaps in the walls",
+            "закройте дыры в стенах",
+        ),
+        "entrance" => (
+            "doors",
+            "дверь",
+            "add the missing doors",
+            "добавьте недостающие двери",
+        ),
+        "workstations" => (
+            "workstations",
+            "рабочие блоки",
+            "add the missing workstations",
+            "добавьте недостающие рабочие блоки",
+        ),
+        "containers" => (
+            "chests/barrels",
+            "сундуки/бочки",
+            "add the missing chests or barrels",
+            "добавьте недостающие сундуки или бочки",
+        ),
+        "wall length" => (
+            "wall length",
+            "длина стены",
+            "extend the wall",
+            "удлините стену",
+        ),
+        "wall height" => (
+            "wall height",
+            "высота стены",
+            "raise the wall",
+            "нарастите стену",
+        ),
+        "continuous wall" => (
+            "continuous wall",
+            "непрерывная стена",
+            "close gaps in the wall",
+            "закройте разрывы стены",
+        ),
+        "gate frame" => (
+            "gate frame",
+            "рама ворот",
+            "complete the gate frame",
+            "достройте раму ворот",
+        ),
         _ => return (code, text(lang, Key::TipCorners)),
     };
     match lang {

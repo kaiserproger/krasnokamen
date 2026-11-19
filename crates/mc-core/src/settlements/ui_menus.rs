@@ -213,7 +213,6 @@ pub(super) enum View {
     },
 }
 
-
 #[derive(Debug, Clone)]
 enum Target {
     None,
@@ -354,12 +353,7 @@ pub(super) fn building_from(
     ctx: &Ctx,
     building: BuildingId,
 ) {
-    show(
-        state,
-        connection,
-        ctx,
-        View::BuildingContext { building },
-    );
+    show(state, connection, ctx, View::BuildingContext { building });
 }
 
 pub(super) fn filtered_buildings(
@@ -729,7 +723,8 @@ fn click(
             certificate,
         } => {
             close(state, connection, entity, true);
-            let payload = Tag::Compound(vec![("b".to_owned(), Tag::String(building.0.to_string()))]);
+            let payload =
+                Tag::Compound(vec![("b".to_owned(), Tag::String(building.0.to_string()))]);
             super::dispatch(
                 state,
                 connection,
@@ -843,12 +838,7 @@ fn click(
             if !ctx.manage {
                 return deny(state, connection, &ctx, view);
             }
-            show(
-                state,
-                connection,
-                &ctx,
-                View::Assign { worker, page: 0 },
-            );
+            show(state, connection, &ctx, View::Assign { worker, page: 0 });
         }
         Target::Assign { worker, building } => {
             if !ctx.manage {
@@ -1564,29 +1554,18 @@ fn render(state: &TickState, ctx: &Ctx, view: View) -> (View, Screen) {
             view,
             filtered_buildings_screen(state, ctx, &name, kind, page),
         ),
-        View::BuildingContext { building } => {
-            (view, building_context_screen(state, ctx, building))
+        View::BuildingContext { building } => (view, building_context_screen(state, ctx, building)),
+        View::BuildingResidents { building, page } => {
+            (view, building_residents_screen(state, ctx, building, page))
         }
-        View::BuildingResidents {
-            building,
-            page,
-        } => (
-            view,
-            building_residents_screen(state, ctx, building, page),
-        ),
-        View::Assign { worker, page } => {
-            match assign_screen(state, ctx, worker, page) {
-                Some(screen) => (view, screen),
-                None => (
-                    View::Census { filter: 0, page: 0 },
-                    census_screen(state, ctx, 0, 0),
-                ),
-            }
-        }
-        View::Hire {
-            building,
-            page,
-        } => match hire_screen(state, ctx, building, page) {
+        View::Assign { worker, page } => match assign_screen(state, ctx, worker, page) {
+            Some(screen) => (view, screen),
+            None => (
+                View::Census { filter: 0, page: 0 },
+                census_screen(state, ctx, 0, 0),
+            ),
+        },
+        View::Hire { building, page } => match hire_screen(state, ctx, building, page) {
             Some(screen) => (view, screen),
             None => (
                 View::BuildingContext { building },
@@ -1596,11 +1575,7 @@ fn render(state: &TickState, ctx: &Ctx, view: View) -> (View, Screen) {
     }
 }
 
-fn building_context_screen(
-    state: &TickState,
-    ctx: &Ctx,
-    building: BuildingId,
-) -> Screen {
+fn building_context_screen(state: &TickState, ctx: &Ctx, building: BuildingId) -> Screen {
     let Some(mut screen) = building_screen(state, ctx, building) else {
         let mut screen = Screen::new(ctx.t(Key::BuildingGone).to_owned());
         screen.put(BACK, back(state, ctx), Target::Back);
@@ -1689,10 +1664,7 @@ fn building_residents_screen(
         Target::Refresh,
     );
     navigation(&mut screen, state, ctx, page, pages, |page| {
-        View::BuildingResidents {
-            building,
-            page,
-        }
+        View::BuildingResidents { building, page }
     });
     screen.put(BACK, back(state, ctx), Target::Back);
     screen
@@ -2546,18 +2518,8 @@ fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
         },
     );
     for (slot, item, label, position) in [
-        (
-            12,
-            Icon::RedBed,
-            ctx.t(Key::HomeMap),
-            person.home,
-        ),
-        (
-            14,
-            Icon::FilledMap,
-            ctx.t(Key::WorkMap),
-            person.job,
-        ),
+        (12, Icon::RedBed, ctx.t(Key::HomeMap), person.home),
+        (14, Icon::FilledMap, ctx.t(Key::WorkMap), person.job),
     ] {
         let detail = position
             .map(|at| super::corner_text([at.x, at.y, at.z]))
@@ -2802,9 +2764,13 @@ fn filtered_buildings_screen(
         lore.push(ctx.t(Key::EmptyBuildings).to_owned());
         screen.put(
             22,
-            icon(state, Icon::IronPickaxe, 1, text(ctx.t(Key::Projects)), &[
-                ctx.t(Key::EmptyBuildings).to_owned(),
-            ]),
+            icon(
+                state,
+                Icon::IronPickaxe,
+                1,
+                text(ctx.t(Key::Projects)),
+                &[ctx.t(Key::EmptyBuildings).to_owned()],
+            ),
             Target::Dialog("projects"),
         );
     }
@@ -2981,7 +2947,9 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
                     slot,
                     person_icon(state, ctx, person, &busy, hint),
                     if ctx.manage {
-                        Target::Pick { worker: person.uuid }
+                        Target::Pick {
+                            worker: person.uuid,
+                        }
                     } else {
                         Target::Show(View::Resident {
                             worker: person.uuid,
@@ -3073,12 +3041,7 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
     Some(screen)
 }
 
-fn assign_screen(
-    state: &TickState,
-    ctx: &Ctx,
-    worker: Uuid,
-    page: usize,
-) -> Option<Screen> {
+fn assign_screen(state: &TickState, ctx: &Ctx, worker: Uuid, page: usize) -> Option<Screen> {
     let record = state.settlements.get(ctx.id)?;
     let people = people(state, ctx.id);
     let person = people.iter().find(|person| person.uuid == worker)?;
@@ -3129,16 +3092,14 @@ fn assign_screen(
     }
     screen.put(INFO, info, Target::Refresh);
     screen.put(BACK, back(state, ctx), Target::Back);
-    navigation(&mut screen, state, ctx, page, pages, |page| View::Assign { worker, page });
+    navigation(&mut screen, state, ctx, page, pages, |page| View::Assign {
+        worker,
+        page,
+    });
     Some(screen)
 }
 
-fn hire_screen(
-    state: &TickState,
-    ctx: &Ctx,
-    id: BuildingId,
-    page: usize,
-) -> Option<Screen> {
+fn hire_screen(state: &TickState, ctx: &Ctx, id: BuildingId, page: usize) -> Option<Screen> {
     let building = state.settlements.get(ctx.id)?.buildings.get(&id)?.clone();
     let people = people(state, ctx.id);
     let busy = super::busy_workers(state, ctx.id);

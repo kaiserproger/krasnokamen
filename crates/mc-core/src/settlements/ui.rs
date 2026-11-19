@@ -306,25 +306,58 @@ fn dispatch(
                         &[("n", &(index + 1).to_string()), ("at", &corner_text(at))],
                     );
                     if index == 0 {
-                        state.push_player(connection, PlayerChange::StyledChat {
-                            content: Tag::Compound(vec![
-                                ("text".into(), Tag::String(ctx.f(Key::WalkCorner2, &[("at", &corner_text(at))]))),
-                                ("extra".into(), Tag::List(mc_nbt::ListTag {
-                                    element_type: mc_nbt::tag_type::COMPOUND,
-                                    elements: vec![Tag::Compound(vec![
-                                        ("text".into(), Tag::String(ctx.t(Key::OpenCertify).to_owned())),
-                                        ("color".into(), Tag::String("green".into())),
-                                        ("click_event".into(), Tag::Compound(vec![
-                                            ("action".into(), Tag::String("run_command".into())),
-                                            ("command".into(), Tag::String("/settlement menu certify".into())),
-                                        ])),
-                                    ])],
-                                })),
-                            ]),
-                        });
-                        present(state, connection, ctx, "mark_saved", Dialog::notice(
-                            ctx.t(Key::TitleCertify), Button::plain(ctx.t(Key::CloseWalk)),
-                        ).text(note));
+                        state.push_player(
+                            connection,
+                            PlayerChange::StyledChat {
+                                content: Tag::Compound(vec![
+                                    (
+                                        "text".into(),
+                                        Tag::String(
+                                            ctx.f(Key::WalkCorner2, &[("at", &corner_text(at))]),
+                                        ),
+                                    ),
+                                    (
+                                        "extra".into(),
+                                        Tag::List(mc_nbt::ListTag {
+                                            element_type: mc_nbt::tag_type::COMPOUND,
+                                            elements: vec![Tag::Compound(vec![
+                                                (
+                                                    "text".into(),
+                                                    Tag::String(ctx.t(Key::OpenCertify).to_owned()),
+                                                ),
+                                                ("color".into(), Tag::String("green".into())),
+                                                (
+                                                    "click_event".into(),
+                                                    Tag::Compound(vec![
+                                                        (
+                                                            "action".into(),
+                                                            Tag::String("run_command".into()),
+                                                        ),
+                                                        (
+                                                            "command".into(),
+                                                            Tag::String(
+                                                                "/settlement menu certify".into(),
+                                                            ),
+                                                        ),
+                                                    ]),
+                                                ),
+                                            ])],
+                                        }),
+                                    ),
+                                ]),
+                            },
+                        );
+                        present(
+                            state,
+                            connection,
+                            ctx,
+                            "mark_saved",
+                            Dialog::notice(
+                                ctx.t(Key::TitleCertify),
+                                Button::plain(ctx.t(Key::CloseWalk)),
+                            )
+                            .text(note),
+                        );
                     } else {
                         certify_screen(state, connection, ctx, &form, &note);
                     }
@@ -393,7 +426,6 @@ fn floor_pos(state: &TickState, connection: ConnectionId) -> Option<[i32; 3]> {
     Some(at)
 }
 
-
 /// The nearest settlement whose radius contains the player, else the first the
 /// player owns.
 fn locate(state: &TickState, connection: ConnectionId) -> Option<SettlementId> {
@@ -431,7 +463,13 @@ fn say(state: &mut TickState, connection: ConnectionId, message: &str) {
     );
 }
 
-fn present(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, screen: &'static str, dialog: Dialog) {
+fn present(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    screen: &'static str,
+    dialog: Dialog,
+) {
     match dialog.into_tag() {
         Ok(dialog) => navigation::dialog(state, connection, ctx.id, screen, dialog),
         Err(error) => tracing::warn!(target: "dialog", %error, "settlement dialog rejected"),
@@ -588,19 +626,31 @@ fn main_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
         button(ctx.t(Key::Army), "army", ctx.id),
         button(ctx.t(Key::Help), "help", ctx.id),
     ];
-    present(state, connection, ctx, "main", frame(ctx, title, note, body, buttons));
+    present(
+        state,
+        connection,
+        ctx,
+        "main",
+        frame(ctx, title, note, body, buttons),
+    );
 }
 
 fn claim_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
     let Some(record) = state.settlements.get(ctx.id) else {
         return;
     };
-    present(state, connection, ctx, "claim", Dialog::confirmation(
-        ctx.t(Key::ClaimReview),
-        button(ctx.t(Key::ClaimReview), "claim", ctx.id),
-        button(ctx.t(Key::Back), "back", ctx.id),
-    )
-    .text(ctx.f(Key::ClaimPolicy, &[("name", &record.name)])));
+    present(
+        state,
+        connection,
+        ctx,
+        "claim",
+        Dialog::confirmation(
+            ctx.t(Key::ClaimReview),
+            button(ctx.t(Key::ClaimReview), "claim", ctx.id),
+            button(ctx.t(Key::Back), "back", ctx.id),
+        )
+        .text(ctx.f(Key::ClaimPolicy, &[("name", &record.name)])),
+    );
 }
 
 fn help_screen(
@@ -640,11 +690,17 @@ fn help_screen(
         );
     }
     buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
-    present(state, connection, ctx, "help", Dialog::multi_action(
-        format!("{} {}/{}", ctx.t(Key::Help), page + 1, topics.len()),
-        buttons,
-    )
-    .text(ctx.t(topic)));
+    present(
+        state,
+        connection,
+        ctx,
+        "help",
+        Dialog::multi_action(
+            format!("{} {}/{}", ctx.t(Key::Help), page + 1, topics.len()),
+            buttons,
+        )
+        .text(ctx.t(topic)),
+    );
 }
 
 // Confirm the visible order intent, not the simulation epoch: native planning,
@@ -696,7 +752,6 @@ fn with_pending_order(
         )
 }
 
-
 fn building_filters(
     state: &mut TickState,
     connection: ConnectionId,
@@ -729,7 +784,13 @@ fn building_filters(
         );
     }
     buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
-    present(state, connection, ctx, "building_filters", Dialog::multi_action(ctx.t(Key::Buildings), buttons));
+    present(
+        state,
+        connection,
+        ctx,
+        "building_filters",
+        Dialog::multi_action(ctx.t(Key::Buildings), buttons),
+    );
 }
 
 fn project_estimate(
@@ -771,12 +832,20 @@ fn project_estimate(
         .take(6)
         .filter_map(|(id, count)| {
             let name = state.registry.items.name_of(*id)?;
-            let held: i64 = stock.iter().flat_map(|(_, image)| &image.slots)
+            let held: i64 = stock
+                .iter()
+                .flat_map(|(_, image)| &image.slots)
                 .filter(|stack| stack.item_id == *id && !stack.is_empty())
-                .map(|stack| i64::from(stack.count)).sum();
-            Some(material_text(state, name.as_str(), ctx.f(Key::MaterialStock, &[
-                ("count", &count.to_string()), ("stock", &held.to_string()),
-            ])))
+                .map(|stack| i64::from(stack.count))
+                .sum();
+            Some(material_text(
+                state,
+                name.as_str(),
+                ctx.f(
+                    Key::MaterialStock,
+                    &[("count", &count.to_string()), ("stock", &held.to_string())],
+                ),
+            ))
         })
         .collect::<Vec<_>>();
     let target = |label: &str, action: &str| {
@@ -799,17 +868,27 @@ fn project_estimate(
                 .with("page", Tag::String(next.to_string())),
         );
     }
-    present(state, connection, ctx, "estimate", Dialog::multi_action(
-        format!("{} {}/{}", ctx.t(Key::MaterialsEstimate), page + 1, pages),
-        buttons,
-    )
-    .text(Tag::Compound(vec![
-        ("text".into(), Tag::String(String::new())),
-        ("extra".into(), Tag::List(mc_nbt::ListTag {
-            element_type: mc_nbt::tag_type::COMPOUND, elements: body,
-        })),
-    ]))
-    .text(ctx.t(Key::RequestPolicy)));
+    present(
+        state,
+        connection,
+        ctx,
+        "estimate",
+        Dialog::multi_action(
+            format!("{} {}/{}", ctx.t(Key::MaterialsEstimate), page + 1, pages),
+            buttons,
+        )
+        .text(Tag::Compound(vec![
+            ("text".into(), Tag::String(String::new())),
+            (
+                "extra".into(),
+                Tag::List(mc_nbt::ListTag {
+                    element_type: mc_nbt::tag_type::COMPOUND,
+                    elements: body,
+                }),
+            ),
+        ]))
+        .text(ctx.t(Key::RequestPolicy)),
+    );
 }
 
 fn certificate_review(
@@ -839,14 +918,19 @@ fn certificate_review(
     )
     .with("b", Tag::String(id.0.to_string()))
     .with("level", Tag::String(building.level.to_string()));
-    let back = button(ctx.t(Key::Back), "back", ctx.id)
-        .with("b", Tag::String(id.0.to_string()));
+    let back = button(ctx.t(Key::Back), "back", ctx.id).with("b", Tag::String(id.0.to_string()));
     let dialog = if ctx.manage && building.level < 3 {
         Dialog::confirmation(ctx.t(Key::Buildings), confirm, back)
     } else {
         Dialog::notice(ctx.t(Key::Buildings), back)
     };
-    present(state, connection, ctx, "certificate_review", dialog.text(ctx.t(Key::CertificatePolicy)).text(result));
+    present(
+        state,
+        connection,
+        ctx,
+        "certificate_review",
+        dialog.text(ctx.t(Key::CertificatePolicy)).text(result),
+    );
 }
 
 fn project_review(
@@ -931,17 +1015,35 @@ fn project_review(
     if ctx.manage {
         buttons.insert(0, confirm);
     }
-    present(state, connection, ctx, "project_review", Dialog::multi_action(title, buttons).text(body).text(pending_material_text(state, ctx, pending_index(payload).unwrap_or(0))));
+    present(
+        state,
+        connection,
+        ctx,
+        "project_review",
+        Dialog::multi_action(title, buttons)
+            .text(body)
+            .text(pending_material_text(
+                state,
+                ctx,
+                pending_index(payload).unwrap_or(0),
+            )),
+    );
 }
 
 // ------------------------------------------------------------------- buildings
 
 fn buildings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note: &str) {
-    present(state, connection, ctx, "buildings_note", Dialog::notice(
-        ctx.t(Key::Buildings),
-        button(ctx.t(Key::Back), "back", ctx.id),
-    )
-    .text(note));
+    present(
+        state,
+        connection,
+        ctx,
+        "buildings_note",
+        Dialog::notice(
+            ctx.t(Key::Buildings),
+            button(ctx.t(Key::Back), "back", ctx.id),
+        )
+        .text(note),
+    );
 }
 
 fn form_of(state: &TickState, connection: ConnectionId, payload: ClickPayload<'_>) -> Form {
@@ -950,20 +1052,33 @@ fn form_of(state: &TickState, connection: ConnectionId, payload: ClickPayload<'_
     let default_corner =
         |mark: Option<[i32; 3]>| mark.or(here).map(corner_text).unwrap_or_default();
     Form {
-        kind: payload.string("kind")
+        kind: payload
+            .string("kind")
             .or_else(|| marks.map(|marks| marks.kind.as_str()))
-            .unwrap_or("house").to_owned(),
-        from: payload
-            .string("from")
-            .map_or_else(|| default_corner(marks.and_then(|marks| marks.corners[0])), str::to_owned),
-        to: payload
-            .string("to")
-            .map_or_else(|| default_corner(marks.and_then(|marks| marks.corners[1])), str::to_owned),
-        extra: payload.float("extra").or_else(|| marks.and_then(|marks| marks.extra)).unwrap_or(4.0),
+            .unwrap_or("house")
+            .to_owned(),
+        from: payload.string("from").map_or_else(
+            || default_corner(marks.and_then(|marks| marks.corners[0])),
+            str::to_owned,
+        ),
+        to: payload.string("to").map_or_else(
+            || default_corner(marks.and_then(|marks| marks.corners[1])),
+            str::to_owned,
+        ),
+        extra: payload
+            .float("extra")
+            .or_else(|| marks.and_then(|marks| marks.extra))
+            .unwrap_or(4.0),
     }
 }
 
-fn set_mark(state: &mut TickState, connection: ConnectionId, index: usize, at: [i32; 3], form: &Form) {
+fn set_mark(
+    state: &mut TickState,
+    connection: ConnectionId,
+    index: usize,
+    at: [i32; 3],
+    form: &Form,
+) {
     if state.settlement_marks.len() >= MAX_MARKS
         && !state.settlement_marks.contains_key(&connection)
     {
@@ -1059,16 +1174,27 @@ fn corner(text: &str) -> Option<[i32; 3]> {
 /// surrounding wall ring when it is physically present; typed outer corners
 /// remain exact, and certification still validates the entire resulting box.
 fn include_marked_walls(state: &TickState, mut bounds: ScriptWorldBounds) -> ScriptWorldBounds {
-    if [0, 2].into_iter().any(|axis| i64::from(bounds.max[axis]) - i64::from(bounds.min[axis]) > 61) {
+    if [0, 2]
+        .into_iter()
+        .any(|axis| i64::from(bounds.max[axis]) - i64::from(bounds.min[axis]) > 61)
+    {
         return bounds;
     }
     let [Some(x0), Some(z0), Some(x1), Some(z1), Some(y)] = [
-        bounds.min[0].checked_sub(1), bounds.min[2].checked_sub(1),
-        bounds.max[0].checked_add(1), bounds.max[2].checked_add(1),
+        bounds.min[0].checked_sub(1),
+        bounds.min[2].checked_sub(1),
+        bounds.max[0].checked_add(1),
+        bounds.max[2].checked_add(1),
         bounds.min[1].checked_add(1),
-    ] else { return bounds };
-    let solid = |x, z| state.world.block_at(x, y, z)
-        .is_some_and(|id| !state.registry.collision_boxes[id as usize].is_empty());
+    ] else {
+        return bounds;
+    };
+    let solid = |x, z| {
+        state
+            .world
+            .block_at(x, y, z)
+            .is_some_and(|id| !state.registry.collision_boxes[id as usize].is_empty())
+    };
     if (x0..=x1).all(|x| solid(x, z0) && solid(x, z1))
         && (z0..=z1).all(|z| solid(x0, z) && solid(x1, z))
     {
@@ -1095,10 +1221,15 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
     let Ok(bounds) = ScriptWorldBounds::new(min, max) else {
         return certify_screen(state, connection, ctx, &form, ctx.t(Key::InvalidCorners));
     };
-    let bounds = if state.settlement_marks.get(&connection)
-        .is_some_and(|marks| marks.corners == [Some(a), Some(b)]) {
+    let bounds = if state
+        .settlement_marks
+        .get(&connection)
+        .is_some_and(|marks| marks.corners == [Some(a), Some(b)])
+    {
         include_marked_walls(state, bounds)
-    } else { bounds };
+    } else {
+        bounds
+    };
     match buildings::certify(state, ctx.id, kind, bounds) {
         Ok(id) => {
             state.settlement_marks.remove(&connection);
@@ -1109,12 +1240,27 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
                     ("id", &short(id).to_string()),
                 ],
             );
-            present(state, connection, ctx, "certified", Dialog::multi_action(ctx.t(Key::Buildings), vec![
-                button(ctx.t(Key::ResidentsJobs), "residents", ctx.id),
-                button(ctx.f(Key::Certificate, &[("level", "2")]), "certificate_review", ctx.id)
-                    .with("b", Tag::String(id.0.to_string())),
-                button(ctx.t(Key::Back), "back", ctx.id),
-            ]).text(note).text(ctx.t(Key::AfterCertified)));
+            present(
+                state,
+                connection,
+                ctx,
+                "certified",
+                Dialog::multi_action(
+                    ctx.t(Key::Buildings),
+                    vec![
+                        button(ctx.t(Key::ResidentsJobs), "residents", ctx.id),
+                        button(
+                            ctx.f(Key::Certificate, &[("level", "2")]),
+                            "certificate_review",
+                            ctx.id,
+                        )
+                        .with("b", Tag::String(id.0.to_string())),
+                        button(ctx.t(Key::Back), "back", ctx.id),
+                    ],
+                )
+                .text(note)
+                .text(ctx.t(Key::AfterCertified)),
+            );
         }
         Err(error) => {
             let note = ctx.f(
@@ -1177,9 +1323,14 @@ fn upgrade(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
             ],
         ),
     };
-    let back = button(ctx.t(Key::Back), "back", ctx.id)
-        .with("b", Tag::String(id.0.to_string()));
-    present(state, connection, ctx, "upgrade", Dialog::notice(ctx.t(Key::Buildings), back).text(note));
+    let back = button(ctx.t(Key::Back), "back", ctx.id).with("b", Tag::String(id.0.to_string()));
+    present(
+        state,
+        connection,
+        ctx,
+        "upgrade",
+        Dialog::notice(ctx.t(Key::Buildings), back).text(note),
+    );
 }
 
 // ---------------------------------------------------------------------- orders
@@ -1211,11 +1362,17 @@ fn orders_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, not
     if note.is_empty() {
         menus::production(state, connection, ctx);
     } else {
-        present(state, connection, ctx, "orders_note", Dialog::notice(
-            ctx.t(Key::ProductionOrders),
-            button(ctx.t(Key::Back), "back", ctx.id),
-        )
-        .text(note));
+        present(
+            state,
+            connection,
+            ctx,
+            "orders_note",
+            Dialog::notice(
+                ctx.t(Key::ProductionOrders),
+                button(ctx.t(Key::Back), "back", ctx.id),
+            )
+            .text(note),
+        );
     }
 }
 
@@ -1456,28 +1613,34 @@ fn recipe_review(
         .with("b", Tag::String(building.0.to_string()))
         .with("p", Tag::String(corner_text(at)))
         .with("r", Tag::String(recipe.id.as_str().to_owned()));
-    present(state, connection, ctx, "order_create", Dialog::multi_action(
-        ctx.t(Key::TitleNewOrder),
-        vec![
-            confirm,
-            button(ctx.t(Key::Back), "back", ctx.id)
-                .with("b", Tag::String(building.0.to_string()))
-                .with("p", Tag::String(corner_text(at))),
-        ],
-    )
-    .text(facts)
-    .text(ctx.f(Key::PickProduct, &[("at", &corner_text(at))]))
-    .input(
-        Input::number_range("count", ctx.t(Key::Quantity), 1.0, MAX_ORDER)
-            .initial_number(8.0)
-            .step(1.0),
-    )
-    .input(Input::single_option(
-        "worker",
-        ctx.t(Key::Resident),
-        workers,
-    ))
-    .input(Input::boolean("auto", ctx.t(Key::AutoCraft)).initial_bool(false)));
+    present(
+        state,
+        connection,
+        ctx,
+        "order_create",
+        Dialog::multi_action(
+            ctx.t(Key::TitleNewOrder),
+            vec![
+                confirm,
+                button(ctx.t(Key::Back), "back", ctx.id)
+                    .with("b", Tag::String(building.0.to_string()))
+                    .with("p", Tag::String(corner_text(at))),
+            ],
+        )
+        .text(facts)
+        .text(ctx.f(Key::PickProduct, &[("at", &corner_text(at))]))
+        .input(
+            Input::number_range("count", ctx.t(Key::Quantity), 1.0, MAX_ORDER)
+                .initial_number(8.0)
+                .step(1.0),
+        )
+        .input(Input::single_option(
+            "worker",
+            ctx.t(Key::Resident),
+            workers,
+        ))
+        .input(Input::boolean("auto", ctx.t(Key::AutoCraft)).initial_bool(false)),
+    );
 }
 
 fn failure_text(ctx: &Ctx, failure: Failure) -> String {
@@ -1697,7 +1860,13 @@ fn army_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
     }
     buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
     let title = ctx.f(Key::TitleArmy, &[("name", &record.name)]);
-    present(state, connection, ctx, "army", frame(ctx, title, note, text, buttons));
+    present(
+        state,
+        connection,
+        ctx,
+        "army",
+        frame(ctx, title, note, text, buttons),
+    );
 }
 
 /// One soldier: details plus its Follow/Guard/Patrol/Return and Dismiss buttons.
@@ -1748,7 +1917,13 @@ fn soldier_screen(
         Key::TitleSoldier,
         &[("id", &soldier_id(uuid)), ("name", &record.name)],
     );
-    present(state, connection, ctx, "soldier", frame(ctx, title, note, text, buttons));
+    present(
+        state,
+        connection,
+        ctx,
+        "soldier",
+        frame(ctx, title, note, text, buttons),
+    );
 }
 
 /// Back to the soldier a click targeted, or to the roster for an all-soldier click.
@@ -1853,11 +2028,17 @@ fn projects_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, n
     if note.is_empty() {
         menus::projects(state, connection, ctx);
     } else {
-        present(state, connection, ctx, "projects_note", Dialog::notice(
-            ctx.t(Key::Projects),
-            button(ctx.t(Key::Status), "project_status", ctx.id),
-        )
-        .text(note));
+        present(
+            state,
+            connection,
+            ctx,
+            "projects_note",
+            Dialog::notice(
+                ctx.t(Key::Projects),
+                button(ctx.t(Key::Status), "project_status", ctx.id),
+            )
+            .text(note),
+        );
     }
 }
 
@@ -1890,11 +2071,26 @@ fn pending_order_text(state: &TickState, ctx: &Ctx, index: usize) -> Option<Stri
 }
 
 fn pending_material_text(state: &TickState, ctx: &Ctx, index: usize) -> Tag {
-    let elements = super::construction::pending_missing(state, ctx.id, index).into_iter()
-        .map(|(item, count)| material_text(state, &item, format!(" ×{count}\n"))).collect::<Vec<_>>();
+    let elements = super::construction::pending_missing(state, ctx.id, index)
+        .into_iter()
+        .map(|(item, count)| material_text(state, &item, format!(" ×{count}\n")))
+        .collect::<Vec<_>>();
     Tag::Compound(vec![
-        ("text".into(), Tag::String(if elements.is_empty() { String::new() } else { format!("{}\n", ctx.t(Key::MissingMaterials)) })),
-        ("extra".into(), Tag::List(mc_nbt::ListTag { element_type: mc_nbt::tag_type::COMPOUND, elements })),
+        (
+            "text".into(),
+            Tag::String(if elements.is_empty() {
+                String::new()
+            } else {
+                format!("{}\n", ctx.t(Key::MissingMaterials))
+            }),
+        ),
+        (
+            "extra".into(),
+            Tag::List(mc_nbt::ListTag {
+                element_type: mc_nbt::tag_type::COMPOUND,
+                elements,
+            }),
+        ),
     ])
 }
 
@@ -2055,7 +2251,13 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
             Lang::Ru => "Нет активной стройки и заказа в очереди.",
         });
     }
-    present(state, connection, ctx, "project_status", dialog.exit(Button::plain(ctx.t(Key::Close))));
+    present(
+        state,
+        connection,
+        ctx,
+        "project_status",
+        dialog.exit(Button::plain(ctx.t(Key::Close))),
+    );
 }
 
 /// One missing material of the current project: item, missing count, why it is missing, and the
@@ -2263,7 +2465,13 @@ fn project_order(
         return projects_screen(state, connection, ctx, ctx.t(Key::ChooseBlueprint));
     };
     match super::construction::request_build(state, ctx.id, blueprint) {
-        Ok(outcome) => order_accepted(state, connection, ctx, blueprint_label(ctx, blueprint), &outcome),
+        Ok(outcome) => order_accepted(
+            state,
+            connection,
+            ctx,
+            blueprint_label(ctx, blueprint),
+            &outcome,
+        ),
         Err(error) => projects_screen(state, connection, ctx, &error),
     }
 }
@@ -2296,28 +2504,60 @@ fn project_upgrade(
     let level = super::construction::owner_upgrade_level(state, ctx.id, id);
     match super::construction::request_upgrade(state, ctx.id, id) {
         Ok(outcome) => {
-            let label = format!("{} L{}", blueprint_label(ctx, &blueprint), level.expect("admitted upgrade level"));
+            let label = format!(
+                "{} L{}",
+                blueprint_label(ctx, &blueprint),
+                level.expect("admitted upgrade level")
+            );
             order_accepted(state, connection, ctx, &label, &outcome);
         }
         Err(error) => projects_screen(state, connection, ctx, &error),
     }
 }
 
-fn order_accepted(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, label: &str, outcome: &super::construction::OrderOutcome) {
+fn order_accepted(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    label: &str,
+    outcome: &super::construction::OrderOutcome,
+) {
     let started = matches!(outcome, super::construction::OrderOutcome::Started);
-    let mut dialog = Dialog::multi_action(ctx.t(Key::Projects), vec![
-        button(ctx.t(Key::Storage), "storage", ctx.id),
-        button(ctx.t(Key::Status), "project_status_details", ctx.id),
-        button(ctx.t(Key::Back), "back", ctx.id),
-    ]).text(ctx.f(if started { Key::OrderStarted } else { Key::OrderAccepted }, &[("blueprint", label)]));
+    let mut dialog = Dialog::multi_action(
+        ctx.t(Key::Projects),
+        vec![
+            button(ctx.t(Key::Storage), "storage", ctx.id),
+            button(ctx.t(Key::Status), "project_status_details", ctx.id),
+            button(ctx.t(Key::Back), "back", ctx.id),
+        ],
+    )
+    .text(ctx.f(
+        if started {
+            Key::OrderStarted
+        } else {
+            Key::OrderAccepted
+        },
+        &[("blueprint", label)],
+    ));
     if !started {
-        let index = state.settlements.get(ctx.id)
-            .map_or(0, |record| super::construction::orders(record).count().saturating_sub(1));
+        let index = state.settlements.get(ctx.id).map_or(0, |record| {
+            super::construction::orders(record)
+                .count()
+                .saturating_sub(1)
+        });
         if let Some(pending) = pending_order_text(state, ctx, index) {
-            dialog = dialog.text(pending).text(pending_material_text(state, ctx, index));
+            dialog = dialog
+                .text(pending)
+                .text(pending_material_text(state, ctx, index));
         }
     }
-    present(state, connection, ctx, "order_accepted", dialog.text(ctx.t(Key::StockForOrder)));
+    present(
+        state,
+        connection,
+        ctx,
+        "order_accepted",
+        dialog.text(ctx.t(Key::StockForOrder)),
+    );
 }
 
 fn settings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note: &str) {

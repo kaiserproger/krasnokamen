@@ -21,10 +21,19 @@ pub(crate) struct Navigation {
     previous: Vec<Screen>,
 }
 
-fn record(state: &mut TickState, connection: ConnectionId, settlement: SettlementId, screen: Screen) {
+fn record(
+    state: &mut TickState,
+    connection: ConnectionId,
+    settlement: SettlementId,
+    screen: Screen,
+) {
     let navigation = match state.settlement_navigation.entry(connection) {
         std::collections::hash_map::Entry::Vacant(entry) => {
-            entry.insert(Navigation { settlement, current: screen, previous: Vec::new() });
+            entry.insert(Navigation {
+                settlement,
+                current: screen,
+                previous: Vec::new(),
+            });
             return;
         }
         std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
@@ -36,7 +45,9 @@ fn record(state: &mut TickState, connection: ConnectionId, settlement: Settlemen
         return;
     }
     let same_view = match (&navigation.current, &screen) {
-        (Screen::Menu(current), Screen::Menu(next)) => std::mem::discriminant(current) == std::mem::discriminant(next),
+        (Screen::Menu(current), Screen::Menu(next)) => {
+            std::mem::discriminant(current) == std::mem::discriminant(next)
+        }
         (Screen::Dialog(current_key, _), Screen::Dialog(next_key, _)) => current_key == next_key,
         _ => false,
     };
@@ -47,22 +58,41 @@ fn record(state: &mut TickState, connection: ConnectionId, settlement: Settlemen
     if navigation.previous.len() == MAX_HISTORY {
         navigation.previous.remove(0);
     }
-    navigation.previous.push(std::mem::replace(&mut navigation.current, screen));
+    navigation
+        .previous
+        .push(std::mem::replace(&mut navigation.current, screen));
 }
 
-
-pub(super) fn menu(state: &mut TickState, connection: ConnectionId, settlement: SettlementId, view: menus::View) {
+pub(super) fn menu(
+    state: &mut TickState,
+    connection: ConnectionId,
+    settlement: SettlementId,
+    view: menus::View,
+) {
     record(state, connection, settlement, Screen::Menu(view));
 }
 
-pub(super) fn dialog(state: &mut TickState, connection: ConnectionId, settlement: SettlementId, key: &'static str, dialog: Tag) {
-    record(state, connection, settlement, Screen::Dialog(key, dialog.clone()));
+pub(super) fn dialog(
+    state: &mut TickState,
+    connection: ConnectionId,
+    settlement: SettlementId,
+    key: &'static str,
+    dialog: Tag,
+) {
+    record(
+        state,
+        connection,
+        settlement,
+        Screen::Dialog(key, dialog.clone()),
+    );
     state.push_player(connection, PlayerChange::ShowDialog { dialog });
 }
 
 pub(super) fn back(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
     menus::close_for_dialog(state, connection);
-    let previous = state.settlement_navigation.get_mut(&connection)
+    let previous = state
+        .settlement_navigation
+        .get_mut(&connection)
         .filter(|navigation| navigation.settlement == ctx.id)
         .and_then(|navigation| {
             let previous = navigation.previous.pop()?;
@@ -71,7 +101,9 @@ pub(super) fn back(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
         });
     match previous {
         Some(Screen::Menu(view)) => menus::show(state, connection, ctx, view),
-        Some(Screen::Dialog(_, dialog)) => state.push_player(connection, PlayerChange::ShowDialog { dialog }),
+        Some(Screen::Dialog(_, dialog)) => {
+            state.push_player(connection, PlayerChange::ShowDialog { dialog })
+        }
         None => crate::dialog::clear(state, connection),
     }
 }

@@ -206,14 +206,7 @@ pub(super) fn screen_at(
         )
         .width(60),
     );
-    buttons.push(
-        button(
-            ctx.t(Key::Projects),
-            "projects",
-            ctx.id,
-        )
-        .width(60),
-    );
+    buttons.push(button(ctx.t(Key::Projects), "projects", ctx.id).width(60));
     buttons.push(view_button(
         ctx,
         if ctx.lang == super::Lang::Ru {
@@ -285,11 +278,14 @@ pub(super) fn legend(
         return;
     };
     let grid = grid(ctx, state, record, player_pos(state, connection));
-    present(state, connection, ctx, "map_legend", Dialog::notice(
-        ctx.t(Key::Map),
-        button(ctx.t(Key::Back), "back", ctx.id),
-    )
-    .text_width(legend_component(ctx, &grid), LEGEND_WIDTH));
+    present(
+        state,
+        connection,
+        ctx,
+        "map_legend",
+        Dialog::notice(ctx.t(Key::Map), button(ctx.t(Key::Back), "back", ctx.id))
+            .text_width(legend_component(ctx, &grid), LEGEND_WIDTH),
+    );
 }
 
 /// Selection is bound to IDs carried by the rendered cell, not a new first-hit
@@ -341,11 +337,17 @@ pub(super) fn pick(
                 .with("sp", Tag::String(next.to_string())),
             );
         }
-        present(state, connection, ctx, "street", Dialog::multi_action(
-            format!("{} {}/{}", ctx.t(Key::Map), page + 1, count),
-            buttons,
-        )
-        .text(streets.lines().nth(page).unwrap_or("")));
+        present(
+            state,
+            connection,
+            ctx,
+            "street",
+            Dialog::multi_action(
+                format!("{} {}/{}", ctx.t(Key::Map), page + 1, count),
+                buttons,
+            )
+            .text(streets.lines().nth(page).unwrap_or("")),
+        );
         return;
     }
     // Only a single stable feature bypasses the selection page.
@@ -356,12 +358,7 @@ pub(super) fn pick(
         && let Ok(raw) = ids.parse::<u64>()
         && record.buildings.contains_key(&BuildingId(raw))
     {
-        super::menus::building_from(
-            state,
-            connection,
-            ctx,
-            BuildingId(raw),
-        );
+        super::menus::building_from(state, connection, ctx, BuildingId(raw));
         return;
     }
     if streets.is_empty()
@@ -471,13 +468,19 @@ pub(super) fn pick(
         .lines()
         .next()
         .unwrap_or("");
-    present(state, connection, ctx, "map_pick", Dialog::multi_action(
-        format!("{} {}/{}", ctx.t(Key::Map), page + 1, pages),
-        buttons,
-    )
-    .columns(1)
-    .text(text)
-    .exit(button(ctx.t(Key::Back), "back", ctx.id)));
+    present(
+        state,
+        connection,
+        ctx,
+        "map_pick",
+        Dialog::multi_action(
+            format!("{} {}/{}", ctx.t(Key::Map), page + 1, pages),
+            buttons,
+        )
+        .columns(1)
+        .text(text)
+        .exit(button(ctx.t(Key::Back), "back", ctx.id)),
+    );
 }
 
 fn grid(ctx: &Ctx, state: &TickState, record: &SettlementRecord, viewer: Option<[i32; 3]>) -> Grid {

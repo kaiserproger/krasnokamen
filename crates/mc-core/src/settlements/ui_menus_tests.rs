@@ -721,15 +721,28 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
     let mut state = joined();
     let (id, building) = farm(&mut state);
     let worker = resident(&mut state, id, 5.5);
-    let map = dialog(&mut state, id, "map", &[
-        ("mx", Tag::String("42".to_owned())),
-        ("mz", Tag::String("-9".to_owned())),
-        ("ms", Tag::String("2".to_owned())),
-    ]).into_iter().find_map(|change| match change {
+    let map = dialog(
+        &mut state,
+        id,
+        "map",
+        &[
+            ("mx", Tag::String("42".to_owned())),
+            ("mz", Tag::String("-9".to_owned())),
+            ("ms", Tag::String("2".to_owned())),
+        ],
+    )
+    .into_iter()
+    .find_map(|change| match change {
         PlayerChange::ShowDialog { dialog } => Some(dialog),
         _ => None,
-    }).unwrap();
-    dialog(&mut state, id, "buildings", &[("b", Tag::String(building.0.to_string()))]);
+    })
+    .unwrap();
+    dialog(
+        &mut state,
+        id,
+        "buildings",
+        &[("b", Tag::String(building.0.to_string()))],
+    );
     assert!(matches!(
         open(&state).targets[BUILDING_PLACES],
         Target::Show(View::Hire { .. })
@@ -739,12 +752,16 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
     press(&mut state, candidate as i16, 0, ClickMode::Pickup);
     assert_eq!(job(&state, worker), Some(BlockPos { x: 4, y: 201, z: 4 }));
     assert_eq!(open(&state).view, View::BuildingContext { building });
-    assert!(matches!(open(&state).targets[BUILDING_PLACES], Target::Pick { worker: w } if w == worker));
+    assert!(
+        matches!(open(&state).targets[BUILDING_PLACES], Target::Pick { worker: w } if w == worker)
+    );
     let restored = press(&mut state, BACK as i16, 0, ClickMode::Pickup)
-        .into_iter().find_map(|change| match change {
+        .into_iter()
+        .find_map(|change| match change {
             PlayerChange::ShowDialog { dialog } => Some(dialog),
             _ => None,
-        }).unwrap();
+        })
+        .unwrap();
     assert_eq!(restored, map);
 }
 
@@ -752,26 +769,45 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
 fn back_tracks_actual_origins_across_menus_map_and_legend() {
     let mut state = joined();
     let id = storage_town(&mut state, PLAYER);
-    let received = |changes: Vec<PlayerChange>| changes.into_iter().find_map(|change| match change {
-        PlayerChange::ShowDialog { dialog } => Some(dialog),
-        _ => None,
-    }).expect("received dialog");
+    let received = |changes: Vec<PlayerChange>| {
+        changes
+            .into_iter()
+            .find_map(|change| match change {
+                PlayerChange::ShowDialog { dialog } => Some(dialog),
+                _ => None,
+            })
+            .expect("received dialog")
+    };
     let main = received(dialog(&mut state, id, "main", &[]));
     dialog(&mut state, id, "dashboard", &[]);
-    let storage = open(&state).targets.iter().position(|target| matches!(target,
-        Target::Dialog("storage") | Target::Show(View::Storage { .. })
-    )).unwrap();
+    let storage = open(&state)
+        .targets
+        .iter()
+        .position(|target| {
+            matches!(
+                target,
+                Target::Dialog("storage") | Target::Show(View::Storage { .. })
+            )
+        })
+        .unwrap();
     press(&mut state, storage as i16, 0, ClickMode::Pickup);
     assert!(matches!(open(&state).view, View::Storage { .. }));
     press(&mut state, BACK as i16, 0, ClickMode::Pickup);
     assert_eq!(open(&state).view, View::Dashboard);
-    let map_slot = open(&state).targets.iter().position(|target| matches!(target, Target::Dialog("map"))).unwrap();
+    let map_slot = open(&state)
+        .targets
+        .iter()
+        .position(|target| matches!(target, Target::Dialog("map")))
+        .unwrap();
     let map = received(press(&mut state, map_slot as i16, 0, ClickMode::Pickup));
     dialog(&mut state, id, "map_legend", &[]);
     assert_eq!(received(dialog(&mut state, id, "back", &[])), map);
     dialog(&mut state, id, "back", &[]);
     assert_eq!(open(&state).view, View::Dashboard);
-    assert_eq!(received(press(&mut state, BACK as i16, 0, ClickMode::Pickup)), main);
+    assert_eq!(
+        received(press(&mut state, BACK as i16, 0, ClickMode::Pickup)),
+        main
+    );
     run(&mut state, &[PlayerInput::Leave { connection: CONN }]);
     assert!(state.settlement_navigation.is_empty());
 }
@@ -1177,7 +1213,10 @@ fn d8_construction_icons_list_all_sites_and_all_indexed_owner_orders() {
         .enumerate()
     {
         assert!(!screen.icons[index].is_empty());
-        assert!(matches!(screen.targets[index], Target::Dialog("project_status_details")));
+        assert!(matches!(
+            screen.targets[index],
+            Target::Dialog("project_status_details")
+        ));
         assert!(
             contents.contains(&super::super::corner_text(project.origin)),
             "{contents}"
