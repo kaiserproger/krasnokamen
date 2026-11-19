@@ -538,8 +538,8 @@ input, not implemented; implementation follows the committee designs after GO.
 
 - Beyond what is already accepted (game-time settlement accrual in
   [ADR 0023](0023-offscreen-settlement-simulation.md), catch-up of resident
-  inactive chunks, nothing accrued during downtime or `/tick freeze`), every
-  entity far from players is simulated, wild mobs included, and births and
+  inactive chunks, nothing accrued during downtime or `/tick freeze`), all
+  creatures far from players are simulated, wild mobs included, and births and
   deaths may happen far away. This changes vanilla farms, spawn limits and
   "what you left is what you find".
 - The per-namespace custom-mob credit of [ADR 0016](0016-mob-capabilities.md#cost-accounting)
@@ -548,8 +548,8 @@ input, not implemented; implementation follows the committee designs after GO.
   offline conversion is required.
 - A warm standby's generation lag is accepted per durability class (custody
   from `wal_tick`, checkpoint-only state from the last verified generation's
-  `checkpoint_tick`) without a fixed maximum, to be measured later. Service and
-  re-seed times and the warning age remain open.
+  `checkpoint_tick`) without a fixed maximum, to be measured later. The host and
+  date, service and re-seed times, and warning age remain open.
 - Plugins may declare new state durable only at checkpoints: after a crash it
   rolls back to the last successful checkpoint. Existing custody and plugin
   storage guarantees do not weaken.

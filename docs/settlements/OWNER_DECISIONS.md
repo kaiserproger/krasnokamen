@@ -286,14 +286,15 @@ the parallel behaviour lands,
 - A birth's bed search keeps vanilla's near search (48 blocks) first; only when
   that finds no bed does a settlement resident take a free bed in a certified
   house of its own settlement at any distance. Rules: [breeding](breeding.md).
-- D7 is done in full now: inside the territory the builder also cuts and fills
-  beyond the 8-block band around the lot floor and cuts a slope above the
-  building's roof, excavated blocks going to storage. Until that change lands,
+- The owner directed D7 to be completed in full now: inside the territory the
+  builder must also cut and fill beyond the 8-block band around the lot floor
+  and cut slopes above the building's roof, with excavated blocks going to
+  storage. Until that change lands,
   [construction](construction.md) describes the current limits. Liquid
   refusals and lava safety are unchanged.
 - If growth to 24 residents does not fit the A9 trial, the trial is lengthened
   to the measured need and the work continues on what slows growth. The
   founding threshold stays 24.
-- Site search is spread over ticks so that no settlement tick exceeds 100 ms;
-  the chosen site stays the same. This tightens the earlier 1 s ceiling for
-  settlement work.
+- Site search is to be spread over ticks, targeting no settlement tick over
+  100 ms while preserving the chosen site. This tightens the earlier 1 s target
+  for settlement work.
