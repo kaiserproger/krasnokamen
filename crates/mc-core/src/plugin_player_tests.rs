@@ -1040,3 +1040,91 @@ async fn reserved_source_floor_refusal_preserves_inventory_kv_and_versions_atomi
     );
     assert!(state.plugins.version("shop", "shop-ledger").unwrap() > version);
 }
+
+#[tokio::test]
+async fn founding_chest_checks_protection_at_the_actual_candidate_cell() {
+    let (mut state, actor) = fixture();
+    let slot = state.entities.slot_of(actor).unwrap();
+    let anchor = state.entities.pos(slot).map(|value| value.floor() as i32);
+    for x in anchor[0] - 1..=anchor[0] + 1 {
+        for z in anchor[2] - 1..=anchor[2] + 1 {
+            if (x, z) == (anchor[0], anchor[2]) {
+                continue;
+            }
+            for y in anchor[1] - 4..=anchor[1] + 4 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+                state.block_entities.remove(&(x, y, z));
+            }
+        }
+    }
+    let at = [anchor[0] + 1, anchor[1], anchor[2]];
+    state
+        .world
+        .set_block(at[0], at[1], at[2], state.registry.states.air);
+    state
+        .world
+        .set_block(at[0], at[1] + 1, at[2], state.registry.states.air);
+    let other = uuid::Uuid::new_v4().to_string();
+    let zone = ScriptAxisAlignedZone::try_new_with_protection(
+        "starter",
+        "minecraft:overworld",
+        ScriptPosition::try_new(
+            f64::from(at[0]) - 0.1,
+            f64::from(at[1]) - 0.1,
+            f64::from(at[2]) - 0.1,
+        )
+        .unwrap(),
+        ScriptPosition::try_new(
+            f64::from(at[0]) + 0.9,
+            f64::from(at[1]) + 0.9,
+            f64::from(at[2]) + 0.9,
+        )
+        .unwrap(),
+        Some(ScriptZoneProtection::try_new([&other], false).unwrap()),
+    )
+    .unwrap();
+    let event = execute(
+        &mut state,
+        admit("towns", ScriptCommand::UpsertZone { zone }).await,
+    )
+    .unwrap();
+    assert!(matches!(
+        event.kind(),
+        ScriptEventKind::ZoneCommandResult { accepted: true, .. }
+    ));
+    assert!(crate::settlements::autonomy::storage_chest_site(&state, actor, anchor).is_none());
+    assert!(
+        crate::settlements::autonomy::storage_chest_site(
+            &state,
+            crate::command_console::EXECUTOR,
+            anchor
+        )
+        .is_some()
+    );
+    let mut changes = crate::boundary::ChangeSet::default();
+    crate::command_execution::execute(
+        &mut state,
+        ConnectionId(1),
+        actor,
+        &crate::commands::Command::Settlement(
+            crate::settlements::commands::SettlementCommand::Create {
+                name: "protected".into(),
+                radius: 48,
+            },
+        ),
+        &mut changes,
+    );
+    assert!(changes.blocks.is_empty());
+    assert!(
+        state
+            .settlements
+            .find("protected")
+            .unwrap()
+            .bootstrap_storage
+            .is_none()
+    );
+    assert!(!crate::settlements::starter_chest::received(
+        &state,
+        state.connections.uuid_of(ConnectionId(1)).unwrap()
+    ));
+}

@@ -397,6 +397,11 @@ pub enum JournalEntry {
         )]
         state: Option<Box<crate::projectiles::ProjectileState>>,
     },
+    /// Global append-only one-time founding chest grant. Appended to preserve
+    /// variant order; a binary without it cannot replay the new WAL.
+    StarterChestGranted {
+        player: uuid::Uuid,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(

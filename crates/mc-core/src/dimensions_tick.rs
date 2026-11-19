@@ -69,8 +69,9 @@ pub(crate) fn swap_globals(root: &mut TickState, world: &mut TickState) {
         &mut root.dimension_globals.reserved_uuids,
         &mut world.dimension_globals.reserved_uuids,
     );
-    // Settlement registries are per-dimension authorities and never swap;
-    // only the allocator sequence (globally monotonic) and tick budget move.
+    // Settlement records remain dimension-local. One-time founding grants,
+    // the allocator sequence and tick budget are global authorities.
+    crate::settlements::starter_chest::swap_globals(root, world);
     std::mem::swap(
         &mut root.settlement_sequence,
         &mut world.settlement_sequence,

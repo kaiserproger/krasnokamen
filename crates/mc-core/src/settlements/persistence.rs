@@ -73,6 +73,7 @@ pub(crate) fn checkpoint_rows(
     tick: u64,
 ) -> Result<BTreeMap<String, NativeDomainRecord>, CoreError> {
     let mut rows = BTreeMap::new();
+    super::starter_chest::checkpoint_rows(state, tick, &mut rows)?;
     for world in std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world))
     {
         for record in world.settlements.records() {
@@ -197,6 +198,7 @@ pub(crate) fn hydrate_dimension(
     state.settlements.set_high_water(water);
     state.settlement_sequence = state.settlement_sequence.max(water);
     super::transit::hydrate(state, checkpoint, replay)?;
+    super::starter_chest::hydrate(state, checkpoint, replay)?;
     // Drained: hydration images must not re-enter the next tick's WAL.
     let _ = state.settlements.take_images();
     Ok(())

@@ -30,7 +30,7 @@ The map is a snapshot: **Refresh** redraws it. **Buildings** opens the building 
 
 Buildings are a paged chest list with type filters and an icon card for each certificate. Empty lists explain how to order new construction or certify your own building. A card shows level requirements, workplaces and staffing. Certificate checking is separate from ordering physical blueprint construction; managers review the target before confirming either action. Free workplaces open resident selection, missing workstations are marked, and storage buildings link to **Storage**.
 
-**Certify new building** opens a dialog: choose **Building type**, enter two inclusive opposite corners as `x y z`, and set **Height above corners**. For **Corner 1 here** / **Corner 2 here**, stand on the floor: marks use the floor block under your feet (Y−1). After the first mark, close the dialog and walk; the clickable chat link reopens the saved type and marks. A complete one-block wall ring around marked inner floor corners is included automatically; typed bounds remain exact. **Certify** reports localized found/required counters and what to add. Success offers residents/jobs and the next certificate level. See [construction](construction.md) for the rules.
+**Certify new building** opens a dialog: choose **Building type**, enter two inclusive opposite corners as `x y z`, and set **Height above corners**. For **Corner 1 here** / **Corner 2 here**, stand on the floor: marks use the supporting cell, `floor(feet Y − ε)`, including slabs and beds. After the first mark, close the dialog and walk; the clickable chat link reopens the saved type and marks. A complete one-block wall ring around marked inner floor corners is included automatically; typed bounds remain exact. **Certify** reports localized found/required counters and what to add. Success offers residents/jobs and the next certificate level. See [construction](construction.md) for the rules.
 
 ## Residents & jobs
 
@@ -61,7 +61,7 @@ Manage the roster and orders from **Army**; see [army](army.md).
 
 ## Construction
 
-View active projects and pending orders, or select an authored blueprint from **Construction**. The material estimate shows translated item names and the amount physically in storage. A successful order response explains whether construction started or is queued, retains the recipe-aware shortage list, and links to **Storage**. Stock the empty founding chest first; no order creates free materials. See [owner build requests](construction.md#owner-build-requests).
+View active projects and pending orders, or select an authored blueprint from **Construction**. The material estimate shows translated item names and the amount physically in storage. A successful order response stays short so **Storage**, **Status** and **Back** remain reachable at 720p. **Status** retains the full translated deficit list; recipe-funded orders show no shortage. Reviews of a new blueprint never display another pending order's bill. Stock your founding chest if one was granted, or certify your own storage; no order creates free materials. See [owner build requests](construction.md#owner-build-requests).
 
 ### Construction text contract (D8)
 

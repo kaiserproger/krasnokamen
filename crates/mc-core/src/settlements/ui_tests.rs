@@ -2663,3 +2663,109 @@ fn d8_cached_cancel_refuses_an_identical_order_that_shifted_into_its_index() {
     assert!(refused.body.contains("changed"), "{}", refused.body);
     assert_eq!(state.settlements.get(id).unwrap().orders, orders);
 }
+
+#[test]
+fn certificate_marks_use_the_supporting_cell_on_full_blocks_slabs_and_beds() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    let slot = state
+        .entities
+        .slot_of(state.connections.entity_of(CONN).unwrap())
+        .unwrap();
+    for y in [201.0, 200.5, 200.5625] {
+        state.entities.set_pos(slot, [2.5, y, 2.5]);
+        click(
+            &mut state,
+            id,
+            "mark1",
+            &[("kind", string("house")), ("extra", string("4"))],
+        );
+        assert_eq!(state.settlement_marks[&CONN].corners[0], Some([2, 200, 2]));
+    }
+}
+
+#[test]
+fn recipe_funded_pending_order_has_no_physical_shortage_to_present() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    prep_projects_site(&mut state, id);
+    let raw = [
+        ("minecraft:oak_log", 64),
+        ("minecraft:oak_log", 64),
+        ("minecraft:oak_log", 64),
+        ("minecraft:oak_log", 43),
+        ("minecraft:coal", 24),
+        ("minecraft:cobblestone", 64),
+        ("minecraft:cobblestone", 38),
+    ]
+    .map(|(name, count)| {
+        mc_data::ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&Identifier::parse(name).unwrap())
+                .unwrap(),
+            count,
+        )
+    });
+    let chest = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    chest.fill(mc_data::ItemStack::EMPTY);
+    chest[..raw.len()].clone_from_slice(&raw);
+    super::super::construction::request_build(&mut state, id, "storage").unwrap();
+    assert!(super::super::construction::pending_missing(&state, id, 0).is_empty());
+    assert!(super::super::construction::waiting(&state, id).is_empty());
+    assert_eq!(&state.block_entities[&(1, 201, 1)].slots[..raw.len()], &raw);
+}
+
+#[test]
+fn new_blueprint_review_does_not_include_another_pending_orders_bill() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    prep_projects_site(&mut state, id);
+    super::super::construction::request_build(&mut state, id, "house").unwrap();
+    assert!(!super::super::construction::pending_missing(&state, id, 0).is_empty());
+    let changes = click(
+        &mut state,
+        id,
+        "project_order_review",
+        &[("blueprint", string("farm"))],
+    );
+    let dialog = changes
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::ShowDialog { dialog } => Some(dialog),
+            _ => None,
+        })
+        .unwrap();
+    assert!(list(field(dialog, "body")).len() <= 2);
+    assert!(last_dialog(&changes).has("project_order"));
+    assert_eq!(
+        super::super::construction::orders(state.settlements.get(id).unwrap()).count(),
+        1
+    );
+}
+
+#[test]
+fn accepted_order_keeps_actions_above_the_long_material_bill() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    prep_projects_site(&mut state, id);
+    set_locale(&mut state, "ru_ru");
+    let changes = click(
+        &mut state,
+        id,
+        "project_order",
+        &[("blueprint", string("house"))],
+    );
+    let dialog = changes
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::ShowDialog { dialog } => Some(dialog),
+            _ => None,
+        })
+        .unwrap();
+    assert!(list(field(dialog, "body")).len() <= 3);
+    let receipt = last_dialog(&changes);
+    assert!(receipt.has("storage") && receipt.has("project_status_details") && receipt.has("back"));
+    assert!(!super::super::construction::pending_missing(&state, id, 0).is_empty());
+}

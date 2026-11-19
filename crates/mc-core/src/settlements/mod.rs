@@ -29,6 +29,7 @@ pub(crate) use crate::plugin_inventories::native as inventory;
 pub mod districts;
 pub mod households;
 pub mod persistence;
+pub(crate) mod starter_chest;
 pub mod startup;
 pub(crate) mod transit;
 pub(crate) mod ui;

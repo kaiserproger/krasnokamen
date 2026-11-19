@@ -6,7 +6,7 @@
 //! `ConstructionFieldAccess`) and its ceiling is zero. Callers use the
 //! functions below instead, which is also how the store changed shape from one
 //! project and one order to vectors without touching them.
-use super::{OwnerOrder, Project, blueprints, executor, selected_bill};
+use super::{OwnerOrder, Project, blueprints, executor, funded_variant, selected_bill};
 use crate::settlements::buildings::BuildingId;
 use crate::settlements::{Registry, SettlementId, SettlementRecord};
 use crate::tick::TickState;
@@ -119,8 +119,8 @@ pub(crate) fn orders(record: &SettlementRecord) -> impl Iterator<Item = &OwnerOr
     record.orders.iter()
 }
 
-/// Recipe-aware shortages for one queued order. Presentation never has to parse
-/// an English diagnostic or discard its material list.
+/// Physical item deficits for an unfunded queued order. A bill fundable through
+/// recipes or a stocked variant has no shortage to present.
 pub(crate) fn pending_missing(
     state: &TickState,
     id: SettlementId,
@@ -139,6 +139,9 @@ pub(crate) fn pending_missing(
         return Vec::new();
     };
     let images = executor::source_images(state, id);
+    if funded_variant(state, id, &level.materials, &images).is_some() {
+        return Vec::new();
+    }
     let Some(bill) = selected_bill(state, id, &level.materials, &images) else {
         return Vec::new();
     };

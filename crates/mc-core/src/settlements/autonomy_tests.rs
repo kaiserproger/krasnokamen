@@ -1218,7 +1218,7 @@ fn removing_a_claimed_generated_village_retires_its_source_across_queue_rebuilds
     assert_eq!(state.settlements.records().count(), 0);
 }
 
-fn native_state(config: &crate::CoreConfig) -> TickState {
+pub(super) fn native_state(config: &crate::CoreConfig) -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
     let generator = Arc::new(VillageGenerator {
         terrain: mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks)),
@@ -1254,7 +1254,7 @@ fn native_village(config: &crate::CoreConfig) -> (TickState, SettlementId) {
     (state, id)
 }
 
-fn native_checkpoint(state: &mut TickState, config: &crate::CoreConfig, tick: u64) {
+pub(super) fn native_checkpoint(state: &mut TickState, config: &crate::CoreConfig, tick: u64) {
     use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
     use mc_world::native::NativeCheckpoint;
     state.world.fold_overlay();
@@ -1323,14 +1323,15 @@ fn native_checkpoint(state: &mut TickState, config: &crate::CoreConfig, tick: u6
 
 #[test]
 fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
-    use crate::command_console::{CONNECTION, EXECUTOR};
     use crate::commands::Command;
     use crate::settlements::commands::SettlementCommand;
     let directory = tempfile::tempdir().unwrap();
     let config = crate::CoreConfig::new(directory.path().to_owned(), 42);
     let mut state = native_state(&config);
+    let (connection, executor) = super::starter_tests::founder(&mut state);
+    let records_before = state.settlements.records().count();
     let existing = [9, 202, 8];
-    let site = storage_chest_site(&state, BELL).unwrap();
+    let site = storage_chest_site(&state, executor, BELL).unwrap();
     state
         .world
         .set_block(existing[0], existing[1], existing[2], site.block);
@@ -1354,8 +1355,8 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
         radius: 48,
     });
     let mut changes = ChangeSet::default();
-    crate::command_execution::execute(&mut state, CONNECTION, EXECUTOR, &command, &mut changes);
-    let record = state.settlements.records().next().unwrap();
+    crate::command_execution::execute(&mut state, connection, executor, &command, &mut changes);
+    let record = state.settlements.find("founded").unwrap();
     let id = record.id;
     let storage = record.bootstrap_storage.unwrap();
     assert_ne!(storage, existing);
@@ -1379,15 +1380,19 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
         stock
     );
     // A repeated request cannot create a second chest or replace its contents.
-    crate::command_execution::execute(&mut state, CONNECTION, EXECUTOR, &command, &mut changes);
+    crate::command_execution::execute(&mut state, connection, executor, &command, &mut changes);
     ensure_storage_chest(&mut state, &mut changes, id, BELL, None);
     assert_eq!(changes.blocks.len(), 1);
-    assert_eq!(state.settlements.records().count(), 1);
+    assert_eq!(state.settlements.records().count(), records_before + 1);
     native_checkpoint(&mut state, &config, 1);
     drop(state);
     let mut reopened =
         crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
             .unwrap();
+    assert!(crate::settlements::starter_chest::received(
+        &reopened,
+        uuid::Uuid::nil()
+    ));
     assert_eq!(
         reopened.settlements.get(id).unwrap().bootstrap_storage,
         Some(storage)

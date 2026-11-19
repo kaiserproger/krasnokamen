@@ -421,9 +421,14 @@ fn player_pos(state: &TickState, connection: ConnectionId) -> Option<[i32; 3]> {
 }
 /// Certificate bounds include the solid floor, not the air occupied by the feet.
 fn floor_pos(state: &TickState, connection: ConnectionId) -> Option<[i32; 3]> {
-    let mut at = player_pos(state, connection)?;
-    at[1] = at[1].checked_sub(1)?;
-    Some(at)
+    let entity = state.connections.entity_of(connection)?;
+    let slot = state.entities.slot_of(entity)?;
+    let position = state.entities.pos(slot);
+    Some([
+        position[0].floor() as i32,
+        (position[1] - 1e-4).floor() as i32,
+        position[2].floor() as i32,
+    ])
 }
 
 /// The nearest settlement whose radius contains the player, else the first the
@@ -996,7 +1001,9 @@ fn project_review(
                 .with("blueprint", Tag::String(blueprint.id.clone()))
         }
     };
-    if let Some(pending) = pending_order_text(state, ctx, pending_index(payload).unwrap_or(0)) {
+    if let Some(index) = pending_index(payload)
+        && let Some(pending) = pending_order_text(state, ctx, index)
+    {
         body.push('\n');
         body.push_str(&pending);
     }
@@ -1014,19 +1021,11 @@ fn project_review(
     if ctx.manage {
         buttons.insert(0, confirm);
     }
-    present(
-        state,
-        connection,
-        ctx,
-        "project_review",
-        Dialog::multi_action(title, buttons)
-            .text(body)
-            .text(pending_material_text(
-                state,
-                ctx,
-                pending_index(payload).unwrap_or(0),
-            )),
-    );
+    let mut dialog = Dialog::multi_action(title, buttons).text(body);
+    if let Some(index) = pending_index(payload) {
+        dialog = dialog.text(pending_material_text(state, ctx, index));
+    }
+    present(state, connection, ctx, "project_review", dialog);
 }
 
 // ------------------------------------------------------------------- buildings
@@ -2545,9 +2544,9 @@ fn order_accepted(
                 .saturating_sub(1)
         });
         if let Some(pending) = pending_order_text(state, ctx, index) {
-            dialog = dialog
-                .text(pending)
-                .text(pending_material_text(state, ctx, index));
+            // The full bill lives in Status. Keep the receipt's action row
+            // visible without scrolling on a 720p client.
+            dialog = dialog.text(pending);
         }
     }
     present(

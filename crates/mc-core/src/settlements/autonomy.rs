@@ -398,14 +398,18 @@ fn grow_radius(
     state.settlements.grow_radius(id, radius);
 }
 
-/// A checked, empty location for a new founding chest. Planning happens before
-/// registry creation so an obstructed anchor cannot leave a half-founded town.
+/// A checked, empty location for a founding chest. Finding no site never
+/// prevents founding, and does not consume the player's one-time grant.
 pub(crate) struct StorageChestSite {
     at: [i32; 3],
     block: u32,
 }
 
-pub(crate) fn storage_chest_site(state: &TickState, anchor: [i32; 3]) -> Option<StorageChestSite> {
+pub(crate) fn storage_chest_site(
+    state: &TickState,
+    executor: crate::boundary::EntityId,
+    anchor: [i32; 3],
+) -> Option<StorageChestSite> {
     let chest = mc_data::Identifier::parse("minecraft:chest")
         .ok()
         .and_then(|name| state.registry.blocks.block(&name))?
@@ -428,10 +432,15 @@ pub(crate) fn storage_chest_site(state: &TickState, anchor: [i32; 3]) -> Option<
             .map(move |dy| [anchor[0] + dx, anchor[1] + dy, anchor[2] + dz])
     })
     .find(|at| {
-        state.world.block_at(at[0], at[1], at[2]) == Some(state.registry.states.air)
+        crate::plugin_player::allows_block(state, executor, BlockPos {
+            x: at[0], y: at[1], z: at[2],
+        })
+            && state.world.block_at(at[0], at[1], at[2]) == Some(state.registry.states.air)
             && state.world.block_at(at[0], at[1] + 1, at[2]) == Some(state.registry.states.air)
             && state.world.block_at(at[0], at[1] - 1, at[2])
                 .is_some_and(|id| !state.registry.collision_boxes[id as usize].is_empty())
+            && !is_chest_block(state, [at[0], at[1] - 1, at[2]])
+            && !state.block_entities.contains_key(&(at[0], at[1] - 1, at[2]))
             // Never merge with an existing (possibly foreign or stocked) chest.
             && [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter()
                 .all(|(dx, dz)| !is_chest_block(state, [at[0] + dx, at[1], at[2] + dz]))
@@ -478,7 +487,7 @@ pub(crate) fn ensure_storage_chest(
         at
     } else {
         let Some(StorageChestSite { at, block }) =
-            site.or_else(|| storage_chest_site(state, anchor))
+            site.or_else(|| storage_chest_site(state, crate::command_console::EXECUTOR, anchor))
         else {
             return;
         };
@@ -929,3 +938,7 @@ fn piece_kind(
 #[cfg(test)]
 #[path = "autonomy_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "starter_chest_tests.rs"]
+mod starter_tests;

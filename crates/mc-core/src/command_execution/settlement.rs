@@ -51,15 +51,14 @@ pub(super) fn settlement(
                 );
                 return;
             };
-            let Some(storage) = crate::settlements::autonomy::storage_chest_site(state, anchor)
-            else {
-                error(
-                    state,
-                    connection,
-                    "No safe space for the starter chest beside the centre.",
-                );
-                return;
-            };
+            // Console ownership is "Server", not a player UUID: it receives
+            // no free chest. A player's grant is global and never reset by remove.
+            let founder = uuid::Uuid::parse_str(&actor).ok();
+            let eligible = founder
+                .filter(|player| !crate::settlements::starter_chest::received(state, *player));
+            let storage = eligible.and_then(|_| {
+                crate::settlements::autonomy::storage_chest_site(state, executor, anchor)
+            });
             match state.settlements.create(
                 &mut state.settlement_sequence,
                 name.clone(),
@@ -68,13 +67,25 @@ pub(super) fn settlement(
                 *radius,
             ) {
                 Ok(id) => {
-                    crate::settlements::autonomy::ensure_storage_chest(
-                        state,
-                        changes,
-                        id,
-                        anchor,
-                        Some(storage),
-                    );
+                    if let Some(storage) = storage {
+                        crate::settlements::autonomy::ensure_storage_chest(
+                            state,
+                            changes,
+                            id,
+                            anchor,
+                            Some(storage),
+                        );
+                        crate::settlements::starter_chest::record(
+                            state,
+                            eligible.expect("a player grant admitted the chest"),
+                        );
+                    } else if eligible.is_some() {
+                        error(
+                            state,
+                            connection,
+                            "Founded without a starter chest: no safe chest spot was found; your grant remains unused.",
+                        );
+                    }
                     crate::settlements::bind_residents(state, id);
                     crate::settlements::refresh_owner_names(state);
                     let record = state.settlements.get(id).expect("created record");
