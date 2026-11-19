@@ -331,7 +331,23 @@ the parallel behaviour lands,
 - The management screens are to be reworked for usability, with Millénaire's
   GUIs as the reference.
 - The settlement map is to show much more detail (a direct order).
-- The redesign is chosen by the owner from a proposal with mockups and map
-  options before implementation starts. The owner did not set its priority
-  against the current queue or which client layer carries it; the vanilla
-  client stays the primary target.
+- Answers after the redesign proposal (`receipts/SettlementUX/REPORT.md`,
+  2026-11-19 ~21:10):
+  - Putting a new building project into the build queue was not findable
+    either; ordering counts as a pain point next to certification.
+  - Certification: the player stands inside and presses «Проверить здесь»; the
+    server finds the walls itself and shows a Russian ✔/✘ checklist. No
+    two-corner marking.
+  - Map: first a dialog map with terrain and about three times the cells,
+    still clickable; then a live `filled_map` of 128×128 in an item frame at
+    the bell (not clickable).
+  - First come the quick wins of the proposal's section 5 (Russian requirement
+    names, "what next" after an order, Back to where the player came from, the
+    corner taken from the floor, no dead buttons, a new `/settlement guide`).
+  - `/settlement create` gives the new settlement a starter storage chest, as
+    generated villages have. The owner did not say what is in it. Main's
+    reading, open to his correction: an empty chest like the generated
+    villages' bootstrap container (`settlements/autonomy.rs` places 27 empty
+    slots); only the chest block itself is free, nothing in it.
+  - Not stated by the owner: the order after the quick wins; hand-picked build
+    sites stay as they are.
