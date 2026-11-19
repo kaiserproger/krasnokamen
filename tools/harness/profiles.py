@@ -700,6 +700,20 @@ def run_pause_empty(ctx: ProfileContext) -> dict[str, Any]:
 
     return pause_empty.run(ctx)
 
+def run_horizon_lod(ctx: ProfileContext) -> dict[str, Any]:
+    """Protocol-level horizon:lod acceptance (Offer, stored tiles, refusals, off switch)."""
+    from .backends import horizon_lod
+
+    return horizon_lod.run(ctx)
+
+
+def run_horizon_lod_live(ctx: ProfileContext) -> dict[str, Any]:
+    """Real Horizon client acceptance of horizon:lod far terrain, with its OFF control."""
+    from .backends import horizon_lod_live
+
+    return horizon_lod_live.run(ctx)
+
+
 def run_item_merge(ctx: ProfileContext) -> dict[str, Any]:
     """Real item consolidation followed by hopper transfer observed from a chest."""
     from .backends import item_merge
@@ -1371,6 +1385,16 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Empty-server pause: pause log, frozen tick across console save, status while paused, offline protocol join resume, re-pause after leave",
         "run": run_pause_empty,
     },
+    "horizon-lod": {
+        "scope": "tcp",
+        "description": "Horizon horizon:lod far terrain (D64): Offer, stored-terrain tiles beyond view distance, refusals, off switch; Horizon-like protocol client on a pregenerated world",
+        "run": run_horizon_lod,
+    },
+    "horizon-lod-live": {
+        "scope": "real-client",
+        "description": "Real Horizon client (offscreen, harness Xvfb) at view 4 / LOD 64 draws far terrain from our server; OFF control with clean game folders",
+        "run": run_horizon_lod_live,
+    },
     "item-merge": {
         "scope": "functional-native",
         "description": "Live identical item merge, hopper pickup, and chest stack contents over the protocol wire",
@@ -1541,6 +1565,8 @@ PROFILE_PREREQUISITES = {
     "java-matrix": (("server_binary", "loader", "xvfb"), (), (), ()),
     "native-matrix": (("server_binary", "client_binary", "client_data", "xvfb"), (), (), ()),
     "pause-empty": (("optional_server_binary",), (), (), ()),
+    "horizon-lod": (("optional_server_binary",), (), (), ()),
+    "horizon-lod-live": (("optional_server_binary", "xvfb"), (), (), ()),
     "item-merge": (("optional_server_binary",), (), (), ()),
     "graves": (("optional_server_binary", "plugins_dir"), (), (), ()),
     "loader-live": (("server_binary", "loader", "xvfb", "plugins_dir"), (), (), ()),
