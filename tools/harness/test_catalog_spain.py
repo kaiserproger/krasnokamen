@@ -113,29 +113,8 @@ class SpainCohortTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ClassifiedFailure, "haul failed before farmer pickup"):
             await self.cohort.pickup(0, "haul", "player", "farmer", {"farmer"}, 3, 1)
 
-    async def test_command_rejects_stale_reply_fence(self):
-        class Input:
-            def write(self, data):
-                self.data = data
-
-            async def drain(self):
-                pass
-
-        self.cohort.processes["bots"] = SimpleNamespace(stdin=Input(), returncode=None)
-        self.cohort.push_event({"event": "runtime_command_reply", "id": "one", "bot": 0, "reply": "ok",
-                                "marker_receive_seq": 2, "write_receive_seq": 3, "receive_seq": 3})
-        with self.assertRaises(ClassifiedFailure):
-            await self.cohort.command(0, "one", "settlement list", "ok", 1)
-
 
 class SpainPopulationTests(unittest.IsolatedAsyncioTestCase):
-    async def test_rejects_wrong_cohort_size_before_spawning(self):
-        with tempfile.TemporaryDirectory() as directory:
-            population = SpainPopulation(SimpleNamespace(), Path(directory))
-            with self.assertRaises(ValueError):
-                await population.add_cohort(["unused"], 4, 1)
-            self.assertEqual(population.cohorts, [])
-
     async def test_failed_concurrent_work_cancels_sibling(self):
         started, cancelled = asyncio.Event(), asyncio.Event()
         async def sibling():

@@ -31,18 +31,19 @@
     "test-audit-d60-read2-anvil-palette-batch.json",
     "test-audit-d60-read2-army-qa-batch.json",
     "test-audit-d60-read2-atm-full-batch.json",
-    "test-audit-d60-read2-atm-loot-batch.json"
+    "test-audit-d60-read2-atm-loot-batch.json",
+    "test-audit-d60-read2-spain-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 980,
-    "removed_in_new_batches": 544,
+    "finalized_historical_test_ids": 997,
+    "removed_in_new_batches": 546,
     "prior_main_deletions_excluded": 3,
     "retained_K1": 173,
     "retained_K2": 4,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 254,
-    "historical_medium_candidates_reviewed": 482,
-    "remaining_medium_candidates_unfinalized": 317,
+    "retained_U": 269,
+    "historical_medium_candidates_reviewed": 486,
+    "remaining_medium_candidates_unfinalized": 313,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
