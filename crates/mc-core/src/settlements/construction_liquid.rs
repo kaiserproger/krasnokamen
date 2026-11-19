@@ -28,11 +28,18 @@ impl Liquids {
     }
 }
 
-/// One lot's bounded fluid work. A lot footprint is at most 11×11 columns, but
-/// inside the territory the fill below the floor has no depth limit (owner
-/// 2026-11-17), so this cap is the real bound on fluid work: a lot beyond it is
-/// refused as `LiquidBeyondBound`.
+/// One lot's bounded fluid work. **Invariant:** a lot footprint is at most
+/// 11×11 columns and the fill below the floor is at most `SITE_BAND` (8) rows
+/// (the support is found within that band of the floor, `surface_y_for_lot`),
+/// so a real lot never exceeds 11·11·8 = 968 fluid cells (the floor row is a dry
+/// fill, never a liquid cell); the 1024 cap is a cheap independent guard, never
+/// reachable through `check`. The const assertion below pins the invariant, and
+/// the named refusal stays testable on the struct itself.
 pub(crate) const MAX_LIQUID_CELLS: usize = 1024;
+const _: () = assert!(
+    11 * 11 * (crate::settlements::construction::SITE_BAND as usize) < MAX_LIQUID_CELLS,
+    "a levelled lot's fluid fill must stay under the liquid bound"
+);
 
 /// A block that *contains* fluid, including a waterlogged block: the shell and
 /// solidity tests must treat those as wet (B-min's `shell_fluid` semantics).

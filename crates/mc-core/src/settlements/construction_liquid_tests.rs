@@ -84,6 +84,74 @@ fn closed_bowl_admits_a_pool_and_prices_its_liquid_cells_once() {
     assert_eq!(cost.total(), cost.cut + cost.fill + cost.liquid);
 }
 
+/// Review of a77b63253, liquid paths the levelling reaches. A closed water bowl
+/// five blocks deep under a dry authored floor is a legal lot now (the depth
+/// limit that used to refuse it first is lifted inside the territory): each
+/// fluid fill cell is priced once as a liquid cell, never as a dry fill.
+#[test]
+fn a_deep_closed_water_bowl_under_a_dry_floor_is_admitted_and_priced_once() {
+    let (mut state, id, origin, size, floors) = pool_lot();
+    let stone = state.registry.states.stone;
+    let water = state.registry.states.water_levels[0];
+    let columns = u32::from(size[0]) * u32::from(size[2]);
+    for x in origin[0]..origin[0] + i32::from(size[0]) {
+        for z in origin[2]..origin[2] + i32::from(size[2]) {
+            state.world.set_block(x, 195, z, stone);
+            for y in 196..=200 {
+                state.world.set_block(x, y, z, water);
+            }
+        }
+    }
+    enclose_bowl(
+        &mut state,
+        [origin[0], 195, origin[2]],
+        max_of(origin, size),
+    );
+    state.world.fold_overlay();
+    let cost =
+        check_lot(&state, id, origin, size, &floors).expect("a closed deep bowl is a legal lot");
+    assert_eq!(cost.liquid, columns * 5, "five fluid fill cells per column");
+    assert_eq!(cost.water, columns * 5);
+    assert_eq!(cost.lava, 0);
+}
+
+/// The liquid bound stays unreachable through `check`: the deepest levelled fill
+/// is `SITE_BAND` rows of the largest footprint.
+#[test]
+fn a_levelled_lot_cannot_exceed_the_liquid_bound() {
+    let deepest = 11 * 11 * crate::settlements::construction::SITE_BAND as usize;
+    assert!(deepest < liquid::MAX_LIQUID_CELLS, "{deepest}");
+}
+
+/// `LiquidAccess` is still named when a lot's door column holds water, even
+/// with a dry support under the water: that support is not a place to stand.
+#[test]
+fn a_wet_door_column_is_still_a_liquid_access_refusal() {
+    let (mut state, id, _) = fixture();
+    super::tests::open_plan(&mut state);
+    let (stone, water) = (
+        state.registry.states.stone,
+        state.registry.states.water_levels[0],
+    );
+    for y in 196..=199 {
+        state.world.set_block(11, y, 16, stone);
+    }
+    for y in 200..=201 {
+        state.world.set_block(11, y, 16, water);
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get(id).unwrap();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let mut network = layout::Network::walk(&state, record);
+    assert_eq!(network.lot(blueprint, [9, 200, 16], [1, 0]), None);
+    assert!(liquid::door_fluid(
+        &state,
+        [9, 200, 16],
+        [1, 0],
+        record.anchor[1]
+    ));
+}
+
 #[test]
 fn an_open_bowl_refuses_the_lot() {
     let (mut state, id, origin, size, floors) = pool_lot();
