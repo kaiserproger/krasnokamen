@@ -2271,3 +2271,71 @@ fn recovery_refuses_a_tail_written_under_another_block_palette() {
         "the legal tail replays over the copy's checkpoint"
     );
 }
+
+/// WAL-BATCH-HAS-NO-STORE-IDENTITY: a zero store field is a value, not a
+/// wildcard. The header is not covered by the payload CRC, so a rewritten
+/// store id must be refused like any other mismatch instead of being skipped
+/// because one side reads zero.
+#[test]
+fn recovery_refuses_a_batch_whose_store_id_is_zero() {
+    let root = tempfile::tempdir().unwrap();
+    let config = crate::config::CoreConfig::new(root.path().join("world"), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    // This build's palette, but no store: what a rewritten header looks like.
+    let zero_store = crate::journal::WalIdentity {
+        store: [0; 16],
+        palette: registry.blocks.palette_digest(),
+    };
+    let mut writer = JournalWriter::open(&config.world_dir, 1, zero_store).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+
+    let error = crate::native_checkpoint::recover_with_reader(
+        &config,
+        std::sync::Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .err()
+    .expect("a zero store id is not a wildcard");
+    let text = error.to_string();
+    assert!(text.contains("belongs to store"), "{text}");
+    assert!(text.contains(&uuid::Uuid::nil().to_string()), "{text}");
+    assert!(
+        text.contains(&uuid::Uuid::from_bytes(store.store_uuid()).to_string()),
+        "the refusal names the opened store: {text}"
+    );
+}
+
+/// WAL-BLOCK-STATE-IDS-HAVE-NO-PALETTE-IDENTITY: the same for the palette
+/// digest — a zero digest must be refused, not treated as "any palette".
+#[test]
+fn recovery_refuses_a_batch_whose_palette_digest_is_zero() {
+    let root = tempfile::tempdir().unwrap();
+    let config = crate::config::CoreConfig::new(root.path().join("world"), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let zero_palette = crate::journal::WalIdentity {
+        store: store.store_uuid(),
+        palette: [0; 8],
+    };
+    let mut writer = JournalWriter::open(&config.world_dir, 1, zero_palette).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+
+    let error = crate::native_checkpoint::recover_with_reader(
+        &config,
+        std::sync::Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .err()
+    .expect("a zero palette digest is not a wildcard");
+    let text = error.to_string();
+    assert!(text.contains("block palette"), "{text}");
+    assert!(
+        text.contains("0000000000000000"),
+        "the refusal names the zero digest: {text}"
+    );
+}

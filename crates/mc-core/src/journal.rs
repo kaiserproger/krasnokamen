@@ -83,7 +83,7 @@ impl WalIdentity {
 }
 
 /// Lowercase hex, for an identity digest in a refusal.
-fn identity_hex(bytes: &[u8]) -> String {
+pub(crate) fn identity_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
@@ -1016,6 +1016,38 @@ impl BatchDecodeError {
     }
 }
 
+/// Every frame records the store id and palette that wrote it: a batch that
+/// belongs to another world, or to another block-state mapping, is refused by
+/// name instead of replayed over this store's checkpoint (Books R4-P3, R5-G5).
+/// Both bindings are compared unconditionally: a zero field is a value like any
+/// other, not a wildcard, and the CRC covers only the payload, so accepting a
+/// zero-side match would let a rewritten header through. A test that opens a
+/// world passes that world's `WalIdentity` on both sides; `WalIdentity::fixture`
+/// matches only itself.
+fn verify_bindings(
+    store: [u8; 16],
+    palette: [u8; 8],
+    identity: WalIdentity,
+) -> Result<(), BatchDecodeError> {
+    if store != identity.store {
+        return Err(BatchDecodeError::Framing(format!(
+            "batch belongs to store {} but the opened store is {}; a journal from another world \
+             is never replayed (restore its own journal with it)",
+            uuid::Uuid::from_bytes(store),
+            uuid::Uuid::from_bytes(identity.store),
+        )));
+    }
+    if palette != identity.palette {
+        return Err(BatchDecodeError::Framing(format!(
+            "batch was written under block palette {} but this build registers {}; block-state \
+             ids would remap, so the tail is refused",
+            identity_hex(&palette),
+            identity_hex(&identity.palette),
+        )));
+    }
+    Ok(())
+}
+
 fn decode_batch(
     bytes: &[u8],
     expect_lo: u64,
@@ -1034,9 +1066,11 @@ fn decode_batch(
     let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
     if version == BATCH_VERSION_V1 {
         return Err(BatchDecodeError::Framing(
-            "batch format 1 carries no store identity and this build reads format 2; stop the \
-             world with the build that wrote it (its final checkpoint folds and prunes this \
-             tail) and start again, or move the journal directory aside"
+            "batch format 1 carries no store identity and this build reads format 2; start the \
+             world once with the build that wrote it, let it save and stop, and confirm its \
+             final checkpoint covers the last published batch before starting this build \
+             (docs/OPERATING.md, upgrading a world). A batch below a covering checkpoint is \
+             never replayed and needs no removal"
                 .into(),
         ));
     }
@@ -1048,32 +1082,11 @@ fn decode_batch(
     if bytes.len() < HEADER_LEN {
         return Err(BatchDecodeError::Framing("incomplete batch header".into()));
     }
-    // Every frame records the store id and palette that wrote it: a batch that
-    // belongs to another world, or to another block-state mapping, is refused
-    // by name instead of replayed over this store's checkpoint (Books R4-P3,
-    // R5-G5). The all-zero value is `WalIdentity::fixture`'s sentinel for a
-    // journal a test wrote without opening a store: a production store always
-    // carries a random v4 `store_uuid` (`validate_header` refuses one without
-    // it), so a real batch and a real world never compare zero.
-    let recorded = |value: &[u8]| value.iter().any(|byte| *byte != 0);
-    let store: [u8; 16] = bytes[8..24].try_into().unwrap();
-    if recorded(&store) && recorded(&identity.store) && store != identity.store {
-        return Err(BatchDecodeError::Framing(format!(
-            "batch belongs to store {} but the opened store is {}; a journal from another world \
-             is never replayed (restore its own journal with it)",
-            uuid::Uuid::from_bytes(store),
-            uuid::Uuid::from_bytes(identity.store),
-        )));
-    }
-    let palette: [u8; 8] = bytes[24..32].try_into().unwrap();
-    if recorded(&palette) && recorded(&identity.palette) && palette != identity.palette {
-        return Err(BatchDecodeError::Framing(format!(
-            "batch was written under block palette {} but this build registers {}; block-state \
-             ids would remap, so the tail is refused",
-            identity_hex(&palette),
-            identity_hex(&identity.palette),
-        )));
-    }
+    verify_bindings(
+        bytes[8..24].try_into().unwrap(),
+        bytes[24..32].try_into().unwrap(),
+        identity,
+    )?;
     let lo = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
     let hi = u64::from_le_bytes(bytes[40..48].try_into().unwrap());
     let len = u32::from_le_bytes(bytes[48..52].try_into().unwrap()) as usize;
