@@ -288,13 +288,18 @@ async fn run_connection(
         Some(profile) => (&profile.data, &profile.tags),
         None => (&*server.data, &*server.tags),
     };
-    let config_outcome = match crate::configuration::handle_configuration(
+    let config_outcome = match crate::configuration::handle_configuration_with_horizon(
         &mut conn,
         data,
         tags,
         server.loader_manifest.as_ref(),
         server.loader_required,
         &server.cfg.resource_pack,
+        server
+            .cfg
+            .horizon_lod
+            .enabled
+            .then_some(server.cfg.horizon_lod.distance_chunks),
     )
     .await
     {
@@ -495,7 +500,7 @@ async fn run_connection(
         .loader_session
         .as_ref()
         .is_some_and(|session| session.platform() == mc_loader::LoaderPlatform::Native);
-    let mut lod = (server.lod.is_some() && native_client)
+    let mut lod = (server.cfg.lod.enabled && native_client)
         .then(|| crate::lod::LodConnection::new(spawn, entity, server.hub.subscribe()));
     if lod.is_some()
         && let Some(handles) = server.connections.get(id)
@@ -504,6 +509,7 @@ async fn run_connection(
             let _ = handles.reliable_tx.try_send(frame);
         }
     }
+    let mut horizon_lod = None;
     let (dh_tx, dh_rx) = mpsc::channel(128);
     let dh =
         server.dh.as_ref().filter(|_| !native_client).map(|_| {
@@ -696,6 +702,21 @@ async fn run_connection(
                             break 'play_loop "computer-decode";
                         }
                     }
+                }
+                if server.cfg.horizon_lod.enabled
+                    && frame.id == mc_protocol::packets::play::ServerboundCustomPayload::ID
+                    && let Some(payload) = crate::horizon_lod::payload(&frame.body)
+                {
+                    let horizon = horizon_lod.get_or_insert_with(|| {
+                        crate::horizon_lod::Connection::new(
+                            spawn,
+                            entity,
+                            server.hub.subscribe(),
+                            dimension == mc_core::dimensions::Dimension::Overworld,
+                        )
+                    });
+                    horizon.request(&server, id, &payload);
+                    continue;
                 }
                 if let Some(dh) = &dh
                     && frame.id == mc_protocol::packets::play::ServerboundCustomPayload::ID

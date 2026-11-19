@@ -12,6 +12,7 @@ import json
 import os
 import runpy
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -381,6 +382,8 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     non_execution = {"--no-run", "--help", "-h", "--version", "-V"}
     if any(arg in non_execution for arg in ctx.extra_args):
         raise ValueError("the test gate must execute tests; preparation/help flags are unsupported")
+    if full and any(arg == "--run-ignored" or arg.startswith("--run-ignored=") for arg in ctx.extra_args):
+        raise ValueError("L2 requires the default non-ignored test selection")
     env = os.environ.copy()
     env["NEXTEST_TEST_THREADS"] = env.get(
         "RUST_TEST_THREADS", env.get("NEXTEST_TEST_THREADS", "num-cpus")
@@ -395,7 +398,22 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
         "--no-fail-fast", "--no-tests=fail",
         *(ctx.extra_args or ["--workspace", "--all-targets"]),
     ]
-    details = _run_command(argv, ctx, "test.log", env=env)
+    report = ctx.artifact_dir / "test-junit.xml"
+    if full:
+        # Nextest's store (`[store] dir`, default `target/nextest`) is relative to the
+        # workspace root, not CARGO_TARGET_DIR: mem-run's slot target holds no report.
+        source = REPO_ROOT / "target" / "nextest" / profile / "junit.xml"
+        # A previous run's report must never stand in for execution in this L2.
+        source.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+    try:
+        details = _run_command(argv, ctx, "test.log", env=env)
+    finally:
+        # Nextest also emits results on test failure; retain those row diagnoses.
+        if full and source.is_file():
+            shutil.copyfile(source, report)
+    if full:
+        details["nextest_junit"] = str(report)
     details.update(_test_scope_memory())
     details["rust_test_threads_env"] = env.get("RUST_TEST_THREADS")
     details["test_runner"] = "nextest"
@@ -404,20 +422,31 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     return details
 
 
-def run_regressions(ctx: ProfileContext) -> dict[str, Any]:
+def run_regressions(ctx: ProfileContext, *, cargo_junit: Path | None = None) -> dict[str, Any]:
     from . import regressions
 
-    return regressions.run(ctx)
+    return regressions.run(ctx, cargo_junit=cargo_junit)
 
 
 def run_correctness(ctx: ProfileContext) -> dict[str, Any]:
-    """The L2 gates: regressions, fmt, clippy, code-health, then the test suite."""
+    """The L2 gates, sharing the full nextest execution with Cargo regressions."""
     details: dict[str, Any] = {}
-    _merge_details(details, run_regressions(ctx))
     _merge_details(details, run_fmt(ctx))
     _merge_details(details, run_clippy(ctx))
     _merge_details(details, run_code_health(ctx))
-    _merge_details(details, run_test(ctx, full=True))
+    test_error = None
+    try:
+        _merge_details(details, run_test(ctx, full=True))
+    except Exception as error:
+        test_error = error
+    try:
+        _merge_details(details, run_regressions(ctx, cargo_junit=ctx.artifact_dir / "test-junit.xml"))
+    except Exception as error:
+        if test_error is not None:
+            raise RuntimeError(f"{test_error}; {error}") from error
+        raise
+    if test_error is not None:
+        raise test_error
     return details
 
 
@@ -699,6 +728,20 @@ def run_pause_empty(ctx: ProfileContext) -> dict[str, Any]:
     from .backends import pause_empty
 
     return pause_empty.run(ctx)
+
+def run_horizon_lod(ctx: ProfileContext) -> dict[str, Any]:
+    """Protocol-level horizon:lod acceptance (Offer, stored tiles, refusals, off switch)."""
+    from .backends import horizon_lod
+
+    return horizon_lod.run(ctx)
+
+
+def run_horizon_lod_live(ctx: ProfileContext) -> dict[str, Any]:
+    """Real Horizon client acceptance of horizon:lod far terrain, with its OFF control."""
+    from .backends import horizon_lod_live
+
+    return horizon_lod_live.run(ctx)
+
 
 def run_item_merge(ctx: ProfileContext) -> dict[str, Any]:
     """Real item consolidation followed by hopper transfer observed from a chest."""
@@ -1371,6 +1414,16 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Empty-server pause: pause log, frozen tick across console save, status while paused, offline protocol join resume, re-pause after leave",
         "run": run_pause_empty,
     },
+    "horizon-lod": {
+        "scope": "tcp",
+        "description": "Horizon horizon:lod far terrain (D64): Offer, stored-terrain tiles beyond view distance, refusals, off switch; Horizon-like protocol client on a pregenerated world",
+        "run": run_horizon_lod,
+    },
+    "horizon-lod-live": {
+        "scope": "real-client",
+        "description": "Real Horizon client (offscreen, harness Xvfb) at view 4 / LOD 64 draws far terrain from our server; OFF control with clean game folders",
+        "run": run_horizon_lod_live,
+    },
     "item-merge": {
         "scope": "functional-native",
         "description": "Live identical item merge, hopper pickup, and chest stack contents over the protocol wire",
@@ -1541,6 +1594,8 @@ PROFILE_PREREQUISITES = {
     "java-matrix": (("server_binary", "loader", "xvfb"), (), (), ()),
     "native-matrix": (("server_binary", "client_binary", "client_data", "xvfb"), (), (), ()),
     "pause-empty": (("optional_server_binary",), (), (), ()),
+    "horizon-lod": (("optional_server_binary",), (), (), ()),
+    "horizon-lod-live": (("optional_server_binary", "xvfb"), (), (), ()),
     "item-merge": (("optional_server_binary",), (), (), ()),
     "graves": (("optional_server_binary", "plugins_dir"), (), (), ()),
     "loader-live": (("server_binary", "loader", "xvfb", "plugins_dir"), (), (), ()),

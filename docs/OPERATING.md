@@ -447,6 +447,20 @@ positional seed through a non-cryptographic generator that can be inverted;
 neither step was shown infeasible. **Treat enabling it as publishing the world
 seed to every native player.**
 
+### Horizon far terrain
+
+`[horizon_lod]` is off by default. When enabled, the server offers Horizon
+protocol 1 during configuration; vanilla ignores the unknown payload.
+`distance_chunks` is in 1–1024 chunks, and sampling shares `[lod].workers`.
+Only stored overworld columns are served. A tile with any unstored column is
+refused whole and Horizon retries it every 2 seconds. An offered Horizon client
+draws only server tiles within `distance_chunks`, not its own server-terrain
+cache or BlueMap. Enable this only after pregenerating approximately that
+distance around the play area using [`world pregenerate`](#offline-chunk-pregeneration).
+Stored terrain can help recover the world seed. Surface samples use the last
+stored image and extend the top block down to overworld min Y; actual subsurface
+layers and water depth are unavailable. Lighting is a fixed presentation value.
+
 ### Distant Horizons
 
 `[distant_horizons]` enables an independent Java Play custom-payload service on
