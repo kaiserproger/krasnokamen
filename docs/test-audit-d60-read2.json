@@ -3,16 +3,17 @@
   "status": "Historical pre-merge checkpoint; current per-test dispositions are recorded in completed_batches.",
   "completed_batches": [
     "test-audit-d60-read2-replay-batch.json",
-    "test-audit-d60-read2-lifecycle-batch.json"
+    "test-audit-d60-read2-lifecycle-batch.json",
+    "test-audit-d60-read2-village-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 57,
-    "removed_in_new_batches": 41,
+    "finalized_historical_test_ids": 125,
+    "removed_in_new_batches": 90,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 9,
-    "retained_U": 4,
-    "historical_medium_candidates_reviewed": 39,
-    "remaining_medium_candidates_confirmed_present": 760,
+    "retained_K1": 22,
+    "retained_U": 10,
+    "historical_medium_candidates_reviewed": 87,
+    "remaining_medium_candidates_confirmed_present": 712,
     "verification_owner": "Main"
   },
   "base": "96e99cfe3bc3e2d6f52354e8cca2a3fb100ece88",
