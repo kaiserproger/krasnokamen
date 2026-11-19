@@ -531,6 +531,29 @@ state across offload through materialization. A layout or fast path keyed on
 vanilla types or on one workload is rejected in review. The architecture
 committee works out the full design after the freeze.
 
+## Far-away simulation and journal policy (owner decision D45, 2026-11-19)
+
+Owner answers to the residency and journal design questions. They are design
+input, not implemented; implementation follows the committee designs after GO.
+
+- Beyond what is already accepted (game-time settlement accrual in
+  [ADR 0023](0023-offscreen-settlement-simulation.md), catch-up of resident
+  inactive chunks, nothing accrued during downtime or `/tick freeze`), every
+  entity far from players is simulated, wild mobs included, and births and
+  deaths may happen far away. This changes vanilla farms, spawn limits and
+  "what you left is what you find".
+- The per-namespace custom-mob credit of [ADR 0016](0016-mob-capabilities.md#cost-accounting)
+  may be revised after measurements, keeping the shared-tick protection.
+- The journal redesign's store format change may reset the world again; no
+  offline conversion is required.
+- A warm standby's generation lag is accepted per durability class (custody
+  from `wal_tick`, checkpoint-only state from the last verified generation's
+  `checkpoint_tick`) without a fixed maximum, to be measured later. Service and
+  re-seed times and the warning age remain open.
+- Plugins may declare new state durable only at checkpoints: after a crash it
+  rolls back to the last successful checkpoint. Existing custody and plugin
+  storage guarantees do not weaken.
+
 ## Rejected alternatives
 
 - Mutable spatial regions as the unit of parallel ownership: a crowd collapses

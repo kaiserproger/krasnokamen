@@ -272,3 +272,28 @@ the parallel behaviour lands,
   tracks history coverage inside the territory.
 - Lumberjack wood harvest, residents clearing leaves at doors and farmers are
   not the planner and keep their own rules.
+
+## Growth, beds, terrain and planner ticks — owner D45, 2026-11-19
+
+> 1. Оставить … 5а. Оставить 5б. Делать сейчас, и не пиздите что там день
+> работы 5в. Удлинить проверки, заодно искать что тормозит рост 6. Да
+
+- A birth between a household-less resident and a member of a household of
+  three or more founds a new household of both parents and the child; the
+  owner kept this rule. Founding still takes a whole household of two or three
+  with at least two adults ([daughter founding](#daughter-founding--owner-approved-2026-11-15)).
+  Implementation: [migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return).
+- A birth's bed search keeps vanilla's near search (48 blocks) first; only when
+  that finds no bed does a settlement resident take a free bed in a certified
+  house of its own settlement at any distance. Rules: [breeding](breeding.md).
+- D7 is done in full now: inside the territory the builder also cuts and fills
+  beyond the 8-block band around the lot floor and cuts a slope above the
+  building's roof, excavated blocks going to storage. Until that change lands,
+  [construction](construction.md) describes the current limits. Liquid
+  refusals and lava safety are unchanged.
+- If growth to 24 residents does not fit the A9 trial, the trial is lengthened
+  to the measured need and the work continues on what slows growth. The
+  founding threshold stays 24.
+- Site search is spread over ticks so that no settlement tick exceeds 100 ms;
+  the chosen site stays the same. This tightens the earlier 1 s ceiling for
+  settlement work.
