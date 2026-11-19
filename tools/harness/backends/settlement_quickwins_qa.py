@@ -367,6 +367,14 @@ class Walk:
         lines = since([str(line) for line in self.probe.observe().get("recent_chat", [])], marker)
         return list(reversed(lines))
 
+    def look_at(self, at: list[int]) -> None:
+        """Aim the camera at a block centre (for a screenshot of a chest in the world)."""
+        player = self.probe.observe()["player"]
+        dx, dy, dz = at[0] + .5 - player["x"], at[1] + .5 - (player["y"] + 1.62), at[2] + .5 - player["z"]
+        self.probe.call("minecraft_look", {"yaw_deg": round(math.degrees(math.atan2(-dx, dz))),
+                                           "pitch_deg": round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))})
+        self.probe.call("minecraft_wait_ticks", {"ticks": 6})
+
     def chest_items(self, at: list[int]) -> str:
         return "\n".join(self.chat(f"data get block {at[0]} {at[1]} {at[2]} Items"))
 

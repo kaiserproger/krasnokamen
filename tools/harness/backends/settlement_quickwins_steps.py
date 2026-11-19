@@ -125,7 +125,9 @@ def block_create(w: Walk) -> None:
         if (chest[0], chest[2]) not in (between, (x + dx, z + dz)):
             w.evidence["pad"]["stand"] = [x + dx + .5, y, z + dz + .5]
             break
-    w.tp(*w.evidence["pad"]["stand"])
+    w.tp(*w.evidence["pad"]["stand"], tol=.7)
+    w.look_at(chest)
+    w.shot("first-chest")
 
 
 # ----------------------------------------------------------------------------- hub and dashboard
@@ -562,6 +564,9 @@ def block_second_founding(w: Walk) -> None:
 
     command("settlement create qw2 8", "Founded qw2")
     first = chests()
+    if first:
+        w.look_at(first[0])
+        w.shot("second-chest")
     items = w.chest_items(first[0]) if len(first) == 1 else ""
     w.judge("C5a", len(first) == 1 and not re.search(r"minecraft:\w+", items), second_anchor=[ax, y, z],
             chests=first, readback=items[:200])
