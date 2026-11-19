@@ -2984,7 +2984,7 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
                     Lang::Ru => format!("Для уровня {next} нужно:"),
                 });
                 upgrade.extend(
-                    super::missing_text(&error)
+                    super::missing_text(ctx, &error)
                         .split(", ")
                         .map(|need| format!("- {need}")),
                 );

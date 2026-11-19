@@ -645,6 +645,29 @@ pub(crate) fn text(lang: Lang, key: Key) -> &'static str {
     }
 }
 
+/// Certificate geometry counters and the action that satisfies each counter.
+pub(crate) fn requirement<'a>(lang: Lang, code: &'a str) -> (&'a str, &'static str) {
+    let (en, ru, en_action, ru_action) = match code {
+        "footprint" => ("floor area", "площадь пола", "complete the solid floor", "достройте сплошной пол"),
+        "height" => ("height", "высота", "increase the building height", "увеличьте высоту постройки"),
+        "beds" => ("beds", "кровати", "add the missing complete beds", "добавьте недостающие кровати целиком"),
+        "roof" => ("roof", "крыша", "complete the roof at the top corner height", "достройте крышу на высоте верхнего угла"),
+        "enclosure" => ("perimeter walls", "стены по периметру", "close gaps in the walls", "закройте дыры в стенах"),
+        "entrance" => ("doors", "дверь", "add the missing doors", "добавьте недостающие двери"),
+        "workstations" => ("workstations", "рабочие блоки", "add the missing workstations", "добавьте недостающие рабочие блоки"),
+        "containers" => ("chests/barrels", "сундуки/бочки", "add the missing chests or barrels", "добавьте недостающие сундуки или бочки"),
+        "wall length" => ("wall length", "длина стены", "extend the wall", "удлините стену"),
+        "wall height" => ("wall height", "высота стены", "raise the wall", "нарастите стену"),
+        "continuous wall" => ("continuous wall", "непрерывная стена", "close gaps in the wall", "закройте разрывы стены"),
+        "gate frame" => ("gate frame", "рама ворот", "complete the gate frame", "достройте раму ворот"),
+        _ => return (code, text(lang, Key::TipCorners)),
+    };
+    match lang {
+        Lang::En => (en, en_action),
+        Lang::Ru => (ru, ru_action),
+    }
+}
+
 /// Substitute `{name}` placeholders; unknown placeholders stay verbatim.
 #[must_use]
 pub(crate) fn fill(template: &str, args: &[(&str, &str)]) -> String {

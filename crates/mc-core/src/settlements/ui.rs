@@ -503,19 +503,16 @@ fn all_kinds() -> Vec<BuildingKind> {
     kinds
 }
 
-fn missing_text(error: &CertError) -> String {
+fn missing_text(ctx: &Ctx, error: &CertError) -> String {
     error
         .missing
         .iter()
         .map(|requirement| {
-            if requirement.required <= 1 && requirement.found == 0 {
-                requirement.description.clone()
-            } else {
-                format!(
-                    "{} {}/{}",
-                    requirement.description, requirement.found, requirement.required
-                )
-            }
+            let (label, instruction) = ui_text::requirement(ctx.lang, &requirement.description);
+            format!(
+                "{label} {}/{} — {instruction}",
+                requirement.found, requirement.required
+            )
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -838,7 +835,7 @@ fn certificate_review(
     } else {
         match buildings::inspect(state, building.kind, next, building.bounds) {
             Ok(_) => ctx.f(Key::ReadyFor, &[("next", &next.to_string())]),
-            Err(error) => missing_text(&error),
+            Err(error) => missing_text(ctx, &error),
         }
     };
     let confirm = with_navigation(
@@ -1121,7 +1118,7 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
                 Key::CannotCertify,
                 &[
                     ("kind", &kind_label(ctx, kind)),
-                    ("missing", &missing_text(&error)),
+                    ("missing", &missing_text(ctx, &error)),
                 ],
             );
             certify_screen(state, connection, ctx, &form, &note);
@@ -1173,7 +1170,7 @@ fn upgrade(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
             Key::CannotUpgrade,
             &[
                 ("id", &short(id).to_string()),
-                ("missing", &missing_text(&error)),
+                ("missing", &missing_text(ctx, &error)),
             ],
         ),
     };
