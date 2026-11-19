@@ -43,7 +43,8 @@ pub struct Replay {
     /// Transient cumulative active time while folding the existing debt images.
     pub(crate) simulation_clocks: BTreeMap<[i32; 2], ReplayChunkClock>,
     pub climate: Option<crate::weather::ClimateImage>,
-    /// Global running-time history, retained only by public replay wrappers.
+    /// Test-only wrapper history; production recovery shares one root clock.
+    #[cfg(test)]
     pub(crate) game_clock: Option<ReplayGameClock>,
     pub(crate) clock_fault: Option<String>,
     pub(crate) recovered_held_ticks: u64,
@@ -630,6 +631,7 @@ fn unaffiliated(faction: &u16) -> bool {
 /// over it, so tail removals delete base records, tail vitals update base
 /// health, and intra-chunk entity images keep base motion. A default [`Replay`] is
 /// an empty base (fresh world).
+#[cfg(test)]
 pub fn replay_batches(replay: Replay, batches: &[(u64, u64, Vec<JournalEntry>)]) -> Replay {
     let mut replay = apply_batch_images(replay, batches);
     advance_replay_clocks(&mut replay);
@@ -637,6 +639,7 @@ pub fn replay_batches(replay: Replay, batches: &[(u64, u64, Vec<JournalEntry>)])
 }
 
 /// Fold absolute images without scanning unrelated retained entities per batch.
+#[cfg(test)]
 pub(crate) fn apply_batch_images(
     mut replay: Replay,
     batches: &[(u64, u64, Vec<JournalEntry>)],
@@ -1384,6 +1387,7 @@ pub(crate) fn validate_replay(replay: &Replay) -> Result<(), CoreError> {
 }
 
 /// Project each retained anchor once after the complete streamed tail is folded.
+#[cfg(test)]
 pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
     let clock = replay.game_clock.take().map_or_else(
         || {
