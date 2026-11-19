@@ -12,6 +12,7 @@ import json
 import os
 import runpy
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -381,6 +382,8 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     non_execution = {"--no-run", "--help", "-h", "--version", "-V"}
     if any(arg in non_execution for arg in ctx.extra_args):
         raise ValueError("the test gate must execute tests; preparation/help flags are unsupported")
+    if full and any(arg == "--run-ignored" or arg.startswith("--run-ignored=") for arg in ctx.extra_args):
+        raise ValueError("L2 requires the default non-ignored test selection")
     env = os.environ.copy()
     env["NEXTEST_TEST_THREADS"] = env.get(
         "RUST_TEST_THREADS", env.get("NEXTEST_TEST_THREADS", "num-cpus")
@@ -395,7 +398,23 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
         "--no-fail-fast", "--no-tests=fail",
         *(ctx.extra_args or ["--workspace", "--all-targets"]),
     ]
-    details = _run_command(argv, ctx, "test.log", env=env)
+    report = ctx.artifact_dir / "test-junit.xml"
+    if full:
+        target = Path(env.get("CARGO_TARGET_DIR", REPO_ROOT / "target"))
+        if not target.is_absolute():
+            target = REPO_ROOT / target
+        source = target / "nextest" / profile / "junit.xml"
+        # A previous run's report must never stand in for execution in this L2.
+        source.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+    try:
+        details = _run_command(argv, ctx, "test.log", env=env)
+    finally:
+        # Nextest also emits results on test failure; retain those row diagnoses.
+        if full and source.is_file():
+            shutil.copyfile(source, report)
+    if full:
+        details["nextest_junit"] = str(report)
     details.update(_test_scope_memory())
     details["rust_test_threads_env"] = env.get("RUST_TEST_THREADS")
     details["test_runner"] = "nextest"
@@ -404,20 +423,31 @@ def run_test(ctx: ProfileContext, *, full: bool = False) -> dict[str, Any]:
     return details
 
 
-def run_regressions(ctx: ProfileContext) -> dict[str, Any]:
+def run_regressions(ctx: ProfileContext, *, cargo_junit: Path | None = None) -> dict[str, Any]:
     from . import regressions
 
-    return regressions.run(ctx)
+    return regressions.run(ctx, cargo_junit=cargo_junit)
 
 
 def run_correctness(ctx: ProfileContext) -> dict[str, Any]:
-    """The L2 gates: regressions, fmt, clippy, code-health, then the test suite."""
+    """The L2 gates, sharing the full nextest execution with Cargo regressions."""
     details: dict[str, Any] = {}
-    _merge_details(details, run_regressions(ctx))
     _merge_details(details, run_fmt(ctx))
     _merge_details(details, run_clippy(ctx))
     _merge_details(details, run_code_health(ctx))
-    _merge_details(details, run_test(ctx, full=True))
+    test_error = None
+    try:
+        _merge_details(details, run_test(ctx, full=True))
+    except Exception as error:
+        test_error = error
+    try:
+        _merge_details(details, run_regressions(ctx, cargo_junit=ctx.artifact_dir / "test-junit.xml"))
+    except Exception as error:
+        if test_error is not None:
+            raise RuntimeError(f"{test_error}; {error}") from error
+        raise
+    if test_error is not None:
+        raise test_error
     return details
 
 
