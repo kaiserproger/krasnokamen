@@ -524,19 +524,36 @@ def block_docs(w: Walk) -> None:
 
 
 def block_second_founding(w: Walk) -> None:
-    """The same player founds a second settlement at the pad's edge (clear of the first): no second chest."""
+    """The same player founds a second settlement at the pad's edge (clear of the first), dissolves it and founds again."""
     x, y, z = w.evidence["pad"]["anchor"]
+    ax = x - 60
     w.close_all()
-    w.tp(x - 60 + .5, y, z + .5)
-    w.probe.report["player_commands"].append("settlement create qw2 8")
-    w.probe.call("minecraft_send_chat", {"message": "settlement create qw2 8", "command": True})
-    w.probe.wait(lambda state: any("Founded qw2" in str(line) or "Основан" in str(line) and "qw2" in str(line)
-                                   for line in state.get("recent_chat", [])), "QW second settlement founded", timeout_seconds=60)
-    w.probe.call("minecraft_wait_ticks", {"ticks": 200})
-    page = w.probe.call("minecraft_scan_blocks", {
-        "min_x": x - 64, "min_y": y - 3, "min_z": z - 4, "max_x": x - 56, "max_y": y + 3, "max_z": z + 4, "max_blocks": 4096})
-    chests = [[row["x"], row["y"], row["z"]] for row in page["blocks"] if row["block_id"] == "minecraft:chest"]
-    w.judge("C5", not chests and bool(w.evidence.get("starter_chest")), second_anchor=[x - 60, y, z], chests=chests)
+    w.tp(ax + .5, y, z + .5)
+
+    def command(text: str, expect: str) -> None:
+        w.probe.report["player_commands"].append(text)
+        w.probe.call("minecraft_send_chat", {"message": text, "command": True})
+        w.probe.wait(lambda state: any(expect in str(line) for line in state.get("recent_chat", [])),
+                     f"QW {text}", timeout_seconds=60)
+        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+
+    def chests() -> list[list[int]]:
+        page = w.probe.call("minecraft_scan_blocks", {
+            "min_x": ax - 4, "min_y": y - 3, "min_z": z - 4, "max_x": ax + 4, "max_y": y + 3, "max_z": z + 4,
+            "max_blocks": 4096})
+        return sorted([row["x"], row["y"], row["z"]] for row in page["blocks"] if row["block_id"] == "minecraft:chest")
+
+    command("settlement create qw2 8", "Founded qw2")
+    first = chests()
+    items = w.chest_items(first[0]) if len(first) == 1 else ""
+    w.judge("C5a", len(first) == 1 and not re.search(r"minecraft:\w+", items), second_anchor=[ax, y, z],
+            chests=first, readback=items[:200])
+    command("settlement remove qw2", "qw2")
+    if any("qw2" in line for line in w.chat("settlement list")):
+        raise StepFailed("settlement qw2 is still listed after `settlement remove qw2`")
+    command("settlement create qw3 8", "Founded qw3")
+    again = chests()
+    w.judge("C5b", all(chest in first for chest in again), chests_before=first, chests_after=again)
 
 
 BLOCKS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
@@ -552,6 +569,6 @@ BLOCKS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
     ("cards", ("Q2", "Q6d"), block_cards),
     ("guide", ("Q15a", "Q15b"), block_guide),
     ("docs", ("Q16",), block_docs),
-    ("second-founding", ("C5",), block_second_founding),
+    ("second-founding", ("C5a", "C5b"), block_second_founding),
 )
 assert {cid for _, ids, _ in BLOCKS for cid in ids} == set(CRITERIA), "every criterion belongs to one block"
