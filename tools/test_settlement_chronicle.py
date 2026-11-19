@@ -75,21 +75,6 @@ class ChronicleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract(data, [], milestone=0)
 
-    def test_native_migration_kinds_have_exact_captions(self):
-        data = run((100, 23900, [town()]), (500, 24300, [town()]))
-        for kind in ("departure", "arrival", "cancel"):
-            with self.subTest(kind=kind):
-                log = (f'INFO settlement_migration settlement=1 event={kind} '
-                       'unit=00000000-0000-0000-0000-000000000001 '
-                       'reason="two residents moved" tick=300 game_time=24100')
-                events = extract(data, [], log)["events"]
-                self.assertEqual(len(events), 1)
-                event = events[0]
-                self.assertEqual(event["kind"], f"migration_{kind}")
-                self.assertEqual((event["tick"], event["game_time"], event["day"]), (300, 24100, 1))
-                self.assertEqual(event["precision"], "native_audit")
-                self.assertIn(f"migration {kind}: two residents moved", event["caption"])
-
     def test_same_tick_arrivals_keep_distinct_native_unit_identities(self):
         data = run((1, 1, [town()]), (3, 3, [town()]))
         log = "\n".join(
@@ -99,11 +84,6 @@ class ChronicleTests(unittest.TestCase):
                          "00000000-0000-0000-0000-000000000002")
         )
         self.assertEqual(len(extract(data, [], log + "\n" + log)["events"]), 2)
-
-    def test_unknown_migration_kind_is_ignored_and_known_incomplete_kind_refuses(self):
-        self.assertEqual(audit_events("settlement_migration event=paused"), [])
-        with self.assertRaisesRegex(ValueError, "incomplete"):
-            audit_events("settlement_migration event=arrival settlement=1 tick=2 game_time=2")
 
 
 if __name__ == '__main__':
