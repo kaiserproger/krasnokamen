@@ -6,6 +6,32 @@ world and plugin domains. Anvil is offline import/export, never serving
 fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 [operations](../OPERATING.md).
 
+### CoreUnload byte oracle
+
+`tools/dev/bytecheck.sh BASE_TREE SLICE_TREE --out ABSOLUTE_RECEIPT_DIR`
+compares the D65 deterministic fixture at matching ticks: checkpoint rows at
+tick 1, the raw single-tick WAL frames at ticks 2–3, live recovery and offline
+`recover_offline → encode_checkpoint` at tick 3, then export and both custody
+and crash censuses. Recovery always reads fresh copies of the **base** world;
+it starts no tick thread. Native rows include their version, capture tick,
+SHA-256 and base64 payload. Export compares every complete output file byte for
+byte, including compressed payloads, region headers and padding.
+The fixture requires the locally imported `data/vanilla` content.
+
+Run base against itself first: the two captures execute in separate processes
+and must match. For isolated scratch-tree controls, reuse that immutable
+`--base-run RECEIPT/base` and pass `--control X1|X2|X3`. X1 swaps the
+`SettlementRecord.owner_name`/`anchor` declaration order; X2 swaps the
+`VillagerState.mining_progress`/`lumber_progress` declaration order; X3 swaps
+only those two progress NBT pushes. X2 also reaches transit JSON through
+`Transit.Record.members`' embedded `ReplayEntity.villager`: both checkpoint
+transit rows and the surviving transit's live-reopen row change, as do WAL
+`Entity` and `Transit` images. A control is red only after all producers
+successfully finish and its exact expected row/WAL/export diff is observed.
+Compilation, recovery and missing-artifact errors never count as a red control.
+Any byte difference refuses an ordinary comparison; `verdict.json` records each
+artifact independently.
+
 ## WAL
 
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole

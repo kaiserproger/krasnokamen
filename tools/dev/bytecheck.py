@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""D65 byte oracle. No source mutation; controls are isolated caller-owned trees.
+
+A/B are captured independently. C/D always read fresh copies of the first
+base checkpoint+tail. JSON object formatting is not an artifact: native row
+payloads, NBT compounds, WAL frames and exported file payloads are bytes.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import struct
+import subprocess
+
+RUNNER = Path('/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh')
+ARTIFACTS = ('A', 'B', 'C-live', 'C-offline', 'D-custody', 'D-crash', 'D-export')
+BINARIES = {}
+BUILDS = {}
+
+
+def provenance(tree):
+    git = lambda *args: subprocess.check_output(['git', '-C', str(tree), *args])
+    untracked = git('ls-files', '--others', '--exclude-standard', '-z').split(b'\0')
+    return dict(head=git('rev-parse', 'HEAD').decode().strip(),
+                diff_sha256=digest(git('diff', '--binary', 'HEAD')),
+                untracked={os.fsdecode(path): digest((tree / os.fsdecode(path)).read_bytes())
+                           for path in untracked if path and (tree / os.fsdecode(path)).is_file()})
+
+
+def test(tree, out, crate, name):
+    env = dict(os.environ, KRASNOKAMEN_BUILD_LANE='background', CORE_UNLOAD_OUT=str(out))
+    # Never use pooled output paths: their lease ends before cargo returns to
+    # this caller. A private per-tree target cannot be rebuilt by another lane.
+    target = Path('/run/media/kaiserroman/games/solaris-work/targets') / ('CoreUnloadImpl-bytecheck-' + digest(str(tree).encode())[:16])
+    env['CARGO_TARGET_DIR'] = str(target)
+    if tree not in BINARIES:
+        source = provenance(tree)
+        cmd = [str(RUNNER), '-m', '12G', 'cargo', 'test', '-j', '1', '--manifest-path', str(tree / 'Cargo.toml'),
+               '-p', 'mc-core', '-p', 'mc-world-conversion', '--lib', '--no-run', '--message-format=json']
+        with (out / 'compile.log').open('wb') as log:
+            subprocess.run(cmd, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
+        assert provenance(tree) == source, 'source tree changed during compile'
+        binaries = {}
+        for line in (out / 'compile.log').read_text().splitlines():
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if message.get('reason') == 'compiler-artifact' and message.get('executable'):
+                binaries[message['target']['name']] = message['executable']
+        assert {'mc_core', 'mc_world_conversion'} <= binaries.keys(), binaries
+        BINARIES[tree] = binaries
+        # Shared build slots can be reused by another agent between tests.
+        # Keep exactly the executables emitted by this compile.
+        pins = out / 'binaries'
+        pins.mkdir()
+        build = dict(source=source, target_dir=str(target), binaries={})
+        for target, binary in BINARIES[tree].items():
+            pinned = pins / target
+            shutil.copy2(binary, pinned)
+            BINARIES[tree][target] = str(pinned)
+            build['binaries'][target] = dict(path=str(pinned), sha256=digest(pinned.read_bytes()))
+        BUILDS[tree] = build
+    (out / 'build.json').write_text(json.dumps(BUILDS[tree], indent=2) + '\n')
+    binary = BINARIES[tree][crate.replace('-', '_')]
+    cmd = [str(RUNNER), '-m', '6G', binary, name, '--nocapture']
+    if name != 'persistence_byte_capture':
+        cmd.append('--ignored')
+    with (out / (name + '.log')).open('wb') as log:
+        subprocess.run(cmd, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
+    with (out / (name + '.log')).open('ab') as log:
+        log.write(('\nbinary_sha256=' + digest(Path(binary).read_bytes()) + '\n').encode())
+    assert 'test result: ok. 1 passed;' in (out / (name + '.log')).read_text()
+
+
+def capture(tree, out):
+    out.mkdir(parents=True)
+    test(tree, out, 'mc-core', 'persistence_byte_capture')
+
+
+def consumers(tree, out, source):
+    shutil.copy2(source.parent / 'stable-transit.json', out / 'reopen-transit.json')
+    for name in ('live', 'offline', 'custody', 'crash', 'export'):
+        shutil.copytree(source, out / (name + '-input'))
+    test(tree, out, 'mc-core', 'persistence_byte_reopen')
+    test(tree, out, 'mc-world-conversion', 'persistence_byte_consumers')
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def rows(path):
+    result = {}
+    for key, row in json.loads(path.read_text()).items():
+        payload = bytes(row.pop('payload'))
+        result[key] = dict(row, sha256=digest(payload), payload=base64.b64encode(payload).decode())
+    return result
+
+
+
+
+def artifacts(out):
+    # Old unpinned runs are not admissible baselines.
+    build = json.loads((out / 'build.json').read_text())
+    for binary in build['binaries'].values():
+        assert digest(Path(binary['path']).read_bytes()) == binary['sha256'], 'binary pin changed'
+    result = {name: rows(out / (name + '.json')) for name in ('A', 'C-live', 'C-offline')}
+    stable = json.loads((out / 'stable-transit.json').read_text())
+    result['_stable_transit'] = 'global/transit/' + stable
+    result['B'] = {p.name: base64.b64encode(p.read_bytes()).decode() for p in sorted((out / 'B').iterdir())}
+    assert result['B']
+    for name in ('D-custody', 'D-crash'):
+        result[name] = json.loads((out / (name + '.json')).read_text())
+    exported = {}
+    for path in sorted((out / 'D-export').rglob('*')):
+        if not path.is_file():
+            continue
+        key = str(path.relative_to(out / 'D-export'))
+        exported[key] = base64.b64encode(path.read_bytes()).decode()
+    assert exported
+    result['D-export'] = exported
+    (out / 'artifacts.json').write_text(json.dumps(result, sort_keys=True, indent=2) + '\n')
+    return result
+
+
+def wal_lines(artifact):
+    result = {'Settlement': [], 'Transit': [], 'Entity': [], 'other': []}
+    def images(value):
+        if list(value) == ['Dimension']:
+            for entry in value['Dimension']['entries']:
+                yield from images(entry)
+        else:
+            yield value
+    for name, encoded in artifact.items():
+        raw = base64.b64decode(encoded)
+        # Preserve raw image bytes, but ignore frame CRC while classifying a
+        # control's diff. The verdict above still compares the entire frame.
+        payload = raw[32:]
+        assert len(payload) == struct.unpack_from('<I', raw, 24)[0]
+        for line in payload.splitlines():
+            for image in images(json.loads(line)):
+                variant = next(iter(image))
+                category = variant if variant in result else 'other'
+                # Dict insertion order preserves every nested field's order;
+                # JSON strings (the Transit payload) retain their exact bytes.
+                encoded_image = json.dumps(image, separators=(',', ':'), ensure_ascii=False)
+                result[category].append((name, encoded_image))
+    return result
+
+
+def compare(base, candidate, control):
+    verdict = {name: {'equal': base[name] == candidate[name]} for name in ARTIFACTS}
+    stable = base['_stable_transit']
+    assert candidate['_stable_transit'] == stable
+    for image in (base, candidate):
+        assert stable in image['A'] and stable in image['C-live'] and stable in image['C-offline']
+        if not control:
+            for stage in ('C-live', 'C-offline'):
+                assert image[stage][stable]['payload'] == base['A'][stable]['payload'], (stage, 'active transit bytes changed on reopen')
+    for name in ('A', 'C-live', 'C-offline'):
+        keys = set(base[name]) | set(candidate[name])
+        verdict[name]['different_rows'] = sorted(k for k in keys if base[name].get(k) != candidate[name].get(k))
+    if control:
+        changed = {name for name in ARTIFACTS if not verdict[name]['equal']}
+        left, right = wal_lines(base['B']), wal_lines(candidate['B'])
+        wal_changed = {k for k in left if left[k] != right[k]}
+        # Reopen always reads BASE. X2 also changes checkpoint transit JSON:
+        # transit::Record.members embeds ReplayEntity.villager (Main ruling).
+        expected = {'X1': {'A', 'B', 'C-live', 'C-offline'},
+                    'X2': {'A', 'B', 'C-live'}, 'X3': {'A', 'C-live', 'C-offline', 'D-export'}}[control]
+        assert changed == expected, (control, changed, expected)
+        for name in ('A', 'C-live', 'C-offline'):
+            if control == 'X1':
+                expected_rows = {
+                    'A': {'global/settlement/1', 'global/settlement/2', 'global/settlement/3'},
+                    'C-live': {'global/settlement/1', 'global/settlement/3'},
+                    'C-offline': {'global/settlement/1'},
+                }[name]
+            elif control == 'X2':
+                expected_rows = ({k for k in base[name] if k.startswith('global/transit/')} if name == 'A'
+                                 else {stable} if name == 'C-live' else set())
+            else:
+                expected_rows = {k for k in base[name] if k.startswith('entity/')}
+            if name == 'A':
+                assert expected_rows, (control, 'vacuous row expectation')
+            assert set(verdict[name]['different_rows']) == expected_rows, (control, name, verdict[name], expected_rows)
+        expected_wal = {'X1': {'Settlement'}, 'X2': {'Entity', 'Transit'}, 'X3': set()}[control]
+        assert wal_changed == expected_wal, (control, wal_changed, expected_wal)
+        verdict['control'] = {'id': control, 'expected_diff_only': True, 'result': 'RED',
+                              'wal_variants': sorted(wal_changed)}
+    return verdict
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('base_tree', type=Path)
+    parser.add_argument('slice_tree', type=Path)
+    parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--base-run', type=Path, help='reuse an immutable, complete base run')
+    parser.add_argument('--control', choices=('X1', 'X2', 'X3'))
+    args = parser.parse_args()
+    args.out = args.out.resolve()
+    args.out.mkdir(parents=True, exist_ok=False)
+    if args.base_run:
+        base_out = args.base_run.resolve()
+        base = artifacts(base_out)
+    else:
+        base_out = args.out / 'base'
+        capture(args.base_tree.resolve(), base_out)
+        consumers(args.base_tree.resolve(), base_out, base_out / 'world')
+        base = artifacts(base_out)
+    candidate_out = args.out / 'slice'
+    capture(args.slice_tree.resolve(), candidate_out)
+    consumers(args.slice_tree.resolve(), candidate_out, base_out / 'world')
+    candidate = artifacts(candidate_out)
+    verdict = compare(base, candidate, args.control)
+    equal = all(verdict[name]['equal'] for name in ARTIFACTS)
+    result = dict(status='PASS' if equal else 'DIFF', artifacts=verdict,
+                  base_tree=str(args.base_tree.resolve()), slice_tree=str(args.slice_tree.resolve()),
+                  base_run=str(base_out), slice_run=str(candidate_out))
+    (args.out / 'verdict.json').write_text(json.dumps(result, indent=2) + '\n')
+    print(json.dumps(result, indent=2))
+    return 0 if equal else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

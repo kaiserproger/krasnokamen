@@ -1088,6 +1088,32 @@ pub fn census_rows(
     Ok(rows)
 }
 
+/// White-box custody setup for the byte oracle; production departure requires
+/// simulated terrain, which is deliberately absent from its reopen phase.
+#[cfg(test)]
+pub(crate) fn bytecheck_put(state: &mut TickState, member: Option<ReplayEntity>, id: uuid::Uuid) {
+    if let Some(member) = member {
+        state.settlements.transit.put(
+            id,
+            Record {
+                source: SettlementId(1),
+                destination: SettlementId(2),
+                destination_anchor: [128, 201, 8],
+                departed: 1,
+                arrives: 1201,
+                bearing: 90.0,
+                exit: [24, 201, 8],
+                status: Status::Travelling,
+                household: None,
+                members: vec![member],
+                retry_at: 0,
+            },
+        );
+    } else {
+        state.settlements.transit.remove(id);
+    }
+}
+
 #[cfg(test)]
 #[path = "transit_tests.rs"]
 mod tests;
