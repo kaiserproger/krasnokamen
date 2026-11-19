@@ -80,14 +80,17 @@ pub(super) fn entity_movement_due(
 ///
 /// `update_interval` is vanilla `EntityType.updateInterval()`: the movement
 /// cadence in ticks, which `ServerEntity` applies as a modulus over its tick
-/// counter.
+/// counter. A modulo needs no guard while every row declares a positive
+/// interval, but a `0` row would divide by zero inside the publish fanout; the
+/// sibling `entity_interest::completed` reads the same column with `.max(1)`,
+/// so `0` means "every tick" here too instead of a latent panic.
 pub(super) fn movement_due_at(
     interval: u32,
     entity: i32,
     tick: u64,
     previous_tick: Option<u64>,
 ) -> bool {
-    let interval = u64::from(interval);
+    let interval = u64::from(interval).max(1);
     let phase = i64::from(entity).rem_euclid(interval as i64) as u64;
     let position = (tick % interval + phase) % interval;
     let elapsed = previous_tick.map_or(0, |previous| tick.saturating_sub(previous));
