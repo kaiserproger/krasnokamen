@@ -94,7 +94,44 @@ class StepFailed(RuntimeError):
 def on_window(node: dict[str, Any], size: tuple[int, int] = (1280, 720)) -> bool:
     """A widget a click can reach: its whole box lies inside the window (no scrolling in this scenario)."""
     x, y, width, height = node.get("bounds", (-1, -1, 0, 0))
-    return x >= 0 and y >= 0 and width > 0 and height > 0 and x + width <= size[0] + 1 and y + height <= size[1] + 1
+    return (x >= 0 and y >= 0 and width > 0 and height > 0 and x + width <= size[0] + 1 and y + height <= size[1] + 1
+            and not node.get("clipped"))
+
+
+def java_nodes(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """The vanilla Java client's dialog widgets (the observer's `screen.widgets`, GUI-scaled boxes) as the
+    native client's `ui_nodes`: physical-pixel `bounds`, `role` button/text/input, `dialog/*` ids. A widget
+    outside the scroll area that holds it is `clipped` (a click cannot reach it without scrolling)."""
+    screen = state.get("screen") or {}
+    scale = int(screen.get("gui_scale") or 3)
+    nodes: list[dict[str, Any]] = []
+    counts = {"title": 0, "body": 0, "action": 0, "input": 0}
+    for widget in screen.get("widgets", []):
+        simple = str(widget["class"]).rsplit(".", 1)[-1]
+        text = str(widget.get("text") or "")
+        if not widget.get("visible") or "ScrollableLayout" in simple or "Scroll" in simple and not text:
+            continue
+        is_input = bool(widget.get("edit_box")) or "Cycle" in simple or "Slider" in simple
+        is_button = "Button" in simple and not is_input
+        if is_button and "Sprite" in simple:  # the dialog's warning icon, not an action
+            continue
+        if not (is_input or is_button) and (not text or text == "warning"):
+            continue
+        if is_input:
+            role, kind = "input", "input"
+        elif is_button:
+            role, kind = "button", "action"
+        else:
+            role, kind = "text", "title" if text == screen.get("title") and not counts["title"] else "body"
+        x, y, width, height = (int(widget[key]) for key in ("x", "y", "width", "height"))
+        clip = widget.get("clip")
+        clipped = bool(clip) and not (x >= clip["x"] and y >= clip["y"] and x + width <= clip["x"] + clip["width"]
+                                      and y + height <= clip["y"] + clip["height"])
+        nodes.append({"id": f"dialog/{kind}/{counts[kind]}", "role": role, "label": text,
+                      "enabled": bool(widget.get("active", True)), "clipped": clipped,
+                      "bounds": (x * scale, y * scale, width * scale, height * scale)})
+        counts[kind] += 1
+    return nodes
 
 
 def view(state: dict[str, Any]) -> dict[str, Any]:
@@ -287,7 +324,17 @@ class Walk:
             return (shown["ready"] and (before is None or signature(shown) != before)
                     and (accept is None or accept(shown)))
         try:
-            return view(self.probe.wait(ready, f"QW screen {label}", timeout_seconds=timeout))
+            shown = view(self.probe.wait(ready, f"QW screen {label}", timeout_seconds=timeout))
+            for _ in range(20 if self.evidence.get("client") in ("java", "horizon") else 0):
+                # Java refreshes the chest page (item updates) before it opens the screen a click leads to:
+                # a screen counts as reached once it stays the same for 8 ticks (a recorded Java difference).
+                self.probe.call("minecraft_wait_ticks", {"ticks": 8})
+                again = self.screen()
+                if again["ready"] and signature(again) == signature(shown):
+                    break
+                self.evidence["java_settle_refreshes"] = self.evidence.get("java_settle_refreshes", 0) + 1
+                shown = again if again["ready"] else shown
+            return shown
         except TimeoutError as error:
             self.probe.remaining()  # the scenario's own deadline is a failure of the run, not a step
             raise StepFailed(f"screen not reached: {label} ({error})") from error
@@ -423,19 +470,32 @@ class Walk:
 
 
 def run(ctx: Any, args: Any) -> dict[str, Any]:
-    """`settlement-map-qa --scenario quickwins`: one native ru_ru session on the lifecycle-owned window."""
-    if ctx.client != "native":
-        raise ValueError("--scenario quickwins requires --client native (its UI nodes carry the dialog text)")
+    """`settlement-map-qa --scenario quickwins`: one ru_ru session (native or vanilla Java) on the lifecycle-owned window."""
+    if ctx.client not in ("native", "java"):
+        raise ValueError("--scenario quickwins requires --client native or --client java (a client that exposes dialog text)")
     if args.language != "ru_ru":
         raise ValueError("--scenario quickwins judges Russian text: pass -- --language ru_ru")
+    java = ctx.client == "java"
 
     def script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str) -> list[str]:
         from . import settlement_quickwins_steps as walk_steps
         from .settlement_map_qa import Gui
         size = (1280, 720)
-        scene_shot.resize_window(probe.client.p4_window, size)
+        if java:
+            # The Java observer lists the open screen's widgets; give them the native `ui_nodes` shape.
+            call_tool = probe.client.call_tool
+
+            def observed(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+                result = call_tool(name, arguments)
+                if name == "minecraft_observe" and isinstance(result, dict):
+                    result["ui_nodes"] = java_nodes(result)
+                return result
+            probe.client.call_tool = observed
+        else:
+            scene_shot.resize_window(probe.client.p4_window, size)
         gui = Gui(probe, artifact, client, 3, size)
         walk = Walk(probe, artifact, gui, args)
+        walk.evidence["client"] = ctx.client
         try:
             walk_steps.setup(walk)
             for name, criteria, block in walk_steps.BLOCKS:
@@ -454,4 +514,5 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             }
         return walk.shots
 
-    return scene_shot.run(ctx, scenario={"steps": [], "client_settings": {"language": args.language}}, script=script)
+    settings = {"gui_scale": 3, "language": args.language, "screen_size": [1280, 720]} if java else {"language": args.language}
+    return scene_shot.run(ctx, scenario={"steps": [], "java_plain": java, "client_settings": settings}, script=script)

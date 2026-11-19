@@ -90,10 +90,10 @@ def setup(w: Walk) -> None:
     w.evidence["pad"] = {"anchor": [x, y, z], "ground_y": y - 1, "stand": [x + .5, y, z - 2.0]}
 
 
-def find_chest(w: Walk) -> list[int] | None:
+def find_chest(w: Walk, tries: int = 15) -> list[int] | None:
     """The chest block next to the anchor, by block scan (the bell is set after, so it cannot hide it)."""
     x, y, z = w.evidence["pad"]["anchor"]
-    for _ in range(15):
+    for _ in range(tries):
         page = w.probe.call("minecraft_scan_blocks", {
             "min_x": x - 4, "min_y": y - 3, "min_z": z - 4, "max_x": x + 4, "max_y": y + 3, "max_z": z + 4,
             "max_blocks": 4096})
@@ -109,7 +109,36 @@ def block_create(w: Walk) -> None:
     x, y, z = w.evidence["pad"]["anchor"]
     chest = find_chest(w)
     w.evidence["starter_chest"] = chest
-    w.judge("C1", chest is not None, chest=chest, anchor=[x, y, z])
+    if chest is None:  # diagnostic only: where does the client see chests at all around the anchor
+        wide = w.probe.call("minecraft_scan_blocks", {
+            "min_x": x - 16, "min_y": y - 3, "min_z": z - 16, "max_x": x + 16, "max_y": y + 3, "max_z": z + 16,
+            "max_blocks": 4096 * 2})
+        w.evidence["wide_scan_chests"] = [[r["x"], r["y"], r["z"]] for r in wide["blocks"]
+                                           if r["block_id"] == "minecraft:chest"]
+        w.evidence["wide_scan_count"] = wide.get("count")
+        w.evidence["chat_tail"] = [str(l) for l in w.probe.observe().get("recent_chat", [])[:8]]
+        # Late or lost? Rescan the same window after 60 s, then after the client leaves the chunk area and returns.
+        w.probe.call("minecraft_wait_ticks", {"ticks": 1200})
+        w.evidence["rescan_after_60s"] = find_chest(w, tries=1)
+        w.fixture("gamemode creative @s")  # no fall damage while the player is away
+        w.fixture(f"tp @s {x + 220.5} {y + 5} {z + 0.5}")
+        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+        w.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        w.fixture("gamemode survival @s")
+        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+        w.evidence["rescan_after_reenter"] = find_chest(w, tries=1)
+    recovered = chest is None and w.evidence.get("rescan_after_reenter")
+    if recovered:
+        # The chest exists on the server and the client got it only after re-entering the chunk area: C1 is
+        # recorded as failed (not strict-raised) and the walk goes on with the real chest, so every other
+        # criterion is still judged on this client.
+        w.results["C1"] = {"ok": False, "what": CRITERIA["C1"][0], "source": CRITERIA["C1"][1], "chest": None,
+                           "anchor": [x, y, z], "visible_only_after_reenter": recovered}
+        w.probe.report["assertions"]["QW C1"] = False
+        chest = recovered
+        w.evidence["starter_chest"] = chest
+    else:
+        w.judge("C1", chest is not None, chest=chest, anchor=[x, y, z])
     if chest is None:
         if w.strict:
             return
@@ -170,7 +199,12 @@ def back_check(w: Walk, cid: str, how: str, pattern: str, expected: Any, origin:
     else:
         w.click_button(pattern, f"{cid} Back", wait=False, scroll=scroll)
     try:
-        landed = w.settle(f"{cid} Back target", before=before, timeout=20)
+        try:
+            # The server may answer Back late under load (a refreshed copy of the same page can arrive first):
+            # wait for the expected landing; if it never shows, fall through to judge what is on screen.
+            landed = w.settle(f"{cid} Back target", accept=expected, before=before, timeout=20)
+        except StepFailed:
+            landed = w.settle(f"{cid} Back target (any)", before=before, timeout=5)
     except StepFailed:
         landed = w.screen()
         if signature(landed) == before:  # the press did not register (seen once after a scroll): press once more
