@@ -1,0 +1,12 @@
+[[bug]]
+id = "ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH"
+title = "With anti-xray on (the default), an ore revealed by a block change in the neighbouring chunk during a publish the edge pump skips stays the stand-in stone on the client: the ore chunk's own revision did not move (no light change), the reveal lived only in the skipped block changes, and skip repair compared only each chunk's own revision"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "CheckpointJoinStall code review 2026-11-20 (receipts/CheckpointJoinStall/REVIEW-code-sol.md). Latent at base dc670b3bd under broadcast `Lagged`; the queue-budget skip of EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS makes skips more frequent. crates/mc-edge/src/plan/viewer_plan.rs full walk: after a skip a held chunk is repaired only when its own revision moved; non-skipped publishes deliver border reveals through `TickPlanIndex::reveals`, and the framed chunk cache already keys anti-xray frames by the four side revisions (plan/chunk_frames.rs `chunk_key`), but a held chunk is not re-sent for a side change. Repro: a_border_reveal_inside_a_skipped_publish_reaches_the_client with the side-repair hunk reverted."
+repro = "cargo"
+regression = [
+  "cargo:mc-edge:anti_xray::anti_xray_tests::a_border_reveal_inside_a_skipped_publish_reaches_the_client",
+]
+failing_first = "reported"

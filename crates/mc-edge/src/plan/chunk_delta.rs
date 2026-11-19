@@ -118,6 +118,11 @@ impl ChunkDeltaLog {
         self.seq += 1;
     }
 
+    /// Resident chunks of `dimension` at its last publish through this log.
+    pub(super) fn previous(&self, dimension: Dimension) -> Option<&Arc<Vec<SnapshotChunk>>> {
+        self.previous.get(&dimension).map(|(_, chunks)| chunks)
+    }
+
     /// Diff `projection`'s resident list against this dimension's previous publish.
     pub(crate) fn delta(&mut self, projection: &TickOutput) -> Option<ChunkDelta> {
         if !self.enabled {

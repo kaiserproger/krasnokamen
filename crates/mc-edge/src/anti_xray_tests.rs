@@ -377,6 +377,73 @@ fn neighbour_change_invalidates_the_cached_border_chunk() {
     assert_eq!(exposed, leaked, "exposed ore is sent as the real block");
 }
 
+/// The publish that mined the block beside a border ore is skipped by the
+/// pump. No light changes and the ore chunk keeps its own revision: the
+/// reveal lived only in the skipped block changes. The next processed publish
+/// still sends the client the real ore by sending the ore chunk again.
+#[test]
+fn a_border_reveal_inside_a_skipped_publish_reaches_the_client() {
+    let f = fixture();
+    let (diamond, air) = (f.id("diamond_ore"), f.id("air"));
+    let mut ore = f.chunk(0, "stone");
+    ore.set_block(15, 10, 7, diamond);
+    let ore = Arc::new(ore);
+    let east_solid = f.chunk(1, "stone");
+    let mut east_open = f.chunk(1, "stone");
+    east_open.set_block(0, 10, 7, air);
+    let chunks = |east_revision, east: &Chunk| {
+        vec![
+            SnapshotChunk {
+                pos: ChunkPos { x: 0, z: 0 },
+                revision: 1,
+                chunk: Arc::clone(&ore),
+            },
+            SnapshotChunk {
+                pos: ChunkPos { x: 1, z: 0 },
+                revision: east_revision,
+                chunk: Arc::new(east.clone()),
+            },
+        ]
+    };
+    let revealed = chunk_body(
+        &tick(1, resident(vec![(1, (*ore).clone())]), Vec::new()),
+        &mut ChunkPacketCache::new(),
+        &f,
+    );
+    let mut cache = ChunkPacketCache::with_anti_xray(Some(Arc::new(f.policy(true, true))));
+    let registries = f.registries();
+    let mut v = viewer(1);
+    let first = frames(
+        publish_with_registries(
+            &tick(1, chunks(1, &east_solid), Vec::new()),
+            [&mut v].into_iter(),
+            1,
+            &registries,
+            &mut cache,
+        ),
+        LevelChunkWithLight::ID,
+    );
+    assert_eq!(first.len(), 2, "the viewer holds both chunks");
+    assert!(!first.contains(&revealed), "the enclosed ore is hidden");
+    // Tick 2 mined (16, 10, 7) and revealed the ore; the pump skipped it.
+    v.skip_publication(&cache);
+    let after_skip = frames(
+        publish_with_registries(
+            &tick(3, chunks(2, &east_open), Vec::new()),
+            [&mut v].into_iter(),
+            1,
+            &registries,
+            &mut cache,
+        ),
+        LevelChunkWithLight::ID,
+    );
+    assert!(
+        after_skip.contains(&revealed),
+        "the ore chunk is sent again with the real ore ({} chunk frames)",
+        after_skip.len()
+    );
+}
+
 #[test]
 fn publish_sends_the_real_ore_when_a_block_beside_it_is_mined() {
     let f = fixture();
