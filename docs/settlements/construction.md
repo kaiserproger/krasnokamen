@@ -206,9 +206,12 @@ used when present. Otherwise stand within four blocks of matching free
 containers/workstations: the smallest box containing you and those blocks gains
 a one-block horizontal border, the supporting floor and at least four cells of
 work-space height. No walls or roof are invented or required; native inspection
-still checks the real floor and work points. The floor search reaches at most
-eight blocks below you. An existing same-kind open certificate containing you
-keeps its bounds and re-inspects current blocks.
+still checks the real floor and work points. The floor is the first
+collision-bearing block in the eight cells strictly below your feet cell:
+upper slabs over air count, while a bottom slab or carpet in your feet cell
+keeps the structural floor underneath. A bottom slab over air has no such
+floor and refuses certification. An existing same-kind open certificate
+containing you keeps its bounds and re-inspects current blocks.
 
 For Wall, stand within two blocks of its base: discovery follows the nearest
 straight continuous wall in its longer cardinal axis, including its supporting

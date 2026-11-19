@@ -570,3 +570,57 @@ fn non_operator_gate_selection_inside_a_room_finds_the_nearby_frame_not_the_room
         mc_script::ScriptWorldBounds::new([3, 200, 5], [7, 203, 7]).unwrap()
     );
 }
+
+fn certify_house_with_floor_surface(surface: &str, feet_y: f64, floor_y: i32) {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    crate::settlements::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    if surface == "carpet" {
+        let carpet = block(&state, "minecraft:red_carpet", &[]);
+        state.world.set_block(4, 201, 4, carpet);
+    } else {
+        let slab = block(&state, "minecraft:stone_slab", &[("type", surface)]);
+        for x in 3..=7 {
+            for z in 3..=7 {
+                state.world.set_block(x, 200, z, slab);
+                for y in 193..=199 {
+                    state.world.set_block(
+                        x,
+                        y,
+                        z,
+                        if surface == "top" {
+                            state.registry.states.air
+                        } else {
+                            state.registry.states.stone
+                        },
+                    );
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let expected = mc_script::ScriptWorldBounds::new([3, floor_y, 3], [7, 204, 7]).unwrap();
+    // The unchanged native validator accepts the actual structural floor.
+    crate::settlements::buildings::inspect(&state, BuildingKind::House, 1, expected).unwrap();
+    let executor = player(&mut state, [4.5, feet_y, 4.5]);
+    certify_here(&mut state, executor, Some("owner"), false, "house").unwrap();
+    let buildings = &state.settlements.get(id).unwrap().buildings;
+    assert_eq!(buildings.len(), 1);
+    assert_eq!(buildings.values().next().unwrap().bounds, expected);
+}
+
+#[test]
+fn non_operator_house_upper_slab_floor_over_air_certifies() {
+    certify_house_with_floor_surface("top", 201.0, 200);
+}
+
+#[test]
+fn non_operator_house_bottom_slab_floor_on_ground_still_certifies() {
+    certify_house_with_floor_surface("bottom", 200.5, 199);
+}
+
+#[test]
+fn non_operator_house_carpet_above_solid_floor_still_certifies() {
+    certify_house_with_floor_surface("carpet", 201.0625, 200);
+}

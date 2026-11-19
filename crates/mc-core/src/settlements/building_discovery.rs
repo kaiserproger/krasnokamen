@@ -165,7 +165,7 @@ fn full(state: &TickState, at: [i32; 3]) -> Result<bool, Refusal> {
 fn floor_below(state: &TickState, feet: [i32; 3]) -> Result<i32, Refusal> {
     for depth in 1..=8 {
         let y = feet[1].checked_sub(depth).ok_or(Refusal::TooLarge)?;
-        if full(state, [feet[0], y, feet[2]])? {
+        if solid(state, [feet[0], y, feet[2]])? {
             return Ok(y);
         }
     }
