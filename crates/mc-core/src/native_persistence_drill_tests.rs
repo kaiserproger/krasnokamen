@@ -920,3 +920,6 @@ mod clock_conversion_tests;
 
 #[path = "native_dimension_clock_drill_tests.rs"]
 mod dimension_clock_tests;
+
+#[path = "native_running_tail_clock_tests.rs"]
+mod running_tail_clock_tests;
