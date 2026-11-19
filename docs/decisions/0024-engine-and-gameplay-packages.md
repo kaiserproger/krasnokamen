@@ -7,7 +7,7 @@ their third-round findings are fixed in this text (AGENTS rule 5: fixes need no
 second review); see [Review resolution](#review-resolution). The owner accepted
 both open proposals (D66 answers, 2026-11-19): the §3.4 slowdown verdict in its
 written order (Q1) and the one-off offline converter, reset only for a world he
-declared expendable (Q2).
+declared expendable (Q4).
 Nothing here is implemented. The D65 settlements crate (ADR 0021 Step 2, design
 `receipts/CoreUnload/DESIGN.md`, revised after its reviews `REVIEW-sol.md` and `REVIEW-sol-r2.md` in that directory,
 both outside Git) is already running and is this ADR's first step; this ADR
@@ -336,7 +336,7 @@ record (to a package, KV or another owner) before D65 C3 is accepted, and C3 is
 accepted only through the D65 gates listed in §4 step 0. A record format change
 happens only in a separate D66 cutover with one writer, never inside a D65
 slice and never dual-written (`receipts/CoreUnload/DESIGN.md:23-27`). Owner
-answer (D66, Q2): keep the format where possible; otherwise a one-off offline
+answer (D66, Q4): keep the format where possible; otherwise a one-off offline
 converter from checkpoint plus WAL into a new directory, with custody and
 high-water checks; reset only a world the owner declared expendable.
 
