@@ -1,0 +1,330 @@
+{
+  "decision": "D60.2",
+  "base": "b7979c4ba310c4ad7e9b5df75c182b7639bc3415",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/battle/video/test_edit.py",
+  "source_sha256_before": "5c9e10eeb2f6cd6e01cdaca2aec11de158e783226dd0525819a9ee0338026c95",
+  "status": "blocked-preexisting; source unchanged and IDs not finalized",
+  "counts": {
+    "historical_test_ids_blocked": 8,
+    "historical_test_ids_finalized": 0,
+    "historical_medium_candidates_finalized": 0
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 8,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 580,
+      "source_file_present": 384,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": [
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BattleBaseline",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BattleBaselineHost",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BattleBaselineHost2",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BuildSpeed",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvArmorAssetsCore",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvCombatActions",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvEdgeRecorder",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvFactionTargeting",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvFormations",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvStaging",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvSwingCmd",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvSwingGate",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CivSim",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CivSim5",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientBugsCore",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientBugsGaps2",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientLoaderGate",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientQ02BHarness",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CompatAudit",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ContentNoJava",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CrateSplit",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CrateSplit2",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H07Portals",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H08HostGate",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H08MainGate",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H08Orbs",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H10Light",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H11MapGate",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H11MapNegative",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H11Maps",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H16Spawn",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/HarnessTimeoutReap",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/HorizonPin",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerCommands",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerDamage",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerDamageNeg",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerDamageReview",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerMatrix",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerMobs",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerMobsNegative",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerOpsCore",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerPromote",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/M00Ext",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/OpaqueTagsFix",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid2",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid3",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid4",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PersistenceDrills",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PlayerVisibility",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ProtocolQA2",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ProtocolQANeg",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/RC5WorldConversion-rc5",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ScanLocalA",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ScanLocalB",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ScenarioCampaign",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/SlowTests2",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed0102",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed18",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed23",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Top100-M00",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Top100H02",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/WeakHardware",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/rc4-notes-fix",
+          "warning: could not open directory 'tools/battle/video/': No such file or directory\n"
+        ]
+      ]
+    },
+    "main_decision": "Main verified absent compose APIs since f459f0666 and owns video-tool backlog. Revert only own audit deletions; no test_edit.py source change."
+  },
+  "records": [
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_three_shots_frame_arithmetic_and_tick_mapping",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_consecutive_transitions_inside_one_shot",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_transitions_that_do_not_fit_are_rejected",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_join_is_tick_exact_and_fail_closed",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_crossfade_tick_comes_from_the_dominant_shot",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_input_validation",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::PlanTests::test_filtergraph_offsets",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    },
+    {
+      "id": "tools/battle/video/test_edit.py::EncodeTests::test_three_shot_edit_encodes_exact_frames_and_repeats_byte_for_byte",
+      "status": "blocked",
+      "reason": "module not importable: edit.py references compose.RESOLUTIONS/TRANSITIONS/build_command absent since f459f0666; tests never runnable"
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.battle.video.test_edit"
+}
