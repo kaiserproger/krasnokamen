@@ -287,7 +287,7 @@ fn dispatch(
         "mark1" | "mark2" => {
             let index = usize::from(action == "mark2");
             let mut form = form_of(state, connection, payload);
-            match player_pos(state, connection) {
+            match floor_pos(state, connection) {
                 Some(at) => {
                     set_mark(state, connection, index, at);
                     *(if index == 0 {
@@ -358,6 +358,13 @@ fn player_pos(state: &TickState, connection: ConnectionId) -> Option<[i32; 3]> {
     let slot = state.entities.slot_of(entity)?;
     Some(state.entities.pos(slot).map(|value| value.floor() as i32))
 }
+/// Certificate bounds include the solid floor, not the air occupied by the feet.
+fn floor_pos(state: &TickState, connection: ConnectionId) -> Option<[i32; 3]> {
+    let mut at = player_pos(state, connection)?;
+    at[1] = at[1].checked_sub(1)?;
+    Some(at)
+}
+
 
 /// The nearest settlement whose radius contains the player, else the first the
 /// player owns.
@@ -969,7 +976,7 @@ fn form_of(state: &TickState, connection: ConnectionId, payload: ClickPayload<'_
         .get(&connection)
         .copied()
         .unwrap_or_default();
-    let here = player_pos(state, connection);
+    let here = floor_pos(state, connection);
     let default_corner =
         |mark: Option<[i32; 3]>| mark.or(here).map(corner_text).unwrap_or_default();
     Form {

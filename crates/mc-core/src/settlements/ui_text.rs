@@ -381,8 +381,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Встаньте в противоположный угловой блок и нажмите.",
         ),
         Key::LabelKind => ("Building type", "Тип постройки"),
-        Key::LabelFrom => ("Corner 1 (x y z)", "Угол 1 (x y z)"),
-        Key::LabelTo => ("Corner 2 (x y z)", "Угол 2 (x y z)"),
+        Key::LabelFrom => ("Floor corner 1 (x y z)", "Угол пола 1 (x y z)"),
+        Key::LabelTo => ("Floor corner 2 (x y z)", "Угол пола 2 (x y z)"),
         Key::LabelExtra => ("Height above corners", "Высота над углами"),
         Key::ChooseKind => ("Choose a building type.", "Выберите тип постройки."),
         Key::BadCorners => (
