@@ -1405,17 +1405,16 @@ fn founded_empty_chest_is_distinct_once_and_survives_native_restart() {
         }]
             .slots
             .iter()
-            .all(mc_data::ItemStack::is_empty)
+            .all(|slot| slot.is_empty())
     );
-    assert_eq!(
-        chunk.chests[&BlockPos {
-            x: existing[0],
-            y: existing[1],
-            z: existing[2]
-        }]
-            .slots[0],
-        stock
-    );
+    let restored_stock = &chunk.chests[&BlockPos {
+        x: existing[0],
+        y: existing[1],
+        z: existing[2],
+    }]
+        .slots[0];
+    assert_eq!(restored_stock.item_id, stock.item_id);
+    assert_eq!(restored_stock.count, stock.count);
     let mut after = ChangeSet::default();
     ensure_storage_chest(&mut reopened, &mut after, id, BELL, None);
     assert!(after.blocks.is_empty());

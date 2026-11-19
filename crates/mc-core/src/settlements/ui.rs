@@ -940,7 +940,7 @@ fn project_review(
     action: &str,
     payload: ClickPayload<'_>,
 ) {
-    let mut confirm;
+    let confirm;
     let mut body = ctx.t(Key::RequestPolicy).to_owned();
     let title;
     match action {
@@ -2526,14 +2526,14 @@ fn order_accepted(
     let mut dialog = Dialog::multi_action(
         ctx.t(Key::Projects),
         vec![
-            button(ctx.t(Key::Storage), "storage", ctx.id),
+            button(ctx.t(Key::KindStorage), "storage", ctx.id),
             button(ctx.t(Key::Status), "project_status_details", ctx.id),
             button(ctx.t(Key::Back), "back", ctx.id),
         ],
     )
     .text(ctx.f(
         if started {
-            Key::OrderStarted
+            Key::ConstructionStarted
         } else {
             Key::OrderAccepted
         },
