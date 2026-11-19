@@ -280,6 +280,11 @@ pub struct NetworkSection {
     /// connection over the cap is closed before its handshake is read.
     #[serde(default)]
     pub max_pre_play_connections: u32,
+    /// Maximum concurrent pre-play connections from one address for direct
+    /// clients (Play sessions do not count). Default 8; `0` disables it.
+    /// Velocity mode ignores it: the proxy owns connection control.
+    #[serde(default = "default_max_pre_play_connections_per_ip")]
+    pub max_pre_play_connections_per_ip: u32,
 }
 
 impl Default for NetworkSection {
@@ -290,6 +295,7 @@ impl Default for NetworkSection {
             connection_throttle_ms: 0,
             max_connections_per_ip: 0,
             max_pre_play_connections: 0,
+            max_pre_play_connections_per_ip: default_max_pre_play_connections_per_ip(),
         }
     }
 }
@@ -721,6 +727,9 @@ fn default_bind_address() -> String {
 fn default_port() -> u16 {
     25565
 }
+fn default_max_pre_play_connections_per_ip() -> u32 {
+    8
+}
 fn default_world_dir() -> PathBuf {
     PathBuf::from("world")
 }
@@ -898,6 +907,7 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "connection_throttle_ms",
                 "max_connections_per_ip",
                 "max_pre_play_connections",
+                "max_pre_play_connections_per_ip",
             ],
         ),
         (
@@ -1359,12 +1369,13 @@ mod tests {
     #[test]
     fn network_address_limits_parse_and_example_names_only_known_keys() {
         let cfg = EdgeConfig::from_toml(
-            "[network]\nconnection_throttle_ms = 750\nmax_connections_per_ip = 2\n",
+            "[network]\nconnection_throttle_ms = 750\nmax_connections_per_ip = 2\nmax_pre_play_connections_per_ip = 64\n",
             None,
         )
         .unwrap();
         assert_eq!(cfg.network.connection_throttle_ms, 750);
         assert_eq!(cfg.network.max_connections_per_ip, 2);
+        assert_eq!(cfg.network.max_pre_play_connections_per_ip, 64);
 
         let text =
             std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../example.toml"))

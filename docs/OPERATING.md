@@ -359,9 +359,10 @@ Connection admission:
   a 5-second stall fence. A deliberately slow client can therefore hold a slot for
   minutes; the cap keeps that to bounded memory per socket, and it never refuses
   an established player.
-- Independently, at most eight pre-play connections per socket IP are accepted
-  for direct clients (Play sessions do not count). This is disabled in Velocity
-  mode, where the proxy owns connection control.
+- Independently, `max_pre_play_connections_per_ip` (default `8`, `0` off) caps
+  concurrent pre-play connections per socket IP for direct clients (Play sessions
+  do not count). Raise it when many clients join from one address (load tests,
+  NAT). It is ignored in Velocity mode, where the proxy owns connection control.
 - When accepting exhausts file descriptors or socket buffers while sessions are
   open, the listener logs a warning and pauses admission until a session ends;
   the same failure with no open session, or any other listener error, stops the
