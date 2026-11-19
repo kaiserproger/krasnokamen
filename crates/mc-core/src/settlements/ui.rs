@@ -947,7 +947,7 @@ fn project_review(
                 .with("blueprint", Tag::String(blueprint.id.clone()));
         }
     }
-    if let Some(pending) = pending_order_text(state, ctx, 0) {
+    if let Some(pending) = pending_order_text(state, ctx, pending_index(payload).unwrap_or(0)) {
         body.push('\n');
         body.push_str(&pending);
     }
@@ -979,7 +979,7 @@ fn project_review(
     present(
         state,
         connection,
-        Dialog::multi_action(title, buttons).text(body),
+        Dialog::multi_action(title, buttons).text(body).text(pending_material_text(state, ctx, pending_index(payload).unwrap_or(0))),
     );
 }
 
@@ -1939,10 +1939,10 @@ fn pending_order_text(state: &TickState, ctx: &Ctx, index: usize) -> Option<Stri
             ctx.t(Key::PendingBusy)
         } else if raw_reason.starts_with("not enough:") {
             ctx.t(Key::PendingMaterials)
-        } else if raw_reason == "waiting for a site" {
-            ctx.t(Key::PendingSite)
+        } else if raw_reason == super::construction::READY {
+            ctx.t(Key::PendingReady)
         } else {
-            &raw_reason
+            ctx.t(Key::PendingSite)
         }
     } else {
         &raw_reason
@@ -1956,6 +1956,15 @@ fn pending_order_text(state: &TickState, ctx: &Ctx, index: usize) -> Option<Stri
             ("reason", reason),
         ],
     ))
+}
+
+fn pending_material_text(state: &TickState, ctx: &Ctx, index: usize) -> Tag {
+    let elements = super::construction::pending_missing(state, ctx.id, index).into_iter()
+        .map(|(item, count)| material_text(state, &item, format!(" ×{count}\n"))).collect::<Vec<_>>();
+    Tag::Compound(vec![
+        ("text".into(), Tag::String(if elements.is_empty() { String::new() } else { format!("{}\n", ctx.t(Key::MissingMaterials)) })),
+        ("extra".into(), Tag::List(mc_nbt::ListTag { element_type: mc_nbt::tag_type::COMPOUND, elements })),
+    ])
 }
 
 fn construction_summary(state: &TickState, ctx: &Ctx) -> String {
@@ -2106,6 +2115,7 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
     for index in 0..super::construction::orders(record).count() {
         if let Some(pending) = pending_order_text(state, ctx, index) {
             dialog = dialog.text(pending);
+            dialog = dialog.text(pending_material_text(state, ctx, index));
         }
     }
     if super::construction::idle(record) {
@@ -2325,11 +2335,10 @@ fn project_order(
     let Some(blueprint) = payload.string("blueprint") else {
         return projects_screen(state, connection, ctx, ctx.t(Key::ChooseBlueprint));
     };
-    let note = match super::construction::request_build(state, ctx.id, blueprint) {
-        Ok(outcome) => outcome.message(blueprint_label(ctx, blueprint)),
-        Err(error) => error,
-    };
-    projects_screen(state, connection, ctx, &note);
+    match super::construction::request_build(state, ctx.id, blueprint) {
+        Ok(outcome) => order_accepted(state, connection, ctx, blueprint_label(ctx, blueprint), &outcome),
+        Err(error) => projects_screen(state, connection, ctx, &error),
+    }
 }
 
 fn project_upgrade(
@@ -2358,22 +2367,30 @@ fn project_upgrade(
         .map(|blueprint| blueprint.id.clone())
         .unwrap_or_default();
     let level = super::construction::owner_upgrade_level(state, ctx.id, id);
-    let note = match super::construction::request_upgrade(state, ctx.id, id) {
+    match super::construction::request_upgrade(state, ctx.id, id) {
         Ok(outcome) => {
-            let label = if matches!(&outcome, super::construction::OrderOutcome::Queued { .. }) {
-                format!(
-                    "{} L{}",
-                    blueprint_label(ctx, &blueprint),
-                    level.expect("admitted upgrade level")
-                )
-            } else {
-                blueprint_label(ctx, &blueprint).to_owned()
-            };
-            outcome.message(&label)
+            let label = format!("{} L{}", blueprint_label(ctx, &blueprint), level.expect("admitted upgrade level"));
+            order_accepted(state, connection, ctx, &label, &outcome);
         }
-        Err(error) => error,
-    };
-    projects_screen(state, connection, ctx, &note);
+        Err(error) => projects_screen(state, connection, ctx, &error),
+    }
+}
+
+fn order_accepted(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, label: &str, outcome: &super::construction::OrderOutcome) {
+    let started = matches!(outcome, super::construction::OrderOutcome::Started);
+    let mut dialog = Dialog::multi_action(ctx.t(Key::Projects), vec![
+        button(ctx.t(Key::Storage), "storage", ctx.id),
+        button(ctx.t(Key::Status), "project_status_details", ctx.id),
+        button(ctx.t(Key::Back), "projects", ctx.id),
+    ]).text(ctx.f(if started { Key::OrderStarted } else { Key::OrderAccepted }, &[("blueprint", label)]));
+    if !started {
+        let index = state.settlements.get(ctx.id)
+            .map_or(0, |record| super::construction::orders(record).count().saturating_sub(1));
+        if let Some(pending) = pending_order_text(state, ctx, index) {
+            dialog = dialog.text(pending).text(pending_material_text(state, ctx, index));
+        }
+    }
+    present(state, connection, dialog.text(ctx.t(Key::StockForOrder)));
 }
 
 fn settings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note: &str) {
