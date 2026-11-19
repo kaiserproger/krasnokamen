@@ -220,6 +220,8 @@ pub(crate) enum Key {
     GuideConstruction,
     MaterialsEstimate,
     MaterialStock,
+    HomeMap,
+    WorkMap,
 }
 
 /// English and Russian text for one key.
@@ -230,6 +232,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::Help => ("Help", "Помощь"),
         Key::MaterialsEstimate => ("Materials estimate", "Оценка материалов"),
         Key::MaterialStock => (" ×{count} · in storage {stock}\n", " ×{count} · на складе {stock}\n"),
+        Key::HomeMap => ("Home / bed on map", "Дом / кровать на карте"),
+        Key::WorkMap => ("Workplace on map", "Место работы на карте"),
         Key::Neighbours => ("Neighbours & war", "Соседи и война"),
         Key::NeighboursUnavailable => (
             "Neighbour and war management is not available in this build.",

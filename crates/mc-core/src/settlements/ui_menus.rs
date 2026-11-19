@@ -2230,7 +2230,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
                 text(name),
                 &lore,
             ),
-            Target::MapAt(project.origin),
+            Target::Dialog("project_status_details"),
         );
     }
     for (index, order) in crate::settlements::construction::orders(record).enumerate() {
@@ -2653,13 +2653,13 @@ fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
         (
             12,
             Icon::RedBed,
-            tr(ctx, "Home / bed", "Дом / кровать"),
+            ctx.t(Key::HomeMap),
             person.home,
         ),
         (
             14,
             Icon::FilledMap,
-            tr(ctx, "Workplace", "Место работы"),
+            ctx.t(Key::WorkMap),
             person.job,
         ),
     ] {
