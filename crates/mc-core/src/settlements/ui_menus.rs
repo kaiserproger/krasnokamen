@@ -3517,27 +3517,7 @@ fn profession_item(profession: Profession) -> Icon {
 }
 
 fn profession_name(ctx: &Ctx, profession: Profession) -> &'static str {
-    match profession {
-        Profession::None => tr(ctx, "Unemployed", "Безработный"),
-        Profession::Nitwit => tr(ctx, "Nitwit", "Бездельник"),
-        Profession::Armorer => tr(ctx, "Armorer", "Бронник"),
-        Profession::Butcher => tr(ctx, "Butcher", "Мясник"),
-        Profession::Cartographer => tr(ctx, "Cartographer", "Картограф"),
-        Profession::Cleric => tr(ctx, "Cleric", "Священник"),
-        Profession::Farmer => tr(ctx, "Farmer", "Фермер"),
-        Profession::Fisherman => tr(ctx, "Fisherman", "Рыбак"),
-        Profession::Fletcher => tr(ctx, "Fletcher", "Лучник"),
-        Profession::Leatherworker => tr(ctx, "Leatherworker", "Кожевник"),
-        Profession::Librarian => tr(ctx, "Librarian", "Библиотекарь"),
-        Profession::Mason => tr(ctx, "Mason", "Каменщик"),
-        Profession::Shepherd => tr(ctx, "Shepherd", "Пастух"),
-        Profession::Toolsmith => tr(ctx, "Toolsmith", "Инструментальщик"),
-        Profession::Weaponsmith => tr(ctx, "Weaponsmith", "Оружейник"),
-        Profession::Miner => tr(ctx, "Miner", "Шахтёр"),
-        Profession::Lumberjack => tr(ctx, "Lumberjack", "Лесоруб"),
-        Profession::Builder => tr(ctx, "Builder", "Строитель"),
-        Profession::Soldier => tr(ctx, "Soldier", "Солдат"),
-    }
+    super::ui_text::profession(ctx.lang, profession)
 }
 
 // ----------------------------------------------------------------------- icons

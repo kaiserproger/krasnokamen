@@ -645,6 +645,33 @@ pub(crate) fn text(lang: Lang, key: Key) -> &'static str {
     }
 }
 
+/// Names shared by workshop certificates and resident cards.
+pub(crate) fn profession(lang: Lang, profession: crate::villager::VillagerProfession) -> &'static str {
+    use crate::villager::VillagerProfession as P;
+    let (en, ru) = match profession {
+        P::None => ("Unemployed", "Безработный"),
+        P::Nitwit => ("Nitwit", "Бездельник"),
+        P::Armorer => ("Armorer", "Бронник"),
+        P::Butcher => ("Butcher", "Мясник"),
+        P::Cartographer => ("Cartographer", "Картограф"),
+        P::Cleric => ("Cleric", "Священник"),
+        P::Farmer => ("Farmer", "Фермер"),
+        P::Fisherman => ("Fisherman", "Рыбак"),
+        P::Fletcher => ("Fletcher", "Лучник"),
+        P::Leatherworker => ("Leatherworker", "Кожевник"),
+        P::Librarian => ("Librarian", "Библиотекарь"),
+        P::Mason => ("Mason", "Каменщик"),
+        P::Shepherd => ("Shepherd", "Пастух"),
+        P::Toolsmith => ("Toolsmith", "Инструментальщик"),
+        P::Weaponsmith => ("Weaponsmith", "Оружейник"),
+        P::Miner => ("Miner", "Шахтёр"),
+        P::Lumberjack => ("Lumberjack", "Лесоруб"),
+        P::Builder => ("Builder", "Строитель"),
+        P::Soldier => ("Soldier", "Солдат"),
+    };
+    match lang { Lang::En => en, Lang::Ru => ru }
+}
+
 /// Certificate geometry counters and the action that satisfies each counter.
 pub(crate) fn requirement<'a>(lang: Lang, code: &'a str) -> (&'a str, &'static str) {
     let (en, ru, en_action, ru_action) = match code {

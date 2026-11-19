@@ -453,7 +453,7 @@ fn kind_label(ctx: &Ctx, kind: BuildingKind) -> String {
         BuildingKind::Gate => ctx.t(Key::KindGate).into(),
         BuildingKind::Workshop(profession) => ctx.f(
             Key::KindWorkshop,
-            &[("profession", &format!("{profession:?}"))],
+            &[("profession", ui_text::profession(ctx.lang, profession))],
         ),
     }
 }
