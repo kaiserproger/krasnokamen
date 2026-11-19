@@ -6,11 +6,11 @@ import unittest
 from tools.harness.backends import settlement_quickwins_qa as gate
 
 GOOD_GUIDE = """Поселения — быстрый старт:
-1. Встаньте в центре и введите /settlement create Имя: в сундуке рядом хранится склад.
-2. Откройте колокол → «Управление» → «Строительство» и закажите здание: строители возьмут материалы со склада.
-3. Не хватает материалов? Положите их на склад: Shift+клик по своему стаку.
-4. Построили сами? «Постройки» → «Сертифицировать»: встаньте на пол в два угла.
-5. Назначьте жителей на работу: «Жители и работа».
+1. Основать поселение: /settlement create Имя; управление — /settlement.
+2. Сначала склад: наполните пустой сундук у центра, стаки переносите Shift+клик.
+3. Строительство: выберите чертёж и закажите, недостающее принесите на склад.
+4. Построили сами? Сертифицируйте: встаньте на пол в два угла.
+5. Жители и работа: назначьте жителей на рабочие блоки.
 6. «Следующий шаг» в колоколе подскажет, что делать дальше."""
 
 
@@ -51,7 +51,7 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(ok, facts)
         old = "Settlements / Поселения — quick start:\n" + "\n".join(f"{i}. composter=Farmer" for i in range(1, 10))
         self.assertFalse(gate.guide_verdict(old)[0])
-        self.assertFalse(gate.guide_verdict(GOOD_GUIDE.replace("склад", "хранилище"))[0])  # task order needs склад
+        self.assertFalse(gate.guide_verdict(GOOD_GUIDE.replace("Сначала склад", "Сначала сундук"))[0])  # task order needs склад
 
     def test_guide_rejects_wrong_order_and_length(self):
         shuffled = "\n".join(reversed(GOOD_GUIDE.splitlines()))

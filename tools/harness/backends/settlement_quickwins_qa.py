@@ -151,20 +151,22 @@ STEP_LINE = re.compile(r"^\s*(?:\d+[.)]|[•*-])\s*\S", re.MULTILINE)
 
 
 def guide_verdict(text: str) -> tuple[bool, dict[str, Any]]:
-    """`/settlement guide`: 5..7 short numbered Russian steps, in task order, no old wall of text."""
-    steps = STEP_LINE.findall(text)
-    order = [re.search(word, text, re.IGNORECASE) for word in
-             (r"склад", r"заказ|строительств|стройк", r"сертифиц", r"жител")]
-    positions = [match.start() if match else -1 for match in order]
+    """`/settlement guide`: 5..7 short numbered Russian steps whose headings (the words before the first
+    colon or question mark) run storage -> order/construction -> certification -> residents, no old wall of text."""
+    lines = [line for line in text.splitlines() if STEP_LINE.match(line)]
+    headings = [re.split(r"[:?]", line, maxsplit=1)[0] for line in lines]
+    topics = (r"склад", r"заказ|строительств|стройк", r"сертифиц|построили сам", r"жител")
+    where = [next((index for index, heading in enumerate(headings) if re.search(topic, heading, re.IGNORECASE)), -1)
+             for topic in topics]
     facts = {
-        "steps": len(steps),
+        "steps": len(lines),
         "chars": len(text),
         "cyrillic_only": cyrillic_only(text, "/settlement guide /settlement"),
-        "task_order": positions,
+        "task_step_order": where,
         "old_text": bool(re.search(r"Settlements /|composter=|Villagers work without|SETTLEMENTS_GUIDE", text)),
     }
-    ok = (5 <= len(steps) <= 7 and len(text) <= 1100 and facts["cyrillic_only"]
-          and all(position >= 0 for position in positions) and positions == sorted(positions)
+    ok = (5 <= len(lines) <= 7 and len(text) <= 1100 and facts["cyrillic_only"]
+          and all(index >= 0 for index in where) and where == sorted(set(where))
           and not facts["old_text"])
     return ok, facts
 

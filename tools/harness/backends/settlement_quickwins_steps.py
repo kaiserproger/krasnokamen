@@ -171,6 +171,15 @@ def back_check(w: Walk, cid: str, how: str, pattern: str, expected: Any, origin:
         landed = w.settle(f"{cid} Back target", before=before, timeout=20)
     except StepFailed:
         landed = w.screen()
+        if signature(landed) == before:  # the press did not register (seen once after a scroll): press once more
+            if how == "slot":
+                w.click_slot(pattern, f"{cid} Back again", wait=False)
+            else:
+                w.click_button(pattern, f"{cid} Back again", wait=False, scroll=scroll)
+            try:
+                landed = w.settle(f"{cid} Back target (retry)", before=before, timeout=20)
+            except StepFailed:
+                landed = w.screen()
     w.shot(f"{cid}-back")
     w.judge(cid, bool(expected(landed)), landed={"kind": landed["kind"], "title": landed["title"],
                                                   "buttons": landed["buttons"][:8]},
