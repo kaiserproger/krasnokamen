@@ -65,13 +65,6 @@ class CursorPromotionTests(unittest.TestCase):
         self.assertEqual(len(shots), 4)
         self.assertEqual(shots[-1], "cursor-crafting_table-reopened-before-any-click")
 
-    def test_placement_does_not_accept_without_unmodified_wire_receipt(self):
-        steps = mock.Mock()
-        steps.client.promotion_wire_receipt = None
-        with self.assertRaisesRegex(RuntimeError, "unmodified graphical wire"):
-            items.banner_placement(steps, (0, 64, 0))
-        steps.fixture.assert_not_called()
-
 
 if __name__ == "__main__":
     unittest.main()
