@@ -220,6 +220,9 @@ pub(crate) enum Key {
     EmptyStorage,
     NeedStorage,
     StorageFirst,
+    WalkCorner2,
+    OpenCertify,
+    CloseWalk,
 }
 
 /// English and Russian text for one key.
@@ -236,6 +239,9 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::EmptyStorage => ("Bring materials: Shift-click your own stack.", "Принесите материалы: Shift+клик по своему стаку."),
         Key::NeedStorage => ("First, storage: certify a building with a chest, then stock it.", "Сначала нужен склад: сертифицируйте постройку с сундуком, затем принесите материалы."),
         Key::StorageFirst => ("Next: storage needed", "Дальше: нужен склад"),
+        Key::WalkCorner2 => ("Corner 1 saved ({at}). Walk to corner 2, then press ", "Метка 1 сохранена ({at}). Подойдите к углу 2 и нажмите "),
+        Key::OpenCertify => ("[Open certification]", "[Открыть сертификацию]"),
+        Key::CloseWalk => ("Close and walk to corner 2", "Закрыть и идти к углу 2"),
         Key::GuideClaim => (
             "Find the village bell → right-click → Claim charter. This is your management entrance.",
             "Найдите колокол деревни → ПКМ → «Принять грамоту». Это вход в управление.",
@@ -372,8 +378,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         ),
         Key::Corner1 => ("Corner 1 here", "Угол 1 = моя позиция"),
         Key::TipCorner1 => (
-            "Stand in a corner block and press this; walk to the opposite corner, then /settlement menu certify and press Corner 2 here.",
-            "Встаньте в угловой блок и нажмите; перейдите в противоположный угол, затем /settlement menu certify и нажмите «Угол 2 = моя позиция».",
+            "Stand on the floor corner. Save it, close the dialog and walk; the chat link reopens this form with your marks.",
+            "Встаньте на угол пола. Сохраните метку, закройте диалог и идите; ссылка в чате откроет форму с вашими метками.",
         ),
         Key::Corner2 => ("Corner 2 here", "Угол 2 = моя позиция"),
         Key::TipCorner2 => (

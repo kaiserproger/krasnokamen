@@ -34,8 +34,13 @@ use crate::villager::VillagerProfession as Profession;
 
 pub(crate) const OWNER: &str = "settlement";
 
-/// The two block positions a player marked for the certify form.
-pub(crate) type Marks = [Option<[i32; 3]>; 2];
+/// Corners and type retained while the player closes the modal dialog to walk.
+#[derive(Default)]
+pub(crate) struct Marks {
+    corners: [Option<[i32; 3]>; 2],
+    kind: String,
+    extra: Option<f32>,
+}
 
 const MAX_LISTED: usize = 12;
 const MAX_RESIDENTS: usize = 30;
@@ -289,7 +294,7 @@ fn dispatch(
             let mut form = form_of(state, connection, payload);
             match floor_pos(state, connection) {
                 Some(at) => {
-                    set_mark(state, connection, index, at);
+                    set_mark(state, connection, index, at, &form);
                     *(if index == 0 {
                         &mut form.from
                     } else {
@@ -299,7 +304,29 @@ fn dispatch(
                         Key::CornerSet,
                         &[("n", &(index + 1).to_string()), ("at", &corner_text(at))],
                     );
-                    certify_screen(state, connection, ctx, &form, &note);
+                    if index == 0 {
+                        state.push_player(connection, PlayerChange::StyledChat {
+                            content: Tag::Compound(vec![
+                                ("text".into(), Tag::String(ctx.f(Key::WalkCorner2, &[("at", &corner_text(at))]))),
+                                ("extra".into(), Tag::List(mc_nbt::ListTag {
+                                    element_type: mc_nbt::tag_type::COMPOUND,
+                                    elements: vec![Tag::Compound(vec![
+                                        ("text".into(), Tag::String(ctx.t(Key::OpenCertify).to_owned())),
+                                        ("color".into(), Tag::String("green".into())),
+                                        ("click_event".into(), Tag::Compound(vec![
+                                            ("action".into(), Tag::String("run_command".into())),
+                                            ("command".into(), Tag::String("/settlement menu certify".into())),
+                                        ])),
+                                    ])],
+                                })),
+                            ]),
+                        });
+                        present(state, connection, Dialog::notice(
+                            ctx.t(Key::TitleCertify), Button::plain(ctx.t(Key::CloseWalk)),
+                        ).text(note));
+                    } else {
+                        certify_screen(state, connection, ctx, &form, &note);
+                    }
                 }
                 None => certify_screen(state, connection, ctx, &form, ctx.t(Key::PositionUnknown)),
             }
@@ -971,27 +998,25 @@ fn buildings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, 
 }
 
 fn form_of(state: &TickState, connection: ConnectionId, payload: ClickPayload<'_>) -> Form {
-    let marks = state
-        .settlement_marks
-        .get(&connection)
-        .copied()
-        .unwrap_or_default();
+    let marks = state.settlement_marks.get(&connection);
     let here = floor_pos(state, connection);
     let default_corner =
         |mark: Option<[i32; 3]>| mark.or(here).map(corner_text).unwrap_or_default();
     Form {
-        kind: payload.string("kind").unwrap_or("house").to_owned(),
+        kind: payload.string("kind")
+            .or_else(|| marks.map(|marks| marks.kind.as_str()))
+            .unwrap_or("house").to_owned(),
         from: payload
             .string("from")
-            .map_or_else(|| default_corner(marks[0]), str::to_owned),
+            .map_or_else(|| default_corner(marks.and_then(|marks| marks.corners[0])), str::to_owned),
         to: payload
             .string("to")
-            .map_or_else(|| default_corner(marks[1]), str::to_owned),
-        extra: payload.float("extra").unwrap_or(4.0),
+            .map_or_else(|| default_corner(marks.and_then(|marks| marks.corners[1])), str::to_owned),
+        extra: payload.float("extra").or_else(|| marks.and_then(|marks| marks.extra)).unwrap_or(4.0),
     }
 }
 
-fn set_mark(state: &mut TickState, connection: ConnectionId, index: usize, at: [i32; 3]) {
+fn set_mark(state: &mut TickState, connection: ConnectionId, index: usize, at: [i32; 3], form: &Form) {
     if state.settlement_marks.len() >= MAX_MARKS
         && !state.settlement_marks.contains_key(&connection)
     {
@@ -1000,7 +1025,10 @@ fn set_mark(state: &mut TickState, connection: ConnectionId, index: usize, at: [
             .settlement_marks
             .retain(|other, _| connections.entity_of(*other).is_some());
     }
-    state.settlement_marks.entry(connection).or_default()[index] = Some(at);
+    let marks = state.settlement_marks.entry(connection).or_default();
+    marks.corners[index] = Some(at);
+    marks.kind.clone_from(&form.kind);
+    marks.extra = Some(form.extra);
 }
 
 fn certify_screen(

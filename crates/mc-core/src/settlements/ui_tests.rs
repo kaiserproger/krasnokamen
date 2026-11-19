@@ -744,14 +744,9 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
 fn marking_corners_prefills_the_certify_form_and_bad_input_is_explained() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
-    let first = last_dialog(&click(&mut state, id, "mark1", &certify_form("house")));
-    let at = player_pos(&state, CONN).unwrap();
-    assert!(
-        first
-            .body
-            .contains(&format!("Corner 1 = {}", corner_text(at)))
-    );
-    assert_eq!(state.settlement_marks[&CONN][0], Some(at));
+    click(&mut state, id, "mark1", &certify_form("house"));
+    let at = floor_pos(&state, CONN).unwrap();
+    assert_eq!(state.settlement_marks[&CONN].corners[0], Some(at));
     // Reopening from the buildings screen uses the stored mark as corner 1.
     click(&mut state, id, "buildings", &[]);
     let reopened = last_dialog(&click(&mut state, id, "certify", &[]));
