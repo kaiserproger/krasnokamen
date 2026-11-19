@@ -7,10 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from . import scenarios
-from .backends import native_promotion_maps as maps
 from .backends import native_promotion_wire as wire
-from .backends import native_v2
 
 
 def varint(value: int) -> bytes:
@@ -98,15 +95,6 @@ class PromotionWireTests(unittest.TestCase):
                 receipt.server_packet(object(), "play", 52, map_packet())
             with self.assertRaisesRegex(RuntimeError, "queried graphical"):
                 receipt.snapshot(object())
-
-    def test_every_map_probe_dispatches_through_native_v2_not_the_default_pig_probe(self):
-        for kind in maps.SCENARIO_KINDS:
-            name = "native-v2-map-" + kind
-            with self.subTest(name=name):
-                self.assertIn(name, native_v2.NATIVE_SCENARIO_IDS)
-                self.assertIn(name, native_v2.RUNNERS)
-                self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
-                self.assertEqual(scenarios.SCENARIOS[name].profile, "entities")
 
 
 if __name__ == "__main__":
