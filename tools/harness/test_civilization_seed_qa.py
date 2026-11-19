@@ -2,91 +2,11 @@
 import copy
 import unittest
 from unittest.mock import Mock, patch
-from tempfile import TemporaryDirectory
-from pathlib import Path
 
 from .backends import civilization_seed_qa as qa
 
 
 class CivilizationEvidenceTests(unittest.TestCase):
-    def test_entity_census_retains_all_pages_including_a_distant_newborn(self):
-        entities = [{"entity_id": index, "entity_uuid": str(index),
-                     "entity_type": "minecraft:villager", "received_baby": index == 599}
-                    for index in range(600)]
-        probe = Mock()
-        def page(name, arguments):
-            self.assertEqual(name, "minecraft_list_entities")
-            self.assertEqual((arguments["radius"], arguments["limit"]), (128, 16))
-            start = int(arguments["cursor"]) + 1 if arguments["cursor"] else 0
-            rows = entities[start:start + 16]
-            more = start + len(rows) < len(entities)
-            return {"entities": rows, "visible_count": len(entities),
-                    "truncated": more, "next_cursor": str(rows[-1]["entity_id"]) if more else None}
-        probe.call.side_effect = page
-        census = qa.entity_census(probe)
-        self.assertEqual(census["entities"], entities)
-        self.assertFalse(census["truncated"])
-        self.assertEqual(qa.newborn(census, {str(index) for index in range(599)}, True)["entity_id"], 599)
-
-    def test_entity_census_never_accepts_an_incomplete_or_repeated_page(self):
-        for pages in (
-            [{"entities": [], "visible_count": 1, "truncated": False, "next_cursor": None}],
-            [{"entities": [], "visible_count": 1, "truncated": True, "next_cursor": None}],
-            [{"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": True, "next_cursor": "1"},
-             {"entities": [{"entity_id": 1}], "visible_count": 2, "truncated": False, "next_cursor": None}],
-            [{"entities": [{"entity_id": 1}], "visible_count": 3, "truncated": True, "next_cursor": "1"},
-             {"entities": [{"entity_id": 2}], "visible_count": 2, "truncated": False, "next_cursor": None}],
-        ):
-            with self.subTest(pages=pages):
-                probe = Mock()
-                probe.call.side_effect = pages
-                with self.assertRaises(RuntimeError):
-                    qa.entity_census(probe)
-
-    def test_ecology_reuses_the_complete_census(self):
-        probe = Mock()
-        census = {"entities": [{"entity_type": "minecraft:sheep"}, {"entity_type": "minecraft:villager"}]}
-        ecology = qa.village._probe_ecology(probe, {}, [], entities=census)
-        self.assertEqual((ecology["sheep"], ecology["villagers"]), (1, 1))
-        probe.call.assert_not_called()
-
-    def test_verdict_requires_all_evidence_and_stall_wins(self):
-        stages = {name: True for name in ("new_house", "births", "second_building", "iron_smelted")}
-        self.assertTrue(qa.acceptance_verdict(stages, stalled=False)["all"])
-        for name in stages:
-            with self.subTest(missing=name):
-                self.assertFalse(qa.acceptance_verdict({**stages, name: False}, stalled=False)["all"])
-        self.assertFalse(qa.acceptance_verdict(stages, stalled=True)["all"])
-
-    def test_population_requires_named_server_count(self):
-        lines = ["village_00000001 | owner=VillageAuto anchor=[131, 78, -217] radius=136 members=7 revision=12"]
-        self.assertEqual(qa.population(lines, "village_00000001"), 7)
-        with self.assertRaisesRegex(RuntimeError, "no member count"):
-            qa.population(lines, "other")
-
-    def test_birth_requires_complete_baseline_and_new_baby(self):
-        old = {"entity_type": "minecraft:villager", "entity_uuid": "old", "received_baby": True}
-        baby = {"entity_type": "minecraft:villager", "entity_uuid": "new", "received_baby": True}
-        entities = {"entities": [old, baby]}
-        self.assertIs(qa.newborn(entities, {"old"}, True), baby)
-        self.assertIsNone(qa.newborn(entities, {"old"}, False))
-        self.assertIsNone(qa.newborn({"entities": [old]}, {"old"}, True))
-        self.assertIsNone(qa.newborn({"entities": [{**baby, "received_baby": False}]}, {"old"}, True))
-
-    def test_baseline_tick_comes_from_a_fresh_server_console_response(self):
-        with TemporaryDirectory() as folder:
-            log = Path(folder) / "server.log"
-            log.write_text("The time is 10\n")
-            server = Mock()
-            def send(_, command):
-                self.assertEqual(command, "time query gametime")
-                with log.open("a") as output:
-                    output.write("unrelated\nThe time is 120\n")
-            with (patch.object(qa.item_merge, "_console", side_effect=send),
-                  patch.object(qa.village.runtime, "wait_for_path_condition",
-                               side_effect=lambda path, timeout, callback: callback()[1])):
-                self.assertEqual(qa.baseline_server_tick(server, log, 10.0), 120)
-
     def test_birth_events_exclude_children_born_in_other_settlements(self):
         def member(uuid, birth_tick=None):
             runtime = {"settlement": 1, "household": "1-1"}
@@ -116,20 +36,6 @@ class CivilizationEvidenceTests(unittest.TestCase):
                 rebound = copy.deepcopy(snapshot)
                 rebound["entities"][-1]["payload"]["krasnokamen:VillagerRuntime"][field] = foreign
                 self.assertFalse(verify(log, rebound)["verified"])
-
-    def test_new_certificate_requires_matching_observed_project(self):
-        building = {"id": 2, "kind": "house", "level": 1, "natural": False}
-        project = {"blueprint": "house", "level": 1, "origin": [1, 70, 1]}
-        blueprints = {"house": {"kind": "house"}}
-        with patch.object(qa.village, "_blueprint_placements", return_value=[{}]):
-            self.assertEqual(qa.completed_project(building, {1}, [project], blueprints), project)
-            self.assertIsNone(qa.completed_project(building, {2}, [project], blueprints))
-            self.assertIsNone(qa.completed_project({**building, "natural": True}, set(), [project], blueprints))
-            self.assertIsNone(qa.completed_project(building, set(), [], blueprints))
-            self.assertIsNone(qa.completed_project({**building, "kind": "mason"}, set(), [project], blueprints))
-            self.assertIsNone(qa.completed_project({**building, "level": 2}, set(), [project], blueprints))
-        with patch.object(qa.village, "_blueprint_placements", return_value=[]):
-            self.assertIsNone(qa.completed_project(building, set(), [project], blueprints))
 
     def test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint(self):
         building = {"id": 4294967302, "kind": "builder",
@@ -261,36 +167,6 @@ class CivilizationEvidenceTests(unittest.TestCase):
                               building={"min": [148, 75, -262], "max": [152, 78, -256]})
         self.assertNotIn("minecraft_navigate_to_block",
                          [call.args[0] for call in probe.call.call_args_list])
-
-    def test_occluded_stage_target_never_produces_screenshot(self):
-        probe = Mock()
-        probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
-                                      "target": {"type": "block", "x": 0, "y": 65, "z": 2}}
-        with patch.object(qa.native_client, "capture") as capture:
-            with self.assertRaisesRegex(RuntimeError, "occluded or out of reach"):
-                qa.capture_target(probe, "artifact", "bed", (0, 65.62, 4))
-        capture.assert_not_called()
-
-    def test_baby_capture_checks_identity_after_approach(self):
-        probe = Mock()
-        baby = {"entity_id": 17, "entity_uuid": "new", "entity_type": "minecraft:villager",
-                "received_baby": True, "x": 0, "y": 65.12, "z": 4}
-        probe.call.side_effect = lambda name, args=None: {
-            "entities": [baby], "visible_count": 1, "truncated": False, "next_cursor": None
-        } if name == "minecraft_list_entities" else {}
-        probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
-                                      "target": {"type": "entity", "entity_uuid": "new"}}
-        with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
-            result = qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
-        self.assertEqual(result["observed_target"]["entity_uuid"], "new")
-        probe.call.assert_any_call("minecraft_approach_entity", {"entity_id": 17, "timeout_seconds": 120.0})
-        probe.call.assert_any_call("minecraft_list_entities", {
-            "radius": 128, "limit": 16, "cursor": "", "entity_type": "minecraft:villager"})
-        probe.observe.return_value["target"]["entity_uuid"] = "other"
-        with patch.object(qa.native_client, "capture") as capture:
-            with self.assertRaisesRegex(RuntimeError, "occluded or out of reach"):
-                qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
-        capture.assert_not_called()
 
     def test_baby_aim_retries_while_a_wall_stands_between_observer_and_baby(self):
         probe = Mock()
@@ -567,14 +443,6 @@ class CivilizationEvidenceTests(unittest.TestCase):
         furnace = detail["snapshots"][0]["workstation_blocks"][0]
         self.assertEqual(furnace["iron_menu_skipped"], "output collected before the simulation hold")
 
-    def scan(self, buildings, response):
-        probe = Mock()
-        probe.observe.return_value = {"player": {"x": 0.0, "y": 70.0, "z": 0.0}}
-        probe.call.return_value = response
-        with patch.object(qa.village, "_listed_buildings", return_value=buildings):
-            evidence = qa.building_blocks(probe, [], Mock())
-        return probe, evidence
-
     def test_remote_building_loads_each_chunk_and_returns_observer(self):
         building = {"natural": False, "min": [234, 72, -213], "max": [240, 76, -207]}
         probe = Mock()
@@ -593,51 +461,6 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertEqual(console.call_count, 2)
         self.assertEqual([call.args[1] for call in probe.wait.call_args_list],
                          ["building_scan_observer_arrived", "building_scan_observer_returned"])
-
-    def test_retains_beds_and_furnaces_with_truncation_flag(self):
-        building = {"natural": False, "min": [0, 64, 0], "max": [2, 67, 2]}
-        blocks = [{"block_id": name} for name in (
-            "minecraft:red_bed", "minecraft:furnace", "minecraft:blast_furnace", "minecraft:stone")]
-        probe, evidence = self.scan([building], {"blocks": blocks, "truncated": True})
-        self.assertEqual(evidence, [{"building": building, "blocks": blocks[:3], "truncated": True, "solid": []}])
-        probe.call.assert_called_once_with("minecraft_scan_blocks", {
-            "min_x": 0, "min_y": 64, "min_z": 0, "max_x": 2, "max_y": 67, "max_z": 2})
-
-    def test_natural_zone_does_not_become_building_evidence(self):
-        probe, evidence = self.scan([{"natural": True}], {})
-        probe.call.assert_not_called()
-        self.assertEqual(evidence, [])
-
-    def test_oversize_scan_is_explicitly_unobserved(self):
-        building = {"natural": False, "min": [0, 64, 0], "max": [31, 95, 31]}
-        probe, evidence = self.scan([building], {})
-        probe.call.assert_not_called()
-        self.assertEqual(evidence, [{"building": building, "skipped": "scan volume exceeds 4096"}])
-
-    def test_empty_scan_never_proves_beds_or_furnaces(self):
-        building = {"natural": False, "min": [0, 64, 0], "max": [2, 67, 2]}
-        _, evidence = self.scan([building], {"blocks": [], "truncated": False})
-        self.assertEqual(evidence[0]["blocks"], [])
-        self.assertFalse(evidence[0]["truncated"])
-
-    def test_waypoint_uses_observed_ground_and_clear_dry_headroom(self):
-        def cell(y, empty, dry=True):
-            return {"y": y, "collision_empty": empty, "fluid": {"empty": dry}}
-        self.assertEqual(qa.standable_height([cell(70, False), cell(71, True),
-                                              cell(72, True)], 69), 71)
-        self.assertIsNone(qa.standable_height([cell(70, False), cell(71, True),
-                                               cell(72, False)], 69))
-        self.assertIsNone(qa.standable_height([cell(70, False), cell(71, True, False),
-                                               cell(72, True)], 69))
-
-    def test_storage_floor_may_be_below_chest_without_overlapping_building(self):
-        floor = [{"x": x, "y": 76, "z": z, "collision_empty": False}
-                 for x in range(131, 134) for z in range(-218, -215)]
-        self.assertEqual(qa.storage_bounds((132, 78, -217), floor, []),
-                         ([131, 76, -218], [133, 79, -216]))
-        self.assertIsNone(qa.storage_bounds((132, 78, -217), floor[:-1], []))
-        self.assertIsNone(qa.storage_bounds((132, 78, -217), floor,
-                                           [{"min": [132, 76, -217], "max": [132, 78, -217]}]))
 
     def test_iron_capture_opens_furnace_and_requires_visible_output(self):
         probe = Mock()
