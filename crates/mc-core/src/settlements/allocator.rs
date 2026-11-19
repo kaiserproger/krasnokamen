@@ -1804,7 +1804,9 @@ pub(crate) fn free_bed(
     // A bed whose route failed waits until every other candidate has had its
     // try: two unreachable nearest beds would otherwise hide every farther bed
     // on each search. The memory forgets beds that left the candidate set and
-    // starts over once every candidate has failed.
+    // starts over once every candidate has failed. A success keeps it: the
+    // birth's own search, when the courtship that success began ends, would
+    // otherwise start again at the unreachable beds and part the couple.
     if let Some(tried) = cache.far_bed_tried.get_mut(&owner) {
         tried.retain(|bed| candidates.iter().any(|(_, poi)| poi.pos == *bed));
         if candidates.iter().all(|(_, poi)| tried.contains(&poi.pos)) {
@@ -1831,7 +1833,6 @@ pub(crate) fn free_bed(
             &mut ctx, cache, pos, poi.pos, half_width, height, path, false, horizontal, vertical,
             true,
         ) {
-            cache.far_bed_tried.remove(&owner);
             return Some(poi.pos);
         }
         let exhausted = ctx

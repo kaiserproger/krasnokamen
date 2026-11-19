@@ -1031,6 +1031,73 @@ fn a_far_spare_bed_search_reaches_past_unreachable_nearer_beds() {
     );
 }
 
+/// Review P1 (wt/SpainLand): the search that found the reachable far bed past
+/// two walled nearer ones starts a courtship. The birth's own search at its
+/// end must reach that bed again instead of starting over at the walled beds,
+/// which parted the couple courtship after courtship with no birth. The
+/// village stands in a walled strip, so a failed far route is short and
+/// leaves the tick's path-node budget: the birth search's answer decides.
+#[test]
+fn a_couple_breeds_into_the_far_bed_past_two_walled_ones() {
+    use crate::settlements::migration::return_tests::{fixture, shelter, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    let walled = [80, 100].map(|x| one_bed_house(&mut state, settlement, x, true));
+    let open = one_bed_house(&mut state, settlement, 130, false);
+    let stone = state.registry.states.stone;
+    for y in 64..=65 {
+        for x in 2..=140 {
+            state.world.set_block(x, y, 4, stone);
+            state.world.set_block(x, y, 14, stone);
+        }
+        for z in 4..=14 {
+            state.world.set_block(2, y, z, stone);
+            state.world.set_block(140, y, z, stone);
+        }
+    }
+    let chest = block(&state, "minecraft:chest", &[]);
+    state.world.set_block(9, 64, 11, chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(item(&state, "minecraft:bread"), 6);
+    state.block_entities.insert(
+        (9, 64, 11),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([9, 64, 11]);
+    state.world.fold_overlay();
+    let parents = [8.5, 10.5].map(|x| bound_resident(&mut state, settlement, x));
+    settle_homes(&mut state, &parents);
+    // A courtship lasts about 300 ticks: the first ones must end in a birth,
+    // not in a loop the couple leaves only by drifting near another house.
+    let mut child = None;
+    for _ in 0..1_500 {
+        crate::settlements::migration::return_tests::step(&mut state);
+        child = state.entities.slots().find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.birth_origin.is_some())
+        });
+        if child.is_some() {
+            break;
+        }
+    }
+    let child = child.expect("the first courtships end in a birth");
+    let home = home_of(&state, child);
+    assert_eq!(home, Some(open), "the child's bed is the reachable far one");
+    assert!(home.is_none_or(|home| !walled.contains(&home)));
+}
+
 /// Two couples court for the one spare bed. The couple that finds it taken
 /// when its courtship ends keeps its food (docs/settlements/breeding.md).
 #[test]
