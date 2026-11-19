@@ -28,7 +28,7 @@ use super::buildings::{self, BuildingId, BuildingKind, CertError};
 use super::ui_text::{self, Key, Lang};
 use super::{SettlementId, economy_customization};
 use crate::boundary::{ConnectionId, PlayerChange};
-use crate::dialog::{self, Button, ClickPayload, Dialog, Input};
+use crate::dialog::{Button, ClickPayload, Dialog, Input};
 use crate::tick::TickState;
 use crate::villager::VillagerProfession as Profession;
 
@@ -198,6 +198,7 @@ fn dispatch(
         return;
     }
     match action {
+        "back" => navigation::back(state, connection, ctx),
         "main" => main_screen(state, connection, ctx, ""),
         "dashboard" => menus::dashboard(state, connection, ctx),
         "help" => help_screen(state, connection, ctx, payload),
@@ -272,7 +273,7 @@ fn dispatch(
         }
         // A building id (map cells, icon pages) opens that building's icon page.
         "buildings" => match building_of(state, ctx, payload) {
-            Some(building) => menus::building_from(state, connection, ctx, building, payload),
+            Some(building) => menus::building_from(state, connection, ctx, building),
             None => menus::buildings(state, connection, ctx),
         },
         "buildings_icons" => menus::buildings(state, connection, ctx),
@@ -321,7 +322,7 @@ fn dispatch(
                                 })),
                             ]),
                         });
-                        present(state, connection, Dialog::notice(
+                        present(state, connection, ctx, "mark_saved", Dialog::notice(
                             ctx.t(Key::TitleCertify), Button::plain(ctx.t(Key::CloseWalk)),
                         ).text(note));
                     } else {
@@ -430,9 +431,10 @@ fn say(state: &mut TickState, connection: ConnectionId, message: &str) {
     );
 }
 
-fn present(state: &mut TickState, connection: ConnectionId, dialog: Dialog) {
-    if let Err(error) = dialog::open(state, connection, dialog) {
-        tracing::warn!(target: "dialog", %error, "settlement dialog rejected");
+fn present(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, screen: &'static str, dialog: Dialog) {
+    match dialog.into_tag() {
+        Ok(dialog) => navigation::dialog(state, connection, ctx.id, screen, dialog),
+        Err(error) => tracing::warn!(target: "dialog", %error, "settlement dialog rejected"),
     }
 }
 
@@ -586,23 +588,19 @@ fn main_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
         button(ctx.t(Key::Army), "army", ctx.id),
         button(ctx.t(Key::Help), "help", ctx.id),
     ];
-    present(state, connection, frame(ctx, title, note, body, buttons));
+    present(state, connection, ctx, "main", frame(ctx, title, note, body, buttons));
 }
 
 fn claim_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
     let Some(record) = state.settlements.get(ctx.id) else {
         return;
     };
-    present(
-        state,
-        connection,
-        Dialog::confirmation(
-            ctx.t(Key::ClaimReview),
-            button(ctx.t(Key::ClaimReview), "claim", ctx.id),
-            button(ctx.t(Key::Back), "main", ctx.id),
-        )
-        .text(ctx.f(Key::ClaimPolicy, &[("name", &record.name)])),
-    );
+    present(state, connection, ctx, "claim", Dialog::confirmation(
+        ctx.t(Key::ClaimReview),
+        button(ctx.t(Key::ClaimReview), "claim", ctx.id),
+        button(ctx.t(Key::Back), "back", ctx.id),
+    )
+    .text(ctx.f(Key::ClaimPolicy, &[("name", &record.name)])));
 }
 
 fn help_screen(
@@ -641,16 +639,12 @@ fn help_screen(
                 .with("page", Tag::String(next.to_string())),
         );
     }
-    buttons.push(button(ctx.t(Key::Back), "main", ctx.id));
-    present(
-        state,
-        connection,
-        Dialog::multi_action(
-            format!("{} {}/{}", ctx.t(Key::Help), page + 1, topics.len()),
-            buttons,
-        )
-        .text(ctx.t(topic)),
-    );
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
+    present(state, connection, ctx, "help", Dialog::multi_action(
+        format!("{} {}/{}", ctx.t(Key::Help), page + 1, topics.len()),
+        buttons,
+    )
+    .text(ctx.t(topic)));
 }
 
 // Confirm the visible order intent, not the simulation epoch: native planning,
@@ -702,14 +696,6 @@ fn with_pending_order(
         )
 }
 
-fn with_navigation(mut button: Button, payload: ClickPayload<'_>) -> Button {
-    for key in ["from", "bk", "bp", "mx", "mz", "ms"] {
-        if let Some(value) = payload.string(key) {
-            button = button.with(key, Tag::String(value.to_owned()));
-        }
-    }
-    button
-}
 
 fn building_filters(
     state: &mut TickState,
@@ -742,12 +728,8 @@ fn building_filters(
             .with("page", Tag::String(next.to_string())),
         );
     }
-    buttons.push(button(ctx.t(Key::Back), "buildings", ctx.id));
-    present(
-        state,
-        connection,
-        Dialog::multi_action(ctx.t(Key::Buildings), buttons),
-    );
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
+    present(state, connection, ctx, "building_filters", Dialog::multi_action(ctx.t(Key::Buildings), buttons));
 }
 
 fn project_estimate(
@@ -797,13 +779,8 @@ fn project_estimate(
             ])))
         })
         .collect::<Vec<_>>();
-    let review = if building.is_some() {
-        "project_upgrade_review"
-    } else {
-        "project_order_review"
-    };
     let target = |label: &str, action: &str| {
-        let mut button = with_navigation(button(label, action, ctx.id), payload);
+        let mut button = button(label, action, ctx.id);
         if let Some(building) = building {
             button = button.with("b", Tag::String(building.id.0.to_string()));
         }
@@ -812,7 +789,7 @@ fn project_estimate(
         }
         button
     };
-    let mut buttons = vec![target(ctx.t(Key::Back), review)];
+    let mut buttons = vec![button(ctx.t(Key::Back), "back", ctx.id)];
     for next in [page.checked_sub(1), (page + 1 < pages).then_some(page + 1)]
         .into_iter()
         .flatten()
@@ -822,21 +799,17 @@ fn project_estimate(
                 .with("page", Tag::String(next.to_string())),
         );
     }
-    present(
-        state,
-        connection,
-        Dialog::multi_action(
-            format!("{} {}/{}", ctx.t(Key::MaterialsEstimate), page + 1, pages),
-            buttons,
-        )
-        .text(Tag::Compound(vec![
-            ("text".into(), Tag::String(String::new())),
-            ("extra".into(), Tag::List(mc_nbt::ListTag {
-                element_type: mc_nbt::tag_type::COMPOUND, elements: body,
-            })),
-        ]))
-        .text(ctx.t(Key::RequestPolicy)),
-    );
+    present(state, connection, ctx, "estimate", Dialog::multi_action(
+        format!("{} {}/{}", ctx.t(Key::MaterialsEstimate), page + 1, pages),
+        buttons,
+    )
+    .text(Tag::Compound(vec![
+        ("text".into(), Tag::String(String::new())),
+        ("extra".into(), Tag::List(mc_nbt::ListTag {
+            element_type: mc_nbt::tag_type::COMPOUND, elements: body,
+        })),
+    ]))
+    .text(ctx.t(Key::RequestPolicy)));
 }
 
 fn certificate_review(
@@ -859,28 +832,21 @@ fn certificate_review(
             Err(error) => missing_text(ctx, &error),
         }
     };
-    let confirm = with_navigation(
-        button(
-            ctx.f(Key::Certificate, &[("level", &next.to_string())]),
-            "upgrade",
-            ctx.id,
-        ),
-        payload,
+    let confirm = button(
+        ctx.f(Key::Certificate, &[("level", &next.to_string())]),
+        "upgrade",
+        ctx.id,
     )
     .with("b", Tag::String(id.0.to_string()))
     .with("level", Tag::String(building.level.to_string()));
-    let back = with_navigation(button(ctx.t(Key::Back), "buildings", ctx.id), payload)
+    let back = button(ctx.t(Key::Back), "back", ctx.id)
         .with("b", Tag::String(id.0.to_string()));
     let dialog = if ctx.manage && building.level < 3 {
         Dialog::confirmation(ctx.t(Key::Buildings), confirm, back)
     } else {
         Dialog::notice(ctx.t(Key::Buildings), back)
     };
-    present(
-        state,
-        connection,
-        dialog.text(ctx.t(Key::CertificatePolicy)).text(result),
-    );
+    present(state, connection, ctx, "certificate_review", dialog.text(ctx.t(Key::CertificatePolicy)).text(result));
 }
 
 fn project_review(
@@ -951,21 +917,10 @@ fn project_review(
         body.push('\n');
         body.push_str(&pending);
     }
-    confirm = with_navigation(confirm, payload);
-    let back = if action == "project_cancel_review" {
-        button(ctx.t(Key::Back), "project_status_details", ctx.id)
-    } else if let Some(id) = building_of(state, ctx, payload) {
-        with_navigation(button(ctx.t(Key::Back), "buildings", ctx.id), payload)
-            .with("b", Tag::String(id.0.to_string()))
-    } else {
-        button(ctx.t(Key::Back), "projects", ctx.id)
-    };
+    let back = button(ctx.t(Key::Back), "back", ctx.id);
     let mut buttons = vec![back];
     if action != "project_cancel_review" {
-        let mut estimate = with_navigation(
-            button(ctx.t(Key::MaterialsEstimate), "project_estimate", ctx.id),
-            payload,
-        );
+        let mut estimate = button(ctx.t(Key::MaterialsEstimate), "project_estimate", ctx.id);
         for key in ["b", "blueprint"] {
             if let Some(value) = payload.string(key) {
                 estimate = estimate.with(key, Tag::String(value.to_owned()));
@@ -976,25 +931,17 @@ fn project_review(
     if ctx.manage {
         buttons.insert(0, confirm);
     }
-    present(
-        state,
-        connection,
-        Dialog::multi_action(title, buttons).text(body).text(pending_material_text(state, ctx, pending_index(payload).unwrap_or(0))),
-    );
+    present(state, connection, ctx, "project_review", Dialog::multi_action(title, buttons).text(body).text(pending_material_text(state, ctx, pending_index(payload).unwrap_or(0))));
 }
 
 // ------------------------------------------------------------------- buildings
 
 fn buildings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note: &str) {
-    present(
-        state,
-        connection,
-        Dialog::notice(
-            ctx.t(Key::Buildings),
-            button(ctx.t(Key::Back), "buildings", ctx.id),
-        )
-        .text(note),
-    );
+    present(state, connection, ctx, "buildings_note", Dialog::notice(
+        ctx.t(Key::Buildings),
+        button(ctx.t(Key::Back), "back", ctx.id),
+    )
+    .text(note));
 }
 
 fn form_of(state: &TickState, connection: ConnectionId, payload: ClickPayload<'_>) -> Form {
@@ -1067,7 +1014,7 @@ fn certify_screen(
         button(ctx.t(Key::Corner2), "mark2", ctx.id)
             .width(100)
             .tooltip(ctx.t(Key::TipCorner2)),
-        button(ctx.t(Key::Back), "buildings", ctx.id).width(100),
+        button(ctx.t(Key::Back), "back", ctx.id).width(100),
     ];
     let mut dialog = Dialog::multi_action(ctx.t(Key::TitleCertify), buttons).columns(4);
     if !note.is_empty() {
@@ -1093,7 +1040,7 @@ fn certify_screen(
                 .initial_number(form.extra.clamp(0.0, MAX_EXTRA_HEIGHT).round())
                 .step(1.0),
         );
-    present(state, connection, dialog);
+    present(state, connection, ctx, "certify", dialog);
 }
 
 fn corner(text: &str) -> Option<[i32; 3]> {
@@ -1162,11 +1109,11 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
                     ("id", &short(id).to_string()),
                 ],
             );
-            present(state, connection, Dialog::multi_action(ctx.t(Key::Buildings), vec![
+            present(state, connection, ctx, "certified", Dialog::multi_action(ctx.t(Key::Buildings), vec![
                 button(ctx.t(Key::ResidentsJobs), "residents", ctx.id),
                 button(ctx.f(Key::Certificate, &[("level", "2")]), "certificate_review", ctx.id)
                     .with("b", Tag::String(id.0.to_string())),
-                button(ctx.t(Key::Back), "buildings", ctx.id),
+                button(ctx.t(Key::Back), "back", ctx.id),
             ]).text(note).text(ctx.t(Key::AfterCertified)));
         }
         Err(error) => {
@@ -1230,13 +1177,9 @@ fn upgrade(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
             ],
         ),
     };
-    let back = with_navigation(button(ctx.t(Key::Back), "buildings", ctx.id), payload)
+    let back = button(ctx.t(Key::Back), "back", ctx.id)
         .with("b", Tag::String(id.0.to_string()));
-    present(
-        state,
-        connection,
-        Dialog::notice(ctx.t(Key::Buildings), back).text(note),
-    );
+    present(state, connection, ctx, "upgrade", Dialog::notice(ctx.t(Key::Buildings), back).text(note));
 }
 
 // ---------------------------------------------------------------------- orders
@@ -1268,15 +1211,11 @@ fn orders_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, not
     if note.is_empty() {
         menus::production(state, connection, ctx);
     } else {
-        present(
-            state,
-            connection,
-            Dialog::notice(
-                ctx.t(Key::ProductionOrders),
-                button(ctx.t(Key::Back), "orders", ctx.id),
-            )
-            .text(note),
-        );
+        present(state, connection, ctx, "orders_note", Dialog::notice(
+            ctx.t(Key::ProductionOrders),
+            button(ctx.t(Key::Back), "back", ctx.id),
+        )
+        .text(note));
     }
 }
 
@@ -1304,7 +1243,7 @@ fn production_detail(
             ("status", &job_status(ctx, job)),
         ],
     );
-    let mut buttons = vec![button(ctx.t(Key::Back), "orders", ctx.id)];
+    let mut buttons = vec![button(ctx.t(Key::Back), "back", ctx.id)];
     if ctx.manage && job.unfinished() {
         let (label, route) = if job.paused.as_deref() == Some("paused") {
             (ctx.f(Key::Resume, &[("id", id)]), "order_resume")
@@ -1322,7 +1261,7 @@ fn production_detail(
     if !note.is_empty() {
         dialog = dialog.text(note);
     }
-    present(state, connection, dialog);
+    present(state, connection, ctx, "job", dialog);
 }
 
 /// Crafting stations inside certified workshops, a bounded scan on click only.
@@ -1398,7 +1337,7 @@ fn order_start(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
                     .with("p", Tag::String(corner_text(station.at)))
                     .width(300)
                 })
-                .chain([button(ctx.t(Key::Back), "orders", ctx.id)])
+                .chain([button(ctx.t(Key::Back), "back", ctx.id)])
                 .collect();
             let dialog = frame(
                 ctx,
@@ -1408,7 +1347,7 @@ fn order_start(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
                 buttons,
             )
             .columns(1);
-            present(state, connection, dialog);
+            present(state, connection, ctx, "recipe_review", dialog);
         }
     }
 }
@@ -1517,32 +1456,28 @@ fn recipe_review(
         .with("b", Tag::String(building.0.to_string()))
         .with("p", Tag::String(corner_text(at)))
         .with("r", Tag::String(recipe.id.as_str().to_owned()));
-    present(
-        state,
-        connection,
-        Dialog::multi_action(
-            ctx.t(Key::TitleNewOrder),
-            vec![
-                confirm,
-                button(ctx.t(Key::Back), "order_pick", ctx.id)
-                    .with("b", Tag::String(building.0.to_string()))
-                    .with("p", Tag::String(corner_text(at))),
-            ],
-        )
-        .text(facts)
-        .text(ctx.f(Key::PickProduct, &[("at", &corner_text(at))]))
-        .input(
-            Input::number_range("count", ctx.t(Key::Quantity), 1.0, MAX_ORDER)
-                .initial_number(8.0)
-                .step(1.0),
-        )
-        .input(Input::single_option(
-            "worker",
-            ctx.t(Key::Resident),
-            workers,
-        ))
-        .input(Input::boolean("auto", ctx.t(Key::AutoCraft)).initial_bool(false)),
-    );
+    present(state, connection, ctx, "order_create", Dialog::multi_action(
+        ctx.t(Key::TitleNewOrder),
+        vec![
+            confirm,
+            button(ctx.t(Key::Back), "back", ctx.id)
+                .with("b", Tag::String(building.0.to_string()))
+                .with("p", Tag::String(corner_text(at))),
+        ],
+    )
+    .text(facts)
+    .text(ctx.f(Key::PickProduct, &[("at", &corner_text(at))]))
+    .input(
+        Input::number_range("count", ctx.t(Key::Quantity), 1.0, MAX_ORDER)
+            .initial_number(8.0)
+            .step(1.0),
+    )
+    .input(Input::single_option(
+        "worker",
+        ctx.t(Key::Resident),
+        workers,
+    ))
+    .input(Input::boolean("auto", ctx.t(Key::AutoCraft)).initial_bool(false)));
 }
 
 fn failure_text(ctx: &Ctx, failure: Failure) -> String {
@@ -1760,9 +1695,9 @@ fn army_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note:
             );
         }
     }
-    buttons.push(button(ctx.t(Key::Back), "main", ctx.id));
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
     let title = ctx.f(Key::TitleArmy, &[("name", &record.name)]);
-    present(state, connection, frame(ctx, title, note, text, buttons));
+    present(state, connection, ctx, "army", frame(ctx, title, note, text, buttons));
 }
 
 /// One soldier: details plus its Follow/Guard/Patrol/Return and Dismiss buttons.
@@ -1808,12 +1743,12 @@ fn soldier_screen(
                 .with("u", Tag::String(uuid.to_string())),
         );
     }
-    buttons.push(button(ctx.t(Key::Back), "army", ctx.id));
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
     let title = ctx.f(
         Key::TitleSoldier,
         &[("id", &soldier_id(uuid)), ("name", &record.name)],
     );
-    present(state, connection, frame(ctx, title, note, text, buttons));
+    present(state, connection, ctx, "soldier", frame(ctx, title, note, text, buttons));
 }
 
 /// Back to the soldier a click targeted, or to the roster for an all-soldier click.
@@ -1918,15 +1853,11 @@ fn projects_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, n
     if note.is_empty() {
         menus::projects(state, connection, ctx);
     } else {
-        present(
-            state,
-            connection,
-            Dialog::notice(
-                ctx.t(Key::Projects),
-                button(ctx.t(Key::Status), "project_status", ctx.id),
-            )
-            .text(note),
-        );
+        present(state, connection, ctx, "projects_note", Dialog::notice(
+            ctx.t(Key::Projects),
+            button(ctx.t(Key::Status), "project_status", ctx.id),
+        )
+        .text(note));
     }
 }
 
@@ -2092,7 +2023,7 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
     };
     let mut buttons = vec![
         button(menus::storage_label(ctx), "storage", ctx.id),
-        button(ctx.t(Key::Back), "project_status", ctx.id),
+        button(ctx.t(Key::Back), "back", ctx.id),
     ];
     if ctx.manage {
         for (index, order) in super::construction::orders(record).enumerate() {
@@ -2124,11 +2055,7 @@ fn project_status_screen(state: &mut TickState, connection: ConnectionId, ctx: &
             Lang::Ru => "Нет активной стройки и заказа в очереди.",
         });
     }
-    present(
-        state,
-        connection,
-        dialog.exit(Button::plain(ctx.t(Key::Close))),
-    );
+    present(state, connection, ctx, "project_status", dialog.exit(Button::plain(ctx.t(Key::Close))));
 }
 
 /// One missing material of the current project: item, missing count, why it is missing, and the
@@ -2188,7 +2115,7 @@ fn material_detail(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, i
         vec![
             button(menus::storage_label(ctx), "storage", ctx.id),
             button(ctx.t(Key::ProductionOrders), "orders", ctx.id),
-            button(ctx.t(Key::Back), "project_status", ctx.id),
+            button(ctx.t(Key::Back), "back", ctx.id),
         ],
     );
     dialog = match project_needs(state, ctx) {
@@ -2215,7 +2142,7 @@ fn material_detail(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, i
         }
         Err(error) => dialog.text(error),
     };
-    present(state, connection, dialog);
+    present(state, connection, ctx, "material", dialog);
 }
 
 fn material_text(state: &TickState, item: &str, suffix: String) -> Tag {
@@ -2381,7 +2308,7 @@ fn order_accepted(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, la
     let mut dialog = Dialog::multi_action(ctx.t(Key::Projects), vec![
         button(ctx.t(Key::Storage), "storage", ctx.id),
         button(ctx.t(Key::Status), "project_status_details", ctx.id),
-        button(ctx.t(Key::Back), "projects", ctx.id),
+        button(ctx.t(Key::Back), "back", ctx.id),
     ]).text(ctx.f(if started { Key::OrderStarted } else { Key::OrderAccepted }, &[("blueprint", label)]));
     if !started {
         let index = state.settlements.get(ctx.id)
@@ -2390,7 +2317,7 @@ fn order_accepted(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, la
             dialog = dialog.text(pending).text(pending_material_text(state, ctx, index));
         }
     }
-    present(state, connection, dialog.text(ctx.t(Key::StockForOrder)));
+    present(state, connection, ctx, "order_accepted", dialog.text(ctx.t(Key::StockForOrder)));
 }
 
 fn settings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, note: &str) {
@@ -2409,7 +2336,7 @@ fn settings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, n
     if ctx.manage {
         buttons.push(button(ctx.t(Key::Rename), "rename", ctx.id));
     }
-    buttons.push(button(ctx.t(Key::Back), "main", ctx.id));
+    buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
     let title = ctx.f(Key::TitleSettings, &[("name", &record.name)]);
     let mut dialog = frame(ctx, title, note, text, buttons);
     if ctx.manage {
@@ -2419,7 +2346,7 @@ fn settings_screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, n
                 .max_length(64),
         );
     }
-    present(state, connection, dialog);
+    present(state, connection, ctx, "settings", dialog);
 }
 
 fn rename(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: ClickPayload<'_>) {
@@ -2438,6 +2365,9 @@ mod map;
 
 #[path = "ui_menus.rs"]
 pub(crate) mod menus;
+
+#[path = "ui_navigation.rs"]
+pub(crate) mod navigation;
 
 #[cfg(test)]
 #[path = "ui_tests.rs"]
