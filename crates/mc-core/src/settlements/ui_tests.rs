@@ -656,11 +656,10 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
         &certify_form("farmer"),
     ));
     assert_eq!(failed.title, "Certify building");
-    assert!(
-        failed
-            .body
-            .contains("Cannot certify Farmer workshop. Missing:")
-    );
+    assert!(failed.body.contains(&format!(
+        "{} 0/1",
+        ui_text::requirement(Lang::En, "workstations").0,
+    )));
     assert_eq!(failed.inputs, ["kind", "from", "to", "extra"]);
     assert!(state.settlements.get(id).unwrap().buildings.is_empty());
 
@@ -2818,6 +2817,36 @@ fn certification_refusal_keeps_retry_actions_compact_without_losing_details() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
     set_locale(&mut state, "ru_ru");
+    // run16: a complete floor, perimeter and doorway, but no bed or roof.
+    for x in 3..=7 {
+        for z in 3..=7 {
+            if x == 3 || x == 7 || z == 3 || z == 7 {
+                for y in 201..204 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    let lower = block(&state, "minecraft:oak_door", &[("half", "lower")]);
+    let upper = block(&state, "minecraft:oak_door", &[("half", "upper")]);
+    state.world.set_block(3, 201, 5, lower);
+    state.world.set_block(3, 202, 5, upper);
+    state.world.fold_overlay();
+    let error = buildings::certify(
+        &mut state,
+        id,
+        BuildingKind::House,
+        ScriptWorldBounds::new([3, 200, 3], [7, 204, 7]).unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error
+            .missing
+            .iter()
+            .map(|r| r.description.as_str())
+            .collect::<Vec<_>>(),
+        ["beds", "roof"]
+    );
     let changes = click(&mut state, id, "certify_do", &certify_form("house"));
     let dialog = changes
         .iter()
@@ -2829,7 +2858,13 @@ fn certification_refusal_keeps_retry_actions_compact_without_losing_details() {
     let body = list(field(dialog, "body"));
     assert_eq!(body.len(), 1);
     let contents = field(&body[0], "contents").unwrap();
-    assert!(text(contents).chars().count() <= 80);
+    for requirement in &error.missing {
+        let (label, _) = ui_text::requirement(Lang::Ru, &requirement.description);
+        assert!(text(contents).contains(&format!(
+            "{label} {}/{}",
+            requirement.found, requirement.required
+        )));
+    }
     assert_eq!(field(&body[0], "width"), Some(&Tag::Int(408)));
     let full = field(field(contents, "hover_event").unwrap(), "value").unwrap();
     assert!(text(full).chars().count() > 80);
@@ -2849,4 +2884,76 @@ fn certification_refusal_keeps_retry_actions_compact_without_losing_details() {
             .all(|action| shown.has(action))
     );
     assert!(state.settlements.get(id).unwrap().buildings.is_empty());
+}
+
+#[test]
+fn certification_refusal_all_eight_requirements_fit_the_retry_body_budget() {
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    set_locale(&mut state, "ru_ru");
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::Ru,
+    };
+    let error = CertError {
+        missing: [
+            "footprint",
+            "height",
+            "beds",
+            "roof",
+            "enclosure",
+            "entrance",
+            "workstations",
+            "containers",
+        ]
+        .into_iter()
+        .map(|code| buildings::Requirement {
+            description: code.to_owned(),
+            found: 0,
+            required: 9,
+        })
+        .collect(),
+    };
+    let summary = missing_summary(&ctx, &error);
+    let details = missing_text(&ctx, &error);
+    let form = form_of(&state, CONN, ClickPayload(None));
+    certify_screen(&mut state, CONN, &ctx, &form, &summary, Some(&details));
+    let changes = run(&mut state, &[]);
+    let dialog = changes
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::ShowDialog { dialog } => Some(dialog),
+            _ => None,
+        })
+        .unwrap();
+    let body = list(field(dialog, "body"));
+    assert_eq!(body.len(), 1);
+    assert_eq!(field(&body[0], "width"), Some(&Tag::Int(408)));
+    let shown = shown(dialog);
+    for requirement in &error.missing {
+        let (label, _) = ui_text::requirement(Lang::Ru, &requirement.description);
+        assert!(shown.body.contains(&format!("{label} 0/9")));
+    }
+    // Conservative default-font bound: each Cyrillic glyph is at most 8 px.
+    let mut lines = 1;
+    let mut used = 0;
+    for word in shown.body.split_whitespace() {
+        let width = word.chars().count() * 8;
+        assert!(width <= 408);
+        if used != 0 && used + 8 + width > 408 {
+            lines += 1;
+            used = width;
+        } else {
+            used += usize::from(used != 0) * 8 + width;
+        }
+    }
+    assert!(lines <= 4, "{lines} lines: {}", shown.body);
+    assert_eq!(shown.inputs.len(), 4);
+    assert_eq!(field(dialog, "columns"), Some(&Tag::Int(4)));
+    assert!(
+        ["certify_do", "mark1", "mark2", "back"]
+            .iter()
+            .all(|action| shown.has(action))
+    );
 }

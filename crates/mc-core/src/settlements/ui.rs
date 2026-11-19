@@ -211,7 +211,7 @@ fn dispatch(
             } else if buildings::storage_points(state, ctx.id).is_empty() {
                 let mut form = form_of(state, connection, ClickPayload(None));
                 form.kind = BuildingKind::Storage.name().to_owned();
-                certify_screen(state, connection, ctx, &form, ctx.t(Key::NeedStorage));
+                certify_screen(state, connection, ctx, &form, ctx.t(Key::NeedStorage), None);
             } else if !super::construction::idle(record) {
                 dispatch(state, connection, ctx, "project_status", ClickPayload(None));
             } else {
@@ -288,7 +288,7 @@ fn dispatch(
         "settings" => settings_screen(state, connection, ctx, ""),
         "certify" => {
             let form = form_of(state, connection, payload);
-            certify_screen(state, connection, ctx, &form, "");
+            certify_screen(state, connection, ctx, &form, "", None);
         }
         "mark1" | "mark2" => {
             let index = usize::from(action == "mark2");
@@ -359,10 +359,17 @@ fn dispatch(
                             .text(note),
                         );
                     } else {
-                        certify_screen(state, connection, ctx, &form, &note);
+                        certify_screen(state, connection, ctx, &form, &note, None);
                     }
                 }
-                None => certify_screen(state, connection, ctx, &form, ctx.t(Key::PositionUnknown)),
+                None => certify_screen(
+                    state,
+                    connection,
+                    ctx,
+                    &form,
+                    ctx.t(Key::PositionUnknown),
+                    None,
+                ),
             }
         }
         "certify_do" => certify(state, connection, ctx, payload),
@@ -579,6 +586,23 @@ fn missing_text(ctx: &Ctx, error: &CertError) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn missing_summary(ctx: &Ctx, error: &CertError) -> String {
+    use std::fmt::Write;
+
+    let mut summary = ctx.t(Key::MissingMaterials).to_owned();
+    for (index, requirement) in error.missing.iter().enumerate() {
+        summary.push_str(if index == 0 { " " } else { ", " });
+        let (label, _) = ui_text::requirement(ctx.lang, &requirement.description);
+        // Writing to a String cannot fail.
+        let _ = write!(
+            summary,
+            "{label} {}/{}",
+            requirement.found, requirement.required
+        );
+    }
+    summary
 }
 
 fn block_name(state: &TickState, at: [i32; 3]) -> Option<&str> {
@@ -1097,7 +1121,9 @@ fn certify_screen(
     ctx: &Ctx,
     form: &Form,
     note: &str,
+    details: Option<&str>,
 ) {
+    let details = details.unwrap_or(note);
     let kinds = all_kinds();
     let selected = BuildingKind::parse(&form.kind).unwrap_or(BuildingKind::House);
     let options = kinds
@@ -1123,7 +1149,7 @@ fn certify_screen(
             .tooltip(if note.is_empty() {
                 ctx.t(Key::TipCorners)
             } else {
-                note
+                details
             }),
         button(ctx.t(Key::Corner1), "mark1", ctx.id)
             .width(100)
@@ -1137,18 +1163,14 @@ fn certify_screen(
     if !note.is_empty() {
         // The four inputs and retry row must fit at 720p. Keep the complete
         // refusal on both the summary hover and the Certify button tooltip.
-        let summary = match note.char_indices().nth(79) {
-            Some((end, _)) => format!("{}…", &note[..end]),
-            None => note.to_owned(),
-        };
         dialog = dialog.text_width(
             Tag::Compound(vec![
-                ("text".into(), Tag::String(summary)),
+                ("text".into(), Tag::String(note.to_owned())),
                 (
                     "hover_event".into(),
                     Tag::Compound(vec![
                         ("action".into(), Tag::String("show_text".into())),
-                        ("value".into(), Tag::String(note.to_owned())),
+                        ("value".into(), Tag::String(details.to_owned())),
                     ]),
                 ),
             ]),
@@ -1229,17 +1251,24 @@ fn include_marked_walls(state: &TickState, mut bounds: ScriptWorldBounds) -> Scr
 fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: ClickPayload<'_>) {
     let form = form_of(state, connection, payload);
     let Some(kind) = BuildingKind::parse(&form.kind) else {
-        return certify_screen(state, connection, ctx, &form, ctx.t(Key::ChooseKind));
+        return certify_screen(state, connection, ctx, &form, ctx.t(Key::ChooseKind), None);
     };
     let (Some(a), Some(b)) = (corner(&form.from), corner(&form.to)) else {
-        return certify_screen(state, connection, ctx, &form, ctx.t(Key::BadCorners));
+        return certify_screen(state, connection, ctx, &form, ctx.t(Key::BadCorners), None);
     };
     let extra = form.extra.clamp(0.0, MAX_EXTRA_HEIGHT) as i32;
     let min = [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])];
     let mut max = [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])];
     max[1] = max[1].saturating_add(extra);
     let Ok(bounds) = ScriptWorldBounds::new(min, max) else {
-        return certify_screen(state, connection, ctx, &form, ctx.t(Key::InvalidCorners));
+        return certify_screen(
+            state,
+            connection,
+            ctx,
+            &form,
+            ctx.t(Key::InvalidCorners),
+            None,
+        );
     };
     let bounds = if state
         .settlement_marks
@@ -1290,7 +1319,8 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
                     ("missing", &missing_text(ctx, &error)),
                 ],
             );
-            certify_screen(state, connection, ctx, &form, &note);
+            let summary = missing_summary(ctx, &error);
+            certify_screen(state, connection, ctx, &form, &summary, Some(&note));
         }
     }
 }
