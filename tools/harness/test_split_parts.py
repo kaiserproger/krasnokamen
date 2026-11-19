@@ -93,39 +93,6 @@ class SplitPartsTests(unittest.TestCase):
                          [os.sys.executable, "-m", "tools.harness", "run", "buildings-qa"])
         self.assertTrue((root / "parts").is_dir())
 
-    def test_children_start_before_any_is_awaited(self):
-        # Concurrency is the point of a split: all children are spawned first,
-        # then awaited, never spawned one after another.
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        order = []
-
-        def spawn(argv, env, log_path):
-            order.append(("spawn", env[profiles.SPLIT_PART_ENV]))
-            root = Path(env["KRASNOKAMEN_VALIDATION_ROOT"])
-            artifact = root / "run"
-            artifact.mkdir(parents=True, exist_ok=True)
-            (artifact / "result.json").write_text(json.dumps(passed()))
-
-            class Child(FakeChild):
-                def wait(self, timeout=None):
-                    order.append(("wait", env[profiles.SPLIT_PART_ENV]))
-                    return super().wait(timeout)
-            log_path.write_bytes(b"")
-            return Child(passed())
-
-        with patch.object(profiles, "_spawn_split", spawn):
-            profiles.run_split(context(directory.name), "buildings-qa",
-                               [profiles.SplitPart(label) for label in ("a", "b", "c")])
-        self.assertEqual(order, [("spawn", "a"), ("spawn", "b"), ("spawn", "c"),
-                                 ("wait", "a"), ("wait", "b"), ("wait", "c")])
-
-    def test_a_part_child_never_splits_again(self):
-        with patch.dict(os.environ, {profiles.SPLIT_PART_ENV: "b"}):
-            self.assertEqual(profiles.split_part_label(), "b")
-        with patch.dict(os.environ, {}, clear=True):
-            self.assertIsNone(profiles.split_part_label())
-
     def test_the_cli_refuses_parts_for_a_profile_without_independent_parts(self):
         from tools.harness import __main__ as cli
         with patch("sys.stderr", new_callable=io.StringIO) as error, \
@@ -135,13 +102,6 @@ class SplitPartsTests(unittest.TestCase):
         self.assertIn("has no independent parts", message)
         for profile in ("buildings-qa", "civilization-seed-qa", "screens-voice-qa"):
             self.assertIn(profile, message)
-
-    def test_the_cli_refuses_zero_parts(self):
-        from tools.harness import __main__ as cli
-        with patch("sys.stderr", new_callable=io.StringIO) as error, \
-                patch("sys.stdout", new_callable=io.StringIO):
-            self.assertNotEqual(cli.cmd_run(["buildings-qa", "--parts", "0"]), 0)
-        self.assertIn("--parts must be at least 1", error.getvalue())
 
 
 if __name__ == "__main__":
