@@ -273,16 +273,30 @@ the parallel behaviour lands,
 - Lumberjack wood harvest, residents clearing leaves at doors and farmers are
   not the planner and keep their own rules.
 
-## Growth observation — owner D45 §6, 2026-11-19
+## Growth, beds, terrain and planner ticks — owner D45, 2026-11-19
 
-> Оставить
->
-> Удлинить проверки, заодно искать что тормозит рост
+> 1. Оставить … 5а. Оставить 5б. Делать сейчас, и не пиздите что там день
+> работы 5в. Удлинить проверки, заодно искать что тормозит рост 6. Да
 
-- Keep the settlement-certified far-bed breeding path and the existing family
-  founding rule. Daughter founding still requires at least 24 residents.
-- If growth does not fit four game days, lengthen the trials and continue
-  measuring what limits it; do not lower the founding population threshold.
+- A birth between a household-less resident and a member of a household of
+  three or more founds a new household of both parents and the child; the
+  owner kept this rule. Founding still takes a whole household of two or three
+  with at least two adults ([daughter founding](#daughter-founding--owner-approved-2026-11-15)).
+  Implementation: [migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return).
+- A birth's bed search keeps vanilla's near search (48 blocks) first; only when
+  that finds no bed does a settlement resident take a free bed in a certified
+  house of its own settlement at any distance. Rules: [breeding](breeding.md).
+- The owner directed D7 to be completed in full now: inside the territory the
+  builder must also cut and fill beyond the 8-block band around the lot floor
+  and cut slopes above the building's roof, with excavated blocks going to
+  storage. Until that change lands,
+  [construction](construction.md) describes the current limits. Liquid
+  refusals and lava safety are unchanged.
+- If growth to 24 residents does not fit the A9 trial, the trial is lengthened
+  to the measured need and the work continues on what slows growth. The
+  founding threshold stays 24.
 - House priority still applies only while physical roofed bed capacity is at
   or below population. Measure the wait before proposing a policy change.
-
+- Site search is to be spread over ticks, targeting no settlement tick over
+  100 ms while preserving the chosen site. This tightens the earlier 1 s target
+  for settlement work.

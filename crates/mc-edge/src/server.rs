@@ -455,6 +455,8 @@ impl EdgeServer {
         let protocols = crate::translation::Catalog::discover(&data);
         // Built from the config before the struct literal moves it.
         let pre_play = Arc::new(PrePlayLimit::resolve(&cfg));
+        let pre_play_addresses =
+            crate::conn_limit::AddressLimiter::new(0, cfg.network.max_pre_play_connections_per_ip);
         Ok(Self {
             admin,
             console_state: crate::console::ConsoleState::load(data.root())?,
@@ -480,7 +482,7 @@ impl EdgeServer {
             wire,
             cfg,
             connections,
-            pre_play_addresses: crate::conn_limit::AddressLimiter::new(0, 8),
+            pre_play_addresses,
             pre_play,
             dashboard,
             tick_stats: Arc::new(TickStats::new()),
