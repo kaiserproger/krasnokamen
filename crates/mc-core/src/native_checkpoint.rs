@@ -953,11 +953,16 @@ pub fn recover_with_reader(
             Ok(())
         })
         .map_err(|e| CoreError::Storage(e.to_string()))?;
+    let mut game_clock = crate::journal::ReplayGameClock::new(
+        manifest.tick,
+        manifest.climate.map(|image| image.game_clock),
+    )?;
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
         |batch| {
             let batches = [batch];
+            game_clock.observe_batches(&batches)?;
             for (&dimension, replay) in &mut dimensions {
                 let mut routed = crate::dimensions::journal_for_dimension(&batches, dimension);
                 if dimension != Dimension::Overworld {
@@ -1011,13 +1016,17 @@ pub fn recover_with_reader(
                         }
                     }
                 }
-                *replay = crate::journal::apply_batch_images(std::mem::take(replay), &routed);
+                *replay = crate::journal::apply_batch_images_with_clock(
+                    std::mem::take(replay),
+                    &routed,
+                    &game_clock,
+                );
             }
             Ok(())
         },
     )?;
     for (&dimension, replay) in &mut dimensions {
-        crate::journal::advance_replay_clocks(replay);
+        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock);
         replay.plugins.validate()?;
         replay.block_ticks.validate().map_err(|error| {
             CoreError::Storage(format!(
@@ -1076,6 +1085,10 @@ pub fn recover_with_reader(
             }
         }
     }
+    dimensions
+        .get_mut(&Dimension::Overworld)
+        .expect("overworld replay")
+        .game_clock = Some(game_clock);
     Ok(RecoveredWorld {
         config: config.clone(),
         registry,

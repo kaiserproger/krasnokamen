@@ -1655,3 +1655,6 @@ fn duplicate_tags_in_legacy_wal_normalize_on_entity_restore() {
     };
     assert_eq!(fields, expected);
 }
+
+#[path = "entity_state_game_clock_tests.rs"]
+mod game_clock_tests;

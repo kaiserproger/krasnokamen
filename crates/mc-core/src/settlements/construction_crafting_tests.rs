@@ -460,10 +460,15 @@ fn successful_recipe_trace_retains_fully_consumed_intermediate_inputs() {
     let target = item(&state, "minecraft:chest");
     let images = chest(vec![stock(log, 2)]);
     let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
-    let inputs: std::collections::BTreeSet<_> =
-        super::ensure_units(&state, &mut post, target, 1, &std::collections::BTreeMap::new())
-            .unwrap()
-            .collect();
+    let inputs: std::collections::BTreeSet<_> = super::ensure_units(
+        &state,
+        &mut post,
+        target,
+        1,
+        &std::collections::BTreeMap::new(),
+    )
+    .unwrap()
+    .collect();
     assert!(inputs.contains(&log));
     assert!(
         inputs.contains(&plank),

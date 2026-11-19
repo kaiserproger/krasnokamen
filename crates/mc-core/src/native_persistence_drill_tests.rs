@@ -911,3 +911,6 @@ fn abrupt_stop_at_each_wal_publication_stage_conserves_transferred_items() {
 
 #[path = "native_battle_persistence_drill_tests.rs"]
 mod battle_resume;
+
+#[path = "native_game_clock_drill_tests.rs"]
+mod game_clock_tests;

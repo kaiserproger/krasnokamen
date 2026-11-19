@@ -28,6 +28,8 @@ mod player_nbt;
 pub use player_nbt::*;
 mod replay;
 pub use replay::*;
+mod replay_game_clock;
+pub(crate) use replay_game_clock::ReplayGameClock;
 
 const BATCH_MAGIC: u32 = 0x534F_4C4A;
 const BATCH_VERSION: u32 = 1;

@@ -20,13 +20,42 @@ const LEVEL_STEP_PER_TICK: f32 = 0.01;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameClockImage {
-    Running { held_ticks: u64 },
-    Held { game_ticks: u64 },
+    Running {
+        held_ticks: u64,
+    },
+    Held {
+        game_ticks: u64,
+        /// First native output tick of the current uninterrupted hold.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        held_since: Option<u64>,
+    },
 }
 
 impl Default for GameClockImage {
     fn default() -> Self {
         Self::Running { held_ticks: 0 }
+    }
+}
+
+pub(crate) const LEGACY_CLOCK_ERROR: &str = "world was frozen by an older binary; its catch-up debt cannot be reconstructed; start a fresh world";
+
+impl GameClockImage {
+    pub(crate) fn held_ticks(self, tick: u64) -> Result<u64, CoreError> {
+        let held = match self {
+            Self::Running { held_ticks } => (held_ticks <= tick).then_some(held_ticks),
+            Self::Held {
+                held_since: None, ..
+            } => return Err(CoreError::Storage(LEGACY_CLOCK_ERROR.into())),
+            Self::Held {
+                game_ticks,
+                held_since: Some(since),
+            } => (since > 0 && since <= tick && game_ticks < since).then(|| tick - game_ticks),
+        };
+        held.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "restore game clock: persisted {self:?} is invalid at native tick {tick}"
+            ))
+        })
     }
 }
 

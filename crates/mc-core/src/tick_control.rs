@@ -56,6 +56,7 @@ pub(crate) struct TickControl {
     /// Ticks that did not simulate (frozen, unstepped): vanilla game time and
     /// every tick-driven clock stand still for them.
     held_ticks: u64,
+    held_since: Option<u64>,
     sprint: Option<Sprint>,
     samples: [u32; SAMPLES],
     cursor: usize,
@@ -70,6 +71,7 @@ impl Default for TickControl {
             steps: 0,
             runs_normally: true,
             held_ticks: 0,
+            held_since: None,
             sprint: None,
             samples: [0; SAMPLES],
             cursor: 0,
@@ -192,6 +194,7 @@ impl TickControl {
         } else {
             GameClockImage::Held {
                 game_ticks: self.game_ticks(tick),
+                held_since: self.held_since,
             }
         }
     }
@@ -202,23 +205,25 @@ impl TickControl {
         image: GameClockImage,
         tick: u64,
     ) -> Result<(), CoreError> {
-        let held_ticks = match image {
-            GameClockImage::Running { held_ticks } => (held_ticks <= tick).then_some(held_ticks),
-            GameClockImage::Held { game_ticks } => tick.checked_sub(game_ticks),
+        self.held_ticks = image.held_ticks(tick)?;
+        self.held_since = match image {
+            GameClockImage::Running { .. } => None,
+            GameClockImage::Held { held_since, .. } => held_since,
         };
-        self.held_ticks = held_ticks.ok_or_else(|| {
-            CoreError::Storage(format!(
-                "restore game clock: persisted {image:?} exceeds recovered tick {tick}"
-            ))
-        })?;
+        self.runs_normally = self.held_since.is_none();
         Ok(())
     }
 
     /// `TickRateManager.tick` plus `checkShouldSprintThisTick`. Returns the
     /// report of a sprint that completed with the previous tick.
-    pub(crate) fn begin_tick(&mut self) -> Option<SprintReport> {
+    pub(crate) fn begin_tick(&mut self, output_tick: u64) -> Option<SprintReport> {
         self.runs_normally = !self.frozen || self.steps > 0;
-        self.held_ticks += u64::from(!self.runs_normally);
+        if self.runs_normally {
+            self.held_since = None;
+        } else {
+            self.held_since.get_or_insert(output_tick);
+            self.held_ticks += 1;
+        }
         if self.steps > 0 {
             self.steps -= 1;
         }
@@ -283,7 +288,7 @@ impl TickControl {
 /// sprint (feedback to the requester, state broadcast).
 pub(crate) fn begin_tick(state: &mut TickState) {
     let was_frozen = state.tick_control.frozen();
-    let Some(report) = state.tick_control.begin_tick() else {
+    let Some(report) = state.tick_control.begin_tick(state.tick + 1) else {
         return;
     };
     announce_state_if_changed(state, was_frozen);

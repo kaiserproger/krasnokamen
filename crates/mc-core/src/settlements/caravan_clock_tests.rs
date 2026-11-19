@@ -203,7 +203,13 @@ fn game_time_caravan_expired_at_zero_blocks_before_pickup() {
     f.state.tick = 20;
     f.state
         .tick_control
-        .restore_clock(crate::weather::GameClockImage::Held { game_ticks: 0 }, 20)
+        .restore_clock(
+            crate::weather::GameClockImage::Held {
+                game_ticks: 0,
+                held_since: Some(1),
+            },
+            20,
+        )
         .unwrap();
     let mut policy = f
         .state

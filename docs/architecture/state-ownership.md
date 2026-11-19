@@ -44,10 +44,23 @@ advances it once. Edge `SET_TIME` uses that simulated age, not the WAL frame.
 `day_time` and its client rate remain independent daylight-clock projections.
 The climate post-image persists the simulated clock as the quantity its mode
 keeps constant: the held-tick count while frames simulate, the game age while
-they are held. It changes only when the mode does, so a held WAL tail needs no
-entry per frame; recovery derives the held offset at the recovered frame. Freeze
-and step control themselves stay session-only, as in vanilla. Older images
-without the clock recover with their frame as age.
+they are held. Held also retains `held_since`, the first native output tick of
+the uninterrupted hold; its last running boundary is `held_since - 1`.
+Both values stay constant throughout that hold, so the WAL needs no entry per
+frame. Restore preserves this image even before the first tick; freeze and
+step requests themselves stay session-only, as in vanilla. A legacy Held
+without the boundary refuses recovery rather than guessing it. Older images
+without a clock recover with their frame as age.
+
+Recovery builds one global piecewise running prefix `R(t) = t - H(t)` from
+unrouted Overworld climate images before folding any dimension's entities.
+Active chunk intervals use that prefix uniformly for all compact entity paths
+and final projection. Villager age and conversion countdowns use running elapsed;
+fresh Work/sleep anchors bridge to the last running native boundary, while
+stale anchors and expired absolute panic deadlines remain stale/expired.
+The prefix survives streamed folds and repeated projections until recovery
+ends. Ambiguous same-mode counters or contradictory native boundaries fail
+closed. Daylight time and native absolute deadlines are not retimed.
 
 ### Mob death and corpses
 

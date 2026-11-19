@@ -491,7 +491,10 @@ fn invalid_persisted_weather_fails_without_partially_restoring_the_clock() {
             ..valid
         },
         ClimateImage {
-            game_clock: GameClockImage::Held { game_ticks: 1 },
+            game_clock: GameClockImage::Held {
+                game_ticks: 1,
+                held_since: Some(2),
+            },
             ..valid
         },
         ClimateImage {
