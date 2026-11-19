@@ -15,7 +15,7 @@ from typing import Any
 from .. import runtime
 from . import scene_shot
 from .settlement_quickwins_qa import (
-    CRITERIA, NAME, RADIUS, StepFailed, Walk, blob, greeting_verdict, guide_verdict, matching,
+    CRITERIA, NAME, RADIUS, StepFailed, Walk, blob, expected_shortage, greeting_verdict, guide_verdict, matching,
     refusal_verdict, shortage_verdict, signature, view, UUID,
 )
 
@@ -263,6 +263,11 @@ def open_blueprints(w: Walk) -> dict[str, Any]:
     return shown
 
 
+def estimate_lines(pages: list[str]) -> list[str]:
+    """Item lines of the estimate pages: one `Name ×need · на складе have` per line."""
+    return [line for page in pages for line in re.findall(r"[^\n]*×\d+ · на складе \d+", page)]
+
+
 def block_order(w: Walk) -> None:
     open_blueprints(w)
     review = w.click_slot(r"^Дом\b", "blueprint House", lambda s: s["kind"] == "dialog")
@@ -274,14 +279,23 @@ def block_order(w: Walk) -> None:
             body=text[:500], sentences=len(sentences))
     estimate = w.click_button(r"^Оценка материалов$", "review Materials estimate", lambda s: s["kind"] == "dialog")
     w.shot("order-estimate")
-    text = " ".join(estimate["body"])
+    pages = [" ".join(estimate["body"])]
+    if matching(r"^→$", estimate["buttons"]):
+        second = w.click_button(r"^→$", "estimate next page", lambda s: s["kind"] == "dialog")
+        w.shot("order-estimate-2")
+        pages.append(" ".join(second["body"]))
+    text = "\n".join(part.replace(" Строители", "\nСтроители") for part in pages)
     w.judge("Q4", not re.search(r"minecraft:", text) and bool(re.search(r"на складе", text, re.IGNORECASE))
             and bool(re.search(r"[А-Яа-я]{3,}", text)), body=text[:500])
-    w.click_button(r"^Назад$", "estimate Back", lambda s: s["kind"] == "dialog" and matching(r"^Заказ", s["buttons"]))
+    w.evidence["expected_shortage"] = expected = expected_shortage("\n".join(estimate_lines(pages)))
+    for _ in range(3):
+        if matching(r"^Заказ", w.screen()["buttons"]):
+            break
+        w.click_button(r"^Назад$", "estimate Back", lambda s: s["kind"] == "dialog")
     outcome = w.click_button(r"^Заказ", "review Order", lambda s: s["kind"] == "dialog")
     w.shot("order-outcome")
     text = " ".join(outcome["body"])
-    ok, facts = shortage_verdict(text, outcome["buttons"])
+    ok, facts = shortage_verdict(text, outcome["buttons"], expected)
     w.judge("Q3", ok, body=text[:600], buttons=outcome["buttons"], **facts)
     w.click_button(r"склад", "outcome Storage link", lambda s: s["kind"] == "menu")
     w.shot("outcome-storage")
@@ -478,9 +492,12 @@ def block_certify(w: Walk) -> None:
     text = " ".join(refused["body"])
     ok, facts = refusal_verdict(text)
     w.judge("Q1", ok, body=text[:600], **facts)
+    shown_now = w.probe.observe()
+    wanted = (r"^Сертифицировать$", r"^Угол\s*1", r"^Угол\s*2", r"^Назад$")
+    visible = {pattern: bool(w.button_nodes(shown_now, pattern)) for pattern in wanted}
+    w.evidence["certify_form_actions_visible_after_refusal"] = all(visible.values())
+    w.judge("Q1b", all(visible.values()), visible=visible)
     complete_house(w, origin)
-    # At 1280x720 the refused form can push its actions below the window: recorded, then scrolled like a player.
-    w.evidence["certify_form_actions_visible_after_refusal"] = bool(w.button_nodes(w.probe.observe(), r"^Сертифицировать$"))
     done = w.click_button(r"^Сертифицировать$", "form Certify (valid house)", lambda s: s["kind"] == "dialog", scroll=True)
     w.shot("certify-done")
     text = " ".join(done["body"])
@@ -513,6 +530,8 @@ def block_cards(w: Walk) -> None:
     w.shot("building-card")
     mapped = w.click_slot(r"^Карта$", "card Map", lambda s: s["kind"] == "dialog")
     w.shot("building-map")
+    w.judge("Q6e", bool(w.button_nodes(w.probe.observe(), r"^Назад$")),
+            buttons=w.screen()["buttons"], title=w.screen()["title"])
     # The map dialog is taller than 720 px: its Back sits below the window, so this click may scroll (recorded).
     back_check(w, "Q6d", "button", r"^Назад$", lambda s: s["kind"] == card["kind"] and s["title"] == card["title"], card,
                scroll=True)
@@ -587,8 +606,8 @@ BLOCKS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
     ("order", ("Q5", "Q4", "Q3", "Q6c"), block_order),
     ("project", ("Q7", "Q17"), block_project),
     ("resident", ("Q7b",), block_resident),
-    ("certify", ("Q13", "Q1", "Q12", "Q14"), block_certify),
-    ("cards", ("Q2", "Q6d"), block_cards),
+    ("certify", ("Q13", "Q1", "Q1b", "Q12", "Q14"), block_certify),
+    ("cards", ("Q2", "Q6e", "Q6d"), block_cards),
     ("guide", ("Q15a", "Q15b"), block_guide),
     ("docs", ("Q16",), block_docs),
     ("second-founding", ("C5a", "C5b"), block_second_founding),

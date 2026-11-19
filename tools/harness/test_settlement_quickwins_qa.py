@@ -64,12 +64,45 @@ class VerdictTests(unittest.TestCase):
         self.assertFalse(gate.greeting_verdict([])[0])
         self.assertFalse(gate.greeting_verdict(["Поселения: /settlement guide", "Поселения: /settlement guide"])[0])
 
+    ESTIMATE = ("Булыжник ×43 · на складе 1\nДубовые доски ×106 · на складе 0\nДубовое бревно ×36 · на складе 0\n"
+                "Факел ×3 · на складе 0\nСундук ×1 · на складе 0\nВерстак ×1 · на складе 0\n"
+                "Печь ×1 · на складе 0\nДубовый забор ×9 · на складе 0\nДубовые ступеньки ×44 · на складе 0\n"
+                "Дубовая нажимная пластина ×1 · на складе 0\nДубовая дверь ×1 · на складе 0\nБелая кровать ×1 · на складе 0")
+
+    def test_expected_shortage_from_estimate(self):
+        expected = gate.expected_shortage(self.ESTIMATE)
+        self.assertEqual(len(expected), 12)
+        self.assertEqual(expected["Булыжник"], 42)
+
     def test_shortage(self):
-        text = "Заказ принят: Дом. Не хватает: 24 доски, 8 булыжника. Положите на склад."
-        self.assertTrue(gate.shortage_verdict(text, ["Склад", "Статус"])[0])
-        self.assertFalse(gate.shortage_verdict(text, ["Статус"])[0])  # no link to storage
-        self.assertFalse(gate.shortage_verdict("Queued Дом: not enough: minecraft:white_wool x3", ["Склад"])[0])
-        self.assertFalse(gate.shortage_verdict("Заказ принят: Дом.", ["Склад"])[0])  # names no material
+        expected = gate.expected_shortage(self.ESTIMATE)
+        good = ("Заказ принят: Дом.\nВ очереди #1: Дом ур. 1 · не хватает материалов\n"
+                "Булыжник ×42, Дубовые доски ×106, Дубовое бревно ×36 и ещё 9 видов")
+        ok, facts = gate.shortage_verdict(good, ["Склад", "Статус", "Назад"], expected)
+        self.assertTrue(ok, facts)
+        self.assertFalse(gate.shortage_verdict(good, ["Статус"], expected)[0])  # no link to storage
+
+    def test_old_outcome_text_fails(self):
+        """The false pass: «#1», «ур. 1» are digits but not materials; the item list is what counts."""
+        expected = gate.expected_shortage(self.ESTIMATE)
+        old = "Заказ принят: Дом. В очереди #1: Дом ур. 1 · не хватает материалов Положите недостающие материалы на склад."
+        ok, facts = gate.shortage_verdict(old, ["Склад", "Статус", "Назад"], expected)
+        self.assertFalse(ok)
+        self.assertFalse(facts["items_exact"])
+        self.assertFalse(gate.shortage_verdict("Queued Дом: not enough: minecraft:cobblestone x43", ["Склад"], expected)[0])
+
+    def test_shortage_rules(self):
+        expected = gate.expected_shortage(self.ESTIMATE)
+        head = "Заказ принят: Дом. Не хватает: "
+        links = ["Склад"]
+        self.assertFalse(gate.shortage_verdict(head + "Булыжник ×43, Дубовые доски ×106 и ещё 10 видов", links, expected)[0])  # wrong count
+        self.assertFalse(gate.shortage_verdict(head + "Булыжник ×42, Дубовые доски ×106", links, expected)[0])  # no «и ещё»
+        self.assertFalse(gate.shortage_verdict(head + "Булыжник ×42, Дубовые доски ×106 и ещё 3 видов", links, expected)[0])  # wrong N
+        four = head + "Булыжник ×42, Дубовые доски ×106, Дубовое бревно ×36, Факел ×3 и ещё 8 видов"
+        self.assertFalse(gate.shortage_verdict(four, links, expected)[0])  # more than three
+        self.assertFalse(gate.shortage_verdict(head + "Гравий ×42 и ещё 11 видов", links, expected)[0])  # not a missing item
+        small = gate.expected_shortage("Булыжник ×2 · на складе 0")
+        self.assertTrue(gate.shortage_verdict(head + "Булыжник ×2", links, small)[0])  # all listed: no «и ещё»
 
     def test_refusal(self):
         good = "Не удалось сертифицировать Дом. Не хватает: кровати (0 из 1) — поставьте кровать; крыша."

@@ -56,6 +56,8 @@ CRITERIA: dict[str, tuple[str, str]] = {
     "Q1": ("a refused certification names the missing requirements in Russian, no `footprint/beds/roof/...`", "REPORT §5.1"),
     "Q2": ("workshop names in the Russian UI have no raw `{profession:?}` (no `Мастерская: Cartographer`)", "REPORT §5.2"),
     "Q3": ("the order outcome is Russian, names the missing materials and links to Storage", "REPORT §5.3"),
+    "Q1b": ("after a long refusal the certify form's Сертифицировать / Угол 1 / Угол 2 / Назад lie fully inside 1280x720 without scrolling", "Main, 2026-11-20 (certification refusal text bounded); R:350"),
+    "Q6e": ("the map dialog's Назад lies fully inside 1280x720 without scrolling", "Main, 2026-11-20 (map body is the grid only); R:355"),
     "Q4": ("the materials estimate lists item names, not `minecraft:` ids, and what the storage holds", "REPORT §5.4"),
     "Q5": ("the order review is two plain sentences, not the four fragments", "REPORT §5.5"),
     "Q6a": ("Dashboard -> Back returns to the hub it came from", "REPORT §5.6, §1.5"),
@@ -179,17 +181,41 @@ def greeting_verdict(lines: list[str]) -> tuple[bool, dict[str, Any]]:
     return ok, facts
 
 
-def shortage_verdict(text: str, buttons: list[str]) -> tuple[bool, dict[str, Any]]:
-    """The order outcome: Russian, names the missing materials with numbers, links to Storage."""
+ESTIMATE_LINE = re.compile(r"^\s*(.+?) ×(\d+) · на складе (\d+)\s*$", re.MULTILINE)
+LISTED_ITEM = re.compile(r"([^\n,:;×.]+?)\s×(\d+)")
+MORE_KINDS = re.compile(r"и ещё (\d+) (?:вид|вида|видов)\b")
+
+
+def expected_shortage(estimate_text: str) -> dict[str, int]:
+    """name -> still missing, from the materials estimate pages (need minus what the storage holds)."""
+    missing = {}
+    for name, need, have in ESTIMATE_LINE.findall(estimate_text):
+        if int(need) > int(have):
+            missing[name.strip()] = int(need) - int(have)
+    return missing
+
+
+def shortage_verdict(text: str, buttons: list[str], expected: dict[str, int]) -> tuple[bool, dict[str, Any]]:
+    """The order outcome: Russian, lists 1..3 of the really missing items with their exact missing counts,
+    says `и ещё N видов` for the rest (N = kinds not listed) and links to Storage.
+    `expected` is name -> missing count taken from the materials estimate the player saw."""
+    body = re.sub(r"Дом ур\. \d+|#\d+", "", text)  # order id / level are not materials
+    listed = [(name.strip(), int(count)) for name, count in LISTED_ITEM.findall(body)]
+    more = MORE_KINDS.search(text)
+    rest = len(expected) - len(listed)
     facts = {
         "missing": bool(re.search(r"не хватает|нужно ещё|недостаёт", text, re.IGNORECASE)),
-        "number": bool(re.search(r"\d", text)),
+        "listed": listed,
+        "expected_kinds": len(expected),
         "raw_ids": bool(re.search(r"minecraft:|not enough|queued|\bx\d+\b", text, re.IGNORECASE)),
         "storage_link": bool(matching(r"склад", buttons)),
         "russian": cyrillic_only(re.sub(r"[A-Za-z]+\d*", "", text) or text),
+        "items_exact": bool(listed) and len(listed) <= 3 and all(expected.get(name) == count for name, count in listed)
+                       and len({name for name, _ in listed}) == len(listed),
+        "more_rule": (more is None and rest == 0) or (more is not None and rest > 0 and int(more.group(1)) == rest),
     }
-    ok = (facts["missing"] and facts["number"] and not facts["raw_ids"] and facts["storage_link"]
-          and facts["russian"])
+    ok = (facts["missing"] and facts["items_exact"] and facts["more_rule"] and not facts["raw_ids"]
+          and facts["storage_link"] and facts["russian"])
     return ok, facts
 
 
@@ -277,7 +303,7 @@ class Walk:
         shown = view(state)
         nodes = self.button_nodes(state, pattern)
         scrolls = 0
-        while scroll and not nodes and shown["kind"] == "dialog" and scrolls < 4:
+        while scroll and self.survey and not nodes and shown["kind"] == "dialog" and scrolls < 4:
             self.gui.input.wheel((640, 360), down=True, notches=3)
             self.probe.call("minecraft_wait_ticks", {"ticks": 4})
             scrolls += 1
