@@ -822,6 +822,29 @@ the Settings dialog or the map territory.
   `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
   (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
   every other verdict runs native with `--timeout-seconds 3600`.
+  A Java run whose client could not load the requested language fails before connect
+  (`scene_shot_client.check_java_language`, marker `Failed to load translations for
+  <locale> from pack vanilla`): such a client still reports the locale to the server but
+  translates item names and vanilla tooltips into `en_us`, so its scene is no evidence
+  for any client-localized text. An asset store missing the `minecraft/lang/<locale>.json`
+  objects is the usual cause (2026-11-19: all 144 lang objects were absent); repair the
+  store instead of accepting the run.
+
+  `settlement-map-qa -- --scenario quickwins --language ru_ru` (native only; the client takes the language
+  from `KRASNOKAMEN_CLIENT_LANGUAGE`, which the lifecycle sets from `client_settings.language`) is the
+  owner-path acceptance of the D63 settlement quick wins, written from the decision text and
+  `receipts/SettlementUX/REPORT.md` section 5 by an agent that did not see the implementation
+  (`tools/harness/backends/settlement_quickwins_qa.py` lists every criterion with its source). One session
+  walks `/settlement create` → the empty starter chest as storage (Storage page count, `data get block`,
+  a Shift-click deposit) → hub → next step → dashboard → Storage → empty Buildings → an order on empty
+  storage with its Russian outcome and storage link → Back to where each screen came from → the active
+  project's icon and status → certifying a small house by marking its two floor corners while standing
+  on its floor → the Buildings list and map → `/settlement guide`. Each criterion is the assertion
+  `QW <id>`; the default run stops at the first unmet one and the receipt names it
+  (`details.client_evidence.quickwins.first_unmet`). `-- --survey` walks every block and records the unmet
+  criteria instead (negative-control plumbing check on a tree without the changes; it fails when any
+  criterion is unmet and is never acceptance). Its negative control is the same run on the tree without
+  the quick wins, with that tree's own server pin.
 
 ## Distant Horizons gate (`dh-gate`)
 
