@@ -14,8 +14,8 @@
     "physical_declarations_before": 13,
     "physical_declarations_remaining": 6,
     "source_lines_before": 198,
-    "source_lines_remaining": 115,
-    "physical_source_lines_removed": 83,
+    "source_lines_remaining": 116,
+    "physical_source_lines_removed": 82,
     "historical_medium_candidates_finalized": 1,
     "historical_medium_candidates_unfinalized": 364
   },
@@ -28,7 +28,7 @@
     ],
     "removed_scaffolding": [
       "FoldTests class",
-      "unused io/threading/redirect_stdout imports",
+      "unused threading/redirect_stdout imports; io retained for force-reason stderr capture",
       "unused in_use_cli tool load"
     ],
     "retained_assertions": "All six retained bodies and their fixtures untouched.",
@@ -280,6 +280,7 @@
     "performed": false,
     "owner": "Main",
     "requested_check": "python3 tools/dev/test_registry.py through the canonical memory runner (direct path preserves existing import convention).",
+    "main_verification_before_import_restore": "Main reports cdd20a0ad1 ran 6 tests, errors=1: NameError io in retained force-reason test. Base 3e7b380eab ran 13/13 OK. Receipt: /run/media/kaiserroman/games/solaris-work/receipts/TestAudit/registry-check.log. Restored io after exact-name retained-reference grep; worker did not rerun.",
     "negative_control": "none run",
     "runtime_saving": "Not measured."
   },
