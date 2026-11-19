@@ -95,10 +95,22 @@ fn head_turns_while_the_body_holds_then_the_body_aligns_after_ten_stable_ticks_i
         "the head lands: {}",
         row.head()
     );
-    // Ten stable ticks: the body holds at 0 (inside the cone).
-    for _ in 0..10 {
-        row.tick(30.0);
-        assert_eq!(row.stored[0].to_bits(), 0.0_f32.to_bits());
+    // Ten stable ticks: the drawn body holds at 0 through the delay (inside
+    // the cone) and the stored yaw holds with it.
+    for tick in 0..10 {
+        let Facing::Set { body, .. } = row.tick(30.0) else {
+            panic!("a projected row is set");
+        };
+        assert_eq!(
+            body.to_bits(),
+            0.0_f32.to_bits(),
+            "tick {tick}: the drawn body holds through the align delay"
+        );
+        assert_eq!(
+            row.stored[0].to_bits(),
+            0.0_f32.to_bits(),
+            "tick {tick}: the stored yaw holds"
+        );
     }
     // Then it aligns within ten more ticks and ends on the head, bit for bit.
     let mut moved = false;

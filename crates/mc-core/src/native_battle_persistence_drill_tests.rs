@@ -280,27 +280,39 @@ fn battle_resume_rebuilds_facing_from_the_journaled_pose() {
     }
     // The cone is around the drawn body: the stored yaw stands while a row
     // stands, so the projection's `body` is what holds the head in the cone.
+    // The head is the one the world holds after the tick, not the published
+    // value, and the check must not pass vacuously: at least one live split
+    // row is projected after the replay.
     hydrate_battle(&mut drill.state);
+    let mut checked = 0;
     for _ in 0..40 {
         drill.run(&[]).unwrap();
         for member in &drill.state.hostile.battle.formation.members {
             let Some(slot) = drill.state.entities.slot_of(member.id) else {
                 continue;
             };
-            let Some(crate::entity_motion::Facing::Set { rotation, body }) =
+            if !drill.state.entities.body(slot).alive {
+                continue;
+            }
+            let Some(crate::entity_motion::Facing::Set { body, .. }) =
                 drill.state.hostile.battle.facing.of(slot)
             else {
                 continue;
             };
-            let off = (rotation[2] - body + 180.0).rem_euclid(360.0) - 180.0;
+            checked += 1;
+            let head = drill.state.entities.rot(slot)[2];
+            let off = (head - body + 180.0).rem_euclid(360.0) - 180.0;
             assert!(
                 off.abs() <= 75.0 + 1.0e-3,
-                "{}: head {} off its drawn body {body}",
-                member.id.0,
-                rotation[2]
+                "{}: written head {head} off its drawn body {body}",
+                member.id.0
             );
         }
     }
+    assert!(
+        checked > 0,
+        "a live split row is projected and checked after the replay"
+    );
     continues(&mut drill);
 }
 
