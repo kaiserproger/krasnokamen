@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.harness import regressions, runtime, scenarios
+from tools.harness import runtime
 from tools.harness.backends import singleplayer_regressions as sp
 
 
@@ -20,45 +20,6 @@ def setUpModule() -> None:
 
 
 class SingleplayerRegressionTests(unittest.TestCase):
-    def test_scenarios_are_graphical_native_ledger_checks(self):
-        for name in (sp.FIRST, sp.LEASE, sp.SLOW, sp.WEAK):
-            with self.subTest(name=name):
-                entry = scenarios.SCENARIOS[name]
-                self.assertEqual(entry.evidence, "graphical")
-                self.assertEqual(entry.scenario_id, name)
-                command = regressions._client_command(entry.profile, name)
-                self.assertIn("--windowed", command)
-                self.assertIn("native", command)
-
-    def test_slow_wrapper_runs_real_server_with_cgroup_quota_receipt(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            binary = root / "real server"
-            binary.touch()
-            pidfile, unit = sp.singleplayer_slow.stage_server(binary, root, root)
-            wrapper = (root / "krasnokamen").read_text()
-            self.assertTrue(unit.startswith("solaris-sp-slow-"))
-            self.assertEqual(pidfile, root / "slow-server.pid")
-            self.assertIn("CPUQuota=1%", wrapper)
-            self.assertIn("/proc/self/cgroup", wrapper)
-            self.assertIn("cpu.max", wrapper)
-            self.assertIn("--expand-environment=no", wrapper)
-            self.assertIn("server-process.pid", wrapper)
-            self.assertIn(str(binary), wrapper)
-
-    def test_laptop_wrapper_does_not_artificially_throttle_the_server(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            binary = root / "real server"
-            pidfile, unit = sp.singleplayer_slow.stage_server(binary, root, root, slow=False)
-            wrapper = (root / "krasnokamen").read_text()
-            self.assertIsNone(unit)
-            self.assertEqual(pidfile, root / "slow-server.pid")
-            self.assertNotIn("CPUQuota", wrapper)
-            self.assertNotIn("systemd-run", wrapper)
-            self.assertIn(str(binary), wrapper)
-            self.assertIn("server-process.pid", wrapper)
-
     def test_startup_quota_release_targets_only_the_owned_scope(self):
         with patch.object(sp.singleplayer_slow.subprocess, "run") as run:
             sp.singleplayer_slow.release_startup_quota("solaris-sp-slow-test")

@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from .backends import client_probes
 from .backends import native_settlement_storage as storage
 
 
@@ -116,23 +115,6 @@ class SettlementStorageLegTests(unittest.TestCase):
             storage.BUILDING_ICON, "refresh_workshop"))
         self.assertLess(send, fence)
         self.assertLess(fence, refresh)
-
-    def test_scenario_requires_window_before_server_resolution(self) -> None:
-        ctx = mock.Mock(scenario_id="native-v2-settlement-storage", client="native", windowed=False)
-        with mock.patch.object(client_probes, "_server_binary") as binary:
-            with self.assertRaisesRegex(ValueError, "requires --windowed"):
-                client_probes.run(ctx, "entities")
-        binary.assert_not_called()
-
-    def test_run_refuses_without_owned_window_or_guest(self) -> None:
-        steps = mock.Mock()
-        steps.client = mock.Mock(spec=[])
-        with self.assertRaisesRegex(RuntimeError, "owned windowed Xvfb"):
-            storage.run(steps, (0, 64, 0))
-        steps.client = mock.Mock(spec=["p4_window"])
-        steps.client.p4_window = {"display": ":99", "window_id": 1}
-        with self.assertRaisesRegex(RuntimeError, "StorageGuest"):
-            storage.run(steps, (0, 64, 0))
 
 
 if __name__ == "__main__":

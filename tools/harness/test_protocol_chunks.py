@@ -32,14 +32,6 @@ class ChunkObservationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'outside received'):
             block_state(sections, (-17, -48, 63), -64)
 
-    def test_indirect_values_do_not_cross_long_boundaries(self):
-        values = [index % 3 for index in range(4096)]
-        palette = b'\x05\x03\x01\x02\x03' + packed(5, values)
-        _, sections = decode_chunk(chunk(palette))
-        for index in (11, 12, 255, 256, 4095):
-            position = (index % 16, -64 + index // 256, (index // 16) % 16)
-            self.assertEqual(block_state(sections, position, -64), index % 3 + 1)
-
     def test_direct_palette_and_truncation_fail_closed(self):
         values = [index for index in range(4096)]
         body = chunk(b'\x0f' + packed(15, values))

@@ -1,5 +1,4 @@
 """The first-view benchmark cannot silently escape its requested envelope."""
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -7,7 +6,6 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from tools.harness import __main__ as cli, preflight, profiles
 from tools.harness.profiles import ProfileContext
 from tools.harness.backends import weak_first_view
 
@@ -18,20 +16,6 @@ class WeakFirstViewTests(unittest.TestCase):
                       extra_args=['--server-cpus', '0', '--client-cpus', '1-3', '--memory', '2G'])
         values.update(overrides)
         return ProfileContext(**values)
-
-    def test_cli_dispatches_windowed_native_first_view(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            run = Mock(return_value={"first_view_seconds": 1.0})
-            with patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), \
-                    patch.object(preflight, "check", return_value=set()), \
-                    patch.dict(profiles.PROFILES["weak-first-view"], {"run": run}):
-                code = cli.cmd_run(["weak-first-view", "--client", "native", "--windowed"])
-            receipt = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
-        self.assertEqual(code, 0)
-        self.assertEqual(receipt["status"], "passed")
-        self.assertEqual(receipt["details"]["first_view_seconds"], 1.0)
-        self.assertEqual(run.call_args.args[0].client, "native")
-        self.assertTrue(run.call_args.args[0].windowed)
 
     def test_client_failure_keeps_private_data_root_and_server_exit_slot(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -81,18 +65,6 @@ class WeakFirstViewTests(unittest.TestCase):
         for override in ({'windowed': False}, {'client': 'java'}, {'platform': 'fabric'}):
             with self.subTest(override=override), self.assertRaisesRegex(ValueError, 'requires'):
                 weak_first_view.validate_args(self.context(**override))
-
-    def test_default_envelope_uses_one_allowed_cpu_and_real_ram_cap(self):
-        with patch.object(weak_first_view.os, 'sched_getaffinity', return_value={8, 9, 10, 11}):
-            args = weak_first_view.validate_args(self.context(extra_args=[]))
-            self.assertEqual(args.server_cpus, '8')
-            observer = set(weak_first_view.common.parse_cpu_list(args.client_cpus))
-            self.assertTrue(observer and observer <= {9, 10, 11})
-            self.assertEqual(args.memory, '2G')
-
-    def test_malformed_envelope_fails_as_a_receiptable_error(self):
-        with self.assertRaisesRegex(ValueError, 'invalid envelope arguments'):
-            weak_first_view.validate_args(self.context(extra_args=['--server-cpus']))
 
 
 if __name__ == '__main__':

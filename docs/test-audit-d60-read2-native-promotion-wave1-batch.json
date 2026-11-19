@@ -1,0 +1,202 @@
+{
+  "decision": "D60.2",
+  "base": "5e04c5264a4a937292f419e8feef278444423353",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_native_promotion_wave1.py",
+  "source_sha256_before": "7d1c1838401d63e4c3236462518169341e3b7189bb4778ea449cd3057fc0df43",
+  "status": "Every 8 body and shared fixture/callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 8,
+    "removed_R4": 1,
+    "removed_R1": 0,
+    "retained_K1": 7,
+    "retained_K2": 0,
+    "retained_U": 0,
+    "historical_medium_candidates_finalized": 6,
+    "source_lines_before": 205,
+    "source_lines_remaining": 197,
+    "physical_source_lines_removed": 8,
+    "historical_medium_candidates_unfinalized": 235
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete 205-line test module including Steps, _row, _summon_rows, _patch_common and all nested callbacks/subcases. Backend revival, metadata/identity/chat, summon-age/death/score-food/spawner/golem/axolotl and run bodies. Complete eight corresponding ledger rows plus 311c78493/502c9095d messages and 7ced6f1a8 production/test fix delta read.",
+    "retained_assertions": "Retained bodies and shared fixture unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 8,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 577,
+      "source_file_present": 406,
+      "dirty_overlaps": [
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/S3ClientRegress",
+          " M tools/harness/test_native_promotion_wave1.py\n"
+        ]
+      ],
+      "errors": [],
+      "warnings": [],
+      "overlap_review": "Exact-file diff of S3ClientRegress adds only test_golem_heal_recovers_from_death_during_heal before _patch_common. It neither edits removed startup guard nor existing test/helper bodies. Existing respawn check and every helper preserved; no cross-worktree edit or symbol research."
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "scope_limit": "Existing score-food and golem code uses bounded query retry loops; observed unchanged, outside test-audit production write set. No graphical or control run performed here."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_summon_age_requires_age_and_baby_flags",
+      "name": "test_summon_age_requires_age_and_baby_flags",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 85,
+      "original_end_line": 98,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed unsupported Age/IsBaby summon fixtures; oracle must require negative Age and synchronized baby flags. Rows preserve real-hunk control descriptions and stay open; not graphical acceptance here.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/SUMMON-AGE.toml",
+        "docs/bugs/rows/SUMMON-ISBABY.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_death_messages_require_death_screen_despite_suppression",
+      "name": "test_death_messages_require_death_screen_despite_suppression",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 100,
+      "original_end_line": 110,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed victim notification incorrectly suppressed by broadcast gamerule; require death screen rather than command feedback. Row stays open; protocol/team parsing limits documented in backend.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/DEATH-NOTIFY.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_score_food_requires_auto_update",
+      "name": "test_score_food_requires_auto_update",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 112,
+      "original_end_line": 122,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed food criterion rejected/never auto-updated; oracle requires actual score change below20 rather than objective existence or explicit score set. Authored reply strings are not actual current scoreboard proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/SCORE-FOOD.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_golem_repair_requires_exact_65_not_overheal",
+      "name": "test_golem_repair_requires_exact_65_not_overheal",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 124,
+      "original_end_line": 140,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed ingot repair left health unchanged; supporting gate oracle must require exact +25 from40 to65 and reject overheal100. Row covers real interaction; this mocked control does not replace it.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/GOLEM-REPAIR.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_axolotl_requires_play_dead_metadata_19",
+      "name": "test_axolotl_requires_play_dead_metadata_19",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 142,
+      "original_end_line": 155,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Known absent play-dead state/targeting exemption; supporting oracle requires received boolean state, not health/effect alone. Authored metadata is not independent vanilla packet oracle.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/AXOLOTL-PLAY-DEAD.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_spawner_egg_requires_configured_spawn_and_later_cow",
+      "name": "test_spawner_egg_requires_configured_spawn_and_later_cow",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 157,
+      "original_end_line": 176,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed adjacent spawn instead of SpawnData configuration and passive rejection on peaceful; preserve no-adjacent spawn and later fresh cow discrimination. Does not prove custom rules/potentials.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/SPAWN-SPAWNER-EGG.toml",
+        "docs/bugs/rows/SPAWN-SPAWNER-CATEGORIES.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_dead_player_is_respawned_before_the_next_golem_reading",
+      "name": "test_dead_player_is_respawned_before_the_next_golem_reading",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 178,
+      "original_end_line": 193,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: 7ced6f1a8 repairs golem gate after a lethal hit: instant health cannot revive death screen. Retain dead/alive respawn regression; active S3ClientRegress separately adds death-during-heal regression, not changed here.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_promotion_wave1.py::Wave1Tests::test_run_rejects_unknown_kind_and_headless",
+      "name": "test_run_rejects_unknown_kind_and_headless",
+      "file": "tools/harness/test_native_promotion_wave1.py",
+      "original_fn_line": 195,
+      "original_end_line": 201,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Fake unknown-kind and absent-window startup labels, without actual invalid-scene acceptance case.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_native_promotion_wave1",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

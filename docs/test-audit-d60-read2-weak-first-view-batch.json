@@ -1,0 +1,148 @@
+{
+  "decision": "D60.2",
+  "base": "c927ede24691b29b2b34d64f87e9af03468be555",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_weak_first_view.py",
+  "source_sha256_before": "362234cb9b7a463ada258706d4519cdb9b47f736a5d66760e7aff3c7e240ec6e",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 6,
+    "removed_R4": 3,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 0,
+    "retained_K2": 0,
+    "retained_U": 3,
+    "historical_medium_candidates_finalized": 5,
+    "source_lines_before": 99,
+    "source_lines_remaining": 71,
+    "physical_source_lines_removed": 28
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole 99-line module including context fixture and fail_client nested callback; whole weak_first_view backend; full test creation/change hunks in 8ed2d7d50 and 28ad326b5 read.",
+    "retained_assertions": "Retained bodies and shared fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": [
+      "Same-file exact-name grep json/cli/preflight/profiles: all value references are confined to removed CLI test; retain ProfileContext import from profiles."
+    ]
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 6,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 563,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "provenance": [
+      "No matching bug-ledger row found; fix subject alone does not establish a real observed failure."
+    ]
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_weak_first_view.py::WeakFirstViewTests::test_cli_dispatches_windowed_native_first_view",
+      "name": "test_cli_dispatches_windowed_native_first_view",
+      "file": "tools/harness/test_weak_first_view.py",
+      "original_fn_line": 22,
+      "original_end_line": 34,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Returns an authored 1.0-second result from a mocked backend and checks its CLI receipt echo; no actual first-view measurement or observed dispatch failure established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_weak_first_view.py::WeakFirstViewTests::test_client_failure_keeps_private_data_root_and_server_exit_slot",
+      "name": "test_client_failure_keeps_private_data_root_and_server_exit_slot",
+      "file": "tools/harness/test_weak_first_view.py",
+      "original_fn_line": 36,
+      "original_end_line": 68,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Checks private writable data custody and distinct server/client exit slots on startup failure; 28ad326b5 changes those paths but supplies no observed failing-run receipt.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_weak_first_view.py::WeakFirstViewTests::test_server_and_observer_sets_stay_inside_the_runner_affinity",
+      "name": "test_server_and_observer_sets_stay_inside_the_runner_affinity",
+      "file": "tools/harness/test_weak_first_view.py",
+      "original_fn_line": 70,
+      "original_end_line": 78,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Refuses server CPUs outside the runner measurement envelope to protect benchmark attribution; authored affinity fixture has no independently observed escaped run.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_weak_first_view.py::WeakFirstViewTests::test_headless_or_java_does_not_substitute_for_a_usable_view",
+      "name": "test_headless_or_java_does_not_substitute_for_a_usable_view",
+      "file": "tools/harness/test_weak_first_view.py",
+      "original_fn_line": 80,
+      "original_end_line": 83,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Rejects substitute clients and headless presentation before claiming native usable-view coverage; no actual false accepted view receipt read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_weak_first_view.py::WeakFirstViewTests::test_default_envelope_uses_one_allowed_cpu_and_real_ram_cap",
+      "name": "test_default_envelope_uses_one_allowed_cpu_and_real_ram_cap",
+      "file": "tools/harness/test_weak_first_view.py",
+      "original_fn_line": 85,
+      "original_end_line": 91,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins own one-server-CPU/default 2G configuration from an injected affinity set without observing resource enforcement or a real weak-host failure.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_weak_first_view.py::WeakFirstViewTests::test_malformed_envelope_fails_as_a_receiptable_error",
+      "name": "test_malformed_envelope_fails_as_a_receiptable_error",
+      "file": "tools/harness/test_weak_first_view.py",
+      "original_fn_line": 93,
+      "original_end_line": 95,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Omits the value of its own --server-cpus parser option and checks translated error wording; no actual benchmark defect or independent oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_weak_first_view"
+}

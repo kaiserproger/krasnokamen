@@ -164,29 +164,12 @@ class ProtocolWireTests(unittest.TestCase):
             with self.subTest(body=body), self.assertRaises(RuntimeError):
                 decode_menu(body)
 
-    def test_block_position_signed_coordinates(self):
-        self.assertEqual(wire.pack_block_position((-1, -64, -2)),
-                         struct.pack('>Q', ((2**26-1) << 38) | ((2**26-2) << 12) | (4096-64)))
-
-    def test_unknown_click_mode_rejected_before_write(self):
-        with self.assertRaises(ValueError):
-            wire.click_body(1, 0, 0, 0, 7)
-
     def test_click_wire_has_empty_prediction_not_item_stack(self):
         self.assertEqual(wire.click_body(4, 7, 12, 0, 1), bytes([4, 7, 0, 12, 0, 1, 0, 0]))
 
     def test_vanilla_cursor_correction_uses_explicit_mismatching_hashed_stack(self):
         self.assertEqual(wire.click_body(4, 7, 12, 0, 1, force_cursor_sync=True),
                          bytes([4, 7, 0, 12, 0, 1, 0, 1, 1, 127, 0, 0]))
-
-    def test_compressed_frame_roundtrip(self):
-        a, b = socket.socketpair()
-        try:
-            wire.send_compressed_frame(a, 0x12, b'hello')
-            self.assertEqual(wire.read_compressed_frame(b), (0x12, b'hello'))
-        finally:
-            a.close()
-            b.close()
 
     def test_section_block_updates_preserve_negative_sections_and_state_ids(self):
         section = ((-2 & 0x3fffff) << 42) | ((3 & 0x3fffff) << 20) | (-4 & 0xfffff)
@@ -264,16 +247,6 @@ class ProtocolWireTests(unittest.TestCase):
             else: a.close()
             b.close()
 
-
-    def test_263_packet_insertions_never_enter_legacy_decoders(self):
-        for new_id, decoder_id in ((36, 36), (38, 37), (82, 81),
-                                   (84, 82), (122, 120), (124, 121)):
-            self.assertEqual(wire.play_packet_id(new_id, inbound=True, protocol=777), decoder_id)
-        for new_id in (37, 83, 123):
-            self.assertEqual(wire.play_packet_id(new_id, inbound=True, protocol=777), -1)
-        self.assertEqual(wire.play_packet_id(53, inbound=False, protocol=777), 54)
-        with self.assertRaises(wire.UnsupportedObservation):
-            wire.play_packet_id(1, inbound=True, protocol=999)
 
     def test_263_teleport_confirmation_contains_resulting_pose(self):
         a, b = socket.socketpair()

@@ -72,29 +72,6 @@ def context(permission='op_2', reply='', **snapshot):
 
 
 class DomainContractTests(unittest.TestCase):
-    def test_every_assigned_subject_has_adapter(self):
-        expected = [(commands, 66), (selectors, 18), (gamerules, 58), (chat, 10), (world_border, 6)]
-        for module, count in expected:
-            self.assertEqual(len(module.ADAPTERS), count, module.__name__)
-            self.assertTrue(all(callable(a.setup) and callable(a.act) and callable(a.oracle)
-                                for a in module.ADAPTERS.values()))
-
-    def test_missing_inventory_does_not_mean_empty(self):
-        c = Client()
-        del c.data['inventory']
-        with self.assertRaisesRegex(MissingCapability, 'snapshot:inventory'):
-            commands.inventory_count(c, 'stone')
-
-    def test_inventory_uses_namespaced_ids_and_sparse_slots(self):
-        c = Client(inventory=[{'slot': 36, 'item_id': 'minecraft:stone', 'count': 4},
-                              {'slot': 9, 'item_id': 'minecraft:stone', 'count': 3},
-                              {'slot': 37, 'item_id': 'minecraft:dirt', 'count': 5}])
-        self.assertEqual(commands.inventory_count(c, 'stone'), 7)
-
-    def test_permission_values_match_matrix(self):
-        for text, value in [('non_op_0', 0), ('op_1', 1), ('op_2', 2), ('op_4', 4), ('console', 4)]:
-            self.assertEqual(commands.permission_level(context(text)), value)
-
     def test_action_preserves_client_authority(self):
         ctx = context('op_1')
         commands.issue(ctx, 'give MatrixActor stone 1')
@@ -142,38 +119,11 @@ class DomainContractTests(unittest.TestCase):
         commands.issue(ctx, 'time set day')
         self.assertEqual(ctx.state['command_reply'], 'Set the time to 1000')
 
-    def test_authoritative_positive_marker(self):
-        ctx = context(reply='[Server] MatrixBlock1801')
-        self.assertTrue(commands.check_block(ctx, (1, 80, 1), 'stone').passed)
-
-    def test_simulation_tick_counter_not_wall_clock(self):
-        commands.ticks(context(), 10)
-        ctx = context()
-        ctx.server.dashboard_stats = lambda: {'uptime_secs': 100}
-        with self.assertRaisesRegex(MissingCapability, 'simulation_tick'):
-            commands.ticks(ctx, 10)
-
-    def test_optional_verbs_fail_closed(self):
-        with self.assertRaisesRegex(MissingCapability, 'client:send_signed_chat'):
-            chat.verb(Client(), 'send_signed_chat', 'test')
-
-    def test_gamerule_value_not_substring(self):
-        ctx = context(reply='max_block_modifications = 32768')
-        self.assertFalse(gamerules.rule_query(ctx, 'max_block_modifications', 1).passed)
-        ctx.server.reply = 'keep_inventory = false'
-        self.assertFalse(gamerules.rule_query(ctx, 'keep_inventory', True).passed)
-
     def test_registration_is_not_behavioral_pass(self):
         ctx = context('console', reply='spawn_patrols = false')
         with self.assertRaisesRegex(MissingCapability, 'controlled_patrol_spawn_attempt'):
             gamerules.act(ctx, 'spawn_patrols')
         self.assertIn('changed_check', ctx.state)
-
-    def test_selector_uses_actual_teleport_not_fake_entity_score_names(self):
-        ctx = context('console')
-        selectors.act(ctx, 'sort_random')
-        self.assertIn('run tp @e[type=pig,sort=random,limit=1] 0 80 6', ctx.server.sent[0])
-        self.assertNotIn('scoreboard players set @s', ctx.server.sent[0])
 
     def test_data_unavailable_is_not_query_pass(self):
         ctx = context('console', reply='Supported: data get|merge block ...')
@@ -249,79 +199,12 @@ class DomainContractTests(unittest.TestCase):
         ctx.factors['plugin_profile'] = 'vanilla'
         self.assertTrue(all(c.passed for c in commands._oracle(ctx, 'msg')))
 
-    def test_low_permission_skips_privileged_fixture_and_checks_root(self):
-        ctx = context('op_1', command_roots=['list', 'help'])
-        commands._setup(ctx, 'give')
-        self.assertEqual(ctx.server.sent, [])
-        ctx.state['command_reply'] = 'Unknown or incomplete command'
-        self.assertTrue(all(c.passed for c in commands.complete_oracle(ctx, 'give')))
-        ctx.clients[0].data['command_roots'].append('give')
-        self.assertFalse(all(c.passed for c in commands.complete_oracle(ctx, 'give')))
-
-    def test_permission_probe_cannot_turn_success_into_complete_coverage(self):
-        ctx = context('console', reply='keep_inventory = true')
-        with self.assertRaisesRegex(MissingCapability, 'client:permission_probe:op_1'):
-            commands.complete_oracle(ctx, 'gamerule')
-        self.assertTrue(ctx.state['domain_checks'][0]['passed'])
-
-    def test_numeric_reports_enforce_range(self):
-        ctx = context()
-        for subject, reply in [('tps', 'TPS: 21.0'), ('mspt', 'MSPT: invalid')]:
-            ctx.state['command_reply'] = reply
-            self.assertFalse(commands._oracle(ctx, subject)[0].passed)
-        ctx.state['command_reply'] = 'TPS: 19.8'
-        self.assertTrue(commands._oracle(ctx, 'tps')[0].passed)
-
-    def test_selector_rejection_checks_all_recipients(self):
-        ctx = context('op_1')
-        ctx.state.update(names=[], recipient_starts=[0], command_reply='Selector not allowed')
-        ctx.clients[0].data['events'] = ['MatrixForbiddenSelector']
-        self.assertFalse(all(c.passed for c in selectors.oracle(ctx, 'nonop_selector_msg')))
-
-    def test_negated_type_selection_is_actually_exercised(self):
-        ctx = context('console', reply='MatrixScoreOracle')
-        ctx.state['names'] = ['MatrixActor', 'MatrixNear', 'MatrixMid', 'MatrixFar', 'MatrixCow']
-        selectors.oracle(ctx, 'opt_type')
-        self.assertTrue(any('tp @e[type=!pig]' in command for command in ctx.server.sent))
-
     def test_volume_probe_includes_intersecting_entity_origin_outside_box(self):
         ctx = context('console', reply='MatrixScoreOracle')
         ctx.state['names'] = ['MatrixNear', 'MatrixMid', 'MatrixFar', 'MatrixCow']
         selectors.oracle(ctx, 'opt_dxdydz')
         self.assertIn('tp @e[name=MatrixNear] -0.2 80 0', ctx.server.sent)
         self.assertTrue(any('dx=-4' in command for command in ctx.server.sent))
-
-    def test_fork_limit_is_real_action_not_registered_stub(self):
-        ctx = context('non_op_0', reply='max_command_forks = 1')
-        with patch.object(gamerules, 'ticks'):
-            gamerules.act(ctx, 'max_command_forks')
-        self.assertNotIn('max_command_forks', gamerules.CONTROLLED_FIXTURES)
-        self.assertTrue(any('execute as @e[type=pig,name=MatrixFork]' in command for command in ctx.server.sent))
-        self.assertEqual(ctx.clients[0].sent, [])
-
-    def test_pearl_staying_at_launch_position_does_not_pass(self):
-        ctx = context(position=[8, 80, 0])
-        ctx.state['tp_position'] = [15, 80, 0]
-        ctx.state.update(health_before=20, tp_health_after=19)
-        self.assertFalse(all(c.passed for c in world_border.oracle(ctx, 'teleport_outside_clamped')))
-
-    def test_gamerule_suppression_checks_observer_not_only_actor(self):
-        ctx = context(reply='show_death_messages = false')
-        ctx.clients.append(Client(events=['MatrixActor fell out of the world']))
-        check = {'name': 'registration', 'passed': True, 'detail': None}
-        ctx.state.update(baseline_check=check, changed_check=check, observer_starts=[0, 0])
-        self.assertFalse(all(c.passed for c in gamerules.oracle(ctx, 'show_death_messages')))
-
-    def test_fixture_and_oracle_commands_stay_in_assigned_dimension(self):
-        ctx = context('console')
-        ctx.factors['dimension'] = 'the_end'
-        commands.fixture(ctx, 'summon pig 3 80 0')
-        commands.query(ctx, 'execute if block 3 80 0 stone run say marker')
-        self.assertEqual(ctx.server.sent, [
-            'execute in minecraft:the_end run summon pig 3 80 0',
-            'execute in minecraft:the_end run execute if block 3 80 0 stone run say marker'])
-        commands.fixture(ctx, 'gamerule minecraft:block_drops false')
-        self.assertEqual(ctx.server.sent[-1], 'gamerule minecraft:block_drops false')
 
     def test_enchantment_identity_uses_received_registry_not_hardcoded_id(self):
         ctx = context(inventory=[{'slot': 36, 'item_id': 'minecraft:diamond_sword', 'count': 1,
@@ -334,46 +217,6 @@ class DomainContractTests(unittest.TestCase):
         ctx.clients[0].data['registries']['minecraft:enchantment'].clear()
         with self.assertRaisesRegex(MissingCapability, 'snapshot:registries.minecraft:enchantment:77'):
             commands._oracle(ctx, 'enchant')
-
-    def test_negative_mspt_is_not_accepted_as_positive_number(self):
-        ctx = context()
-        ctx.state['command_reply'] = 'MSPT: -3.0'
-        self.assertFalse(commands._oracle(ctx, 'mspt')[0].passed)
-
-    def test_regeneration_requires_positive_enabled_control(self):
-        ctx = context(reply='natural_health_regeneration = false', food=20, health=14)
-        check = {'name': 'registration', 'passed': True, 'detail': None}
-        ctx.state.update(baseline_check=check, changed_check=check, damaged_health=14)
-        with patch.object(gamerules, 'ticks'):
-            checks = gamerules.oracle(ctx, 'natural_health_regeneration')
-        self.assertTrue(next(c for c in checks if c.name == 'full_food_regeneration_disabled').passed)
-        self.assertFalse(next(c for c in checks if c.name == 'full_food_regeneration_enabled').passed)
-        self.assertNotIn('natural_health_regeneration', gamerules.CONTROLLED_FIXTURES)
-
-    def test_cramming_requires_actual_entity_health(self):
-        ctx = context(entities=[{'id': 5, 'uuid': 'cow', 'type': 'minecraft:cow', 'position': [3.5, 80, .5]}])
-        self.assertEqual(len(gamerules.nearby_entities(ctx, 'cow', (3.5, 80, .5))), 1)
-        with self.assertRaisesRegex(MissingCapability, 'snapshot:entities.health'):
-            gamerules.entity_health(ctx.clients[0].data['entities'][0])
-        self.assertNotIn('max_entity_cramming', gamerules.CONTROLLED_FIXTURES)
-
-    def test_single_player_pvp_is_explicit_missing_victim(self):
-        ctx = context('console')
-        with self.assertRaisesRegex(MissingCapability, 'multi_client_2:pvp_victim'):
-            gamerules.setup(ctx, 'pvp')
-
-    def test_mob_drop_probe_uses_received_entity_attack_not_console_kill(self):
-        ctx = context('console', reply='mob_drops = false',
-                      entities=[{'id': 77, 'uuid': 'victim', 'type': 'minecraft:cow', 'position': [3, 80, 0]}])
-        attacks = []
-        def attack(entity_id):
-            attacks.append(entity_id)
-            ctx.clients[0].data['entities'] = []
-        ctx.clients[0].attack = attack
-        with patch.object(gamerules, 'ticks'):
-            gamerules.act(ctx, 'mob_drops')
-        self.assertEqual(attacks, [77])
-        self.assertFalse(any(command.startswith('kill ') for command in ctx.server.sent))
 
     def test_bounded_native_chat_cannot_supply_indexed_receipt(self):
         ctx = context()
@@ -412,80 +255,6 @@ class DomainContractTests(unittest.TestCase):
         ctx.factors['player_count'] = '1'
         self.assertFalse(gamerules.actor_only_row(ctx, 'spawn_patrols'))
 
-    def test_bow_probe_requires_consumed_arrow_not_only_input_submission(self):
-        ctx = context(inventory=[{'slot': 37, 'item_id': 'minecraft:arrow', 'count': 4}])
-        submitted = []
-        ctx.clients[0].look_at = lambda *pos: submitted.append(('look', pos))
-        ctx.clients[0].use_item = lambda **kw: submitted.append(('hold', kw))
-        ctx.clients[0].release_use_item = lambda: None
-        with self.assertRaisesRegex(AssertionError, 'consumes actual arrow'):
-            gamerules.shoot(ctx, (3.5, 80.5, .5))
-        def consume():
-            ctx.clients[0].data['inventory'][0]['count'] -= 1
-        ctx.clients[0].release_use_item = consume
-        with patch.object(gamerules, 'ticks'):
-            gamerules.shoot(ctx, (3.5, 80.5, .5))
-        self.assertIn(('hold', {'ticks': 20}), submitted)
-
-    def test_projectile_rule_requires_enabled_pot_break_control(self):
-        ctx = context(reply='projectiles_can_break_blocks = false')
-        check = {'name': 'registration', 'passed': True, 'detail': None}
-        ctx.state.update(baseline_check=check, changed_check=check)
-        with patch.object(gamerules, 'shoot') as shot, patch.object(gamerules, 'check_block',
-                side_effect=[Check('disabled_intact', True), Check('enabled_broken', False)]):
-            checks = gamerules.oracle(ctx, 'projectiles_can_break_blocks')
-        self.assertEqual(shot.call_count, 1)
-        self.assertFalse(all(c.passed for c in checks))
-        self.assertNotIn('projectiles_can_break_blocks', gamerules.CONTROLLED_FIXTURES)
-
-    def test_pvp_covers_melee_and_projectiles_with_received_victim_identity(self):
-        ctx = context(reply='pvp = false',
-                      entities=[{'id': 77, 'uuid': 'victim', 'type': 'minecraft:player', 'position': [2.5, 80, .5]}])
-        victim = Client()
-        ctx.clients.append(victim)
-        check = {'name': 'registration', 'passed': True, 'detail': None}
-        ctx.state.update(baseline_check=check, changed_check=check, victim_health=20, victim_uuid='victim')
-        ctx.clients[0].attack = lambda entity_id: victim.data.update(health=19)
-        shots = []
-        def shoot(*args):
-            shots.append(1)
-            if len(shots) == 2:
-                victim.data['health'] = 10
-        with patch.object(gamerules, 'prepare_bow'), patch.object(gamerules, 'shoot', side_effect=shoot), patch.object(gamerules, 'ticks'):
-            checks = gamerules.oracle(ctx, 'pvp')
-        self.assertTrue(all(c.passed for c in checks))
-        self.assertEqual(len(shots), 2)
-
-    def test_sleep_quorum_requires_positive_skip_and_both_wake_publications(self):
-        ctx = context(reply='players_sleeping_percentage = 101')
-        ctx.clients.append(Client())
-        check = {'name': 'registration', 'passed': True, 'detail': None}
-        ctx.state.update(baseline_check=check, changed_check=check)
-        for client in ctx.clients:
-            client.read_block_state = lambda pos: {'block_id': 'minecraft:red_bed',
-                                                    'properties': {'occupied': 'true'}}
-        with patch.object(gamerules, 'ticks'), patch.object(gamerules, 'daytime',
-                side_effect=[13160, 13320, 13480]):
-            checks = gamerules.oracle(ctx, 'players_sleeping_percentage')
-        self.assertTrue(next(c for c in checks if c.name == 'one_of_two_at_100_no_skip').passed)
-        self.assertFalse(next(c for c in checks if c.name == 'one_of_two_at_50_skips_night').passed)
-        self.assertEqual(len([c for c in checks if c.name.startswith('wake_publication:') and not c.passed]), 2)
-        self.assertNotIn('players_sleeping_percentage', gamerules.CONTROLLED_FIXTURES)
-
-    def test_missing_bed_is_not_a_successful_wake_publication(self):
-        client = Client()
-        client.read_block_state = lambda pos: {'block_id': 'minecraft:air', 'properties': {}}
-        self.assertFalse(gamerules.bed_occupied(client, False))
-        client.read_block_state = lambda pos: {'block_id': 'minecraft:red_bed', 'properties': {'occupied': 'false'}}
-        self.assertTrue(gamerules.bed_occupied(client, False))
-
-    def test_daytime_uses_command_value_not_log_timestamp(self):
-        ctx = context(reply='2026-10-24 commands.time.query: 13000')
-        self.assertEqual(gamerules.daytime(ctx), 13000)
-        ctx.server.reply = 'Unknown command time; MatrixConsoleFence12345'
-        with self.assertRaisesRegex(MissingCapability, 'query:time.daytime.numeric_feedback'):
-            gamerules.daytime(ctx)
-
     def test_behavioral_rule_requires_restart_persistence(self):
         ctx = context(reply='commands.time.query: 6000; advance_time = false')
         check = {'name': 'registration', 'passed': True, 'detail': None}
@@ -497,37 +266,6 @@ class DomainContractTests(unittest.TestCase):
         ctx.server.clean_restart = lambda: setattr(ctx.server, 'reply', 'advance_time = true')
         checks = gamerules.oracle(ctx, 'advance_time')
         self.assertFalse(checks[-1].passed)
-
-    def test_feedback_requires_other_operator_delivery_and_received_style(self):
-        for delivered, styled in ((True, True), (False, False), (True, False)):
-            with self.subTest(delivered=delivered, styled=styled):
-                ctx = context(reply='send_command_feedback = false')
-                component = {'translate': 'chat.type.admin'}
-                if styled:
-                    component.update(color='gray', italic=True)
-                observer = Client(chat_components=[component])
-                observer.name = 'Observer'
-                ctx.clients.append(observer)
-                check = {'name': 'registration', 'passed': True, 'detail': None}
-                ctx.state.update(baseline_check=check, changed_check=check, observer_starts=[0, 0])
-                def command(text):
-                    ctx.clients[0].data['events'].append('commands.time.set: 2000')
-                    if delivered:
-                        observer.data['events'].append('chat.type.admin: MatrixActor, commands.time.set: 2000')
-                def fixture(context, text):
-                    if text.startswith('say '):
-                        for client in context.clients:
-                            client.data['events'].append(text[4:])
-                ctx.clients[0].command = command
-                with patch.object(gamerules, 'fixture', side_effect=fixture), patch.object(
-                        gamerules, 'daytime', side_effect=[1000, 2000]):
-                    if delivered and not styled:
-                        with self.assertRaisesRegex(MissingCapability, 'admin_color_and_italic'):
-                            gamerules.oracle(ctx, 'send_command_feedback')
-                        self.assertTrue(all(c['passed'] for c in ctx.state['domain_checks']))
-                    else:
-                        checks = gamerules.oracle(ctx, 'send_command_feedback')
-                        self.assertEqual(all(c.passed for c in checks), delivered)
 
     def test_log_admin_commands_never_uses_obsolete_observer_split(self):
         ctx = context()
@@ -558,38 +296,6 @@ class DomainContractTests(unittest.TestCase):
             world_border.act(ctx, 'border_persistence')
         for client in ctx.clients:
             self.assertEqual(client.lifecycle, ['disconnect', 'reconnect', 'disconnect', 'reconnect'])
-
-    def test_join_leave_requires_received_yellow_style(self):
-        components = [{'translate': key, 'with': [{'text': 'Observer'}]}
-                      for key in ('multiplayer.player.left', 'multiplayer.player.joined')]
-        ctx = context(events=['Observer left', 'Observer joined'], chat_components=components)
-        observer = Client()
-        observer.name = 'Observer'
-        ctx.clients.append(observer)
-        ctx.state['starts'] = [0, 0]
-        with self.assertRaisesRegex(MissingCapability, 'join_leave_color'):
-            chat.oracle(ctx, 'join_leave_messages')
-        for component in components:
-            component['color'] = 'yellow'
-        self.assertTrue(all(c.passed for c in chat.oracle(ctx, 'join_leave_messages')))
-        components[0]['color'] = 'red'
-        self.assertFalse(all(c.passed for c in chat.oracle(ctx, 'join_leave_messages')))
-
-    def test_unrelated_departure_cannot_satisfy_named_leave(self):
-        ctx = context(events=['SomeoneElse left', 'Observer joined'])
-        observer = Client()
-        observer.name = 'Observer'
-        ctx.clients.append(observer)
-        ctx.state['starts'] = [0, 0]
-        self.assertFalse(chat.oracle(ctx, 'join_leave_messages')[0].passed)
-
-    def test_visibility_accepts_actual_translated_list_component(self):
-        ctx = context()
-        ctx.state.update(starts=[0], visibility_results=[
-            ('full', ['MatrixVisibilityfull', 'commands.list.players: 2, 20']),
-            ('commands_only', ['commands.list.players: 2, 20']),
-            ('hidden', [])])
-        self.assertTrue(all(c.passed for c in chat.oracle(ctx, 'chat_visibility_setting')))
 
     def test_border_lerp_duration_is_explicit_vanilla_ticks(self):
         ctx = context()

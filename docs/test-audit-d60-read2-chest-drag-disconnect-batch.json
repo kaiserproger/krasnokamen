@@ -1,0 +1,96 @@
+{
+  "decision": "D60.2",
+  "base": "9013bb531ad2cc9df9f6e755738c1cbe4499d209",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_chest_drag_disconnect.py",
+  "source_sha256_before": "354442255420ea11aa128fe5556132612643b8321f913a7a86e4f209f34e511f",
+  "status": "Every2 test body/shared fixture/nested callback read. Remove1 R4; retain0 K1,0 K2,1 U. Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 2,
+    "removed_R4": 1,
+    "retained_K1": 0,
+    "retained_K2": 0,
+    "retained_U": 1,
+    "prior_deletions": 0,
+    "physical_declarations_before": 2,
+    "physical_declarations_remaining": 1,
+    "source_lines_before": 48,
+    "source_lines_remaining": 42,
+    "physical_source_lines_removed": 6,
+    "historical_medium_candidates_finalized": 1,
+    "historical_medium_candidates_unfinalized": 311
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete48-line module, all3 subtest cases, check callback and every patched helper.",
+    "production_source_read": "Complete61-line native_chest_drag_disconnect.run; menu_observer.py48 lines; native_v2._point33-34 and probe_steps.item_count141-142.",
+    "retained_assertions": "Custody test body unchanged.",
+    "removed_scaffolding": [
+      "Exact-name same-file scenarios/native_v2 grep confirmed only registry test used them; removed both imported names."
+    ],
+    "production_unchanged": true
+  },
+  "evidence": {
+    "observed_case": "ISSUE-1-14 row read fully (open). Full109-line receipts/CraftDrag/REPORT.md read: actual native drag disappearance was client presentation, custody conserved; reports historical native graphical runs and pre-fix client controls, not new worker runs.",
+    "source_history_read": "3fe868f1f complete two test-introduction deltas read.",
+    "scope_limit": "Keep custody U; no present-tree graphical acceptance or K1/K2 for mocked loss/dupe claimed.",
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 2,
+      "external_matches": "",
+      "exit": 1,
+      "stderr": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "scope": "Exact-file git status only; no cross-worktree symbol research.",
+      "worktrees_checked": 573,
+      "source_file_present": 559,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original799 R4/medium IDs; additional U removals do not count in denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_chest_drag_disconnect.py::ChestDragTests::test_registered_graphical",
+      "name": "test_registered_graphical",
+      "file": "tools/harness/test_chest_drag_disconnect.py",
+      "original_fn_line": 12,
+      "original_end_line": 15,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Only asserts hard-coded scenario name registration and own graphical label, never invokes behavior; actual cursor report does not depend on this registry self-check.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_chest_drag_disconnect.py::ChestDragTests::test_gate_rejects_loss_and_duplicate_after_rejoin",
+      "name": "test_gate_rejects_loss_and_duplicate_after_rejoin",
+      "file": "tools/harness/test_chest_drag_disconnect.py",
+      "original_fn_line": 17,
+      "original_end_line": 48,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve three-way server-custody control (loss,duplicate,conserved) around the real ISSUE-1-14 graphical gate, but every menu and reconnect observation is mocked. CraftDrag report found no server loss/dupe and old-client failure was cursor presentation, not this guard; do not misclassify it as live regression proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_chest_drag_disconnect through canonical memory runner",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

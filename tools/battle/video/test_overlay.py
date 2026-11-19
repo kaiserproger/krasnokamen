@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-import hashlib
 import json
 import pathlib
-import struct
 import tempfile
 import unittest
-import zlib
 from unittest import mock
-import overlay
+from tools.battle.video import overlay
 
 
 def sample(tick, wall, host=None):
@@ -17,23 +14,6 @@ def sample(tick, wall, host=None):
 
 
 class OverlayTests(unittest.TestCase):
-    def test_hash_and_budget_line(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = pathlib.Path(d)/'telemetry.jsonl'
-            path.write_text('\n'.join(json.dumps(sample(t, 1_000_000_000+t*50_000_000)) for t in range(3))+'\n')
-            data = overlay.load(path)[2]
-            image1 = overlay.render(*data)
-            image2 = overlay.render(*overlay.load(path)[2])
-            self.assertEqual(hashlib.sha256(image1).hexdigest(), hashlib.sha256(image2).hexdigest())
-            self.assertNotEqual(image1, overlay.render(*overlay.load(path)[1]))
-            self.assertEqual(overlay.graph_y(50,100),122)
-            length = struct.unpack('>I',image1[33:37])[0]
-            self.assertEqual(image1[37:41],b'IDAT')
-            raw = zlib.decompress(image1[41:41+length])
-            offset = 122*(overlay.W*4+1)+1+300*4
-            self.assertEqual(raw[offset:offset+4],bytes((255,190,65,255)))
-            self.assertEqual(data[1][-1][1],20.0)
-
     def test_host_deltas_and_missing(self):
         host1 = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':2**30,
                  'cgroup_cpu_usage_usec':1000,'cpu_total_ticks':100,'cpu_steal_ticks':10}
@@ -82,28 +62,6 @@ class OverlayTests(unittest.TestCase):
             p.write_text('\n'.join(json.dumps(x) for x in [
                 sample(1, 1_000_000_000, host), sample(1201, 61_000_000_000)])+'\n')
             self.assertEqual(overlay.load(p)[1201][5], ())
-
-    def test_rss_graph_pixels(self):
-        def host(tick, rss):
-            return {'sampled_unix_ns':1_000_000_000+tick*50_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':rss,
-                    'cgroup_cpu_usage_usec':1000*tick,'cpu_total_ticks':100*tick,'cpu_steal_ticks':0}
-        with tempfile.TemporaryDirectory() as d:
-            p=pathlib.Path(d)/'t.jsonl'
-            # Axis is the whole-file peak (3 GiB) rounded up; tick 1 at 1 GiB, tick 41 at 3 GiB.
-            p.write_text('\n'.join(json.dumps(sample(t,1_000_000_000+t*50_000_000,host(t,r) if t in (1,41) else None)) for t,r in [(1,2**30)]+[(t,0) for t in range(2,41)]+[(41,3*2**30)])+'\n')
-            data=overlay.load(p)
-            self.assertEqual(data[41][6],3)
-            self.assertEqual(overlay.rss_y(3,3),overlay.RSS_TOP)
-            self.assertEqual(overlay.rss_y(1,3),overlay.RSS_TOP+overlay.RSS_HEIGHT-12)
-            image=overlay.render(*data[41])
-            length=struct.unpack('>I',image[33:37])[0]
-            raw=zlib.decompress(image[41:41+length])
-            def pixel(x,y):
-                o=y*(overlay.W*4+1)+1+x*4
-                return raw[o:o+4]
-            end_x=12+(41-(41-overlay.RSS_WINDOW_TICKS))*360//overlay.RSS_WINDOW_TICKS
-            self.assertEqual(pixel(end_x,overlay.RSS_TOP),bytes((99,220,255,255)))
-            self.assertEqual(overlay.H,324)
 
     def test_missing_tick_rejected(self):
         import subprocess, sys

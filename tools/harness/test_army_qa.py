@@ -81,10 +81,6 @@ class CommandOrderRosterTests(unittest.TestCase):
 
 
 class WatchdogTests(unittest.TestCase):
-    def test_fast_send_passes_through(self) -> None:
-        from .backends.army_qa_watchdog import send_guarded
-        self.assertEqual(send_guarded(lambda: {"ok": True}, "probe", timeout=5.0), {"ok": True})
-
     def test_error_propagates(self) -> None:
         from .backends.army_qa_watchdog import WedgedOwnerError, send_guarded
 

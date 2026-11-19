@@ -17,8 +17,8 @@
     "source_lines_before": 719,
     "source_lines_remaining": 548,
     "physical_source_lines_removed": 171,
-    "historical_medium_candidates_finalized": 20,
-    "historical_medium_candidates_unfinalized": 536
+    "historical_medium_candidates_finalized": 18,
+    "historical_medium_candidates_unfinalized": 538
   },
   "coverage": {
     "module_and_helpers_read": "Entire719-line original module, all47 methods; observed, LISTING, MenuProbe/probe, every nested Probe/MenuProbe, FakeProbe/HEADLESS, run_retry, replaced, run_flow and all nested command/certificate/order/funding/capture builders, plus split block/house fixtures. Mocked flows and fake /a receipt paths are not actual runs/artifacts.",

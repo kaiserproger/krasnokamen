@@ -1,0 +1,94 @@
+{
+  "decision": "D60.2",
+  "base": "a8d49aef14648e3243395ffa8a0f667718aee178",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_catalog_spain_disk.py",
+  "source_sha256_before": "ae8220e7dbc865a242362714d72ad651bacc581c1bc7834e4ba652cb1faa5d8c",
+  "status": "Every2 test body/shared fixture/nested callback read. Remove1 R4; retain0 K1,0 K2,1 U. Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 2,
+    "removed_R4": 1,
+    "retained_K1": 0,
+    "retained_K2": 0,
+    "retained_U": 1,
+    "prior_deletions": 0,
+    "physical_declarations_before": 2,
+    "physical_declarations_remaining": 1,
+    "source_lines_before": 28,
+    "source_lines_remaining": 13,
+    "physical_source_lines_removed": 15,
+    "historical_medium_candidates_finalized": 1,
+    "historical_medium_candidates_unfinalized": 312
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete28-line module, cancel lambda, mock os.read frame and finally guard.close.",
+    "production_source_read": "Complete134-line catalog_spain_disk.py, all ctypes/inotify watch/setup/read/cleanup paths.",
+    "retained_assertions": "Single reserve body unchanged; no shared helper removed.",
+    "removed_scaffolding": [
+      "Exact-name same-file struct,SimpleNamespace,patch grep: all non-import uses only in removed overflow body; removed these3 imports."
+    ],
+    "production_unchanged": true
+  },
+  "evidence": {
+    "scope_limit": "Module only appears in introduction9eefd521a; no real overflow receipt established. Reserve protection kept U, not claimed as a real disk-full regression.",
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 2,
+      "external_matches": "",
+      "exit": 1,
+      "stderr": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "scope": "Exact-file git status only; no cross-worktree symbol research.",
+      "worktrees_checked": 574,
+      "source_file_present": 570,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original799 R4/medium IDs; additional U removals do not count in denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_catalog_spain_disk.py::SpainDiskGuardTests::test_reserve_refuses_before_launch",
+      "name": "test_reserve_refuses_before_launch",
+      "file": "tools/harness/test_catalog_spain_disk.py",
+      "original_fn_line": 13,
+      "original_end_line": 16,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserve real filesystem disk-reserve preflight protecting owner storage; impossible threshold2**80 is synthetic, no exact low-space incident receipt independently established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_catalog_spain_disk.py::SpainDiskGuardTests::test_inotify_overflow_cancels_work",
+      "name": "test_inotify_overflow_cancels_work",
+      "file": "tools/harness/test_catalog_spain_disk.py",
+      "original_fn_line": 18,
+      "original_end_line": 28,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Patches os.read to return one authored inotify overflow frame and asserts cancellation/reason from the guard itself; no observed Spain inotify queue overflow or independent oracle case established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_catalog_spain_disk through canonical memory runner",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

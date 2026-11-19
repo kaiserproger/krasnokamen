@@ -16,7 +16,7 @@
     "source_lines_remaining": 475,
     "physical_source_lines_removed": 178,
     "historical_medium_candidates_finalized": 10,
-    "historical_medium_candidates_unfinalized": 516
+    "historical_medium_candidates_unfinalized": 518
   },
   "coverage": {
     "module_and_helpers_read": "Entire653-line original module, all22 test bodies, FakeLogHandle, FakeMcpClient, _ready_handler, _auth_handler, setUp/start/ready/stop/patch/receipt helpers, and every nested handler/environment capturing/cleanup closure.",

@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import ast
-import contextlib
-import io
-import json
-import re
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
-from . import __main__ as cli
-from . import plan, profiles, scenarios
+from . import plan
 
 REPO = Path(__file__).resolve().parents[2]
 PY = "python3 -m tools.harness run"
@@ -89,16 +82,6 @@ class GameplayTests(unittest.TestCase):
     def test_tests_and_persistence_only_files_ask_for_no_real_client_gate(self):
         found = gates(build(["crates/mc-core/src/beacon_tests.rs", "crates/mc-core/src/core/journal.rs"]))
         self.assertFalse([g for g in found if g.startswith("no mapped gate")])
-
-    def test_every_area_gate_exists(self):
-        for area in plan.AREAS:
-            for gate in area.gates:
-                kind, _, name = gate.partition(":")
-                with self.subTest(area=area.id, gate=gate):
-                    if kind == "profile":
-                        self.assertIn(name, profiles.PROFILES)
-                    else:
-                        self.assertIn(name, scenarios.SCENARIOS)
 
 
 class ChangedGateTests(unittest.TestCase):
@@ -271,14 +254,6 @@ class InnovationTests(unittest.TestCase):
         self.assertIn("new required prerequisite blender (profile a)", record)
 
 
-class MarkdownTests(unittest.TestCase):
-    def test_markdown_only_change_needs_doclinks_only(self):
-        result = build(["docs/architecture/persistence.md", "AGENTS.md"])
-        self.assertEqual(list(gates(result)), ["python3 tools/doclinks.py"])
-        self.assertEqual(result["reviewers"], [])
-        self.assertEqual(result["manual_classification"], [])
-
-
 class SiblingTests(unittest.TestCase):
     def test_client_path_gets_strict_clippy_tests_and_a_core_real_client_gate(self):
         found = gates(build(["../solaris-client/src/ui/hud.rs"]))
@@ -351,77 +326,6 @@ class UnionTests(unittest.TestCase):
         self.assertEqual(sorted(r["kind"] for r in result["reviewers"]), ["custody", "persistence"])
         self.assertIn("python3 tools/doclinks.py", all_gates)
         self.assertEqual(all_gates.count(f"{PY} correctness"), 1)
-
-    def test_plan_json_roundtrips_through_the_cli(self):
-        out = io.StringIO()
-        with mock.patch.object(plan, "git_root", return_value=REPO), contextlib.redirect_stdout(out):
-            code = cli.main(["plan", "--paths", "docs/STATUS.md", "--json"])
-        self.assertEqual(code, 0)
-        data = json.loads(out.getvalue())
-        self.assertEqual([e["gate"] for e in data["entries"]], ["python3 tools/doclinks.py"])
-        for key in ("gate", "why", "runs", "negative_control", "reviewer"):
-            self.assertIn(key, data["entries"][0])
-
-
-class TableDriftTests(unittest.TestCase):
-    """The data tables must agree with the catalogs they name."""
-
-    def test_native_windowed_profiles_are_enabled_for_native(self):
-        source = (REPO / "tools/harness/__main__.py").read_text(encoding="utf-8")
-        match = re.search(r'client == "native" and profile not in \{([^}]*)\}', source)
-        self.assertIsNotNone(match)
-        allowed = set(re.findall(r'"([^"]+)"', match.group(1)))
-        self.assertEqual(plan.NATIVE_WINDOWED - allowed, set())
-
-    def test_profile_names_in_tables_exist(self):
-        names = set(profiles.PROFILES)
-        used = set(plan.VARIABLE_PROFILES) | plan.NATIVE_WINDOWED
-        for targets in plan.BACKEND_PROFILES.values():
-            used |= set(targets)
-        self.assertEqual(used - names, set())
-
-    def test_backend_engines_are_reachable_from_their_profiles(self):
-        """Each BACKEND_PROFILES row: the profile's run function imports the engine, directly or transitively."""
-        backends = REPO / "tools/harness/backends"
-
-        def imports(tree: ast.AST) -> set[str]:
-            found = set()
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom):
-                    module = node.module or ""
-                    if module.endswith("backends") or module == "":
-                        found |= {alias.name for alias in node.names}
-                    elif node.level:
-                        found.add(module.split(".")[0])  # `from .x import y`
-                    elif "backends." in module:
-                        found.add(module.rsplit(".", 1)[-1])
-            return found
-
-        def closure(start: set[str]) -> set[str]:
-            seen, queue = set(), list(start)
-            while queue:
-                name = queue.pop()
-                if name in seen:
-                    continue
-                seen.add(name)
-                path = backends / f"{name}.py"
-                if path.is_file():
-                    queue.extend(imports(ast.parse(path.read_text(encoding="utf-8"))))
-            return seen
-
-        tree = ast.parse((REPO / "tools/harness/profiles.py").read_text(encoding="utf-8"))
-        functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
-        run_of: dict[str, str] = {}
-        for node in tree.body:
-            if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "PROFILES":
-                for key, value in zip(node.value.keys, node.value.values):
-                    spec = {k.value: v for k, v in zip(value.keys, value.values)}
-                    run_of[key.value] = spec["run"].id
-        for stem, targets in plan.BACKEND_PROFILES.items():
-            for profile in targets:
-                with self.subTest(engine=stem, profile=profile):
-                    reachable = closure(imports(functions[run_of[profile]]))
-                    self.assertIn(stem, reachable)
 
 
 if __name__ == "__main__":

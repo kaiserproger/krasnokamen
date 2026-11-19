@@ -1,0 +1,209 @@
+{
+  "decision": "D60.2",
+  "base": "0f9f100e1732e8099399a4166c94dda42963ce80",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_native_promotion_world.py",
+  "source_sha256_before": "1136f26b916dc808fb31ee53d13db56445a490eb5b10d8be01f5cda2f5eae316",
+  "status": "Every 9 body and shared fixture/callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 9,
+    "removed_R4": 3,
+    "removed_R1": 0,
+    "retained_K1": 6,
+    "retained_K2": 0,
+    "retained_U": 0,
+    "historical_medium_candidates_finalized": 6,
+    "source_lines_before": 169,
+    "source_lines_remaining": 149,
+    "physical_source_lines_removed": 20,
+    "historical_medium_candidates_unfinalized": 227
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete 169-line module, row/Steps and nested restart/echo callbacks; complete 147-line backend including marker ordering and survivor identities. Full END-RESTART/ENTITY-BODY-PANIC/TEST-END-RESTART-OBSERVER/SHUTDOWN-ERROR-LOG rows, 83ccb7ca6 and shutdown history messages plus 3d0f1f546 delta read.",
+    "retained_assertions": "Retained bodies and shared fixture unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 9,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 577,
+      "source_file_present": 571,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_both_kinds_reject_missing_graphical_hook_before_actions",
+      "name": "test_both_kinds_reject_missing_graphical_hook_before_actions",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 58,
+      "original_end_line": 65,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Mocked missing-window startup guard only; no actual headless false acceptance case.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_end_requires_restart_hook_before_actions",
+      "name": "test_end_requires_restart_hook_before_actions",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 67,
+      "original_end_line": 72,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Mocked missing restart hook guard only, not actual End persistence defect.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_end_fences_dragon_uuid_across_restart",
+      "name": "test_end_fences_dragon_uuid_across_restart",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 74,
+      "original_end_line": 85,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed same End world failed reopening retained dragon fight UUID. Preserve exact persistent dragon identity while allowing new restart-local protocol ID; original gate/control recorded by83ccb7ca6. Supporting mock check, not current graphical proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/END-RESTART.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_gallery_orders_compaction_before_live_echo_and_fences_survivors",
+      "name": "test_gallery_orders_compaction_before_live_echo_and_fences_survivors",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 87,
+      "original_end_line": 106,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed mixed entity gallery unfreeze crashes after projectile swap-removal. Preserve compaction before ordered live echo, same survivors/player and finally-unfreeze cleanup; authored rows cannot replace actual same-client survival proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/ENTITY-BODY-PANIC.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_gallery_rejects_changed_survivor_and_unfreezes_on_setup_failure",
+      "name": "test_gallery_rejects_changed_survivor_and_unfreezes_on_setup_failure",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 108,
+      "original_end_line": 122,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed mixed entity gallery unfreeze crashes after projectile swap-removal. Preserve compaction before ordered live echo, same survivors/player and finally-unfreeze cleanup; authored rows cannot replace actual same-client survival proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/ENTITY-BODY-PANIC.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_end_accepts_same_uuid_with_new_protocol_id",
+      "name": "test_end_accepts_same_uuid_with_new_protocol_id",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 124,
+      "original_end_line": 135,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed same End world failed reopening retained dragon fight UUID. Preserve exact persistent dragon identity while allowing new restart-local protocol ID; original gate/control recorded by83ccb7ca6. Supporting mock check, not current graphical proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/END-RESTART.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_gallery_rejects_different_player_after_compaction",
+      "name": "test_gallery_rejects_different_player_after_compaction",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 137,
+      "original_end_line": 148,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed mixed entity gallery unfreeze crashes after projectile swap-removal. Preserve compaction before ordered live echo, same survivors/player and finally-unfreeze cleanup; authored rows cannot replace actual same-client survival proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/ENTITY-BODY-PANIC.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_console_shutdown_checks_the_actual_stop_log",
+      "name": "test_console_shutdown_checks_the_actual_stop_log",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 151,
+      "original_end_line": 161,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Observed ordinary console stop emitted ERROR despite committed checkpoint. Keep exact owner-stop/checkpoint messages and rejection of broadcast ERROR; row remains open with real-hunk control/real-client limits. Authored log is not actual shutdown acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/SHUTDOWN-ERROR-LOG.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_world.py::PromotionWorldTests::test_unknown_kind_rejected",
+      "name": "test_unknown_kind_rejected",
+      "file": "tools/harness/test_native_promotion_world.py",
+      "original_fn_line": 163,
+      "original_end_line": 165,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Unknown literal kind admission self-test without real invalid-scene case.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_native_promotion_world",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

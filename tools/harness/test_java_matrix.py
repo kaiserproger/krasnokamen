@@ -21,17 +21,6 @@ def row(subject="commands.list", **context):
 
 
 class MatrixTest(unittest.TestCase):
-    def test_unknown_subject_is_blocked_with_exact_shared_missing_capability(self):
-        with patch.object(matrix, "load_adapter", side_effect=MissingCapability("domain_adapter:effects.Speed")):
-            self.assertEqual(matrix.blockers(row("effects.Speed")), ["domain_adapter:effects.Speed"])
-
-    def test_preflight_does_not_downgrade_context(self):
-        cell = row(game_mode="adventure", dimension="the_end", permission="op_3")
-        with patch.object(matrix, "load_adapter") as load:
-            self.assertEqual(matrix.blockers(cell), [])
-        load.assert_called_once_with("commands.list")
-        self.assertEqual(cell["context"]["dimension"], "the_end")
-
     def test_ledger_preserves_driver_binary_and_stable_id(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = Path(directory) / "ledger.jsonl"

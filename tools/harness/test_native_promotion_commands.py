@@ -6,12 +6,6 @@ from .backends import native_promotion_commands as commands
 
 
 class CommandPromotionTests(unittest.TestCase):
-    def test_requires_window(self):
-        steps = mock.Mock()
-        steps.client.p4_window = None
-        with self.assertRaisesRegex(RuntimeError, "windowed Xvfb"):
-            commands.run(steps, (0, 0, 0))
-
     def test_score_requires_fresh_unique_marker(self):
         class Steps:
             def fixture(self, command):

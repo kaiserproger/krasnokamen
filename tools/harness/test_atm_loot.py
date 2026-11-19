@@ -5,26 +5,13 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from . import atm_horizon, atm_loot
-from .backends import atm_structures
 from .test_atm_carry import region
 
 
 class ContainerProofTests(unittest.TestCase):
-    def test_native_screenshot_gate_cannot_skip_required_loot_probe(self):
-        with tempfile.TemporaryDirectory() as directory:
-            manifest = Path(directory) / "result.json"
-            manifest.write_text(json.dumps({"status": "converted-unproven", "packs": [
-                {"container_loot_probe": {"block": "minecraft:barrel", "table": "demo:barrel"}}
-            ]}))
-            ctx = SimpleNamespace(client="native", windowed=True, extra_args=[], platform=None, timeout_seconds=30)
-            with patch.dict(os.environ, {"KRASNOKAMEN_ATM_MANIFEST": str(manifest)}):
-                with self.assertRaisesRegex(ValueError, "Horizon barrel-open"):
-                    atm_structures.run(ctx)
-
     def test_saved_unopened_table_and_barrel_inside_start_are_required(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

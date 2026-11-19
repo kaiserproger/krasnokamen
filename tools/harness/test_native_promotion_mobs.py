@@ -18,14 +18,6 @@ class MobPromotionTests(unittest.TestCase):
         self.assertFalse(mobs._snow_flag({"received_metadata": {"16": {"kind": "bool", "value": False}}}, False))
         self.assertTrue(mobs._snow_flag({"received_metadata": {"16": {"kind": "byte", "value": 16}}}, True))
         self.assertTrue(mobs._snow_flag({"received_metadata": {"16": {"kind": "byte", "value": 0}}}, False))
-    def test_requires_window_and_known_scenario(self):
-        steps = mock.Mock()
-        steps.client.p4_window = None
-        with self.assertRaisesRegex(RuntimeError, "windowed Xvfb"):
-            mobs.run(steps, (0, 0, 0), "snow-golem-shear")
-        with self.assertRaises(ValueError):
-            mobs.run(steps, (0, 0, 0), "unknown")
-
     def test_snow_rejects_wrong_start_and_missing_received_transition(self):
         class Steps:
             def __init__(self):

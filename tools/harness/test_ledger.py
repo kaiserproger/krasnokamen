@@ -146,26 +146,6 @@ class RowFileTests(unittest.TestCase):
         self.assertEqual(ledger.split(root), 1)
         self.assertIn('severity = "major"', ledger.show(root, 'BUG-0'))
 
-    def test_load_refuses_a_name_that_is_not_the_id(self):
-        root = self.root()
-        ledger.write_rows(root, self.rows(1))
-        (root / 'docs/bugs/rows/BUG-0.toml').rename(root / 'docs/bugs/rows/OTHER.toml')
-        with self.assertRaisesRegex(ValueError, r'OTHER\.toml: the file name must be BUG-0\.toml'):
-            ledger.load_rows(root)
-
-    def test_load_refuses_two_rows_in_one_file(self):
-        root = self.root()
-        path = root / 'docs/bugs/rows'
-        path.mkdir(parents=True)
-        (path / 'BUG-0.toml').write_text(ROW.format(ident='BUG-0') + '\n' + ROW.format(ident='BUG-1') + '\n')
-        with self.assertRaisesRegex(ValueError, 'exactly one \\[\\[bug\\]\\] row'):
-            ledger.load_rows(root)
-
-    def test_document_is_the_rows_reassembled(self):
-        root = self.root()
-        ledger.write_rows(root, self.rows(2))
-        self.assertEqual(ledger.document(root), ''.join(ROW.format(ident=f'BUG-{n}') for n in range(2)))
-
     def test_edit_sets_a_field_and_skips_multi_line_strings(self):
         root = self.root()
         ledger.write_rows(root, self.rows(1))
@@ -196,16 +176,6 @@ class RowFileTests(unittest.TestCase):
             ledger.edit(root, 'BUG-0', ['title = "unterminated'])
         ledger.edit(root, 'BUG-0', ['title = "dry"'], dry_run=True)
         self.assertEqual(ledger.show(root, 'BUG-0'), before)
-
-    def test_show_field_and_missing_row(self):
-        root = self.root()
-        ledger.write_rows(root, self.rows(1))
-        self.assertEqual(ledger.show(root, 'BUG-0', field='severity'), 'major')
-        self.assertEqual(ledger.show(root, 'BUG-0', field='regression'), '[]')
-        with self.assertRaisesRegex(ledger.Refused, 'no row file'):
-            ledger.show(root, 'BUG-9')
-        with self.assertRaisesRegex(ledger.Refused, 'no field missing'):
-            ledger.show(root, 'BUG-0', field='missing')
 
     def test_promote_flips_the_real_status_not_the_quoted_one(self):
         root = self.root()

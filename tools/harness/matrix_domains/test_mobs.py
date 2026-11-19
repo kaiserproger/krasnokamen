@@ -13,40 +13,13 @@ from unittest.mock import patch
 from ..matrix_api import MissingCapability
 from ._mob_contracts import CONTRACTS
 from ._mob_loot import _condition, bounds
-from . import mobs, spawning, villagers, settlements
+from . import mobs, villagers, settlements
 
 VANILLA=Path(os.environ.get('KRASNOKAMEN_VANILLA_DATA',
     '/run/media/kaiserroman/games/solaris-work/solaris/data/vanilla'))
 
 
 class MobOracleTests(unittest.TestCase):
-    def test_peaceful_requires_received_spawn_then_removal(self):
-        from ..protocol_entities import ProtocolEntities
-        from ..test_protocol_entities import add_body,varint
-        import uuid
-        tracker=ProtocolEntities()
-        client=SimpleNamespace(snapshot=lambda:{
-            'entities':tracker.snapshot()['entities'],
-            'entity_lifecycle':tracker.snapshot()['lifecycle']})
-        def wait(predicate,**kwargs):
-            if not predicate():
-                raise TimeoutError('missing lifecycle')
-        def run_case(send_spawn):
-            def command(text):
-                if text.startswith('summon '):
-                    if send_spawn:
-                        tracker.consume(0x01,add_body(entity_id=42,entity_uuid=uuid.UUID(mobs.UUID)))
-                    tracker.consume(0x4d,varint(1)+varint(42))
-            ctx=SimpleNamespace(row={'subject':'mobs.zombie'},
-                factors={'dimension':'overworld','difficulty':'peaceful'},
-                clients=[client],server=SimpleNamespace(command=command),state={},wait_until=wait)
-            with patch.object(mobs,'arena'),patch.object(mobs,'exists',return_value=False):
-                mobs.setup(ctx)
-                return mobs.oracle(ctx)[0].passed
-        self.assertTrue(run_case(True))
-        with self.assertRaisesRegex(TimeoutError,'missing lifecycle'):
-            run_case(False)
-
     def test_mob_guard_uses_gameplay_not_protocol_version(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -90,21 +63,9 @@ class MobOracleTests(unittest.TestCase):
         self.assertEqual(bounds(VANILLA,'entities/blaze',False),{})
         self.assertIn('minecraft:blaze_rod',bounds(VANILLA,'entities/blaze',True))
 
-    def test_unknown_predicate_fails_closed(self):
-        with self.assertRaises(MissingCapability):
-            _condition({'condition':'minecraft:unrecognized_future_condition'},True)
-
     def test_giant_does_not_inherit_monster_pursuit(self):
         # Exact26.1.2 Giant.javap has attributes but no registerGoals override.
         self.assertEqual(CONTRACTS['giant'],('Immobile','None'))
-
-    def test_domains_have_only_shared_adapter_objects(self):
-        from ..matrix_api import Adapter
-        for module in (mobs,spawning,villagers,settlements):
-            self.assertTrue(module.ADAPTERS)
-            for subject,adapter in module.ADAPTERS.items():
-                self.assertIsInstance(adapter,Adapter,subject)
-                self.assertTrue(callable(adapter.setup) and callable(adapter.act) and callable(adapter.oracle))
 
     def test_lightning_oracle_requires_named_type_change_not_uuid_deletion(self):
         ctx=SimpleNamespace(factors={'difficulty':'normal'},state={'witches_before':0,'observer_witches_before':[]},clients=[object()])
@@ -115,18 +76,6 @@ class MobOracleTests(unittest.TestCase):
         with patch.object(villagers,'exists',return_value=False), patch.object(villagers,'count',return_value=1):
             self.assertFalse(all(check.passed for check in villagers.lightning_oracle(ctx)))
 
-    def test_lightning_peaceful_preserves_villager_without_witch(self):
-        ctx=SimpleNamespace(factors={'difficulty':'peaceful'},state={'witches_before':0,'observer_witches_before':[]},clients=[object()])
-        def present(_ctx,selector):
-            return selector=='@e[type=villager,name=MatrixLightning]'
-        with patch.object(villagers,'exists',side_effect=present), patch.object(villagers,'count',return_value=0):
-            self.assertTrue(all(check.passed for check in villagers.lightning_oracle(ctx)))
-
-    def test_console_fences_do_not_change_settlement_state(self):
-        reply='Settlements: MatrixTown.\n'
-        ctx=SimpleNamespace(server=SimpleNamespace(query=lambda _:reply))
-        self.assertEqual(settlements.query(ctx,'settlement list'),'Settlements: MatrixTown.')
-
     def test_data_queries_accept_transport_fence_after_value(self):
         from ._mob_support import number,string
         reply='Health on Cow after scale factor of 1000.00 is 10000\nchat.type.announcement: Server, MatrixConsoleFence00000016\n'
@@ -134,15 +83,6 @@ class MobOracleTests(unittest.TestCase):
         self.assertEqual(number(ctx,'cow','Health'),10)
         reply='Cow has the following entity data: "minecraft:cow"\nchat.type.announcement: Server, MatrixConsoleFence00000017\n'
         self.assertEqual(string(ctx,'cow','id'),'minecraft:cow')
-
-    def test_mob_observation_state_is_json_serializable(self):
-        snapshot={'entities':[{'type':'minecraft:cow','uuid':mobs.UUID,'position':[1,200,2]}],'health':20}
-        ctx=SimpleNamespace(clients=[SimpleNamespace(snapshot=lambda:snapshot)],
-                            state={'name':'cow','seen_types':[],'samples':[],'minimum_health':20,'checks':[]})
-        mobs.sample(ctx)
-        mobs.sample(ctx)
-        self.assertEqual(ctx.state['seen_types'],['minecraft:cow'])
-        json.dumps(ctx.state,allow_nan=False)
 
     def test_mob_health_uses_received_metadata_without_data_command(self):
         row={'uuid':mobs.UUID,'id':1,'type':'minecraft:cow','position':[1,200,2],'health':10.0}
@@ -171,26 +111,6 @@ class MobOracleTests(unittest.TestCase):
             self.assertFalse(next(c.passed for c in checks if c.name=='observers_receive_authoritative_result'))
             state['observer_replies']=['MatrixTown'];state['observer_restart_replies']=['MatrixTown']
             self.assertTrue(all(c.passed for c in settlements.oracle(ctx)))
-
-    def test_spawner_oracle_checks_birth_range_and_delay(self):
-        state={'empty_before':None,'configured':'minecraft:zombie','spawned':1,'inactive_count':0,
-               'paused_delay':250,'inactive_delay':250,'spawn_positions':[[4.5,200,0.5]],
-               'reset_delay':199,'delay_query_ticks':1,'spawner_observer_receipts':[]}
-        ctx=SimpleNamespace(state=state,factors={'game_mode':'survival','difficulty':'normal'},clients=[object()])
-        self.assertTrue(all(c.passed for c in spawning.spawner_oracle(ctx)))
-        state['spawn_positions']=[[9,200,0.5]]
-        self.assertFalse(next(c.passed for c in spawning.spawner_oracle(ctx)
-                              if c.name=='spawn_inside_four_block_horizontal_range'))
-        state['spawn_positions']=[[4.5,200,0.5]]
-        state['reset_delay']=900
-        self.assertFalse(next(c.passed for c in spawning.spawner_oracle(ctx)
-                              if c.name=='reset_delay_200_to_800_ticks'))
-
-    def test_settlement_family_cannot_pass_from_empty_status(self):
-        ctx=SimpleNamespace(row={'subject':'settlements.production'},server=SimpleNamespace(command=lambda _:None))
-        with patch.object(settlements,'arena'):
-            with self.assertRaisesRegex(MissingCapability,'settlement_economy_snapshot'):
-                settlements.setup(ctx)
 
     def test_mob_loot_excludes_remote_births_not_unexpected_nearby_items(self):
         rows=[

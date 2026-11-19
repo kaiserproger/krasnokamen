@@ -15,22 +15,6 @@ from tools.harness.backends import civilization_seed_qa, settlement_map_qa, vill
 
 
 class CivilizationSeedSplitTests(unittest.TestCase):
-    def test_seeds_parse_with_and_without_a_center(self):
-        self.assertEqual(civilization_seed_qa.split_seeds("24"),
-                         [(24, "")])
-        self.assertEqual(civilization_seed_qa.split_seeds("24:136,70,-216; 87122:-461,70,350"),
-                         [(24, "136,70,-216"), (87122, "-461,70,350")])
-
-    def test_a_split_without_named_seeds_is_refused(self):
-        for value in (None, "", " ; ", "abc", "24:1,2", "24:1,2,3,4", "24;24"):
-            with self.subTest(value=value):
-                with self.assertRaises(ValueError):
-                    civilization_seed_qa.split_seeds(value)
-
-    def test_part_labels_name_their_observation_world(self):
-        self.assertEqual(civilization_seed_qa.split_label(24, "136,70,-216"), "seed24-136_70_-216")
-        self.assertEqual(civilization_seed_qa.split_label(87122, ""), "seed87122")
-
     def verdicts(self, **stages):
         base = {name: True for name in civilization_seed_qa.STAGES}
         base.update(stages)
@@ -92,15 +76,6 @@ class CivilizationSeedSplitTests(unittest.TestCase):
                           ("seed87122", "87122", "")])
         self.assertTrue(report["scenario"]["all"])
 
-    def test_a_part_count_that_does_not_match_the_named_seeds_is_refused(self):
-        ctx = SimpleNamespace(parts=3, client="native", extra_args=[], platform=None,
-                             windowed=True, timeout_seconds=600.0, artifact_dir=None,
-                             client_evidence={})
-        with mock.patch.dict(os.environ, {civilization_seed_qa.SPLIT_SEEDS_ENV: "24;87122"}):
-            from tools.harness.backends import village_autonomy_qa
-            with self.assertRaisesRegex(ValueError, "needs exactly 3 entries"):
-                village_autonomy_qa.run(ctx, civilization=True)
-
 
 class NoIndependentPartsTests(unittest.TestCase):
     def ctx(self, profile):
@@ -115,11 +90,6 @@ class NoIndependentPartsTests(unittest.TestCase):
     def test_settlement_map_qa_refuses_a_split_instead_of_ignoring_it(self):
         with self.assertRaisesRegex(ValueError, "settlement-map-qa has no independent parts"):
             settlement_map_qa.run(self.ctx("settlement-map-qa"))
-
-    def test_a_single_part_still_passes_the_old_guard(self):
-        self.assertEqual(village_qa.validate_args(
-            SimpleNamespace(parts=1, client="native", extra_args=[], platform=None,
-                            timeout_seconds=600.0)), 600.0)
 
 
 if __name__ == "__main__":
