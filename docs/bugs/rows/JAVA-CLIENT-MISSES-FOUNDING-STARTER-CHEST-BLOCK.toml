@@ -1,0 +1,10 @@
+[[bug]]
+id = "JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK"
+title = "A vanilla Java 26.3 client sometimes never shows the starter chest placed by `/settlement create`: the server holds the chest and the grant, the client keeps air at that cell"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "D63 stage 1 acceptance (SettlementQuickWinsAccept, 2026-11-20), pin 7393780e37a4 (tree 7209af9fb), `settlement-map-qa --client java --windowed -- --scenario quickwins --language ru_ru`: 1 of 5 Java 26.3 runs, 0 native runs. Failed run receipts/SettlementQuickWinsAccept/java-7209af9fb/flake-C1-26.3 (artifact 20261119T215801-settlement-map-qa-6pvauu2f): after the chat line `Founded qw` the client block scan x124..132 y198..204 z-4..4 ran 15 times over about 15 s and saw the pad (81 dirt, 81 grass, 405 air), never a chest. On a hash-checked copy of that run's stopped world (receipts/SettlementQuickWinsAccept/c1-flake-world-copy): `world census` PASS, settlement 2 anchor [128,201,0]; `world probe` finds exactly one empty chest at (129,201,0) inside the scan window; state.redb holds the grant row settlement_chest/<owner uuid>. The chest is placed in the founding command's own tick (crates/mc-core/src/command_execution/settlement.rs:63-81). Cause open: a block update lost on the way to the client, or applied out of order against the scenario's earlier pad fill/chunk resend; the artifacts prove only the final server state, not what the edge sent."
+repro = "client"
+regression = []
+failing_first = "not recorded"
