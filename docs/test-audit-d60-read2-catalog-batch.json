@@ -81,7 +81,15 @@
     },
     "ledger_and_document_search": "No test_catalog_load, native_game_clock, native_console_setup or checkpoint_ack_survives regression references in current worktree ledger rows/development docs. Generic plugin-heavy documentation is acceptance scope, not an observed-failure linkage.",
     "unavailable_historical_receipt": "catalog-public-controls-20261014/triage-p11-load-harness.yaml referenced by old memory is absent at both examined Main .analysis and LaptopArchive locations; no actual raw run provenance is claimed from that path.",
-    "known_failure_preserved": "Perf1M R3i/R3j reports both CLI-forwarding subcases failing already on pristine 7e421d34c060. This U test stays unchanged; the worker neither reproduces nor diagnoses the reported failure."
+    "historical_failure_report_superseded": "Perf1M R3i/R3j historically reported CLI-forwarding failures on pristine 7e421d34c060. Main's current validation supersedes that stale label: 47 module tests OK on main, five OK on adfd87edfe. The CLI test remains U and unchanged.",
+    "main_reported_validation": {
+      "scope": "tools.harness.test_catalog_load",
+      "main_result": "47 tests OK",
+      "main_tree": "main; exact SHA not provided in message",
+      "candidate_result": "5 tests OK",
+      "candidate_tree": "adfd87edfeee3f15356cad7041605f391f91cb57",
+      "source": "Main direct message 2026-11-20; not worker-run checks"
+    }
   },
   "records": [
     {
@@ -418,7 +426,7 @@
       "category": "U",
       "basis": "read",
       "confidence": "medium",
-      "reason": "Keep U: R3-DRIVER-NOTES R3i/R3j reports both subcases failing on pristine 7e421d34c060; do not erase known unresolved failure evidence. The test launches the actual CLI/backend preflight but no live server; the report does not establish the failure cause.",
+      "reason": "Keep U: actual CLI/backend preflight and receipt forwarding without a live server or an independent vanilla/run oracle. The historical R3i/R3j failure label is stale: Main reports 47 module tests OK on main and five OK on adfd87edfe. Main explicitly requests retaining this test as U.",
       "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
       "body_provenance_commits": [
         "1ada2ceb93688adf35d0869111743d4d231e8b62"
@@ -1056,7 +1064,7 @@
   ],
   "notes": [
     "Classification is per-body with individual reasons; self-generated local log/report files are not received real artifacts.",
-    "Five U cases remain conservative keeps: known unresolved CLI failure, maintained catalog configuration, and three exact sequencing/cold-frame corrective contracts without a recovered original observed-run linkage.",
+    "Five U cases remain conservative keeps: actual CLI/backend preflight, maintained catalog configuration, and three exact sequencing/cold-frame corrective contracts without a recovered original observed-run linkage. The historical CLI failure label is superseded by Main's current green results.",
     "No production code, real scenario/vanilla data, ledger state, acceptance thresholds or environment-dependent skips changed.",
     "Allowed code-health AST/module-cycle ratchets are outside this deletion category and untouched."
   ]
