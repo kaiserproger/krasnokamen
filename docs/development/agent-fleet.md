@@ -119,8 +119,7 @@ the previous one's handoff.
   Implementation defaults to Terra or Sol: Sol for long multi-step slices,
   Terra for bounded slices, gates, QA and harness. Opus only designs
   persistence, protocol or item custody, or takes a task the OpenAI filter
-  refuses; the owner wants Opus cut even below that, so in doubt pick Terra or
-  Sol. Fable runs only when the owner explicitly asks for an architecture
+  refuses. Fable runs only when the owner explicitly asks for an architecture
   design. Reviews run on Opus or Sol from a vendor other than the author's
   (D14). Muse or DeepSeek take mechanical bulk. Edit-heavy slices go to Terra,
   Sol or Astra: about 10% of their edits failed against 24–27% for Sonnet and
