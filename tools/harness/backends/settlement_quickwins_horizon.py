@@ -13,9 +13,11 @@ and inputs come from `state.dialog.open` and the button rectangles from `ui`.
 Every process lives in the `ExitStack` of `run`, so a failure at any step (including the server or
 Xvfb start) stops what was started; the harness writes `result.json` with the tree fingerprint and
 this module records the server binary path and its sha256, so the receipt names the pin the walk ran
-against. Horizon has no state-change push for dialog content, position, blocks or entities
-(`horizon-ctl wait-for` covers screen/widget/loaded/chat/event only), so the acceptance stays blocked
-on that primitive; `Probe.wait` still polls and is the one known gap.
+against. `Probe.wait` is a push: it observes, and if the predicate still fails it blocks on the
+client's `wait-for state-change --since REV` (the `state.revision` the QA kit adds over the film pin),
+which moves when the dialog, the position, a tracked entity or a block write changes. A `ru_ru` run
+refuses before connect when the client's resources lack `assets/minecraft/lang/ru_ru.json`, because
+such a client shows English item names next to the server's Russian text.
 """
 from __future__ import annotations
 
@@ -302,18 +304,45 @@ class Probe:
         out["ui_nodes"] = nodes
         return out
 
+    def revision(self) -> int:
+        """The observable-state revision `state` reports (dialog, position, entities, blocks)."""
+        state = self.hz("state")
+        revision = state.get("revision") if isinstance(state, dict) else None
+        if revision is None:
+            raise RuntimeError(f"Horizon state reports no revision: {state}")
+        return int(revision)
+
+    def push(self, observed: int, remaining: float) -> None:
+        """Block until the client publishes the next observable-state revision.
+
+        Horizon's `wait-for state-change` is a push: the client answers once its dialog, the
+        player's position, a tracked entity or a block write changes, so the walk never polls a
+        wall clock. The tool's own timeout is the only error, and the caller re-checks its step
+        deadline after it.
+        """
+        reply = self.hz("wait_for", condition="state-change", since=observed,
+                        timeout=min(30.0, max(0.1, remaining)))
+        if not isinstance(reply, dict):
+            raise RuntimeError(f"Horizon wait_for state-change returned {reply!r}")
+        if reply.get("kind") == "timeout":
+            return
+        if reply.get("error"):
+            raise RuntimeError(f"Horizon wait_for state-change failed: {reply['error']}")
+
     def wait(self, predicate: Callable[[dict[str, Any]], bool], label: str, *, wait_for_play: bool = False,
              outside_play: bool = False, timeout_seconds: float | None = None) -> dict[str, Any]:
         deadline = time.monotonic() + (timeout_seconds or 120)
         while True:
+            observed = self.revision()
             state = self.observe()
             if predicate(state):
                 self.report["assertions"][label] = True
                 return state
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 self.report["assertions"][label] = False
                 raise TimeoutError(f"timed out waiting for {label}")
-            time.sleep(0.25)
+            self.push(observed, remaining)
 
 
 def shown_title(hz: Any, kind: str) -> str:
@@ -344,11 +373,22 @@ def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
                          f"26.3 resources folder: {args.horizon_resources}")
     if ctx.platform is not None or ctx.plugins_dir is not None:
         raise ValueError("settlement-quickwins-horizon runs the bare server without Loader/plugins")
+    args.language = "ru_ru"
+    if args.language != "en_us" and not language_file(args.horizon_resources, args.language).is_file():
+        raise RuntimeError(
+            f"Horizon resources have no assets/minecraft/lang/{args.language}.json "
+            f"({args.horizon_resources}): the client would translate its own text (item names, "
+            f"tooltips) into en_us while the server sends {args.language} literals, so the run is "
+            "not evidence; repair the resources (the QA kit ships the repaired language file)")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 3600.0
     if not timeout > 0:
         raise ValueError("timeout must be positive")
-    args.language = "ru_ru"
     return args, timeout
+
+
+def language_file(resources: Path, language: str) -> Path:
+    """Where Horizon keeps one of its translations (`assets/minecraft/lang/<locale>.json`)."""
+    return resources / "assets" / "minecraft" / "lang" / f"{language}.json"
 
 
 def server_config_text(port: int, world: Path, plugins: Path) -> str:

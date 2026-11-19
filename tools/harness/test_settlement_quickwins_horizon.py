@@ -64,6 +64,79 @@ class ProbeDeadlineTest(unittest.TestCase):
         self.assertGreater(probe.remaining(), 0)
 
 
+class PushWaitTest(unittest.TestCase):
+    """`Probe.wait` blocks on `wait-for state-change`; it must never sleep on the wall clock."""
+
+    def probe(self, tool_calls: list[tuple[str, dict]], ready: dict[str, bool]):
+        artifact = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, artifact, True)
+
+        def hz(tool, **arguments):
+            tool_calls.append((tool, arguments))
+            if tool == "state":
+                return {"player": {"position": [0.0, 64.0, 0.0], "yaw": 0.0, "pitch": 0.0},
+                        "screen": "playing", "revision": 41}
+            if tool == "messages":
+                return {"chat": []}
+            if tool == "wait_for":
+                if arguments.get("condition") == "state-change" and arguments.get("since") == 41:
+                    ready["value"] = True
+                    return {"ok": True, "waited_seconds": 0.1, "screen": "playing"}
+                return {"error": "wrong condition", "kind": "timeout"}
+            raise AssertionError(f"unexpected Horizon tool {tool}")
+
+        return horizon.Probe(hz, artifact)
+
+    def test_the_wait_pushes_on_the_state_revision_instead_of_sleeping(self):
+        calls: list[tuple[str, dict]] = []
+        probe = self.probe(calls, ready := {"value": False})
+
+        def no_sleep(_seconds):
+            raise AssertionError("Probe.wait slept on the wall clock")
+
+        with mock.patch.object(horizon.time, "sleep", no_sleep):
+            state = probe.wait(lambda _state: ready["value"], "QW test screen", timeout_seconds=5)
+        self.assertFalse(state["screen"]["open"])
+        self.assertTrue(probe.report["assertions"]["QW test screen"])
+        self.assertIn(("wait_for", {"condition": "state-change", "since": 41, "timeout": mock.ANY}), calls)
+        self.assertNotIn("wait", [tool for tool, _ in calls])
+
+    def test_a_state_without_a_revision_fails_loudly(self):
+        probe = horizon.Probe(lambda tool, **_k: {"player": {"position": [0, 0, 0], "yaw": 0, "pitch": 0},
+                                                   "screen": "playing"}.get(tool, {}), Path(tempfile.mkdtemp()))
+        with self.assertRaises(RuntimeError) as raised:
+            probe.wait(lambda _state: True, "QW no revision", timeout_seconds=1)
+        self.assertIn("no revision", str(raised.exception))
+
+
+class LanguageGuardTest(unittest.TestCase):
+    """A `ru_ru` run on resources without `lang/ru_ru.json` is not evidence (English item names)."""
+
+    def ctx(self, resources: Path, extra: list[str] | None = None):
+        fake = resources.parent / "horizon-client"
+        fake.write_bytes(b"#!client\n")
+        fake.chmod(0o755)
+        ctl = resources.parent / "horizon-ctl"
+        ctl.write_bytes(b"#!ctl\n")
+        ctl.chmod(0o755)
+        return SimpleNamespace(artifact_dir=resources.parent / "artifact",
+                               extra_args=extra or ["--horizon-client", str(fake), "--horizon-ctl", str(ctl),
+                                                    "--horizon-resources", str(resources)],
+                               timeout_seconds=60.0, platform=None, plugins_dir=None, client="java")
+
+    def test_the_ru_ru_run_refuses_when_the_resources_have_no_russian_language_file(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, root, True)
+        resources = root / "resources"
+        (resources / "assets" / "minecraft" / "lang").mkdir(parents=True)
+        (resources / "assets" / "minecraft" / "lang" / "en_us.json").write_text("{}\n")
+        with self.assertRaises(RuntimeError) as raised:
+            horizon.validate_args(self.ctx(resources))
+        self.assertIn("no assets/minecraft/lang/ru_ru.json", str(raised.exception))
+        (resources / "assets" / "minecraft" / "lang" / "ru_ru.json").write_text("{}\n")
+        args, _ = horizon.validate_args(self.ctx(resources))
+        self.assertEqual(args.language, "ru_ru")
+
 class LaunchTest(unittest.TestCase):
     """`run(ctx)` on mocked processes; the walk itself is not started."""
 
@@ -80,7 +153,9 @@ class LaunchTest(unittest.TestCase):
         fake_ctl.write_bytes(b"#!ctl\n")
         fake_ctl.chmod(0o755)
         resources = self.artifact / "resources"
-        resources.mkdir()
+        (resources / "assets" / "minecraft" / "lang").mkdir(parents=True)
+        (resources / "assets" / "minecraft" / "lang" / "en_us.json").write_text("{}\n")
+        (resources / "assets" / "minecraft" / "lang" / "ru_ru.json").write_text("{}\n")
         self.resources = resources
         extra_args = ["--horizon-client", str(fake_client), "--horizon-ctl", str(fake_ctl),
                       "--horizon-resources", str(resources)]

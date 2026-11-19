@@ -854,9 +854,12 @@ quick-wins walk as `settlement-map-qa --scenario quickwins` on the pinned Horizo
 `--horizon-client|--horizon-ctl|--horizon-resources`). The harness owns the server (a `Server` with
 its own loopback port, world and empty plugins folder), the Xvfb display and the client in one
 `ExitStack`; a failure at any step stops what was started, and the receipt names the tree fingerprint
-and the server binary path and sha256. Known gap: `Probe.wait` still polls with a 0.25 s sleep, because
-Horizon exposes no state-change push (`horizon-ctl wait-for` covers screen/widget/loaded/chat/event
-only); acceptance on this client stays blocked until that primitive exists.
+and the server binary path and sha256. Waits are pushes: `Probe.wait` observes and then blocks on the
+client's `wait-for state-change --since REV` (`state.revision`, a read-only extension carried by the QA
+kit at `targets/horizon-qa-kit`), which moves when the dialog, the position, a tracked entity or a
+block write changes. A `ru_ru` run refuses before connect when the client's resources lack
+`assets/minecraft/lang/ru_ru.json` (the film resources carry only `en_us`, so the outcome showed
+English item names next to Russian server text).
 
 ## Distant Horizons gate (`dh-gate`)
 
