@@ -1,0 +1,992 @@
+{
+  "decision": "D60.2",
+  "base": "adfd87edfeee3f15356cad7041605f391f91cb57",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/matrix_domains/test_world.py",
+  "source_sha256_before": "2268a8e09ef78136d5ee0bf59da19c28a3de2a6b756cfb556cc9ed6a4e39c34c",
+  "status": "All 38 historical bodies and the shared fixture helper individually read, with real original DomWorld receipts recovered. Delete 27 read/high R4 cases; retain four K1 fixture regressions and seven U. No worker tests/builds/L2/formatters/negative controls.",
+  "counts": {
+    "historical_test_ids_finalized": 38,
+    "removed_R4": 27,
+    "retained_K1": 4,
+    "retained_U": 7,
+    "prior_deletions": 0,
+    "physical_declarations_before": 38,
+    "physical_declarations_remaining": 11,
+    "source_lines_before": 497,
+    "source_lines_remaining": 176,
+    "physical_source_lines_removed": 321,
+    "historical_medium_candidates_finalized": 24,
+    "historical_medium_candidates_unfinalized": 624
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire original 497-line module, all 38 bodies, context helper and DOMAINS registration inventory. Sync/async AST census reconciled 38/38 with the historical inventory.",
+    "backend_source_read": {
+      "tools/harness/matrix_domains/_world.py": "1-241 whole",
+      "tools/harness/matrix_domains/farming.py": "1-304 whole",
+      "tools/harness/matrix_domains/redstone.py": "1-569 whole",
+      "tools/harness/matrix_domains/fluids.py": [
+        "1-171 declaration view",
+        "6-25 water_flow body",
+        "153-164 sponge body"
+      ],
+      "tools/harness/matrix_domains/portals_dimensions.py": "1-75",
+      "tools/harness/matrix_domains/entities_misc.py": "imports 1-4 and experience_orbs 105-127",
+      "tools/harness/matrix_api.py": [
+        "1-25",
+        "188-239"
+      ],
+      "tools/harness/matrix_domains/README.md": "1-332 whole"
+    },
+    "helpers_removed": [],
+    "unused_imports_removed": []
+  },
+  "evidence": {
+    "body_origin_messages_read": [
+      "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "b7020b427b33ca547d0e152fecdb70527b3072dd"
+    ],
+    "introducing_test_patches_read": [
+      "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "b7020b427b33ca547d0e152fecdb70527b3072dd"
+    ],
+    "corrective_backend_diff_read": "b7020b427: redstone.py received sensor phases, downward/perpendicular output observations; STATUS/COMPATIBILITY hunks inspected only to distinguish unrelated core integration claims.",
+    "unmerged_original_change_messages_read": [
+      "426764794d73f03328d4ac344bcdf1ebc54a6e85",
+      "1408f578d27ede36c285f88b987c386cc04dd888",
+      "236dbf54e1fd5a1661edaaa37478697f66200fc5",
+      "5322ebe094d9285f8dcea6235f1fa3d56d8afd70",
+      "a37ebc5386e91f0cad27df260b78bf1f7f153226",
+      "e71d294a03c281fe206972a48588afbcb2cda0ba",
+      "a6efd610ff1e3004a5ff687094d2ead62c9cfced",
+      "0370faa321f5c6ac4da67ec1d50e4a2c4e1dfba4"
+    ],
+    "original_reports_read": {
+      "scenarios/domains/world-adapters.md": "whole 66 lines, including untruncated line54",
+      "scenarios/domains/world-result.yaml": "whole 148 lines",
+      "scenarios/domains/world-coverage.yaml": "whole 233 lines",
+      "scenarios/domains/fluids-bugs.md": "1-35; final line is clipped beyond the substantive ACK and two failed query observations already read in protocol artifact projection",
+      "receipts/XCoreBlocks/rows.md": "1-43, including AUDIT-SCULK no-fix finding at27",
+      "receipts/Stage2X/SLICES.md": "105-125, including raw119",
+      "BUGS.md": "Only matching historical world/fence-chat/sculk notes; not a full-file manual read."
+    },
+    "ledger_rows_read": [
+      "AUDIT-SCULK",
+      "SPONGE",
+      "FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE"
+    ],
+    "ledger_relationship": "AUDIT-SCULK preserves the real downward-latch circuit failure with no isolated product fix. SPONGE links core/live absorption regressions, while this retained unit protects the separately observed fixture obstruction. Fluid plant-wash row is a distinct actual core defect, not provenance for the synthetic seagrass-construction test. No ledger rows changed.",
+    "real_artifact_inspection_scope": "Protocol-result metadata discovered for 13 original DomWorld runs. Selected nine receipts inspected as projections: exact note/check list for small artifacts, aggregate counts, first failed check and note-stimulus subset for 160-check sculk artifacts. No claim of reading all wire JSONL, server logs, raw observation arrays or entire large JSON artifacts.",
+    "real_artifact_projections": [
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T031634-protocol-matrix-0d6nwen_/protocol-result.json",
+        "sha256": "5148569b4cb67917785a3df1ed1f37849817b91684c35f50af408cbbc44d222d",
+        "status": "fail",
+        "note": "domain oracle failed: block:(17, 100, 16):water[level=1],block:(18, 100, 16):water[level=2],block:(19, 100, 16):water[level=3],block:(20, 100, 16):water[level=4],block:(21, 100, 16):water[level=5],block:(22, 100, 16):water[level=6],block:(23, 100, 16):water[level=7],block:(18, 98, 16):water",
+        "checks": 9,
+        "passed": 1,
+        "failed": 8
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T032707-protocol-matrix-8d083ano/protocol-result.json",
+        "sha256": "2928b860ba4244651415568f377ea212f4ea5ae4858fde149e0ec46828dfde2b",
+        "status": "fail",
+        "note": "received fixture item sponge; frames={10: 2, 64: 1, 105: 1, 16: 1, 72: 3, 43: 2, 113: 51, 38: 7, 97: 1, 94: 4, 95: 4, 133: 1, 76: 1, 74: 13, 18: 3, 104: 31, 127: 1, 128: 1, 130: 26, 99: 694, 103: 1, 121: 18, 131: 1, 70: 1, 45: 54, 48: 187, 6: 6, 1: 53, 8: 3759, 54: 34, 83: 27, 53: 620, 44: 3, 77: 9, 37: 29, 106: 1, 59: 1, 20: 2, 34: 14, 25: 13, 17: 1}, menu_errors={1: 'component-bearing stack requires the Rust mechanic observer'}",
+        "checks": 0,
+        "passed": 0,
+        "failed": 0
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T033533-protocol-matrix-8nh4dp2r/protocol-result.json",
+        "sha256": "dcb91d119df2f8a967ef4dcf415af0569140a7010cb29ec3e2d06d5102a3b4ec",
+        "status": "blocked",
+        "note": "fixture_chunks_loaded",
+        "checks": 0,
+        "passed": 0,
+        "failed": 0
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T033930-protocol-matrix-z0trndz5/protocol-result.json",
+        "sha256": "183eee2185a6a3eb24fbbd2a9ca4199cb6a021c2239fdac7211636c51c6b8a39",
+        "status": "pass",
+        "note": null,
+        "checks": 12,
+        "passed": 12,
+        "failed": 0
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T034631-protocol-matrix-l11rvjyy/protocol-result.json",
+        "sha256": "1234e10c7ad98fe88fb217aea5a03bb97c133af2087df1fdf8bf55a40c541a30",
+        "status": "blocked",
+        "note": "same_tick_admission_fence",
+        "checks": 0,
+        "passed": 0,
+        "failed": 0
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T035224-protocol-matrix-he798992/protocol-result.json",
+        "sha256": "db32490a9b3b249616d098dc95e7128dcbf25564334ceda5c4d30e0b5480c619",
+        "status": "fail",
+        "note": "domain oracle failed: block:(3, 100, 16):wet_sponge,block:(3, 101, 16):air",
+        "checks": 2,
+        "passed": 0,
+        "failed": 2
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T041314-protocol-matrix-lydx7zg_/protocol-result.json",
+        "sha256": "f7b38bcf0dbcd6bf31f430d9c3c998bcf1138b39b04063a2feabf38eb0db1b5c",
+        "status": "fail",
+        "note": "domain oracle failed: block:(24, 100, 16):sculk_sensor[power=12],block:(26, 100, 16):redstone_wire[power=10],block:(24, 100, 16):sculk_sensor[power=4],block:(26, 100, 16):redstone_wire[power=10],block:(24, 100, 16):calibrated_sculk_sensor[power=14],block:(26, 100, 16):redstone_wire[power=10],block:(24, 100, 16):calibrated_sculk_sensor[power=4],block:(26, 100, 16):redstone_wire[power=10]",
+        "checks": 15,
+        "passed": 7,
+        "failed": 8
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T042427-protocol-matrix-zh3y8i9s/protocol-result.json",
+        "sha256": "b207a1fa3768e8a0668d4c6b7a0e4bb562e1f64ad8dea2d66924619d55ca7e8b",
+        "status": "fail",
+        "note": "domain oracle failed: calibrated=False:distance=2:selected=0:strength-latch:1,calibrated=False:distance=2:selected=0:frequency-latch:1,calibrated=False:distance=2:selected=0:strength-latch:2,calibrated=False:distance=2:selected=0:frequency-latch:2,calibrated=False:distance=2:selected=0:strength-latch:3,calibrated=False:distance=2:selected=0:frequency-latch:3,calibrated=False:distance=2:selected=0:strength-latch:4,calibrated=False:distance=2:selected=0:frequency-latch:4,calibrated=False:distance=2:selected=0:strength-latch:5,calibrated=False:distance=2:selected=0:frequency-latch:5,calibrated=False:distance=2:selected=0:strength-latch:6,calibrated=False:distance=2:selected=0:frequency-latch:6,calibrated=False:distance=2:selected=0:strength-latch:7,calibrated=False:distance=2:selected=0:frequency-latch:7,calibrated=False:distance=2:selected=0:strength-latch:8,calibrated=False:distance=2:selected=0:frequency-latch:8,calibrated=False:distance=2:selected=0:strength-latch:9,calibrated=False:distance=2:selected=0:frequency-latch:9,calibrated=False:distance=2:selected=0:strength-latch:10,calibrated=False:distance=2:selected=0:frequency-latch:10,calibrated=False:distance=2:selected=0:strength-latch:11,calibrated=False:distance=2:selected=0:strength-latch:12,calibrated=False:distance=6:selected=0:strength-latch:1,calibrated=False:distance=6:selected=0:frequency-latch:1,calibrated=False:distance=6:selected=0:strength-latch:2,calibrated=False:distance=6:selected=0:frequency-latch:2,calibrated=False:distance=6:selected=0:strength-latch:3,calibrated=False:distance=6:selected=0:frequency-latch:3,calibrated=False:distance=6:selected=0:strength-latch:4,calibrated=False:distance=6:selected=0:frequency-latch:4,calibrated=False:distance=6:selected=0:frequency-latch:5,calibrated=False:distance=6:selected=0:frequency-latch:6,calibrated=False:distance=6:selected=0:frequency-latch:7,calibrated=False:distance=6:selected=0:frequency-latch:8,calibrated=False:distance=6:selected=0:frequency-latch:9,calibrated=False:distance=6:selected=0:frequency-latch:10,calibrated=True:distance=2:selected=10:strength-latch:1,calibrated=True:distance=2:selected=10:frequency-latch:1,calibrated=True:distance=2:selected=10:strength-latch:2,calibrated=True:distance=2:selected=10:frequency-latch:2,calibrated=True:distance=2:selected=10:strength-latch:3,calibrated=True:distance=2:selected=10:frequency-latch:3,calibrated=True:distance=2:selected=10:strength-latch:4,calibrated=True:distance=2:selected=10:frequency-latch:4,calibrated=True:distance=2:selected=10:strength-latch:5,calibrated=True:distance=2:selected=10:frequency-latch:5,calibrated=True:distance=2:selected=10:strength-latch:6,calibrated=True:distance=2:selected=10:frequency-latch:6,calibrated=True:distance=2:selected=10:strength-latch:7,calibrated=True:distance=2:selected=10:frequency-latch:7,calibrated=True:distance=2:selected=10:strength-latch:8,calibrated=True:distance=2:selected=10:frequency-latch:8,calibrated=True:distance=2:selected=10:strength-latch:9,calibrated=True:distance=2:selected=10:frequency-latch:9,calibrated=True:distance=2:selected=10:strength-latch:10,calibrated=True:distance=2:selected=10:frequency-latch:10,calibrated=True:distance=2:selected=10:strength-latch:11,calibrated=True:distance=2:selected=10:strength-latch:12,calibrated=True:distance=2:selected=10:strength-latch:13,calibrated=True:distance=2:selected=10:strength-latch:14,calibrated=True:distance=12:selected=10:strength-latch:1,calibrated=True:distance=12:selected=10:frequency-latch:1,calibrated=True:distance=12:selected=10:strength-latch:2,calibrated=True:distance=12:selected=10:frequency-latch:2,calibrated=True:distance=12:selected=10:strength-latch:3,calibrated=True:distance=12:selected=10:frequency-latch:3,calibrated=True:distance=12:selected=10:strength-latch:4,calibrated=True:distance=12:selected=10:frequency-latch:4,calibrated=True:distance=12:selected=10:frequency-latch:5,calibrated=True:distance=12:selected=10:frequency-latch:6,calibrated=True:distance=12:selected=10:frequency-latch:7,calibrated=True:distance=12:selected=10:frequency-latch:8,calibrated=True:distance=12:selected=10:frequency-latch:9,calibrated=True:distance=12:selected=10:frequency-latch:10",
+        "checks": 160,
+        "passed": 86,
+        "failed": 74
+      },
+      {
+        "path": "/run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T043238-protocol-matrix-4_gyxzcu/protocol-result.json",
+        "sha256": "5dd4a5a511ab3f94e9103eb239d96b033dd07ccd925146bc2fed998bed7f2a07",
+        "status": "fail",
+        "note": "domain oracle failed: calibrated=False:distance=2:selected=0:strength-latch:1,calibrated=False:distance=2:selected=0:frequency-latch:1,calibrated=False:distance=2:selected=0:strength-latch:2,calibrated=False:distance=2:selected=0:frequency-latch:2,calibrated=False:distance=2:selected=0:strength-latch:3,calibrated=False:distance=2:selected=0:frequency-latch:3,calibrated=False:distance=2:selected=0:strength-latch:4,calibrated=False:distance=2:selected=0:frequency-latch:4,calibrated=False:distance=2:selected=0:strength-latch:5,calibrated=False:distance=2:selected=0:frequency-latch:5,calibrated=False:distance=2:selected=0:strength-latch:6,calibrated=False:distance=2:selected=0:frequency-latch:6,calibrated=False:distance=2:selected=0:strength-latch:7,calibrated=False:distance=2:selected=0:frequency-latch:7,calibrated=False:distance=2:selected=0:strength-latch:8,calibrated=False:distance=2:selected=0:frequency-latch:8,calibrated=False:distance=2:selected=0:strength-latch:9,calibrated=False:distance=2:selected=0:frequency-latch:9,calibrated=False:distance=2:selected=0:strength-latch:10,calibrated=False:distance=2:selected=0:frequency-latch:10,calibrated=False:distance=2:selected=0:strength-latch:11,calibrated=False:distance=2:selected=0:strength-latch:12,calibrated=False:distance=6:selected=0:strength-latch:1,calibrated=False:distance=6:selected=0:frequency-latch:1,calibrated=False:distance=6:selected=0:strength-latch:2,calibrated=False:distance=6:selected=0:frequency-latch:2,calibrated=False:distance=6:selected=0:strength-latch:3,calibrated=False:distance=6:selected=0:frequency-latch:3,calibrated=False:distance=6:selected=0:strength-latch:4,calibrated=False:distance=6:selected=0:frequency-latch:4,calibrated=False:distance=6:selected=0:frequency-latch:5,calibrated=False:distance=6:selected=0:frequency-latch:6,calibrated=False:distance=6:selected=0:frequency-latch:7,calibrated=False:distance=6:selected=0:frequency-latch:8,calibrated=False:distance=6:selected=0:frequency-latch:9,calibrated=False:distance=6:selected=0:frequency-latch:10,calibrated=True:distance=2:selected=10:strength-latch:1,calibrated=True:distance=2:selected=10:frequency-latch:1,calibrated=True:distance=2:selected=10:strength-latch:2,calibrated=True:distance=2:selected=10:frequency-latch:2,calibrated=True:distance=2:selected=10:strength-latch:3,calibrated=True:distance=2:selected=10:frequency-latch:3,calibrated=True:distance=2:selected=10:strength-latch:4,calibrated=True:distance=2:selected=10:frequency-latch:4,calibrated=True:distance=2:selected=10:strength-latch:5,calibrated=True:distance=2:selected=10:frequency-latch:5,calibrated=True:distance=2:selected=10:strength-latch:6,calibrated=True:distance=2:selected=10:frequency-latch:6,calibrated=True:distance=2:selected=10:strength-latch:7,calibrated=True:distance=2:selected=10:frequency-latch:7,calibrated=True:distance=2:selected=10:strength-latch:8,calibrated=True:distance=2:selected=10:frequency-latch:8,calibrated=True:distance=2:selected=10:strength-latch:9,calibrated=True:distance=2:selected=10:frequency-latch:9,calibrated=True:distance=2:selected=10:strength-latch:10,calibrated=True:distance=2:selected=10:frequency-latch:10,calibrated=True:distance=2:selected=10:strength-latch:11,calibrated=True:distance=2:selected=10:strength-latch:12,calibrated=True:distance=2:selected=10:strength-latch:13,calibrated=True:distance=2:selected=10:strength-latch:14,calibrated=True:distance=12:selected=10:strength-latch:1,calibrated=True:distance=12:selected=10:frequency-latch:1,calibrated=True:distance=12:selected=10:strength-latch:2,calibrated=True:distance=12:selected=10:frequency-latch:2,calibrated=True:distance=12:selected=10:strength-latch:3,calibrated=True:distance=12:selected=10:frequency-latch:3,calibrated=True:distance=12:selected=10:strength-latch:4,calibrated=True:distance=12:selected=10:frequency-latch:4,calibrated=True:distance=12:selected=10:frequency-latch:5,calibrated=True:distance=12:selected=10:frequency-latch:6,calibrated=True:distance=12:selected=10:frequency-latch:7,calibrated=True:distance=12:selected=10:frequency-latch:8,calibrated=True:distance=12:selected=10:frequency-latch:9,calibrated=True:distance=12:selected=10:frequency-latch:10",
+        "checks": 160,
+        "passed": 86,
+        "failed": 74
+      }
+    ],
+    "missing_old_outer_receipt": "First 031634 result.json is absent; its protocol-result.json survives. No serialization exception is claimed from that absence. Receipt JSON shape stays U.",
+    "classification_boundary": "Authoring an expected clause with a Minecraft Wiki URL is not received gameplay evidence. Only the exact original observed fixture/admission cases inform the keeps; broad subject overlap does not turn self-supplied mock observations into K1/K2.",
+    "catalog_wording_correction": "This commit also withdraws the stale historical CLI-failure label in the prior catalog receipt. Main reports 47 module tests OK on main and five on adfd87edf; CLI test remains U and unchanged. No worker rerun or diagnosis."
+  },
+  "records": [
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_all_assigned_subjects_have_real_adapters",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 25,
+      "original_end_line": 42,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: maintained registration/callability inventory for seven actual adapter modules, with a conditional comparison to the external matrix catalog. Not a gameplay oracle, but deleting configuration-coverage intent needs a stronger case than its hardcoded count.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_checks_are_json_serializable_in_receipt_state",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 44,
+      "original_end_line": 50,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: receipt-state JSON contract. The first actual protocol artifact has Check repr strings in adapter_state while later receipts contain dictionaries; a direct original serialization failure is not established, so do not force either K1 or R4.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_command_echo_is_never_a_success_oracle",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 52,
+      "original_end_line": 55,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fabricates a MatrixConsoleFence string and checks the helper rejects it. The separate historical fence-chat UI defect is not tested (no chat observer); no received scoreboard artifact or exact observed false-positive case is used.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_condition_requires_exact_holder_score",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 57,
+      "original_end_line": 64,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents dw1/dw11 feedback strings and checks the same holder regex; no captured scoreboard exchange, old executable differential or observed misassociation is linked.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_unloaded_fixture_is_blocked_not_gameplay_failure",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 66,
+      "original_end_line": 69,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Keep K1: unloaded-floor fixture defect is documented in world-adapters.md:11 and real DomWorld 033533 protocol receipt (blocked fixture_chunks_loaded); this rejects that real feedback rather than treating it as gameplay failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_unknown_observations_fail_closed",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 71,
+      "original_end_line": 76,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds an empty SimpleNamespace snapshot and missing move attribute, then checks own MissingCapability plumbing; no real failed observation or client is exercised.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_data_query_rejects_old_binary_surface",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 78,
+      "original_end_line": 81,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Handwrites the old command-only data feedback and expects a helper capability error. The report describes original binary limitations, not a received artifact/reproduced helper regression or an old implementation differential.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_data_scalar_and_numeric_list_decode",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 83,
+      "original_end_line": 89,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Manufactures the SNBT-looking scalar/list/string examples and matching Python literals; parser self-test without captured vanilla output or received query evidence.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_unsupported_compound_decode_never_defaults_empty",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 91,
+      "original_end_line": 94,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Injects a made-up compound string and checks the helper refuses it, with no real compound receipt or observed parser defaulting failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_boundary_is_once_and_not_during_setup",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 96,
+      "original_end_line": 103,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Toggles world_act on the local fixture and counts its own boundary mock; no real lifecycle transition or identified prior boundary failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_water_flow_checks_nearest_drop_as_well_as_spread_and_fall",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 105,
+      "original_end_line": 119,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: the 12 oracle labels match the original expanded real water/SIGKILL replay receipt 033930. This test only checks authored clause coverage using all-positive fake feedback, not water physics; retained because it corresponds to that concrete real-case coverage.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_setup_fences_all_fixture_chunks_before_fill",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 121,
+      "original_end_line": 128,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Keep K1: same observed fixture-chunk race; this orders the received-chunk fence before any fill. Original report records recurrence after teleport-only mitigation, then the corrected real water run.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_missing_nbt_path_cannot_pass_as_empty_list",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 130,
+      "original_end_line": 135,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fabricates Nothing found at path Passengers and a zero score, asserting no second query. No actual missing-path artifact or observed zero-default failure is supplied.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_block_input_boundary_requires_received_sequence",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 137,
+      "original_end_line": 146,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: original real sponge 034631 is blocked on same_tick_admission_fence; the report records f941981c then moving block actions to real prediction-sequence ACKs. This no-ACK synthetic edge is not itself a captured failing packet sequence, but belongs to that concrete admission correction.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_block_ack_waits_past_old_or_absent_packet",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 148,
+      "original_end_line": 162,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: same real admission correction and received-sequence contract; None/6/7 snapshots are fabricated, not a recovered wire sequence. Keep the edge contract conservatively rather than label it a proven live regression.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_verb_submits_bound_arguments_through_shared_receipt_hook",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 164,
+      "original_end_line": 175,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: shared singleton consumed-input staging contract discussed alongside the real 034631 admission blocker. No actual attack receipt is consumed by this test, so its exact real-case relationship remains unclear.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_sponge_fixture_keeps_actor_outside_pool_and_spawn_shop",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 177,
+      "original_end_line": 188,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Keep K1: real sponge probe 032707 could not obtain a received inventory grant; moving pool/actor outside the spawn-shop obstruction allowed 034631 to reach admission. The test protects those corrected fixture coordinates, not proof that sponge gameplay is fixed.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_nested_uuid_arrays_decode_without_inventing_compound_values",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 190,
+      "original_end_line": 192,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs a typed UUID-array response and literal nested-list result; no real fox trust query or captured protocol/vanilla bytes.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_comparator_covers_fullness_and_all_frame_rotations",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 194,
+      "original_end_line": 205,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "All scoreboard queries return true and real item loading/inputs/ticks are mocked; counts staged chest quantities and requested block labels, not received comparator/frame results. Original handoff labels these authored clauses, not live evidence.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_dispenser_runs_all_item_families_and_checks_residue",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 207,
+      "original_end_line": 235,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks item loading, residue counts, armor metadata, time and input; supplies every expected entity/drop/tool snapshot itself. Assertions validate its own fabricated custody and staged family list, not a real dispenser or artifact.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_hopper_lock_checks_all_three_custody_locations",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 237,
+      "original_end_line": 252,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Patches transfer counts to the exact desired scripted list and supplies the expected coal slot, then counts checks and expects the cadence capability error. No actual hopper/furnace transfer evidence.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_sculk_latches_distance_frequency_and_rejection_after_pulse",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 254,
+      "original_end_line": 281,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Keep K1: AUDIT-SCULK and original DomWorld report identify perpendicular horizontal latch positions as an actual fixture defect in 042427. a37ebc53 corrects the assertions to downward y99 latches; b7020b427 adds received-phase/perpendicular-control clauses. Later 043238 still fails 74 checks, so this retained regression does not claim a product fix.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+        "b7020b427b33ca547d0e152fecdb70527b3072dd"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_repeater_cannot_claim_delay_from_settled_output",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 283,
+      "original_end_line": 290,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Forces every settled block query true and patches ticks, then counts 12 generated checks and the explicit missing-timestamp exception. The authored contract is not an observed repeater-delay case.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_taming_rejects_nonempty_wrong_owner_and_wrong_fox_trust",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 292,
+      "original_end_line": 312,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents actor/other UUIDs, taming fields, two fox snapshots and offspring; patches every interaction/tick. Checks negative owner/trust outcomes from self-supplied data, with no real taming failure/run.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_entity_position_and_health_use_received_packets_not_nbt",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 315,
+      "original_end_line": 321,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Injects cow position/health literals through a fake snapshot and asks the projection helper to return those same values without a command; no received packet or real artifact is decoded.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_unreceived_entity_health_is_not_invented",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 323,
+      "original_end_line": 328,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Deletes health from its own cow dict and checks its own capability exception/no-command policy; not a received malformed/missing-metadata case.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_egg_oracle_reads_received_entity_stack",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 330,
+      "original_end_line": 338,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Creates its own egg item entity and suppresses ticks/existence. No real chicken, entity packet or captured artifact; assertion is the fabricated egg branch.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_experience_and_mending_use_received_xp_and_stack_components",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 340,
+      "original_end_line": 353,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks XP observations to 1/7 and the pickaxe damage to exactly 14, with grants/ticks suppressed. This cannot check real XP conservation or Mending and uses no independent run artifact.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_bee_crop_oracle_excludes_random_growth",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 356,
+      "original_end_line": 368,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Stubs growth predicates so every intended positive succeeds, patches ticks, and inspects its own command call order and two result flags. Handoff describes newly authored clauses, not an observed bee/random-growth regression.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_seagrass_fixture_is_underwater_outside_shop",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 370,
+      "original_end_line": 383,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Patches all growth, block checks, use and time; compares the fixture command/teleport arguments to current source. Unlike the real sponge obstruction, no actual seagrass run/failure is documented.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_daylight_and_bulb_cover_night_and_second_pulse",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 385,
+      "original_end_line": 395,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Patches every block observation/time step and compares the requested output list to the adapter literals over two pulses. No real detector/bulb/lamp states or observed second-pulse failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_missing_item_metadata_cannot_be_an_empty_egg_result",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 397,
+      "original_end_line": 403,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fabricates an item entity without metadata and expects the local error branch while suppressing real egg existence/time; no captured undecodable item packet or original observed metadata failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_weighted_plate_thresholds_and_arrow_button_rules",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 406,
+      "original_end_line": 424,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks all plate/button observations, timing and client input. Compares the adapter-generated expected block strings to manually repeated count thresholds; no actual pressure plate or arrow result.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_portal_checks_every_minimum_and_maximum_interior_cell",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 426,
+      "original_end_line": 440,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Patches ignition, time and every block query; repeats the production frame-cell coordinate ranges and request strings. It counts authored calls, not any received portal interior or vanilla artifact.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_command_block_chain_origin_and_repeat_do_not_claim_output",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 442,
+      "original_end_line": 454,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Patches time/block queries, compares current staged relative/chain/held-output arguments and expects the declared output capability error. No actual command-block execution/output artifact.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_berry_fixture_observes_growth_before_harvesting",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 456,
+      "original_end_line": 467,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Forces berry maturation true while mocking grants/use/block queries; asserts the first authored growth request/check name and its fabricated true result, not an observed immature-harvest failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_shearing_counts_dropped_and_picked_up_wool",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 469,
+      "original_end_line": 482,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents dropped-wool counts and a constant carried count, patches all input/time/species observations, then checks the adapter range predicate. No real sheep/shearing custody receipt or captured drops.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "deleted",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/matrix_domains/test_world.py::WorldAdapterTests::test_non_inverted_detector_is_zero_in_nether_and_end",
+      "file": "tools/harness/matrix_domains/test_world.py",
+      "original_fn_line": 485,
+      "original_end_line": 493,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "medium",
+      "reason": "Keep U: original world-adapters.md:66 records correction of a mistaken End-output search summary after reading the actual Daylight Detector source page. This mocks block queries rather than using captured vanilla evidence; retain the documented corrective oracle intent without inventing a live failure.",
+      "provenance_commit": "b592f8bd9bf4dadfe48bb4a98557e713b6b97068",
+      "body_provenance_commits": [
+        "b592f8bd9bf4dadfe48bb4a98557e713b6b97068"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "fence": {
+    "reference_search_scope": "Exact removed test names searched ONLY within wt/D60Read2, excluding this module and historical audit JSON. Other worktrees received dirty-overlap checks only, NOT reference searches.",
+    "external_removed_name_references": "",
+    "reference_search_exit_code": 1,
+    "other_registered_worktrees_checked_for_dirty_overlap": 563,
+    "dirty_overlaps": [],
+    "absent_parent_directory_count": 11,
+    "absent_parent_directories": [
+      "/run/media/kaiserroman/games/solaris-work/wt/BuildSpeed",
+      "/run/media/kaiserroman/games/solaris-work/wt/ClientBugsCore",
+      "/run/media/kaiserroman/games/solaris-work/wt/CompatAudit",
+      "/run/media/kaiserroman/games/solaris-work/wt/ContentNoJava",
+      "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid",
+      "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid2",
+      "/run/media/kaiserroman/games/solaris-work/wt/RC5WorldConversion-rc5",
+      "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed0102",
+      "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed23",
+      "/run/media/kaiserroman/games/solaris-work/wt/WeakHardware",
+      "/run/media/kaiserroman/games/solaris-work/wt/rc4-notes-fix"
+    ],
+    "absent_directory_explanation": "git status returned no changes and exit0 but warned for absent matrix_domains parents on 11 older worktrees; parent absence was inspected, not treated as a dirty conflict or silently discarded error.",
+    "inspection_errors": [],
+    "unmerged_overlaps": [
+      {
+        "commit": "426764794d73f03328d4ac344bcdf1ebc54a6e85",
+        "subject": "wip(laptop): Top100-M00 uncommitted state",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "1408f578d27ede36c285f88b987c386cc04dd888",
+        "subject": "wip(laptop): LedgerDamage uncommitted state",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "236dbf54e1fd5a1661edaaa37478697f66200fc5",
+        "subject": "wip(laptop): LedgerDamageNeg uncommitted state",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "5322ebe094d9285f8dcea6235f1fa3d56d8afd70",
+        "subject": "test(harness): extend weighted plates portal limits and harvest custody",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "a37ebc5386e91f0cad27df260b78bf1f7f153226",
+        "subject": "test(harness): correct sculk latch direction and extend crop and bulb oracles",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "e71d294a03c281fe206972a48588afbcb2cda0ba",
+        "subject": "test(harness): consume received world entities and retain sculk pulses",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "a6efd610ff1e3004a5ff687094d2ead62c9cfced",
+        "subject": "Complete hopper routing checks and reject unobservable cadence claims",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      },
+      {
+        "commit": "0370faa321f5c6ac4da67ec1d50e4a2c4e1dfba4",
+        "subject": "Add world-domain adapters and extend redstone and taming clauses",
+        "read": true,
+        "assessment": "Original domain/test development already incorporated by b592f8bd9 or the already-present b7020b427 received-sculk extension; no new unmerged body omitted from the review."
+      }
+    ]
+  },
+  "validation": [
+    {
+      "cmd": "Static sync/async AST identity reconciliation with historical inventory",
+      "tree": "adfd87edfeee3f15356cad7041605f391f91cb57",
+      "result": "38/38 existing methods matched; no absent historical methods or duplicate qualified declarations."
+    },
+    {
+      "cmd": "Source/callee/provenance and historical raw-artifact projection review",
+      "tree": "adfd87edfeee3f15356cad7041605f391f91cb57",
+      "result": "Four observed fixture regressions retained, seven conservative U retained, 27 per-body R4 reasons recorded. Historical runs read, never re-executed."
+    },
+    {
+      "cmd": "Removed-name references ONLY in assigned worktree; dirty-overlap ONLY in 563 other worktrees; all eight unmerged file diffs",
+      "tree": "adfd87edfeee3f15356cad7041605f391f91cb57",
+      "result": "No external removed-name references, no dirty overlaps, no unresolved inspection errors. Eleven old worktrees have no matrix_domains directory."
+    },
+    {
+      "cmd": "Tests/builds/L2/formatters/graphical runs/negative controls",
+      "tree": "worker",
+      "result": "Not run; Main owns integrated verification. No measured runtime reduction."
+    }
+  ],
+  "notes": [
+    "No production adapter/helper code, scenario catalog, live scenario, ledger state, acceptance thresholds, skips or allowed AST/module-cycle ratchets changed.",
+    "The retained sculk unit protects a real fixture-direction correction, not a repaired sensor algorithm. Both original 160-check latch probes still report 74 failures/86 passes in their historical receipts.",
+    "No deletion is justified merely by Mock, test naming, source file size or absent exact ledger references. Reasons distinguish the concrete actual-case keeps from the self-generated observation cases."
+  ]
+}

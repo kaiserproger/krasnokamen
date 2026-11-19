@@ -1,11 +1,8 @@
-"""Mocked lifecycle tests for the multi Java-client helper.
+"""Mocked Java-client regressions and retained lifecycle/security contracts.
 
-These tests never launch a real client: ``runtime`` lifecycle functions and
-``McpClient`` are faked. They pin the contract the matrix runner relies on:
-N distinct identities/game dirs, play readiness before yield, exact-address
-Loader permission confirmation, optional krasnokamen-auth registration with
-secret-free receipts, N8 heap caps, failure group.json evidence, and full
-cleanup on any failure.
+No test launches a real client: runtime lifecycle and MCP sessions are faked.
+Observed launch/bootstrap regressions remain alongside conservative identity,
+permission, authentication, receipt and environment-isolation contracts.
 """
 
 from __future__ import annotations
@@ -162,9 +159,6 @@ class JavaClientsTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def _enter_group(self, *args, **kwargs):
-        return java_clients.client_group(*args, **kwargs)
-
     def _group_text(self) -> str:
         return (self.artifact / "group.json").read_text()
 
@@ -187,34 +181,6 @@ class JavaClientsTests(unittest.TestCase):
             self.assertNotIn("launch_manifest", kwargs)
         self.assertTrue(self.xvfb_log.closed)
         self.assertIn(self.xvfb_proc, self.stopped)
-
-    def test_rejects_bad_count_before_any_lifecycle(self) -> None:
-        self._start_patches()
-        for bad in (0, 9, -2, "3", True, None):
-            with self.assertRaises(ValueError, msg=f"count={bad!r}"):
-                with self._enter_group(self.artifact, bad, "127.0.0.1:25567"):
-                    self.fail("must not yield")
-        java_clients.runtime.start_xvfb.assert_not_called()
-        java_clients.runtime.start_client.assert_not_called()
-
-    def test_rejects_bad_address_profile_platform_timeout_authenticate(self) -> None:
-        self._start_patches()
-        with self.assertRaises(ValueError):
-            with self._enter_group(self.artifact, 2, ""):
-                pass
-        with self.assertRaises(ValueError):
-            with self._enter_group(self.artifact, 2, "127.0.0.1:25567", platform="bogus"):
-                pass
-        with self.assertRaises(ValueError):
-            with self._enter_group(self.artifact, 2, "127.0.0.1:25567", client_profile=""):
-                pass
-        with self.assertRaises(ValueError):
-            with self._enter_group(self.artifact, 2, "127.0.0.1:25567", timeout_seconds=0):
-                pass
-        with self.assertRaises(ValueError):
-            with self._enter_group(self.artifact, 2, "127.0.0.1:25567", authenticate="yes"):
-                pass
-        java_clients.runtime.start_xvfb.assert_not_called()
 
     def test_group_uses_distinct_identities_dirs_ports_tokens(self) -> None:
         self._start_patches()
@@ -287,86 +253,6 @@ class JavaClientsTests(unittest.TestCase):
         for kwargs in self.start_kwargs:
             self.assertNotIn(kwargs["token"], text)
 
-    def test_not_in_play_writes_failure_receipt_and_cleans_everything(self) -> None:
-        self._start_patches()
-
-        def handler(client: FakeMcpClient, name: str, args: dict) -> dict:
-            if name == "initialize":
-                return {"protocolVersion": "test"}
-            if name == "minecraft_wait_for_play":
-                return {"in_play": False, "endpoint": client.endpoint}
-            return {}
-
-        FakeMcpClient.handler = handler
-        entered = False
-        with self.assertRaisesRegex(RuntimeError, "did not enter Play"):
-            with java_clients.client_group(self.artifact, 2, "127.0.0.1:25567"):
-                entered = True
-        self.assertFalse(entered)
-        payload = json.loads(self._group_text())
-        self.assertFalse(payload["passed"])
-        self.assertIn("did not enter Play", payload["error"])
-        self.assertGreaterEqual(len(payload["clients"]), 1)
-        self.assertLessEqual(len(payload["clients"]), 2)  # parallel workers may already be launched
-        for entry in payload["clients"]:
-            self.assertIsNone(entry["play"])
-        self.assertNotIn("token", self._group_text())
-        for instance in FakeMcpClient.instances:
-            self.assertTrue(instance.closed)
-        for handle in self.handles:
-            self.assertTrue(handle.closed)
-        self.assertTrue(self.xvfb_log.closed)
-        self.assertIn(self.xvfb_proc, self.stopped)
-        self.assertEqual(len([proc for proc in self.stopped if proc is not self.xvfb_proc]),
-                         len(payload["clients"]))
-
-    def test_partial_launch_failure_writes_receipt_and_cleans_siblings(self) -> None:
-        self._start_patches()
-        self.fail_usernames = {"JMatrix01"}
-        with self.assertRaisesRegex(RuntimeError, "injected launch failure"):
-            with java_clients.client_group(self.artifact, 3, "127.0.0.1:25567"):
-                self.fail("must not yield on partial failure")
-        payload = json.loads(self._group_text())
-        self.assertFalse(payload["passed"])
-        self.assertIn("injected launch failure", payload["error"])
-        launched_usernames = {kwargs["username"] for kwargs in self.start_kwargs}
-        self.assertIn("JMatrix00", launched_usernames)
-        self.assertIn("JMatrix01", launched_usernames)
-        for instance in FakeMcpClient.instances:
-            self.assertTrue(instance.closed)
-        for handle in self.handles:
-            self.assertTrue(handle.closed)
-        self.assertTrue(self.xvfb_log.closed)
-        self.assertIn(self.xvfb_proc, self.stopped)
-        stopped_ids = {id(proc) for proc in self.stopped}
-        self.assertIn(id(self.xvfb_proc), stopped_ids)
-        self.assertNotIn("token", self._group_text())
-
-    def test_initialize_failure_still_closes_session(self) -> None:
-        self._start_patches()
-
-        def handler(client: FakeMcpClient, name: str, args: dict) -> dict:
-            if name == "initialize":
-                raise RuntimeError("injected init failure")
-            return _ready_handler(client, name, args)
-
-        FakeMcpClient.handler = handler
-        with self.assertRaisesRegex(RuntimeError, "injected init failure"):
-            with java_clients.client_group(self.artifact, 2, "127.0.0.1:25567"):
-                self.fail("must not yield on init failure")
-        # A sibling may already have initialized before failure cancellation.
-        self.assertGreaterEqual(len(FakeMcpClient.instances), 1)
-        self.assertLessEqual(len(FakeMcpClient.instances), 2)
-        for instance in FakeMcpClient.instances:
-            self.assertTrue(instance.closed)
-        payload = json.loads(self._group_text())
-        self.assertFalse(payload["passed"])
-        self.assertIn("injected init failure", payload["error"])
-        for handle in self.handles:
-            self.assertTrue(handle.closed)
-        self.assertTrue(self.xvfb_log.closed)
-        self.assertIn(self.xvfb_proc, self.stopped)
-
     def test_loader_confirms_exact_server_address(self) -> None:
         self._start_patches()
         address = "10.9.8.7:25567"
@@ -409,17 +295,6 @@ class JavaClientsTests(unittest.TestCase):
             self.assertEqual(entry["platform"], "fabric")
             self.assertEqual(entry["permission_title"], expected_title)
             self.assertEqual(entry["stage"], "in-play")
-
-    def test_exit_after_yield_cleans_everything(self) -> None:
-        self._start_patches()
-        with java_clients.client_group(self.artifact, 2, "127.0.0.1:25567"):
-            pass
-        for instance in FakeMcpClient.instances:
-            self.assertTrue(instance.closed)
-        for handle in self.handles:
-            self.assertTrue(handle.closed)
-        self.assertTrue(self.xvfb_log.closed)
-        self.assertIn(self.xvfb_proc, self.stopped)
 
     def test_group_never_touches_the_private_audio_graph_on_scenario_and_startup_failure(self) -> None:
         self._start_patches()
@@ -500,50 +375,6 @@ class JavaClientsTests(unittest.TestCase):
         for instance in FakeMcpClient.instances:
             self.assertTrue(instance.closed)
 
-    def test_authenticate_client_rejects_stale_baseline_match(self) -> None:
-        self._start_patches()
-        client = FakeMcpClient("http://127.0.0.1:50100/mcp", "tok", 5.0)
-        client.chat = ["older session: registered ok"]
-        FakeMcpClient.handler = _auth_handler
-        result = java_clients.authenticate_client(client, "FreshPass9", timeout_seconds=10)
-        self.assertEqual(result, {"authenticated": True})
-        sends = [args for name, args in client.calls if name == "minecraft_send_chat"]
-        self.assertEqual(len(sends), 1)
-        self.assertEqual(sends[0], {"message": "register FreshPass9 FreshPass9", "command": True})
-
-    def test_authenticate_client_validates_password_shape(self) -> None:
-        self._start_patches()
-        client = FakeMcpClient("http://127.0.0.1:50100/mcp", "tok", 5.0)
-        for bad in ("", "abc", "has space", "tab\there", "x" * 129):
-            with self.assertRaises(ValueError, msg=f"password={bad!r}"):
-                java_clients.authenticate_client(client, bad)
-        self.assertEqual(client.calls, [])
-
-    def test_authenticate_client_missing_ack_error_hides_password(self) -> None:
-        self._start_patches()
-        password = "SecretMissingAck4"
-
-        def handler(client: FakeMcpClient, name: str, args: dict) -> dict:
-            if name == "minecraft_observe":
-                client.version += 1
-                return {"state_version": client.version, "in_play": True, "recent_chat": []}
-            if name == "minecraft_wait_for_state_change":
-                return {"state_version": client.version}
-            if name == "minecraft_send_chat":
-                return {"sent": True}
-            return {}
-
-        FakeMcpClient.handler = handler
-        client = FakeMcpClient("http://127.0.0.1:50100/mcp", "tok", 5.0)
-        with self.assertRaisesRegex(RuntimeError, "authentication acknowledgement missing"):
-            java_clients.authenticate_client(client, password, timeout_seconds=1)
-        try:
-            java_clients.authenticate_client(client, password, timeout_seconds=1)
-        except RuntimeError as error:
-            self.assertNotIn(password, str(error))
-        else:
-            self.fail("expected RuntimeError")
-
     def test_group_does_not_cap_gradle_and_compiler_jvms(self) -> None:
         self._start_patches()
         saved = dict(os.environ)
@@ -605,15 +436,6 @@ class JavaClientsTests(unittest.TestCase):
         self.assertEqual(os.environ.get("WAYLAND_DISPLAY"), "wayland-9")
         self.assertEqual(os.environ.get("PULSE_SINK"), "owner-sink")
         self.assertNotIn("PIPEWIRE_NODE", os.environ)
-
-    def test_no_direct_process_spawning(self) -> None:
-        self.assertNotIn("subprocess", dir(java_clients))
-        self._start_patches()
-        with mock.patch("subprocess.Popen", side_effect=AssertionError("direct spawn")):
-            with java_clients.client_group(self.artifact, 2, "127.0.0.1:25567"):
-                pass
-        java_clients.runtime.start_xvfb.assert_called_once_with(self.artifact)
-        self.assertEqual(java_clients.runtime.start_client.call_count, 2)
 
     def test_reconnect_auth_logs_in_without_registering_again(self) -> None:
         self._start_patches()

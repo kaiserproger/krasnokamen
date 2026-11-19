@@ -1,4 +1,4 @@
-"""Frozen v2 Loader launch selection without server/client builds."""
+"""Loader launch regressions and retained immutable-candidate/isolation contracts."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from . import __main__ as cli
 from . import loader, profiles, runtime
 
 
@@ -58,13 +57,6 @@ class LoaderV2Tests(unittest.TestCase):
                 "client_ready_timeout_seconds": profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]})
             self.assertEqual(json.loads((root / "ops.json").read_text())[0]["name"], "GateFabric")
 
-    def test_missing_v2_inputs_fail_before_build(self) -> None:
-        ctx = profiles.ProfileContext(Path("/tmp/loader-v2"), platform="fabric")
-        with mock.patch.object(profiles, "_run_command") as build:
-            with self.assertRaisesRegex(ValueError, "--server-bin and --plugins-dir"):
-                profiles.run_loader_live(ctx)
-        build.assert_not_called()
-
     def test_shared_probe_uses_frozen_binary_without_building(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             binary = Path(temporary) / "krasnokamen"
@@ -75,13 +67,6 @@ class LoaderV2Tests(unittest.TestCase):
                 selected = profiles._server_binary(profiles.ProfileContext(Path(temporary)))
             self.assertEqual(selected, binary)
             build.assert_not_called()
-
-    def test_shared_probe_rejects_invalid_frozen_binary_without_building(self) -> None:
-        with mock.patch.dict("os.environ", {"KRASNOKAMEN_SERVER_BINARY": "/missing/krasnokamen"}), \
-             mock.patch.object(profiles, "_run_command") as build:
-            with self.assertRaisesRegex(RuntimeError, "missing executable server binary"):
-                profiles._server_binary(profiles.ProfileContext(Path("/tmp")))
-        build.assert_not_called()
 
     def test_v2_config_points_at_readonly_candidate_and_frozen_binary(self) -> None:
         with tempfile.TemporaryDirectory(dir=runtime.REPO_ROOT / ".analysis") as temporary:
@@ -289,50 +274,6 @@ class LoaderV2Tests(unittest.TestCase):
                     self.assertEqual(env["HOME"], str(root / "game" / ".home"))
                     self.assertEqual(env.get("GRADLE_USER_HOME"), explicit or str(shared))
                     self.assertEqual(ready.call_args.args[1], 180.0)
-
-    def test_smoke_uses_native_settlement_commands_without_package(self) -> None:
-        from . import loader_settlements
-
-        with tempfile.TemporaryDirectory() as temporary:
-            artifact = Path(temporary)
-            (artifact / "server.log").write_text("fixture\n")
-            steps = mock.MagicMock()
-            steps.report = {}
-            steps.__enter__.return_value = steps
-            commands: list[str] = []
-            def record(_steps: object, command: str, _reply: str) -> None:
-                commands.append(command)
-            with mock.patch.object(loader_settlements, "ProbeSteps", return_value=steps), \
-                 mock.patch.object(loader_settlements, "_command", side_effect=record), \
-                 mock.patch.object(loader_settlements, "capture_ui", return_value={}):
-                result = loader_settlements.run(mock.Mock(), runtime, artifact, artifact / "server.log")
-            self.assertEqual(commands, [
-                "settlement create p5qa",
-                "settlement list",
-                "settlement info p5qa",
-                "settlement info p5qa",
-            ])
-            steps.call.assert_any_call(
-                "minecraft_press_inputs", {"keys": ["key.keyboard.c"], "ticks": 1}
-            )
-            self.assertNotIn("settlements_bundle_cache", result)
-
-    def test_cli_forwards_typed_loader_options(self) -> None:
-        from . import preflight
-
-        with tempfile.TemporaryDirectory() as temporary:
-            # Only argument forwarding is under test; the paths are placeholders.
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(temporary)), \
-                 mock.patch.object(preflight, "check"), \
-                 mock.patch.dict(profiles.PROFILES, {"loader-live": {"scope": "real-client", "run": mock.Mock(return_value={})}}):
-                run = profiles.PROFILES["loader-live"]["run"]
-                code = cli.cmd_run(["loader-live", "--platform", "fabric",
-                    "--server-bin", "/tmp/frozen", "--plugins-dir", "/tmp/candidate"])
-                ctx = run.call_args.args[0]
-            self.assertEqual(code, 0)
-            self.assertEqual(ctx.server_bin, Path("/tmp/frozen"))
-            self.assertEqual(ctx.plugins_dir, Path("/tmp/candidate"))
-            self.assertEqual(ctx.extra_args, [])
 
 
 if __name__ == "__main__":

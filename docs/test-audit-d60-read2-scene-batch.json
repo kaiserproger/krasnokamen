@@ -1,0 +1,2072 @@
+{
+  "decision": "D60.2",
+  "batch": "scene-shot",
+  "base": "ac612a763c5e7c640b9e4e4b500c6edc0c3e8402",
+  "file": "tools/harness/test_scene_shot.py",
+  "source_before_sha256": "bc5a147cac77f4dc94e36f0b6d6355ab8893b6c7d41fdcf3bf31f027a1a441ef",
+  "coverage": {
+    "test_bodies_read": 84,
+    "all_historical_bodies_match_pre_edit_source_including_decorators": true,
+    "whole_test_module_lines": 1633,
+    "callees_read": [
+      "scene_shot.py:1-51 (whole forwarding owner)",
+      "scene_shot_steps.py:1-371 (whole)",
+      "scene_shot_execute.py:1-449 (whole)",
+      "scene_shot_scenario.py:1-356 (whole)",
+      "scene_shot_client.py:44-48,59-182,194-275 and imports/constants (relevant client/plumbing helpers)",
+      "scene_shot_checks.py:97-117,213-443 and imports (all directly tested head/spider/clock checks and their helpers)",
+      "falling_block_oracle.py:1-35 (whole)",
+      "death_tilt_oracle.py:1-77 (whole; measured Java reference provenance)",
+      "mob_motion_oracle.py:1-36 (whole)",
+      "runtime.py:720-841 (screen size validation and display creation/fallback)"
+    ],
+    "provenance_read": [
+      "15 complete relevant ledger rows (including three initially reader-clipped repro_check lines recovered with raw reads)",
+      "44 declaration-origin commit messages and nine additional body-origin messages",
+      "seven focused production/doc correction diffs plus full fb2674fb scene restoration diff",
+      "receipts/HarnessFix4Scene/REPORT.md:1-46 (whole)",
+      "receipts/Stage2Tools/area-d-audit.md:94-118 (scope/limitations of synthetic helper controls)",
+      "all 12 unmerged first-parent test-file diffs and one disjoint dirty-worktree diff"
+    ],
+    "historical_comparison_note": "Initial AST comparison omitted the optional stored-frame decorator; including decorators gives 84/84 exact matches, not a changed test."
+  },
+  "counts": {
+    "removed_R4": 50,
+    "retained_K1": 30,
+    "retained_U": 4,
+    "tests_before": 84,
+    "tests_remaining": 34,
+    "dead_private_helpers_removed": 1,
+    "empty_test_classes_removed": 3,
+    "unused_imports_removed": [
+      "socket",
+      "threading",
+      "time"
+    ],
+    "physical_source_lines_removed": 872,
+    "historical_medium_candidates_finalized": 21,
+    "historical_medium_candidates_remaining": 691
+  },
+  "tests": [
+    {
+      "id": "tools/harness/test_scene_shot.py::DebugOverlayAndPixelSteps::test_toggle_debug_overlay_is_a_validated_step_and_calls_the_client_tool",
+      "name": "test_toggle_debug_overlay_is_a_validated_step_and_calls_the_client_tool",
+      "class": "DebugOverlayAndPixelSteps",
+      "source_line": 19,
+      "source_end_line": 27,
+      "body_sha256": "e9f809c9de729f766faef62e15a7b346896905e26c1d7b95f8bc267755998086",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only validates authored booleans and compares generated call tuples; no actual F3/client execution or observed dispatch failure. The introduction’s function-removal red control does not supply a real case.",
+      "provenance_commit": "986421bb996a2bc4cfa7c7bc76499791b62b2b6b",
+      "body_provenance_commits": [
+        "986421bb996a2bc4cfa7c7bc76499791b62b2b6b"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DebugOverlayAndPixelSteps::test_pixel_window_counts_only_the_color_box_inside_the_window",
+      "name": "test_pixel_window_counts_only_the_color_box_inside_the_window",
+      "class": "DebugOverlayAndPixelSteps",
+      "source_line": 29,
+      "source_end_line": 39,
+      "body_sha256": "ff2a1ec546175e51c8d34261796ee42561a6cfbcd6f7d0e243dc9ae126db36b3",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Counts an authored 10×10 colored square in a synthetic blank PIL image; no retained vanilla/real-client image or observed color-window failure.",
+      "provenance_commit": "986421bb996a2bc4cfa7c7bc76499791b62b2b6b",
+      "body_provenance_commits": [
+        "986421bb996a2bc4cfa7c7bc76499791b62b2b6b"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DebugOverlayAndPixelSteps::test_pixel_window_refuses_a_frame_that_is_not_the_matched_size",
+      "name": "test_pixel_window_refuses_a_frame_that_is_not_the_matched_size",
+      "class": "DebugOverlayAndPixelSteps",
+      "source_line": 41,
+      "source_end_line": 46,
+      "body_sha256": "d1233e16f1795853ac532701ea6dca654bde4c6205b6c5325b19e234f15ef65f",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds an invented 640×360 PIL frame to the newly introduced helper; no actual mismatched capture or observed size refusal regression.",
+      "provenance_commit": "986421bb996a2bc4cfa7c7bc76499791b62b2b6b",
+      "body_provenance_commits": [
+        "986421bb996a2bc4cfa7c7bc76499791b62b2b6b"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DebugOverlayAndPixelSteps::test_pixel_window_step_validation",
+      "name": "test_pixel_window_step_validation",
+      "class": "DebugOverlayAndPixelSteps",
+      "source_line": 48,
+      "source_end_line": 63,
+      "body_sha256": "ad3ad5f35f6e717ce4131ca5071a515754fd7bf7b503efd2f020a94e1f033bc5",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only validates a hand-built dictionary and variants of its own grammar; no real scenario execution, frame or observed bad-step failure.",
+      "provenance_commit": "986421bb996a2bc4cfa7c7bc76499791b62b2b6b",
+      "body_provenance_commits": [
+        "986421bb996a2bc4cfa7c7bc76499791b62b2b6b"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DebugOverlayAndPixelSteps::test_render_metrics_and_the_drawn_index_bound",
+      "name": "test_render_metrics_and_the_drawn_index_bound",
+      "class": "DebugOverlayAndPixelSteps",
+      "source_line": 65,
+      "source_end_line": 78,
+      "body_sha256": "a2149b431d1e5d081845fe38a56e2834fa934bd22b6c00d851bc2e39276cdd79",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies synthetic renderer counters and threshold examples to the newly introduced bound helper; no actual accumulating draw trace or recorded harness failure.",
+      "provenance_commit": "986421bb996a2bc4cfa7c7bc76499791b62b2b6b",
+      "body_provenance_commits": [
+        "986421bb996a2bc4cfa7c7bc76499791b62b2b6b"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_gait_fixture_keeps_previous_subject_outside_spider_view",
+      "name": "test_gait_fixture_keeps_previous_subject_outside_spider_view",
+      "class": "SceneShotTests",
+      "source_line": 82,
+      "source_end_line": 103,
+      "body_sha256": "1b2a525a2715edcddf3ca6817586628df868fe196a839fc8fbc6a33a88acb222",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks the camera/frustum correction for the actually occluded spider capture; the named row records original failure, exact fixture reversal and three real unobstructed reruns.",
+      "provenance_commit": "b6f1ac655a00667614d9aa87eb2de1387813a265",
+      "body_provenance_commits": [
+        "b6f1ac655a00667614d9aa87eb2de1387813a265"
+      ],
+      "observed_failure_references": [
+        "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED.toml:9:regression = [\"python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view\", \"harness:scene-shot:native-gait-spider\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_gait_spider_oracle_rejects_death_tinted_occlusion",
+      "name": "test_gait_spider_oracle_rejects_death_tinted_occlusion",
+      "class": "SceneShotTests",
+      "source_line": 105,
+      "source_end_line": 128,
+      "body_sha256": "1a5704029bfa4b94f7a0bc5441b9088d2e038fc9b5507820fd9bfdb1f56d7812",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Replays the observed dying-zombie obstruction of the spider window with a bounded red/purple occluder; the checker documents 5513 obstructing pixels versus 0–75 in retained real clean runs.",
+      "provenance_commit": "45cf068a2336ddb2c4243cb121329505b12968e4",
+      "body_provenance_commits": [
+        "45cf068a2336ddb2c4243cb121329505b12968e4"
+      ],
+      "observed_failure_references": [
+        "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED",
+        "45cf068a2336ddb2c4243cb121329505b12968e4"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_chat_hidden_is_opt_in",
+      "name": "test_java_chat_hidden_is_opt_in",
+      "class": "SceneShotTests",
+      "source_line": 130,
+      "source_end_line": 132,
+      "body_sha256": "6401493f93b90e51aafc675c8a04533c7b192d8692056d4bdecac929eeeb030c",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Directly covers the hide_chat java_options parameter lost in the observed stage-0 merge regression; fb2674fb restores this signature as well as caller threading.",
+      "provenance_commit": "6495ef966ca8c3e3ca8940d60ab3fe10ee8ccc35",
+      "body_provenance_commits": [
+        "6495ef966ca8c3e3ca8940d60ab3fe10ee8ccc35"
+      ],
+      "observed_failure_references": [
+        "fb2674fb7b016148d544566cf7bb5db0d694bd14"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_bootstrap_retries_only_early_client_thread_timeout",
+      "name": "test_java_bootstrap_retries_only_early_client_thread_timeout",
+      "class": "SceneShotTests",
+      "source_line": 134,
+      "source_end_line": 146,
+      "body_sha256": "08e4b5b143f6354e711765a7b6dffa72b84dbfc729855862cbea1fab8f0b5299",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Synthesizes a very specific Java premain/client-thread TimeoutException and landed with lifecycle corrections, but the reviewed provenance has no standalone observed timeout receipt; retain rather than infer either a real regression or disposable new plumbing.",
+      "provenance_commit": "6495ef966ca8c3e3ca8940d60ab3fe10ee8ccc35",
+      "body_provenance_commits": [
+        "6495ef966ca8c3e3ca8940d60ab3fe10ee8ccc35"
+      ],
+      "observed_failure_references": [],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_server_identity_is_recorded_at_launch",
+      "name": "test_server_identity_is_recorded_at_launch",
+      "class": "SceneShotTests",
+      "source_line": 148,
+      "source_end_line": 172,
+      "body_sha256": "bc5bfe4c490b1c724bbf02a118273249c2bc4c0d917a3fc21530e931f044a661",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Hashes authored b\"scene-server\" bytes and deliberately aborts mocked Popen before server launch; no real binary/run or observed identity-loss case.",
+      "provenance_commit": "34e651b3bcadba30a405e2402b052f0c9c92741d",
+      "body_provenance_commits": [
+        "34e651b3bcadba30a405e2402b052f0c9c92741d",
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_lod_option_only_changes_generated_config",
+      "name": "test_lod_option_only_changes_generated_config",
+      "class": "SceneShotTests",
+      "source_line": 174,
+      "source_end_line": 221,
+      "body_sha256": "b035d3bc88c3b9f457ecd828130dffa06de372e34d82a9b6b8ef9ce142af9228",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocked launch reads the base config and round-trips locally generated option variants; no real LOD service/client behavior, artifact from a real run or observed config mutation.",
+      "provenance_commit": "c81671a8cf8c7b77b7f37d8d627fa581aaa6455a",
+      "body_provenance_commits": [
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14",
+        "c81671a8cf8c7b77b7f37d8d627fa581aaa6455a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_scenario_username",
+      "name": "test_scenario_username",
+      "class": "SceneShotTests",
+      "source_line": 223,
+      "source_end_line": 228,
+      "body_sha256": "11bb323561833780fc14cde439a18bb49d0a19aaef0dff7a776ac21a7401203f",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exercises new username defaults and handwritten invalid strings only; neither real login nor a recorded username bug is covered.",
+      "provenance_commit": "7c920fd1b85b2cbcca1d76e772305151fc05ab33",
+      "body_provenance_commits": [
+        "7c920fd1b85b2cbcca1d76e772305151fc05ab33"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_latency_proxy_delays_both_directions",
+      "name": "test_latency_proxy_delays_both_directions",
+      "class": "SceneShotTests",
+      "source_line": 230,
+      "source_end_line": 251,
+      "body_sha256": "1a3f6c84852e6753913c263c926bc0bef5489c47664044ef426cc70e80d4f1f8",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses real TCP sockets/timing only against a locally authored byte-echo fixture, not a real game server/client/bot or observed proxy failure; generic harness plumbing rather than K2 product-run evidence.",
+      "provenance_commit": "5713fcced9fef4a9cc2a1e2548bf7d494e3812f5",
+      "body_provenance_commits": [
+        "5713fcced9fef4a9cc2a1e2548bf7d494e3812f5"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_proxy_eof_is_a_clean_half_close",
+      "name": "test_proxy_eof_is_a_clean_half_close",
+      "class": "SceneShotTests",
+      "source_line": 253,
+      "source_end_line": 275,
+      "body_sha256": "a1feba9b2845da49234f8cdfab223a59087dbbfad593f54a04afb83f46b3622c",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "An authored byte-echo socket fixture checks its own proxy EOF plumbing without a game session or observed half-close failure.",
+      "provenance_commit": "5e99ce6731236e0537e0a741c12652ff0b905b64",
+      "body_provenance_commits": [
+        "5e99ce6731236e0537e0a741c12652ff0b905b64"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_proxy_eof_closes_every_isolated_connection",
+      "name": "test_proxy_eof_closes_every_isolated_connection",
+      "class": "SceneShotTests",
+      "source_line": 277,
+      "source_end_line": 308,
+      "body_sha256": "3174e4e0964e60acd79754d2c5d740799336a4cfa16dc2ceb61ac9cae9f6313b",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Extends the same locally authored echo fixture to two sockets; no real isolated game-client EOF trace or observed multi-connection failure.",
+      "provenance_commit": "e38637dde1ba04f9b5eb4939d508d8d59ca6868c",
+      "body_provenance_commits": [
+        "e38637dde1ba04f9b5eb4939d508d8d59ca6868c"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_tool_wall_visibility_requires_close_target_and_visible_tool",
+      "name": "test_tool_wall_visibility_requires_close_target_and_visible_tool",
+      "class": "SceneShotTests",
+      "source_line": 310,
+      "source_end_line": 345,
+      "body_sha256": "0d2e439ecbfb4caf4106571ac55fd07e88279faa9f30193e03267580b5458fba",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds a fake target/item observation and hand-painted turquoise/dark rectangles to a new visual helper; no retained wall/tool frame or observed checker failure.",
+      "provenance_commit": "91576f9fef77ebe369556455b0071d18e02d1847",
+      "body_provenance_commits": [
+        "91576f9fef77ebe369556455b0071d18e02d1847"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_require_entities_fails_before_shot_when_summon_did_not_create_subject",
+      "name": "test_require_entities_fails_before_shot_when_summon_did_not_create_subject",
+      "class": "SceneShotTests",
+      "source_line": 347,
+      "source_end_line": 383,
+      "body_sha256": "2927ece57effe2c21b0236aa6465414a1ccba62662a18681f3bce7a06cde8398",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named regression for two real runs falsely passing without their intended capture subjects; tests absent/missing snapshots and blocks capture until all required kinds exist.",
+      "provenance_commit": "259649f7c66bc6ec346fbc84d74927a7e2a93b81",
+      "body_provenance_commits": [
+        "259649f7c66bc6ec346fbc84d74927a7e2a93b81"
+      ],
+      "observed_failure_references": [
+        "HARNESS-SCENE-SHOT-MISSING-SUBJECT"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-SCENE-SHOT-MISSING-SUBJECT.toml:9:regression = [\"python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_fails_before_shot_when_summon_did_not_create_subject\", \"python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_rejects_empty_or_invalid_type_lists\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_require_entities_rejects_empty_or_invalid_type_lists",
+      "name": "test_require_entities_rejects_empty_or_invalid_type_lists",
+      "class": "SceneShotTests",
+      "source_line": 385,
+      "source_end_line": 390,
+      "body_sha256": "d4ba1c552bdb8a4469e870b52f0b290f5c77cd38b5e5fc28d2a762c9148825eb",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named companion regression prevents vacuous/invalid required-subject contracts from bypassing the observed missing-subject failure.",
+      "provenance_commit": "259649f7c66bc6ec346fbc84d74927a7e2a93b81",
+      "body_provenance_commits": [
+        "259649f7c66bc6ec346fbc84d74927a7e2a93b81"
+      ],
+      "observed_failure_references": [
+        "HARNESS-SCENE-SHOT-MISSING-SUBJECT"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-SCENE-SHOT-MISSING-SUBJECT.toml:9:regression = [\"python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_fails_before_shot_when_summon_did_not_create_subject\", \"python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_rejects_empty_or_invalid_type_lists\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_walk_phase_rejects_idle_missing_and_wrong_phase",
+      "name": "test_walk_phase_rejects_idle_missing_and_wrong_phase",
+      "class": "SceneShotTests",
+      "source_line": 392,
+      "source_end_line": 403,
+      "body_sha256": "3d2eb06102eaa0d2f6ed72a6af3521d57cb763dc5dbd630ca01730de1818ce38",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only synthetic entity dicts and hand-authored phase/speed invalid cases, including an unwrapped numeric phase; no actual gait sidecar, vanilla trace or observed matching failure.",
+      "provenance_commit": "5e99ce6731236e0537e0a741c12652ff0b905b64",
+      "body_provenance_commits": [
+        "5e99ce6731236e0537e0a741c12652ff0b905b64",
+        "c9ee2f28a0adbc888d971fe9ce1bf28f0f7f89ac"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_walk_capture_checks_render_frame_not_later_observation",
+      "name": "test_walk_capture_checks_render_frame_not_later_observation",
+      "class": "SceneShotTests",
+      "source_line": 405,
+      "source_end_line": 451,
+      "body_sha256": "f4ede2419327b997861ee18eceb7eee31cdcd452776918bd1601059b847cc297",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Preserves the actual walk-capture resampling restoration after stage-0 dropped hunks; distinguishes retained frame phase, below-bracket resampling and terminal overshoot instead of a later observation or widened lag allowance.",
+      "provenance_commit": "93ededd20bed759eae3907e8a68d0c074f0b36f8",
+      "body_provenance_commits": [
+        "784a4dc275a3f3cac3fa2fa7da204ddb4884debf",
+        "91576f9fef77ebe369556455b0071d18e02d1847",
+        "93ededd20bed759eae3907e8a68d0c074f0b36f8",
+        "c77c0d42a7736a8f12a777e592957e08738afae2",
+        "e57dd5df8930f88501ac1a8da2ba26706723f247",
+        "fb2674fb7b016148d544566cf7bb5db0d694bd14"
+      ],
+      "observed_failure_references": [
+        "fb2674fb7b016148d544566cf7bb5db0d694bd14",
+        "c77c0d42a7736a8f12a777e592957e08738afae2"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_walk_capture_retries_interpolated_frame_without_widening_phase",
+      "name": "test_walk_capture_retries_interpolated_frame_without_widening_phase",
+      "class": "SceneShotTests",
+      "source_line": 453,
+      "source_end_line": 484,
+      "body_sha256": "8a83771659155744bc1b417c017caf8e686d9460f976996bb2542cf4a50b4c74",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Covers the same restored interpolation/resampling failure path: retry an early rendered frame without advancing past the requested phase or widening its tolerance.",
+      "provenance_commit": "c77c0d42a7736a8f12a777e592957e08738afae2",
+      "body_provenance_commits": [
+        "4b741b34263f28884ae319bc7d71e93b8a9cda1d",
+        "c77c0d42a7736a8f12a777e592957e08738afae2"
+      ],
+      "observed_failure_references": [
+        "fb2674fb7b016148d544566cf7bb5db0d694bd14",
+        "4b741b34263f28884ae319bc7d71e93b8a9cda1d"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_steps_dispatch_and_retain_evidence",
+      "name": "test_steps_dispatch_and_retain_evidence",
+      "class": "SceneShotTests",
+      "source_line": 486,
+      "source_end_line": 509,
+      "body_sha256": "7bbc5886de1eb185180d6b9b3ee8e3f639eb9213c0b508e2369d8670c8d9f65d",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fake Probe and mocked native capture replay the dispatcher’s call/artifact plumbing; no real client/server or actual scene evidence.",
+      "provenance_commit": "d5874a052d4e508046512084b2df74cc3736523a",
+      "body_provenance_commits": [
+        "d5874a052d4e508046512084b2df74cc3736523a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_assert_chat_requires_fence_and_rejects_unexpected_feedback",
+      "name": "test_assert_chat_requires_fence_and_rejects_unexpected_feedback",
+      "class": "SceneShotTests",
+      "source_line": 511,
+      "source_end_line": 535,
+      "body_sha256": "3908b98482b6122ba0cd75fafe35634675ae2405086474ee786d1abf363179fc",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fabricates chat strings and a fake Probe for the new contains/excludes grammar; does not reproduce a real command-feedback response or recorded harness misjudgment.",
+      "provenance_commit": "93ededd20bed759eae3907e8a68d0c074f0b36f8",
+      "body_provenance_commits": [
+        "93ededd20bed759eae3907e8a68d0c074f0b36f8"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_upgrade_certified_upgrades_the_one_certified_id_and_checks_the_reply",
+      "name": "test_upgrade_certified_upgrades_the_one_certified_id_and_checks_the_reply",
+      "class": "SceneShotTests",
+      "source_line": 537,
+      "source_end_line": 579,
+      "body_sha256": "e58549cf70c8884a45a1696b4080d9c73993ac8ad8f7920499ba0ef364af4752",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Scripts certification/upgrade replies, ambiguous IDs and errors entirely inside a fake Probe; the actual settlement issue is not exercised and no observed ID-parser failure is recorded.",
+      "provenance_commit": "36c3d3accd85030f37251d8f857a1171856db22d",
+      "body_provenance_commits": [
+        "36c3d3accd85030f37251d8f857a1171856db22d"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_settlement_scenes_are_registered_and_reject_overrides",
+      "name": "test_named_settlement_scenes_are_registered_and_reject_overrides",
+      "class": "SceneShotTests",
+      "source_line": 581,
+      "source_end_line": 597,
+      "body_sha256": "19bd6a9f11e8fd69128cd17eb9f095427728fe8bf0a0cb40a968c634b769eb9a",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only loads authored settlement scene definitions and refuses alternate inputs; no real radius/building run or observed registry mismatch for these particular scenarios.",
+      "provenance_commit": "36c3d3accd85030f37251d8f857a1171856db22d",
+      "body_provenance_commits": [
+        "36c3d3accd85030f37251d8f857a1171856db22d"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_every_registered_scene_runs_its_own_fixture_without_an_override",
+      "name": "test_every_registered_scene_runs_its_own_fixture_without_an_override",
+      "class": "SceneShotTests",
+      "source_line": 599,
+      "source_end_line": 616,
+      "body_sha256": "3b64547006ce69200e1e9f2d8511210f4d16b71ce071fce2e2ea390ddc54c0ce",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "6ce0940b8 reports three actual ISSUE-1 scenario-id loads failing because registered fixtures were not bound; bdb7d7b7 extends this exact regression to Java after Main reported the baseline failure.",
+      "provenance_commit": "6ce0940b8b69cef538ceb7606e1dcec8628a0190",
+      "body_provenance_commits": [
+        "6ce0940b8b69cef538ceb7606e1dcec8628a0190",
+        "bdb7d7b7b9fe769c1b804ef7836d23dc84033c3e"
+      ],
+      "observed_failure_references": [
+        "6ce0940b8b69cef538ceb7606e1dcec8628a0190",
+        "receipts/HarnessFix4Scene/REPORT.md:10-31"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_java_chat_scene_preserves_fixture_and_rejects_overrides",
+      "name": "test_named_java_chat_scene_preserves_fixture_and_rejects_overrides",
+      "class": "SceneShotTests",
+      "source_line": 618,
+      "source_end_line": 640,
+      "body_sha256": "8f96e395a687439f5f1d0448da41cc8f41e1d0679f7914266457f95f25e46bac",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Companion to Main-reported Java fixture registry failure; checks the migrated actual gate settings and prevents override/wrong-client replacement.",
+      "provenance_commit": "bdb7d7b7b9fe769c1b804ef7836d23dc84033c3e",
+      "body_provenance_commits": [
+        "bdb7d7b7b9fe769c1b804ef7836d23dc84033c3e"
+      ],
+      "observed_failure_references": [
+        "bdb7d7b7b9fe769c1b804ef7836d23dc84033c3e",
+        "receipts/HarnessFix4Scene/REPORT.md:10-31"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_feedback_scene_rejects_overrides",
+      "name": "test_named_feedback_scene_rejects_overrides",
+      "class": "SceneShotTests",
+      "source_line": 642,
+      "source_end_line": 657,
+      "body_sha256": "c1505e4aa2e798e49cde350fe549c1d0ba354e6b57a9ad6f8a7deafce27f2fbf",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks presence of an assert_chat key in the authored feedback fixture and generic override refusal; no observed binding failure for this named scene.",
+      "provenance_commit": "93ededd20bed759eae3907e8a68d0c074f0b36f8",
+      "body_provenance_commits": [
+        "93ededd20bed759eae3907e8a68d0c074f0b36f8"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_low_roof_scene_rejects_overrides",
+      "name": "test_named_low_roof_scene_rejects_overrides",
+      "class": "SceneShotTests",
+      "source_line": 659,
+      "source_end_line": 671,
+      "body_sha256": "999f8c19b6c78d55c04ea6c9415727ffefd482dc09e0b3b4cac9cf3bc9183f32",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks assert_chat presence and override refusal in a new low-roof fixture; no actual low-roof run or observed registry failure.",
+      "provenance_commit": "d492ff94452bf3e2d93882f77f7bd6b19afab2db",
+      "body_provenance_commits": [
+        "d492ff94452bf3e2d93882f77f7bd6b19afab2db"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_falling_scene_rejects_overrides",
+      "name": "test_named_falling_scene_rejects_overrides",
+      "class": "SceneShotTests",
+      "source_line": 673,
+      "source_end_line": 685,
+      "body_sha256": "f313d00448bd4362ee9a955da4eb27877f6d863f7853d49270e3a398057377db",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks a falling_block_capture key and override refusal in an authored scene; does not compare actual sand packets/frames or a recorded binding failure.",
+      "provenance_commit": "d492ff94452bf3e2d93882f77f7bd6b19afab2db",
+      "body_provenance_commits": [
+        "d492ff94452bf3e2d93882f77f7bd6b19afab2db"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_falling_frame_packet_fence_and_sand_pixels",
+      "name": "test_falling_frame_packet_fence_and_sand_pixels",
+      "class": "SceneShotTests",
+      "source_line": 687,
+      "source_end_line": 703,
+      "body_sha256": "daee41829641c8858575ebac01064583defbbbdaff7987745cd6bc5aad85d509",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents two packet/sample dictionaries and paints a sand-colored rectangle into a blank PNG; no captured vanilla/game packet or actual falling-block frame.",
+      "provenance_commit": "d492ff94452bf3e2d93882f77f7bd6b19afab2db",
+      "body_provenance_commits": [
+        "d492ff94452bf3e2d93882f77f7bd6b19afab2db"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_death_tilt_scene_gates_its_own_shots",
+      "name": "test_named_death_tilt_scene_gates_its_own_shots",
+      "class": "SceneShotTests",
+      "source_line": 705,
+      "source_end_line": 723,
+      "body_sha256": "f98a14781d8e69b5bf4f780d1bde7a5394158348de0b5f58b8b4f9e75cbacf01",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks restored named-death fixture wiring lost in the observed stage-0 merges and complete shot coverage of the measured Java reference set; not itself a native silhouette comparison.",
+      "provenance_commit": "b5e6869330e3b486f4817dc1b4095fb3a74e2b1f",
+      "body_provenance_commits": [
+        "b5e6869330e3b486f4817dc1b4095fb3a74e2b1f"
+      ],
+      "observed_failure_references": [
+        "fb2674fb7b016148d544566cf7bb5db0d694bd14",
+        "backends/death_tilt_oracle.py:10-16"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_named_frozen_age_scene_rejects_overrides",
+      "name": "test_named_frozen_age_scene_rejects_overrides",
+      "class": "SceneShotTests",
+      "source_line": 725,
+      "source_end_line": 737,
+      "body_sha256": "30d50bdb046361ccd2137e5a3e73d973daf2dd1af7e2797277ce8f8c5a159041",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only checks that the authored fixture contains the new assertion step and rejects overrides; no observed load failure or actual frozen-clock run.",
+      "provenance_commit": "270a78198b45c42bf5eb4205434dba799810ba69",
+      "body_provenance_commits": [
+        "270a78198b45c42bf5eb4205434dba799810ba69"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_frozen_age_assertion_rejects_advance_and_missing_clock",
+      "name": "test_frozen_age_assertion_rejects_advance_and_missing_clock",
+      "class": "SceneShotTests",
+      "source_line": 739,
+      "source_end_line": 761,
+      "body_sha256": "8f2291c5592a1b1d17cb2d2607e284c7536912c097fd87a9d84559657c9e183d",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Writes its own before/after clock dictionaries and checks the new comparator with a fake Probe; no real time packets or observed oracle failure.",
+      "provenance_commit": "270a78198b45c42bf5eb4205434dba799810ba69",
+      "body_provenance_commits": [
+        "270a78198b45c42bf5eb4205434dba799810ba69"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_wait_respawn_rejects_dead_or_open_screen",
+      "name": "test_wait_respawn_rejects_dead_or_open_screen",
+      "class": "SceneShotTests",
+      "source_line": 763,
+      "source_end_line": 774,
+      "body_sha256": "8cce36d03daeef16906e5a82a431bc85b76264d89124d8d46d1149d14a3ac0c6",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "The fake Probe itself invokes the supplied predicate on four authored states; no real death/respawn, client screen or observed wait bug.",
+      "provenance_commit": "57948f08213ef10093d8c8ad22451c71ed1a6a0d",
+      "body_provenance_commits": [
+        "57948f08213ef10093d8c8ad22451c71ed1a6a0d"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_pause_dispatches_native_menu_and_rejects_other_inputs",
+      "name": "test_pause_dispatches_native_menu_and_rejects_other_inputs",
+      "class": "SceneShotTests",
+      "source_line": 776,
+      "source_end_line": 789,
+      "body_sha256": "d7027f058b351317d0e1908a1ab2e83b5d9406d122e5d1b2a7564b64e84852be",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only compares a fake Probe’s recorded pause tool tuple and input grammar; no client pause menu or observed dispatch failure.",
+      "provenance_commit": "67b7610923ba25f89fa4e99e6d648d0ce1ee10ff",
+      "body_provenance_commits": [
+        "67b7610923ba25f89fa4e99e6d648d0ce1ee10ff"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_use_phases_checks_state_and_releases_on_failure",
+      "name": "test_use_phases_checks_state_and_releases_on_failure",
+      "class": "SceneShotTests",
+      "source_line": 791,
+      "source_end_line": 814,
+      "body_sha256": "a9a65f9523d0887026de8e67fcee4181e22d1915db08f46ad2089b2cfe62b270",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Scripts using-state transitions and mocks every capture; tests its new helper’s cleanup plumbing without a real held-use failure/run.",
+      "provenance_commit": "92f29288d36c89b8cbefe15ca9ec7e0023102d3b",
+      "body_provenance_commits": [
+        "92f29288d36c89b8cbefe15ca9ec7e0023102d3b"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_resize_requires_owned_window_and_matching_frame_size",
+      "name": "test_resize_requires_owned_window_and_matching_frame_size",
+      "class": "SceneShotTests",
+      "source_line": 816,
+      "source_end_line": 833,
+      "body_sha256": "bb0b05c85139fdc925750a34c9da7b8a99425ae9a164e140c0fab5c66fe20098",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks resize, capture and PNG dimensions; never resizes a real window or replays an observed mismatch.",
+      "provenance_commit": "1a8391a32e16b3a3bcae5e2ce7ca56c0ee8c8069",
+      "body_provenance_commits": [
+        "1a8391a32e16b3a3bcae5e2ce7ca56c0ee8c8069"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_disconnect_wait_rejects_live_or_wrong_eof_state",
+      "name": "test_disconnect_wait_rejects_live_or_wrong_eof_state",
+      "class": "SceneShotTests",
+      "source_line": 835,
+      "source_end_line": 858,
+      "body_sha256": "a8d58f2848e35dc756ad1a9e6bc1e3d9b8f3cd745dcb01d525a1f1f875f5bd6d",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents disconnect/error states and exact reason strings in a fake Probe; no real EOF/reconnect event or observed wait failure.",
+      "provenance_commit": "c91399192f95608fcbdaedecf06eb38f3e9aad29",
+      "body_provenance_commits": [
+        "c91399192f95608fcbdaedecf06eb38f3e9aad29"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_look_is_validated_and_dispatched_to_real_client",
+      "name": "test_look_is_validated_and_dispatched_to_real_client",
+      "class": "SceneShotTests",
+      "source_line": 860,
+      "source_end_line": 871,
+      "body_sha256": "e4aaf54152aa3ba677c83c1e2d97d997641b8e6c79bf09c72a1a59e61031126c",
+      "prior_category": "K2",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Despite its name, only records fake Probe calls and compares generated minecraft_look tuples; no real client or observed look-dispatch bug.",
+      "provenance_commit": "3fe868f1fcd93ae097ce5c08ae81973e5e89665f",
+      "body_provenance_commits": [
+        "3fe868f1fcd93ae097ce5c08ae81973e5e89665f"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_hotbar_is_dispatched_to_real_client",
+      "name": "test_hotbar_is_dispatched_to_real_client",
+      "class": "SceneShotTests",
+      "source_line": 873,
+      "source_end_line": 884,
+      "body_sha256": "86c4b2d6360fb44187a86e7e98366573ef9709c5290667abf42e5931856807fb",
+      "prior_category": "K2",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Despite its name, only records fake Probe calls and compares generated hotbar tuples; no real selected slot or observed dispatch failure.",
+      "provenance_commit": "3fe868f1fcd93ae097ce5c08ae81973e5e89665f",
+      "body_provenance_commits": [
+        "3fe868f1fcd93ae097ce5c08ae81973e5e89665f"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_mob_motion_gate_rejects_stationary_entities",
+      "name": "test_mob_motion_gate_rejects_stationary_entities",
+      "class": "SceneShotTests",
+      "source_line": 886,
+      "source_end_line": 907,
+      "body_sha256": "f0cbedaa9313bc204b35cb30ae6c930dbc04c0c43195689a52ec6c62701ec9da",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Generates all stationary entity samples locally and reads fake check results; no real motion trace or specific observed false pass. The separately observed per-window/rate regressions are retained.",
+      "provenance_commit": "3fe868f1fcd93ae097ce5c08ae81973e5e89665f",
+      "body_provenance_commits": [
+        "3fe868f1fcd93ae097ce5c08ae81973e5e89665f",
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_mob_motion_gate_ignores_a_kind_the_window_does_not_drive",
+      "name": "test_mob_motion_gate_ignores_a_kind_the_window_does_not_drive",
+      "class": "SceneShotTests",
+      "source_line": 909,
+      "source_end_line": 932,
+      "body_sha256": "d84281eeaac0e3b7977d4b9fe1bbd81fe83e68b515d0c6e934cc24644b9bf044",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exact reported ISSUE-1-19 false failure: the spider window left the zombie standing; only explicitly driven kinds must be judged.",
+      "provenance_commit": "9d57766a7a64cfdf270a2020aebea531f510fa1d",
+      "body_provenance_commits": [
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "observed_failure_references": [
+        "ISSUE-1-19",
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_mob_motion_gate_bounds_each_segment_speed",
+      "name": "test_mob_motion_gate_bounds_each_segment_speed",
+      "class": "SceneShotTests",
+      "source_line": 934,
+      "source_end_line": 963,
+      "body_sha256": "f54a1cc66e7055c953cbcb4bb5d7ce2e835a45fae9a72382b75e2a28f57cddde",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Reported ISSUE-1-19 oracle gap: total displacement passed a wrongly paced trajectory; fixed-speed synthetic segments isolate the added per-segment rejection.",
+      "provenance_commit": "9d57766a7a64cfdf270a2020aebea531f510fa1d",
+      "body_provenance_commits": [
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "observed_failure_references": [
+        "ISSUE-1-19",
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_mob_motion_gate_requires_the_kinds_it_measures",
+      "name": "test_mob_motion_gate_requires_the_kinds_it_measures",
+      "class": "SceneShotTests",
+      "source_line": 965,
+      "source_end_line": 973,
+      "body_sha256": "ffc3001099ce003f586bf5808a856ae4e39642699bca0458c7e24846bb2d7718",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Companion to the observed hardcoded zombie/spider failure: the step must explicitly declare the kinds rather than silently inherit both in every window.",
+      "provenance_commit": "9d57766a7a64cfdf270a2020aebea531f510fa1d",
+      "body_provenance_commits": [
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "observed_failure_references": [
+        "ISSUE-1-19",
+        "9d57766a7a64cfdf270a2020aebea531f510fa1d"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_entity_snapshot_requires_same_thread_game_time",
+      "name": "test_entity_snapshot_requires_same_thread_game_time",
+      "class": "SceneShotTests",
+      "source_line": 975,
+      "source_end_line": 990,
+      "body_sha256": "3ad1ebdd9970f8ac845ae17a36eb6a79caa4e18ef05b467220855c2ccc9d9329",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only copies a fake list_entities response into generated JSON and refuses an authored None tick; no actual same-thread snapshot or recorded timestamp mismatch.",
+      "provenance_commit": "c0d78c11eb3acb4e43ca28d01b1e0ba463e2fb4c",
+      "body_provenance_commits": [
+        "c0d78c11eb3acb4e43ca28d01b1e0ba463e2fb4c"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_wait_terrain_fails_closed_on_stale_receipt_and_invalid_input",
+      "name": "test_wait_terrain_fails_closed_on_stale_receipt_and_invalid_input",
+      "class": "SceneShotTests",
+      "source_line": 992,
+      "source_end_line": 1013,
+      "body_sha256": "e3b536ed232870d98b718dff8ba8ccf21bb7b251973d975cd2ce43c85ffc20b6",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fabricates a stale revision receipt and invalid dictionaries; no actual terrain client, captured stale receipt or observed checker failure.",
+      "provenance_commit": "9eefd521a65fee749f44fc0719548e27401bb57a",
+      "body_provenance_commits": [
+        "9eefd521a65fee749f44fc0719548e27401bb57a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_unknown_or_unsafe_step_fails",
+      "name": "test_unknown_or_unsafe_step_fails",
+      "class": "SceneShotTests",
+      "source_line": 1015,
+      "source_end_line": 1018,
+      "body_sha256": "087729c35b04139b888e965903b8ce7548ddb6fb584ee40f8509672c8c90d67a",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Exercises new parser refusal on invented unsafe/unknown step dictionaries; no real escaped artifact or observed unsafe-step failure.",
+      "provenance_commit": "d5874a052d4e508046512084b2df74cc3736523a",
+      "body_provenance_commits": [
+        "d5874a052d4e508046512084b2df74cc3736523a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_wait_play_spans_mcp_wait_boundaries_and_detects_disconnect",
+      "name": "test_wait_play_spans_mcp_wait_boundaries_and_detects_disconnect",
+      "class": "SceneShotTests",
+      "source_line": 1020,
+      "source_end_line": 1034,
+      "body_sha256": "633d8f312d8962958645dda5203317aec2075d6c8d84e43b1469327875159ac2",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "A fake Probe iterates authored in_play/disconnect replies; no actual MCP timeout, session or reported split-wait failure.",
+      "provenance_commit": "d5874a052d4e508046512084b2df74cc3736523a",
+      "body_provenance_commits": [
+        "d5874a052d4e508046512084b2df74cc3736523a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_long_waits_are_split_for_lease_renewal",
+      "name": "test_long_waits_are_split_for_lease_renewal",
+      "class": "SceneShotTests",
+      "source_line": 1036,
+      "source_end_line": 1046,
+      "body_sha256": "d8feb2b1841df61f66e9249c886cb0b481076db9ab37a16eb500b0da4e81c8cd",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Records fake wait calls and restates the 250→100+100+50 splitting convention; no real lease expiry/renewal case.",
+      "provenance_commit": "d5874a052d4e508046512084b2df74cc3736523a",
+      "body_provenance_commits": [
+        "d5874a052d4e508046512084b2df74cc3736523a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_screenshot_holds_and_releases_tab_even_on_capture_failure",
+      "name": "test_screenshot_holds_and_releases_tab_even_on_capture_failure",
+      "class": "SceneShotTests",
+      "source_line": 1048,
+      "source_end_line": 1061,
+      "body_sha256": "7616f620fe3e2ddc871cd82873a3c3b558b82ec7797a2a0ff23f6e8aa9f23c52",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks capture failure and fabricates tab/player UI visibility; verifies cleanup call plumbing without a real stuck Tab/capture failure.",
+      "provenance_commit": "dd31d1d672a4fdc6bfb068352dc2004b8c66b481",
+      "body_provenance_commits": [
+        "dd31d1d672a4fdc6bfb068352dc2004b8c66b481"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_shot_uses_minecraft_screenshot",
+      "name": "test_java_shot_uses_minecraft_screenshot",
+      "class": "SceneShotTests",
+      "source_line": 1063,
+      "source_end_line": 1072,
+      "body_sha256": "b555f1de1c06408b670faaee442b3085894ea579945d1e77ef51461293f98bcf",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks the Java capture result, PNG size and native capture; only checks which plumbing seam was called.",
+      "provenance_commit": "939a3c03ee4f6483f51edded017a5e539da7f76a",
+      "body_provenance_commits": [
+        "939a3c03ee4f6483f51edded017a5e539da7f76a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_shot_with_wrong_window_size_fails",
+      "name": "test_java_shot_with_wrong_window_size_fails",
+      "class": "SceneShotTests",
+      "source_line": 1074,
+      "source_end_line": 1080,
+      "body_sha256": "9e09aa44f59886933acdf16a943606a789bd2cb38c8f69870721c3f580cb4784",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks capture and size to an authored 854×480 mismatch; no actual wrong-size Java screenshot or observed checker failure.",
+      "provenance_commit": "939a3c03ee4f6483f51edded017a5e539da7f76a",
+      "body_provenance_commits": [
+        "939a3c03ee4f6483f51edded017a5e539da7f76a",
+        "b34c1d0b0f8d72d93e592ec540482be373a22407"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_rejects_native_only_held_screenshot",
+      "name": "test_java_rejects_native_only_held_screenshot",
+      "class": "SceneShotTests",
+      "source_line": 1082,
+      "source_end_line": 1084,
+      "body_sha256": "ce8760a022f459df5445e1d05784006e046eba5f0c4f843869578b480c4b429e",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Passes an authored unsupported held-shot step into the validator; no real Java screenshot or observed native/Java capability confusion.",
+      "provenance_commit": "939a3c03ee4f6483f51edded017a5e539da7f76a",
+      "body_provenance_commits": [
+        "939a3c03ee4f6483f51edded017a5e539da7f76a"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_options_pin_window_fov_gui_and_distance",
+      "name": "test_java_options_pin_window_fov_gui_and_distance",
+      "class": "SceneShotTests",
+      "source_line": 1086,
+      "source_end_line": 1091,
+      "body_sha256": "d97d8917b477c8b1723ca3b5511ba4bc8145947d64354845325d54aa60fdfee3",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Includes the custom graphics-preset assertion added by the observed 32-to-16 render-distance reset correction; do not remove the bundled preset regression with the other option assertions.",
+      "provenance_commit": "939a3c03ee4f6483f51edded017a5e539da7f76a",
+      "body_provenance_commits": [
+        "939a3c03ee4f6483f51edded017a5e539da7f76a",
+        "952765e9cd621a12fc7fca08a8ec6fbcfbe6e97a"
+      ],
+      "observed_failure_references": [
+        "952765e9cd621a12fc7fca08a8ec6fbcfbe6e97a"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_display_settings_are_explicit_and_fail_closed",
+      "name": "test_java_display_settings_are_explicit_and_fail_closed",
+      "class": "SceneShotTests",
+      "source_line": 1093,
+      "source_end_line": 1112,
+      "body_sha256": "2603c2559be05568d646c69482df47671a07bbb829cd06427bcb7c7f903d78b8",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mixed Java display/localization boundary landed in parked civil-UI gate repairs; mocked options/contracts are read, but the exact original real-run failure versus new capability is not separable from the reviewed provenance.",
+      "provenance_commit": "b34c1d0b0f8d72d93e592ec540482be373a22407",
+      "body_provenance_commits": [
+        "b34c1d0b0f8d72d93e592ec540482be373a22407"
+      ],
+      "observed_failure_references": [],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_screen_size_reaches_options_and_capture_expectation",
+      "name": "test_java_screen_size_reaches_options_and_capture_expectation",
+      "class": "SceneShotTests",
+      "source_line": 1114,
+      "source_end_line": 1130,
+      "body_sha256": "0163c6a9e1bf177db508483dec91af8aa5a7920c748241464991ed0375b524c3",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mixed actual Java frame-size/clamping contract and mocked capture, landed with civil-UI real-client repairs; no exact original mismatch receipt identifies whether this particular case is a regression.",
+      "provenance_commit": "b34c1d0b0f8d72d93e592ec540482be373a22407",
+      "body_provenance_commits": [
+        "b34c1d0b0f8d72d93e592ec540482be373a22407"
+      ],
+      "observed_failure_references": [],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_private_xvfb_size_is_validated_and_preserved_by_fallback",
+      "name": "test_private_xvfb_size_is_validated_and_preserved_by_fallback",
+      "class": "SceneShotTests",
+      "source_line": 1132,
+      "source_end_line": 1148,
+      "body_sha256": "a5b2a600c6f24c055b6ff32f6a2f10c0cc5093474fadab11ba37977d80f9d92d",
+      "prior_category": "R4",
+      "prior_basis": "extrapolated",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocks both process launch and fallback size threading in the same parked real-client/display isolation repair; the reviewed patch does not identify an observed size-loss failure for this particular test.",
+      "provenance_commit": "b34c1d0b0f8d72d93e592ec540482be373a22407",
+      "body_provenance_commits": [
+        "b34c1d0b0f8d72d93e592ec540482be373a22407"
+      ],
+      "observed_failure_references": [],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::SceneShotTests::test_java_effective_render_distance_is_checked",
+      "name": "test_java_effective_render_distance_is_checked",
+      "class": "SceneShotTests",
+      "source_line": 1150,
+      "source_end_line": 1160,
+      "body_sha256": "f401d6b8800eadc093552a800a99d5885e47b84ea1f630a844ae5996aedc3e93",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Regression of actual Java graphics preset resetting a requested 32-chunk oracle to 16; verifies the effective-options rejection and missing-field refusal.",
+      "provenance_commit": "952765e9cd621a12fc7fca08a8ec6fbcfbe6e97a",
+      "body_provenance_commits": [
+        "952765e9cd621a12fc7fca08a8ec6fbcfbe6e97a"
+      ],
+      "observed_failure_references": [
+        "952765e9cd621a12fc7fca08a8ec6fbcfbe6e97a"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_placed_head_roi_covers_fixture_and_requires_hat_pixels",
+      "name": "test_placed_head_roi_covers_fixture_and_requires_hat_pixels",
+      "class": "PlayerHeadTests",
+      "source_line": 1190,
+      "source_end_line": 1203,
+      "body_sha256": "81368be3ac8237da218ee7fd63ff27028ad7dbe34b77fe24783f20874d7ae5fe",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named observed empty-ROI/indistinguishable-hat regression; row records original-frame measurement, ROI-only red control and actual contrasting-hat versus no-hat frames.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7"
+      ],
+      "observed_failure_references": [
+        "HARNESS-PLAYER-HEAD-ROI",
+        "HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE.toml:10:  \"python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels\",",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-PLAYER-HEAD-ROI.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels\", \"harness:scene-shot:native-player-head\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_worn_head_rejects_extra_back_patch_even_with_correct_head",
+      "name": "test_worn_head_rejects_extra_back_patch_even_with_correct_head",
+      "class": "PlayerHeadTests",
+      "source_line": 1205,
+      "source_end_line": 1221,
+      "body_sha256": "413dfbe35451cb085b619aa928afd6f97314c33b1e096295ed5e612dfd81957b",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Replays HeadBreaker’s exact extra 71×71 magenta back-patch counterexample while the correct head remains present; later pose-aware correction retains this rejection.",
+      "provenance_commit": "071d9c59363ea324abce833aa3d408d07e972c8e",
+      "body_provenance_commits": [
+        "071d9c59363ea324abce833aa3d408d07e972c8e"
+      ],
+      "observed_failure_references": [
+        "HARNESS-HEAD-ORACLE-NO-BACK-CHECK",
+        "HARNESS-HEAD-ORACLE-IDLE-POSE-FALSE-POSITIVE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-HEAD-ORACLE-NO-BACK-CHECK.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head\", \"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_allows_small_pose_raster_changes_on_back\"]",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-HEAD-ORACLE-IDLE-POSE-FALSE-POSITIVE.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels\", \"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_worn_head_allows_small_pose_raster_changes_on_back",
+      "name": "test_worn_head_allows_small_pose_raster_changes_on_back",
+      "class": "PlayerHeadTests",
+      "source_line": 1223,
+      "source_end_line": 1236,
+      "body_sha256": "85bb97d6a003f6a8c091c37300e2febb5e2c09f623dd35216459772087fb040b",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named companion regression for the back-attachment check: allow small non-hat pose raster changes rather than reject all changed torso pixels.",
+      "provenance_commit": "071d9c59363ea324abce833aa3d408d07e972c8e",
+      "body_provenance_commits": [
+        "071d9c59363ea324abce833aa3d408d07e972c8e"
+      ],
+      "observed_failure_references": [
+        "HARNESS-HEAD-ORACLE-NO-BACK-CHECK"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-HEAD-ORACLE-NO-BACK-CHECK.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head\", \"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_allows_small_pose_raster_changes_on_back\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels",
+      "name": "test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels",
+      "class": "PlayerHeadTests",
+      "source_line": 1238,
+      "source_end_line": 1254,
+      "body_sha256": "e3fd54a78729b1d7ddde00c3aae2258ff3b0914114b5b3b9e0537d7348ec169d",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Replays the real 022004 idle-body false rejection; row records five retained real frame pairs, exact old-check reversal and still-red extra-hat controls.",
+      "provenance_commit": "f3229f1a76d929631af74fc1e0718f550cf4f9a4",
+      "body_provenance_commits": [
+        "f3229f1a76d929631af74fc1e0718f550cf4f9a4"
+      ],
+      "observed_failure_references": [
+        "HARNESS-HEAD-ORACLE-IDLE-POSE-FALSE-POSITIVE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-HEAD-ORACLE-IDLE-POSE-FALSE-POSITIVE.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels\", \"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes",
+      "name": "test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes",
+      "class": "PlayerHeadTests",
+      "source_line": 1256,
+      "source_end_line": 1272,
+      "body_sha256": "246a770fc6c2d5beb6bbddf98aae1bd219b0f9961caf1e4968a2cf3e959efa9c",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Observed real head-on-back frame passed because unrelated head-region pixels changed; authored head-color evidence must be in the actual head region.",
+      "provenance_commit": "fad1cef1efc10bbadbaae454465af275f1ad52b8",
+      "body_provenance_commits": [
+        "fad1cef1efc10bbadbaae454465af275f1ad52b8"
+      ],
+      "observed_failure_references": [
+        "HARNESS-WORN-HEAD-BACK-FALSE-POSITIVE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-WORN-HEAD-BACK-FALSE-POSITIVE.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi",
+      "name": "test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi",
+      "class": "PlayerHeadTests",
+      "source_line": 1274,
+      "source_end_line": 1290,
+      "body_sha256": "25c7ff573587b5fc31033fd9a87d5c2af86b0294a63ed80850b218213e0b37b7",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Replays the real rejected candidate’s adjacent skull, whose edge supplied 743 magenta pixels to the old box while the head stayed bare.",
+      "provenance_commit": "98900fb5cded521e650a2da9fbf757f3f2d1d209",
+      "body_provenance_commits": [
+        "98900fb5cded521e650a2da9fbf757f3f2d1d209"
+      ],
+      "observed_failure_references": [
+        "HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_adjacent_skull_clipping_the_old_broad_roi\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::PlayerHeadTests::test_authored_skin_has_opaque_contrasting_hat_and_base_window",
+      "name": "test_authored_skin_has_opaque_contrasting_hat_and_base_window",
+      "class": "PlayerHeadTests",
+      "source_line": 1292,
+      "source_end_line": 1309,
+      "body_sha256": "37569c7ae13c24d20e88e76256cf415663d62e3f117467f3141345089a293262",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named actual missing-hat/slim-fallback regression: both skin families must contain the authored contrast, with recorded slim-only red control and real placed-head pixels.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "510657a25e3c8929843ca13346d281392f8c9a53",
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+        "fad1cef1efc10bbadbaae454465af275f1ad52b8"
+      ],
+      "observed_failure_references": [
+        "HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE",
+        "HARNESS-PLAYER-HEAD-SLIM-FALLBACK"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE.toml:11:  \"python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window\",",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-PLAYER-HEAD-SLIM-FALLBACK.toml:9:regression = [\"python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::WalkCaptureArtifactsTests::test_each_retry_owns_an_artifact_and_misses_are_bounded",
+      "name": "test_each_retry_owns_an_artifact_and_misses_are_bounded",
+      "class": "WalkCaptureArtifactsTests",
+      "source_line": 1313,
+      "source_end_line": 1353,
+      "body_sha256": "3c696db1e6af2ea7c7c9443ff28a992cf1713b921739e357ebec74d4b3bd6381",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named actual FileExistsError capture collision; reproduces exclusive artifact creation across native/Java retries and bounded misses.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7"
+      ],
+      "observed_failure_references": [
+        "HARNESS-GAIT-ARTIFACT-REUSE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-GAIT-ARTIFACT-REUSE.toml:9:regression = [\"python:tools.harness.test_scene_shot:WalkCaptureArtifactsTests.test_each_retry_owns_an_artifact_and_misses_are_bounded\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_clock_scene_samples_past_edge_on_without_changing_oracle",
+      "name": "test_clock_scene_samples_past_edge_on_without_changing_oracle",
+      "class": "DroppedClockTests",
+      "source_line": 1398,
+      "source_end_line": 1427,
+      "body_sha256": "3e2e2d80538fbc428f00c55fbde0360b7ed0a11aa86ef105b051f4dac9ef1573",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named real zero/35-cell edge-on failures; tests bounded face-only resampling while preserving selected PNG/sidecar bytes and the unchanged animation oracle.",
+      "provenance_commit": "635d650e182f78eb71dead45381596bcda8f28ef",
+      "body_provenance_commits": [
+        "635d650e182f78eb71dead45381596bcda8f28ef"
+      ],
+      "observed_failure_references": [
+        "HARNESS-DROPPED-CLOCK-EDGE-ON"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DROPPED-CLOCK-EDGE-ON.toml:9:regression = [\"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_is_bounded_and_does_not_accept_hud_only\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_selects_static_face_but_animation_oracle_rejects_it\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_clock_capture_is_bounded_and_does_not_accept_hud_only",
+      "name": "test_clock_capture_is_bounded_and_does_not_accept_hud_only",
+      "class": "DroppedClockTests",
+      "source_line": 1429,
+      "source_end_line": 1443,
+      "body_sha256": "89d86928668a21d5f3fe0842e61133a5958aa6806cb2c4ed9c0067958e5ac8ee",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Companion to actual edge-on capture correction: a missing face must exhaust the finite sampler and never publish a HUD-only selected shot.",
+      "provenance_commit": "635d650e182f78eb71dead45381596bcda8f28ef",
+      "body_provenance_commits": [
+        "635d650e182f78eb71dead45381596bcda8f28ef"
+      ],
+      "observed_failure_references": [
+        "HARNESS-DROPPED-CLOCK-EDGE-ON"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DROPPED-CLOCK-EDGE-ON.toml:9:regression = [\"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_is_bounded_and_does_not_accept_hud_only\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_selects_static_face_but_animation_oracle_rejects_it\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_clock_capture_selects_static_face_but_animation_oracle_rejects_it",
+      "name": "test_clock_capture_selects_static_face_but_animation_oracle_rejects_it",
+      "class": "DroppedClockTests",
+      "source_line": 1445,
+      "source_end_line": 1460,
+      "body_sha256": "47f3ce5cd2eae7d6c248e496c5e7c58618a1ad6df6b50ac623b11d1f3d82e0dd",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Companion real edge-on failure regression ensures capture selection uses only visibility and cannot select for successful animation; static face remains rejected downstream.",
+      "provenance_commit": "635d650e182f78eb71dead45381596bcda8f28ef",
+      "body_provenance_commits": [
+        "635d650e182f78eb71dead45381596bcda8f28ef"
+      ],
+      "observed_failure_references": [
+        "HARNESS-DROPPED-CLOCK-EDGE-ON"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DROPPED-CLOCK-EDGE-ON.toml:9:regression = [\"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_is_bounded_and_does_not_accept_hud_only\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_selects_static_face_but_animation_oracle_rejects_it\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation",
+      "name": "test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation",
+      "class": "DroppedClockTests",
+      "source_line": 1462,
+      "source_end_line": 1477,
+      "body_sha256": "9b460b7aec3d344783384a4d92e6ff5225bed8a04d4dc5dda10ad280acd93cd4",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named observed same-time/different-pose false animation; real frames shifted 17 cells with nearly identical blue fractions, and exact old comparator control falsely passed.",
+      "provenance_commit": "d3bc1c33a0cfe9e97ab3a3f42918672bc488a671",
+      "body_provenance_commits": [
+        "d3bc1c33a0cfe9e97ab3a3f42918672bc488a671"
+      ],
+      "observed_failure_references": [
+        "HARNESS-CLOCK-POSE-FALSE-ANIMATION"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-CLOCK-POSE-FALSE-ANIMATION.toml:9:regression = [\"python:tools.harness.test_scene_shot:DroppedClockTests.test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_clock_capture_contract_and_tick_subscription",
+      "name": "test_clock_capture_contract_and_tick_subscription",
+      "class": "DroppedClockTests",
+      "source_line": 1479,
+      "source_end_line": 1486,
+      "body_sha256": "7c34da1c565b1fa88ec0d94836d88339e6409f7e8974e626d8ec8aeba85b9c31",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only compares declared MCP tick subscription and new step grammar; the actual edge-on capture/selection regressions remain separately retained.",
+      "provenance_commit": "635d650e182f78eb71dead45381596bcda8f28ef",
+      "body_provenance_commits": [
+        "635d650e182f78eb71dead45381596bcda8f28ef"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_only_clock_face_change_passes_not_hud_or_static_clock",
+      "name": "test_only_clock_face_change_passes_not_hud_or_static_clock",
+      "class": "DroppedClockTests",
+      "source_line": 1488,
+      "source_end_line": 1499,
+      "body_sha256": "d315304c5375d5d9f58b1e02a1dfe7c872aa9a9ea9537400e98d2d744a0b6f6e",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named observed HUD contamination and pose false-animation regression; rejects synthetic isolations of the real failures and accepts only actual face change.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+        "fad1cef1efc10bbadbaae454465af275f1ad52b8"
+      ],
+      "observed_failure_references": [
+        "HARNESS-DROPPED-CLOCK-HUD-ORACLE",
+        "HARNESS-CLOCK-POSE-FALSE-ANIMATION"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-CLOCK-POSE-FALSE-ANIMATION.toml:9:regression = [\"python:tools.harness.test_scene_shot:DroppedClockTests.test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation\", \"python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock\"]",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DROPPED-CLOCK-HUD-ORACLE.toml:10:  \"python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock\","
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_stored_original_frames_reject_hud_contamination",
+      "name": "test_stored_original_frames_reject_hud_contamination",
+      "class": "DroppedClockTests",
+      "source_line": 1501,
+      "source_end_line": 1509,
+      "body_sha256": "97cf7a12c0fb7bebff8bc9351b775dbf652182ab98b97e75634d5280f7365fcc",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Optional real-artifact regression for the observed original HUD-contaminated clock frames; reads retained original PNGs, not a fabricated fixture. Existing environment-dependent skip is unchanged.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+        "fad1cef1efc10bbadbaae454465af275f1ad52b8"
+      ],
+      "observed_failure_references": [
+        "HARNESS-DROPPED-CLOCK-HUD-ORACLE"
+      ],
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::DroppedClockTests::test_fixture_lifts_and_lights_dropped_clock_away_from_hud",
+      "name": "test_fixture_lifts_and_lights_dropped_clock_away_from_hud",
+      "class": "DroppedClockTests",
+      "source_line": 1511,
+      "source_end_line": 1519,
+      "body_sha256": "3d8bf83c4655a91023754ec5cfdbcbe0bb429880929dffe0aead30aebfaafa60",
+      "prior_category": "K1",
+      "prior_basis": "mechanical",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Named actual below-HUD dropped-clock, omitted shelf-clock and edge-on held-clock fixture failures; row records exact fixture reversals and three real runs.",
+      "provenance_commit": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+      "body_provenance_commits": [
+        "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+        "fad1cef1efc10bbadbaae454465af275f1ad52b8"
+      ],
+      "observed_failure_references": [
+        "HARNESS-DROPPED-CLOCK-HUD-ORACLE",
+        "HARNESS-CONTEXT-CLOCK-FIXTURE"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-CONTEXT-CLOCK-FIXTURE.toml:9:regression = [\"python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud\"]",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-DROPPED-CLOCK-HUD-ORACLE.toml:11:  \"python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud\","
+      ]
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::AssertEntitiesTests::test_filters_box_pose_and_profession",
+      "name": "test_filters_box_pose_and_profession",
+      "class": "AssertEntitiesTests",
+      "source_line": 1529,
+      "source_end_line": 1538,
+      "body_sha256": "d58bd3fa960ffee550a1433ea8ec6739d2ce27af4956aa03e2dcc34f9e4d0c73",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Generates fake villager rows, bounding boxes and numeric profession metadata, then checks filter counts; no received server/vanilla artifact or observed filter error.",
+      "provenance_commit": "ad2cf5f0d7dfc2fc49b2b61eabd5b559dc0ee148",
+      "body_provenance_commits": [
+        "ad2cf5f0d7dfc2fc49b2b61eabd5b559dc0ee148"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::AssertEntitiesTests::test_baby_filter_matches_only_received_flag",
+      "name": "test_baby_filter_matches_only_received_flag",
+      "class": "AssertEntitiesTests",
+      "source_line": 1540,
+      "source_end_line": 1549,
+      "body_sha256": "40398651f6128ec081bac38e0c1234c509e79ce5975d5ac5fb0a1d7cdb07a074",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs adult/baby/unknown/missing flags locally to test the new filter; no captured birth/metadata trace or observed misclassification.",
+      "provenance_commit": "8950985ad998e4ef84f1e0493f5a09b72d60f5a8",
+      "body_provenance_commits": [
+        "8950985ad998e4ef84f1e0493f5a09b72d60f5a8"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::AssertEntitiesTests::test_baby_step_validation",
+      "name": "test_baby_step_validation",
+      "class": "AssertEntitiesTests",
+      "source_line": 1551,
+      "source_end_line": 1555,
+      "body_sha256": "11d8575bde563ba8e4c3adc6933d1748eb04a6c323ddf197c8e83f2d4cebda07",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only exercises an authored boolean versus integer dictionary field in the new grammar; no actual baby entity or real bad-step case.",
+      "provenance_commit": "8950985ad998e4ef84f1e0493f5a09b72d60f5a8",
+      "body_provenance_commits": [
+        "8950985ad998e4ef84f1e0493f5a09b72d60f5a8"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::AssertEntitiesTests::test_breeding_scene_judges_a_birth_in_game_ticks",
+      "name": "test_breeding_scene_judges_a_birth_in_game_ticks",
+      "class": "AssertEntitiesTests",
+      "source_line": 1557,
+      "source_end_line": 1571,
+      "body_sha256": "1038107cd65ee4d9c02b33c3ae0bb4adf98ab06f667ace28317d664beee4ccfb",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Reads authored scene JSON and restates its 40+3000 wait schedule and assertion ordering; does not run breeding, use a captured oracle or reproduce an observed schedule bug.",
+      "provenance_commit": "8950985ad998e4ef84f1e0493f5a09b72d60f5a8",
+      "body_provenance_commits": [
+        "8950985ad998e4ef84f1e0493f5a09b72d60f5a8"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::AssertEntitiesTests::test_step_validation_and_village_scenes",
+      "name": "test_step_validation_and_village_scenes",
+      "class": "AssertEntitiesTests",
+      "source_line": 1573,
+      "source_end_line": 1585,
+      "body_sha256": "9a1d44b953c1dbfb5a8f7a6a4de16ce52a84b4fec2faf89608694c5ddd0d97fd",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Runs the tool’s own validator over authored invalid examples and its authored village JSON scenes; no actual villager run or observed schema mismatch.",
+      "provenance_commit": "ad2cf5f0d7dfc2fc49b2b61eabd5b559dc0ee148",
+      "body_provenance_commits": [
+        "1b93e8a22c2bfb8dbc337267351ad855e2f7a7d3",
+        "ad2cf5f0d7dfc2fc49b2b61eabd5b559dc0ee148",
+        "e97d47c6e3270beb605bb5161deea54636190a10"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::VillagerClaimGateTests::test_sleeping_observer_requires_received_pose",
+      "name": "test_sleeping_observer_requires_received_pose",
+      "class": "VillagerClaimGateTests",
+      "source_line": 1589,
+      "source_end_line": 1594,
+      "body_sha256": "549b91b3bcaf2b109a654b4c210048f2072cb7c1f7b6c5470fa12ba2c607fe54",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs pose-id dictionaries and expected booleans locally; no vanilla metadata capture, protocol citation in this test or observed observer failure.",
+      "provenance_commit": "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c",
+      "body_provenance_commits": [
+        "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::VillagerClaimGateTests::test_player_sleeping_asserts_received_metadata_not_predicted_pose",
+      "name": "test_player_sleeping_asserts_received_metadata_not_predicted_pose",
+      "class": "VillagerClaimGateTests",
+      "source_line": 1596,
+      "source_end_line": 1618,
+      "body_sha256": "6ca9ed81a283c674bc31ac481053f6de4571a6c0f739dd9fdaf1b88e724196cb",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fake Probe fabricates contradictory local/received player poses to exercise a new observer; no actual bed claimant, received packet or recorded harness false green.",
+      "provenance_commit": "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c",
+      "body_provenance_commits": [
+        "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::VillagerClaimGateTests::test_entity_sleeping_filter_uses_received_pose",
+      "name": "test_entity_sleeping_filter_uses_received_pose",
+      "class": "VillagerClaimGateTests",
+      "source_line": 1620,
+      "source_end_line": 1626,
+      "body_sha256": "540f2151f48780fe4ad518829ff6cfacc5372799f1325b07f547b56237a6c5c3",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs two fake villager metadata rows and checks newly added filtering; no actual sleeping-entity snapshot or observed filter failure.",
+      "provenance_commit": "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c",
+      "body_provenance_commits": [
+        "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_scene_shot.py::VillagerClaimGateTests::test_registered_claim_gates_have_native_valid_fixtures",
+      "name": "test_registered_claim_gates_have_native_valid_fixtures",
+      "class": "VillagerClaimGateTests",
+      "source_line": 1628,
+      "source_end_line": 1633,
+      "body_sha256": "d7be7309c3f7b4a528a7f79b120b9d36c7c6613393b48479744bbcb6227c5f48",
+      "prior_category": "U",
+      "prior_basis": "mechanical",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Only checks catalog evidence labels and validates authored claim scene JSON; no real workstation/bed/home gate run or observed registry mismatch.",
+      "provenance_commit": "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c",
+      "body_provenance_commits": [
+        "d26f32417ba1ca2cab4119cf1d13f05965cbcc4c"
+      ],
+      "observed_failure_references": [],
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    }
+  ],
+  "fence": {
+    "language_server": "Python unavailable in earlier attempt; explicit whole-source/reference fallback used.",
+    "removed_name_external_references": [],
+    "removed_class_helper_external_references": "",
+    "reference_search_scope": "Entire worktree, excluding own module and historical audit JSON. All exact ledger-named cases retained.",
+    "other_registered_worktrees_checked": 563,
+    "dirty_overlaps": [
+      {
+        "worktree": "/run/media/kaiserroman/games/solaris-work/wt/S3ClientRegress",
+        "status": "M tools/harness/test_scene_shot.py",
+        "disposition": "Read full diff: only adds test_java_wait_chat_uses_received_client_text at SceneShotTests start; no deleted test/helper is changed. Existing adjacent chat regression and class retained; no changes to that worktree."
+      }
+    ],
+    "worktree_inspection_errors": [],
+    "unmerged_overlaps": [
+      {
+        "commit": "57945f2d5084a5382706115ed781f42be64b6bf0",
+        "subject": "Merge wt/PerfRoam: Horizon roam workload, capture, scaling and foreign runs",
+        "patch_lines": 0,
+        "disposition": "Empty first-parent test delta."
+      },
+      {
+        "commit": "ece142f5d0e89004eed4c54a3140d19b474ab520",
+        "subject": "chore(stage0): rebrand + fmt BvG2L2 for the merge into main",
+        "patch_lines": 13,
+        "disposition": "Only environment-name rebrand already present in source."
+      },
+      {
+        "commit": "11fffe44eae847f4125d2b2c717b829245c0f80c",
+        "subject": "wip(laptop): SettlementUICivil uncommitted state",
+        "patch_lines": 82,
+        "disposition": "Read complete delta: duplicate current test bodies, not unique pending changes. Civil-UI mixed display cases remain U; duplicate synthetic launch/timestamp/filter/validation cases follow their individually read current verdicts."
+      },
+      {
+        "commit": "7a84ec7a95832442104927f6179c48ae8558670c",
+        "subject": "wip(laptop): WeakHardware uncommitted state",
+        "patch_lines": 37,
+        "disposition": "Read complete delta: duplicate current test bodies, not unique pending changes. Civil-UI mixed display cases remain U; duplicate synthetic launch/timestamp/filter/validation cases follow their individually read current verdicts."
+      },
+      {
+        "commit": "76077e3a0db0f8d755cba318c09a144897b92e48",
+        "subject": "wip(laptop): ContentNoJava uncommitted state",
+        "patch_lines": 37,
+        "disposition": "Read complete delta: duplicate current test bodies, not unique pending changes. Civil-UI mixed display cases remain U; duplicate synthetic launch/timestamp/filter/validation cases follow their individually read current verdicts."
+      },
+      {
+        "commit": "8d80dd1edb8cd467536d7f1cba9d6d758540bdd4",
+        "subject": "wip(laptop): ClientBugsCore uncommitted state",
+        "patch_lines": 28,
+        "disposition": "Read complete delta: duplicate current test bodies, not unique pending changes. Civil-UI mixed display cases remain U; duplicate synthetic launch/timestamp/filter/validation cases follow their individually read current verdicts."
+      },
+      {
+        "commit": "0722003b2a02b9ecf738ac036467904a9ce20247",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Only environment-name rebrand already present in source."
+      },
+      {
+        "commit": "aefd70ec8f94124251ac130378db4f47deb5b1c6",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Only environment-name rebrand already present in source."
+      },
+      {
+        "commit": "dd224b453e1ea876416f607bcd868209ce9b8025",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Only environment-name rebrand already present in source."
+      },
+      {
+        "commit": "efba00502c9d2842f864a792275997eca6feb396",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Only environment-name rebrand already present in source."
+      },
+      {
+        "commit": "a5262042c6ce402f42ab47f6dfcd504097ee8027",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Only environment-name rebrand already present in source."
+      },
+      {
+        "commit": "f20955e82191ff1a8943ecb292a3132251770011",
+        "subject": "Merge main into wt/CivSimSeed24b",
+        "patch_lines": 151,
+        "disposition": "Read complete delta: duplicate current test bodies, not unique pending changes. Civil-UI mixed display cases remain U; duplicate synthetic launch/timestamp/filter/validation cases follow their individually read current verdicts."
+      }
+    ]
+  },
+  "observed_failure_receipts": [
+    "Actual missing-subject runs, occluded spider capture, exclusive gait artifact collision, misplaced/unobservable/slim/worn head findings and dropped-clock HUD/edge/pose failures are recorded in the per-test linked ledger rows; all relevant tests retained.",
+    "HARNESS-DROPPED-CLOCK-EDGE-ON explicitly has retained-frame replay only, with live confirmation pending; no fresh game acceptance or ledger promotion claimed.",
+    "ISSUE-1-19 scene evidence is teleport-driven per-kind/rate/pose evidence, not AI-gait acceptance; row still requests a clean exact-reversal product control.",
+    "fb2674fb reports observed stage-0 dropped scene/Java/gait hunks; matching regressions retained.",
+    "952765e9 explicitly reports actual Java requested-distance 32 resetting to 16.",
+    "HarnessFix4Scene accepts Main’s reported baseline failure and records its later full module run; worker did not rerun it."
+  ],
+  "validation": [
+    {
+      "cmd": "Read all 84 current bodies/helpers and relevant producer/consumer implementations; trace individual declaration/body provenance",
+      "tree": "ac612a763c5e7c640b9e4e4b500c6edc0c3e8402",
+      "result": "Source-based review complete; 84/84 historical bodies match including the existing optional decorator."
+    },
+    {
+      "cmd": "Exact-name/helper/ledger reference search; inspect file dirt in 563 other registered worktrees; read 12 unmerged file diffs plus dirty S3ClientRegress diff",
+      "tree": "ac612a763c5e7c640b9e4e4b500c6edc0c3e8402",
+      "result": "No removed-name/helper external references; one disjoint dirty addition is left untouched. Pending histories contain no unique change to a removed body."
+    },
+    {
+      "cmd": "L2/build/tests/formatters/graphical runs",
+      "tree": "worker",
+      "result": "Not run: Main owns integrated verification."
+    }
+  ],
+  "notes": [
+    "No production backend, scenario JSON, measured vanilla reference, real-run artifact, ledger state or environment-dependent skip changed.",
+    "Generated PIL rectangles, invented protocol dictionaries and byte-echo sockets are not substituted for actual vanilla/game-run evidence; individual removal reasons identify the exact synthetic input.",
+    "Function-removal red controls for newly introduced helpers alone do not establish a real failure regression.",
+    "Real-case regressions are retained despite mocks and generated isolating images; they are not blanket R4.",
+    "Removed one now-dead AssertEntitiesTests.villager helper together with its two exclusively synthetic classes and the all-synthetic debug class; retained head/clock helpers for real-case regressions.",
+    "The four U display/bootstrap cases are intentionally not forced into a removal bucket.",
+    "No measured L2 speedup claimed."
+  ]
+}

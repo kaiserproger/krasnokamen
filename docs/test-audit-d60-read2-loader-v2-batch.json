@@ -1,0 +1,450 @@
+{
+  "decision": "D60.2",
+  "base": "7a6a2e031a8bacf36be1f058829ad178cb65a816",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_loader_v2.py",
+  "source_sha256_before": "7621b839c20bd83d08687309e8b5b66779b2613c0b6cae0c45022841b345685d",
+  "status": "All16 original methods and shared/nested fixtures read. Remove4 read/high R4 input/CLI/adapter self-tests; preserve6 K1 observed private-user.home/cold-start/cache regressions and6 U immutable-candidate/isolation/consent/cache-policy contracts. No worker tests/builds/L2/linters/formatters/smokes/negative controls or post-edit re-audit.",
+  "counts": {
+    "historical_test_ids_finalized": 16,
+    "removed_R4": 4,
+    "retained_K1": 6,
+    "retained_U": 6,
+    "physical_declarations_before": 16,
+    "physical_declarations_remaining": 12,
+    "source_lines_before": 339,
+    "source_lines_remaining": 280,
+    "physical_source_lines_removed": 59,
+    "historical_medium_candidates_finalized": 10,
+    "historical_medium_candidates_unfinalized": 506
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire339-line original module: all16 test bodies, setUpModule, _configured_run, nested fake permission click callback, adapter record callback, temporary files/environments and all mock fences.",
+    "production_source_read": {
+      "tools/harness/loader.py": "Entire271-line lifecycle/config/permission/port owner including finally cleanup and scenario receipt.",
+      "tools/harness/loader_settlements.py": "Entire46-line native settlement/C-key adapter; no real dialog or command was run.",
+      "tools/harness/profiles.py": [
+        "ProfileContext36-64",
+        "_server_binary299-315",
+        "validate_loader_live_args766-777",
+        "run_loader_live780-823",
+        "loader-live profile and prerequisite entries via AST source selection"
+      ],
+      "tools/harness/runtime.py": [
+        "ensure_loader_gradle_home327-335",
+        "reserve_port338-341",
+        "ChildExited531-537",
+        "wait_port540-557",
+        "_wait_port560-598",
+        "start_client943-1122 including nested initialized callback"
+      ]
+    },
+    "helper_policy": "No helper removed: setUpModule and _configured_run remain required by retained isolation tests. Removed only newly unused module-level __main__ alias cli import; deleted adapter/preflight imports were local to removed methods.",
+    "retained_assertions": "No retained body, assertion, readiness allowance, signal handling, permission policy or shared fixture was changed. Retained current None cold-build allowance is not reverted to historical1800 seconds.",
+    "docstring_updated": "Describe launch regressions and retained immutable-candidate/isolation contracts."
+  },
+  "evidence": {
+    "origin_commit_headlines": {
+      "05438809add901875d1101294eb0684678229189": "fix(harness): Java clients use the run's private user.home",
+      "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464": "fix(harness): wait for loader readiness or process exit without a build deadline",
+      "1ada2ceb93688adf35d0869111743d4d231e8b62": "feat: Solaris v0.0.8 — core v2 server, native storage, entity layout",
+      "34e651b3bcadba30a405e2402b052f0c9c92741d": "feat(harness): preflight, validation plan, MCP schema checks and backend fixes",
+      "59d632faff6eb22143362f7e8a7f7ef618778c70": "fix(harness): reap Java client when event-only startup is cancelled",
+      "7f7d9e6ac7349d6412bf2a95f0d9a7b1b81c502f": "test(harness): tests that place temporary files under .analysis/ create it first (fresh worktrees lack it)",
+      "a39164dc947b5074b0f7f5380335816287e2e0d1": "fix(harness): require registered release pins and allow cold loader startup",
+      "a8099dac3fac61d1196261e9824e8c658d9824ed": "feat: Distant Horizons support, checkpoint stall fix, edge hotspots, crash tests, Rust 1.99",
+      "aeaf41864ec11410434c80f9b1acb476b02d1922": "loader-live: each run takes its own free server port (config, address, permission prompt follow it); default GRADLE_USER_HOME to <work>/loader-gradle-home",
+      "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+      "ff1b494a01622e58b15c85da2897e368f402b65c": "harness: start screen and voice clients on verified private audio endpoints"
+    },
+    "complete_selected_non_test_fix_diffs_read": [
+      "05438809ad",
+      "aeaf41864e",
+      "1081c210e4",
+      "59d632faff",
+      "a39164dc9",
+      "ff1b494a01"
+    ],
+    "selected_fix_scope": "05438809ad runtime private Java user.home; aeaf41864e loader per-run ports/titles and shared Gradle cache; a39164dc9 initial readiness allowance;1081c210e runtime/loader/profile event-only wait;59d632faff runtime cancellation reap;ff1b494a01 runtime cache launch-call fix (same diff also changes private audio). Other files/entire release history were not audited.",
+    "ledger_rows_read": [
+      "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml",
+      "docs/bugs/rows/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.toml"
+    ],
+    "additional_observed_case": "Commit05438809ad explicitly attributes private Java user.home fix to RC4 breaker finding: Forge resolved assets under owner ~/.minecraft despite HOME/XDG isolation. The existing test is promoted from historical generic R4-medium to K1 on that observed source evidence.",
+    "original_case_scope": "Ledger rows and fix sources only. Original RC4 Forge run, Stage3 NeoForge compilation logs, ScreensVoiceStart/cache-red.log and historical negative-control logs were not reopened or rerun. No real cold NeoForge graphical pass, real new Java launch, real socket ownership readiness, or signal/process cleanup run is claimed.",
+    "boundaries": [
+      "The occupied TCP socket is real OS input, but it is not a real game server/client/bot oracle; per-run isolation stays U.",
+      "The frozen executable is a created #!/bin/false file, not a real registered release pin; immutable-selection tests stay U.",
+      "The authored server-only plugin.toml is a temporary deployment fixture, not repository source scanned for text; configuration immutability test stays U, not R3.",
+      "Standalone default cache discovery is a conservative U companion: it would pass without the actual missing GRADLE_USER_HOME launch-call fix. Named full launch-cache test remains K1.",
+      "Permission-title fallback is a consent/target contract over fake MCP; no real UI/protocol oracle claimed.",
+      "Removed smoke adapter test mocks all commands, wait/screenshots and merely expects its scripted sequence; it does not test the repeated-chat freshness implementation.",
+      "Removed CLI forwarding test has stubbed preflight/profile and placeholder paths; no known-red/current-failure label or claim is made."
+    ],
+    "unmerged_module_commits": "7b0cefa63 fix(harness): require registered release pins and allow cold loader startup\nece142f5d chore(stage0): rebrand + fmt BvG2L2 for the merge into main\n7a84ec7a9 wip(laptop): WeakHardware uncommitted state\n76077e3a0 wip(laptop): ContentNoJava uncommitted state\n0722003b2 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)\naefd70ec8 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)\ndd224b453 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)\nefba00502 chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)\na5262042c chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)\n",
+    "unmerged_diffs_read": [
+      "7b0cefa63",
+      "ece142f5d",
+      "7a84ec7a9",
+      "76077e3a0",
+      "0722003b2",
+      "aefd70ec8",
+      "dd224b453",
+      "efba00502",
+      "a5262042c"
+    ],
+    "unmerged_scope": "All nine exact-module diffs read: rebrand name/environment/title substitutions, duplicate laptop preflight stubs for the removed forwarding test, and earlier7b0cefa63 allowance signature/test. Current branch already contains their relevant changes and newer None event-only semantics; retained regressions unchanged.",
+    "reference_search_scope": "All16 exact method names searched only in D60Read2 excluding own module and audit JSON: only retained named ledger/promotion references, no removed method callers. No other-worktree reference searches.",
+    "other_worktree_fence": {
+      "scope": "563 cached other worktree paths; exact tools/harness/test_loader_v2.py git status only",
+      "checked": 563,
+      "dirty_overlaps": [],
+      "errors": []
+    },
+    "semantic_search_scope": "Targeted loader/frozen-candidate/private-home/Gradle-cache/startup ledger patterns, current line origins/headlines, selected fixes and exact-module unmerged diffs; no exhaustive repository-history claim."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_java_clients_use_private_home_for_all_platforms",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 21,
+      "original_end_line": 44,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: commit05438809ad explicitly records the RC4 breaker finding that Forge used the owner ~/.minecraft despite private HOME/XDG. Its selected runtime fix adds private -Duser.home for every Java platform; this existing mocked launch regression exercises that observed failure without claiming a real new Forge run.",
+      "provenance_commit": "05438809add901875d1101294eb0684678229189",
+      "body_provenance_commits": [
+        "05438809add901875d1101294eb0684678229189"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_v2_profile_never_builds_or_replaces_deployment",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 46,
+      "original_end_line": 59,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: immutable server/plugin candidate selection and no-build/no-deploy ownership is an explicit release-gate boundary. The loader.run return and deployment are mocked and no actual overwritten deployment/build incident is established; preserve conservatively rather than claim K1 or a real-artifact oracle.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "a39164dc947b5074b0f7f5380335816287e2e0d1"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_missing_v2_inputs_fail_before_build",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 61,
+      "original_end_line": 66,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: absent authored server/plugin arguments exercise local profile validation before a mocked build hook. No real failed launch or artifact is consumed.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_shared_probe_uses_frozen_binary_without_building",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 68,
+      "original_end_line": 77,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: an explicitly supplied frozen executable must be selected without starting a build. The executable is a created #!/bin/false fixture, not a real release pin/server; retain the candidate-ownership contract without claiming registered-pin verification or an observed fallback-build incident.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_shared_probe_rejects_invalid_frozen_binary_without_building",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 79,
+      "original_end_line": 84,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: /missing/krasnokamen is an invented invalid executable path, and build is mocked. This tests local selection/input failure plumbing, not a real invalid pin or failed server artifact.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_v2_config_points_at_readonly_candidate_and_frozen_binary",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 86,
+      "original_end_line": 110,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: configuration and artifact metadata must retain the supplied binary/plugin directory without mutating deployment. The server-only manifest is authored and Xvfb stops at an injected fence before any server/client runs, so it is not a source-text R3 scan or a real-deployment oracle; retain the immutability boundary.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "a39164dc947b5074b0f7f5380335816287e2e0d1"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_each_run_takes_its_own_free_port_and_the_prompt_follows_it",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 129,
+      "original_end_line": 146,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: real local TCP occupancy checks independent per-run port allocation and consistency with generated config/receipt addresses. This is not a real game server/client/bot run; the commit describes eliminating shared template ports but an original collision case is not established. Preserve the run-isolation contract without upgrading the socket fixture to K2.",
+      "provenance_commit": "aeaf41864ec11410434c80f9b1acb476b02d1922",
+      "body_provenance_commits": [
+        "aeaf41864ec11410434c80f9b1acb476b02d1922"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_permission_prompt_titles_name_the_runs_server_address",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 148,
+      "original_end_line": 163,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: exact run-server-address permission prompts, including localhost alias fallback, are a consent/target-selection boundary. MCP dialogs are mocked and no real prompt/captured client bytes or observed wrong-target case is consumed.",
+      "provenance_commit": "aeaf41864ec11410434c80f9b1acb476b02d1922",
+      "body_provenance_commits": [
+        "aeaf41864ec11410434c80f9b1acb476b02d1922",
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 165,
+      "original_end_line": 195,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HARNESS-LOADER-STARTUP-180S names this regression for observed cold NeoForge compilation exceeding180 seconds. It asserts event-only None allowance reaches shared client MCP startup and receipt; a39164dc9 initial1800-second mitigation was superseded by1081c210e. No real cold graphical pass is claimed.",
+      "provenance_commit": "a39164dc947b5074b0f7f5380335816287e2e0d1",
+      "body_provenance_commits": [
+        "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464",
+        "a39164dc947b5074b0f7f5380335816287e2e0d1"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_cold_build_wait_has_no_clock_deadline_and_requires_owned_listener",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 197,
+      "original_end_line": 214,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HARNESS-LOADER-STARTUP-180S names this minimized event-only cold-start regression. It rejects any wall-clock deadline and a foreign listener before accepting owned readiness; its mocked selector does not claim actual kernel readiness coverage.",
+      "provenance_commit": "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464",
+      "body_provenance_commits": [
+        "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_cold_build_wait_fails_on_process_exit",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 216,
+      "original_end_line": 227,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HARNESS-LOADER-STARTUP-180S names this process-exit companion so event-only waiting fails with the compiler log rather than hanging. The exit/log are authored fixtures, not newly obtained real createMinecraftArtifacts failure output.",
+      "provenance_commit": "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464",
+      "body_provenance_commits": [
+        "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_cancelling_cold_start_stops_unreturned_client_process",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 229,
+      "original_end_line": 245,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HARNESS-LOADER-STARTUP-180S names the cancellation companion to event-only cold startup;59d632faff changes Exception to BaseException so KeyboardInterrupt tears down the unreturned Java process and log. The signal is injected, not a real process-group cleanup run.",
+      "provenance_commit": "59d632faff6eb22143362f7e8a7f7ef618778c70",
+      "body_provenance_commits": [
+        "59d632faff6eb22143362f7e8a7f7ef618778c70"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-LOADER-STARTUP-180S.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_loader_gradle_home_defaults_to_the_shared_work_cache",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 247,
+      "original_end_line": 264,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: default shared Gradle cache discovery, explicit-operator override and missing-cache fallback are cache/ownership contracts. The directories are synthetic and this helper test would already pass without the actual cold-cache launch-call fix; keep as U alongside the named real cold-cache regression, not a second observed cache failure.",
+      "provenance_commit": "aeaf41864ec11410434c80f9b1acb476b02d1922",
+      "body_provenance_commits": [
+        "aeaf41864ec11410434c80f9b1acb476b02d1922"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_client_launch_reuses_gradle_cache_despite_private_home",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 266,
+      "original_end_line": 291,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE names this regression for observed FabricViewer180-second timeout while mavenizer rebuilt26.3 in game/.home/.gradle. It preserves private HOME, shared/explicit GRADLE_USER_HOME and existing readiness allowance. It does not run Mavenizer, Gradle or a real Java client.",
+      "provenance_commit": "ff1b494a01622e58b15c85da2897e368f402b65c",
+      "body_provenance_commits": [
+        "ff1b494a01622e58b15c85da2897e368f402b65c"
+      ],
+      "disposition": "retained",
+      "protected_references": [
+        "docs/bugs/promotions/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.hunks.md",
+        "docs/bugs/promotions/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.json",
+        "docs/bugs/rows/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_smoke_uses_native_settlement_commands_without_package",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 293,
+      "original_end_line": 318,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: mocks ProbeSteps, all command execution and screenshots, then restates the adapter native settlement command/C-key sequence. Neither a real dialog/client nor vanilla command/protocol evidence or actual captured settlement artifact is consumed.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "a8099dac3fac61d1196261e9824e8c658d9824ed"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_loader_v2.py::LoaderV2Tests::test_cli_forwards_typed_loader_options",
+      "file": "tools/harness/test_loader_v2.py",
+      "original_fn_line": 320,
+      "original_end_line": 335,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: CLI profile and preflight are mocked with placeholder binary/plugin paths; assertions cover typed argument forwarding only. No actual failed CLI launch or artifact is consumed, and no known-red/current-failure claim is made.",
+      "provenance_commit": "1ada2ceb93688adf35d0869111743d4d231e8b62",
+      "body_provenance_commits": [
+        "1ada2ceb93688adf35d0869111743d4d231e8b62",
+        "34e651b3bcadba30a405e2402b052f0c9c92741d"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": "Complete read-only bodies/owner slices and targeted provenance/reference inspection; pre-edit exact-file dirty-overlap inspection. Edit-tool outputs are change receipts.",
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_loader_v2 (12 retained methods), plus its two existing named ledger rows/integrated correctness as appropriate. Worker ran neither.",
+    "negative_control": "None performed; historical row controls are provenance, not new verification.",
+    "runtime_saving": "Unmeasured; no speedup claimed."
+  },
+  "gaps": []
+}

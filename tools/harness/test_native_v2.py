@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from . import scenarios
-from .backends import client_probes, native_v2
+from .backends import native_v2
 from .backends.probe_steps import ProbeSteps
 
 
@@ -22,79 +22,6 @@ class NativeV2ProbeTests(unittest.TestCase):
         self.assertEqual(entry.evidence, "graphical")
         self.assertEqual(entry.profile, "entities")
         self.assertIn("tools/harness/backends/native_custody.py", entry.sources)
-
-    def test_corruption_edits_hit_only_their_record_and_keep_every_other_byte(self) -> None:
-        from .backends import anvil_corrupt as nbt
-
-        def entity(kind: str, x: int, extra: list) -> list:
-            return [("id", (nbt.STRING, kind)), ("x", (nbt.INT, x)), ("y", (nbt.INT, 64)),
-                    ("z", (nbt.INT, 0)), *extra]
-
-        root = [("block_entities", (nbt.LIST, (nbt.COMPOUND, [
-            entity("minecraft:crafter", 1, [("crafting_ticks_remaining", (nbt.INT, 0))]),
-            entity("minecraft:jukebox", 2, [("RecordItem", (nbt.COMPOUND, []))]),
-        ]))), ("DataVersion", (nbt.INT, 5))]
-        raw = nbt.serialize("", (nbt.COMPOUND, root))
-        name, parsed = nbt.parse(raw)
-        self.assertEqual(nbt.serialize(name, parsed), raw)
-        crafters = parsed[1][0][1][1][1][0]
-        crafters[:] = [pair for pair in crafters if pair[0] != "crafting_ticks_remaining"]
-        crafters.append(("crafting_ticks_remaining", (nbt.INT, 99)))
-        edited = nbt.serialize(name, parsed)
-        self.assertNotEqual(edited, raw)
-        self.assertEqual(len(edited), len(raw))
-        self.assertEqual(nbt.field(nbt.parse(edited)[1][1][0][1][1][1][1], "x"), (nbt.INT, 2))
-
-    def test_region_rewrite_edits_the_named_block_entity_and_refuses_a_missing_one(self) -> None:
-        import zlib
-
-        from .backends import anvil_corrupt as nbt
-
-        record = [("id", (nbt.STRING, "minecraft:crafter")), ("x", (nbt.INT, 5)),
-                  ("y", (nbt.INT, 64)), ("z", (nbt.INT, 6))]
-        chunk = nbt.serialize("", (nbt.COMPOUND, [
-            ("block_entities", (nbt.LIST, (nbt.COMPOUND, [record])))]))
-        with tempfile.TemporaryDirectory() as directory:
-            region = Path(directory) / "dimensions" / "region"
-            region.mkdir(parents=True)
-            nbt._write_region(region / "r.0.0.mca", {0: (zlib.compress(chunk), 7)})
-
-            def corrupt(compound: list) -> None:
-                compound.append(("crafting_ticks_remaining", (nbt.INT, 99)))
-
-            applied = nbt.corrupt_block_entities(Path(directory), {(5, 64, 6): corrupt})
-            self.assertEqual(applied, {(5, 64, 6): "minecraft:crafter"})
-            (_, body, stamp), = nbt._read_region(region / "r.0.0.mca").values()
-            self.assertEqual(stamp, 7)
-            stored = nbt.parse(body)[1][1][0][1][1][1][0]
-            self.assertEqual(nbt.field(stored, "crafting_ticks_remaining"), (nbt.INT, 99))
-            with self.assertRaisesRegex(RuntimeError, "not found"):
-                nbt.corrupt_block_entities(Path(directory), {(9, 9, 9): corrupt})
-
-    def test_forged_wal_batch_follows_the_checkpoint_with_a_valid_frame(self) -> None:
-        import json
-        import struct
-        import zlib
-
-        from .backends import anvil_corrupt as nbt
-        from .backends import wal_forge
-
-        self.assertEqual(wal_forge.committed_tick(
-            "INFO checkpoint committed tick=427 total_ms=1\nINFO checkpoint committed tick=533 total_ms=2"), 533)
-        with self.assertRaisesRegex(RuntimeError, "no committed checkpoint"):
-            wal_forge.committed_tick("nothing")
-        raw = wal_forge.network_compound([("id", (nbt.STRING, "minecraft:sign")), ("x", (nbt.INT, 7))])
-        self.assertEqual(raw[:1], b"\x0a")
-        with tempfile.TemporaryDirectory() as directory:
-            path = wal_forge.publish_opaque_batch(Path(directory), 533, {(7, 64, 9): raw})
-            self.assertEqual(path.name, f"batch-{534:020}-{534:020}.bin")
-            frame = path.read_bytes()
-            magic, version, lo, hi, length, crc = struct.unpack("<IIQQII", frame[:32])
-            payload = frame[32:]
-            self.assertEqual((magic, version, lo, hi, length), (0x534F4C4A, 1, 534, 534, len(payload)))
-            self.assertEqual(crc, zlib.crc32(payload))
-            entry, = [json.loads(line) for line in payload.decode().splitlines()]
-            self.assertEqual(entry, {"OpaqueBlockEntity": {"pos": [7, 64, 9], "nbt": list(raw)}})
 
     def test_new_core_blocker_scenarios_are_runnable_catalog_entries(self) -> None:
         for name in ("native-v2-destroyed-chest-race", "native-v2-duplicate-login",
@@ -118,64 +45,6 @@ class NativeV2ProbeTests(unittest.TestCase):
         for lines, expected in cases:
             with self.subTest(lines=lines):
                 self.assertEqual(_difficulty_from_interval(lines, begin, end), expected)
-
-    def test_radius_rejects_missing_or_non_eight_live_render_setting(self) -> None:
-        from .backends import native_radius
-
-        for settings in ({}, {"render_distance": 4}, {"render_distance": "8"},
-                         {"render_distance": True}):
-            with self.subTest(settings=settings), tempfile.TemporaryDirectory() as directory:
-                client = mock.Mock()
-                client.call_tool.return_value = {"in_play": True, "client_settings": settings}
-                steps = ProbeSteps(client, Path(directory), 1, native_radius.SCENARIO_ID)
-                with self.assertRaisesRegex(RuntimeError, "client_render_distance_is_8"):
-                    native_radius.run(steps, (8, 65, 8))
-                self.assertEqual(client.call_tool.call_args_list,
-                                 [mock.call("minecraft_observe", {})])
-
-    def test_radius_records_live_render_setting_and_reads_all_unique_chunk_cells(self) -> None:
-        from .backends import native_radius
-
-        client = mock.Mock()
-        reads_since_wait = 0
-
-        def call(name: str, args: dict) -> dict:
-            nonlocal reads_since_wait
-            if name == "minecraft_observe":
-                return {"in_play": True, "client_settings": {"render_distance": 8}}
-            if name == "minecraft_wait_ticks":
-                self.assertGreaterEqual(args["ticks"], 20)
-                reads_since_wait = 0
-                return {}
-            self.assertEqual(name, "minecraft_read_block")
-            reads_since_wait += 1
-            self.assertLessEqual(reads_since_wait, 32, "native MCP request budget must refill")
-            return {"block_id": "minecraft:air"}
-
-        client.call_tool.side_effect = call
-        client.light_wire.query.return_value = []
-        with tempfile.TemporaryDirectory() as directory:
-            steps = ProbeSteps(client, Path(directory), 1, native_radius.SCENARIO_ID)
-            with mock.patch.object(native_radius, "_echo"):
-                native_radius.run(steps, (8, 65, 8))
-            self.assertEqual(steps.report["radii"]["client_render_distance"], 8)
-            cells = {tuple(call.args[1][key] for key in ("x", "z"))
-                     for call in client.call_tool.call_args_list
-                     if call.args[0] == "minecraft_read_block"}
-            self.assertEqual(cells, {(x * 16 + 8, z * 16 + 8)
-                                     for x in range(-8, 9) for z in range(-8, 9)})
-            self.assertTrue(steps.report["assertions"]["full_17x17_client_readable"])
-
-    def test_ranged_target_fixture_uses_only_needed_no_ai_tag(self) -> None:
-        steps = mock.Mock(report={})
-        steps.call.side_effect = RuntimeError("stop before live target wait")
-        chat = {"recent_chat": ["Summoned new Iron Golem"]}
-        with mock.patch.object(native_v2, "_echo", return_value=chat):
-            with self.assertRaisesRegex(RuntimeError, "stop before live target wait"):
-                native_v2._ranged(steps, (1, 2, 3))
-        self.assertEqual(steps.fixture.call_args.args[0],
-                         "summon minecraft:iron_golem 1.5 2 11.5 {NoAI:1b}")
-        self.assertEqual(steps.report["target_fixture_chat"], chat["recent_chat"])
 
     def test_standard_inventory_fixture_does_not_assume_auxiliary_equipment(self) -> None:
         auxiliary = [{"slot": 41, "count": None, "state": "unknown"},
@@ -204,33 +73,6 @@ class NativeV2ProbeTests(unittest.TestCase):
                 self.assertIn(name, native_v2.NATIVE_SCENARIO_IDS)
                 self.assertIs(native_v2.RUNNERS[name], native_v2._player_input)
                 self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
-
-    def test_physical_click_queues_both_edges_before_x_server_sync(self) -> None:
-        from .backends import native_player_input
-        steps = mock.Mock(report={})
-        steps.observe.return_value = {"client_tick": 10}
-        with mock.patch.object(native_player_input, "Pointer") as pointer_type:
-            pointer = pointer_type.return_value
-            pointer.xt.XTestFakeButtonEvent.return_value = 1
-            native_player_input._input(steps, button=2)
-        self.assertEqual(pointer.mock_calls, [
-            mock.call.xt.XTestFakeButtonEvent(pointer.display, 2, 1, 0),
-            mock.call.xt.XTestFakeButtonEvent(pointer.display, 2, 0, 0),
-            mock.call.x.XSync(pointer.display, 0),
-            mock.call.close(),
-        ])
-        self.assertEqual(pointer.down, None)
-
-    def test_input_fixture_uses_hotbar_only_debug_slots_and_removes_filler(self) -> None:
-        from .backends import native_player_input
-        steps = mock.Mock()
-        native_player_input._seed_main(steps, "minecraft:emerald", 3, 10)
-        self.assertEqual(steps.fixture.call_args_list, [
-            *(mock.call(f"debug give minecraft:stone 64 {i}") for i in range(9)),
-            mock.call("give @s minecraft:stone 64"),
-            mock.call("give @s minecraft:emerald 3"),
-            mock.call("clear @s minecraft:stone"),
-        ])
 
     def test_p1_catalog_covers_all_five_surfaces(self) -> None:
         expected = {f"native-v2-p1-{name}" for name in ("armor-stand", "signs", "piglin", "trader", "leaves")}
@@ -511,85 +353,6 @@ class NativeV2ProbeTests(unittest.TestCase):
         # at once, and both precede every slow capture.
         self.assertEqual((tilt, kill), (hit + 1, hit + 2))
         self.assertLess(kill, events.index(("capture", "p4-damage-hit")))
-
-    def test_p4_advancement_labels_are_actual_visible_ui_nodes(self) -> None:
-        from .backends.native_p4 import _advancement_labels
-
-        self.assertEqual(_advancement_labels({"ui_nodes": [
-            {"id": "advancement/minecraft:story/root", "label": "✓ Minecraft"},
-            {"id": "advancement/minecraft:story/upgrade_tools", "label": "✓ Getting an Upgrade"},
-            {"id": "advancements/done", "label": "Done"},
-        ]}), {"advancement/minecraft:story/root": "✓ Minecraft",
-              "advancement/minecraft:story/upgrade_tools": "✓ Getting an Upgrade"})
-
-    def test_fixture_coordinates_preserve_negative_origin(self) -> None:
-        self.assertEqual(native_v2._point((-12, 81, -8), dx=-2, dz=1),
-                         {"x": -14, "y": 81, "z": -7})
-
-    def test_missing_tool_fails_before_privileged_setup(self) -> None:
-        client = mock.Mock()
-        client.list_tools.return_value = [{"name": name} for name in native_v2.REQUIRED_TOOLS
-                                         if name != "minecraft_use_item_on"]
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(RuntimeError, "minecraft_use_item_on"):
-                native_v2.run(client, Path(directory), 1, "native-v2-redstone")
-        client.call_tool.assert_not_called()
-
-    def test_wrong_profile_fails_before_server_resolution(self) -> None:
-        ctx = mock.Mock(scenario_id="native-v2-redstone", client="native")
-        with mock.patch.object(client_probes, "_server_binary") as binary:
-            with self.assertRaisesRegex(ValueError, "entities"):
-                client_probes.run(ctx, "inventory")
-        binary.assert_not_called()
-
-    def test_wrong_client_fails_before_server_resolution(self) -> None:
-        ctx = mock.Mock(scenario_id="native-v2-redstone", client="java")
-        with mock.patch.object(client_probes, "_server_binary") as binary:
-            with self.assertRaisesRegex(ValueError, "--client native"):
-                client_probes.run(ctx, "entities")
-        binary.assert_not_called()
-
-    def test_insert_requires_unique_received_source_and_preserves_failure_receipt(self) -> None:
-        client = mock.Mock(token="")
-        client.call_tool.return_value = {
-            "in_play": True, "container": {"slots": [], "slot_count": 63},
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            with self.assertRaisesRegex(RuntimeError, "unique_source"):
-                with ProbeSteps(client, root, 1, "missing-source") as steps:
-                    native_v2._insert(steps, "minecraft:diamond", 0)
-            report = json.loads((root / "scenario.json").read_text())
-            self.assertFalse(report["passed"])
-            self.assertFalse(report["assertions"]["minecraft:diamond_unique_source"])
-            self.assertEqual([call.args[0] for call in client.call_tool.call_args_list],
-                             ["minecraft_observe"])
-
-    def test_shared_java_launcher_disables_reusable_gradle_daemon(self) -> None:
-        from . import runtime
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            # `main_checkout` shells out to git; patching the global `subprocess.Popen`
-            # below would hand that `subprocess.run` a Mock, so the sibling root is
-            # pinned instead of depending on a warm lru_cache from an earlier test.
-            with mock.patch.object(runtime, "main_checkout", return_value=root), \
-                    mock.patch.object(Path, "is_file", return_value=True), \
-                    mock.patch.object(runtime.os, "access", return_value=True), \
-                    mock.patch.object(runtime, "port_open", return_value=False), \
-                    mock.patch.object(runtime, "wait_port"), \
-                    mock.patch.object(runtime.subprocess, "Popen") as launch:
-                process, handle = runtime.start_client(
-                    game_dir=root / "game", log_path=root / "client.log",
-                    token="unit-test-only", mcp_port=12345, username="HarnessUnit", display=":99",
-                )
-                try:
-                    self.assertIs(process, launch.return_value)
-                    self.assertIn("--no-daemon", launch.call_args.args[0])
-                    self.assertIn("--no-configuration-cache", launch.call_args.args[0])
-                    self.assertTrue(launch.call_args.kwargs["start_new_session"])
-                finally:
-                    handle.close()
 
     def test_java_launcher_validates_platform_before_launch(self) -> None:
         from . import runtime

@@ -266,21 +266,6 @@ class NativeMatrixTests(unittest.TestCase):
         lane.host.kill9_restart.assert_not_called()
 
 
-    def test_restart_has_one_deadline_despite_unrelated_events(self):
-        from types import SimpleNamespace
-        lane=object.__new__(native_matrix.Lane)
-        lane.host=SimpleNamespace(clean_restart=lambda:{})
-        lane._record_server=lambda:None
-        lane.steps=SimpleNamespace(report={})
-        lane.wal_checkpoint_baseline=None
-        lane.health=None
-        lane.timeout=1
-        client=SimpleNamespace(call_tool=lambda *args:{'in_play':True,'state_version':1})
-        lane.clients=[client]; lane.names=['test']
-        with patch.object(native_matrix.time,'monotonic',side_effect=[0,0.3,0.6,1.0]):
-            with self.assertRaisesRegex(TimeoutError,'did not leave Play'):
-                lane.restart()
-
     def test_native_selection_preserves_windows_as_explicit_blockers(self):
         rows = [{"id": "linux", "context": {"client_kind": "native_linux"}},
                 {"id": "windows", "context": {"client_kind": "native_windows"}},
@@ -320,10 +305,6 @@ class NativeMatrixTests(unittest.TestCase):
             self.assertEqual(line["driver"], "native_mcp")
             self.assertTrue(line["ts"].endswith("Z"))
             self.assertIn("windows_mcp_lane", line["note"])
-
-    def test_pending_uses_last_ledger_status_and_never_hides_blocked(self):
-        rows = [{"id": "x"}, {"id": "y"}]
-        self.assertEqual(native_matrix.pending(rows, {"x": "pass", "y": "blocked"}), [{"id": "y"}])
 
     def test_missing_native_network_tools_are_precise(self):
         scenario = {"context": {"client_kind": "native_linux", "network_condition": "slow_reader_backpressure"}}
@@ -397,22 +378,6 @@ class NativeMatrixTests(unittest.TestCase):
         mcp=Mcp()
         NativeMatrixClient('test',mcp,'127.0.0.1:1',[]).wait_ticks(600)
         self.assertEqual(mcp.ticks,[255,255,90])
-
-    def test_canonical_native_profile_accepts_immutable_candidate(self):
-        from unittest.mock import patch
-        from tools.harness import __main__ as cli, profiles
-        with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory)
-            spec={'scope':'real-client','description':'dispatch unit test',
-                  'prerequisites': ((), (), (), ()), 'run':lambda ctx:{'dispatch_only':True}}
-            with patch.object(cli,'ARTIFACT_ROOT',root), patch.dict(profiles.PROFILES,{'native-matrix':spec}):
-                code=cli.cmd_run(['native-matrix','--client','native','--windowed',
-                                  '--server-bin',str(root/'immutable-server')])
-            self.assertEqual(code,0)
-            receipt=json.loads(next(root.glob('*/result.json')).read_text())
-            self.assertEqual(receipt['client'],'native')
-            self.assertEqual(receipt['status'],'passed')
-            self.assertEqual(receipt['commands'],[])
 
     def test_native_launch_fails_closed_before_process_without_private_audio(self):
         from types import SimpleNamespace
@@ -524,54 +489,6 @@ class NativeMatrixTests(unittest.TestCase):
         loaded=[(call.args[1]['x'],call.args[1]['z']) for call in client.call_tool.call_args_list
                 if call.args[0]=='minecraft_wait_for_loaded_block']
         self.assertEqual(sorted(loaded),sorted((x*16,z*16) for x in (-1,0,1) for z in (-1,0,1)))
-
-    def test_profile_fingerprint_is_retained_in_ledger(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory)
-            receipt={'details':{'matrix':{'ledger':str(root/'ledger.jsonl'),'server_sha':'a'*64,
-                'rows':[{'id':'tr:a@live','status':'blocked','run_dir':str(root),
-                         'note':'capability','plugin_set':'b'*64}]}}}
-            native_matrix.record_receipt(receipt,root/'result.json')
-            self.assertEqual(json.loads((root/'ledger.jsonl').read_text())['plugin_set'],'b'*64)
-
-    def test_composter_selects_seven_received_single_cakes(self):
-        from types import SimpleNamespace
-        from unittest.mock import Mock, patch
-        from tools.harness.backends import native_matrix_interactions as subject
-        steps=Mock()
-        steps.wait.return_value={'player':{'x':0,'y':100,'z':0,'on_ground':True}}
-        steps.call.return_value={'entities':[]}
-        lane=SimpleNamespace(steps=steps,names=['test'],console=Mock(),custody_boundary=Mock())
-        with patch.object(subject,'_use'),patch.object(subject,'_block'):
-            subject.run(lane,{'subject':'block_interact.composter','context':{'player_count':'1'}})
-        selects=[call.args[1]['count'] for call in steps.call.call_args_list
-                 if call.args[0]=='minecraft_select_hotbar_item']
-        self.assertEqual(selects,[1]*7)
-        self.assertEqual(lane.custody_boundary.call_count,1)
-
-    def test_sculk_latch_matrix_dispatch_requires_steady_normal_cell(self):
-        from types import SimpleNamespace
-        from unittest.mock import Mock, patch
-        from tools.harness.backends import native_matrix_interactions as subject
-        steps = Mock()
-        steps.wait.return_value = {'player': {'x': 0, 'y': 100, 'z': 0, 'on_ground': True}}
-        lane = SimpleNamespace(steps=steps, names=['test'], console=Mock(), custody_boundary=Mock())
-        context = {'player_count': '1', 'network_condition': 'normal', 'server_lifecycle': 'steady'}
-        with patch.object(subject, '_sculk_latch') as latch:
-            subject.run(lane, {'subject': 'redstone.sculk_sensor_signal', 'context': context})
-            latch.assert_called_once_with(steps, (0, 100, 0), fixture=lane.console)
-            with self.assertRaises(NotImplementedError):
-                subject.run(lane, {'subject': 'redstone.sculk_sensor_signal',
-                                   'context': {**context, 'server_lifecycle': 'save_all_checkpoint'}})
-
-    def test_ground_custody_copy_is_not_ignored(self):
-        from unittest.mock import Mock
-        from tools.harness.backends.native_matrix_custody import _no_ground_copy
-        steps=Mock()
-        steps.call.return_value={'truncated':False,'entities':[
-            {'item':{'item_id':'minecraft:torch','count':1}}]}
-        _no_ground_copy(steps,{'minecraft:torch'},'conserved')
-        steps.check.assert_called_once_with('conserved',False)
 
 
 if __name__ == "__main__":

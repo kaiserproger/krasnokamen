@@ -1,0 +1,1043 @@
+{
+  "decision": "D60.2",
+  "batch": "civilization-seed",
+  "base": "21b962dd62ecea5dd4819c02e770a9c18656ce88",
+  "file": "tools/harness/test_civilization_seed_qa.py",
+  "source_before_sha256": "736027646ed6b7d8480aa59de80934b2da3a75b1adb790714b183a9226b3da73",
+  "coverage": {
+    "physical_test_bodies_read": 39,
+    "all_historical_bodies_match_pre_edit_physical_source": true,
+    "whole_test_module_lines": 726,
+    "callees_read": [
+      "civilization_seed_qa.py:1-910 (whole backend, including funding, scanning, capture/aim, attribution and the whole scenario loop)",
+      "village_autonomy_qa.py and ProbeSteps owner source already read in immediately preceding village batch; relevant ecology and deadline deltas additionally read here"
+    ],
+    "provenance_read": [
+      "17 declaration/body-origin commit messages plus three original census/fixture-origin messages",
+      "11 focused production/documentation diffs (including all milestone introduction hunks; three clipped long doc lines recovered raw)",
+      "three complete ledger rows; two clipped source lines recovered raw",
+      "receipts/CivSimSeed24/REPORT.md:1-223 (whole actual seed-run analysis)",
+      "receipts/CivSimStallFix/main-fresh-with-native-controller-fix.json:1-23 (whole actual baby occlusion failure)",
+      "receipts/CivSimLanding/conflicts.md:1-26,28-39 (relevant retention/merge decisions and acceptance limits)",
+      "receipts/CivSimLanding/validation.json:450-510 (explicit in-memory census/stand reversal scope)",
+      "all eight unmerged first-parent test-file diffs"
+    ],
+    "identity_note": "Physical line-indexed AST map preserves both pairs of repeated method declarations. Qualified-name maps would collapse 39 physical declarations to 37 names; @line historical IDs remain individually classified."
+  },
+  "counts": {
+    "removed_R4": 16,
+    "retained_K1_physical_declarations": 16,
+    "retained_U": 5,
+    "physical_test_declarations_before": 39,
+    "physical_test_declarations_remaining": 21,
+    "unique_same_class_test_method_names_before": 37,
+    "unique_same_class_test_method_names_remaining": 21,
+    "shadowed_declarations_retained": 0,
+    "removed_shadowed_duplicate_declarations": 2,
+    "dead_private_helpers_removed": [
+      "CivilizationEvidenceTests.scan"
+    ],
+    "unused_imports_removed": [
+      "TemporaryDirectory",
+      "Path"
+    ],
+    "physical_source_lines_removed": 221,
+    "historical_medium_candidates_finalized": 20,
+    "historical_medium_candidates_remaining": 671
+  },
+  "tests": [
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_entity_census_retains_all_pages_including_a_distant_newborn",
+      "name": "test_entity_census_retains_all_pages_including_a_distant_newborn",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 12,
+      "source_end_line": 29,
+      "body_sha256": "43d68ad678a986b72c8c1142c3c356343e98912a3838be8db8c3c9caed168c1a",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents 600 sequential villager dictionaries and implements its own paged Mock responder; verifies list concatenation and an invented 600th baby, not a retained census/actual missing-baby incident. efaedc6c/72039b41 and landing receipts establish implementation-only controls, not a real 600-entity failure.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_entity_census_never_accepts_an_incomplete_or_repeated_page",
+      "name": "test_entity_census_never_accepts_an_incomplete_or_repeated_page",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 31,
+      "source_end_line": 44,
+      "body_sha256": "419f9c444b62f1640b910459258d524d585a9c6070c2435887c6336a990099e3",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Feeds four hand-authored inconsistent/repeated page dictionaries to its own pagination validator; landing validation explicitly labels its reversal in-memory. No real inconsistent census artifact or observed membership-change incident is supplied.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_ecology_reuses_the_complete_census",
+      "name": "test_ecology_reuses_the_complete_census",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 46,
+      "source_end_line": 51,
+      "body_sha256": "cc46d256ac1c9f0ffe63f1d18e3f44a8ad2faf8c221be0d82a0d9d1b0846c51c",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Passes two invented species rows into ecology and asserts no extra Mock call; self-plumbing reuse/count coverage, not an actual ecological observation or failure.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_verdict_requires_all_evidence_and_stall_wins",
+      "name": "test_verdict_requires_all_evidence_and_stall_wins",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 53,
+      "source_end_line": 59,
+      "body_sha256": "313398f7a4b8a4412c70ce41118299a4280868478c4e344e8b9f7a6179a354b5",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds four literal True stage flags and toggles them to exercise the newly introduced Boolean aggregation helper; no real milestone result or false-pass incident.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_population_requires_named_server_count",
+      "name": "test_population_requires_named_server_count",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 61,
+      "source_end_line": 65,
+      "body_sha256": "641d651219da1a3e947314629f59a69153a1a48b17fcea4dbae953fcdd0d3c37",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Parses one hand-authored settlement-info line and an invented missing name; no retained server reply or observed parser failure is linked to the case.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_birth_requires_complete_baseline_and_new_baby",
+      "name": "test_birth_requires_complete_baseline_and_new_baby",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 67,
+      "source_end_line": 74,
+      "body_sha256": "116b75c4d39cf04b44daf63e43322afdae07519f27e88d22f9d77414ae66f838",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds old/new UUID dictionaries and flips completeness/baby flags to exercise its own newborn selector; no actual census or attributed-birth incident.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_baseline_tick_comes_from_a_fresh_server_console_response",
+      "name": "test_baseline_tick_comes_from_a_fresh_server_console_response",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 76,
+      "source_end_line": 88,
+      "body_sha256": "47d60834a98a01c408967d9d6bee1919630046640643d930bea07050e3beead6",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Writes an invented old time to a temporary log and has a mocked console append a newer literal, while mocking the file wait; generic fresh-response plumbing, not an observed stale-baseline run or captured console artifact.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_birth_events_exclude_children_born_in_other_settlements",
+      "name": "test_birth_events_exclude_children_born_in_other_settlements",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 90,
+      "source_end_line": 118,
+      "body_sha256": "f76ceea02c541b1114b9f3d0dc222a527279eabb55f18544de71e0e78f9539ed",
+      "prior_category": "U",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Acceptance docs explicitly name this synthetic foreign-settlement/household birth control and 7e61b80e corrects its verifier, but no actual foreign-child incident is linked. Keep U rather than delete a documented acceptance control. Main reports all 21 module tests passed on 2d2ccca6d; the earlier source-only fixture finding is withdrawn.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+        "7e61b80e06dce1414095db9da29586413c19b91f",
+        "b24f0ce35792d8fc5f48ac0348dfb8efc95f1e14"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/settlements/acceptance-gates.md:50:For birth attribution, run `python3 -m unittest tools.harness.test_civilization_seed_qa.CivilizationEvidenceTests.test_birth_events_exclude_children_born_in_other_settlements`. Its complete two-birth checkpoint and audit fixture first passes, then separately rebinds one child to another settlement and another household while keeping the claimed growth. Both must reject the birth verdict; a changed census alone cannot authorize growth. The household in each counted birth audit event must match the child's checkpoint household. This is a focused oracle control, not an additional graphical gameplay pass."
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_new_certificate_requires_matching_observed_project",
+      "name": "test_new_certificate_requires_matching_observed_project",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 120,
+      "source_end_line": 132,
+      "body_sha256": "2bfcb14aa89b69a739d50e1994937d636ab57f75cf8007219afa3262f4cc13d4",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents certificates/projects/blueprint identity, replaces placement validation with a fixed list, then toggles each guard; no real misattributed completed project or external blueprint oracle.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint@134",
+      "name": "test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 134,
+      "source_end_line": 164,
+      "body_sha256": "6531391dc3a731d9a28dba707027dd4e55c8ef983345517dfaabbf2fb10e199e",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Observed seed-24 Builder capture used an unsupported volume midpoint; b7943fcb corrects it to a supported exterior stand. This earlier declaration is shadowed by an identical later method and is removed on Main's explicit instruction as dead duplicate code; the collected K1 regression remains.",
+      "provenance_commit": "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+        "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42"
+      ],
+      "observed_failure_references": [
+        "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
+        "receipts/CivSimLanding/validation.json:485-488"
+      ],
+      "actually_shadowed_by_later_same_class_method": true,
+      "disposition": "deleted-shadowed-duplicate-by-Main",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_building_capture_refuses_a_column_without_supported_standing_space@166",
+      "name": "test_building_capture_refuses_a_column_without_supported_standing_space",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 166,
+      "source_end_line": 176,
+      "body_sha256": "4fbcfaf17d8aa7fd21025574bac972e5563ee43bb7d66dec1753e4bbd57c8ee6",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fail-closed counterpart of the observed Builder unsupported-stand correction b7943fcb. This earlier declaration is shadowed by an identical later method and is removed on Main's explicit instruction as dead duplicate code; the collected K1 regression remains.",
+      "provenance_commit": "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
+      "body_provenance_commits": [
+        "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42"
+      ],
+      "observed_failure_references": [
+        "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42"
+      ],
+      "actually_shadowed_by_later_same_class_method": true,
+      "disposition": "deleted-shadowed-duplicate-by-Main",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside",
+      "name": "test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 178,
+      "source_end_line": 206,
+      "body_sha256": "a2b0909cf24d05aecbe24aa26e5da3ea9191fb9076f427b09100231d609c926f",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE records the actual fresh seed-24 bed-capture abort at a closed door; preserves ordinary entrance use, both received open halves, exact bed target and return.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE.toml"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE.toml:9:regression = [\"harness:civilization-seed-qa:new_house\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_refuses_missing_or_changed_entrance_before_capture\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_house_capture_refuses_missing_or_changed_entrance_before_capture",
+      "name": "test_house_capture_refuses_missing_or_changed_entrance_before_capture",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 208,
+      "source_end_line": 219,
+      "body_sha256": "0d877c63333a4fbc5929505c091f45d59c1c70f3ec5e69e0971b2ca461ebcdd5",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Missing/stale entrance refusal is an explicitly ledger-named negative counterpart to the actual closed-entrance capture bug; retain despite mocked navigation/capture.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE.toml"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE.toml:9:regression = [\"harness:civilization-seed-qa:new_house\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_refuses_missing_or_changed_entrance_before_capture\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint@221",
+      "name": "test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 221,
+      "source_end_line": 251,
+      "body_sha256": "6531391dc3a731d9a28dba707027dd4e55c8ef983345517dfaabbf2fb10e199e",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Collected duplicate of the received seed-24 failed Builder-column regression from b7943fcb, restored with the CivSim5 landing. Keeps the supported exterior viewpoint correction.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [
+        "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_building_capture_refuses_a_column_without_supported_standing_space@253",
+      "name": "test_building_capture_refuses_a_column_without_supported_standing_space",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 253,
+      "source_end_line": 263,
+      "body_sha256": "4fbcfaf17d8aa7fd21025574bac972e5563ee43bb7d66dec1753e4bbd57c8ee6",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Collected supported-stand fail-closed counterpart to the actual seed-24 Builder capture bug. Retained unchanged; the earlier identical shadowed declaration is removed without changing collected coverage.",
+      "provenance_commit": "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+      "body_provenance_commits": [
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [
+        "b7943fcbce8c0bd4f8e431fbe0e47ad30dc09b42",
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_occluded_stage_target_never_produces_screenshot",
+      "name": "test_occluded_stage_target_never_produces_screenshot",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 265,
+      "source_end_line": 272,
+      "body_sha256": "56059dc15dba1dafd59d11fc24c7ccce355f05eed131b4c0e5694982dc2db5e0",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents a block raycast two cells short and mocks image capture; exercises the original generic visibility guard introduced with the milestone feature, not a retained failed run. Actual corrective baby/wall, house, sparse-building and observer-stand regressions remain.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_baby_capture_checks_identity_after_approach",
+      "name": "test_baby_capture_checks_identity_after_approach",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 274,
+      "source_end_line": 293,
+      "body_sha256": "16cfe527dd31c4357f6d218c8268127bce8fafc6a296c48b0965053e71b91581",
+      "prior_category": "R4",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Uses an invented UUID and one synthetic census page, then changes the returned crosshair UUID; original generic identity/API-call contract, not a recorded wrong-baby incident. Actual baby-occlusion and unreachable-baby corrective regressions remain.",
+      "provenance_commit": "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_baby_aim_retries_while_a_wall_stands_between_observer_and_baby",
+      "name": "test_baby_aim_retries_while_a_wall_stands_between_observer_and_baby",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 295,
+      "source_end_line": 315,
+      "body_sha256": "86274570760754192c8e3ffba3e7f3ee968542bab98108aa60c339e4d407680a",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "83523fd8 corrects a moving/wall-occluded baby milestone aim. A real unchanged fresh seed-24 controller-fixed run records the same births capture blocked by dirt; this retry regression isolates that observed capture failure.",
+      "provenance_commit": "83523fd8579392279b9e42b4a322b942f39dc42a",
+      "body_provenance_commits": [
+        "83523fd8579392279b9e42b4a322b942f39dc42a"
+      ],
+      "observed_failure_references": [
+        "83523fd8579392279b9e42b4a322b942f39dc42a",
+        "receipts/CivSimStallFix/main-fresh-with-native-controller-fix.json:20-22"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_baby_beyond_the_walking_observer_gets_the_observer_teleported_and_returned",
+      "name": "test_baby_beyond_the_walking_observer_gets_the_observer_teleported_and_returned",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 317,
+      "source_end_line": 340,
+      "body_sha256": "e88368337d9defda0fd73b3d1f7705b6216c9b62e71b9159d39548e598ba08a5",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "38e3be54 explicitly documents the actual seed-24 newborn house across a cliff, inaccessible to the walking observer; regression preserves observer teleport to the current baby and return instead of perpetual approach failure.",
+      "provenance_commit": "38e3be54030055598bfade220064c6077d456628",
+      "body_provenance_commits": [
+        "38e3be54030055598bfade220064c6077d456628"
+      ],
+      "observed_failure_references": [
+        "38e3be54030055598bfade220064c6077d456628",
+        "tools/harness/backends/civilization_seed_qa.py:289-317"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_sparse_building_whose_centre_aim_misses_is_aimed_at_the_nearest_solid_block",
+      "name": "test_sparse_building_whose_centre_aim_misses_is_aimed_at_the_nearest_solid_block",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 342,
+      "source_end_line": 374,
+      "body_sha256": "112ff0066ef0603c9534baa0f7980dda1784de944aecec82b953cfcaa55ae095",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Names observed seed-24 runs 0yj9abeh/p1pmn34d where centre-nearest lumber-camp aim returned none; regression checks fallback to the received solid block nearest the exterior observer.",
+      "provenance_commit": "6bd5480606098d4b49782d3305b57900b9dc5a38",
+      "body_provenance_commits": [
+        "6bd5480606098d4b49782d3305b57900b9dc5a38"
+      ],
+      "observed_failure_references": [
+        "6bd5480606098d4b49782d3305b57900b9dc5a38",
+        "tools/harness/test_civilization_seed_qa.py:342-374"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_sparse_building_aim_waits_while_a_resident_stands_in_the_line_of_sight",
+      "name": "test_sparse_building_aim_waits_while_a_resident_stands_in_the_line_of_sight",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 376,
+      "source_end_line": 405,
+      "body_sha256": "ac45a3b62a2a7392ed8d56acd9dac64f4de215adedd85b164b1373a912eb082e",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Names actual run chswt0i9 where a resident crossed the lumber-camp aim and aborted capture; regression preserves waiting/re-aiming past a temporary entity occluder.",
+      "provenance_commit": "d107e2f4dfd526fb04e0be9d7ee621820a049293",
+      "body_provenance_commits": [
+        "d107e2f4dfd526fb04e0be9d7ee621820a049293"
+      ],
+      "observed_failure_references": [
+        "d107e2f4dfd526fb04e0be9d7ee621820a049293",
+        "tools/harness/test_civilization_seed_qa.py:376-405"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_building_the_walking_observer_cannot_reach_is_observed_from_a_teleport",
+      "name": "test_building_the_walking_observer_cannot_reach_is_observed_from_a_teleport",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 407,
+      "source_end_line": 433,
+      "body_sha256": "1310efd2839eb955258682ccd047db4a27acb9f02c16a88eb7f888109a2f1ef5",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Names actual run m8v6480s and its unreachable-building navigation error; regression preserves explicit creative-observer teleport fallback and return for that observed refusal.",
+      "provenance_commit": "d107e2f4dfd526fb04e0be9d7ee621820a049293",
+      "body_provenance_commits": [
+        "d107e2f4dfd526fb04e0be9d7ee621820a049293"
+      ],
+      "observed_failure_references": [
+        "d107e2f4dfd526fb04e0be9d7ee621820a049293",
+        "tools/harness/backends/civilization_seed_qa.py:367-381"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_sparse_building_with_no_solid_block_in_reach_still_refuses_a_screenshot",
+      "name": "test_sparse_building_with_no_solid_block_in_reach_still_refuses_a_screenshot",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 435,
+      "source_end_line": 450,
+      "body_sha256": "1cb5ff4a32d120ed4a38e01697e6a08f374d39bc9fc35d1092b31e2796d93d75",
+      "prior_category": "R4",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Fail-closed counterpart added with 6bd54806 to the observed sparse lumber-camp missed-ray fix: exhausting solid-block candidates must still refuse capture, not silently convert the actual missed target into a milestone.",
+      "provenance_commit": "6bd5480606098d4b49782d3305b57900b9dc5a38",
+      "body_provenance_commits": [
+        "6bd5480606098d4b49782d3305b57900b9dc5a38"
+      ],
+      "observed_failure_references": [
+        "6bd5480606098d4b49782d3305b57900b9dc5a38"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_sparse_building_is_aimed_at_a_solid_block_not_its_air_centre",
+      "name": "test_sparse_building_is_aimed_at_a_solid_block_not_its_air_centre",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 452,
+      "source_end_line": 456,
+      "body_sha256": "238a324c1771ee026639d426adf9c5bf2c6d6936aefc94abe21102c15196196d",
+      "prior_category": "U",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "4688ca92 replaces sparse-building air-centre aim with a received solid block. The test bounds [113,72,-226]..[119,76,-220] correspond to the actual seed-24 Lumber camp lot recorded in the run analysis, not only a made-up formula fixture.",
+      "provenance_commit": "4688ca924aa147541b69deac08d88e201921eb87",
+      "body_provenance_commits": [
+        "4688ca924aa147541b69deac08d88e201921eb87"
+      ],
+      "observed_failure_references": [
+        "4688ca924aa147541b69deac08d88e201921eb87",
+        "receipts/CivSimSeed24/REPORT.md:100-118"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_simulation_wait_uses_scenario_deadline_not_mcp_request_cap",
+      "name": "test_simulation_wait_uses_scenario_deadline_not_mcp_request_cap",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 458,
+      "source_end_line": 466,
+      "body_sha256": "f251674867aece6651a64dc517970e811a335672478125465ee73d97eb685153",
+      "prior_category": "R4",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Direct fake-clock deadline test accompanies d309632c sprint-timeout correction, but available history does not identify the original actual over-120s sprint run. Keep U rather than infer a concrete observed failure or force generic timing coverage into R4.",
+      "provenance_commit": "d309632cc7d455d9b90fb1cf79b20af6142bda42",
+      "body_provenance_commits": [
+        "d309632cc7d455d9b90fb1cf79b20af6142bda42"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_waiting_project_materials_do_not_hide_a_stalled_active_project",
+      "name": "test_waiting_project_materials_do_not_hide_a_stalled_active_project",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 511,
+      "source_end_line": 527,
+      "body_sha256": "2aa27a396eeccec4ae4829169a8be9f0a988a7044856dabd322aaa94dd2ceeb1",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "CIV-STALL-ORACLE-WAITING-MATERIALS actual ufgbv77d Road 0/33 held the slot for 51000 ticks while waiting Farm dirt changed; regression recreates the recorded active-project/waiting-material split and demands the one-day stall.",
+      "provenance_commit": "7ed4d504759de26d3c9126d8b40d62a5b25dd389",
+      "body_provenance_commits": [
+        "30efa5cabc02be4fd78c5762d0de6f3b9d18f06a",
+        "7ed4d504759de26d3c9126d8b40d62a5b25dd389"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-STALL-ORACLE-WAITING-MATERIALS.toml"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-STALL-ORACLE-WAITING-MATERIALS.toml:8:source = \"Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log).\"",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-STALL-ORACLE-WAITING-MATERIALS.toml:11:regression = [\"harness:civilization-seed-qa:all\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_project_materials_do_not_hide_a_stalled_active_project\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_projects_count_as_progress_without_an_active_project\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_waiting_projects_count_as_progress_without_an_active_project",
+      "name": "test_waiting_projects_count_as_progress_without_an_active_project",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 529,
+      "source_end_line": 538,
+      "body_sha256": "6fb78ac1e13dab64be2b9770dbeb8715c7ee6f8e8332c612ed31a259b858fd98",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Explicitly ledger-named no-active-project counterpart of the waiting-material stall fix: genuine waiting progress must continue to reset the signature when no active project owns the slot.",
+      "provenance_commit": "7ed4d504759de26d3c9126d8b40d62a5b25dd389",
+      "body_provenance_commits": [
+        "7ed4d504759de26d3c9126d8b40d62a5b25dd389"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-STALL-ORACLE-WAITING-MATERIALS.toml"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-STALL-ORACLE-WAITING-MATERIALS.toml:11:regression = [\"harness:civilization-seed-qa:all\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_project_materials_do_not_hide_a_stalled_active_project\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_projects_count_as_progress_without_an_active_project\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_civilization_sprint_wait_can_outlast_one_mcp_request",
+      "name": "test_civilization_sprint_wait_can_outlast_one_mcp_request",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 540,
+      "source_end_line": 546,
+      "body_sha256": "e8cc460daf26410cc3a2cf58af275d20af3b3b296576a8aa98d5887224f92c8e",
+      "prior_category": "U",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Mocked scenario-level sprint-budget control has the same d309632c correction provenance but lacks an identified original timed-out run; keep U with its helper rather than asserting K1 or deleting uncertain corrective coverage.",
+      "provenance_commit": "d7f98cd44dc46f9fe23845240f776cf7e080b91d",
+      "body_provenance_commits": [
+        "7ed4d504759de26d3c9126d8b40d62a5b25dd389",
+        "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_furnace_output_collected_before_the_menu_does_not_abort_the_run",
+      "name": "test_furnace_output_collected_before_the_menu_does_not_abort_the_run",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 548,
+      "source_end_line": 568,
+      "body_sha256": "9ec03013f982f8f2e92cb9e4ab27893bf055fca447b6cd71de64a6f6ac946fd2",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "CIV-IRON-CAPTURE-OUTPUT-COLLECTED actual o31rlnkb saw an ingot on the console but an empty player menu after a resident collected it; scenario-level regression preserves retry rather than the recorded abort.",
+      "provenance_commit": "d7f98cd44dc46f9fe23845240f776cf7e080b91d",
+      "body_provenance_commits": [
+        "7ed4d504759de26d3c9126d8b40d62a5b25dd389",
+        "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml:8:source = \"Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log).\"",
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml:11:regression = [\"harness:civilization-seed-qa:iron_smelted\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_furnace_output_collected_before_the_menu_does_not_abort_the_run\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_capture_opens_furnace_and_requires_visible_output\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_remote_building_loads_each_chunk_and_returns_observer",
+      "name": "test_remote_building_loads_each_chunk_and_returns_observer",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 578,
+      "source_end_line": 595,
+      "body_sha256": "01cce47a0bbc066fea2459beac61a2302074cdfda57fd98bbb4d891a91827ee2",
+      "prior_category": "R4",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "9f53e1b7 changes distant-building scans to load intersecting real-client chunks, but this test supplies only a synthetic bed and no specific failed distant-scan run is identified in the inspected provenance. Keep U for the plausible corrective case; no real-run acceptance claimed.",
+      "provenance_commit": "9f53e1b71f16b9e2c3fe83f91c387a246c185397",
+      "body_provenance_commits": [
+        "9f53e1b71f16b9e2c3fe83f91c387a246c185397"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_retains_beds_and_furnaces_with_truncation_flag",
+      "name": "test_retains_beds_and_furnaces_with_truncation_flag",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 597,
+      "source_end_line": 604,
+      "body_sha256": "18b1f6dbe8aa896fc658a7716dec814a85627e55410a0e174546b04c820865ac",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Returns four invented block IDs from a Mock and expects its hand-selected first three plus a literal truncation flag/scan bounds; no real received scan or observed omitted evidence.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "4688ca924aa147541b69deac08d88e201921eb87",
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_natural_zone_does_not_become_building_evidence",
+      "name": "test_natural_zone_does_not_become_building_evidence",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 606,
+      "source_end_line": 609,
+      "body_sha256": "7e6777ac835c18336df4ba3b9815448976305c369797611a817ed7298ebadecd",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Marks a fabricated certificate natural and asserts that its own scan Mock is unused; no actual generated certificate/false milestone case.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_oversize_scan_is_explicitly_unobserved",
+      "name": "test_oversize_scan_is_explicitly_unobserved",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 611,
+      "source_end_line": 615,
+      "body_sha256": "322ad32bec511cfd0475ac382d4a96ff0a49866fe3c9c9fdfc84b849fb17769f",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Makes up 32-cubed bounds and expects the helper scan-volume error string without a real oversized certificate or scan artifact.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_empty_scan_never_proves_beds_or_furnaces",
+      "name": "test_empty_scan_never_proves_beds_or_furnaces",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 617,
+      "source_end_line": 621,
+      "body_sha256": "f4b7e868057adc3f259af5f0fcdc3b561169472579c27ec4cf5cab592cc5cfbd",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Supplies an invented empty block response and checks that it remains empty/not truncated; no real empty-scan false proof or actual world artifact.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_waypoint_uses_observed_ground_and_clear_dry_headroom",
+      "name": "test_waypoint_uses_observed_ground_and_clear_dry_headroom",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 623,
+      "source_end_line": 631,
+      "body_sha256": "e8ac9ae2e737209d7e40fddc65060d7cbd90a0e1f2c2d22d425f90115c64de0c",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Synthesizes three cells with Boolean collision/fluid flags and flips them to cover its own height-selector conditions; no real navigation trace or failed terrain column.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_storage_floor_may_be_below_chest_without_overlapping_building",
+      "name": "test_storage_floor_may_be_below_chest_without_overlapping_building",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 633,
+      "source_end_line": 640,
+      "body_sha256": "3c0a9c8b6a81057618ba83fbd1622f4901364359ec276f57848a9abac9fc9543",
+      "prior_category": "U",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Generates a 3x3 solid floor, deletes a cell or adds an invented overlapping certificate, and checks storage-bound selection; no real failed founding-chest floor/overlap incident.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "deleted-in-this-batch",
+      "protected_references": []
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_iron_capture_opens_furnace_and_requires_visible_output",
+      "name": "test_iron_capture_opens_furnace_and_requires_visible_output",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 642,
+      "source_end_line": 670,
+      "body_sha256": "b4a712c28d64d3ac239ed1acea0a117bb828d5353105ae5989752e1363b9ba2b",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Explicitly ledger-named menu/ordered freeze-read-unfreeze counterpart of the actual furnace output collection race; the initial generic menu test was strengthened with the corrective hold and is retained.",
+      "provenance_commit": "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+      "body_provenance_commits": [
+        "5f21055d47ba0c1f6a4de52e98bbbdd9de50bb52",
+        "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml",
+        "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml:11:regression = [\"harness:civilization-seed-qa:iron_smelted\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_furnace_output_collected_before_the_menu_does_not_abort_the_run\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_capture_opens_furnace_and_requires_visible_output\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal",
+      "name": "test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 672,
+      "source_end_line": 683,
+      "body_sha256": "3c8a3be47834be0d01e5c3297b7bb849e2acc3e11cd75bee2ac2f4ba6788912c",
+      "prior_category": "K1",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Explicitly ledger-named pre-hold ingot-collection counterpart of the actual o31rlnkb race, retaining nonfatal retry and guaranteed tick unfreeze.",
+      "provenance_commit": "d7f98cd44dc46f9fe23845240f776cf7e080b91d",
+      "body_provenance_commits": [
+        "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
+      ],
+      "observed_failure_references": [
+        "docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml"
+      ],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/CIV-IRON-CAPTURE-OUTPUT-COLLECTED.toml:11:regression = [\"harness:civilization-seed-qa:iron_smelted\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_furnace_output_collected_before_the_menu_does_not_abort_the_run\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_capture_opens_furnace_and_requires_visible_output\", \"python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal\"]"
+      ]
+    },
+    {
+      "id": "tools/harness/test_civilization_seed_qa.py::CivilizationEvidenceTests::test_observer_is_safe_only_after_ordinary_claim_and_stock_transfer",
+      "name": "test_observer_is_safe_only_after_ordinary_claim_and_stock_transfer",
+      "class": "CivilizationEvidenceTests",
+      "source_line": 685,
+      "source_end_line": 722,
+      "body_sha256": "93dcfeb653d712c921b6a426b37c82f5260784d4e85c434e80af8c0f5df52074",
+      "prior_category": "R4",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "7028e026 adds creative observer mode after ordinary claim/stock transfer, alongside an actual resident-death fix. No actual observer-death/claim-order failure is identified; synthetic ordering test is kept U rather than confusing the resident incident with observer evidence.",
+      "provenance_commit": "7028e026027dbf626dbe2ca75cace1f75c50fe24",
+      "body_provenance_commits": [
+        "21d740c1db5d54e30cf86c9b3c29bfc111ec365e",
+        "4e6874ded41e723f4e86f6c05c77739c8e8d535c",
+        "7028e026027dbf626dbe2ca75cace1f75c50fe24"
+      ],
+      "observed_failure_references": [],
+      "actually_shadowed_by_later_same_class_method": false,
+      "disposition": "retained",
+      "protected_references": []
+    }
+  ],
+  "fence": {
+    "language_server": "Python unavailable in earlier attempt; explicit whole-source/reference fallback used.",
+    "removed_exact_name_external_references": "",
+    "dead_scan_helper_external_references": [],
+    "reference_search_scope": "Reference searches cover wt/D60Read2 only: removed test names across that worktree excluding own module/historical audit JSON, and qualified/self.scan helper references in its tools subtree. The 563 other worktrees received a dirty-overlap check only, not a reference search. All ledger/doc-named collected tests remain.",
+    "other_registered_worktrees_checked": 563,
+    "dirty_overlaps": [],
+    "worktree_inspection_errors": [],
+    "unmerged_overlaps": [
+      {
+        "commit": "ece142f5d0e89004eed4c54a3140d19b474ab520",
+        "subject": "chore(stage0): rebrand + fmt BvG2L2 for the merge into main",
+        "patch_lines": 22,
+        "disposition": "Rebrand only, already present; documented birth control retained."
+      },
+      {
+        "commit": "31aa0a3e7ee81b603b89a46b9496cead38359aa9",
+        "subject": "wip(laptop): CivSim5 uncommitted state",
+        "patch_lines": 32,
+        "disposition": "Removes already-absent generic forwarding test and census-call assertions inside the generic identity test removed under current D60 R4 criterion; no unique pending behavior addition."
+      },
+      {
+        "commit": "40192079f67d7e5674788a60121fb83474329078",
+        "subject": "wip(laptop): CivSimLanding uncommitted state",
+        "patch_lines": 188,
+        "disposition": "Duplicate current census/house/stand bodies and fixture updates, all individually reviewed; no unique pending addition."
+      },
+      {
+        "commit": "0722003b2a02b9ecf738ac036467904a9ce20247",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Rebrand only, already present; documented birth control retained."
+      },
+      {
+        "commit": "aefd70ec8f94124251ac130378db4f47deb5b1c6",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Rebrand only, already present; documented birth control retained."
+      },
+      {
+        "commit": "dd224b453e1ea876416f607bcd868209ce9b8025",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Rebrand only, already present; documented birth control retained."
+      },
+      {
+        "commit": "efba00502c9d2842f864a792275997eca6feb396",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Rebrand only, already present; documented birth control retained."
+      },
+      {
+        "commit": "a5262042c6ce402f42ab47f6dfcd504097ee8027",
+        "subject": "chore(rebrand): apply the Krasnokamen name contract (rebrand.py output)",
+        "patch_lines": 22,
+        "disposition": "Rebrand only, already present; documented birth control retained."
+      }
+    ]
+  },
+  "historical_retention_note": "CivSimLanding rejected an older dirty deletion on the ground that live capture/census code still existed, before the owner D60 categories. That note is not represented as a new observed bug/oracle for generic mocked pagination/identity plumbing. This batch preserves every specifically documented actual corrective capture case and all current ledger/doc references. Besides 16 individually read R4-only cases, Main explicitly authorized removing two earlier identical shadowed declarations as dead code without changing collected coverage.",
+  "duplicate_cleanup": {
+    "base": "2d2ccca6d9f7f9c9d2993d2fecfe06aa36ce7235",
+    "authorization": "Main direct instruction 2026-11-20",
+    "removed_lines_at_base": "40-83",
+    "reason": "Earlier AST-identical stand-method copies are shadowed by later definitions; collected K1 methods are unchanged.",
+    "source_lines_removed": 44
+  },
+  "main_reported_validation": {
+    "cmd": "python3 -m unittest tools.harness.test_civilization_seed_qa",
+    "tree": "2d2ccca6d9f7f9c9d2993d2fecfe06aa36ce7235",
+    "result": "21 tests OK",
+    "source": "Main direct message 2026-11-20; not a worker-run check",
+    "consequence": "Earlier source-only birth-fixture finding withdrawn; documented birth test kept unchanged."
+  },
+  "validation": [
+    {
+      "cmd": "Whole-source/body/helper/callee review, source-provenance tracing and canonical physical body comparison",
+      "tree": "21b962dd62ecea5dd4819c02e770a9c18656ce88",
+      "result": "39/39 historical bodies match; 16 individually read R4-only cases selected; 18 real-case declarations and five uncertain/documented cases retained."
+    },
+    {
+      "cmd": "Exact-name/helper/ledger reference searches in wt/D60Read2 only; dirty-overlap checks in 563 other registered worktrees; all eight unmerged file diffs",
+      "tree": "21b962dd62ecea5dd4819c02e770a9c18656ce88",
+      "result": "No external removed-name/helper references in wt/D60Read2, no dirty overlaps or worktree inspection errors in the checked other worktrees; no unique pending test addition discarded."
+    },
+    {
+      "cmd": "L2/build/tests/formatters/graphical runs",
+      "tree": "worker",
+      "result": "Not run: Main owns integrated verification."
+    }
+  ],
+  "notes": [
+    "No production code, actual scenario/vanilla reference data, received artifact, ledger state, environment-dependent skip or acceptance threshold changed.",
+    "Both stand regression pairs are K1; Main explicitly authorized removing only their earlier identical shadowed copies. The 39-declaration historical census had 37 unique unittest method names; current remaining 21 declarations are all unique.",
+    "Prior in-memory red controls alone do not turn mocked pagination into an observed real census failure.",
+    "Observed furnace/door/stall/capture regressions stay despite mocked isolation; mocks do not by themselves imply R4.",
+    "Five unclear cases are intentionally retained; evidence absence is not forced into an approved removal category.",
+    "No measured L2 speedup claimed."
+  ]
+}

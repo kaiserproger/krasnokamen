@@ -1,4 +1,4 @@
-"""Seed reproducibility and independent fault controls for every invariant."""
+"""Observed random-matrix regressions and retained game-state contracts."""
 import copy
 import json
 from pathlib import Path
@@ -6,16 +6,14 @@ import struct
 import tempfile
 from types import SimpleNamespace
 import unittest
-import zlib
 from unittest.mock import patch
 
-from .backends import matrix_random
 from .quirk_parity import player
 from .matrix_api import MissingCapability
 
-from .matrix_domains.random import invariant_checks, mutate_observation, stock, _published, setup, recovery_matches, _mine, _exact_slots, _action, _fixture_item_stock
-from .quirk_parity.seeded import (player_scenario, PLAYER_ACTIONS, DETERMINISTIC_ACTIONS,
-                                shrink_player_scenario, failure_identity)
+from .matrix_domains.random import (invariant_checks, stock, setup, recovery_matches,
+                                    _mine, _exact_slots, _action, _fixture_item_stock)
+from .quirk_parity.seeded import player_scenario
 
 
 class RandomMatrixTests(unittest.TestCase):
@@ -191,11 +189,6 @@ class RandomMatrixTests(unittest.TestCase):
                 worker.join(timeout=2)
                 self.assertFalse(worker.is_alive(), "wire fixture thread did not stop")
 
-    def test_differential_rejects_planted_inventory_divergence(self):
-        state = {'inventories': [{}], 'container': {}, 'blocks': {}}
-        self.assertTrue(player.compare_player_states(state, state)['passed'])
-        self.assertFalse(player.compare_player_states(state, state, fault=True)['passed'])
-
     def test_vanilla_game_time_fence_parses_actual_feedback(self):
         oracle = object.__new__(player.VanillaMatrixServer)
         oracle.query = lambda _: 'System chat: The game time is 642 tick(s)'
@@ -277,108 +270,6 @@ class RandomMatrixTests(unittest.TestCase):
             _fixture_item_stock([{'type': 'minecraft:item', 'position': [33, 80, 34]}])
 
 
-    def test_ddmin_keeps_exact_failure_and_reduces_parameters(self):
-        row = player_scenario(1, 40, 4)
-        row['actions'][27]['verb'] = 'craft'
-        original = copy.deepcopy(row)
-        minimal = shrink_player_scenario(row, lambda value:
-                                        any(step['verb'] == 'craft' for step in value['actions']))
-        self.assertEqual(minimal['actions'], [{'verb': 'craft', 'actor': 0, 'count': 1, 'target': 0}])
-        self.assertEqual(row, original)
-        self.assertIsNone(failure_identity({'status': 'blocked', 'note': 'random:conservation:step=0:'}))
-        self.assertEqual(failure_identity({'status': 'fail', 'note': 'random:conservation:step=22: bad'}),
-                         'random:conservation')
-
-    def test_reduced_repro_retains_trial_selectors(self):
-        row = player_scenario(1, 1, 2)
-        report = {'status': 'fail', 'note': 'random:conservation:step=0: planted', 'row': row}
-        with tempfile.TemporaryDirectory() as directory:
-            (Path(directory) / 'shrink').mkdir()
-            ctx = SimpleNamespace(artifact_dir=Path(directory))
-            argv = ['python3', '-m', 'tools.harness', 'run', 'matrix-random',
-                    '--server-bin', '/pin/server', '--script', '/trial/script.json',
-                    '--vanilla-data', '/data', '--differential', '--vanilla-jar', '/vanilla.jar',
-                    '--plugins-dir', '/plugins']
-            with patch.object(matrix_random, 'replay', return_value=(report, '/trial/result.json', argv)):
-                result = matrix_random.shrink(ctx, report)
-            self.assertEqual(result['status'], 'reproduced')
-            self.assertIn('--differential', result['repro_command'])
-            self.assertIn('--vanilla-jar /vanilla.jar', result['repro_command'])
-            self.assertIn('--plugins-dir /plugins', result['repro_command'])
-            self.assertIn(result['minimal_script'], result['repro_command'])
-    def test_nightly_shrink_runs_each_replay_in_separate_scope(self):
-        row = player_scenario(1, 1, 2)
-        report = {'status': 'fail', 'note': 'random:conservation:step=0: planted', 'row': row}
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            script = root / 'input.json'
-            script.write_text(json.dumps(row))
-            ctx = SimpleNamespace(artifact_dir=root / 'outer', extra_args=['--script', str(script), '--shrink'],
-                                  server_bin=Path('/pin/server'), plugins_dir=None, timeout_seconds=600,
-                                  commands=[], cwds=[], logs=[], exits=[], client_evidence={})
-            ctx.artifact_dir.mkdir()
-            launches = []
-
-            def launch(argv, *, cwd, env, stdout, stderr, timeout):
-                launches.append(argv)
-                self.assertEqual(argv[:11], ['/mem-run', '-m', '6G', 'timeout', '600',
-                                              'nice', '-n', '19', 'ionice', '-c', '3'])
-                self.assertIsNone(timeout)
-                self.assertNotIn('KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN', env)
-                receipt = Path(env['KRASNOKAMEN_VALIDATION_ROOT']) / 'run' / 'result.json'
-                receipt.parent.mkdir(parents=True)
-                receipt.write_text(json.dumps({'details': {'protocol_matrix': report}}))
-                return SimpleNamespace(returncode=1)
-
-            with patch.dict('os.environ', {'KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN': '/mem-run'}), \
-                    patch.object(matrix_random.shutil, 'disk_usage',
-                                 return_value=SimpleNamespace(free=100 * 1024**3)), \
-                    patch.object(matrix_random.subprocess, 'run', side_effect=launch), \
-                    patch.object(matrix_random, 'run_protocol_matrix') as unscoped:
-                with self.assertRaisesRegex(RuntimeError, 'planted'):
-                    matrix_random.run(ctx)
-            unscoped.assert_not_called()
-            self.assertGreaterEqual(len(launches), 5)
-            self.assertEqual(ctx.commands, launches)
-            result = json.loads((ctx.artifact_dir / 'shrink' / 'result.json').read_text())
-            self.assertEqual(result['status'], 'reproduced')
-            self.assertEqual(len(result['confirmations']), 3)
-            self.assertTrue(all(Path(item['receipt']).is_file()
-                                for item in result['trials'] + result['confirmations']))
-
-    def test_unwrapped_replay_keeps_subprocess_timeout(self):
-        with tempfile.TemporaryDirectory() as directory:
-            ctx = SimpleNamespace(extra_args=[], server_bin=Path('/pin/server'), plugins_dir=None,
-                                  timeout_seconds=37, commands=[], cwds=[], logs=[], exits=[])
-
-            def launch(argv, *, cwd, env, stdout, stderr, timeout):
-                self.assertEqual(timeout, 37)
-                receipt = Path(env['KRASNOKAMEN_VALIDATION_ROOT']) / 'run' / 'result.json'
-                receipt.parent.mkdir(parents=True)
-                receipt.write_text(json.dumps({'details': {'protocol_matrix': {'status': 'pass'}}}))
-                return SimpleNamespace(returncode=0)
-
-            with patch.dict('os.environ', {}, clear=True), \
-                    patch.object(matrix_random.shutil, 'disk_usage',
-                                 return_value=SimpleNamespace(free=100 * 1024**3)), \
-                    patch.object(matrix_random.subprocess, 'run', side_effect=launch):
-                report, _, _ = matrix_random.replay(ctx, {}, Path(directory) / 'trial')
-            self.assertEqual(report['status'], 'pass')
-
-    def test_reduction_refuses_world_launch_below_disk_floor(self):
-        with tempfile.TemporaryDirectory() as directory:
-            ctx = SimpleNamespace(extra_args=[], server_bin=Path('/pin/server'), plugins_dir=None,
-                                  timeout_seconds=600, commands=[], cwds=[], logs=[], exits=[])
-            owner = Path('/run/media/kaiserroman/games/solaris-work/wt/scenario')
-            with patch.object(matrix_random.runtime, 'REPO_ROOT', owner), \
-                    patch.object(matrix_random.shutil, 'disk_usage',
-                                 return_value=SimpleNamespace(free=100 * 1024**3 - 1)), \
-                    patch.object(matrix_random.subprocess, 'run') as launch:
-                with self.assertRaisesRegex(RuntimeError, 'less than 100 GiB'):
-                    matrix_random.replay(ctx, {}, Path(directory) / 'trial')
-            launch.assert_not_called()
-
-
     def test_recovery_rejects_lost_published_transfer_and_craft_equivalent_substitution(self):
         committed = {'inventories': [{}, {'minecraft:oak_log': 1}],
                      'container': {}, 'blocks': {'32,80,34': 'minecraft:dirt'}}
@@ -441,25 +332,6 @@ class RandomMatrixTests(unittest.TestCase):
         self.assertNotIn('recovery_atomic_durable',
                          [check.name for check in invariant_checks(observation)])
 
-    def test_every_oracle_passes_valid_state_and_rejects_its_own_mutation(self):
-        good = self.observation()
-        self.assertTrue(all(check.passed for check in invariant_checks(good)))
-        for check in invariant_checks(good):
-            with self.subTest(oracle=check.name):
-                mutated = mutate_observation(good, check.name)
-                failed = [result.name for result in invariant_checks(mutated) if not result.passed]
-                self.assertEqual(failed, [check.name])
-                self.assertTrue(all(result.passed for result in invariant_checks(good)))
-
-    def test_seed_and_serialized_actions_replay_exactly(self):
-        first = player_scenario(101, 100, 4)
-        self.assertEqual(first, player_scenario(101, 100, 4))
-        self.assertNotEqual(first['actions'], player_scenario(102, 100, 4)['actions'])
-        self.assertEqual(set(PLAYER_ACTIONS) | {'concurrent'}, {a['verb'] for a in first['actions']})
-        self.assertTrue(all(a['actor'] < 3 for a in first['actions']))
-        self.assertTrue(set(a['verb'] for a in player_scenario(101, 100, 4, differential=True)['actions'])
-                        <= set(DETERMINISTIC_ACTIONS))
-
     def test_explicit_resource_units_preserve_crafting_inputs_and_outputs(self):
         self.assertEqual(stock([{'item_id': 'minecraft:oak_log', 'count': 2}]),
                          stock([{'item_id': 'minecraft:oak_planks', 'count': 8}]))
@@ -467,43 +339,6 @@ class RandomMatrixTests(unittest.TestCase):
                             stock([{'item_id': 'minecraft:oak_planks', 'count': 9}]))
         self.assertEqual(stock([{'item_id': 'minecraft:diamond', 'count': 1}]),
                          {'minecraft:diamond': 1})
-
-    def test_published_wal_fence_checks_framing_checksum_and_tick(self):
-        with tempfile.TemporaryDirectory() as directory:
-            world = Path(directory)
-            journal = world / 'journal'
-            journal.mkdir()
-            payload = b'{}\n'
-            path = journal / 'batch-1-12.bin'
-            header = struct.pack('<IIQQII', 0x534F4C4A, 1, 1, 12, len(payload), zlib.crc32(payload))
-            path.write_bytes(header + payload)
-            ctx = SimpleNamespace(server=SimpleNamespace(world_dir=world))
-            self.assertEqual(_published(ctx, 12)['high'], 12)
-            path.write_bytes(header + b'bad')
-            with self.assertRaisesRegex(AssertionError, 'invalid published'):
-                _published(ctx, 12)
-    def test_published_fence_skips_batch_retired_during_read(self):
-        with tempfile.TemporaryDirectory() as directory:
-            world = Path(directory)
-            journal = world / 'journal'
-            journal.mkdir()
-            vanished = journal / 'batch-1-1.bin'
-            current = journal / 'batch-2-12.bin'
-            payload = b'{}\n'
-            current.write_bytes(struct.pack('<IIQQII', 0x534F4C4A, 1, 2, 12, len(payload),
-                                            zlib.crc32(payload)) + payload)
-            original_read = Path.read_bytes
-            def read(path):
-                if path == vanished:
-                    raise FileNotFoundError(path)
-                return original_read(path)
-            ctx = SimpleNamespace(server=SimpleNamespace(world_dir=world))
-            with patch.object(Path, 'glob', return_value=iter([vanished, current])), \
-                    patch.object(Path, 'read_bytes', autospec=True, side_effect=read), \
-                    patch.object(matrix_random.runtime, 'wait_for_path_condition',
-                                 side_effect=lambda path, timeout, predicate: predicate()[1]):
-                self.assertEqual(_published(ctx, 12)['high'], 12)
-
 
 
 if __name__ == '__main__':
