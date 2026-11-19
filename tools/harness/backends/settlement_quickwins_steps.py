@@ -328,7 +328,7 @@ def block_project(w: Walk) -> None:
     status: dict[str, Any] = {}
     for _ in range(40):
         status = open_status(w)
-        active = next((slot for slot in sorted(status["slots"]) if slot < 18 and status["slots"][slot]), None)
+        active = next((slot for slot in sorted(status["slots"]) if slot < 8 and status["slots"][slot]), None)
         if active is not None:
             break
         w.probe.call("minecraft_wait_ticks", {"ticks": 100})
@@ -359,7 +359,7 @@ def block_resident(w: Walk) -> None:
     open_dashboard(w)
     census = w.click_slot(r"^Жители", "dashboard Residents", lambda s: s["kind"] == "menu")
     head = next((slot for slot, item in sorted(census["items"].items())
-                 if slot >= 9 and item == "minecraft:player_head"), None)
+                 if slot >= 9 and item in ("minecraft:player_head", "minecraft:villager_spawn_egg")), None)
     if head is None:
         raise StepFailed(f"no resident icon on the census page: {census['items']}")
     w.gui.slot(head)
@@ -432,7 +432,7 @@ def block_certify(w: Walk) -> None:
     # Open the certify form by the chest screens a player uses, then stand on the floor of corner 1.
     open_dashboard(w)
     w.click_slot(r"^Постройки$", "dashboard Buildings", lambda s: s["kind"] == "menu")
-    w.click_slot(r"Сертифицир", "Buildings Certify", lambda s: s["kind"] == "dialog")
+    w.click_slot(r"^Сертифицировать", "Buildings Certify", lambda s: s["kind"] == "dialog")
     w.shot("certify-form")
     w.tp(corner1[0] + .5, ground + 1.0, corner1[1] + .5)
     marked = w.click_button(r"Угол\s*1", "form Corner 1", lambda s: s["kind"] == "dialog")

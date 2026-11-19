@@ -220,7 +220,7 @@ class Walk:
 
     # ---- recording
     def judge(self, cid: str, ok: bool, **facts: Any) -> bool:
-        if self.evidence.get("survey_fixture_chest") and cid in ("C2", "C3", "C4", "Q8b"):
+        if self.evidence.get("survey_fixture_chest") and cid in ("C2", "C3", "C4", "Q8b", "Q8a", "Q9"):
             facts["fixture_chest"] = True  # survey on a tree without the starter chest: not the tree's chest
         self.results[cid] = {"ok": bool(ok), "what": CRITERIA[cid][0], "source": CRITERIA[cid][1], **facts}
         if self.strict:
