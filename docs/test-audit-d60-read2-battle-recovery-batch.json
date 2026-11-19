@@ -1,0 +1,707 @@
+{
+  "decision": "D60.2",
+  "base": "04b82aa695814a9d7a0071ee74657c463ba15604",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_battle_recovery.py",
+  "source_sha256_before": "4168e3c4411374116c6a3fe2f909210a17b2f25dbc70d5957d8925b9ec19b8dc",
+  "status": "All31 original bodies and every shared/nested fixture read. Delete15 read/high R4 tool self-tests; retain nine K1 real-case regressions and seven conservative U contracts. No worker tests/builds/L2/formatters/smokes/negative controls.",
+  "counts": {
+    "historical_test_ids_finalized": 31,
+    "removed_R4": 15,
+    "retained_K1": 9,
+    "retained_U": 7,
+    "prior_deletions": 0,
+    "physical_declarations_before": 31,
+    "physical_declarations_remaining": 16,
+    "source_lines_before": 636,
+    "source_lines_remaining": 386,
+    "physical_source_lines_removed": 250,
+    "historical_medium_candidates_finalized": 9,
+    "historical_medium_candidates_unfinalized": 569
+  },
+  "coverage": {
+    "module_and_helpers_read": "Entire original636-line module, all31 methods; stack/census/history/batch/setUp and all nested Fake console, compact, verdict, holder, Client and exception builders. Fixture batch bytes and paired census dictionaries are synthetic, not actual WAL/world exports.",
+    "backend_source_read": {
+      "tools/harness/backends/battle_recovery.py": "2-42 evidence scope;45-72 imports;83-93 environment mapping; existing complete107-125 UUID/hash helpers from declaration read;128-196 check/input resolution;326-347 auxiliary live census;361-431 HorizonCtl;529-545 roles;555-608 NBT/stack/identity projection;665-808 dimension wrapping, patch fold, WAL parse/history and coverage;811-830 ordered removal;836-1030 complete custody/reopen/conservation/removal-control verifier;1036-1085 config/derived-copy compact guard;1102-1112 private reopen config;1170-1188 recovery tick evidence;1240-1386 RunnerSession including complete cleanup;1413-1479 observer/fresh windup selector;1482-1537 real forced windup checkpoint;1540-1549 repeated rearm;1726-1739 auth acknowledgement;1742-1770 locked-tick image/drop kit;1985-2022 password scanner/scenario entry. Not claiming the whole2022-line real-client backend or all transitive exporters/process modules.",
+      "tools/harness/scenarios.py": "Four real battle entries714-751 and767-778, including actual Horizon clients, SIGKILL and exact evidence limits.",
+      "docs/QA_AGENT_PROTOCOL.md": "88-113 crash-census authority/common-mode loss/removal-control scope.",
+      "docs/AGENT_TOOLING.md": "189-214 raw projection/restore-only-loss distinction.",
+      "docs/development/real-client-gates.md": "80-92 runner cleanup evidence and real-client setup."
+    },
+    "unused_imports_removed": [],
+    "helpers_removed": "Only nested builders inside deleted bodies and the now-empty WalHistoryTests class. All shared top-level stack/census/history/batch and RearmScenarioTests.full_image/header helpers remain used by retained cases.",
+    "docstring_updated": "Describe retained offline regressions and unresolved contracts, not the removed standalone export/WAL census self-tests."
+  },
+  "evidence": {
+    "current_body_origin_messages_read": [
+      "0ccab2d5e7082d6334b90a6c013aeddba1ad061c",
+      "0e043eadf7d98eb688037389f4503d56d0a63329",
+      "19f422f059851b42ba6cb8e1baf4f90917c40920",
+      "3f0ad844a746fcc817c4d8e3e1daba68d8110a7f",
+      "4934c038aae0232c7fdc7d080a1d18b1e5fdc3d7",
+      "605584b0a982f6aee2808dbe1b789399351fd0cf",
+      "85abb168f5908dc954420e6b10e5ceba40c87f30",
+      "90283afacb90e9c3a6ac54f449ad2522c5795989",
+      "bf01f2560905ad2b0bc0e9091bc17ba5023549df",
+      "e42765b1ace91af864c2c569683caa44d383142b",
+      "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "ffca347ae40556d2366d79f94deb2d69f25506d0"
+    ],
+    "fix_test_and_backend_diffs_read": [
+      "0ccab2d5e7082d6334b90a6c013aeddba1ad061c",
+      "0e043eadf7d98eb688037389f4503d56d0a63329",
+      "90283afacb90e9c3a6ac54f449ad2522c5795989",
+      "85abb168f5908dc954420e6b10e5ceba40c87f30",
+      "4934c038aae0232c7fdc7d080a1d18b1e5fdc3d7",
+      "bf01f2560905ad2b0bc0e9091bc17ba5023549df",
+      "ffca347ae40556d2366d79f94deb2d69f25506d0",
+      "3f0ad844a746fcc817c4d8e3e1daba68d8110a7f",
+      "e42765b1ace91af864c2c569683caa44d383142b",
+      "19f422f059851b42ba6cb8e1baf4f90917c40920"
+    ],
+    "diff_scope": "Selected battle backend/tests/ledger paths only. ffca source hunks elided from the long output were explicitly recovered; no claim of reading the unrelated whole Rust projection implementation.",
+    "ledger_rows_read": [
+      "BATTLE-LIVE-KIT-DUPLICATED-ON-REARM",
+      "BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET",
+      "HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL"
+    ],
+    "original_receipt_scope": "Read complete ledger source documentation, including the long windup diagnosis, and fix messages naming actual incremental-pin, auth-control and auth-timeout runs. Did not reopen raw A11 breaker/Horizon/WAL evidence, run clients or reproduce historical controls. Open ledger rows not promoted.",
+    "important_reclassifications": [
+      "Three historical medium R4 cases are K1 after concrete observed input-pin, repeated-rearm and timeout-forwarding provenance; all complete bodies retained.",
+      "The synthetic rearm-with-dropped-spear verifier case is K1 because it directly models the ledger real-client one-to-two-unit failure; mocks alone do not make it R4.",
+      "Both auth kit/drop helpers are K1 on the actual auth scenario missing observed entity-control correction; recent-chat/password scrubbing is K1 on a named failed run.",
+      "Cleanup fix title alone does not establish a real original broken-pipe case. Both complete cleanup contracts remain U.",
+      "Common-mode restore-loss control remains U: protocol explicitly distinguishes issued-kit conservation from export agreement; no new real-control claim or deletion inferred.",
+      "BattlePatch malformed-input expectations are not R1 merely because the Python backend mirrors Rust. No executed/recovered Rust differential/captured oracle here; all three patch/header contracts remain U.",
+      "Generated config-string tests are R4, not repository/source-text R3; malformed constants/expected values are not treated as self-equal constant assertions."
+    ],
+    "reference_search_scope": "All31 exact method names and removed WalHistoryTests class searched only in D60Read2, excluding own module/audit JSON; no external references. All shared top-level fixture helpers retained, so no out-of-scope helper deletion.",
+    "semantic_search_scope": "Assigned docs/bugs/rows battle crash/rearm/auth/census/windup cases; narrow assigned docs search for cleanup diagnostics and common-mode restore-loss provenance. No cross-worktree reference searches.",
+    "other_worktree_fence": {
+      "checked": 563,
+      "dirty_overlaps": 0,
+      "errors": 0,
+      "scope": "Exact one-file git status only; no cross-worktree reference searches"
+    },
+    "unmerged_module_diffs_read": [
+      "57945f2d5 Merge wt/PerfRoam: Horizon roam workload, capture, scaling and foreign runs",
+      "aec669ffd Merge commit '0d1c6e1b8' into wt/MigrationFlowsControl",
+      "2ebc44e76 merge: integrate current main before A9 growth fixes",
+      "7c67827db test(harness): force horse death inside battle windup",
+      "d228112f0 test(harness): refuse an incremental pin for the battle-runner scenarios",
+      "6ee49d759 test(harness): battle crash-recovery real-client gate with full crash census"
+    ],
+    "unmerged_fence_result": "All six first-parent module deltas inspected:57945f2d5 has no first-parent file change; two merge diffs add the already-read current cleanup/common-loss/windup/rearm cases; three original source-lineage deltas introduce current windup, incremental-pin or original375-line self-test module. No unreviewed function removed."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_battle_recovery.py::CleanupFailureTests::test_primary_traceback_survives_broken_control_pipe_and_cleanup_continues",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 49,
+      "original_end_line": 80,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "0ccab2d5e7 adds primary-exception/cleanup diagnostics with fake processes and a hand-raised BrokenPipeError. Documentation specifies the boundary, but no original real broken-control-pipe incident was recovered; retain U rather than calling a fix title alone an observed regression.",
+      "provenance_commit": "0ccab2d5e7082d6334b90a6c013aeddba1ad061c",
+      "body_provenance_commits": [
+        "0ccab2d5e7082d6334b90a6c013aeddba1ad061c"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::CleanupFailureTests::test_teardown_failure_without_primary_still_fails",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 82,
+      "original_end_line": 97,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Companion0ccab2d5e7 negative contract: cleanup failure must remain failure when no primary error exists. Entire process/session setup is mocked; original observed incident unresolved. Keep U with its paired primary-error contract.",
+      "provenance_commit": "0ccab2d5e7082d6334b90a6c013aeddba1ad061c",
+      "body_provenance_commits": [
+        "0ccab2d5e7082d6334b90a6c013aeddba1ad061c"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ExportReadingTests::test_every_player_custody_place_and_nested_container_is_a_stack",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 101,
+      "original_end_line": 120,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Builds its own NBT-like player/stack dictionaries and enumerates locally expected custody paths. No real world export, independent parser oracle or observed nested-stack enumeration failure is consumed; R4 harness export-reader self-test.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ExportReadingTests::test_nbt_uuid_matches_vanilla_int_array",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 122,
+      "original_end_line": 124,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Two hand-written signed-int UUID representation examples have independent expected literals; not a computed mirror or self-equal constant. Vanilla is named but no external vanilla source/capture is provided here, so conservative U, not an asserted K2 oracle.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::WalHistoryTests::test_complete_batches_only_and_conflicts_refuse",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 128,
+      "original_end_line": 147,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Generates CRC/header/JSON WAL files through its local batch() builder, then checks the harness parser on those same invented records/conflicts. No real server WAL or replay/artifact is used; R4.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::WalHistoryTests::test_coverage_gaps",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 149,
+      "original_end_line": 152,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks three hand-authored interval examples of the harness coverage_gaps helper. No actual missing/torn WAL run or real artifact is supplied; R4 tool algorithm self-test, not a same-formula expected value.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_kept_drop_passes_and_soldier_equipment_is_not_custody",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 165,
+      "original_end_line": 171,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents a dropped-kit census and an unrelated soldier equipment record, then checks the verifier excludes that synthetic roster record. No observed roster-count defect or actual battle census is exercised; R4. The real dropped-kit duplication regression is separately retained.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_rearm_with_the_dropped_piece_on_the_ground_fails",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 173,
+      "original_end_line": 177,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Represents the concrete BATTLE-LIVE-KIT-DUPLICATED-ON-REARM case: the dropped spear remains on the ground while rejoin issues a second copy, yielding two units. The ledger documents real-client red f4c0/fixed b06399a7e observations. Keep K1 despite synthetic census transport.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "BATTLE-LIVE-KIT-DUPLICATED-ON-REARM"
+      ]
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_lost_piece_needs_an_ordered_durable_removal",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 179,
+      "original_end_line": 188,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Invents missing-piece and early/late removal dictionaries to exercise the verifier own ordered-removal rules. It reads no real WAL/census artifact and identifies no original observed removal-admission defect; R4.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_common_restore_loss_in_both_exports_still_fails_issued_kit_reconciliation",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 190,
+      "original_end_line": 198,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "0e043eadf7 adds a common-mode restore-loss control while changing independent raw crash-custody projection. QA_AGENT_PROTOCOL101-105 explicitly distinguishes G1 conservation from shared export agreement. No original observed failure of this unchanged G1 reconciler established; keep this unresolved control U, not a claimed real run.",
+      "provenance_commit": "0e043eadf7d98eb688037389f4503d56d0a63329",
+      "body_provenance_commits": [
+        "0e043eadf7d98eb688037389f4503d56d0a63329"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_identity_reuse_gaps_and_clocks_are_incomplete",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 200,
+      "original_end_line": 214,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Constructs identity reuse, history gaps, decreasing age/backward time and retyped-entity dictionaries against the local verifier. No original run/artifact for these cases is consumed; R4 harness verdict self-test.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_new_epoch_reads_its_own_history_from_the_recovered_tick",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 216,
+      "original_end_line": 225,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Creates two artificial epochs and complete/late history lists to check the verifier switches to recovered-epoch coverage. No real restart WAL or observed epoch-switch failure is used; R4.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_removal_control_on_a_derived_copy_is_detected",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 227,
+      "original_end_line": 237,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "90283afacb corrects the concrete battle-auth-hydration control that removed a held spear and never checked entity enumeration;3f0ad844a7 documents that the corrected real scenario ended incomplete without an observed dropped entity. Keep the complete positive control and inventory-only refusal as K1.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "90283afacb90e9c3a6ac54f449ad2522c5795989",
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_offline_and_production_recovery_exports_must_agree_on_every_kit_item",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 239,
+      "original_end_line": 281,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Compares two locally invented export dictionaries over wear/slot/dimension/custody/age variants. Neither export comes from a server or independent artifact; shared helper-generated images do not constitute the actual production-recovery differential oracle. R4; real dual-export runners unchanged.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ReconcileTests::test_recovery_tick_evidence_needs_the_crash_tail_and_the_next_tick",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 283,
+      "original_end_line": 302,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Generates Tick-only WAL batches and a hand-authored checkpoint/replay dictionary, then alters those fake batches to exercise the local tick-evidence verifier. No actual SIGKILL/recovery artifact or observed tick-admission error; R4.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_census_config_points_at_the_derived_world",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 306,
+      "original_end_line": 312,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks generated config-string rewriting to a fabricated derived-world path and missing-key refusal. It does not inspect repository TOML/code text (not R3) or a real configuration/run; R4.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_reopen_config_uses_fresh_ports_and_a_private_plugin_copy",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 314,
+      "original_end_line": 325,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Checks generated config-string port/plugin/world rewrites using temporary free-port allocation, but no server/plugin run or actual input config/failure artifact. R4, not a source-text ratchet.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_census_refuses_a_compact_that_changes_more_than_the_redb_file",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 327,
+      "original_end_line": 351,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Creates placeholder redb/WAL bytes and replaces compact/reopen commands with mocks that rewrite those strings, then checks the harness own generated failure JSON. No real compaction/world artifact or observed compact-corruption case; R4.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_inputs_fail_closed_and_are_hashed",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 353,
+      "original_end_line": 398,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "85abb168f5 documents actual ledger probe --client runner scenarios dying before battle because an incremental pin was rejected downstream. This complete compound input test now rejects that pin early with --no-incremental and preserves the auth exception. Keep K1;605584b0a9 later isolates its local cache fixture, which is not itself a gameplay regression.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "605584b0a982f6aee2808dbe1b789399351fd0cf",
+        "85abb168f5908dc954420e6b10e5ceba40c87f30",
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_password_scan_reports_paths_only",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 400,
+      "original_end_line": 408,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Creates its own fake secret-bearing binary file and checks the tool scanner returns its path without echoing the invented secret. No actual leaked-run artifact or observed scanner disclosure is used; R4. The separately observed auth-error password-redaction regression remains K1.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_online_census_groups_replies_by_marker",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 410,
+      "original_end_line": 434,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "The Fake console synthesizes clear replies and delimiter echoes from its own send method; the helper then groups those invented strings. No actual server console transcript or observed grouping failure; R4 plumbing self-test.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::InputsAndOutputsTests::test_named_scenarios_only",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 436,
+      "original_end_line": 441,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Calls the entry point with only missing scenario/extra arguments and asserts local admission failure before any run. No real named-scenario incident or artifact; R4 guard self-test.",
+      "provenance_commit": "fb7589e2a5a8169f46da3b530820fa659525aa97",
+      "body_provenance_commits": [
+        "fb7589e2a5a8169f46da3b530820fa659525aa97"
+      ],
+      "disposition": "removed",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::RearmScenarioTests::test_windup_observer_selects_only_fresh_horse_extra",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 445,
+      "original_end_line": 467,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "bf01f25609 adds helper support for the documented BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET repro: a fresh soldier windup targets a non-roster horse extra that must die before impact. Ledger names actual failed checkpoints/targets and historical red receipt; keep the helper boundary case K1.",
+      "provenance_commit": "bf01f2560905ad2b0bc0e9091bc17ba5023549df",
+      "body_provenance_commits": [
+        "bf01f2560905ad2b0bc0e9091bc17ba5023549df"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET"
+      ]
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::RearmScenarioTests::test_windup_observer_folds_battle_patches_after_the_full_image",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 487,
+      "original_end_line": 516,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "ffca347ae4 adapts the observer/locked-tick reader to core BattlePatch WAL records. This body uses fabricated full+patch records and has a possible cross-implementation format contract, but neither a captured patch nor an observed original gate failure was established. Retain U; not an implementation mirror merely because its builder uses BATTLE_LISTS.",
+      "provenance_commit": "ffca347ae40556d2366d79f94deb2d69f25506d0",
+      "body_provenance_commits": [
+        "ffca347ae40556d2366d79f94deb2d69f25506d0"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::RearmScenarioTests::test_battle_image_reads_header_changes_at_the_locked_tick",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 518,
+      "original_end_line": 530,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "ffca347ae4 checks locked-tick header/live-hold folding using fabricated records, not real auth-locked WAL. Potential cross-implementation persistence contract remains unresolved; conservative U keep.",
+      "provenance_commit": "ffca347ae40556d2366d79f94deb2d69f25506d0",
+      "body_provenance_commits": [
+        "ffca347ae40556d2366d79f94deb2d69f25506d0"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::RearmScenarioTests::test_battle_patch_refusals_mirror_the_core",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 532,
+      "original_end_line": 546,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "Independent malformed-patch inputs/refusal expectations target a Python mirror of Rust core persistence. The title does not prove R1: expected outcomes are not computed by the function under test. No Rust differential/captured oracle was executed/recovered here; retain U rather than assert K2 or delete by title.",
+      "provenance_commit": "ffca347ae40556d2366d79f94deb2d69f25506d0",
+      "body_provenance_commits": [
+        "ffca347ae40556d2366d79f94deb2d69f25506d0"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::RearmScenarioTests::test_rearm_scenario_runs_two_acknowledged_commands_before_census",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 548,
+      "original_end_line": 565,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "4934c038aa registers the actual repeated-rearm recovery repro documented by BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET. This helper regression preserves two separately acknowledged commands and their pre-crash census/capture; K1 despite mocked FIFO transport.",
+      "provenance_commit": "4934c038aae0232c7fdc7d080a1d18b1e5fdc3d7",
+      "body_provenance_commits": [
+        "4934c038aae0232c7fdc7d080a1d18b1e5fdc3d7"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": [],
+      "related_observed_cases_not_exact_test_id_links": [
+        "BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET"
+      ]
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ClientKitTests::test_a_drop_moves_exactly_one_kit_piece",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 571,
+      "original_end_line": 578,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "3f0ad844a7 corrects the actual battle-auth-hydration scenario ending incomplete after its removal control was required to see a real dropped item entity. This exact helper validates the one-piece drop used in that correction; keep K1.",
+      "provenance_commit": "3f0ad844a746fcc817c4d8e3e1daba68d8110a7f",
+      "body_provenance_commits": [
+        "3f0ad844a746fcc817c4d8e3e1daba68d8110a7f"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ClientKitTests::test_roles_after_login_hold_the_kit_minus_the_dropped_piece",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 580,
+      "original_end_line": 594,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "3f0ad844a7 changes auth hydration after the observed missing-entity-control problem: after login/re-entry, the holder must own only the retained kit, not receive the dropped piece again. Keep the complete received-kit-role positive/negative regression K1.",
+      "provenance_commit": "3f0ad844a746fcc817c4d8e3e1daba68d8110a7f",
+      "body_provenance_commits": [
+        "3f0ad844a746fcc817c4d8e3e1daba68d8110a7f"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ClientKitTests::test_a_missing_auth_acknowledgement_reports_the_chat_without_the_password",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 596,
+      "original_end_line": 620,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "e42765b1ac names real failed run V/20261116T124819-battle-auth-hydration-1vmbr3_6: /register timed out and its plugin response was lost. This regression preserves recent chat while scrubbing the password; K1.",
+      "provenance_commit": "e42765b1ace91af864c2c569683caa44d383142b",
+      "body_provenance_commits": [
+        "e42765b1ace91af864c2c569683caa44d383142b"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_battle_recovery.py::ClientKitTests::test_tool_timeouts_reach_horizon_ctl",
+      "file": "tools/harness/test_battle_recovery.py",
+      "original_fn_line": 622,
+      "original_end_line": 632,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "19f422f059 names the same real auth run: requested60s wait_for was swallowed into HorizonCtl own keyword and the tool timed out after30s. Keep timeout/seconds forwarding and reply-deadline cases K1. Commit reports historical red against old __call__; no worker rerun.",
+      "provenance_commit": "19f422f059851b42ba6cb8e1baf4f90917c40920",
+      "body_provenance_commits": [
+        "19f422f059851b42ba6cb8e1baf4f90917c40920"
+      ],
+      "disposition": "retained",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": "Read-only full-body/helper/source/provenance/ledger/reference and pre-edit exact-file dirty-overlap inspection. Edit-tool outputs are change receipts; no post-edit re-audit or worker tests/builds.",
+    "owner": "Main",
+    "requested_check": "python3 -m unittest tools.harness.test_battle_recovery (16 retained methods), then integrated correctness at Main discretion; worker ran neither.",
+    "negative_control": "None performed by this audit. 19f422f059 reports historical red of timeout forwarding against old __call__, and the windup ledger names its historical red receipt; not new worker verification.",
+    "runtime_saving": "Unmeasured; no speedup claimed."
+  },
+  "gaps": []
+}
