@@ -70,7 +70,8 @@ tools/dev/mem-run.sh -m 12G env KRASNOKAMEN_SERVER_BINARY=<release pin> \
   KRASNOKAMEN_HORIZON_CTL=/run/media/kaiserroman/games/solaris-work/targets/horizon-lod-kit/horizon-ctl \
   KRASNOKAMEN_HORIZON_RESOURCES=/run/media/kaiserroman/games/solaris-work/targets/hzbattleprep-hz/.local/horizon-client/26.3 \
   python3 -m tools.harness run horizon-lod-live
-# `-- --only off` runs the control alone; other options: --seed --view-distance 4 --lod-distance 64
+# `-- --only off` records the control session only and always ends failed (never a pass);
+# other options: --seed --view-distance 4 --lod-distance 64
 #   --pregenerate-radius 400 --min-quad-ratio 1.5 --min-changed-fraction 0.15
 ```
 

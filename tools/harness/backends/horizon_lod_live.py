@@ -22,8 +22,9 @@ BlueMap detection is switched off):
   `lod.sampled_target_tiles` is recorded but proves nothing alone: Horizon
   reports every target tile sampled in OFF too.
 
-`--only off` runs the control alone. Expected evidence of a pass is written
-down in docs/development/horizon-lod-acceptance.md.
+`--only off` records the control session alone and always ends `failed`
+(`off_only_is_a_control_not_acceptance`): its receipt is evidence, never a pass.
+Expected evidence of a pass is written down in docs/development/horizon-lod-acceptance.md.
 """
 
 from __future__ import annotations
@@ -222,6 +223,50 @@ def play(args: argparse.Namespace, ctx: ProfileContext, binary: Path, artifact: 
     return evidence
 
 
+def judge(args: argparse.Namespace, sessions: dict[str, dict[str, Any]], checks) -> None:
+    """Every acceptance check over the sessions. Fails closed: `--only off` is a control run and
+    never an acceptance result, and a pair without a completed ON session cannot pass."""
+    off = sessions.get("off")
+    if off is not None:
+        final = off["final"]
+        checks("off_control_is_clean", final["source"] == "server-terrain" and not off["decode_warnings"],
+               {"source": final["source"], "sampled_target_tiles": final["sampled_target_tiles"],
+                "resident_quads": final["resident_quads"]})
+    on = sessions.get("on")
+    if args.only == "off":
+        checks("off_only_is_a_control_not_acceptance", False,
+               "the control evidence is saved in this receipt; only the pair run can accept horizon:lod")
+    if on is not None and off is not None:
+        final, base = on["final"], off["final"]
+        checks("on_client_accepted_the_offer", final["source"] == "server",
+               {"source": final["source"], "rule": "lod.source is 'server' only when the Offer "
+                "arrived and the client uses the server as its far-terrain source"})
+        checks("on_effective_distance_reaches_beyond_the_sent_chunks",
+               (final["effective_distance"] or 0) > args.view_distance * 4,
+               {"effective_distance": final["effective_distance"], "view_distance": args.view_distance})
+        checks("on_tiles_were_sampled", (final["sampled_target_tiles"] or 0) > 0,
+               {"target_tiles": final["target_tiles"], "sampled_target_tiles": final["sampled_target_tiles"],
+                "off_sampled_target_tiles": base["sampled_target_tiles"],
+                "note": "informational against OFF: Horizon reports every target tile sampled in OFF too "
+                        "(2400 of 2400 in the recorded control), so this counter alone proves nothing"})
+        checks("on_resident_far_geometry_exceeds_off",
+               (final["resident_quads"] or 0) >= args.min_quad_ratio * (base["resident_quads"] or 0),
+               {"on": final["resident_quads"], "off": base["resident_quads"], "required_ratio": args.min_quad_ratio})
+        checks("on_client_found_no_reply_it_refused", not on["decode_warnings"], on["decode_warnings"])
+        try:
+            fraction = changed_fraction(Path(off["screenshot"]), Path(on["screenshot"]))
+            checks("on_screenshot_shows_far_terrain_off_does_not", fraction >= args.min_changed_fraction,
+                   {"changed_fraction": round(fraction, 4), "required": args.min_changed_fraction,
+                    "off": off["screenshot"], "on": on["screenshot"]})
+        except Exception as error:  # noqa: BLE001
+            checks("on_screenshot_shows_far_terrain_off_does_not", False, f"{type(error).__name__}: {error}")
+        for mode, session in sessions.items():
+            checks(f"{mode}_exits_clean", session["client_exit"] == 0 and session["server_exit"] == 0,
+                   {"client": session["client_exit"], "server": session["server_exit"]})
+    elif args.only == "pair":
+        checks("on_session", False, "the ON session did not complete")
+
+
 def run(ctx: ProfileContext) -> dict[str, Any]:
     args, timeout = validate_args(ctx)
     from ..profiles import _server_binary
@@ -267,42 +312,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             break
     report["sessions"] = sessions
 
-    off = sessions.get("off")
-    if off is not None:
-        final = off["final"]
-        checks("off_control_is_clean", final["source"] == "server-terrain" and not off["decode_warnings"],
-               {"source": final["source"], "sampled_target_tiles": final["sampled_target_tiles"],
-                "resident_quads": final["resident_quads"]})
-    on = sessions.get("on")
-    if on is not None and off is not None:
-        final, base = on["final"], off["final"]
-        checks("on_client_accepted_the_offer", final["source"] == "server",
-               {"source": final["source"], "rule": "lod.source is 'server' only when the Offer "
-                "arrived and the client uses the server as its far-terrain source"})
-        checks("on_effective_distance_reaches_beyond_the_sent_chunks",
-               (final["effective_distance"] or 0) > args.view_distance * 4,
-               {"effective_distance": final["effective_distance"], "view_distance": args.view_distance})
-        checks("on_tiles_were_sampled", (final["sampled_target_tiles"] or 0) > 0,
-               {"target_tiles": final["target_tiles"], "sampled_target_tiles": final["sampled_target_tiles"],
-                "off_sampled_target_tiles": base["sampled_target_tiles"],
-                "note": "informational against OFF: Horizon reports every target tile sampled in OFF too "
-                        "(2400 of 2400 in the recorded control), so this counter alone proves nothing"})
-        checks("on_resident_far_geometry_exceeds_off",
-               (final["resident_quads"] or 0) >= args.min_quad_ratio * (base["resident_quads"] or 0),
-               {"on": final["resident_quads"], "off": base["resident_quads"], "required_ratio": args.min_quad_ratio})
-        checks("on_client_found_no_reply_it_refused", not on["decode_warnings"], on["decode_warnings"])
-        try:
-            fraction = changed_fraction(Path(off["screenshot"]), Path(on["screenshot"]))
-            checks("on_screenshot_shows_far_terrain_off_does_not", fraction >= args.min_changed_fraction,
-                   {"changed_fraction": round(fraction, 4), "required": args.min_changed_fraction,
-                    "off": off["screenshot"], "on": on["screenshot"]})
-        except Exception as error:  # noqa: BLE001
-            checks("on_screenshot_shows_far_terrain_off_does_not", False, f"{type(error).__name__}: {error}")
-        for mode, session in sessions.items():
-            checks(f"{mode}_exits_clean", session["client_exit"] == 0 and session["server_exit"] == 0,
-                   {"client": session["client_exit"], "server": session["server_exit"]})
-    elif args.only == "pair" and on is None:
-        checks("on_session", False, "the ON session did not complete")
+    judge(args, sessions, checks)
     failed = checks.failed()
     report["failed_checks"] = failed
     if failed:

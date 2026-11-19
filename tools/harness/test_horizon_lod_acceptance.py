@@ -2,10 +2,14 @@
 reply scores 100%, a flat or shifted fake fails the thresholds the profile applies."""
 from __future__ import annotations
 
+import argparse
+import tempfile
 import unittest
+from pathlib import Path
 
 from . import horizon_lod_wire as hz
 from .backends import horizon_lod as accept
+from .backends import horizon_lod_live as live
 
 STONE, GRASS, WATER = 1, 9, 86
 
@@ -77,6 +81,65 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(accept.seed_warnings(warn), [warn])
         self.assertEqual(accept.seed_warnings("WARN ignoring unknown config section key=horizon_lod"), [])
         self.assertEqual(accept.seed_warnings("INFO horizon_lod seed"), [])
+
+
+def _picture(directory: Path, name: str, terrain: bool) -> str:
+    from PIL import Image
+
+    image = Image.new("RGB", (1280, 720), (150, 190, 255))
+    if terrain:
+        for x in range(1280):
+            for y in range(250, 440):
+                image.putpixel((x, y), (40, 120, 40))
+    path = directory / name
+    image.save(path)
+    return str(path)
+
+
+def _session(directory: Path, name: str, source: str, quads: int, terrain: bool) -> dict:
+    final = {"source": source, "effective_distance": 64, "target_tiles": 2400,
+             "sampled_target_tiles": 2400, "resident_quads": quads}
+    return {"final": final, "decode_warnings": [], "client_exit": 0, "server_exit": 0,
+            "screenshot": _picture(directory, f"{name}.png", terrain)}
+
+
+def _judged(only: str, sessions: dict) -> list[str]:
+    args = argparse.Namespace(only=only, view_distance=4, min_quad_ratio=1.5, min_changed_fraction=0.15)
+    checks = accept.Checks()
+    live.judge(args, sessions, checks)
+    return checks.failed()
+
+
+class LiveVerdictTests(unittest.TestCase):
+    """The live profile cannot pass without a real ON session that used the server's far terrain."""
+
+    def test_off_only_is_never_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            off = _session(Path(directory), "off", "server-terrain", 25000, False)
+            self.assertEqual(_judged("off", {"off": off}), ["off_only_is_a_control_not_acceptance"])
+
+    def test_a_server_without_the_service_fails_the_pair(self):
+        with tempfile.TemporaryDirectory() as directory:
+            where = Path(directory)
+            sessions = {"off": _session(where, "off", "server-terrain", 25000, False),
+                        "on": _session(where, "on", "server-terrain", 25100, False)}
+            failed = _judged("pair", sessions)
+            self.assertIn("on_client_accepted_the_offer", failed)
+            self.assertIn("on_resident_far_geometry_exceeds_off", failed)
+            self.assertIn("on_screenshot_shows_far_terrain_off_does_not", failed)
+
+    def test_a_pair_without_an_on_session_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            off = _session(Path(directory), "off", "server-terrain", 25000, False)
+            self.assertEqual(_judged("pair", {"off": off}), ["on_session"])
+        self.assertEqual(_judged("pair", {}), ["on_session"])
+
+    def test_a_server_that_serves_far_terrain_passes_the_pair(self):
+        with tempfile.TemporaryDirectory() as directory:
+            where = Path(directory)
+            sessions = {"off": _session(where, "off", "server-terrain", 25000, False),
+                        "on": _session(where, "on", "server", 90000, True)}
+            self.assertEqual(_judged("pair", sessions), [])
 
 
 if __name__ == "__main__":
