@@ -29,18 +29,19 @@
     "test-audit-d60-read2-domain-lifecycle-batch.json",
     "test-audit-d60-read2-mobs-batch.json",
     "test-audit-d60-read2-anvil-palette-batch.json",
-    "test-audit-d60-read2-army-qa-batch.json"
+    "test-audit-d60-read2-army-qa-batch.json",
+    "test-audit-d60-read2-atm-full-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 961,
-    "removed_in_new_batches": 542,
+    "finalized_historical_test_ids": 974,
+    "removed_in_new_batches": 543,
     "prior_main_deletions_excluded": 3,
-    "retained_K1": 170,
+    "retained_K1": 173,
     "retained_K2": 4,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 240,
-    "historical_medium_candidates_reviewed": 475,
-    "remaining_medium_candidates_unfinalized": 324,
+    "retained_U": 249,
+    "historical_medium_candidates_reviewed": 480,
+    "remaining_medium_candidates_unfinalized": 319,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },

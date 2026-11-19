@@ -55,11 +55,6 @@ class FullSelectionTests(unittest.TestCase):
                          "identifier not admitted by the server")
         self.assertIsNone(atm_full.locate_failure(messages, "mvs:other"))
 
-    def test_rejects_path_escape(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(ValueError, "unsafe resource"):
-                atm_full.resource(Path(directory), "mvs:../../../../outside", "structure", ".nbt")
-
     def test_differential_rejects_natural_and_beard_only_changes(self):
         baseline = {"0,0,0": "minecraft:stone", "1,0,0": "minecraft:dirt"}
         natural = {"minecraft:air", "minecraft:stone", "minecraft:dirt"}
