@@ -58563,7 +58563,7 @@ scenarios:
   domain: plugins
   subject: plugins.plugin_startup_fail_closed
   steps:
-  - 'Action: deploy two death_graves packages / api 0.6 legacy (land-claims, online-roster, geological-mines)'
+  - 'Action: deploy two death_graves packages / a synthetic api 0.6 legacy manifest (core tools/fixtures/legacy-api-0.6, formerly the land-claims/online-roster/geological-mines packages)'
   oracle:
   - 'reference: startup refuses with clear error'
   - 'SERVER GAP (not_deployable): expected to fail until implemented; must not crash or corrupt state'
