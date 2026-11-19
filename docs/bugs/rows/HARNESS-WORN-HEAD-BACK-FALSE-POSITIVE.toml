@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-WORN-HEAD-BACK-FALSE-POSITIVE"
+title = "Worn-head gate accepts unrelated head-region changes while the authored skull is on the back"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 followup: head-worn.png in 20261115T010550-native-player-head-iplrnv4q shows the skull at x600-680/y420-506 rather than head y306-375"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes"]
+fix_commit = "fad1cef1e"
+repro_check = "worn_head_renders now requires >100 authored magenta pixels inside the actual head ROI x580-700/y280-400 as well as changed pixels. ROI was not moved to the back. Only this predicate reverted: receipts/HarnessFix2/red-worn-back-false-positive.log wrongly accepts back attachment plus unrelated head changes. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Tightened real-client candidate 20261115T011500-native-player-head-k682egi4 correctly fails worn_head_renders, exposing WORN-PLAYER-HEAD-ON-BACK rather than hiding it."
+failing_first = "reported"

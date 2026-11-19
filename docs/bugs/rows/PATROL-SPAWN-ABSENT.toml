@@ -1,0 +1,10 @@
+[[bug]]
+id = "PATROL-SPAWN-ABSENT"
+title = "Pillager patrols never spawn: the `spawn_patrols` gamerule is registered (`command_rules.rs:158`) but no consumer reads it — no patrol clock, attempt roll, village-distance skip, or 24-48-block captain placement exists anywhere in core. Vanilla runs attempts after 5 in-game days every 10-11 min at 20% chance, skipping players near villages, spawning the captain 24-48 blocks out (light <= 8, non-Peaceful, non-spectator). Raids themselves are implemented (`raids.rs`); only the patrol spawner is absent."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PATROL-SPAWN-ABSENT"
+regression = ["cargo:mc-core:natural_spawn_tests::patrols_spawn_pillagers_near_an_exposed_player_after_five_days"]
+failing_first = "reported"

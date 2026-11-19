@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-ITEM-POSE"
+title = "Copper-golem statue item ignores its `pose` (always standing rig); `swap_animation_scale` (7 spear items) unimplemented"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:26"
+regression = []

@@ -152,9 +152,12 @@ tests and builds; 55 h on Main, IRC or peers; 14% of edits failed).
   merged-tree checks there and then moves `main` with one `--ff-only`.
 - **Do not block on Main.** After sending a question, continue the queue's
   other work; the answer arrives as a message.
-- **Ledger reads.** Never read all of `docs/bugs/ledger.toml`: find the row
-  with `rg -n 'id = "<ROW>"' docs/bugs/ledger.toml` and read only its block;
-  edit only that block.
+- **Ledger reads.** One row is one file: read
+  `docs/bugs/rows/<ROW>.toml` (or `python3 -m tools.harness ledger show <ROW>`);
+  `ledger list --status open` names rows without opening them. Never assemble
+  the whole ledger to find a row.
+- **Ledger edits.** `python3 -m tools.harness ledger edit <ROW> --set 'key = value'`
+  or edit that one file; `status`/`promotion` only through `ledger promote`.
 - **Edits.** Re-read the exact range right before editing it.
 
 ## Briefs

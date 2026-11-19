@@ -1,0 +1,10 @@
+[[bug]]
+id = "WITHER-MANUAL-BUILD"
+title = "Placing the final wither skull by hand never summons the wither: `golems.rs:pattern()` matches only snow (pumpkin + 2 snow) and iron (pumpkin + T) patterns — no soul-sand/soul-soil T + 3-skull arm exists. The dispenser path (`dispenser_construct.rs`) completes wither constructs, so only the manual placement route is missing. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WITHER-MANUAL-BUILD"
+regression = ["cargo:mc-core:golems::tests::player_places_final_skull_and_summons_wither"]
+failing_first = "not recorded"

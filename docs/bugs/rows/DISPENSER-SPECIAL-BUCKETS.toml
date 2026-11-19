@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-SPECIAL-BUCKETS"
+title = "Dispensers eject mob buckets and powder-snow buckets rather than emptying them; empty buckets cannot collect powder snow. The planner supports only water/lava source buckets and water/lava pickup."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-SPECIAL-BUCKETS"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_special_buckets"]
+failing_first = "reported"

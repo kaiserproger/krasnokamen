@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-AMETHYST-NO-CHIME"
+title = "A projectile striking amethyst does not chime"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 AmethystBlock javap (.analysis/codex-logs/impact-parity/parity.javap lines 1486-1518): onProjectileHit plays AMETHYST_BLOCK_CHIME, BLOCKS, volume 1, pitch 0.5 + nextFloat * 1.2; budding amethyst, buds and clusters inherit it. crates/mc-core/src/projectiles had no amethyst reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_chimes_amethyst_once"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-AMETHYST-NO-CHIME.json"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-CONSTRUCT-ERASES-BLOCK"
+title = "A dispenser attempting to place a pumpkin or wither skull overwrites a solid target block and restores air when the construct is incomplete."
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/BugsBlocks/construct-before.log"
+regression = ["cargo:mc-core:redstone::containers::tests::dispenser_construct_heads_do_not_erase_solid_target"]
+failing_first = "reported"

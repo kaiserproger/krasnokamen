@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-18"
+title = "Sheep and goat models wrong"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = ["harness:scene-shot:issue1-18-sheep-goat"]
+fix_commit = "client:b7c48e1c"
+proving_assertions = { "harness:scene-shot:issue1-18-sheep-goat" = "goat_horns_upright" }
+repro_check = "Stage2X SLICES.md:125,144,151: era pin b7c48e1c^ failed goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log), fixed client passed (run-green2-18_sheep_goat.log). The era control is not an exact reversal of the candidate and must be rebuilt for stage 3."

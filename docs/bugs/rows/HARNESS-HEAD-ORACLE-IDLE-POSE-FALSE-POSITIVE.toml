@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-HEAD-ORACLE-IDLE-POSE-FALSE-POSITIVE"
+title = "Player-head back absence check mistakes idle body motion for an extra attachment"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HeadBreaker native-player-head 20261115T022004-native-player-head-gim5wtl7: correct head with no back skull failed raw torso pixel difference at 571 above 440; idle body and arm motion dominates"
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels", "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head"]
+fix_commit = "f3229f1a7"
+failing_first = "reported"
+repro_check = "HarnessFix3/head-pose-green.json: five real candidate frame pairs pass including HeadBreaker 022004 and 022113, with zero added magenta hat pixels on the back; magenta counterexample and old-attachment control remain red. head-pose-control.log restores only check_player_head from 4a90fa799, retaining the real-frame unittest: exactly the 022004 pose regression fails worn_head_back_unchanged. Raw changed-pixel values remain diagnostic, not the attachment oracle."

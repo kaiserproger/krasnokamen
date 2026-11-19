@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-VEHICLE-PLACEMENT"
+title = "Automatic boat/minecart stations eject vehicle items instead of placing usable vehicle entities even with valid water/rail targets. Boat and minecart variants share the missing vehicle dispatch."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-VEHICLE-PLACEMENT"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_vehicle_placement"]
+failing_first = "reported"

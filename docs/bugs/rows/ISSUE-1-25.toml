@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-25"
+title = "Settlement UI is not localized"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by b34c1d0b (civil settlement UI, wt/SettlementUICivil: ui_text.rs Lang strings and every page title); fix patch docs/bugs/fix-patches/SETTLEMENT-UI-CIVIL.patch is the production hunks of that branch, and reversing it removes the localized hub and pages. The ref is the settlement-map-qa localized_text verdict on vanilla Java 26.1.2 with --language ru_ru (the native client sends ClientInformation language en_us fixed and has no language option, so its lane cannot run ru_ru): every Russian title (hub, Settlement, Map, Projects, Construction, Storage, Residents, Resident, Household, Resources, order review, waiting for materials) and the rendered shortage text must arrive"
+regression = ["harness:settlement-map-qa:localized_text"]
+failing_first = "reported"
+fix_commit = "patch:40f8383c27571409b89c202d9f47a4a636b765818e46987640a027055c870381"
+promotion = "docs/bugs/promotions/ISSUE-1-25.json"

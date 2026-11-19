@@ -1,0 +1,11 @@
+[[bug]]
+id = "NATIVE-POTION-IMPACT-EFFECT"
+title = "The native client ignores splash/lingering potion impact level events (2002/2007): src/session/packets.rs:518 routes LevelEvent to present_block_break and block_effects.rs:10 accepts only 2001, so impact particles and custom colors never appear."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Promote agent finding on client e1b22a5"
+regression = ["client:krasnokamen-client:session::packets::map_effect_packet_tests::received_potion_impact_uses_event_rgb_and_effect_family_until_expiry"]
+fix_commit = "client:83994480"
+repro_check = "candidate: no faithful reverse - 83994480's block_effects.rs hunks no longer apply (3-way conflicts after 54b79f73 rewrote the file); area=client, real-client check required"

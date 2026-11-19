@@ -1,0 +1,11 @@
+[[bug]]
+id = "EDGE-ONESHOT-VISUALS-BEST-EFFORT"
+title = "World-credit pressure silently drops non-explosion one-shot visual events"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Stage2Review/terra-edge-events.md finding 4"
+repro = "source"
+regression = []
+repro_check = "Under missing world credit, status, sweep, shield, bottle, swing, damage, hurt, death and pickup events can be dropped without a later snapshot repeating them. Define a delivery policy and test it, including pickup and death ordering before entity removal."
+failing_first = "not recorded"

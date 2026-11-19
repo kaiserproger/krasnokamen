@@ -1,0 +1,12 @@
+[[bug]]
+id = "DAMAGE-IDENTITIES"
+title = "Freeze/wall/cramming/sonic/stalagmite/dragon cloud identities could not be emitted correctly; warden concretely used magic. Not a claim every physical mechanism is implemented."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-IDENTITIES"
+regression = ["cargo:mc-core:command_damage::tests::named_damage_identities_reach_committed_events", "cargo:mc-core:warden::tests::angered_warden_sonic_attack_retains_damage_identity", "harness:entities:native-v2-p4-identities"]
+# Fix 7fe49052 introduced DamageSource::Command, which later code uses, so its reversal does not build; the control reverts the warden sonic_boom identity hunk (special_mobs/mod.rs) only. Patch: docs/bugs/fix-patches/DAMAGE-IDENTITIES.patch.
+fix_commit = "patch:183e48e731519935714fca91fb2a3e6dd04d79c5322dc47402de905db4530296"
+promotion = "docs/bugs/promotions/DAMAGE-IDENTITIES.json"

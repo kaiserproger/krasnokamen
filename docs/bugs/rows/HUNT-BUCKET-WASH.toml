@@ -1,0 +1,10 @@
+[[bug]]
+id = "HUNT-BUCKET-WASH"
+title = "Pouring an offhand water bucket onto cobweb incorrectly mines it using the main-hand tool."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/hunt-block-interactions-next/REPORT.yaml; /run/media/kaiserroman/games/solaris-work/wt/server-bugs-20261103/.analysis/codex-logs/server-bugs/report.md"
+regression = ["cargo:mc-core:fluids_tests::parity::offhand_bucket_wash_does_not_mine_with_main_hand"]
+failing_first = "reported"

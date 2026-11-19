@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-BASELINE-WATER-DESCENT"
+title = "Baseline gate: fluids parity::physics_water_selects_nearest_descent fails on clean base 7fe49052 (VanillaA base-only receipt). Pre-existing red; blocks acceptance growth until separately green."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-WATER-DESCENT"
+regression = ["cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent"]
+fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"

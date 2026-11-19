@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-PANE-ALPHA"
+title = "15 stained-glass-pane GUI icons ≈1.5× too opaque (0.70 vs 0.46); cause unproven"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-model-remainder-20261103.md:125"
+regression = ["client:krasnokamen-client:ui::state::item_projection_tests::gui_blended_item_draws_only_the_facing_side_after_rotation"]
+fix_commit = "client:83994480"
+repro_check = "control receipts/XClientUi/controls-2.log: 83994480's cull hunk no longer applies as a patch (reflowed by 9a645aa9), so its added lines were removed verbatim (quoted byte-identical in controls/pane-alpha-reverted-lines.txt) -> 12 vs 6 indices, both slab faces blended. The ref asserts the mechanism (one viewer-facing blended quad), a proxy for the audit's 0.70-vs-0.46 pixel value; the pixel check is the stage-3 GUI gate. area=client, candidate"

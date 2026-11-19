@@ -1,0 +1,13 @@
+[[bug]]
+id = "HAPPY-GHAST-HARNESS"
+title = "No harness equipment or four-rider admission; current mount owner has single rider. Species itself exists."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HAPPY-GHAST-HARNESS"
+regression = [
+  "cargo:mc-core:vanilla_mob_behavior_tests::happy_ghast_harness_admits_four_riders_and_survives_rider_codec",
+  "harness:entities:native-v2-happy-ghast-harness",
+]
+fix_commit = "patch:94f32f3b264bcb85d8511780a7c0cce3b911095441e8387265a18fd8d29577ea"

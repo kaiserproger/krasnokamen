@@ -1,0 +1,12 @@
+[[bug]]
+id = "NATIVE-FREEZE-CAMERA"
+title = "Under server tick freeze, tp updates observed position while native camera frames remain stale; minecraft_wait_ticks times out30s. Original source returned before player.tick when server_frozen and no step budget."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA"
+regression = ["harness:entities:native-v2-input-camera", "harness:admin-commands:all"]
+proving_assertions = { "harness:entities:native-v2-input-camera" = "frozen_captured_camera_tracks_teleport" }
+fix_commit = "client:c6a56f1d"
+repro_check = "candidate: the tree already ticks the local player while the world is frozen (in-tree test frozen_world_keeps_local_player_and_teleport_camera_live green) and c6a56f1d removes the frozen presentation lag, but no scoped revert exists (stage-0 wip merge); real gate harness:entities:native-v2-input-camera"

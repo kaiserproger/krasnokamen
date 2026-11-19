@@ -1,0 +1,17 @@
+[[bug]]
+id = "JAVA-BATTLE-TAKE-END-CAMERA"
+title = "The battle runner shuts the server down while the Loader scenario is still capturing its end camera"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 LoaderObs seed-46 Java battle: tools/battle/run-battle.py stopped the server right after the finite recorder wait while the CamSpec shield capture was still running (receipts/LoaderObs)"
+repro = "client"
+regression = [
+  "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_holds_shutdown_until_scenario_releases",
+  "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed",
+  "python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes",
+  "harness:java-battle-functional:java-battle-end-camera",
+]
+fix_commit = "patch:d7b99317ffa96bb69e9e3b8c04942a13b85ad1895cabe358875b4da1db3bc80e"
+failing_first = "reported"
+repro_check = "Runner now waits for an explicit, bounded inotify/pidfd completion barrier released by the Loader scenario (loader d6a94c22 battle_scenario.py CaptureLifecycleTest). Red: receipts/LoaderObs/completion-barrier-red.log, capture-lifecycle-red.log; green: completion-barrier-green.log, capture-lifecycle-green.log (39 core tests). Real client: receipts/LoaderObs/late-capture-neoforge-46/java-battle.json waited for completion.ready, took the screenshot, then completion.done, then runner shutdown. Deadline fails closed. Not promoted."

@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-OPUS-3"
+title = "Animal equipment is never drawn."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:78"
+regression = []

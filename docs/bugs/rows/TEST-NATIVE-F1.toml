@@ -1,0 +1,11 @@
+[[bug]]
+id = "TEST-NATIVE-F1"
+title = "Automation press_inputs key.keyboard.f1 rejects a supported physical window key; `wt/model-gallery/.analysis/validation/20261024T035502-model-gallery-_bufguv2/model-gallery/transcript.json:855-860` records unsupported ordinary key."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-F1"
+regression = ["harness:entities:native-v2-input-camera", "client:krasnokamen-client:session::mining_start_tests::f1_key_toggles_hide_hud_through_the_ordinary_key_path"]
+fix_commit = "client:e0f9d563"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-C-f1.log: reversing e0f9d563's two actions.rs hunks (hide_hud arm, normalize_key f1) reproduces the reported symptom 'unsupported ordinary key key.keyboard.f1'; area=harness, repro=cargo, so the evidence is complete. The ref runs in the client checkout (client:<crate>:<test>) and becomes runnable after Main merges wt/XClientControl"

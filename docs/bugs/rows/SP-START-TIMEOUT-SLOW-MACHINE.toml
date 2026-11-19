@@ -1,0 +1,12 @@
+[[bug]]
+id = "SP-START-TIMEOUT-SLOW-MACHINE"
+title = "On a slow machine, singleplayer Play on a new world fails with 'Server did not start in time' (fixed 180 s limit in solaris-client singleplayer.rs) while the server is still generating spawn; pressing Play again resumes the first start and works."
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Main's smoke of the published RC5 Windows zip, 2026-11-07: 4-core Windows 11 VM with software rendering (WARP; the client used about 3000 s CPU and starved the server). Play #1 and #2 timed out; Play #3, with the client minimized, had the server listening after 36 s. Not tried on hardware with a GPU."
+regression = ["harness:singleplayer-regressions:native-sp-slow-machine"]
+proving_assertions = { "harness:singleplayer-regressions:native-sp-slow-machine" = "slow_entered_world" }
+failing_first = "reported"
+repro_check = "candidate: START_TIMEOUT (180 s) was removed by 6a8d255a but that hunk no longer reverse-applies (file drifted) and no cargo ref observes the absence of a deadline - only harness:singleplayer-regressions:native-sp-slow-machine does; area=client, real-client check required"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "REDSTONE-WIRE-HOPPER-SUPPORT"
+title = "Redstone dust is rejected or pops while supported by an intact hopper: vanilla permits hopper support even though its upper face is not fully sturdy. Dust should still pop when the hopper is broken."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-WIRE-HOPPER-SUPPORT"
+regression = ["cargo:mc-core:farming_tests::redstone_wire_survives_on_hopper_until_the_hopper_is_broken"]
+failing_first = "reported"

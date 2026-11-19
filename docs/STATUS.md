@@ -36,8 +36,8 @@ The owner's open GitHub issues are the queue:
 gh issue list -R kaiserproger/krasnokamen --author kaiserproger --state open
 ```
 
-Known bugs, with their status and regression checks, are rows in
-[`bugs/ledger.toml`](bugs/README.md).
+Known bugs, with their status and regression checks, are rows under
+[`bugs/rows/`](bugs/README.md).
 
 ## Open transitions
 

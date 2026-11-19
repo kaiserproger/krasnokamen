@@ -1,0 +1,10 @@
+[[bug]]
+id = "LLAMA-SPIT-ABSENT"
+title = "Llamas never spit at attackers: no `spit/Spit` logic exists in core. Vanilla llamas spit projectiles dealing 1 damage when provoked, and trader llamas defend the wandering trader. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LLAMA-SPIT-ABSENT"
+regression = ["cargo:mc-core:mob_lanes::tests::llamas_spit_at_attackers_and_defend_their_trader", "cargo:mc-core:projectiles::payloads::tests::shulker_fireball_skull_wind_and_spit_deliver_native_special_payloads"]
+failing_first = "reported"

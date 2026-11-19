@@ -1,0 +1,13 @@
+[[bug]]
+id = "LZ4-TOKEN-SIZE-LIMIT"
+title = "Anvil preserving writer accepts LZ4 blocks larger than their token permits"
+area = "gameplay"
+severity = "minor"
+status = "fixed"
+source = "Stage3 ServerSmallFix independent review: a checksum-valid raw LZ4 block with token 0x10 and length 1025 is accepted although vanilla lz4-java 1.10.1 refuses originalLen above 1 << (10 + token low nibble)"
+repro = "cargo"
+regression = ["cargo:mc-world:anvil::region::tests::lz4_token_size_bound_applies_to_readers_and_preserved_writer"]
+fix_commit = "24a0eefd4"
+repro_check = "receipts/ServerSmallFix/negative-token-bound-harness/test.log records all three paths (raw reader, exact decoder, preserving writer) accepting the invalid 1025-byte block before the size guard. token-green-anvil-harness/result.json passes 397 Anvil tests; token-green-vanilla-lz4-harness/result.json passes both ignored vanilla fixture tests. Regression covers raw/compressed blocks at and one byte above the token limit for levels 0, 1 and 6, with no destination published on rejection. token-bound-javap.log records the local vanilla bytecode oracle."
+failing_first = "reported"
+promotion = "docs/bugs/promotions/LZ4-TOKEN-SIZE-LIMIT.json"

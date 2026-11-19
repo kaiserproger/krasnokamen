@@ -1,0 +1,10 @@
+[[bug]]
+id = "DRIPSTONE-RANDOM-TICK"
+title = "Renewable lava farms never fill their cauldrons; water dripstone filling and stalactite/stalagmite growth are likewise absent. Pointed dripstone is classified inert and has only falling-block behavior, not its random-tick resource renewal."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DRIPSTONE-RANDOM-TICK"
+regression = ["cargo:mc-core:farming_tests::dripstone_with_lava_source_fills_the_cauldron_below", "cargo:mc-core:farming_tests::dripstone_grows_without_cauldron_below", "cargo:mc-core:farming_tests::dripstone_fills_water_and_grows_stalagmite"]
+failing_first = "reported"

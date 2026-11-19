@@ -1,0 +1,10 @@
+[[bug]]
+id = "CORE-DROP-LEAVES-WORLD-DIR-WRITER"
+title = "A file appears in the world directory after Core is dropped, so deleting the directory right after drop fails with DirectoryNotEmpty"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "CI run 43340344269 (main 3caeae5c, regressions stage): mc-edge advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book panicked at crates/mc-edge/src/advancements_tests.rs:233 on std::fs::remove_dir_all(dir).unwrap() directly after drop(core): Os code 39 DirectoryNotEmpty (artifact test-failure-receipts-1, receipts/FleetControl/ci-flakes-20261113/a). Reproduced on main ad93ee71 (after the forest-worker join fix fb4c1a52, so that fix does not cover it) by looping the exact test binary: 0 of 100 serial, 1 of 100 with four copies in parallel (receipts/CiFlakes/repro.sh, repro.out, A-par4-56.log). Classification: a timing race in the core, not in the test and not caused by the input/entity commits: remove_dir_all empties the directory and the final rmdir fails, so some core thread or deferred writer still creates a file after Core::drop returned (Core::drop does not wait for every writer of the world directory). Which thread and file is not yet identified (next step: list the leftover entry on failure)."
+regression = []
+failing_first = "reported"

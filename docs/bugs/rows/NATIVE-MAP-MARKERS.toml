@@ -1,0 +1,11 @@
+[[bug]]
+id = "NATIVE-MAP-MARKERS"
+title = "The native client receives correct map decorations (frame marker, off-map player) but draws none on a held map, so waypoints, banners and player markers are invisible."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Promote gate 20261104T213104-native-v2-map-frame-waypoint-lhku9sjo (promotion-wire-receipts.json, screenshots/map-distant-held-clone.png)"
+regression = ["client:krasnokamen-client:ui::packets::held_map_tests::received_map_decorations_face_the_map_and_use_their_atlas_regions", "client:krasnokamen-client:ui::packets::map_lifecycle_tests::received_map_marker_replacements_remove_old_icons_and_omitted_updates_preserve_them"]
+fix_commit = "client:e1b22a5a"
+repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing e1b22a5a's non-test hunk reds held_map_tests at src/ui/packets.rs:1196 ('decoration must face the map viewer'), i.e. the cause (marker winding/UV flip), not the held-map pixels; repro=client, candidate: real-client check required"

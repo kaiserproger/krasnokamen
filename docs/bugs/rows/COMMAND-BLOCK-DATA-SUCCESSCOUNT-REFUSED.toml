@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-BLOCK-DATA-SUCCESSCOUNT-REFUSED"
+title = "Command block data merge refuses the supported SuccessCount field"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:176,179; vanilla BaseCommandBlock javap"
+repro = "cargo"
+regression = ["cargo:mc-core:command_blocks::tests::data_merge_admits_only_supported_fields_and_requires_operator"]
+fix_commit = "7af558182"
+repro_check = "Pre-existing since 0416a3d4c. Green receipts/M3FixCommands/green-scoped-final.log; fix-reverted red receipts/M3FixCommands/red-fix-reverted.log."
+failing_first = "reported"

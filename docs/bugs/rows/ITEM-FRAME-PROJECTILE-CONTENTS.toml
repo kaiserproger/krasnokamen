@@ -1,0 +1,10 @@
+[[bug]]
+id = "ITEM-FRAME-PROJECTILE-CONTENTS"
+title = "Shooting an occupied item frame with an ordinary arrow destroys both the frame and its display, whereas vanilla ejects only the displayed item on the first non-explosive hit and leaves the frame attached."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ITEM-FRAME-PROJECTILE-CONTENTS"
+regression = ["cargo:mc-core:item_frame::tests::arrow_ejects_display_without_destroying_frame"]
+failing_first = "not recorded"

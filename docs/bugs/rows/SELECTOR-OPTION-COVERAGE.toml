@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-OPTION-COVERAGE"
+title = "Java scores, tag, team, level, gamemode, x_rotation, y_rotation, nbt and advancements selector options are rejected or matched incorrectly."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_sort_limit_options_and_typed_filters"]
+failing_first = "not recorded"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-7"
+title = "Creeper has no pre-explosion swell or white flash, and no charged aura."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:117"
+regression = []
+repro_check = "candidate: in-tree code (entities/creeper.rs swell/swollen/flash + creeper_charge rig) with no control - reverting the swell/flash hunks needs a commit-level revert not attempted; real-client check required"

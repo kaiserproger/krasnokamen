@@ -1,0 +1,11 @@
+[[bug]]
+id = "JAVA-BATTLE-SPEAR-PLAIN-ATTACK"
+title = "The Java agent's attack tool sends a plain entity attack while holding a spear, which vanilla servers reject"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 LoaderObs seed-46 Java battle: 8 NeoForge attacks unconfirmed and the Fabric player died after unconfirmed spear attacks; kits carry iron_spear (piercing_weapon)"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Fixed in Loader commit d6a94c225bc42d0a4d4b772fc7f1fc7344fdc31e (merged into local loader main a559802; no ledger fix_commit kind for the Loader repository). Vanilla 26.1.2 ServerGamePacketListenerImpl.handleAttack returns when the main hand has PIERCING_WEAPON (receipts/LoaderObs/vanilla-26.1.2-interact-bytecode.txt:5390-5494, offsets 106-117; bytecode inspection, not a live vanilla run). minecraft_attack_entity_once now refreshes the vanilla raycast and calls startAttack, keeping the piercing path and cooldown gates; no server combat change. Loader Java tests (no ledger ref kind): MinecraftAttackInputTest 4 tests on 26.1.2 and 26.3. Red: receipts/LoaderObs/native-attack-red-26.1.2.log, native-attack-facade-red.log; green: native-attack-green-26.1.2.log, native-attack-green-26.3.log. Real clients: native-input-fabric-46/java-battle.json and native-input-neoforge-46/java-battle.json functional pass with confirmed damage. Not promoted."

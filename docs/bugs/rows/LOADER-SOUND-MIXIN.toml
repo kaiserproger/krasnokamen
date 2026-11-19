@@ -1,0 +1,10 @@
+[[bug]]
+id = "LOADER-SOUND-MIXIN"
+title = "Real Fabric26.1.2/API0.155.2 startup crashed before join: Solaris ScreenSoundEngineMixin redirected getStream first, causing Fabric's required0/1 injection failure."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LOADER-SOUND-MIXIN (ScreenSoundEngineMixin exists only on the unmerged loader branch monitor-fabric, where 432d29d removed it; loader main never had it)"
+regression = []
+repro_check = "Stage2X SLICES.md:133: loader commit 432d29d removed the mixin; restoring it makes MixinConfigTest red (receipts/XWorldLoader/row3-mixinconfig-negctl-red.log). Fabric tests pass on 26.1.2 and 26.3, but a real Fabric launch remains required; this server tree cannot register the loader test as a Cargo ref."

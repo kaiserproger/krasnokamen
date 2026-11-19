@@ -1,0 +1,10 @@
+[[bug]]
+id = "TARGET-PROJECTILE-POWER"
+title = "An arrow striking a target block produces no redstone output."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TARGET-PROJECTILE-POWER"
+regression = ["cargo:mc-core:projectiles::flight_tests::target_block_emits_power_when_shot"]
+failing_first = "not recorded"

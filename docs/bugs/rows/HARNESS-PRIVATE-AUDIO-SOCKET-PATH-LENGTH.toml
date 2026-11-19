@@ -1,0 +1,15 @@
+[[bug]]
+id = "HARNESS-PRIVATE-AUDIO-SOCKET-PATH-LENGTH"
+title = "Long temporary paths exceed private audio Unix socket limits"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "Main reported test_screen_audio_graph failing with a long TMPDIR under targets because AF_UNIX socket paths exceed 108 bytes. Socket fixtures now use short /tmp roots; explicit long SA_SCRATCH fails before daemon startup with a clear diagnostic."
+repro = "source"
+regression = [
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_explicit_scratch_is_rejected_before_daemons",
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_tmpdir_keeps_socket_fixture_short",
+]
+fix_commit = "e1ae29d5c"
+failing_first = "reported"
+repro_check = "receipts/ScreensVoiceStart/long-runtime-red.log records the retained long-path assertion failing before the production guard was added (0 != 3). long-runtime-green.log passes all eight private graph tests after the guard, including long TMPDIR and cleanup on refusal."

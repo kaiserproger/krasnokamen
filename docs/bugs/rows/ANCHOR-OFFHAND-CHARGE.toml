@@ -1,0 +1,10 @@
+[[bug]]
+id = "ANCHOR-OFFHAND-CHARGE"
+title = "Using a partially charged anchor with a non-glowstone main hand and glowstone offhand produces a main-hand SetRespawn or explosion intent instead of deferring to the offhand charge. In the Overworld/End this can explode an anchor the player is trying to recharge."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-OFFHAND-CHARGE"
+regression = ["cargo:mc-core:dimensions::tests::anchor_offhand_glowstone_charges_instead_of_exploding"]
+failing_first = "not recorded"

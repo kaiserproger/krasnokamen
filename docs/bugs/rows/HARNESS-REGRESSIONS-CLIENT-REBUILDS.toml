@@ -1,0 +1,19 @@
+[[bug]]
+id = "HARNESS-REGRESSIONS-CLIENT-REBUILDS"
+title = "Client regression gates ignore release pins and rebuild the server"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 QA: regressions._release_server ran cargo build --release despite the owner pin-release rule"
+repro = "source"
+regression = [
+  "python:tools.harness.test_regressions:ReleasePinTests.test_pin_is_accepted_for_its_registered_tree_without_building",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_explicit_pin_is_accepted_for_its_registered_tree",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_pin_of_another_tree_is_refused",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_missing_pin_is_refused_and_names_exact_pin_release_command",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_explicit_unregistered_pin_is_refused_without_building",
+  "python:tools.harness.test_regressions:ReleasePinTests.test_negative_control_accepts_only_its_own_registered_pin",
+]
+fix_commit = "a39164dc9"
+repro_check = "HarnessPins/negative-pin.log: all eight pin tests fail with only the base _release_server restored, at the forbidden release-build invocation. HarnessPins/refusal.log and its result.json: real regressions-client invocation refuses the absent pin before executing any command."
+failing_first = "not recorded"

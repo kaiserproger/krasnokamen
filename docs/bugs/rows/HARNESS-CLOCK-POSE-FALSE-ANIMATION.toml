@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-CLOCK-POSE-FALSE-ANIMATION"
+title = "Clock face oracle can mistake different item poses for time animation"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Advisor/Main: HarnessFix2 ctx-day frames 20261115T010330-native-dynamic-context-toy5c9tm and 20261115T011022-native-dynamic-context-vew1_lrt have identical time 6000 and camera but produce 17 changed face-grid cells. Pose alone could hide a frozen clock texture after a server time change."
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation", "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock"]
+fix_commit = "d3bc1c33a"
+failing_first = "reported"
+repro_check = "HarnessFix3/clock-pose-green.json: same-time/different-pose real day and night pairs fail dropped_clock_face_changed; noon blue/(blue+neutral-dark) proportions are 0.8414 and 0.8370 despite 17 shifted cells. Three real day/night full-context pairs still pass, including held clocks; dropped fraction changes are 0.65..0.70. Selection remains rim-coverage-only. clock-pose-control.log restores only the prior comparator and its sampling helper from 29800a709, retaining tests: the reported same-time day pair falsely passes again. clock-pose-unit-control.log produces the same false-green failure in the registered regression. Edge-on sampling replays and HUD-only/static controls remain green/red respectively; frame-level proof only, no graphical run or promotion."

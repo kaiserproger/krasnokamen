@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-HOT-RELOAD-RECIPES-LOOT"
+title = "Runtime recipe/loot changes are rejected instead of installed, leaving the old recipes and loot active; client recipe resynchronization is part of the missing outcome. Explicit residual of approved functions/tags-only live enable/disable scope."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
+regression = ["cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients", "cargo:mc-core:datapacks::command_tests::a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection", "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_file", "cargo:mc-core:datapacks::command_tests::a_pack_the_live_reload_refused_does_not_stop_the_next_start", "cargo:mc-core:datapacks::command_tests::the_live_refusal_of_a_pack_names_the_pack_and_the_file", "cargo:mc-core:datapacks::command_tests::a_pack_filter_hides_the_files_of_the_packs_below_it", "cargo:mc-core:datapacks::command_tests::a_malformed_pack_filter_is_refused_naming_the_pack", "cargo:mc-core:datapacks::command_tests::a_pack_command_while_another_is_still_compiling_says_so_instead_of_misreporting_the_selection"]
+fix_commit = "7875d3193"
+repro_check = "candidate: 7875d3193's datapacks.rs reverse conflicts in four blocks after b24f0ce35 and the per-entry scan follow-ups (83d0928e9, 554ba43f1, fd757e004), so no real-hunk control; the refs need test helper df2766ffb from wt/XCoreCommands to be green (12 such failures on base, 3 remaining with the peer fix, none a row ref); receipts/XCoreItems; real-client gate pending (stage 3)"

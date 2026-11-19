@@ -1,0 +1,11 @@
+[[bug]]
+id = "PLAYER-HEAD-UNLISTED-PROFILE-TEXTURE"
+title = "Player heads carrying their own skin texture render as default Steve on the native client (worn, placed and in the inventory)"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 HeadBreaker paired 26.3 oracle: a player head whose profile carries an unsigned public Notch texture property renders Notch on vanilla Java but default Steve on native client 8a7817c8 — worn 2/2 (wt/HeadBreaker/.analysis/validation/20261115T024204-scene-shot-eq64ic2g vs Java 20261115T024245-scene-shot-m2w97kz3), placed block and inventory icon (native 20261115T024502-scene-shot-shky3rd4 vs Java 20261115T024547-scene-shot-t2xl43sp); comparison receipts/HeadBreaker/profile-surfaces-comparison.png. src/entities/profiles.rs:171-215 resolves only listed (tab-list) profiles"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Pre-existing: pre-fix control client 0a0ed7e4 renders the same Steve head for placed and inventory surfaces (20261115T024646-scene-shot-o_aczqke). Server side holds the texture: `data get block ... profile.properties[0].value` returns the exact encoded texture (profile_nbt_readback.json). Signed full profiles not covered (MCP tool field limit 256 chars)."

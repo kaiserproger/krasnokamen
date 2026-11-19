@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-NETHER-TERRAIN"
+title = "Nether maps use the ordinary top-block sampler, so they map the physical bedrock roof/roof builds instead of vanilla's ceiling-dimension noise pattern."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-NETHER-TERRAIN"
+regression = ["cargo:mc-core:tick_tests::maps_tests::nether_map_noise_uses_vanilla_colors_not_roof_blocks", "harness:entities:native-v2-map-nether-terrain"]
+failing_first = "reported"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "FLOWER-SOIL-PLACEMENT"
+title = "A poppy/dandelion can be planted directly onto stone: generic flower placement substitutes a sturdy-face check for vanilla's allowed soil types."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FLOWER-SOIL-PLACEMENT"
+regression = ["cargo:mc-core:farming_tests::flowers_plant_on_soil_but_not_on_bare_stone"]
+failing_first = "not recorded"

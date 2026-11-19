@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-TYPE-NAME-FILTERS"
+title = "Implemented type/name filters reject valid repeated negative clauses, e.g. @e[type=!creeper,type=!pig] or [name=!Alice,name=!Bob]; type filtering also has no entity-tag expansion. A single optional identifier/string stores the whole filter."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-TYPE-NAME-FILTERS"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_repeated_negative_type_name_clauses", "cargo:mc-core:command_execution::tests::command_parity_unnamed_mob_plain_name_and_player_type_rejection"]
+failing_first = "not recorded"

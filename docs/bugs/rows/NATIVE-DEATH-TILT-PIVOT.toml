@@ -1,0 +1,12 @@
+[[bug]]
+id = "NATIVE-DEATH-TILT-PIVOT"
+title = "The native client tilts a dying living entity about the model origin on a sqrt(t/20) curve, so the body turns about chest height and the upright legs lift off the ground; vanilla LivingEntityRenderer.setupRotations turns about the feet with min(sqrt((deathTime-1)/20*1.6),1) * flipDegrees (180 for spider, cave spider, silverfish, endermite). The local avatar never tilted because local.rs reset its death tick every tick."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose)"
+regression = ["harness:scene-shot:native-death-tilt", "client:krasnokamen-client:entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve"]
+proving_assertions = { "harness:scene-shot:native-death-tilt" = "death_tilt_t10" }
+failing_first = "reported"
+repro_check = "implemented in the tree (commit 45ceeafb, carried by wt/XClientMobs); the ref is green and the death tilt turns about the feet on the vanilla curve, but no negative control has been run yet, so this row is not promotable before one exists (the tilt landed as 45ceeafb, which is the fix_commit to record once the control is run). candidate: area=client, real-client check required"

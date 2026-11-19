@@ -1,0 +1,10 @@
+[[bug]]
+id = "THROWABLE-LAUNCH-GEOMETRY"
+title = "Hand-thrown projectiles always originate1.52 blocks above feet regardless of pose, ignore shooter movement, and throw potions directly along aim without their upward bias. Crawling throws originate above the player; sprint-jumping pearls lose their extra range; horizontal splash/lingering throws have the wrong arc. These share one deficient launch-geometry owner."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#THROWABLE-LAUNCH-GEOMETRY"
+regression = ["cargo:mc-core:projectiles::weapons::tests::thrown_snowball_inherits_shooter_motion_and_pose_eye_height", "cargo:mc-core:projectiles::weapons::tests::thrown_potions_use_upward_pitch_offset"]
+failing_first = "reported"

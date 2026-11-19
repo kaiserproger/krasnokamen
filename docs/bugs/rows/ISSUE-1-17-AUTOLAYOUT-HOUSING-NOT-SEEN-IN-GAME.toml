@@ -1,0 +1,19 @@
+[[bug]]
+id = "ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME"
+title = "The settlement plans and builds storage, workshops, roads and lamps by itself on a real client, but never completed a new house or grew its population in any recorded run"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-17): the settlement lays itself out and grows without the player placing every building. Planner source: docs/settlements/construction.md#planning-and-streets (houses are planned when certified house capacity is below population; the first House needs a bed: 3 wool, shears, 2 iron ingots, docs/settlements/construction.md#builders-and-supplies). Evidence: harness profile civilization-seed-qa verdict map, scanned over the 51 result.json receipts under wt/*/.analysis/validation and receipts/ on 2026-11-12: new_house true in 0, second_building true in 3, iron_smelted true in 17, births 0, all 0 (last full runs 2026-11-08/09 on older trees; the three runs of 2026-11-12 failed at start on a missing client root, no evidence). receipts/CivSimSeed24/REPORT.md and REPORT-2.md name the stalls (bed iron never smelted, the first Farm cannot be funded without seeds). Related rows: CIV-SEED24-HOUSE-BED-IRON-NEVER-SMELTED, CIV-SEED24-FARM-SEEDS-NEED-A-FARM, CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT. The remaining wish of ISSUE-1-17: civilization-seed-qa `new_house` and `second_building` true on main in one run"
+regression = [
+  "cargo:mc-core:villager::brain::tests::breeding_tests::fed_residents_with_no_spare_bed_keep_their_bread",
+  "cargo:mc-core:settlements::construction::site_tests::a_town_short_of_wheat_seeds_clears_a_meadow_for_its_first_farm",
+  "cargo:mc-core:settlements::construction::site_tests::a_town_with_the_farms_wheat_seeds_in_stock_clears_no_meadow",
+  "cargo:mc-core:settlements::construction::planner_tests::a_house_short_of_unproducible_wool_does_not_hide_the_farms_extraction",
+  "cargo:mc-core:settlements::blueprints::tests::the_first_farm_costs_no_dirt",
+  "harness:civilization-seed-qa:births",
+]
+failing_first = "reported"
+fix_commit = "patch:5f50f42f18f1a2f1a25b548f65759cf1d06484459099cd71e40c0eceb09db8a1"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patch (patch:5f50f42f18f1a2f1), reverse-ok; replaces the earlier patch:80e8f461; control: four refs red (control-autolayout.log)"

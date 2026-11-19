@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-CAN-BREAK-NOT-EVALUATED"
+title = "Adventure-mode and mob projectiles never break or ignite blocks even when the arrow's can_break admits them"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 Projectile.canBreakBlockInAdventureMode (.analysis/codex-logs/impact-parity/Projectile.javap 459-496: ownerless outside default adventure and non-adventure players pass; mob owners and adventure players need canBreak, applied from the arrow pickup stack by AbstractArrow.javap 96) and TntBlock.prime (parity.javap 2613+: an adventure igniter needs stack.canBreakBlockInAdventureMode). crates/mc-core/src/projectiles/block_impact.rs denied every such shot because Solaris evaluated no can_break predicate."
+regression = ["cargo:mc-core:projectiles::flight_tests::adventure_and_mob_arrows_break_pots_only_through_can_break", "cargo:mc-core:projectiles::flight_tests::adventure_burning_arrow_primes_tnt_only_through_can_break", "cargo:mc-core:projectiles::can_break::tests::block_ids_lists_and_alternatives_select_the_block", "cargo:mc-core:projectiles::can_break::tests::state_properties_match_exact_values_and_ordered_ranges", "cargo:mc-core:projectiles::can_break::tests::nbt_needs_a_block_entity_whose_image_contains_it"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-CAN-BREAK-NOT-EVALUATED.json"

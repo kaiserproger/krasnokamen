@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-WARNINGS-CHAT-FLOOD"
+title = "Every datapack warning was a separate chat line to the operator (50 bad entries gave 50 lines, pushing `Reloading!` out of view); vanilla logs them to the console."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
+regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:7b0fdad349e409f18ff3f8c5bfd69f20a84bb80e79befdebf55e98e59ca7c485"
+repro_check = "round 2: docs/bugs/fix-patches/DATAPACK-WARNINGS-CHAT-FLOOD.patch was replaced - the previous text is recoverable at b620e3333 - and the new digest is verified. Control control-A.log: reversed -> red with 8 `Found non-pack entry` lines and no `5 more` line (8 vs 3)"

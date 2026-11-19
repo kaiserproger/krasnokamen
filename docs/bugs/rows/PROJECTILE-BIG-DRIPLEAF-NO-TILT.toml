@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-BIG-DRIPLEAF-NO-TILT"
+title = "A projectile striking a big dripleaf does not tilt it, and big dripleaf has no tilt ticks at all"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 BigDripleafBlock javap (.analysis/codex-logs/impact-parity/parity.javap lines 767-1485): onProjectileHit sets tilt FULL with the tilt-down sound and schedules a tick; tick walks UNSTABLE->PARTIAL->FULL (10, 10) and resets FULL after 100 with the tilt-up sound; a neighbour signal resets; setTilt emits BLOCK_CHANGE for a changed vibrating tilt. Solaris had no big_dripleaf tilt code."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_tilts_big_dripleaf_until_its_tick_levels_it", "cargo:mc-core:redstone::big_dripleaf::tests::scheduled_ticks_walk_the_tilt_and_reset_a_full_leaf", "cargo:mc-core:redstone::big_dripleaf::tests::a_neighbour_signal_resets_a_tilted_leaf", "cargo:mc-core:redstone::big_dripleaf::tests::a_projectile_hit_keeps_the_pending_tick"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-BIG-DRIPLEAF-NO-TILT.json"

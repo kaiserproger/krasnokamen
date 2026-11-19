@@ -1,0 +1,10 @@
+[[bug]]
+id = "WOLF-ARMOR-ABSORB"
+title = "Body armor never absorbed."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WOLF-ARMOR-ABSORB"
+regression = ["cargo:mc-core:mounts::tests::wolf_body_armor_absorbs_melee_damage_and_wears"]
+failing_first = "not recorded"

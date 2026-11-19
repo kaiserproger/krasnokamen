@@ -1,0 +1,11 @@
+[[bug]]
+id = "SHUTDOWN-ERROR-LOG"
+title = "Ordinary console stop emits ERROR for tick owner, journal owner, checkpoint writer, broadcast closure and server loop, forcing intentional-stop health-oracle exceptions. Checkpoint commit is present; no crash/data-loss inferred."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHUTDOWN-ERROR-LOG"
+regression = ["cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close", "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause", "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges", "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint", "harness:entities:native-v2-console-shutdown"]
+fix_commit = "3acf6374"
+repro_check = "candidate: fix 3acf6374's non-test hunks no longer reverse (core.rs moved to core/journal.rs + core/tick_loop.rs by the stage-0 merges; crates/mc-edge/src/bin/solaris-v2.rs no longer exists; `git apply -3 -R --check` conflicts), so no real control; a hand-made level flip would be synthetic. Refs green incl. the 47 s real-core console stop (receipts/XHarnessInfra/edge-rows-verify.log); harness:entities:native-v2-console-shutdown is stage 3; repro=manual, real-client check required"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "TIME-QUERY-FROZEN-PHASE"
+title = "time query gametime is one tick behind the published simulated age during a held frame"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "tick.rs begin_tick increments held_ticks before input commands, but state.tick increments afterwards; command_execution.rs queries game_ticks(state.tick) in between. A held query sees N-(H+1), whereas the post-tick snapshot sees (N+1)-(H+1)."
+regression = ["cargo:mc-core:tick_control::tests::frozen_frame_time_query_matches_published_game_age"]
+failing_first = "not recorded"
+fix_commit = "31ccff063650fbca21bd81b2af181fbdf5b0548d"
+promotion = "docs/bugs/promotions/TIME-QUERY-FROZEN-PHASE.json"

@@ -1,0 +1,13 @@
+[[bug]]
+id = "NATIVE-REPLACEMENT-INPUT-CLEARED"
+title = "A replacement native controller keeps its lease but loses accepted held input after cancellation"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "WriterLifetimeQA exact client 4f96c55b and Core5e: cancel A's held sneak, then B successfully holds forward; B's controller remains active but the next observation has no held inputs. One failure in three fresh attempts; a confirmation did not reproduce. Both observations are healthy and playable without a screen transition. Session::input(ReleaseAll) clears gameplay input synchronously but UiState::release_all leaves a pending release that the next UI synchronization can replay over B's input. The SourceNext correction consumes that already-applied release: 30 focused regressions pass, the same consumer regression fails with the original release owner in an isolated tree, and native candidate 99f28571/Core5e passes three fresh cancellation cases plus manual preemption. Main read all four receipts; evidence is retained in receipts/NativeControlLease/replacement-input-cleanup.json. The correction and synchronous_release_does_not_clear_replacement_input_on_ui_sync are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Broader acceptance and formal promotion remain pending."
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:session::observation::debug_tests::synchronous_release_does_not_clear_replacement_input_on_ui_sync"]
+proving_assertions = { "harness:entities:native-v2-lease-navigation" = "replacement_input_retained" }
+failing_first = "reported"
+fix_commit = "client:895c63f3"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-A-replacement-input.log (reversing the `ui.release_pending = false;` hunk leaves held inputs [] after the UI sync, the symptom); repro=client, so candidate: real-client check required"

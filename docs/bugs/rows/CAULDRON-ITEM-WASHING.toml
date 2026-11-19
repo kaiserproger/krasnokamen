@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAULDRON-ITEM-WASHING"
+title = "Water cauldrons cannot remove dye from armor/shulkers or the last banner pattern. Ordinary held-item routing has bottle/bucket exchanges but no washing interaction, so customization cannot be undone by the vanilla method."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-ITEM-WASHING"
+regression = ["cargo:mc-core:cauldron_wash_tests::dyed_chestplate_loses_its_color_for_one_water_level", "cargo:mc-core:cauldron_wash_tests::banner_loses_only_its_last_layer_per_use", "cargo:mc-core:cauldron_wash_tests::colored_shulker_washes_to_plain_with_contents_kept"]
+failing_first = "not recorded"

@@ -1,0 +1,16 @@
+[[bug]]
+id = "ENTITYVIEWS-ASCENDING-ID-DEBUG-ONLY"
+title = "EntityViews::publish documents a strictly ascending unique-id input contract but enforced it only with debug_assert!, so a release build silently accepted a batch with a duplicated id (one slot captured before the batch's mutations and freed twice, the identity index and page cells then diverging) or a merely out-of-order one (changed slot assignment between versions that share a slot); the check now runs in every build."
+area = "gameplay"
+severity = "minor"
+status = "fixed"
+source = "crates/mc-core/src/boundary/views.rs:64-83 (the doc contract, now including release-build enforcement) and :122-137 (the check: one comparison per row on the serial slot walk, always on, before that row mutates anything); the serial lifecycle it guards is :118-171 (next_append, free-list pop/push, slot insertion) and the page grouping is `entries.sort_by_key` by slot after a 'Stable' comment. Fix: replace the `debug_assert!(resolved.windows(2)…)` whole-batch scan with `previous < row.id` per row, panicking with a named contract message in every build. Two breaches motivated it, not equally severe: a duplicate id captures its slot before this batch's mutations, so removing it twice frees the same slot twice and the identity index, page cells and chunk index disagree; a unique but descending batch stays self-consistent but changes slot assignment between versions that share a slot (a determinism breach). Consequence, stated exactly: the panic is not caught (the tick thread has no catch_unwind) and does not run halt_authority, so no reliable `Disconnect` is sent; the broadcast sender drops, the pump ends and `serve` returns an error — a fail-stop of serving, the intended outcome for an internal contract breach after a partial mutation. Negative controls: reverting the non-test hunks restores the bare `debug_assert!`, whose payload is the stringified expression, so the registered message assertion fails in a debug build; with `-C debug-assertions=off` the reverted tree accepts the batch and the same checks fail at `expect_err`, while the fixed tree panics with the contract message (receipts 20261117T160526, 20261117T162308, 20261117T161253). Found by read-only audit CS341/REPORT-B.md B8; no caller violation known and no failure observed."
+repro = "source"
+regression = [
+  "cargo:mc-core:boundary::views::tests::publish_rejects_descending_ids_with_a_named_contract_panic",
+  "cargo:mc-core:boundary::views::tests::publish_rejects_a_duplicate_id_that_would_free_one_slot_twice",
+  "cargo:mc-core:boundary::views::tests::ascending_batch_still_publishes_and_keeps_its_slots",
+]
+failing_first = "not recorded"
+fix_commit = "1f949f1516cb1cae2451f90fbc0011fb30741e37"
+promotion = "docs/bugs/promotions/ENTITYVIEWS-ASCENDING-ID-DEBUG-ONLY.json"

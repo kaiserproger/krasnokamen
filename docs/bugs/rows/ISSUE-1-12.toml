@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-12"
+title = "Village radius does not expand"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (settlement radius grows with population); implemented by 8a1c5453 (2026-10-19: GROWTH_PER_RESIDENT = 4 in settlements/registry.rs, `grow_radii` raising the record radius to 4 blocks per resident, capped at MAX_RADIUS 256, never shrinking; docs/settlements/construction.md#natural-zones-and-radius). Fix patch docs/bugs/fix-patches/ISSUE-1-12.patch is the two `grow_radii()` calls that run it (settlements/mod.rs rebuild_counts and refresh_counts); reversing them leaves the radius at its creation value while residents join. The real-client scene founds radius 8 with six villagers inside it and reads radius=24 from `/settlement info`, then binds a seventh and reads radius=28"
+regression = ["cargo:mc-core:settlements::binding_tests::radius_grows_with_population_persists_and_never_shrinks", "harness:scene-shot:native-settlement-radius-growth"]
+failing_first = "not recorded"
+fix_commit = "patch:b47625083f6b75b19e0a4edde8b431b718480ad92327ece6249242958df06d14"
+promotion = "docs/bugs/promotions/ISSUE-1-12.json"

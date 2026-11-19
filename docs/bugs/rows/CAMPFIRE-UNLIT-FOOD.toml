@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAMPFIRE-UNLIT-FOOD"
+title = "Players cannot preload raw food onto an extinguished campfire; every recognized food interaction returns without inserting or consuming anything until the fire is already lit. Vanilla permits food placement while unlit."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-UNLIT-FOOD"
+regression = ["cargo:mc-core:campfire::tests::unlit_campfires_preload_without_cooking_until_relit"]
+failing_first = "not recorded"

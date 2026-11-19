@@ -1,0 +1,16 @@
+[[bug]]
+id = "HARNESS-JAVA-MATRIX-FIXTURE-CHUNK-NOT-LOADED"
+title = "Java matrix armadillo cell fails waiting for its remote fixture block after successful launch"
+area = "harness"
+severity = "major"
+status = "open"
+source = "PreparedLaunchFix original java-matrix command: Fabric capability reaches Play, but selected mobs.armadillo reconnect_mid_action cell fails minecraft_wait_for_loaded_block at -16,199,-16"
+repro = "source"
+regression = [
+  "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_remote_armadillo_fixture_loads_before_arena_teleport",
+  "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_loaded_area_waits_for_each_actual_client_chunk",
+  "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_fixture_observer_restores_actor_when_chunk_publication_fails",
+]
+fix_commit = "e02693db1"
+failing_first = "reported"
+repro_check = "PreparedLaunchFix real-java/20261115T013000-java-matrix-fd94b0mk/pw-2314a2e847b93d120a99: JMatrix00-verbs.jsonl shows the actor at 192.5,77,-447.5 (chunk 12,-28), then a loaded-block wait for chunk -1,-1; server/runproto.toml view_distance=2. ensure_loaded ran before the arena teleport, so forceload could not publish the remote chunk to that client. HarnessFix3/negative-controls.log retains the new regression and reverses only ensure_loaded: expected loaded-chunk assertion fails (12,-28 != -1,-1). No reconnect action had run at the original failure."

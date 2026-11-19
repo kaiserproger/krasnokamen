@@ -1,0 +1,14 @@
+[[bug]]
+id = "CIV-SEED24-FORESTRY-STAFFING"
+title = "Claimed seed-24 village leaves its certified lumber camp unstaffed while construction needs logs."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa seed 24, 20261104T052839-civilization-seed-qa-qd6z7egu; receipts/civ-stall"
+failing_first = "reported"
+regression = [
+  "cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops",
+  "harness:civilization-seed-qa:second_building",
+]
+fix_commit = "1c6f7b09"

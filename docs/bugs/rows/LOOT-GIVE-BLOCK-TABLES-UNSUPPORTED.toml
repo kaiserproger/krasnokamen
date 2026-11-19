@@ -1,0 +1,12 @@
+[[bug]]
+id = "LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED"
+title = "/loot give @s loot minecraft:blocks/stone reports an unknown or unsupported loot table: command_loot resolves only chest loot tables (registry.chest_loot), not block drop tables."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'); command_loot.rs generate(): Source::Table reads state.registry.chest_loot only."
+fix_commit = "patch:32eedfeb063f45f7adc94498723b3378ee66404fba9ababc92b27801a3d0579f"
+regression = ["cargo:mc-core:command_execution::tests::admin_loot_give_rolls_block_tables_like_vanilla_chest_context", "harness:entities:native-v2-command-persist"]
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED.json"

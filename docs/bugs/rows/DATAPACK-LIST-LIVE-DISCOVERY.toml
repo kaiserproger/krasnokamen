@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-LIST-LIVE-DISCOVERY"
+title = "After packs are added/removed on disk, a cached-only `/datapack list` cannot immediately discover the repository change without a separate reload. This remains the explicit residual of Main-approved snapshot listing, not an assumed full vanilla list implementation."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-LIVE-DISCOVERY Fix patch: reversing it makes `/datapack list available` list only packs the selection already knows (explicitly disabled ones) instead of scanning the pack folder."
+regression = ["cargo:mc-core:datapacks::command_tests::list_sees_packs_added_and_removed_on_disk_without_a_reload", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:9294887432bfee19b741c47d64f3dd12b12c2824d4b01ffe2453ba430363062e"
+promotion = "docs/bugs/promotions/DATAPACK-LIST-LIVE-DISCOVERY.json"

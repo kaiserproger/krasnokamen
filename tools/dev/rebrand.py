@@ -44,7 +44,7 @@ HISTORY_FILES = (
 )
 # History lines kept inside otherwise rewritten files: (path regex, line regex).
 HISTORY_LINES = (
-    (r'^docs/bugs/ledger\.toml$', r'^(title|source)\s*='),
+    (r'^docs/bugs/rows/[^/]+\.toml$', r'^(title|source)\s*='),
     (r'^docs/decisions/\d{4}-.*\.md$', r'^\*\*Status:\*\*'),
 )
 KEEP_BEGIN, KEEP_END = 'rebrand:keep-begin', 'rebrand:keep-end'

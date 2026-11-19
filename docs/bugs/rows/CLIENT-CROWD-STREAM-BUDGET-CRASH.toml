@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-CROWD-STREAM-BUDGET-CRASH"
+title = "Native client exits with dynamic_or_ui_stream_budget_exceeded when an overhead camera sees a 2000-mob crowd 19 blocks below"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 Horizon client 1:1 comparison (HzClient1v1 crowd diagnostic, laptop): sealed world with 2000 stationary NoAI mobs at feet y200 on a 0.75-block grid around x4096 z0 (receipts/HzClient1v1/crowd-failures/REPRO_NATIVE_CROWD.md, exact summon commands in logs/entities_2000-summons.json); after `tp HzCamera 4096 219 0 0 90` the native client exits 1 with `client failed: dynamic_or_ui_stream_budget_exceeded` and the server logs the connection closure. Confirmed on the retained UNMODIFIED release binary SHA256 5e30c40a1ebeb730d1e0562072175203ba47624f414109b6ae13d538c3effd51 (crowd-failures/original-confirmation/compatibility/crowd-diagnostic-ours-1794729983844856371/client.log), so the read-only observer patch is not the cause. The Horizon client @0a4dc7ca draws the same pose (1845/2000 bodies in frustum). Fix waits for the owner's client decision."
+repro = "client"
+regression = []
+failing_first = "reported"

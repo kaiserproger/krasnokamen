@@ -1,0 +1,11 @@
+[[bug]]
+id = "ISSUE-1-15"
+title = "Village territory and building map missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (the settlement map page landed in 5013acff (2026-11-03). Fix patch docs/bugs/fix-patches/ISSUE-1-15.patch is the two dialog body lines of settlements/ui_map.rs screen (the cell grid and its legend); reversing it opens the Map page with title and buttons but no territory, buildings or viewer)"
+regression = ["harness:settlement-map-qa:all"]
+fix_commit = "patch:c998825110cb856759bb5928b0cb57978552dc3ba8cb9877b970b5589a993dff"
+promotion = "docs/bugs/promotions/ISSUE-1-15.json"

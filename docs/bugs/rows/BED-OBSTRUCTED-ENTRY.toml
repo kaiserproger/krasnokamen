@@ -1,0 +1,11 @@
+[[bug]]
+id = "BED-OBSTRUCTED-ENTRY"
+title = "A bed with no valid wake-up space is accepted; leaving it clears sleeping pose but leaves the player's position inside the sealed bed area when exit resolution returns None. The row's 'vanilla refuses entry' premise is unverified (vanilla 26.3 bedBlocked checks suffocation above the halves, not exit availability), and the listed test blocks above both halves, so it proves the headroom check, not this symptom."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-OBSTRUCTED-ENTRY"
+regression = ["cargo:mc-core:sleep::tests::sealed_bed_refuses_entry_as_obstructed"]
+failing_first = "not recorded"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/rows.md:66-80: vanilla accepts sleep when no exit is available and leaves the player in place on wake; the registered sealed-bed ref tests headroom, not this obsolete premise, and remains green under reversal. The actual entry change is 0a5cc9c1a, not c2647d08b."

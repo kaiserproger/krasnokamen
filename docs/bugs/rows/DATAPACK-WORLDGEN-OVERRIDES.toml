@@ -1,0 +1,9 @@
+[[bug]]
+id = "DATAPACK-WORLDGEN-OVERRIDES"
+title = "General datapack terrain customization is unsupported. Only the experimental jigsaw inputs (worldgen structure_set, structure with a supported type, template_pool, processor_list, tags/worldgen/biome, structure .nbt) change generation; any other worldgen or dimension resource (biomes, dimension types, noise settings, features, unsupported structure types) refuses a selected pack with an error naming every such entry, and a new pack holding one is skipped and named, instead of being ignored. Split from DATAPACK-WORLDGEN-ZIP, whose ZIP loading is implemented."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split from DATAPACK-WORLDGEN-ZIP. Since the A10 baseline-custody work the experimental jigsaw inputs apply on restart and every other worldgen/dimension resource fails closed by name (docs/OPERATING.md Datapacks and command blocks, docs/COMPATIBILITY.md); general custom terrain remains the open gap."
+regression = []

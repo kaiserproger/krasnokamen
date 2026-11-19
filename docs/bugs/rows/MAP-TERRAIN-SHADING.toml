@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-TERRAIN-SHADING"
+title = "Maps render every visible base color at one constant brightness, losing height contours and water-depth shading. Stair-stepped map art and shallow/deep water with the same base color become indistinguishable."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-TERRAIN-SHADING"
+regression = ["cargo:mc-core:tick_tests::maps_tests::water_map_pixels_keep_water_color_and_distinguish_depth", "harness:entities:native-v2-map-terrain-shading"]
+failing_first = "reported"

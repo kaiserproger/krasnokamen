@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-BASELINE-RANDOM-SAMPLER"
+title = "Baseline gate: plants_tests::native_random_sampler fails on clean base 7fe49052 (VanillaA stash-verified base-only receipt). Pre-existing red; blocks acceptance growth of touching crates until separately green."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-RANDOM-SAMPLER"
+regression = ["cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade", "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers"]
+fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"

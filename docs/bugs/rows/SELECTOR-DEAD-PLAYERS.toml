@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-DEAD-PLAYERS"
+title = "@a and @s omit retained dead players, so commands directed at players on the death screen incorrectly get no matching target. Shared selector admission also imposes alive-only behavior on other player selectors."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-DEAD-PLAYERS"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_dead_players_stay_selectable_by_name_and_all"]
+failing_first = "reported"

@@ -1,0 +1,9 @@
+[[bug]]
+id = "GOLEM-GOSSIP"
+title = "Five eligible recently slept gossiping villagers cannot summon; owner only admits Panic route. Graphical gate native-v2-golem-gossip is blocked until branch wt/LedgerCommandsB10 (row DATA-MUTATION-STORAGE, commits 32069cbb and 0900f85f) lands `/data merge entity` in main; the gate seeds villager state with it."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-GOSSIP"
+regression = ["cargo:mc-core:villager::brain::tests::golem_gossip_summoning_requires_five_recently_sleeping_villagers"]

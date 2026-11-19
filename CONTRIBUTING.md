@@ -150,8 +150,9 @@ python3 -m tools.harness run correctness                       # L2: regressions
    **red when the fix hunks are reverted** (negative control). A unit test
    cannot close a known client-visible failure — those need a real-client
    check. Substantial tests go in focused sibling `*_tests.rs` modules.
-4. File or update a bug row in [`docs/bugs/ledger.toml`](docs/bugs/ledger.toml)
-   for anything broken you observed — see
+4. File or update a bug row at `docs/bugs/rows/<ID>.toml` for anything broken you
+   observed — `python3 -m tools.harness ledger show <ID>` reads one and
+   `ledger list --status open` names them; see
    [the bug ledger](docs/bugs/README.md#filing-a-bug). A fix adds `regression`
    refs. Leave `fix_commit` out of your PR: the maintainer records it after
    merging, when the commit id is final. **Never set `status = "fixed"` by

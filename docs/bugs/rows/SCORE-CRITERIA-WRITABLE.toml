@@ -1,0 +1,11 @@
+[[bug]]
+id = "SCORE-CRITERIA-WRITABLE"
+title = "Create deaths deathCount then scoreboard players set Alice deaths 2 was rejected as read-only; non-dummy/trigger swap targets were also rejected. Vanilla death/player/total kill counters permit writes."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources", "harness:entities:native-v2-command-score-store"]
+fix_commit = "patch:49684fbf13f63f651932adb59ed33616b0f7178faac54b7af4ccc8182c5f7bf5"
+repro_check = "round 2: patch digest verified. Control control-B.log: reversed -> red `no entry found for key`, the `deaths` write was refused as read-only"

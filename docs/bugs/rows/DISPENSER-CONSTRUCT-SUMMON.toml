@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-CONSTRUCT-SUMMON"
+title = "Dispensers cannot complete snow/iron golems or withers with a carved pumpkin/skull; absent a wearable target, the item is ejected and the structure remains unactivated."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-CONSTRUCT-SUMMON"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_construct_summons_from_dispenser"]
+failing_first = "not recorded"

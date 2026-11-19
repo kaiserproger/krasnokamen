@@ -1,0 +1,12 @@
+[[bug]]
+id = "HARNESS-CONTEXT-CLOCK-FIXTURE"
+title = "Dynamic-context scene omits its right shelf clock and frames the held clock edge-on"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 followup: native-dynamic-context right shelf contains compass but no clock; old held-clock ROI samples torso"
+repro = "client"
+regression = ["python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud"]
+fix_commit = "fad1cef1e"
+repro_check = "Added shelf clock at 997,160,1005 and a separate elevated held-clock camera; noon/midnight snapshots show distinct clock faces. Only right shelf clock removed: receipts/HarnessFix2/red-context-right-clock.log fails the fixture unit. Restore: receipts/HarnessFix2/green-followup-scene-units.log. Native-dynamic-context passes three times: .analysis/validation/20261115T010330-native-dynamic-context-toy5c9tm, 20261115T010930-native-dynamic-context-0psg4rju, 20261115T011022-native-dynamic-context-vew1_lrt. First run's dropped/held day/night frames reviewed; no item-frame assertion claimed."
+failing_first = "reported"

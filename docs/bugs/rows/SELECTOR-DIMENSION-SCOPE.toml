@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-DIMENSION-SCOPE"
+title = "Unqualified @e and @p are resolved only in the request dimension, so `/kill @e[type=minecraft:pig]` omits a loaded Nether pig when run from Overworld, and nearest-player commands cannot select a nearer player in another dimension. Existing @a/@r global routing does not cover these variables."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-DIMENSION-SCOPE"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_unqualified_entity_selector_reaches_loaded_remote_dimensions"]
+failing_first = "reported"

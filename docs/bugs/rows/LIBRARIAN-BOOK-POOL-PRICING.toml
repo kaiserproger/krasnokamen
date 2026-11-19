@@ -1,0 +1,10 @@
+[[bug]]
+id = "LIBRARIAN-BOOK-POOL-PRICING"
+title = "Librarian book offers draw from a 35-entry hardcoded pool with flat pricing: vanilla `emerald_and_book_enchanted_book` rolls `enchant_randomly` over `#minecraft:tradeable` (= `#non_treasure` + binding/vanishing/frost_walker/mending) and DOUBLES the emerald price for `#double_trade_price` (= `#treasure`) enchantments. The candidate pool omits soul_speed/swift_sneak/wind_burst/binding_curse/vanishing_curse handling, never doubles treasure prices (mending/frost_walker cost the flat formula), and uses a fixed per-level pick instead of the loot-function roll."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LIBRARIAN-BOOK-POOL-PRICING"
+regression = ["cargo:mc-core:villager::trades::tests::mending_book_uses_treasure_trade_price", "cargo:mc-core:villager::trades::tests::librarian_unlock_adds_enchanted_book_offer", "cargo:mc-core:villager::trades::tests::librarian_tradeable_pool_and_exact_treasure_roll_are_reachable"]
+failing_first = "not recorded"

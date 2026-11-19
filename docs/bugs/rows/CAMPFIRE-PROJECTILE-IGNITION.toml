@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAMPFIRE-PROJECTILE-IGNITION"
+title = "Shooting a dry extinguished campfire with a Flame-bow arrow leaves it unlit instead of relighting it. The burning-arrow impact path handles TNT only, then sticks the arrow without changing the campfire."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-PROJECTILE-IGNITION"
+regression = ["cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire"]
+failing_first = "not recorded"

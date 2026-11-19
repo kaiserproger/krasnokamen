@@ -1,0 +1,14 @@
+[[bug]]
+id = "BATTLE-CAVALRY-HORSE-YAW-SWAY"
+title = "Cavalry horses swing their body yaw in alternating steps of 45 degrees or more at gallop speed while their path continues"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "BattleYawHold residual 2026-11-17 (receipts/BattleYawHold/RESULTS.md:44; BOUNDS.md:21-28 C1; receipts/Stage3/D20-INVENTORY.md row 'Cavalry yaw residual'). ATTRIBUTED 2026-11-18 with a drive probe (receipts/MotionYaw/motion_probe.patch, one RUNBOOK 6a take, 285,212,332 bytes of per-row records, horses selected by wire type 67, no look target, battle rows): 935,386 horse body-ticks, 35.5% turn at all, 61,816 turns >= 45 deg. Of those turns 61% happen while the horse's own drive direction is steady (<= 15 deg/tick movement of the drive) - the body follows a step the physics clipped or bent, i.e. presentation; 31% coincide with the drive itself turning >= 45 deg, i.e. steering; 8% mixed (receipts/MotionYaw/cavalry-attribution2.txt; foot for contrast 39% presentation, 28% steering, 33% mixed). BLOCKED for this freeze: facing the drive has been measured (candidate branch 662460c411 before the battle-row fallback, integration pin 45b5407f6e2c, three takes) and halves the C1 horse time share (.0064/.0058/.0053 -> .0029/.0042/.0028) but it raises recorded move_entity_rot payload from 120-135 KB to 2,554,276 bytes per take (+19x) and rotate_head frames by 62%, and the integration take fails the pre-registered M3 gap_engaged window (.019 vs .0557-.0572); the slice alone with battle rows frozen reproduces the base rows exactly (M3 gap .0574/.0554, move_entity_rot 132,594/136,110 bytes, head_frames 621,960/619,850), so the cost belongs to BattleRest's rest guard, not to the horse change, and the horse change waits for a campaign A/B that carries both. An earlier previous-velocity proxy (replay.py over hook2-yaw-probe.bin) was rejected by the design reviewer and is not evidence."
+repro = "client"
+regression = []
+failing_first = "not recorded"
+
+# Books audit rows (owner D31, 2026-11-18, BooksLedger): every gap of receipts/Books/REPORT-R1..R6.md still open on main 5bdc02911.
+# Gap-to-row table, skipped gaps and their closing commits: receipts/Books/LEDGER-FILING.md. Ideas live in receipts/Perf1M/BOOKS-IDEAS.md.
+# Severity: the reports rank classes, not blocker/major/minor. Data loss, corruption and security gaps file as major; perf and hygiene gaps as minor.

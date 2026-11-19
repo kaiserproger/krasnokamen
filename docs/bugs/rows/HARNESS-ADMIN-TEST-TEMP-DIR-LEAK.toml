@@ -1,0 +1,11 @@
+[[bug]]
+id = "HARNESS-ADMIN-TEST-TEMP-DIR-LEAK"
+title = "A failing mc-edge admin test leaked its /tmp/mc-edge-admin-* fixture directory"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "crates/mc-edge/src/admin_tests.rs created /tmp/mc-edge-admin-* directories by hand instead of through a TempDir, so a failing (or panicking) test left them behind and a later test could remove a directory it did not own; the shared host accumulated them across runs."
+regression = ["cargo:mc-edge:server::admin_tests::a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other", "cargo:mc-edge:server::admin_tests::a_passing_admin_test_leaves_no_temp_dir"]
+fix_commit = "abc5fd559"
+repro_check = "real-hunk control receipts/XHarnessJava/NC-ADMIN-TEMPDIR-reverse-abc5fd559.log: reversing abc5fd559's non-test hunks makes both refs red with the leaked directory listed; the refs live on wt/XHarnessJava 730d9a79c and become runnable after Main merges that branch. Both refs land with wt/XHarnessJava (abc5fd559): on a tree without that branch the tests do not exist and the refs are unrunnable, which is a merge gap, not a wrong name"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "SIGN-EDITOR-DISCONNECT"
+title = "If a player loses connection while the sign editor is open, the unwaxed sign stays owned by their dead connection and other players cannot edit or decorate it without replacing the block/restarting the world."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-EDITOR-DISCONNECT"
+regression = ["cargo:mc-core:farming_tests::signs_tests::disconnected_editor_releases_sign_for_another_player"]
+failing_first = "reported"

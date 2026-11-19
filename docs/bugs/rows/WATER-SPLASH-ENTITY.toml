@@ -1,0 +1,10 @@
+[[bug]]
+id = "WATER-SPLASH-ENTITY"
+title = "Splash water bottles do not extinguish burning entities."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity"]
+failing_first = "not recorded"

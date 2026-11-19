@@ -1,0 +1,18 @@
+[[bug]]
+id = "PLAYER-SPEAR-JAB-DROPPED-AT-DECODE"
+title = "Player spear jab dropped at decode"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "G2L laptop hit-test: the iron spear sent player action STAB but the server discarded it; zero PovRed hits before the pre-rename fix. See receipts/G2/LAPTOP-NEXT.md history and receipts/G2L/hit-test-diag. The pre-rename server fix 0e0155ce was live-tested in receipts/G2L/hit-test-stab; this main port still needs its own real-client check."
+repro = "client"
+regression = [
+  "cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap",
+  "cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation",
+  "cargo:mc-core:tick_tests::spear_stab_hits_at_range_only_when_charged",
+  "cargo:mc-core:tick_tests::spear_stab_sequence_preserves_charge_and_rejects_plain_attack",
+  "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks",
+  "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range",
+  "cargo:mc-data:item_components::tests::loads_component_report_fixture",
+]
+failing_first = "reported"

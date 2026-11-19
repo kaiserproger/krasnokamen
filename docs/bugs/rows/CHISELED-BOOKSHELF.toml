@@ -1,0 +1,10 @@
+[[bug]]
+id = "CHISELED-BOOKSHELF"
+title = "Chiseled bookshelves cannot store and return books."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CHISELED-BOOKSHELF"
+regression = ["cargo:mc-core:shelf::tests::chiseled_bookshelf_stores_and_returns_books"]
+failing_first = "reported"

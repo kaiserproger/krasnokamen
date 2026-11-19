@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS"
+title = "A command block placed by /setblock with {auto:1b} never runs; the same block powered by redstone runs."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick). Cause: the neighbour update that wakes a command block runs before the block entity image is installed, and nothing scheduled the first tick after the install."
+fix_commit = "patch:01110d16794914eb9e293df02bf4e3633c0df0f48118b80d38408859f4f98ea4"
+regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits", "harness:entities:native-v2-command-rows"]
+failing_first = "reported"
+promotion = "docs/bugs/promotions/COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS.json"

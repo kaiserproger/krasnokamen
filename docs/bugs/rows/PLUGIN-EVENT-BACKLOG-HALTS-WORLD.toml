@@ -1,0 +1,12 @@
+[[bug]]
+id = "PLUGIN-EVENT-BACKLOG-HALTS-WORLD"
+title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing new plugin commands"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "CoreAuditFable CAF-01 (receipts/CoreAuditFable/REPORT.md, queue.yaml; static read at 21607d42): crates/mc-core/src/plugin/events.rs:23-34 returns Err when retained+pending exceeds MAX_SCRIPT_EVENT_QUEUE_CAPACITY (1024, crates/mc-script/src/lib.rs:239) or delivery_failed is set; crates/mc-core/src/core/tick_loop.rs:266-271 then calls halt_authority and leaves the loop without a final checkpoint (:628-672). One mc-plugin-host thread delivers to every plugin (host.rs:703-712) and one callback may run 50M fuel / 30 s (limits.rs:84-87). Not documented in docs/PLUGINS.md or ADR 0013. Reachability on the standard pack unproven. Proof: a real component that burns its fuel in on_events while two bots send its command at the maximum rate; today every player sees 'plugin callback backlog overflow: world halted'."
+failing_first = "reported"
+regression = ["cargo:mc-core:plugin_backlog_tests::a_stalled_plugin_refuses_new_commands_instead_of_halting_the_world"]
+fix_commit = "patch:68f37e19635593f8a0504b42fb63a2f08cb8c09387c7f595d4a44ff5d22fa026"
+promotion = "docs/bugs/promotions/PLUGIN-EVENT-BACKLOG-HALTS-WORLD.json"

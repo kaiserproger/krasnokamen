@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-BLOCK-ENTITY-DRAW"
+title = "The production native scene draws only 22 of the 27 block-entity types that have a factory. `shelf`, `brushable_block`, `structure_block`, `test_instance_block` (and the dynamic path that handles them) are never drawn"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-block-item-completion-20261103.md:56"
+regression = ["client:krasnokamen-client:entities::render_blocks::village_tests::every_factory_block_entity_reaches_the_static_scene", "client:krasnokamen-client:entities::render_blocks::village_tests::static_shelf_renders_and_clears_received_item_slots", "client:krasnokamen-client:entities::render_blocks::village_tests::static_brushable_renders_received_item_with_adjacent_light_and_clears", "client:krasnokamen-client:entities::render_blocks::village_tests::structure_box_tracks_viewer_and_received_mode_and_size", "client:krasnokamen-client:entities::render_blocks::village_tests::test_instance_scene_tracks_received_status_box_and_errors"]
+fix_commit = "client:83994480"
+repro_check = "candidate: real revert (scene filter restored to the narrow pre-fix literal list plus the same names excluded from draws_static) reds all eight shelf/brushable/structure/test_instance refs, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"

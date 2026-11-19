@@ -1,0 +1,10 @@
+[[bug]]
+id = "ISSUE-1-23"
+title = "Villager and witch held items not rendered"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+repro_check = "note only: green PASS on the current client with no discriminating red yet - the two pixel windows (emerald green, redstone red) land with Mistral round 2"

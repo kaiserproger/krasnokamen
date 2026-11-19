@@ -1,0 +1,11 @@
+[[bug]]
+id = "SUMMON-ISBABY"
+title = "summon IsBaby accepted only for zombie_villager, rejecting Zombie subclasses, Piglin and Zoglin baby forms."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
+regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin", "harness:entities:native-v2-summon-age"]
+fix_commit = "patch:1d24d42295a3d1140a14a4109683c73aea94df4fe083c22efe1669c4f4cf88ac"
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red `piglin/zombie {IsBaby:0b}`: `Entity does not support summon NBT field IsBaby`"

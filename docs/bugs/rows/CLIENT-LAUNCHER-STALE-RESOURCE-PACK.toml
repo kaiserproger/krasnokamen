@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-LAUNCHER-STALE-RESOURCE-PACK"
+title = "Launcher resource extraction was additive and skipped on a manifest claim, so a stale 26.1.2 pack was never rebuilt and 26.3 assets (sign templates, cushion, sulfur_cube textures) were missing"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "The launcher wrote the resource pack into the game directory incrementally and treated an existing manifest as proof the pack was current, so upgrading the client left a 26.1.2 pack in place: 26.3 content the client needs (template_sign_* block models, entity/cushion and entity/sulfur_cube textures) never appeared, and the client's model-texture walk fails on the missing files."
+regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack", "client:krasnokamen-launcher:bootstrap::tests::a_jar_with_the_same_paths_and_other_bytes_invalidates_the_pack", "client:krasnokamen-launcher:bootstrap::tests::pack_entry_digest_is_the_shared_known_answer", "client:krasnokamen-launcher:ui::tests::ordinary_play_runs_the_install_stage_for_a_stale_pack"]
+fix_commit = "client:8f8e07e9"
+repro_check = "Candidate client:3fa63044 restores a previous pack on failed swap and requires a matching marker before Play; client:8f8e07e9 uses jar SHA-1 and entry digest. Receipts XClientBlocks/27-ready-negative-control.log and 31-jar-identity-negative-control.log show readiness and jar identity controls red; 36-play-negative-control.log shows the real start_play test red. The swap ref stayed green in those controls, but reversing only the swap restore branch fails it in receipts/XClientBlocks/37-swap-negative-control.log and restore passes in 38-swap-restored.log. Real-client upgrade across a pack change remains required."

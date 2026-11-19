@@ -1,0 +1,10 @@
+[[bug]]
+id = "SELECTOR-RANDOM-REPEAT"
+title = "Repeated @r or sort=random evaluations by the same executor within one tick always reuse the same ordering, rather than drawing again. A function repeatedly giving an item to @r with an unchanged player set always awards the same player throughout that tick."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-RANDOM-REPEAT"
+regression = ["cargo:mc-core:command_execution::tests::command_parity_repeated_random_evaluation_redraws_within_one_tick"]
+failing_first = "not recorded"

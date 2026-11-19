@@ -1,0 +1,10 @@
+[[bug]]
+id = "ENTITY-COLD-ROW-READ-IN-FULL-PER-ADMITTED-ENTITY-TICK"
+title = "ColdRow is 760 B and read_row takes it unconditionally for every admitted entity, touching 6-8 of its cache lines per entity per tick (about 0.4-0.5 KB per entity, 400-500 MB per tick at 1M), an order of magnitude over the tens-of-bytes hot footprint the 2-core 1M budget allows."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-1 and section 5 (Bakhvalov 8.1, Drepper 6.2.1, Slotin AoS vs SoA; perf, Perf1M H5, ranked first by effect). crates/mc-core/src/entities.rs ColdRow = 760 B (receipts/M3FixState/r3/scoped-green-final.log:370); EntityStore::row returns &self.cold[slot] and tick/entity_phase.rs read_row reads loot.slime_size, controls, active_effects, speed, sight_range, attack_reach, attack_damage, love, breed_cooldown, entity_life.* and special_mob for every admitted slot; only resting rows are spared (the hot flag). Verified open on main 5bdc02911 (read_row signature unchanged, entity_body_tests.rs ratchets Body only). Fix shape (design, needs Main's review): a HotRow column of at most 64 B holding exactly the fields read_row reads, wide state left in ColdRow for the rare paths (RarePrep already draws that boundary); fence: a test that the HotRow projection equals the ColdRow fields. Measure ls_any_fills_from_sys.dram_io_all per entity per tick (expect 8-12 before, 1-2 after) and backend_bound_memory."
+regression = []
+failing_first = "not recorded"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "COMMAND-ZERO-BUDGET-LOCKOUT"
+title = "Parked B16 WIP honors max_command_sequence_length=0 literally, then rejects every native root command before execution, including the gamerule command needed to restore a positive limit. Both ordinary player and trusted console native-command paths share this admission. This is command-administration lockout in an unaccepted candidate, not a deployed or login failure."
+area = "gameplay"
+repro = "source"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#COMMAND-ZERO-BUDGET-LOCKOUT"
+regression = ["cargo:mc-core:command_context::tests::command_parity_zero_sequence_budget_still_admits_one_root_command"]
+failing_first = "reported"

@@ -1,0 +1,16 @@
+[[bug]]
+id = "NATIVE-UNLOADED-EYE-SESSION-END"
+title = "A far server teleport ends the native client session when the eye's terrain has not arrived yet"
+area = "client"
+severity = "blocker"
+status = "open"
+source = "Stage3 ScreensVoiceStart: teleport to 1000.5/176/1000.5 → `session failed: unloaded_eye_environment` (client 12e076e9 player.rs:644 eye_medium Err on an unloaded block ended the session). Also hit ordinary gates on 12e076e9 + server c7786910e (S3ClientRegress): native-item-bars 20261115T005013-native-item-bars-eeprrqzp and native-v2-p4-damage 20261115T005042-native-v2-p4-damage-gwindu_y reach Play, then the session ends with the same error"
+repro = "client"
+regression = [
+  "client:krasnokamen-client:session::observation::destruction_tests::unloaded_eye_keeps_play_frames_and_waits_for_terrain",
+  "harness:scene-shot:native-unloaded-eye",
+]
+proving_assertions = { "harness:scene-shot:native-unloaded-eye" = "unloaded_eye_session_survives" }
+fix_commit = "client:ace7a8049bc10c22f5d2db639f40663712dee4b4"
+failing_first = "reported"
+repro_check = "Registered causal harness:scene-shot:native-unloaded-eye forwards unmodified server packets, holds the stream after the far teleport, and proves unloaded_eye_session_survives after the initial Play session. Server pin 8b6fc28e58bb: client 8a7817c8b0fb passes all 14 assertions in receipts/HarnessFix4/runs/20261115T031808-native-unloaded-eye-da3qyqcy (null unloaded eye, later water, four advancing actual-window GPU frames); client 12e076e9c761 fails exactly unloaded_eye_session_survives with initial in_play=true in runs/20261115T032109-native-unloaded-eye-d_nhc6_6 under the same receipt root. Neither is a startup error or timeout. Historical exact Err-return unit control and three ace7a8049bc1 scene passes remain in receipts/EyeUnloaded/result.yaml and unit-red.log/unit-green.log. Supplied client snapshots are not claimed to be an exact-only fix reversal. No promotion performed."

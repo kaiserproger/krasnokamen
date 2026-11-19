@@ -1,0 +1,10 @@
+[[bug]]
+id = "KELP-FLOWING-GROWTH"
+title = "Kelp cannot grow into downward-flowing water: extension requires water level0, preventing the ordinary top-poured water-column/bubble-elevator cultivation workflow. Existing test oracle conflicts with the reported vanilla water behavior and needs javap verification."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#KELP-FLOWING-GROWTH"
+regression = ["cargo:mc-core:farming_tests::kelp_bonemeal_grows_into_flowing_and_falling_water_under_air", "cargo:mc-core:farming_tests::kelp_random_ticks_grow_into_flowing_and_falling_water_under_air"]
+failing_first = "reported"

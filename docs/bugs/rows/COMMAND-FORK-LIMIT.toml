@@ -1,0 +1,10 @@
+[[bug]]
+id = "COMMAND-FORK-LIMIT"
+title = "Command forks may not obey vanilla strict admission and fork-counting semantics."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RULE-COMMAND-BUDGET; ReviewAcceptanceOpus first-promotion-batch"
+regression = ["cargo:mc-core:command_context::tests::command_parity_fork_limit_is_strict_and_sequence_costs_modifier_stages"]
+failing_first = "not recorded"

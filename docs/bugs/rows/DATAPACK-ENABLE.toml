@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-ENABLE"
+title = "datapack disable file/matrix and enable rejected; list-only dispatch."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE Fix patch: reversing it removes the enable/disable arms (and the in-progress guard) from datapack_management::dispatch, back to list-only dispatch."
+regression = ["cargo:mc-core:datapacks::command_tests::enable_and_disable_follow_vanilla_ordering_errors_and_results", "cargo:mc-core:datapacks::command_tests::the_saved_pack_selection_decides_which_recipes_load_after_a_restart", "cargo:mc-core:datapacks::command_tests::a_selected_pack_gone_from_disk_is_dropped_with_an_inactive_start_warning", "cargo:mc-core:datapacks::command_tests::a_pack_removed_without_saved_starts_does_not_block_reopen", "cargo:mc-core:datapacks::command_tests::a_corrupt_saved_selection_fails_closed", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::unreadable_or_non_pack_folder_entries_are_skipped_at_start_and_named", "cargo:mc-core:datapacks::command_tests::a_reload_skips_a_new_broken_pack_and_applies_the_rest_but_a_broken_saved_pack_refuses_it", "cargo:mc-core:datapacks::command_tests::list_and_activation_work_beside_unreadable_entries", "cargo:mc-core:datapacks::command_tests::a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other"]
+fix_commit = "patch:c3f274721984ac395f776c096188b4dbdbe453f0ad4d35b4be1d8a8011689116"
+promotion = "docs/bugs/promotions/DATAPACK-ENABLE.json"

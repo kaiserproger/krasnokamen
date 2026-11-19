@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-PLAYER-HEAD-PROFILE"
+title = "`player_head` items ignore the `profile` component (GUI, hand, ground, frame, worn): always Steve"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:24"
+regression = ["client:krasnokamen-client:entities::render_blocks::village_tests::player_head_item_uses_listed_profile_skin"]
+fix_commit = "client:4380b088"
+repro_check = "candidate: real revert (the head_skin branch removed from special_item) reds the ref on the baked texture layer (listed 9, unlisted/none Steve 5), receipts/XClientBlocks/10-negative-control.log; the test that commit added had been lost in the stage-0 merges and is restored here; area=client, real-client check required"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "HC-5"
+title = "Launcher Cancel cannot interrupt headers-stalled HTTP send and may retry20-minute requests."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-5"
+regression = ["client:krasnokamen-launcher:net::tests::stalled_headers_fail_within_the_bounded_request_timeout", "client:krasnokamen-launcher:net::tests::cancel_ends_a_stalled_download"]
+fix_commit = "client:b47fc25a"
+repro_check = "real-hunk control (cancel/retry hunks reversed -> the timeout surfaces instead of the cancel); the launcher crate is krasnokamen-launcher; the 60 s bound itself is pinned only through the client_with_timeout seam, not by a symptom-level ref; area=client, candidate"

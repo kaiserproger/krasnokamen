@@ -1,0 +1,10 @@
+[[bug]]
+id = "SETTLEMENT-RESIDENTS-TRAPPED-IN-PLAZA-BASIN"
+title = "Seven of trial-4's eight residents stay in the one-cell water basin beside the bell for 24,000 ticks under a tree crown, so no Builder ever reaches a worksite"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "SlotStall native probe on a copy of SpainCulture trial-4 at ab2d945c9 (receipts/SlotStall/README.md, logs/before-trial4.log, logs/dump-trial4.log): residents at (116.3-116.7, 69.6, 7.5) float in water (116,69,7), rimmed by acacia_wood at y=69, with acacia_leaves at (116,72,7) and its neighbours and an acacia trunk at (116,70..73,9); they hold navigation targets and 40-130-node paths but do not move from tick 304106 to 328106. mc-physics step_entity lets a body jump out of fluid only when a 0.6 rise is free of collision; from y=69.6 the 1.95-high body would reach 72.15 and meets the crown at y=72. Not established: whether vanilla frees villagers here, and how the crown came to stand over the basin (lumber replant or natural growth)."
+regression = []
+failing_first = "not recorded"

@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-OPUS-N6"
+title = "Baby armour shells resample the texture at non-1:1 texel density on almost every face."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:129"
+regression = []

@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-CHICKEN-WINGS"
+title = "Grounded chickens and other wings flap constantly"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
+regression = ["client:krasnokamen-client:entities::animation_tests::animation_chicken_wings_rest_on_received_ground_and_beat_in_midair"]
+repro_check = "candidate: in-tree code and a passing unit ref, no control (the code lives in the shared animation state, Area C); real-client check required"

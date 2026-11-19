@@ -1,0 +1,9 @@
+[[bug]]
+id = "CIVILIZATION-EMPLOYED-SHEARING"
+title = "A construction wool bill cannot use an otherwise eligible working adult with shears or two iron ingots."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/result.yaml"
+regression = ["cargo:mc-core:villager::shepherd_tests::working_miner_crafts_shears_and_delivers_wool_during_house_demand"]

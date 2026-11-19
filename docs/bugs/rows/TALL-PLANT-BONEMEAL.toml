@@ -1,0 +1,10 @@
+[[bug]]
+id = "TALL-PLANT-BONEMEAL"
+title = "Bone meal applied near the base of an ordinarily cultivated kelp/weeping-vine/twisting-vine column stops working once its head is more than25 blocks from the clicked segment. The code confuses the natural age limit with a maximum legal column length."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TALL-PLANT-BONEMEAL"
+regression = ["cargo:mc-core:farming_tests::bone_meal_reaches_column_tips_beyond_twenty_five_blocks", "cargo:mc-core:farming_tests::bone_meal_reaches_head_of_long_kelp_column"]
+failing_first = "reported"

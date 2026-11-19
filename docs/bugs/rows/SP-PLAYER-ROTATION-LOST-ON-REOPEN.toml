@@ -1,0 +1,10 @@
+[[bug]]
+id = "SP-PLAYER-ROTATION-LOST-ON-REOPEN"
+title = "Singleplayer: after a clean quit and reopen the player's position is kept but yaw/pitch come back as 0/0; vanilla persists Rotation."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F4, 8/8 including the uninterrupted control run); not caused by the WORLD-FIRST-START-INTERRUPTED fix."
+regression = []
+failing_first = "reported"

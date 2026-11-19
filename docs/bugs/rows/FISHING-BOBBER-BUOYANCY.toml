@@ -1,0 +1,10 @@
+[[bug]]
+id = "FISHING-BOBBER-BUOYANCY"
+title = "A hook cast while the player is underwater stays at its submerged cast position instead of rising to the unobstructed water surface."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FISHING-BOBBER-BUOYANCY"
+regression = ["cargo:mc-core:projectiles::fishing::tests::submerged_hook_rises_toward_the_surface"]
+failing_first = "not recorded"
