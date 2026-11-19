@@ -69,18 +69,19 @@
     "test-audit-d60-read2-screens-voice-split-batch.json",
     "test-audit-d60-read2-server-load-profile-batch.json",
     "test-audit-d60-read2-settlement-map-qa-batch.json",
-    "test-audit-d60-read2-singleplayer-regressions-batch.json"
+    "test-audit-d60-read2-singleplayer-regressions-batch.json",
+    "test-audit-d60-read2-split-civilization-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 1449,
-    "removed_in_new_batches": 660,
+    "finalized_historical_test_ids": 1461,
+    "removed_in_new_batches": 665,
     "prior_main_deletions_excluded": 3,
     "retained_K1": 228,
     "retained_K2": 9,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 547,
-    "historical_medium_candidates_reviewed": 646,
-    "remaining_medium_candidates_unfinalized": 153,
+    "retained_U": 554,
+    "historical_medium_candidates_reviewed": 650,
+    "remaining_medium_candidates_unfinalized": 149,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },
