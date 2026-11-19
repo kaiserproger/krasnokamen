@@ -78,6 +78,25 @@ def unknown_ignored(path: Path) -> list[str]:
     return [item.decode(errors="replace") for item in raw.split(b"\0") if item]
 
 
+# Run data under .analysis (worlds, crash copies, WAL, stores) is not reproducible: the
+# disk rule forbids deleting it without the owner's explicit OK, so it blocks removal.
+RUN_DATA_SUFFIXES = {".redb", ".mca", ".mcc", ".dat", ".dat_old", ".bin", ".nbt"}
+RUN_DATA_DIRS = {"world", "crash-copy", "backups", "journal", "region"}
+
+
+def run_data(path: Path) -> list[str]:
+    """Ignored .analysis files that are run data rather than gate evidence."""
+    raw = w.git(path, "ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--",
+                ":(glob)**/.analysis/**", binary=True)
+    found = []
+    for item in (entry.decode(errors="replace") for entry in raw.split(b"\0") if entry):
+        parts = Path(item).parts
+        if (Path(item).suffix.lower() in RUN_DATA_SUFFIXES
+                or any(part in RUN_DATA_DIRS or part.startswith("wal") for part in parts[:-1])):
+            found.append(item)
+    return found
+
+
 def keep_evidence(path: Path, receipts: Path) -> tuple[int, int]:
     """Copy evidence files of every .analysis dir into receipts/<Name>/analysis/<path>."""
     raw = w.git(path, "ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--",
@@ -161,6 +180,12 @@ def main() -> None:
     base = find_base(name, key, wt)
     branch = str(w.git(wt, "symbolic-ref", "-q", "--short", "HEAD", check=False))
     tree, untracked = w.working_state(wt, include_untracked=not args.drop_untracked)
+    runs = run_data(wt)
+    if runs:
+        shown = ", ".join(runs[:10]) + (f" ... ({len(runs)} files)" if len(runs) > 10 else "")
+        raise w.ToolError(f"run data under .analysis (worlds, WAL, stores): {shown}; it is never deleted "
+                          "here - move it out of the worktree first (deleting run data needs the owner's OK "
+                          "and never covers failed runs or negative controls)")
     unknown = unknown_ignored(wt)
     if unknown and not args.drop_ignored:
         shown = ", ".join(unknown[:20]) + (f" ... ({len(unknown)} files)" if len(unknown) > 20 else "")

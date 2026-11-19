@@ -99,6 +99,27 @@ pub async fn handle_configuration(
     loader_required: bool,
     resource_pack: &crate::config::ResourcePackSection,
 ) -> anyhow::Result<ConfigOutcome> {
+    handle_configuration_with_horizon(
+        conn,
+        data,
+        tags,
+        loader_manifest,
+        loader_required,
+        resource_pack,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn handle_configuration_with_horizon(
+    conn: &mut Connection,
+    data: &mc_data::VanillaData,
+    tags: &mc_data::tags::TagsData,
+    loader_manifest: Option<&mc_loader::LoaderManifest>,
+    loader_required: bool,
+    resource_pack: &crate::config::ResourcePackSection,
+    horizon_distance: Option<u32>,
+) -> anyhow::Result<ConfigOutcome> {
     // Vanilla publishes feature flags before registry/known-pack negotiation.
     conn.send_packet(&UpdateEnabledFeatures {
         features: mc_core::datapacks::ENABLED_FEATURES
@@ -232,6 +253,12 @@ pub async fn handle_configuration(
         payload: CustomPayload::Brand(server_brand()),
     })
     .await?;
+    if let Some(distance) = horizon_distance {
+        conn.send_packet(&ClientboundCustomPayload {
+            payload: crate::horizon_lod::offer(distance),
+        })
+        .await?;
+    }
 
     // Required bundles negotiate with every client (a vanilla client is refused
     // there). Optional-only manifests negotiate only with a client that answered

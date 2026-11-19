@@ -225,6 +225,9 @@ AREAS = (
          ("scenario:native-v2-custody-mount-export",), "docs/bugs/README.md#native-promotion-probes"),
     Area("light", ("crates/mc-core/src/light*", "crates/mc-edge/src/light*", "crates/mc-world/src/light*"),
          ("scenario:native-v2-light-seam",), "tools/harness/scenarios.py (native-v2-light-seam)"),
+    Area("horizon-lod", ("crates/mc-edge/src/horizon_lod*",),
+         ("profile:horizon-lod", "profile:horizon-lod-live"),
+         "docs/development/horizon-lod-acceptance.md"),
 )
 
 # Profiles marked variable: timing-, seed- or concurrency-dependent behaviour
@@ -280,6 +283,8 @@ BACKEND_PROFILES: dict[str, tuple[str, ...]] = {
     "composter_chance": ("composter-chance",),
     "datapack_reload": ("datapack-reload",),
     "dh_gate": ("dh-gate",),
+    "horizon_lod": ("horizon-lod", "horizon-lod-live"),
+    "horizon_lod_live": ("horizon-lod-live",),
     "dialogs": ("dialogs",),
     "gameplay": ("survival",),
     "graves": ("graves",),

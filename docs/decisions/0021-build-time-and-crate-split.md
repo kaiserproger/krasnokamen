@@ -118,7 +118,14 @@ along with the reference tables behind its counts.
   - Merge conflicts: 71 of the 302 `mc-core` commits since 2026-10-22 touched
     this area.
 
-The design's recommendation is no-go until Step 3 narrows the coupling.
+The design's recommendation was no-go until Step 3 narrows the coupling. The
+owner overrode the timing on 2026-11-19 (D65: «Да, начать сейчас, параллельно с
+работой над поселениями, и принять конфликты»): the work starts now, in parallel
+with the current settlement slices, and their merge conflicts are accepted. The
+order stays: Step 3 item 3 (one owned settlement and villager state type,
+persistence byte for byte) first, then this crate. Build time (the Step 1
+method) and release game speed (villager brains without cross-crate inlining,
+no LTO) are measured before and after; neither gain is claimed before that.
 
 ## Step 3 (in progress): feature unification, leaf extraction, ownership cuts
 

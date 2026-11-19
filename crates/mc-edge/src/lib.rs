@@ -48,6 +48,7 @@ mod dimensions;
 pub(crate) mod faction_teams;
 pub mod fanout;
 pub mod handshake;
+mod horizon_lod;
 mod host_telemetry;
 mod light;
 mod lod;

@@ -1073,7 +1073,6 @@ GOAL_MAP["FangLife"].append("mobs.evoker")  # evoker_fangs entity lifecycle (non
 PLUGIN_MAP = {"krasnokamen-permissions": "plugins.perm_groups_user_set", "krasnokamen-essentials": "plugins.essentials_homes", "krasnokamen-economy": "plugins.economy_money_pay",
               "krasnokamen-towns": "plugins.towns_create_info", "krasnokamen-audit": "plugins.audit_queries", "basic-economy": "plugins.basic_economy_shop",
               "krasnokamen-auth": "plugins.auth_register_login", "chisel": "plugins.chisel_conversion", "graves": "plugins.graves_custody",
-              "land-claims": "plugins.plugin_startup_fail_closed", "online-roster": "plugins.plugin_startup_fail_closed", "geological-mines": "plugins.plugin_startup_fail_closed",
               "computer": "monitor.monitor_give_place_break"}
 PCMD_MAP = {"perm": "plugins.perm_groups_user_set", "sethome": "plugins.essentials_homes", "home": "plugins.essentials_homes", "delhome": "plugins.essentials_homes",
             "setspawn": "plugins.essentials_spawn_warps", "spawn": "plugins.essentials_spawn_warps", "setwarp": "plugins.essentials_spawn_warps",
@@ -1081,8 +1080,19 @@ PCMD_MAP = {"perm": "plugins.perm_groups_user_set", "sethome": "plugins.essentia
             "tpaccept": "plugins.essentials_tpa", "msg": "plugins.essentials_msg_reply", "reply": "plugins.essentials_msg_reply", "money": "plugins.economy_money_pay",
             "pay": "plugins.economy_money_pay", "econadmin": "plugins.economy_admin", "town": "plugins.towns_create_info", "audit": "plugins.audit_queries",
             "economy": "plugins.basic_economy_shop", "register": "plugins.auth_register_login", "login": "plugins.auth_register_login",
-            "changepassword": "plugins.auth_register_login", "claim": "plugins.plugin_startup_fail_closed", "who": "plugins.plugin_startup_fail_closed",
-            "geology": "plugins.plugin_startup_fail_closed"}
+            "changepassword": "plugins.auth_register_login"}
+def mapped(table, names, what):
+    """Name every declared package and command in this table or refuse to generate.
+
+    A package or command found in a deployment but absent here means the matrix
+    documentation lost it; failing with the names beats a bare KeyError, and
+    silently omitting it would hide a real gap."""
+    missing = sorted(set(names) - set(table))
+    if missing:
+        raise SystemExit(f"{what} has no matrix scenario: {', '.join(missing)}; add it to the table above")
+    return {name: table[name] for name in names}
+
+
 CODE_DIMS = {
     "player_input (core:boundary.rs PlayerInput)": {v: PI_MAP.get(v) for v in CG["player_inputs"] if v != "TestGive"},
     "menu_kind (core:inventory.rs MenuKind)": {v: MENU_MAP[v] for v in CG["menu_kinds"]},
@@ -1098,8 +1108,8 @@ CODE_DIMS = {
     "villager_profession (core:villager/mod.rs)": {p: f"villagers.profession_{p}" for p in CG["professions"]},
     "settlement_subcommand (edge:command_tree.rs SETTLEMENT_HELP/ECONOMY)": {**{h: f"settlements.{h.replace(' ', '_')}" for h, _ in CG["settlement_help"]},
                                                                              **{f"{a} {b}": f"settlements.{a}_{b}" for a, b, _ in CG["settlement_eco"]}},
-    "plugin_package (../solaris-default-plugins/*/plugin.toml)": {p: PLUGIN_MAP[p] for p in CG["plugins"]},
-    "plugin_command (plugin.toml player_commands)": {c: PCMD_MAP[c] for p in CG["plugins"].values() for c in p["commands"]},
+    "plugin_package (../solaris-default-plugins/*/plugin.toml)": mapped(PLUGIN_MAP, list(CG["plugins"]), "a deployed plugin package"),
+    "plugin_command (plugin.toml player_commands)": mapped(PCMD_MAP, [c for p in CG["plugins"].values() for c in p["commands"]], "a plugin player command"),
     "weather (core:commands.rs Weather)": {"Clear": "weather_time.weather_cycle", "Rain": "weather_time.weather_cycle", "Thunder": "weather_time.lightning_effects"},
     "selector": {k.split(".", 1)[1]: k for k in SUBJ if k.startswith("selectors.")},
 }
@@ -1577,7 +1587,7 @@ lines += ["",
           "- Computer terminal exists only in Fabric Loader (loader-core ComputerProtocol, loader-fabric ComputerClient); native client has no `krasnokamen:computer`; screen sharing to other players is excluded by ADR 0018.",
           "- No horse/donkey/llama inventory screen and no lectern menu in `MenuKind` / container mapping (crates/mc-core/src/tick.rs container_kind_for_state).",
           "- No spawn-protection key in server.properties support (crates/mc-edge/src/server_properties.rs).",
-          "- Legacy plugin manifests land-claims/online-roster/geological-mines declare api 0.6.0 and are not deployable on 0.8 (scenario `plugins.plugin_startup_fail_closed`).",
+          "- A legacy API 0.6.0 manifest is refused by manifest validation (`UnsupportedScriptApiVersion`, host contract 0.9.0) before its `entry` is resolved; the synthetic fixture `tools/fixtures/legacy-api-0.6` is meant for scenario `plugins.plugin_startup_fail_closed`, whose driver step (`plugin_invalid_startup`) is not implemented yet. The v1 packages land-claims/online-roster/geological-mines were deleted by the D66 duplicate-plugin audit (2026-11-19; receipts/PluginDupAudit/AUDIT.md).",
           "",
           "## Full combinatorial set (all combinations)", "",
           f"- Unconstrained product: {len(SUBJ)} subjects x {FULL['contexts_per_subject']:,} contexts (9 clients x 4 modes x 3 dimensions x 4 difficulties x 3 player counts x 6 network x 6 lifecycle x 6 permissions) = **{FULL['unconstrained']:,}**.",
