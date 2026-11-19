@@ -62,6 +62,28 @@ The prefix survives streamed folds and repeated projections until recovery
 ends. Ambiguous same-mode counters or contradictory native boundaries fail
 closed. Daylight time and native absolute deadlines are not retimed.
 
+Catch-up debt stores a native anchor `L` and the held prefix `A = H(L)`.
+Activation at output `T` owes `max(0, (T - 1 - L) - (H(T - 1) - A))`, excluding
+both held frames and activation itself. Live, block-only and cancellation
+writes advance both anchors together. Active recovery/checkpoint images use
+one global recovered prefix for every dimension; inactive anchors and
+outstanding `remaining` debt do not project. Only running ticks spend debt.
+Accepted external edits and item births still cancel old debt while frozen.
+Native extras retain the optional `KrasnokamenSimHeldTicks` Long, including
+zero, and newer manifest/WAL authority supersedes older native extras.
+
+Climate also retains a constant `sim_debt_anchored_since` tick. An unflagged
+legacy running world with `H = 0` upgrades after its entire old tail is folded;
+the first new output tick starts the epoch. Missing older anchors mean zero
+exactly. Unflagged held/nonzero-prefix worlds refuse ordinary recovery, as do
+anchorless WAL images at or after the epoch or a writer removing the epoch.
+No ordinary open scans cold chunks or guesses a held prefix. Historical
+pre-c9c13b37 restarts that reset `H` can already have overstated running time;
+the exact upgrade does not repair that history or already-accrued legacy debt.
+For unchanged running clock/debt state, capture/load/capture preserves the
+stored bytes. Owned metadata updates preserve field positions; online-player
+to offline-player session-clock normalization is a distinct state change.
+
 ### Mob death and corpses
 
 `tick/damage.rs` commits a mob's death once: `alive = false`, entity event 3,

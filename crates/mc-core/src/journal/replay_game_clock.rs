@@ -2,7 +2,7 @@
 use crate::config::CoreError;
 use crate::dimensions::Dimension;
 use crate::journal::JournalEntry;
-use crate::weather::GameClockImage;
+use crate::weather::{ClimateImage, GameClockImage};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Point {
@@ -17,6 +17,7 @@ pub(crate) struct ReplayGameClock {
     initial: Point,
     changes: Vec<Point>,
     through_tick: u64,
+    anchored_since: Option<u64>,
 }
 
 impl ReplayGameClock {
@@ -27,7 +28,58 @@ impl ReplayGameClock {
             initial: Point { tick, image },
             changes: Vec::new(),
             through_tick: tick,
+            anchored_since: None,
         })
+    }
+
+    pub(crate) fn observe_debt_stamp(
+        &mut self,
+        climate: Option<ClimateImage>,
+        tick: u64,
+    ) -> Result<(), CoreError> {
+        let Some(climate) = climate else {
+            return Ok(());
+        };
+        match (self.anchored_since, climate.sim_debt_anchored_since) {
+            (Some(old), Some(new)) if old != new => {
+                return Err(invalid("simulation-debt anchor epoch changed"));
+            }
+            (Some(_), None) => {
+                return Err(invalid(
+                    "simulation-debt anchor epoch was removed by an older writer",
+                ));
+            }
+            (_, Some(since)) => {
+                if since > tick.saturating_add(1) {
+                    return Err(invalid("simulation-debt anchor epoch is in the future"));
+                }
+                self.anchored_since = Some(since);
+            }
+            (None, None) if climate.game_clock.held_ticks(tick)? != 0 => {
+                return Err(CoreError::Storage(
+                    crate::weather::LEGACY_CLOCK_ERROR.into(),
+                ));
+            }
+            (None, None) => {}
+        }
+        Ok(())
+    }
+
+    pub(crate) fn anchored_since(&self) -> Option<u64> {
+        self.anchored_since
+    }
+
+    /// Called only after the entire old H=0 tail has been admitted.
+    pub(crate) fn finish_debt_upgrade(&mut self, tick: u64) -> Result<u64, CoreError> {
+        let since = match self.anchored_since {
+            Some(since) => since,
+            None if tick == 0 => 0,
+            None => tick
+                .checked_add(1)
+                .ok_or_else(|| invalid("anchor epoch overflows"))?,
+        };
+        self.anchored_since = Some(since);
+        Ok(since)
     }
 
     /// Inspect unrouted batches once, before any dimension folds entity images.
@@ -57,6 +109,7 @@ impl ReplayGameClock {
                     self.observe_entries(entries, *dimension, hi)?;
                 }
                 JournalEntry::Climate { value } if dimension == Dimension::Overworld => {
+                    self.observe_debt_stamp(Some(*value), hi)?;
                     self.observe(value.game_clock, hi)?;
                 }
                 _ => {}

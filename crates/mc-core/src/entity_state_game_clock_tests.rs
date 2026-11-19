@@ -57,6 +57,7 @@ fn frozen_game_clock_gates_compact_vitals_and_final_projection() {
         game_ticks: 199,
         held_since: Some(200),
     };
+    base.sim_debt.get_mut(&[0, 0]).unwrap().held_anchor = Some(1);
     let replay = replay_batches(
         base,
         &[
@@ -113,6 +114,7 @@ fn frozen_game_clock_preserves_steps_inactive_intervals_and_streamed_fold_bounda
                 image: crate::journal::SimDebtImage {
                     chunk: [0, 0],
                     last_sim: 212,
+                    held_anchor: Some(10),
                     remaining: 0,
                     active: false,
                     tick: 220,
@@ -122,6 +124,7 @@ fn frozen_game_clock_preserves_steps_inactive_intervals_and_streamed_fold_bounda
                 image: crate::journal::SimDebtImage {
                     chunk: [0, 0],
                     last_sim: 230,
+                    held_anchor: Some(24),
                     remaining: 0,
                     active: true,
                     tick: 230,
@@ -283,10 +286,12 @@ fn game_clock_mid_hold_checkpoint_bridges_fresh_memories_not_stale_or_expired_on
             game_ticks: 100,
             held_since: Some(151),
         };
+        let mut debt = active_clock(200);
+        debt.get_mut(&[0, 0]).unwrap().held_anchor = Some(100);
         let base = Replay {
             tick: 200,
             climate: Some(climate),
-            sim_debt: active_clock(200),
+            sim_debt: debt,
             entities: [(1, record)].into(),
             ..Default::default()
         };

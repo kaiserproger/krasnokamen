@@ -57,6 +57,9 @@ pub(crate) struct TickControl {
     /// every tick-driven clock stand still for them.
     held_ticks: u64,
     held_since: Option<u64>,
+    /// Native boundary already decided, even before TickState increments.
+    clock_tick: u64,
+    sim_debt_anchored_since: u64,
     sprint: Option<Sprint>,
     samples: [u32; SAMPLES],
     cursor: usize,
@@ -72,6 +75,8 @@ impl Default for TickControl {
             runs_normally: true,
             held_ticks: 0,
             held_since: None,
+            clock_tick: 0,
+            sim_debt_anchored_since: 0,
             sprint: None,
             samples: [0; SAMPLES],
             cursor: 0,
@@ -199,6 +204,21 @@ impl TickControl {
         }
     }
 
+    /// Membership is refreshed at the decided output tick; activation excludes
+    /// that tick. These are the only two boundaries queried on the live path.
+    pub(crate) fn held_ticks_at(&self, tick: u64) -> u64 {
+        debug_assert!(tick >= self.clock_tick.saturating_sub(1));
+        self.held_ticks - u64::from(!self.runs_normally && tick < self.clock_tick)
+    }
+
+    pub(crate) fn sim_debt_anchored_since(&self) -> u64 {
+        self.sim_debt_anchored_since
+    }
+
+    pub(crate) fn restore_debt_anchor(&mut self, since: u64) {
+        self.sim_debt_anchored_since = since;
+    }
+
     /// Recovery: the held-tick count at the recovered global tick `tick`.
     pub(crate) fn restore_clock(
         &mut self,
@@ -211,12 +231,14 @@ impl TickControl {
             GameClockImage::Held { held_since, .. } => held_since,
         };
         self.runs_normally = self.held_since.is_none();
+        self.clock_tick = tick;
         Ok(())
     }
 
     /// `TickRateManager.tick` plus `checkShouldSprintThisTick`. Returns the
     /// report of a sprint that completed with the previous tick.
     pub(crate) fn begin_tick(&mut self, output_tick: u64) -> Option<SprintReport> {
+        self.clock_tick = output_tick;
         self.runs_normally = !self.frozen || self.steps > 0;
         if self.runs_normally {
             self.held_since = None;

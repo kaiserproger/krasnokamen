@@ -1087,6 +1087,7 @@ fn lazy_ground_clock_survives_native_checkpoint_wal_active_pause_and_age_wrap() 
             crate::journal::SimDebtImage {
                 chunk: [-1, 0],
                 last_sim: 100,
+                held_anchor: Some(0),
                 remaining: 0,
                 active,
                 tick: 100,

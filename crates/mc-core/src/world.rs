@@ -93,6 +93,8 @@ pub struct ChunkWorld {
     /// Entity mirrors rebase these chunks before `journal_debt` clears them.
     activity_changes: HashMap<ChunkPos, Option<crate::journal::SimDebtImage>>,
     sim_tick: u64,
+    sim_held_ticks: u64,
+    sim_held_before_tick: u64,
     /// Parent-managed active membership (hysteresis set). `refresh_active_clock`
     /// reconciles it against residency; cached stationary ticks skip re-sends.
     active_set: HashSet<ChunkPos>,
@@ -494,6 +496,8 @@ impl ChunkWorld {
             debt_changes: HashMap::default(),
             activity_changes: HashMap::default(),
             sim_tick: 0,
+            sim_held_ticks: 0,
+            sim_held_before_tick: 0,
             active_set: HashSet::default(),
             block_only: HashSet::default(),
             active_revision: 0,
@@ -1554,7 +1558,7 @@ impl ChunkCapture {
                 inhabited.apply(&mut chunk, inhabited.tick);
             }
             if let Some(debt) = image.debt {
-                crate::debt::project(&mut chunk, debt.last_sim, debt.remaining)?;
+                crate::debt::project(&mut chunk, debt.last_sim, debt.remaining, debt.held_anchor)?;
             }
             if let Some(ticks) = &image.block_ticks {
                 chunk.load_scheduled_block_ticks(ticks.clone());

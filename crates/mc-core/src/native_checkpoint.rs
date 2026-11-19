@@ -957,6 +957,7 @@ pub fn recover_with_reader(
         manifest.tick,
         manifest.climate.map(|image| image.game_clock),
     )?;
+    game_clock.observe_debt_stamp(manifest.climate, manifest.tick)?;
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
@@ -1025,8 +1026,11 @@ pub fn recover_with_reader(
             Ok(())
         },
     )?;
+    let clock_tick = dimensions[&Dimension::Overworld].tick;
+    let held_ticks = clock_tick - game_clock.game_ticks(clock_tick);
+    let anchored_since = game_clock.finish_debt_upgrade(clock_tick)?;
     for (&dimension, replay) in &mut dimensions {
-        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock);
+        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock, held_ticks);
         replay.plugins.validate()?;
         replay.block_ticks.validate().map_err(|error| {
             CoreError::Storage(format!(
@@ -1056,7 +1060,10 @@ pub fn recover_with_reader(
     }
     let scoreboard = root.scoreboard.clone();
     let bossbars = root.bossbars.clone();
-    let climate = root.climate;
+    let climate = root.climate.map(|mut image| {
+        image.sim_debt_anchored_since = Some(anchored_since);
+        image
+    });
     let difficulty = root.difficulty;
     let default_game_mode = root.default_game_mode;
     let gamerules = root.gamerules.clone();
@@ -1194,6 +1201,7 @@ pub fn generator(
 pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage, CoreError> {
     let mut manifest = world.manifest.clone();
     let tick = world.dimensions[&Dimension::Overworld].tick;
+    let held_ticks = world.dimensions[&Dimension::Overworld].recovered_held_ticks;
     let mut entities = Vec::new();
     let mut players = Vec::new();
     for (&dimension, replay) in &world.dimensions {
@@ -1223,12 +1231,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         image.debt = replay
             .sim_debt
             .values()
-            .map(|image| crate::journal::SimDebtImage {
-                last_sim: image.last_sim_at(tick),
-                remaining: image.remaining,
-                tick,
-                ..*image
-            })
+            .map(|image| image.at(tick, held_ticks))
             .collect();
         image.generated_entity_claims = replay.generated_entity_claims.clone();
         image.tickets = replay.tickets.clone();

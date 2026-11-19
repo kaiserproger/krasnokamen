@@ -1049,6 +1049,8 @@ impl InhabitedTimeImage {
 pub struct SimDebtImage {
     pub chunk: [i32; 2],
     pub last_sim: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_anchor: Option<u64>,
     pub remaining: u64,
     pub tick: u64,
     /// Open interval at this image's tick mirrors
@@ -1063,6 +1065,20 @@ impl SimDebtImage {
             self.last_sim.max(tick)
         } else {
             self.last_sim
+        }
+    }
+
+    /// Project the native and held anchors together; outstanding debt is fixed.
+    pub(crate) fn at(self, tick: u64, held_ticks: u64) -> Self {
+        Self {
+            last_sim: self.last_sim_at(tick),
+            held_anchor: Some(if self.active {
+                held_ticks
+            } else {
+                self.held_anchor.unwrap_or(0)
+            }),
+            tick,
+            ..self
         }
     }
 }

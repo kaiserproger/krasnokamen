@@ -7,6 +7,10 @@ impl TickState {
     /// Enter at the simulation radius; retain the previous set one chunk
     /// farther out so crossing a chunk boundary does not flap simulation.
     pub(crate) fn refresh_active_chunks(&mut self, tick: u64) {
+        self.world.set_simulation_clock(
+            self.tick_control.held_ticks_at(tick),
+            self.tick_control.held_ticks_at(tick.saturating_sub(1)),
+        );
         let radius = self.config_sim_distance.max(0);
         let entities = &self.entities;
         let centers = self.players.keys().filter_map(|id| {

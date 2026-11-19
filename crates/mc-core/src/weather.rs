@@ -65,6 +65,9 @@ pub struct ClimateImage {
     pub day_time: i64,
     #[serde(default)]
     pub game_clock: GameClockImage,
+    /// First native tick written by a binary that anchors simulation debt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sim_debt_anchored_since: Option<u64>,
     pub weather_kind: u8,
     pub remaining_ticks: i64,
     /// A zero clock draws a fresh natural duration on the next tick.
@@ -82,6 +85,7 @@ impl ClimateImage {
         Self {
             day_time: state.day_time,
             game_clock: state.tick_control.clock_image(state.tick),
+            sim_debt_anchored_since: Some(state.tick_control.sim_debt_anchored_since()),
             weather_kind: match state.weather.0 {
                 Weather::Clear => 0,
                 Weather::Rain => 1,
@@ -124,6 +128,9 @@ impl ClimateImage {
         state
             .tick_control
             .restore_clock(self.game_clock, state.tick)?;
+        if let Some(since) = self.sim_debt_anchored_since {
+            state.tick_control.restore_debt_anchor(since);
+        }
         state.day_time = self.day_time;
         state.weather = (kind, self.remaining_ticks);
         state.thunder_remaining_ticks = self.thunder_remaining_ticks;

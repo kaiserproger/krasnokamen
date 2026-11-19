@@ -144,6 +144,9 @@ pub(super) fn load_dimension_state(
     tick_state.config_view_distance = i32::from(config.view_distance);
     tick_state.dimension = dimension;
     tick_state.tick = recovered_tick;
+    if let Some(since) = replay.sim_debt_anchored_since {
+        tick_state.tick_control.restore_debt_anchor(since);
+    }
     // Settlement registries are per-dimension authorities: every dimension
     // hydrates its own rows (matched by home dimension) folded with its
     // dimension-routed WAL tail. Membership columns hydrate with entities below.

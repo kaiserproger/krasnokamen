@@ -46,6 +46,8 @@ pub struct Replay {
     /// Global running-time history, retained only by public replay wrappers.
     pub(crate) game_clock: Option<ReplayGameClock>,
     pub(crate) clock_fault: Option<String>,
+    pub(crate) recovered_held_ticks: u64,
+    pub(crate) sim_debt_anchored_since: Option<u64>,
     pub border: crate::command_border::Border,
     pub difficulty: crate::survival::Difficulty,
     pub default_game_mode: crate::commands::GameMode,
@@ -640,7 +642,12 @@ pub(crate) fn apply_batch_images(
     batches: &[(u64, u64, Vec<JournalEntry>)],
 ) -> Replay {
     let clock = replay.game_clock.take().map_or_else(
-        || ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock)),
+        || {
+            let mut clock =
+                ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
+            clock.observe_debt_stamp(replay.climate, replay.tick)?;
+            Ok::<_, CoreError>(clock)
+        },
         Ok,
     );
     let mut clock = match clock {
@@ -690,6 +697,17 @@ fn apply_batch_entries(
     // even a compact vitals anchor sees this batch's complete activity.
     for entry in entries {
         if let JournalEntry::SimDebt { image } = entry {
+            if image.held_anchor.is_none()
+                && game
+                    .anchored_since()
+                    .is_some_and(|since| image.tick >= since)
+            {
+                replay.clock_fault = Some(format!(
+                    "anchorless simulation-debt WAL image at tick {} after the anchored epoch",
+                    image.tick
+                ));
+                return replay;
+            }
             if replay
                 .sim_debt
                 .get(&image.chunk)
@@ -1368,19 +1386,43 @@ pub(crate) fn validate_replay(replay: &Replay) -> Result<(), CoreError> {
 /// Project each retained anchor once after the complete streamed tail is folded.
 pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
     let clock = replay.game_clock.take().map_or_else(
-        || ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock)),
+        || {
+            let mut clock =
+                ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
+            clock.observe_debt_stamp(replay.climate, replay.tick)?;
+            Ok::<_, CoreError>(clock)
+        },
         Ok,
     );
     match clock {
         Ok(clock) => {
-            advance_replay_clocks_with_clock(replay, &clock);
+            let held_ticks = replay.tick - clock.game_ticks(replay.tick);
+            advance_replay_clocks_with_clock(replay, &clock, held_ticks);
             replay.game_clock = Some(clock);
         }
         Err(error) => replay.clock_fault = Some(error.to_string()),
     }
 }
 
-pub(crate) fn advance_replay_clocks_with_clock(replay: &mut Replay, game: &ReplayGameClock) {
+pub(crate) fn advance_replay_clocks_with_clock(
+    replay: &mut Replay,
+    game: &ReplayGameClock,
+    held_ticks: u64,
+) {
+    replay.recovered_held_ticks = held_ticks;
+    replay.sim_debt_anchored_since = game.anchored_since();
+    for (&[x, z], image) in &replay.sim_debt {
+        if let Err(error) = crate::debt::validate_anchor(
+            mc_world::ChunkPos { x, z },
+            image.last_sim,
+            image.held_anchor,
+            replay.tick,
+            held_ticks,
+        ) {
+            replay.clock_fault = Some(error.to_string());
+            return;
+        }
+    }
     for (&id, record) in &mut replay.entities {
         if record.tick < replay.tick {
             let clock = replay
@@ -1413,8 +1455,7 @@ pub(crate) fn advance_replay_clocks_with_clock(replay: &mut Replay, game: &Repla
     // 001 slice0: active debt intervals advance through the recovered WAL
     // tick (never `remaining`, never wall time); inactive images freeze.
     for image in replay.sim_debt.values_mut() {
-        image.last_sim = image.last_sim_at(replay.tick);
-        image.tick = replay.tick;
+        *image = image.at(replay.tick, held_ticks);
     }
     for clock in replay.simulation_clocks.values_mut() {
         let active = clock.points.last().is_some_and(|point| point.active);
@@ -1427,6 +1468,6 @@ pub(crate) fn advance_replay_clocks_with_clock(replay: &mut Replay, game: &Repla
     }
     for dimension in replay.dimensions.values_mut() {
         dimension.tick = dimension.tick.max(replay.tick);
-        advance_replay_clocks_with_clock(dimension, game);
+        advance_replay_clocks_with_clock(dimension, game, held_ticks);
     }
 }

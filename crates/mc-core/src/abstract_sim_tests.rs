@@ -26,6 +26,7 @@ fn fixture(chunks: &[ChunkPos]) -> TickState {
 fn native_fixture(directory: &std::path::Path, chunks: &[ChunkPos]) -> TickState {
     let registry = Arc::new(crate::tick_tests::full_registry());
     let mut world = crate::world::world_tests::test_world(Some(directory.to_path_buf()));
+    world.refresh_active_clock(10000);
     world.ensure_blocking(&chunks.iter().map(|&pos| (pos, 0)).collect());
     let mut state = TickState::new(registry, world, 2, 512);
     state.tick = 10000;
@@ -78,6 +79,7 @@ fn owe(state: &mut TickState, chunks: &[ChunkPos], debt: u64) {
         .restore_sim_debt(
             &Replay {
                 tick: state.tick,
+                recovered_held_ticks: state.tick_control.held_ticks_at(state.tick),
                 sim_debt: chunks
                     .iter()
                     .map(|chunk| {
@@ -86,6 +88,7 @@ fn owe(state: &mut TickState, chunks: &[ChunkPos], debt: u64) {
                             SimDebtImage {
                                 chunk: [chunk.x, chunk.z],
                                 last_sim: state.tick,
+                                held_anchor: Some(state.tick_control.held_ticks_at(state.tick)),
                                 remaining: debt,
                                 active: false,
                                 tick: state.tick,
@@ -553,6 +556,36 @@ fn plant_crop(state: &mut TickState, x: i32) -> (u32, u32) {
 }
 
 #[test]
+fn frozen_game_clock_never_spends_existing_catch_up_debt() {
+    let mut state = fixture(&[CHUNK]);
+    furnace(&mut state, CELL, 8);
+    let (young, _) = plant_crop(&mut state, 4);
+    let stack = ItemStack::new(item(&state, "minecraft:stone"), 1);
+    let id = crate::tick::spawn_item_entity(&mut state, [10.5, 100.5, 8.5], stack);
+    let slot = state.entities.slot_of(id).unwrap();
+    state.entities.row_mut(slot).age = 5800;
+    state.tick_control.set_frozen(true);
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+    owe(&mut state, &[CHUNK], 350);
+    let furnace_before = serde_json::to_value(state.block_entities[&CELL].furnace_image()).unwrap();
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+    assert_eq!(state.world.simulation_debt(CHUNK), 350);
+    let slot = state.entities.slot_of(id).expect("frozen item survives");
+    assert_eq!(state.entities.row(slot).age, 5800);
+    assert_eq!(state.world.block_at(4, 100, 8), Some(young));
+    assert!(state.block_entities[&CELL].slots[2].is_empty());
+    assert_eq!(
+        serde_json::to_value(state.block_entities[&CELL].furnace_image()).unwrap(),
+        furnace_before
+    );
+    assert!(!entries.iter().any(
+        |entry| matches!(entry, JournalEntry::RemoveEntity { id: removed, .. } if *removed == id.0)
+    ));
+}
+
+#[test]
 fn crop_catch_up_grows_expected_stages_and_spends_chunk_time() {
     let mut state = fixture(&[CHUNK]);
     let (_, grown) = plant_crop(&mut state, 8);
@@ -666,4 +699,37 @@ fn catch_up_uses_current_chunk_membership_after_item_moves() {
     assert_eq!(state.entities.row(arrived_slot).age, 200);
     assert_eq!(state.entities.row(departed_slot).age, 0);
     assert_eq!(state.world.simulation_debt(CHUNK), 0);
+}
+
+#[test]
+fn frozen_debt_game_clock_still_cancels_external_edits_and_item_births() {
+    for drop_item in [false, true] {
+        let mut state = fixture(&[CHUNK]);
+        state.tick_control.set_frozen(true);
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+        owe(&mut state, &[CHUNK], 600);
+        if drop_item {
+            let stack = ItemStack::new(item(&state, "minecraft:stone"), 1);
+            crate::tick::spawn_item_entity(&mut state, [8.5, 100.5, 8.5], stack);
+        } else {
+            let current = state.world.block_at(1, 100, 1).unwrap();
+            state.world.set_block(1, 100, 1, current);
+        }
+        let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+        assert_eq!(state.world.simulation_debt(CHUNK), 0);
+        let debt = entries
+            .iter()
+            .find_map(|entry| match entry {
+                JournalEntry::SimDebt { image } if image.chunk == [0, 0] => Some(image),
+                _ => None,
+            })
+            .expect("cancellation is durable in the same frozen batch");
+        assert_eq!(
+            debt.held_anchor,
+            Some(state.tick_control.held_ticks_at(debt.last_sim))
+        );
+        assert_eq!(debt.remaining, 0);
+    }
 }
