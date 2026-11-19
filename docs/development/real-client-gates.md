@@ -822,6 +822,13 @@ the Settings dialog or the map territory.
   `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
   (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
   every other verdict runs native with `--timeout-seconds 3600`.
+  A Java run whose client could not load the requested language fails before connect
+  (`scene_shot_client.check_java_language`, marker `Failed to load translations for
+  <locale> from pack vanilla`): such a client still reports the locale to the server but
+  translates item names and vanilla tooltips into `en_us`, so its scene is no evidence
+  for any client-localized text. An asset store missing the `minecraft/lang/<locale>.json`
+  objects is the usual cause (2026-11-19: all 144 lang objects were absent); repair the
+  store instead of accepting the run.
 
 ## Distant Horizons gate (`dh-gate`)
 
